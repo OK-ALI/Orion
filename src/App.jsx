@@ -131,7 +131,8 @@ export default function App() {
 
   // ── Startup update check ─────────────────────────────────────────────────
   useEffect(() => {
-    if (!storage.get("autoCheckUpdates")) return;
+    const autoCheck = storage.get("autoCheckUpdates");
+    if (autoCheck === false || autoCheck === 0) return;
     checkForUpdates()
       .then((r) => {
         if (r.hasUpdate) setUpdateBanner(r);
