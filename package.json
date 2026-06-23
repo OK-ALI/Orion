@@ -83,6 +83,12 @@
       ],
       "category": "Utility",
       "icon": "public/icon.png"
-    }
+    },
+    "extraResources": [
+  {
+    "from": "public/icon.png",
+    "to": "icon.png"
+  }
+]
   }
 }

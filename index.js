@@ -13,6 +13,7 @@ const {
   Tray,
   Menu,
   dialog,
+  nativeImage,
 } = require("electron");
 const path = require("path");
 
@@ -241,9 +242,24 @@ function setupSession(playerSession, trailerSession) {
 function createTray() {
   if (tray) return;
 
-  const iconPath = path.join(__dirname, "public", "icon.png");
-  tray = new Tray(iconPath);
-  
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, "icon.png")
+    : path.join(__dirname, "public", "icon.png");
+
+  const trayIcon = nativeImage.createFromPath(iconPath);
+
+  if (trayIcon.isEmpty()) {
+    console.error("Tray icon failed to load:", iconPath);
+    return;
+  }
+
+  try {
+    tray = new Tray(trayIcon);
+  } catch (error) {
+    console.error("Failed to create tray:", error);
+    return;
+  }
+
   tray.on("double-click", () => {
     if (mainWindow) {
       mainWindow.show();
@@ -254,7 +270,6 @@ function createTray() {
 
   updateTrayMenu();
 }
-
 function updateTrayMenu() {
   if (!tray) return;
 
@@ -267,14 +282,14 @@ function updateTrayMenu() {
           mainWindow.focus();
           mainWindow.webContents.send("tray-restore-window");
         }
-      }
+      },
     },
     { type: "separator" },
     {
       label: miniPlayerActive
         ? `Now Playing: ${miniPlayerTitle}`
         : "Orion: No Stream Active",
-      enabled: false
+      enabled: false,
     },
     {
       label: "Stop Playback",
@@ -283,9 +298,10 @@ function updateTrayMenu() {
         if (mainWindow) {
           mainWindow.webContents.send("stop-mini-player");
         }
+
         miniPlayerActive = false;
         updateTrayMenu();
-      }
+      },
     },
     { type: "separator" },
     {
@@ -293,22 +309,12 @@ function updateTrayMenu() {
       click: () => {
         app.isQuiting = true;
         app.quit();
-      }
-    }
+      },
+    },
   ]);
 
   tray.setToolTip("Orion Media Player");
   tray.setContextMenu(contextMenu);
-}
-
-function showTrayBalloonOnce() {
-  if (tray && !shownTrayBalloon) {
-    tray.displayBalloon({
-      title: "Orion running in background",
-      content: "Orion is minimized to the system tray and will continue streaming in the background.",
-    });
-    shownTrayBalloon = true;
-  }
 }
 
 function createWindow() {
@@ -323,7 +329,9 @@ function createWindow() {
     minWidth: 940,
     minHeight: 560,
     backgroundColor: "#0a0a0f",
-    icon: path.join(__dirname, "public", "icon.png"),
+    icon: app.isPackaged
+  ? path.join(process.resourcesPath, "icon.png")
+  : path.join(__dirname, "public", "icon.png"),
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
     frame: process.platform !== "win32",
     webPreferences: {

@@ -21,9 +21,8 @@ export default function WindowTitlebar() {
     <header className="titlebar titlebar-drag">
       <div className="titlebar-left titlebar-no-drag">
         <div className="titlebar-logo">
-          <img src="/brand-mark.png" alt="" className="titlebar-logo-image" />
-          <span>Orion</span>
-        </div>
+  <span>Orion</span>
+</div>
       </div>
 
       <div className="titlebar-controls titlebar-no-drag">
