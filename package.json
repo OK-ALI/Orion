@@ -1,6 +1,6 @@
 {
   "name": "orion",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Orion — A Multiverse of Stories",
   "author": "Orion",
   "license": "GPL-3.0",
@@ -85,10 +85,10 @@
       "icon": "public/icon.png"
     },
     "extraResources": [
-  {
-    "from": "public/icon.png",
-    "to": "icon.png"
-  }
-]
+      {
+        "from": "public/icon.png",
+        "to": "icon.png"
+      }
+    ]
   }
 }
