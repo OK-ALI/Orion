@@ -1,6 +1,6 @@
 // ── App Update Utilities ──────────────────────────────────────────────────────
 
-export const GITHUB_REPO = "OK-ALI/orion";
+export const GITHUB_REPO = "OK-ALI/Orion";
 
 export function normaliseVersion(v) {
   const parts = String(v).replace(/^v/i, "").split(".");

@@ -1,7 +1,6 @@
 // ── Orion — Custom Window Titlebar ────────────────────────────────────────────
 import { useState, useEffect } from "react";
 import {
-  OrionLogo,
   MinimizeIcon,
   MaximizeIcon,
   RestoreIcon,
@@ -22,7 +21,7 @@ export default function WindowTitlebar() {
     <header className="titlebar titlebar-drag">
       <div className="titlebar-left titlebar-no-drag">
         <div className="titlebar-logo">
-          <OrionLogo size={18} className="titlebar-logo-icon" />
+          <img src="/brand-mark.png" alt="" className="titlebar-logo-image" />
           <span>Orion</span>
         </div>
       </div>

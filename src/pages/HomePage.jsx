@@ -214,6 +214,37 @@ export default function HomePage({
     return list.slice(0, 5);
   }, [trendingMovieItems, trendingTVItems]);
 
+  const renderContinueSection = () => {
+    if (inProgress.length === 0) return null;
+    return (
+      <div key="continue" className="home-section">
+        <h2 className="section-title">Continue Watching</h2>
+        <div className="continue-grid">
+          {inProgress.map((item) => {
+            const pk =
+              item.media_type === "movie"
+                ? `movie_${item.id}`
+                : `tv_${item.id}_s${item.season}e${item.episode}`;
+            const r = getRating(item);
+            return (
+              <MediaCard
+                key={`${item.media_type}_${item.id}_${item.season || ""}_${item.episode || ""}`}
+                item={item}
+                onClick={() => onSelect(item)}
+                progress={progress[pk] || 0}
+                watched={watched}
+                onMarkWatched={onMarkWatched}
+                onMarkUnwatched={onMarkUnwatched}
+                ageRating={r.cert}
+                restricted={itemRestricted(item)}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   if (offline) {
     return (
       <div className="offline-placeholder">
@@ -245,6 +276,8 @@ export default function HomePage({
       )}
 
       <div className="homepage-content">
+        {renderContinueSection()}
+
         {saved.length > 0 && saved.length <= 3 && (
           <section className="home-section home-my-list-section">
             <div className="home-section-header">
@@ -287,34 +320,7 @@ export default function HomePage({
           if (!rowVisible[id]) return null;
 
           if (id === "continue") {
-            if (inProgress.length === 0) return null;
-            return (
-              <div key="continue" className="home-section">
-                <h2 className="section-title">Continue Watching</h2>
-                <div className="continue-grid">
-                  {inProgress.map((item) => {
-                    const pk =
-                      item.media_type === "movie"
-                        ? `movie_${item.id}`
-                        : `tv_${item.id}_s${item.season}e${item.episode}`;
-                    const r = getRating(item);
-                    return (
-                      <MediaCard
-                        key={`${item.media_type}_${item.id}_${item.season || ""}_${item.episode || ""}`}
-                        item={item}
-                        onClick={() => onSelect(item)}
-                        progress={progress[pk] || 0}
-                        watched={watched}
-                        onMarkWatched={onMarkWatched}
-                        onMarkUnwatched={onMarkUnwatched}
-                        ageRating={r.cert}
-                        restricted={itemRestricted(item)}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            );
+            return null;
           }
 
           if (id === "recommended") {

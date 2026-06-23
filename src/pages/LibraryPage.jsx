@@ -5,6 +5,7 @@ import { EyeIcon, WatchedIcon } from "../components/common/Icons";
 import { useRatings, getRatingForItem } from "../utils/useRatings";
 import { isRestricted } from "../utils/ageRating";
 import { storage, STORAGE_KEYS } from "../utils/storage";
+import ConfirmModal from "../components/common/ConfirmModal";
 
 export default function LibraryPage({
   history,
@@ -16,7 +17,9 @@ export default function LibraryPage({
   onMarkWatched,
   onMarkUnwatched,
   onRemoveHistory,
+  onClearHistory,
   onReorderSaved,
+  downloads = [],
 }) {
   const allItems = useMemo(
     () => [...inProgress, ...saved],
@@ -27,7 +30,30 @@ export default function LibraryPage({
   const [sort, setSort] = useState(
     () => storage.get(STORAGE_KEYS.LIBRARY_SORT) || "manual",
   );
-  const [activeTab, setActiveTab] = useState("all");
+  const [activeTab, setActiveTab] = useState(
+    () => storage.get(STORAGE_KEYS.LIBRARY_TAB) || "all",
+  );
+  const [historyFilter, setHistoryFilter] = useState(
+    () => storage.get(STORAGE_KEYS.LIBRARY_HISTORY_FILTER) || "all",
+  );
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(
+    () => storage.get(STORAGE_KEYS.LIBRARY_HISTORY_VISIBLE) || 10,
+  );
+
+  useEffect(() => {
+    storage.set(STORAGE_KEYS.LIBRARY_TAB, activeTab);
+    setHistoryVisibleCount(activeTab === "history" ? 25 : 10);
+  }, [activeTab]);
+
+  useEffect(() => {
+    storage.set(STORAGE_KEYS.LIBRARY_HISTORY_FILTER, historyFilter);
+    setHistoryVisibleCount(activeTab === "history" ? 25 : 10);
+  }, [historyFilter, activeTab]);
+
+  useEffect(() => {
+    storage.set(STORAGE_KEYS.LIBRARY_HISTORY_VISIBLE, historyVisibleCount);
+  }, [historyVisibleCount]);
+
   useEffect(() => {
     const handler = (e) => setSort(e.detail);
     window.addEventListener("orion:library-sort-changed", handler);
@@ -89,6 +115,67 @@ export default function LibraryPage({
     { id: "list", label: "My List", count: saved.length },
     { id: "history", label: "History", count: history.length },
   ];
+
+  const downloadedKeys = useMemo(() => {
+    const keys = new Set();
+    for (const dl of downloads || []) {
+      if (!dl || dl.status !== "completed") continue;
+      if (dl.mediaType === "movie" && (dl.tmdbId || dl.mediaId)) {
+        keys.add(`movie_${dl.tmdbId || dl.mediaId}`);
+      }
+      if (dl.mediaType === "tv" && (dl.tmdbId || dl.mediaId) && dl.season && dl.episode) {
+        keys.add(`tv_${dl.tmdbId || dl.mediaId}_s${dl.season}e${dl.episode}`);
+      }
+    }
+    return keys;
+  }, [downloads]);
+
+  const historyFilters = [
+    { id: "all", label: "All" },
+    { id: "movie", label: "Movies" },
+    { id: "tv", label: "Series" },
+    { id: "downloaded", label: "Downloaded" },
+    { id: "watched", label: "Watched" },
+    { id: "progress", label: "In Progress" },
+  ];
+
+  const getHistoryKey = useCallback(
+    (item) =>
+      item.media_type === "movie"
+        ? `movie_${item.id}`
+        : `tv_${item.id}_s${item.season}e${item.episode}`,
+    [],
+  );
+
+  const filteredHistory = useMemo(() => {
+    return history.filter((item) => {
+      const pk = getHistoryKey(item);
+      if (historyFilter === "movie") return item.media_type === "movie";
+      if (historyFilter === "tv") return item.media_type === "tv";
+      if (historyFilter === "downloaded") return downloadedKeys.has(pk);
+      if (historyFilter === "watched") return !!watched?.[pk];
+      if (historyFilter === "progress") {
+        const pct = progress?.[pk] || 0;
+        return !watched?.[pk] && pct > 2 && pct < 98;
+      }
+      return true;
+    });
+  }, [history, historyFilter, downloadedKeys, watched, progress, getHistoryKey]);
+
+  const visibleHistory = useMemo(
+    () => filteredHistory.slice(0, historyVisibleCount),
+    [filteredHistory, historyVisibleCount],
+  );
+
+  const historyBaseCount = activeTab === "history" ? 25 : 10;
+  const hasMoreHistory = historyVisibleCount < filteredHistory.length;
+
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  const handleClearHistory = useCallback(() => {
+    if (!onClearHistory) return;
+    setShowClearConfirm(true);
+  }, [onClearHistory]);
 
   const getRating = useCallback(
     (item) => getRatingForItem(item, ratingsMap),
@@ -205,14 +292,35 @@ export default function LibraryPage({
 
       {(activeTab === "all" || activeTab === "history") && history.length > 0 && (
         <div className="library-section">
-          <div className="library-section-title">Watch History</div>
+          <div className="library-section-title library-section-title--actions">
+            <span>
+              Watch History ({filteredHistory.length}
+              {filteredHistory.length !== history.length ? ` of ${history.length}` : ""})
+            </span>
+            <div className="library-section-actions">
+              {onClearHistory && (
+                <button className="btn btn-ghost btn--sm" onClick={handleClearHistory}>
+                  Clear history
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="library-filters" role="toolbar" aria-label="History filters">
+            {historyFilters.map((filter) => (
+              <button
+                key={filter.id}
+                className={`library-filter${historyFilter === filter.id ? " active" : ""}`}
+                onClick={() => setHistoryFilter(filter.id)}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
           <div className="history-rows">
-            {history.map((item, i) => {
-              const pk =
-                item.media_type === "movie"
-                  ? `movie_${item.id}`
-                  : `tv_${item.id}_s${item.season}e${item.episode}`;
+            {visibleHistory.map((item, i) => {
+              const pk = getHistoryKey(item);
               const isWatched = !!watched?.[pk];
+              const isDownloaded = downloadedKeys.has(pk);
               return (
                 <div
                   key={`${pk}_${item.watchedAt}`}
@@ -291,6 +399,43 @@ export default function LibraryPage({
                   >
                     {item.media_type === "tv" ? "Series" : "Movie"}
                   </span>
+                  {isDownloaded && (
+                    <span className="search-result-type type-downloaded">
+                      Downloaded
+                    </span>
+                  )}
+                  <div className="history-actions">
+                    <button
+                      className="btn btn-primary btn--sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelect(item);
+                      }}
+                    >
+                      Resume
+                    </button>
+                    {isWatched ? (
+                      <button
+                        className="btn btn-ghost btn--sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onMarkUnwatched?.(pk);
+                        }}
+                      >
+                        Unwatch
+                      </button>
+                    ) : (
+                      <button
+                        className="btn btn-ghost btn--sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onMarkWatched?.(pk);
+                        }}
+                      >
+                        Mark watched
+                      </button>
+                    )}
+                  </div>
                   {onRemoveHistory && (
                     <button
                       className="history-remove-btn"
@@ -307,6 +452,36 @@ export default function LibraryPage({
               );
             })}
           </div>
+          {filteredHistory.length === 0 && (
+            <div className="empty-state empty-state--compact">
+              <EyeIcon />
+              <h3>No matching history</h3>
+              <p>Try another filter or start watching something new.</p>
+            </div>
+          )}
+          {filteredHistory.length > historyBaseCount && (
+            <div className="library-show-more">
+              {hasMoreHistory ? (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() =>
+                    setHistoryVisibleCount((count) =>
+                      Math.min(count + historyBaseCount, filteredHistory.length),
+                    )
+                  }
+                >
+                  Load more
+                </button>
+              ) : (
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => setHistoryVisibleCount(historyBaseCount)}
+                >
+                  Show less
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -342,6 +517,20 @@ export default function LibraryPage({
             Start watching a movie or series and your history will appear here.
           </p>
         </div>
+      )}
+
+      {showClearConfirm && (
+        <ConfirmModal
+          title="Clear Watch History"
+          message="Clear all watch history? This will not remove saved titles or downloads."
+          confirmText="Clear History"
+          cancelText="Cancel"
+          onConfirm={() => {
+            setShowClearConfirm(false);
+            onClearHistory?.();
+          }}
+          onCancel={() => setShowClearConfirm(false)}
+        />
       )}
     </div>
   );

@@ -1,7 +1,6 @@
 // ── Orion — Sidebar Navigation ────────────────────────────────────────────────
 import { useState, useCallback } from "react";
 import {
-  OrionLogo,
   HomeIcon,
   SearchIcon,
   CompassIcon,
@@ -81,14 +80,11 @@ export default function Sidebar({
 
       <div className="sidebar-brand-row">
         <button
-          className="sidebar-brand"
+          className="sidebar-brand sidebar-brand-text"
           onClick={() => onNavigate("home")}
           data-tooltip={!expanded ? "Orion Home" : undefined}
           aria-label="Go to Orion Home"
         >
-          <span className="sidebar-brand-mark">
-            <OrionLogo size={20} />
-          </span>
           <span className="sidebar-brand-copy">
             <span className="sidebar-brand-tag">A Multiverse of Stories</span>
           </span>

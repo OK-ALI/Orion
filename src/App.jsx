@@ -30,6 +30,8 @@ import SearchModal from "./components/modals/SearchModal";
 import SetupScreen from "./components/setup/SetupScreen";
 import CloseConfirmModal from "./components/CloseConfirmModal";
 import UpdateModal from "./components/UpdateModal";
+import MiniPlayer from "./components/MiniPlayer";
+import "./styles/mini-player.css";
 
 // Lazy-loaded pages: each chunk is only downloaded when the user first visits
 const HomePage = lazy(() => import("./pages/HomePage"));
@@ -98,6 +100,7 @@ export default function App() {
     return { accentColor: accentHex, subtitleLang };
   };
   const [playerSettings, setPlayerSettings] = useState(readPlayerSettings);
+  const [miniPlayer, setMiniPlayer] = useState(null);
 
   // ── Scheduled backup: run on startup if due ─────────────────────────────────
   useEffect(() => {
@@ -635,6 +638,42 @@ export default function App() {
     }
   }, []);
 
+  const handleExpandMiniPlayer = useCallback(() => {
+    setMiniPlayer((current) => {
+      if (!current) return null;
+      const targetItem = { ...current.item };
+      if (current.mediaType === "tv") {
+        targetItem.season = current.season;
+        targetItem.episode = current.episode;
+      }
+      navigate(current.mediaType, targetItem);
+      return null;
+    });
+  }, [navigate]);
+
+  // Sync Mini-Player state to Electron main process
+  useEffect(() => {
+    if (!window.electron) return;
+    if (miniPlayer) {
+      window.electron.setMiniPlayerStatus(true, miniPlayer.title);
+    } else {
+      window.electron.setMiniPlayerStatus(false, null);
+    }
+  }, [miniPlayer]);
+
+  // Listen for Electron tray commands
+  useEffect(() => {
+    if (!window.electron?.onStopMiniPlayer) return;
+
+    const stopHandler = window.electron.onStopMiniPlayer(() => {
+      setMiniPlayer(null);
+    });
+
+    return () => {
+      window.electron.offStopMiniPlayer(stopHandler);
+    };
+  }, []);
+
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e) => {
@@ -775,6 +814,7 @@ export default function App() {
       season: item.season != null ? Number(item.season) : null,
       episode: item.episode != null ? Number(item.episode) : null,
       episodeName: item.episodeName || null,
+      lastWatchedAt: Date.now(),
     };
     // Functional update - never reads stale history from closure
     setHistory((prev) => {
@@ -787,7 +827,19 @@ export default function App() {
         }
         return false;
       });
-      const next = [entry, ...filtered].slice(0, 100);
+      const existing = prev.find((h) => {
+        if (h.id !== entry.id || h.media_type !== entry.media_type) return false;
+        if (entry.media_type === "tv") {
+          return h.season === entry.season && h.episode === entry.episode;
+        }
+        return true;
+      });
+      const nextEntry = {
+        ...entry,
+        rewatchCount: (existing?.rewatchCount || 0) + (existing ? 1 : 0),
+        completedAt: existing?.completedAt || null,
+      };
+      const next = [nextEntry, ...filtered].slice(0, 100);
       storage.set("history", next);
       return next;
     });
@@ -834,6 +886,11 @@ export default function App() {
       storage.set("history", next);
       return next;
     });
+  }, []);
+
+  const clearHistory = useCallback(() => {
+    setHistory([]);
+    storage.set("history", []);
   }, []);
 
   // Memoized, avoids re-filtering on every download-progress event
@@ -1032,6 +1089,8 @@ export default function App() {
                 downloads={downloads}
                 onGoToDownloads={handleGoToDownloads}
                 onSelect={handleSelectResult}
+                onOpenMiniPlayer={setMiniPlayer}
+                onPlay={() => setMiniPlayer(null)}
               />
             )}
             {page === "tv" && selected && (
@@ -1054,6 +1113,8 @@ export default function App() {
                 onMarkUnwatched={markUnwatched}
                 downloads={downloads}
                 onGoToDownloads={handleGoToDownloads}
+                onOpenMiniPlayer={setMiniPlayer}
+                onPlay={() => setMiniPlayer(null)}
               />
             )}
             {page === "library" && (
@@ -1067,7 +1128,9 @@ export default function App() {
                 onMarkWatched={markWatched}
                 onMarkUnwatched={markUnwatched}
                 onRemoveHistory={removeHistory}
+                onClearHistory={clearHistory}
                 onReorderSaved={handleReorderSaved}
+                downloads={downloads}
               />
             )}
             {page === "settings" && (
@@ -1373,6 +1436,14 @@ export default function App() {
               setCloseConfirm(null);
               window.electron.respondClose(false);
             }}
+          />
+        )}
+        {miniPlayer && (
+          <MiniPlayer
+            url={miniPlayer.url}
+            title={miniPlayer.title}
+            onClose={() => setMiniPlayer(null)}
+            onExpand={handleExpandMiniPlayer}
           />
         )}
         {showShortcuts && (

@@ -359,3 +359,13 @@ export function PopOutIcon({ size = 16, ...props }) {
     </svg>
   );
 }
+
+export function MiniPlayerIcon({ size = 16, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <rect x="13" y="11" width="7" height="7" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+

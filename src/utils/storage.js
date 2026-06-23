@@ -40,7 +40,13 @@ export const STORAGE_KEYS = {
   COMPACT_MODE: "compactMode",
   REDUCE_ANIMATIONS: "reduceAnimations",
   LIBRARY_SORT: "librarySort",
+  LIBRARY_TAB: "libraryTab",
+  LIBRARY_HISTORY_FILTER: "libraryHistoryFilter",
+  LIBRARY_HISTORY_VISIBLE: "libraryHistoryVisible",
   HISTORY_ENABLED: "historyEnabled",
+  HIDDEN_TITLES: "hiddenTitles",
+  NOT_INTERESTED: "notInterested",
+  TITLE_SIGNALS: "titleSignals",
   // Notification preferences
   NOTIFY_DOWNLOAD_COMPLETE: "notifyDownloadComplete",
   NOTIFY_NEW_EPISODE: "notifyNewEpisode",
@@ -56,12 +62,15 @@ export const STORAGE_KEYS = {
   DL_SORT_BY: "dlSortBy",
   DL_SORT_DIR: "dlSortDir",
   DL_SHOW_UNTRACKED: "dlShowUntracked",
+  DOWNLOADER_ENGINE: "downloaderEngine",
+  DOWNLOADER_HELPER_FOLDER: "downloaderHelperFolder",
   // Cache for new-episode startup check
   EPISODE_RELEASE_CACHE: "episodeReleaseCache",
   // Failover cache
   SOURCE_FAILOVER_CACHE: "sourceFailoverCache",
   // Sidebar collapsed/expanded state
   SIDEBAR_EXPANDED: "sidebarExpanded",
+  CLOSE_TO_TRAY: "closeToTray",
 };
 
 export const storage = {

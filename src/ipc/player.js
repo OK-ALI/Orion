@@ -209,7 +209,7 @@ function register(getMainWindow, { writeSecretMigration }) {
       }
 
       const TRUSTED_ORIGIN   = "https://github.com";
-      const TRUSTED_PATH     = "/orion-app/orion/releases/download/";
+      const TRUSTED_PATH     = "/ok-ali/orion/releases/download/";
       const ALLOWED_REDIRECT_HOSTS = [
         "github.com",
         "objects.githubusercontent.com",
@@ -225,7 +225,7 @@ function register(getMainWindow, { writeSecretMigration }) {
 
       if (
         parsed.origin !== TRUSTED_ORIGIN ||
-        !parsed.pathname.startsWith(TRUSTED_PATH)
+        !parsed.pathname.toLowerCase().startsWith(TRUSTED_PATH)
       ) {
         return { ok: false, error: "Unauthorized update source" };
       }

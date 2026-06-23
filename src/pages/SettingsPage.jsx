@@ -1348,9 +1348,9 @@ function AppearanceSection() {
                   borderRadius: 4,
                   background:
                     t.id === "custom"
-                      ? `linear-gradient(135deg, ${customVars["--bg"]} 50%, ${customVars["--surface2"]} 50%)`
+                      ? `linear-gradient(135deg, ${customVars["--bg"] || customVars["--bg-base"]} 50%, ${customVars["--surface2"] || customVars["--bg-surface"]} 50%)`
                       : t.vars
-                        ? `linear-gradient(135deg, ${t.vars["--bg"]} 50%, ${t.vars["--surface2"]} 50%)`
+                        ? `linear-gradient(135deg, ${t.vars["--bg"] || t.vars["--bg-base"]} 50%, ${t.vars["--surface2"] || t.vars["--bg-surface"]} 50%)`
                         : "var(--surface3)",
                   border: "1px solid rgba(255,255,255,0.08)",
                   flexShrink: 0,
@@ -1777,6 +1777,68 @@ function StartPageSection() {
   );
 }
 
+function CloseBehaviorSection() {
+  const [behavior, setBehavior] = useState(
+    () => storage.get(STORAGE_KEYS.CLOSE_TO_TRAY) || "ask",
+  );
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!window.electron?.onUpdateCloseBehavior) return;
+    const handler = window.electron.onUpdateCloseBehavior((newBehavior) => {
+      setBehavior(newBehavior);
+    });
+    return () => window.electron.offUpdateCloseBehavior(handler);
+  }, []);
+
+  const handleSave = () => {
+    storage.set(STORAGE_KEYS.CLOSE_TO_TRAY, behavior);
+    window.electron?.setCloseBehavior?.(behavior);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div style={{ marginBottom: 40 }}>
+      <div className="settings-section-title">Close Behavior</div>
+      <div
+        style={{
+          fontSize: 13,
+          color: "var(--text3)",
+          marginBottom: 16,
+          lineHeight: 1.6,
+        }}
+      >
+        Choose what happens when you close the main Orion window while a mini-player stream is active.
+      </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <SettingsSelect
+          value={behavior}
+          onChange={(v) => setBehavior(v)}
+          options={[
+            { value: "ask", label: "❓ Ask every time" },
+            { value: "tray", label: "📥 Keep playing in background (System Tray)" },
+            { value: "quit", label: "❌ Close application immediately" },
+          ]}
+        />
+        <button className="btn btn-primary" onClick={handleSave}>
+          Save
+        </button>
+        {saved && (
+          <span style={{ fontSize: 13, color: "#48c774" }}>✓ Saved</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── TMDB Metadata Language ────────────────────────────────────────────────────
 const TMDB_LANGUAGES = [
   { value: "en-US", label: "English (en-US)" },
@@ -2041,7 +2103,7 @@ function SubtitleSettingsSection() {
                 }}
                 onClick={() =>
                   window.electron?.openExternal(
-                    "https://github.com/orion-app/orion/wyzie-tutorial.md",
+                    "https://github.com/OK-ALI/Orion/blob/main/wyzie-tutorial.md",
                   )
                 }
               >
@@ -2378,32 +2440,6 @@ function SystemCheckSection({ apiKey, apiKeySource = "missing", downloadPath }) 
           label: "TMDB token",
           ok: status.configuration.tmdbTokenSet,
           detail: tmdbTokenDetail(status.configuration.tmdbTokenSource),
-        },
-        {
-          label: "Download folder",
-          ok: status.configuration.downloadPath.ok,
-          detail:
-            status.configuration.downloadPath.status === "not_configured"
-              ? "Not configured yet"
-              : status.configuration.downloadPath.ok
-                ? status.configuration.downloadPath.path
-                : status.configuration.downloadPath.error ||
-                  status.configuration.downloadPath.status,
-        },
-        {
-          label: "yt-dlp",
-          ok: status.tools.ytDlp.ok,
-          detail: status.tools.ytDlp.version || status.tools.ytDlp.error,
-        },
-        {
-          label: "ffmpeg",
-          ok: status.tools.ffmpeg.ok,
-          detail: status.tools.ffmpeg.version || status.tools.ffmpeg.error,
-        },
-        {
-          label: "Download queue",
-          ok: status.downloads.errors === 0,
-          detail: `${status.downloads.active} active, ${status.downloads.completed} completed, ${status.downloads.errors} errors`,
         },
         {
           label: "Player sessions",
@@ -4296,6 +4332,8 @@ export default function SettingsPage({
           <HomeLayoutSection />
           <Divider />
           <StartPageSection />
+          <Divider />
+          <CloseBehaviorSection />
           <Divider />
           <AppearanceSection />
         </div>

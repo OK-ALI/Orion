@@ -38,6 +38,7 @@ import {
   SourceIcon,
   ShieldBlockIcon,
   PopOutIcon,
+  MiniPlayerIcon,
 } from "../components/common/Icons";
 import DownloadModal from "../components/DownloadModal";
 import TrailerModal from "../components/TrailerModal";
@@ -56,7 +57,16 @@ import {
   isRestricted,
   getAgeLimitSetting,
   getRatingCountry,
-} from "../utils/ageRating";
+} from "../utils/ageRating";const VoiceBoostIcon = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <path d="M12 2v20" />
+    <path d="M17 5v14" />
+    <path d="M22 9v6" />
+    <path d="M7 9v6" />
+    <path d="M2 11v2" />
+  </svg>
+);
+
 
 // Injected into the webview DOM
 const INJECT_SKIP_CONTROLS = `
@@ -248,6 +258,8 @@ export default function MoviePage({
   downloads,
   onGoToDownloads,
   onSelect,
+  onOpenMiniPlayer,
+  onPlay,
 }) {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -256,6 +268,7 @@ export default function MoviePage({
   const [trailerKey, setTrailerKey] = useState(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const [m3u8Url, setM3u8Url] = useState(null);
+  const [m3u8Context, setM3u8Context] = useState(null);
   const [interceptedSubs, setInterceptedSubs] = useState([]);
   const [playerSource, setPlayerSource] = useState(
     () => storage.get("playerSource") || NON_ANIME_DEFAULT_SOURCE,
@@ -278,6 +291,8 @@ export default function MoviePage({
   const sourceRef = useRef(null);
   const playerWrapRef = useRef(null);
   const webviewRef = useRef(null);
+  const switchingToMiniPlayerRef = useRef(false);
+  const [voiceBoost, setVoiceBoost] = useState(() => !!storage.get("voiceBoostEnabled"));
   // Always-current refs for interval callbacks, avoids stale closures without restarting the interval
   const saveProgressRef = useRef(saveProgress);
   saveProgressRef.current = saveProgress;
@@ -605,8 +620,11 @@ export default function MoviePage({
 
   useEffect(() => {
     if (!window.electron) return;
-    const handler = window.electron.onM3u8Found((url) => {
+    const handler = window.electron.onM3u8Found((payload) => {
+      const url = typeof payload === "string" ? payload : payload?.url;
+      if (!url) return;
       setM3u8Url((prev) => (prev !== url ? url : prev));
+      setM3u8Context(typeof payload === "string" ? { url } : payload);
     });
     return () => window.electron.offM3u8Found(handler);
   }, []);
@@ -643,6 +661,159 @@ export default function MoviePage({
     });
     return () => window.electron.offSubtitleFound(handler);
   }, []);
+
+  const applyVoiceBoost = useCallback(() => {
+    const wv = webviewRef.current;
+    if (!wv) return;
+    const js = `
+      (function() {
+        try {
+          const v = document.querySelector('video');
+          if (!v) return;
+          
+          if (!${voiceBoost}) {
+            if (window.__orionAudioNodes) {
+              const { source, highpass, peaking, compressor, dest } = window.__orionAudioNodes;
+              source.disconnect();
+              highpass.disconnect();
+              peaking.disconnect();
+              compressor.disconnect();
+              source.connect(dest);
+              window.__orionVoiceBoostActive = false;
+            }
+            return;
+          }
+          
+          if (window.__orionVoiceBoostActive) return;
+          
+          if (!window.__orionAudioCtx) {
+            window.__orionAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          const ctx = window.__orionAudioCtx;
+          
+          let sourceNode;
+          if (window.__orionAudioNodes) {
+            sourceNode = window.__orionAudioNodes.source;
+          } else {
+            sourceNode = ctx.createMediaElementSource(v);
+          }
+          
+          const highpass = ctx.createBiquadFilter();
+          highpass.type = 'highpass';
+          highpass.frequency.value = 100;
+          
+          const peaking = ctx.createBiquadFilter();
+          peaking.type = 'peaking';
+          peaking.frequency.value = 1500;
+          peaking.Q.value = 1.0;
+          peaking.gain.value = 8;
+          
+          const compressor = ctx.createDynamicsCompressor();
+          compressor.threshold.value = -20;
+          compressor.knee.value = 30;
+          compressor.ratio.value = 3;
+          compressor.attack.value = 0.003;
+          compressor.release.value = 0.25;
+          
+          sourceNode.disconnect();
+          sourceNode.connect(highpass);
+          highpass.connect(peaking);
+          peaking.connect(compressor);
+          compressor.connect(ctx.destination);
+          
+          window.__orionAudioNodes = {
+            source: sourceNode,
+            highpass,
+            peaking,
+            compressor,
+            dest: ctx.destination
+          };
+          window.__orionVoiceBoostActive = true;
+        } catch (e) {
+          console.error("Voice Boost injection failed:", e);
+        }
+      })()
+    `;
+    wv.executeJavaScript(js).catch(() => {});
+  }, [voiceBoost]);
+
+  useEffect(() => {
+    if (!playing || webviewLoading) return;
+    applyVoiceBoost();
+    const wv = webviewRef.current;
+    if (!wv) return;
+    const handleDomReady = () => {
+      applyVoiceBoost();
+    };
+    wv.addEventListener("dom-ready", handleDomReady);
+    return () => {
+      wv.removeEventListener("dom-ready", handleDomReady);
+    };
+  }, [playing, webviewLoading, applyVoiceBoost]);
+
+  useEffect(() => {
+    if (!playing) return;
+    const handleGlobalKeyDown = (e) => {
+      const active = document.activeElement;
+      if (
+        active &&
+        (active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          active.contentEditable === "true")
+      ) {
+        return;
+      }
+      
+      const key = e.key.toLowerCase();
+      if (
+        key === " " ||
+        key === "arrowleft" ||
+        key === "arrowright" ||
+        key === "arrowup" ||
+        key === "arrowdown" ||
+        key === "f" ||
+        key === "m"
+      ) {
+        e.preventDefault();
+        const wv = webviewRef.current;
+        if (!wv) return;
+        
+        const JS = `
+          (() => {
+            const v = document.querySelector('video');
+            if (!v) return false;
+            const key = "${key}";
+            if (key === " ") {
+              if (v.paused) v.play(); else v.pause();
+            } else if (key === "arrowleft") {
+              v.currentTime = Math.max(0, v.currentTime - 10);
+            } else if (key === "arrowright") {
+              v.currentTime = Math.min(v.duration || Infinity, v.currentTime + 10);
+            } else if (key === "arrowup") {
+              v.volume = Math.min(1, v.volume + 0.1);
+            } else if (key === "arrowdown") {
+              v.volume = Math.max(0, v.volume - 0.1);
+            } else if (key === "f") {
+              if (document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+              } else {
+                document.documentElement.requestFullscreen().catch(() => {});
+              }
+            } else if (key === "m") {
+              v.muted = !v.muted;
+            }
+            return true;
+          })()
+        `;
+        wv.executeJavaScript(JS).catch(() => {});
+      }
+    };
+    
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, [playing]);
 
   // Reset auto-mark guard when a new movie loads or watched state resets
   useEffect(() => {
@@ -710,7 +881,9 @@ export default function MoviePage({
   // On unmount: signal main process to destroy the player WebContents and flush session cache.
   useEffect(() => {
     return () => {
-      window.electron?.playerStopped?.();
+      if (!switchingToMiniPlayerRef.current) {
+        window.electron?.playerStopped?.();
+      }
     };
   }, []);
 
@@ -890,6 +1063,7 @@ export default function MoviePage({
     storage.set("dlTime_" + progressKey, safeTime);
     if (safeTime === 0) saveProgress?.(progressKey, 0);
     setPlaying(true);
+    onPlay?.();
     setTimeout(() => {
       playerWrapRef.current?.scrollIntoView({
         behavior: "smooth",
@@ -941,6 +1115,65 @@ export default function MoviePage({
 
     const inject = () => {
       wv.executeJavaScript(INJECT_SKIP_CONTROLS).catch(() => {});
+      
+      const css = `
+        video::cue {
+          background: rgba(0, 0, 0, 0.75) !important;
+          color: #ffffff !important;
+          font-family: sans-serif !important;
+        }
+        .jw-captions, .jw-caption-text,
+        .vjs-text-track-display, .vjs-text-track-cue,
+        .plyr__captions, .plyr__caption,
+        .art-subtitles, .art-subtitle,
+        .shaka-text-container, .shaka-text-region,
+        .dplayer-subtitles, .dplayer-subtitle,
+        [class*="caption"], [class*="subtitle"], [class*="cue"] {
+          transform: translateY(0) !important;
+          margin-bottom: 0 !important;
+          display: block !important;
+        }
+        @media (max-height: 450px) {
+          video::cue { font-size: 12px !important; }
+          .jw-captions, .jw-caption-text,
+          .vjs-text-track-display, .vjs-text-track-cue,
+          .plyr__captions, .plyr__caption,
+          .art-subtitles, .art-subtitle,
+          .shaka-text-container, .shaka-text-region,
+          .dplayer-subtitles, .dplayer-subtitle,
+          [class*="caption"], [class*="subtitle"], [class*="cue"] {
+            bottom: 20px !important;
+            font-size: 11px !important;
+          }
+        }
+        @media (min-height: 451px) and (max-height: 750px) {
+          video::cue { font-size: 16px !important; }
+          .jw-captions, .jw-caption-text,
+          .vjs-text-track-display, .vjs-text-track-cue,
+          .plyr__captions, .plyr__caption,
+          .art-subtitles, .art-subtitle,
+          .shaka-text-container, .shaka-text-region,
+          .dplayer-subtitles, .dplayer-subtitle,
+          [class*="caption"], [class*="subtitle"], [class*="cue"] {
+            bottom: 35px !important;
+            font-size: 14px !important;
+          }
+        }
+        @media (min-height: 751px) {
+          video::cue { font-size: 20px !important; }
+          .jw-captions, .jw-caption-text,
+          .vjs-text-track-display, .vjs-text-track-cue,
+          .plyr__captions, .plyr__caption,
+          .art-subtitles, .art-subtitle,
+          .shaka-text-container, .shaka-text-region,
+          .dplayer-subtitles, .dplayer-subtitle,
+          [class*="caption"], [class*="subtitle"], [class*="cue"] {
+            bottom: 45px !important;
+            font-size: 18px !important;
+          }
+        }
+      `;
+      wv.insertCSS(css).catch(() => {});
     };
 
     wv.addEventListener("dom-ready", inject);
@@ -1401,92 +1634,200 @@ export default function MoviePage({
                     : "visible",
               }}
             />
-            {/* Left-side overlay button group, flex row, no fixed px offsets */}
+            {/* Unified HUD player header bar */}
             <div className="player-overlay-group">
-              <button
-                ref={sourceRef}
-                className="player-overlay-btn"
-                onClick={() => {
-                  const rect = sourceRef.current?.getBoundingClientRect();
-                  if (rect)
-                    setMenuPos({ top: rect.bottom + 6, left: rect.left });
-                  setShowSourceMenu((v) => !v);
-                }}
-                title="Change source"
-              >
-                <SourceIcon />
-                {PLAYER_SOURCES.find((s) => s.id === playerSource)?.label ??
-                  "Source"}
-              </button>
-              {/* Sub/Dub toggle, only for async (AllManga) sources */}
-              {sourceIsAsync(playerSource) && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {/* Media Title (premium look) */}
+                <div className="player-overlay-title">
+                  {item.title || item.name}
+                </div>
+                
+                {/* Source Selection Button */}
+                <button
+                  ref={sourceRef}
+                  className="player-overlay-btn"
+                  onClick={() => {
+                    const rect = sourceRef.current?.getBoundingClientRect();
+                    if (rect)
+                      setMenuPos({ top: rect.bottom + 6, left: rect.left });
+                    setShowSourceMenu((v) => !v);
+                  }}
+                  title="Change source"
+                >
+                  <SourceIcon />
+                  {PLAYER_SOURCES.find((s) => s.id === playerSource)?.label ??
+                    "Source"}
+                </button>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {/* Sub/Dub toggle, only for async (AllManga) sources */}
+                {sourceIsAsync(playerSource) && (
+                  <button
+                    className="player-overlay-btn"
+                    onClick={() => {
+                      const next = dubMode === "sub" ? "dub" : "sub";
+                      setDubMode(next);
+                      storage.set(STORAGE_KEYS.ALLMANGA_DUB_MODE, next);
+                      setM3u8Url(null);
+                      setInterceptedSubs([]);
+                      resolvedPlayerUrlRef.current = null;
+                      setResolvedPlayerUrl(null);
+                      resolvingUrlRef.current = false;
+                      setResolvingUrl(false);
+                      setResolveError(null);
+                    }}
+                    title="Toggle Sub/Dub"
+                  >
+                    {dubMode === "sub" ? "SUB" : "DUB"}
+                  </button>
+                )}
+                
+                {/* Blocked ads & trackers button */}
                 <button
                   className="player-overlay-btn"
                   onClick={() => {
-                    const next = dubMode === "sub" ? "dub" : "sub";
-                    setDubMode(next);
-                    storage.set(STORAGE_KEYS.ALLMANGA_DUB_MODE, next);
-                    setM3u8Url(null);
-                    setInterceptedSubs([]);
-                    resolvedPlayerUrlRef.current = null;
-                    setResolvedPlayerUrl(null);
-                    resolvingUrlRef.current = false;
-                    setResolvingUrl(false);
-                    setResolveError(null);
+                    setShowSourceMenu(false);
+                    setShowBlockedModal(true);
                   }}
-                  title="Toggle Sub/Dub"
+                  title="Blocked ads & trackers"
                 >
-                  {dubMode === "sub" ? "SUB" : "DUB"}
+                  <ShieldBlockIcon />
+                  {blockedSession > 0 && (
+                    <span className="player-blocked-badge">{blockedSession}</span>
+                  )}
                 </button>
-              )}
-              {/* Blocked ads & trackers button */}
-              <button
-                className="player-overlay-btn"
-                onClick={() => {
-                  setShowSourceMenu(false);
-                  setShowBlockedModal(true);
-                }}
-                title="Blocked ads & trackers"
-              >
-                <ShieldBlockIcon />
-                {blockedSession > 0 && (
-                  <span className="player-blocked-badge">{blockedSession}</span>
-                )}
-              </button>
-              {/* Pop-out button*/}
-              <button
-                className="player-overlay-btn"
-                onClick={() => {
-                  if (pipOpen) {
-                    window.electron?.closePipWindow?.();
-                    return;
+                
+                {/* Voice Boost toggle button */}
+                <button
+                  className={`player-overlay-btn${voiceBoost ? " active" : ""}`}
+                  onClick={() => {
+                    const next = !voiceBoost;
+                    setVoiceBoost(next);
+                    storage.set("voiceBoostEnabled", next ? 1 : 0);
+                  }}
+                  title="Voice Boost (Dialogue Enhancer)"
+                >
+                  <VoiceBoostIcon size={14} />
+                  Voice Boost
+                </button>
+                
+                {/* Mini-player button */}
+                <button
+                  className="player-overlay-btn"
+                  title="Mini player"
+                  disabled={
+                    webviewLoading ||
+                    !!(sourceIsAsync(playerSource) && !resolvedPlayerUrl)
                   }
-                  const url = sourceIsAsync(playerSource)
-                    ? resolvedPlayerUrl
-                    : getSourceUrl(
-                        playerSource,
-                        "movie",
-                        item.id,
-                        null,
-                        null,
-                        {},
-                        playerAccentColor,
-                        playerSubLang,
-                      );
-                  if (!url) return;
-                  pipUrlRef.current = url;
-                  window.electron?.openPipWindow?.(url, item.title);
-                }}
-                title={pipOpen ? "Close pop-out" : "Pop out player"}
-                disabled={
-                  !pipOpen &&
-                  (webviewLoading ||
-                    !!(sourceIsAsync(playerSource) && !resolvedPlayerUrl))
-                }
-                style={pipOpen ? { color: "var(--red)" } : undefined}
-              >
-                <PopOutIcon />
-              </button>
+                  onClick={() => {
+                    const url = sourceIsAsync(playerSource)
+                      ? resolvedPlayerUrl
+                      : getSourceUrl(
+                          playerSource,
+                          "movie",
+                          item.id,
+                          null,
+                          null,
+                          {},
+                          playerAccentColor,
+                          playerSubLang,
+                        );
+                    if (!url) return;
+                    switchingToMiniPlayerRef.current = true;
+                    onOpenMiniPlayer?.({
+                      url,
+                      title: item.title,
+                      mediaType: "movie",
+                      mediaId: item.id,
+                      posterPath: item.poster_path,
+                      item,
+                    });
+                    onBack();
+                  }}
+                >
+                  <MiniPlayerIcon />
+                </button>
+                
+                {/* Pop-out button*/}
+                <button
+                  className="player-overlay-btn"
+                  onClick={() => {
+                    if (pipOpen) {
+                      window.electron?.closePipWindow?.();
+                      return;
+                    }
+                    const url = sourceIsAsync(playerSource)
+                      ? resolvedPlayerUrl
+                      : getSourceUrl(
+                          playerSource,
+                          "movie",
+                          item.id,
+                          null,
+                          null,
+                          {},
+                          playerAccentColor,
+                          playerSubLang,
+                        );
+                    if (!url) return;
+                    pipUrlRef.current = url;
+                    window.electron?.openPipWindow?.(url, item.title);
+                  }}
+                  title={pipOpen ? "Close pop-out" : "Pop out player"}
+                  disabled={
+                    !pipOpen &&
+                    (webviewLoading ||
+                      !!(sourceIsAsync(playerSource) && !resolvedPlayerUrl))
+                  }
+                  style={pipOpen ? { color: "var(--red)" } : undefined}
+                >
+                  <PopOutIcon />
+                </button>
+
+                {/* Download button */}
+                <button
+                  className="player-overlay-btn"
+                  onClick={() =>
+                    movieDownload
+                      ? onGoToDownloads?.(movieDownload.id)
+                      : (setShowSourceMenu(false), setShowDownload(true))
+                  }
+                  title={
+                    movieDownload
+                      ? movieDownload.status === "downloading"
+                        ? "Downloading… - view in Downloads"
+                        : "Already downloaded - view in Downloads"
+                      : "Download"
+                  }
+                >
+                  {movieDownload ? (
+                    <span
+                      className="player-downloaded-icon"
+                      style={{
+                        color:
+                          movieDownload.status === "downloading"
+                            ? "var(--red)"
+                            : "#4caf50",
+                      }}
+                    >
+                      {movieDownload.status === "downloading" ? "↓" : "✓"}
+                    </span>
+                  ) : (
+                    <DownloadIcon />
+                  )}
+                  {!movieDownload && m3u8Url && (
+                    <span className="player-overlay-dot" />
+                  )}
+                  {!sourceSupportsProgress(playerSource) && (
+                    <span
+                      className="player-no-progress-hint"
+                      title="No automatic progress tracking for this source"
+                    >
+                      ⚠ no tracking
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
             {showSourceMenu && menuPos && (
               <div
@@ -1530,48 +1871,6 @@ export default function MoviePage({
                 ))}
               </div>
             )}
-            <button
-              className="player-overlay-btn"
-              onClick={() =>
-                movieDownload
-                  ? onGoToDownloads?.(movieDownload.id)
-                  : (setShowSourceMenu(false), setShowDownload(true))
-              }
-              title={
-                movieDownload
-                  ? movieDownload.status === "downloading"
-                    ? "Downloading… - view in Downloads"
-                    : "Already downloaded - view in Downloads"
-                  : "Download"
-              }
-            >
-              {movieDownload ? (
-                <span
-                  className="player-downloaded-icon"
-                  style={{
-                    color:
-                      movieDownload.status === "downloading"
-                        ? "var(--red)"
-                        : "#4caf50",
-                  }}
-                >
-                  {movieDownload.status === "downloading" ? "↓" : "✓"}
-                </span>
-              ) : (
-                <DownloadIcon />
-              )}
-              {!movieDownload && m3u8Url && (
-                <span className="player-overlay-dot" />
-              )}
-              {!sourceSupportsProgress(playerSource) && (
-                <span
-                  className="player-no-progress-hint"
-                  title="No automatic progress tracking for this source"
-                >
-                  ⚠ no tracking
-                </span>
-              )}
-            </button>
           </div>
 
           {displayPct > 0 && (
@@ -1688,6 +1987,7 @@ export default function MoviePage({
         <DownloadModal
           onClose={() => setShowDownload(false)}
           m3u8Url={m3u8Url}
+          m3u8Context={m3u8Context}
           subtitles={interceptedSubs}
           mediaName={mediaName}
           downloaderFolder={downloaderFolder}

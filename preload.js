@@ -73,6 +73,8 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.removeListener("download-progress", handler),
 
   checkDownloader: (folder) => ipcRenderer.invoke("check-downloader", folder),
+  checkHelperDownloader: (folder) =>
+    ipcRenderer.invoke("check-helper-downloader", folder),
   getDownloaderStatus: () => ipcRenderer.invoke("get-downloader-status"),
   installDownloaderTools: () => ipcRenderer.invoke("install-downloader-tools"),
   openDownloaderToolsFolder: () =>
@@ -221,4 +223,30 @@ contextBridge.exposeInMainWorld("electron", {
   },
   offScheduledBackupRequested: (handler) =>
     ipcRenderer.removeListener("scheduled-backup-requested", handler),
+
+  // ── Mini-Player and Tray IPC ───────────────────────────────────────────────
+  setMiniPlayerStatus: (active, title) =>
+    ipcRenderer.send("mini-player-status", { active, title }),
+  onStopMiniPlayer: (cb) => {
+    const handler = () => cb();
+    ipcRenderer.on("stop-mini-player", handler);
+    return handler;
+  },
+  offStopMiniPlayer: (handler) =>
+    ipcRenderer.removeListener("stop-mini-player", handler),
+  onTrayRestore: (cb) => {
+    const handler = () => cb();
+    ipcRenderer.on("tray-restore-window", handler);
+    return handler;
+  },
+  offTrayRestore: (handler) =>
+    ipcRenderer.removeListener("tray-restore-window", handler),
+  onUpdateCloseBehavior: (cb) => {
+    const handler = (_, behavior) => cb(behavior);
+    ipcRenderer.on("update-close-behavior", handler);
+    return handler;
+  },
+  offUpdateCloseBehavior: (handler) =>
+    ipcRenderer.removeListener("update-close-behavior", handler),
 });
+

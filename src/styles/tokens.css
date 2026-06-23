@@ -106,6 +106,7 @@
   --media-card-collection: 164px;
 
   /* Streambert compatibility aliases for ported parity pages */
+  --bg: var(--bg-base);
   --red: var(--accent);
   --red-soft: var(--accent-soft);
   --surface: var(--bg-elevated);

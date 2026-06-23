@@ -160,15 +160,14 @@ export const THEME_PRESETS = [
 ];
 
 export const DEFAULT_CUSTOM_VARS = {
-  "--bg-base": "#0a0a0f",
-  "--bg-elevated": "#12121a",
-  "--bg-surface": "#1a1a26",
-  "--bg-hover": "#22223a",
-  "--bg-input": "#161622",
-  "--text-primary": "#f0f0f5",
-  "--text-secondary": "#a0a0b0",
-  "--text-muted": "#606078",
+  "--bg": "#0a0a0f",
+  "--surface": "#12121a",
+  "--surface2": "#1a1a26",
+  "--surface3": "#22223a",
   "--border": "rgba(255, 255, 255, 0.07)",
+  "--text": "#f0f0f5",
+  "--text2": "#a0a0b0",
+  "--text3": "#606078",
 };
 
 export function applyTheme(themeId, customVars = null) {
@@ -177,7 +176,49 @@ export function applyTheme(themeId, customVars = null) {
   const vars =
     themeId === "custom" ? (customVars ?? DEFAULT_CUSTOM_VARS) : preset.vars;
   const root = document.documentElement;
+
+  // Clear previously applied theme variables to prevent leaks
+  const allProps = [
+    "--bg-base",
+    "--bg-elevated",
+    "--bg-surface",
+    "--bg-hover",
+    "--bg-input",
+    "--text-primary",
+    "--text-secondary",
+    "--text-muted",
+    "--bg",
+    "--surface",
+    "--surface2",
+    "--surface3",
+    "--text",
+    "--text2",
+    "--text3",
+    "--border",
+  ];
+  for (const prop of allProps) {
+    root.style.removeProperty(prop);
+  }
+
+  const CUSTOM_TO_BASE_MAP = {
+    "--bg": "--bg-base",
+    "--surface": "--bg-elevated",
+    "--surface2": "--bg-surface",
+    "--surface3": "--bg-hover",
+    "--text": "--text-primary",
+    "--text2": "--text-secondary",
+    "--text3": "--text-muted",
+  };
+
   for (const [prop, value] of Object.entries(vars)) {
     root.style.setProperty(prop, value);
+    if (themeId === "custom") {
+      if (CUSTOM_TO_BASE_MAP[prop]) {
+        root.style.setProperty(CUSTOM_TO_BASE_MAP[prop], value);
+      }
+      if (prop === "--surface") {
+        root.style.setProperty("--bg-input", value);
+      }
+    }
   }
 }

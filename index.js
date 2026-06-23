@@ -10,6 +10,9 @@ const {
   session,
   webContents,
   Notification,
+  Tray,
+  Menu,
+  dialog,
 } = require("electron");
 const path = require("path");
 
@@ -25,6 +28,7 @@ app.commandLine.appendSwitch(
 app.commandLine.appendSwitch("enable-features", "NetworkServiceInProcess2");
 app.commandLine.appendSwitch("disk-cache-size", String(80 * 1024 * 1024));
 app.commandLine.appendSwitch("renderer-process-limit", "3");
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 // ── Sub-modules ──────────────────────────────────────────────────────────────
 const blockStats = require("./src/ipc/blockStats");
@@ -94,10 +98,22 @@ const BLOCKED_HOSTS = [
 let mainWindow = null;
 const getMainWindow = () => mainWindow;
 
+let tray = null;
+let miniPlayerActive = false;
+let miniPlayerTitle = "";
+let closeBehavior = "ask"; // "ask" | "tray" | "quit"
+let shownTrayBalloon = false;
+
 const playerWcIds = new Set();
 let sessionsConfigured = false;
 
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.orion.multiverse");
+}
+
 function setupSession(playerSession, trailerSession) {
+  const mediaRequestContexts = new Map();
+
   const stripHeaders = (details, callback) => {
     const headers = { ...details.responseHeaders };
     for (const key of Object.keys(headers)) {
@@ -134,6 +150,32 @@ function setupSession(playerSession, trailerSession) {
     "*://*/*.vtt*",
     "*://*/*.vtt",
   ];
+  playerSession.webRequest.onBeforeSendHeaders(
+    { urls: MEDIA_URLS },
+    (details, callback) => {
+      const { url, requestHeaders = {} } = details;
+      if (url.includes(".m3u8") || url.includes(".vtt")) {
+        mediaRequestContexts.set(url, {
+          url,
+          requestHeaders,
+          referrer:
+            details.referrer ||
+            requestHeaders.Referer ||
+            requestHeaders.referer ||
+            "",
+          resourceType: details.resourceType || "",
+          timestamp: Date.now(),
+        });
+        if (mediaRequestContexts.size > 80) {
+          const cutoff = Date.now() - 10 * 60 * 1000;
+          for (const [key, value] of mediaRequestContexts) {
+            if (value.timestamp < cutoff) mediaRequestContexts.delete(key);
+          }
+        }
+      }
+      callback({ requestHeaders });
+    },
+  );
   playerSession.webRequest.onBeforeRequest(
     { urls: [...BLOCKED_HOSTS, ...MEDIA_URLS] },
     (details, callback) => {
@@ -162,7 +204,10 @@ function setupSession(playerSession, trailerSession) {
       const mw = getMainWindow();
       if (mw && !mw.isDestroyed()) {
         if (url.includes(".m3u8")) {
-          mw.webContents.send("m3u8-found", url);
+          mw.webContents.send(
+            "m3u8-found",
+            mediaRequestContexts.get(url) || { url },
+          );
         } else if (url.includes(".vtt")) {
           const { extractSubtitleLang } = require("./src/ipc/subtitles");
           mw.webContents.send("subtitle-found", {
@@ -193,10 +238,84 @@ function setupSession(playerSession, trailerSession) {
   }
 }
 
+function createTray() {
+  if (tray) return;
+
+  const iconPath = path.join(__dirname, "public", "icon.png");
+  tray = new Tray(iconPath);
+  
+  tray.on("double-click", () => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.send("tray-restore-window");
+    }
+  });
+
+  updateTrayMenu();
+}
+
+function updateTrayMenu() {
+  if (!tray) return;
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: "Open Orion",
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+          mainWindow.webContents.send("tray-restore-window");
+        }
+      }
+    },
+    { type: "separator" },
+    {
+      label: miniPlayerActive
+        ? `Now Playing: ${miniPlayerTitle}`
+        : "Orion: No Stream Active",
+      enabled: false
+    },
+    {
+      label: "Stop Playback",
+      enabled: miniPlayerActive,
+      click: () => {
+        if (mainWindow) {
+          mainWindow.webContents.send("stop-mini-player");
+        }
+        miniPlayerActive = false;
+        updateTrayMenu();
+      }
+    },
+    { type: "separator" },
+    {
+      label: "Quit Orion",
+      click: () => {
+        app.isQuiting = true;
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setToolTip("Orion Media Player");
+  tray.setContextMenu(contextMenu);
+}
+
+function showTrayBalloonOnce() {
+  if (tray && !shownTrayBalloon) {
+    tray.displayBalloon({
+      title: "Orion running in background",
+      content: "Orion is minimized to the system tray and will continue streaming in the background.",
+    });
+    shownTrayBalloon = true;
+  }
+}
+
 function createWindow() {
   storageIpc.applySecretMigrationIfNeeded();
   downloadsIpc.loadDownloads();
   blockStats.loadBlockStats();
+  createTray();
 
   mainWindow = new BrowserWindow({
     width: 1380,
@@ -204,7 +323,7 @@ function createWindow() {
     minWidth: 940,
     minHeight: 560,
     backgroundColor: "#0a0a0f",
-    icon: path.join(__dirname, "public", process.platform === "win32" ? "icon.ico" : "icon.png"),
+    icon: path.join(__dirname, "public", "icon.png"),
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
     frame: process.platform !== "win32",
     webPreferences: {
@@ -325,24 +444,81 @@ function createWindow() {
     }
   });
 
-  // Intercept close if downloads are active
+  // Intercept close if downloads or mini-player are active
   let closeResponsePending = false;
   mainWindow.on("close", (e) => {
+    if (app.isQuiting) return;
+
     const running = downloadsIpc
       .getDownloads()
       .filter((d) => d.status === "downloading");
-    if (running.length === 0) return;
-    e.preventDefault();
-    if (closeResponsePending) return;
-    closeResponsePending = true;
-    mainWindow.webContents.send("confirm-close", { count: running.length });
+
+    // Case 1: Active downloads running
+    if (running.length > 0) {
+      e.preventDefault();
+      if (closeResponsePending) return;
+      closeResponsePending = true;
+      mainWindow.webContents.send("confirm-close", { count: running.length });
+      return;
+    }
+
+    // Case 2: Mini-player is active (background tray streaming)
+    if (miniPlayerActive) {
+      if (closeBehavior === "tray") {
+        e.preventDefault();
+        mainWindow.hide();
+        showTrayBalloonOnce();
+        return;
+      }
+
+      if (closeBehavior === "quit") {
+        // Let normal quit happen
+        app.isQuiting = true;
+        downloadsIpc.killAllDownloads();
+        app.quit();
+        return;
+      }
+
+      // closeBehavior === "ask"
+      e.preventDefault();
+      dialog.showMessageBox(mainWindow, {
+        type: "question",
+        buttons: ["Minimize to Tray", "Quit Orion", "Cancel"],
+        defaultId: 0,
+        title: "Orion Media Player",
+        message: "Orion is currently streaming in a mini-player.",
+        detail: "Would you like to keep streaming in the background (system tray) or close the application?",
+        checkboxLabel: "Remember my choice",
+        checkboxChecked: false,
+      }).then((result) => {
+        const { response, checkboxChecked } = result;
+        if (response === 0) { // Minimize to Tray
+          if (checkboxChecked) {
+            closeBehavior = "tray";
+            mainWindow.webContents.send("update-close-behavior", "tray");
+          }
+          mainWindow.hide();
+          showTrayBalloonOnce();
+        } else if (response === 1) { // Quit Orion
+          if (checkboxChecked) {
+            closeBehavior = "quit";
+            mainWindow.webContents.send("update-close-behavior", "quit");
+          }
+          app.isQuiting = true;
+          downloadsIpc.killAllDownloads();
+          app.quit();
+        }
+      });
+    }
   });
 
   ipcMain.on("close-response", (_, confirmed) => {
     closeResponsePending = false;
     if (confirmed) {
+      app.isQuiting = true;
       downloadsIpc.killAllDownloads();
       mainWindow.destroy();
+      app.quit();
     }
   });
 
@@ -367,6 +543,20 @@ blockStats.init(getMainWindow);
 diagnosticsIpc.register({
   getDownloads: downloadsIpc.getDownloads,
   getPlayerWebContentsCount: () => playerWcIds.size,
+});
+
+ipcMain.on("mini-player-status", (_, status) => {
+  miniPlayerActive = status.active;
+  miniPlayerTitle = status.title || "";
+  updateTrayMenu();
+});
+
+ipcMain.on("set-close-behavior", (_, behavior) => {
+  closeBehavior = behavior;
+});
+
+app.on("will-quit", () => {
+  if (tray) tray.destroy();
 });
 
 ipcMain.handle("get-block-stats", () => blockStats.getBlockStats());
@@ -458,10 +648,76 @@ ipcMain.handle("open-pip-window", (_, { url, title }) => {
     },
   });
 
+  const injectPopoutCSS = (wc) => {
+    const css = `
+      video::cue {
+        background: rgba(0, 0, 0, 0.75) !important;
+        color: #ffffff !important;
+        font-family: sans-serif !important;
+      }
+      .jw-captions, .jw-caption-text,
+      .vjs-text-track-display, .vjs-text-track-cue,
+      .plyr__captions, .plyr__caption,
+      .art-subtitles, .art-subtitle,
+      .shaka-text-container, .shaka-text-region,
+      .dplayer-subtitles, .dplayer-subtitle,
+      [class*="caption"], [class*="subtitle"], [class*="cue"] {
+        transform: translateY(0) !important;
+        margin-bottom: 0 !important;
+        display: block !important;
+      }
+      @media (max-height: 450px) {
+        video::cue { font-size: 12px !important; }
+        .jw-captions, .jw-caption-text,
+        .vjs-text-track-display, .vjs-text-track-cue,
+        .plyr__captions, .plyr__caption,
+        .art-subtitles, .art-subtitle,
+        .shaka-text-container, .shaka-text-region,
+        .dplayer-subtitles, .dplayer-subtitle,
+        [class*="caption"], [class*="subtitle"], [class*="cue"] {
+          bottom: 20px !important;
+          font-size: 11px !important;
+        }
+      }
+      @media (min-height: 451px) and (max-height: 750px) {
+        video::cue { font-size: 16px !important; }
+        .jw-captions, .jw-caption-text,
+        .vjs-text-track-display, .vjs-text-track-cue,
+        .plyr__captions, .plyr__caption,
+        .art-subtitles, .art-subtitle,
+        .shaka-text-container, .shaka-text-region,
+        .dplayer-subtitles, .dplayer-subtitle,
+        [class*="caption"], [class*="subtitle"], [class*="cue"] {
+          bottom: 35px !important;
+          font-size: 14px !important;
+        }
+      }
+      @media (min-height: 751px) {
+        video::cue { font-size: 20px !important; }
+        .jw-captions, .jw-caption-text,
+        .vjs-text-track-display, .vjs-text-track-cue,
+        .plyr__captions, .plyr__caption,
+        .art-subtitles, .art-subtitle,
+        .shaka-text-container, .shaka-text-region,
+        .dplayer-subtitles, .dplayer-subtitle,
+        [class*="caption"], [class*="subtitle"], [class*="cue"] {
+          bottom: 45px !important;
+          font-size: 18px !important;
+        }
+      }
+    `;
+    wc.insertCSS(css).catch(() => {});
+  };
+
   pipWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 
   pipWindow.webContents.on("did-attach-webview", (_, wc) => {
     wc.setWindowOpenHandler(() => ({ action: "deny" }));
+    wc.on("dom-ready", () => injectPopoutCSS(wc));
+  });
+
+  pipWindow.webContents.on("did-finish-load", () => {
+    injectPopoutCSS(pipWindow.webContents);
   });
 
   pipWindow.loadURL(url);

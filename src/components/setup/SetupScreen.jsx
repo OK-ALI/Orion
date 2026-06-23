@@ -2,7 +2,7 @@
 // Shown on first launch to collect the user's TMDB API key.
 
 import { useState, useCallback } from "react";
-import { OrionLogo, KeyIcon } from "../common/Icons";
+import { KeyIcon } from "../common/Icons";
 
 export default function SetupScreen({ onComplete, onSave, onSkip }) {
   const [apiKey, setApiKey] = useState("");
@@ -73,7 +73,7 @@ export default function SetupScreen({ onComplete, onSave, onSkip }) {
     <div className="setup-screen">
       <form className="setup-card" onSubmit={handleSubmit}>
         <div className="setup-logo">
-          <OrionLogo size={36} className="setup-logo-icon" />
+          <img src="/brand-mark.png" alt="" className="setup-logo-image" />
           <div>
             <span className="setup-logo-text">Orion</span>
             <span className="setup-subtitle">A Multiverse of Stories</span>

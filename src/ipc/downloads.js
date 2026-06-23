@@ -2,7 +2,7 @@
 // Manages the download queue, spawns the downloader binary, tracks progress,
 // and handles all download-related IPC handlers.
 
-const { app, ipcMain, shell, dialog, session } = require("electron");
+const { app, ipcMain, shell, dialog, session, net } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -30,6 +30,8 @@ let _getMainWindow = () => null;
 const TOOL_DIR = () => path.join(app.getPath("userData"), "tools");
 const YTDLP_NAME = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
 const FFMPEG_NAME = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+const DOWNLOAD_STALL_TIMEOUT_MS = 2 * 60 * 1000;
+const DOWNLOAD_STALL_CHECK_MS = 15 * 1000;
 
 function toolPath(name) {
   return path.join(TOOL_DIR(), name);
@@ -88,6 +90,214 @@ function getPlayerUserAgent() {
   }
 }
 
+function getHeaderValue(headers, wanted) {
+  if (!headers) return null;
+  const lowerWanted = wanted.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() !== lowerWanted) continue;
+    if (Array.isArray(value)) return value.join("; ");
+    return value == null ? null : String(value);
+  }
+  return null;
+}
+
+function buildDownloadHeaders(m3u8Context, userAgent) {
+  const requestHeaders = m3u8Context?.requestHeaders || {};
+  const headers = new Map();
+  const add = (name, value) => {
+    if (!value) return;
+    headers.set(name, String(value));
+  };
+
+  add("User-Agent", getHeaderValue(requestHeaders, "User-Agent") || userAgent);
+  add("Referer", getHeaderValue(requestHeaders, "Referer") || m3u8Context?.referrer);
+  add("Origin", getHeaderValue(requestHeaders, "Origin"));
+  add("Accept", getHeaderValue(requestHeaders, "Accept") || "*/*");
+  add("Accept-Language", getHeaderValue(requestHeaders, "Accept-Language"));
+  add("Cookie", getHeaderValue(requestHeaders, "Cookie"));
+  add("Sec-Fetch-Dest", getHeaderValue(requestHeaders, "Sec-Fetch-Dest"));
+  add("Sec-Fetch-Mode", getHeaderValue(requestHeaders, "Sec-Fetch-Mode"));
+  add("Sec-Fetch-Site", getHeaderValue(requestHeaders, "Sec-Fetch-Site"));
+  add("Sec-CH-UA", getHeaderValue(requestHeaders, "Sec-CH-UA"));
+  add("Sec-CH-UA-Mobile", getHeaderValue(requestHeaders, "Sec-CH-UA-Mobile"));
+  add("Sec-CH-UA-Platform", getHeaderValue(requestHeaders, "Sec-CH-UA-Platform"));
+
+  return [...headers.entries()];
+}
+
+function headerValue(headers, key) {
+  const value = headers?.[key] ?? headers?.[key.toLowerCase()];
+  return Array.isArray(value) ? value.join(", ") : value;
+}
+
+function fetchViaPlayerSession(url, m3u8Context, options = {}) {
+  return new Promise((resolve, reject) => {
+    try {
+      const playerSession = session.fromPartition("persist:player");
+      const request = net.request({
+        url,
+        session: playerSession,
+        redirect: "follow",
+      });
+      const upstreamHeaders = buildDownloadHeaders(m3u8Context, getPlayerUserAgent());
+      const upstreamOrigin = (() => {
+        try {
+          return new URL(url).origin;
+        } catch {
+          return null;
+        }
+      })();
+      for (const [name, value] of upstreamHeaders) {
+        const lower = name.toLowerCase();
+        if (
+          lower === "host" ||
+          lower === "content-length" ||
+          lower === "accept-encoding" ||
+          lower === "cookie"
+        ) {
+          continue;
+        }
+        try {
+          if (lower === "referer" && options.referer) {
+            request.setHeader(name, options.referer);
+          } else if (lower === "origin" && upstreamOrigin) {
+            request.setHeader(name, upstreamOrigin);
+          } else {
+            request.setHeader(name, value);
+          }
+        } catch {}
+      }
+      if (options.referer) {
+        try {
+          request.setHeader("Referer", options.referer);
+        } catch {}
+      }
+      if (upstreamOrigin) {
+        try {
+          request.setHeader("Origin", upstreamOrigin);
+        } catch {}
+      }
+      if (options.range) {
+        try {
+          request.setHeader("Range", options.range);
+        } catch {}
+      }
+      request.on("response", (response) => {
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        response.on("end", () => {
+          resolve({
+            statusCode: response.statusCode || 200,
+            headers: response.headers || {},
+            body: Buffer.concat(chunks),
+          });
+        });
+      });
+      request.on("error", reject);
+      request.end();
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+function rewritePlaylist(text, playlistUrl, proxyBase) {
+  const toProxyUrl = (raw) => {
+    if (!raw || raw.startsWith("data:")) return raw;
+    try {
+      const absolute = new URL(raw, playlistUrl).href;
+      return `${proxyBase}/proxy?url=${encodeURIComponent(absolute)}&parent=${encodeURIComponent(playlistUrl)}`;
+    } catch {
+      return raw;
+    }
+  };
+
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return line;
+      if (trimmed.startsWith("#")) {
+        return line.replace(/URI="([^"]+)"/g, (_, uri) => `URI="${toProxyUrl(uri)}"`);
+      }
+      return toProxyUrl(trimmed);
+    })
+    .join("\n");
+}
+
+function createHlsProxy(rootUrl, m3u8Context) {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer(async (req, res) => {
+      try {
+        const reqUrl = new URL(req.url, "http://127.0.0.1");
+        const upstreamUrl =
+          reqUrl.pathname === "/master.m3u8"
+            ? rootUrl
+            : reqUrl.searchParams.get("url");
+        const parentUrl = reqUrl.searchParams.get("parent") || rootUrl;
+        if (!upstreamUrl) {
+          res.writeHead(400);
+          res.end("Missing upstream url");
+          return;
+        }
+
+        const upstream = await fetchViaPlayerSession(upstreamUrl, m3u8Context, {
+          referer: parentUrl,
+          range: req.headers.range,
+        });
+        if (upstream.statusCode >= 400) {
+          res.writeHead(upstream.statusCode, {
+            "content-type": "text/plain; charset=utf-8",
+          });
+          res.end(upstream.body);
+          return;
+        }
+
+        const contentType = String(headerValue(upstream.headers, "content-type") || "");
+        const isPlaylist =
+          upstreamUrl.toLowerCase().includes(".m3u8") ||
+          contentType.includes("mpegurl") ||
+          contentType.includes("application/vnd.apple");
+
+        if (isPlaylist) {
+          const body = rewritePlaylist(
+            upstream.body.toString("utf8"),
+            upstreamUrl,
+            `http://127.0.0.1:${server.address().port}`,
+          );
+          res.writeHead(200, {
+            "content-type": "application/vnd.apple.mpegurl; charset=utf-8",
+            "cache-control": "no-store",
+          });
+          res.end(body);
+          return;
+        }
+
+        res.writeHead(200, {
+          "content-type": contentType || "application/octet-stream",
+          "cache-control": "no-store",
+        });
+        res.end(upstream.body);
+      } catch (error) {
+        res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
+        res.end(error.message || "Proxy fetch failed");
+      }
+    });
+
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      resolve({
+        url: `http://127.0.0.1:${server.address().port}/master.m3u8`,
+        close: () => {
+          try {
+            server.close();
+          } catch {}
+        },
+      });
+    });
+  });
+}
+
 async function getDownloaderStatus() {
   const ytCandidates = [toolPath(YTDLP_NAME), YTDLP_NAME];
   const ffmpegCandidates =
@@ -122,6 +332,37 @@ async function getDownloaderStatus() {
           ? "missing_ytdlp"
           : "missing_ffmpeg",
   };
+}
+
+function checkHelperDownloader(folderPath) {
+  if (!folderPath) return { exists: false, reason: "no_folder" };
+  let entries;
+  try {
+    entries = fs.readdirSync(folderPath);
+  } catch (e) {
+    return {
+      exists: false,
+      reason: e.code === "EACCES" ? "folder_permission" : "folder_unreadable",
+    };
+  }
+  if (!entries.includes("_internal")) {
+    return { exists: false, reason: "no_internal" };
+  }
+  const binary = entries.find((entry) => {
+    if (entry === "_internal" || entry.startsWith(".")) return false;
+    try {
+      const stat = fs.statSync(path.join(folderPath, entry));
+      if (!stat.isFile()) return false;
+      return process.platform === "win32" ? entry.endsWith(".exe") : !!(stat.mode & 0o111);
+    } catch {
+      return false;
+    }
+  });
+  if (!binary) return { exists: false, reason: "no_executable" };
+  const token = crypto.randomUUID();
+  const binaryPath = path.join(folderPath, binary);
+  trustedBinaryPaths.set(token, binaryPath);
+  return { exists: true, ready: true, token, folderPath, binary };
 }
 
 async function installDownloaderTools() {
@@ -266,6 +507,9 @@ function killAllDownloads() {
     try {
       proc.kill("SIGKILL");
     } catch {}
+    try {
+      proc.__orionCleanup?.();
+    } catch {}
     const idx = downloads.findIndex((d) => d.id === id);
     if (idx !== -1) {
       downloads[idx].status = "error";
@@ -345,7 +589,24 @@ function downloadSubtitleFile(url, destPath) {
   });
 }
 
-function trackProcess(id, proc, name, downloadPath, logPath, cookiePath) {
+function trackProcess(id, proc, name, downloadPath, logPath, cookiePath, cleanup) {
+  let lastProgressAt = Date.now();
+  let lastProgressSignature = "";
+  let stallTimer = null;
+  let consecutiveFragmentFailures = 0;
+
+  const markProgressActivity = (entry, update) => {
+    const signature = [
+      update.completedFragments ?? entry.completedFragments ?? "",
+      update.progress ?? entry.progress ?? "",
+      update.size ?? entry.size ?? "",
+    ].join("|");
+    if (signature && signature !== lastProgressSignature) {
+      lastProgressSignature = signature;
+      lastProgressAt = Date.now();
+    }
+  };
+
   const handleLine = (line) => {
     const trimmed = line.trim();
     if (!trimmed) return;
@@ -356,6 +617,7 @@ function trackProcess(id, proc, name, downloadPath, logPath, cookiePath) {
 
     const fragMatch = trimmed.match(/\(frag\s+(\d+)\/(\d+)\)/);
     if (fragMatch) {
+      consecutiveFragmentFailures = 0;
       const currentFrag = parseInt(fragMatch[1]);
       const total = parseInt(fragMatch[2]);
       update.completedFragments = currentFrag;
@@ -429,15 +691,40 @@ function trackProcess(id, proc, name, downloadPath, logPath, cookiePath) {
     const retryMatch =
       trimmed.match(/Retrying\s+\(\d+\/\d+\)/i) ||
       trimmed.match(/Got error:.*timed?\s*out/i) ||
-      trimmed.match(/Read timed? out/i);
+      trimmed.match(/Read timed? out/i) ||
+      trimmed.match(/HTTP Error 403|Forbidden|fragment not found/i);
     if (retryMatch) {
       update.speed = "0 MB/s";
       const retryNumMatch = trimmed.match(/Retrying\s+\((\d+)\/(\d+)\)/i);
       update.lastMessage = retryNumMatch
         ? `Retrying… (${retryNumMatch[1]}/${retryNumMatch[2]})`
         : "Retrying…";
+      if (/HTTP Error 403|Forbidden|fragment not found/i.test(trimmed)) {
+        consecutiveFragmentFailures += 1;
+        update.lastMessage =
+          consecutiveFragmentFailures >= 3
+            ? "Download blocked: this source is returning 403 for video fragments."
+            : "Source blocked a video fragment; retrying...";
+      }
+
       downloads[idx] = { ...downloads[idx], ...update };
       sendProgress({ id, ...update, status: downloads[idx].status });
+
+      if (consecutiveFragmentFailures >= 3) {
+        downloads[idx].status = "error";
+        downloads[idx].completedAt = Date.now();
+        appendLog("Download blocked: source returned repeated 403/fragment errors.");
+        sendProgress({
+          id,
+          status: "error",
+          lastMessage: downloads[idx].lastMessage,
+          speed: "0 MB/s",
+        });
+        saveDownloads();
+        try {
+          proc.kill("SIGKILL");
+        } catch {}
+      }
       return;
     }
 
@@ -503,6 +790,7 @@ function trackProcess(id, proc, name, downloadPath, logPath, cookiePath) {
     }
 
     if (Object.keys(update).length > 0) {
+      markProgressActivity(downloads[idx], update);
       downloads[idx] = { ...downloads[idx], ...update };
       sendProgress({ id, ...update, status: downloads[idx].status });
     }
@@ -516,6 +804,32 @@ function trackProcess(id, proc, name, downloadPath, logPath, cookiePath) {
       fs.appendFileSync(logPath, line + "\n", "utf8");
     } catch {}
   };
+
+  stallTimer = setInterval(() => {
+    const idx = downloads.findIndex((d) => d.id === id);
+    if (idx === -1 || downloads[idx].status !== "downloading") return;
+    const idleMs = Date.now() - lastProgressAt;
+    if (idleMs < DOWNLOAD_STALL_TIMEOUT_MS) return;
+
+    const msg =
+      "Download stalled: no fragment or byte progress for 2 minutes. The streaming source likely blocked or stopped serving fragments.";
+    downloads[idx].status = "error";
+    downloads[idx].completedAt = Date.now();
+    downloads[idx].lastMessage = msg;
+    downloads[idx].speed = "0 MB/s";
+    appendLog(msg);
+    sendProgress({
+      id,
+      status: "error",
+      lastMessage: msg,
+      speed: "0 MB/s",
+    });
+    saveDownloads();
+
+    try {
+      proc.kill("SIGKILL");
+    } catch {}
+  }, DOWNLOAD_STALL_CHECK_MS);
 
   proc.stdout.on("data", (chunk) => {
     buf += chunk.toString();
@@ -536,6 +850,10 @@ function trackProcess(id, proc, name, downloadPath, logPath, cookiePath) {
   });
 
   proc.on("error", (err) => {
+    if (stallTimer) clearInterval(stallTimer);
+    try {
+      cleanup?.();
+    } catch {}
     if (cookiePath) {
       try {
         if (fs.existsSync(cookiePath)) fs.unlinkSync(cookiePath);
@@ -558,6 +876,10 @@ function trackProcess(id, proc, name, downloadPath, logPath, cookiePath) {
   });
 
   proc.on("close", (code) => {
+    if (stallTimer) clearInterval(stallTimer);
+    try {
+      cleanup?.();
+    } catch {}
     if (cookiePath) {
       try {
         if (fs.existsSync(cookiePath)) fs.unlinkSync(cookiePath);
@@ -575,6 +897,7 @@ function trackProcess(id, proc, name, downloadPath, logPath, cookiePath) {
       return; // Paused explicitly, ignore close status update
     }
 
+    const wasAlreadyError = downloads[idx].status === "error";
     const status = code === 0 ? "completed" : "error";
     downloads[idx].status = status;
     downloads[idx].completedAt = Date.now();
@@ -584,7 +907,7 @@ function trackProcess(id, proc, name, downloadPath, logPath, cookiePath) {
       try {
         fs.unlinkSync(logPath);
       } catch {}
-    } else {
+    } else if (!wasAlreadyError) {
       try {
         fs.appendFileSync(
           logPath,
@@ -605,6 +928,14 @@ function trackProcess(id, proc, name, downloadPath, logPath, cookiePath) {
       downloads[idx].lastMessage = base
         ? `${base} (exit ${code})`
         : `Download failed (exit code ${code})`;
+    } else {
+      try {
+        fs.appendFileSync(
+          logPath,
+          `${"â”€".repeat(60)}\nStopped after prior error: exit code ${code}\nFinished: ${new Date().toISOString()}\n`,
+          "utf8",
+        );
+      } catch {}
     }
 
     if (code === 0 && !downloads[idx].filePath) {
@@ -760,7 +1091,12 @@ function register(getMainWindow) {
     }
   });
 
-  ipcMain.handle("check-downloader", () => getDownloaderStatus());
+  ipcMain.handle("check-downloader", (_, folderPath) =>
+    folderPath ? checkHelperDownloader(folderPath) : getDownloaderStatus(),
+  );
+  ipcMain.handle("check-helper-downloader", (_, folderPath) =>
+    checkHelperDownloader(folderPath),
+  );
 
   ipcMain.handle(
     "run-download",
@@ -768,6 +1104,7 @@ function register(getMainWindow) {
       _,
       {
         m3u8Url,
+        m3u8Context,
         name,
         downloadPath,
         mediaId,
@@ -777,16 +1114,28 @@ function register(getMainWindow) {
         posterPath,
         tmdbId,
         subtitles,
+        downloaderEngine = "auto",
+        helperToken,
       },
     ) => {
       try {
-        const status = await getDownloaderStatus();
-        if (!status.exists) {
+        const helperPath = helperToken ? trustedBinaryPaths.get(helperToken) : null;
+        const directStatus = await getDownloaderStatus();
+        const useHelper =
+          downloaderEngine === "ext-helper" ||
+          (downloaderEngine === "auto" && !directStatus.exists && !!helperPath);
+        if (useHelper && !helperPath) {
+          return {
+            ok: false,
+            error: "External helper is not ready. Choose the helper folder, then retry.",
+          };
+        }
+        if (!useHelper && !directStatus.exists) {
           return {
             ok: false,
             error:
               "yt-dlp and ffmpeg are not ready. Install downloader tools from the download dialog or Settings, then retry.",
-            status,
+            status: directStatus,
           };
         }
         const id = crypto.randomUUID();
@@ -819,6 +1168,7 @@ function register(getMainWindow) {
           id,
           name,
           m3u8Url,
+          m3u8Context: m3u8Context || null,
           downloadPath: targetDir,
           filePath: null,
           status: "downloading",
@@ -840,6 +1190,7 @@ function register(getMainWindow) {
           subtitlePaths: [],
           logPath,
           cookiePath,
+          downloaderEngine: useHelper ? "ext-helper" : "yt-dlp",
         };
 
         try {
@@ -861,39 +1212,95 @@ function register(getMainWindow) {
           String(d.episode ?? "") === String(entry.episode ?? "");
         downloads = downloads.filter((d) => !isSameMedia(d));
 
+        let hlsProxy = null;
+        let downloadUrl = m3u8Url;
+        if (!useHelper && m3u8Url && /^https?:\/\//i.test(m3u8Url)) {
+          try {
+            hlsProxy = await createHlsProxy(m3u8Url, m3u8Context);
+            downloadUrl = hlsProxy.url;
+            try {
+              fs.appendFileSync(
+                logPath,
+                `Using local HLS proxy: ${downloadUrl}\n`,
+                "utf8",
+              );
+            } catch {}
+          } catch (proxyError) {
+            try {
+              fs.appendFileSync(
+                logPath,
+                `Local HLS proxy unavailable: ${proxyError.message}\n`,
+                "utf8",
+              );
+            } catch {}
+          }
+        }
+
         const outputTemplate = path.join(targetDir, `${safeFileName(name)}.%(ext)s`);
-        const ffmpegDir = path.dirname(status.ffmpeg.path);
-        const args = [
-          "--newline",
-          "--no-playlist",
-          "--retries",
-          "10",
-          "--fragment-retries",
-          "10",
-          "--ffmpeg-location",
-          ffmpegDir,
-          "-f",
-          "best",
-          "--merge-output-format",
-          "mp4",
-        ];
+        const ffmpegDir = directStatus.ffmpeg?.path ? path.dirname(directStatus.ffmpeg.path) : null;
+        const downloadHeaders = buildDownloadHeaders(m3u8Context, userAgent);
+        const args = useHelper
+          ? [
+              "--cli",
+              m3u8Url,
+              "-f",
+              "mp4 (with Audio)",
+              "-r",
+              "best",
+              "-b",
+              "320",
+              "-n",
+              name,
+              "-d",
+              targetDir,
+            ]
+          : [
+              "--newline",
+              "--no-playlist",
+              "--retries",
+              "3",
+              "--fragment-retries",
+              "2",
+              "--socket-timeout",
+              "15",
+              "--abort-on-unavailable-fragments",
+              "--impersonate",
+              "chrome",
+              "--ffmpeg-location",
+              ffmpegDir,
+              "--merge-output-format",
+              "mp4",
+            ];
 
-        if (cookiePath) {
-          args.push("--cookies", cookiePath);
+        if (!useHelper) {
+          if (cookiePath) {
+            args.push("--cookies", cookiePath);
+          }
+          if (userAgent) {
+            args.push("--user-agent", userAgent);
+          }
+          for (const [header, value] of downloadHeaders) {
+            if (header.toLowerCase() === "user-agent") continue;
+            args.push("--add-headers", `${header}:${value}`);
+          }
+          args.push("-o", outputTemplate, downloadUrl);
         }
-        if (userAgent) {
-          args.push("--user-agent", userAgent);
-        }
-        args.push("--extractor-args", "generic:impersonate");
-        args.push("-o", outputTemplate, m3u8Url);
 
-        const proc = spawn(status.ytDlp.path, args, {
+        const env = { ...process.env };
+        if (ffmpegDir) {
+          const pathKey = process.platform === "win32" ? "Path" : "PATH";
+          env[pathKey] = `${ffmpegDir}${path.delimiter}${env[pathKey] || ""}`;
+        }
+
+        const proc = spawn(useHelper ? helperPath : directStatus.ytDlp.path, args, {
           stdio: ["ignore", "pipe", "pipe"],
           windowsHide: true,
+          env,
         });
+        proc.__orionCleanup = () => hlsProxy?.close();
         activeProcs.set(id, proc);
 
-        trackProcess(id, proc, name, targetDir, logPath, cookiePath);
+        trackProcess(id, proc, name, targetDir, logPath, cookiePath, proc.__orionCleanup);
 
         return { ok: true, id };
       } catch (e) {
@@ -907,6 +1314,9 @@ function register(getMainWindow) {
       const proc = activeProcs.get(id);
       if (proc) {
         proc.kill("SIGKILL");
+        try {
+          proc.__orionCleanup?.();
+        } catch {}
         activeProcs.delete(id);
       }
       const idx = downloads.findIndex((d) => d.id === id);
@@ -982,17 +1392,44 @@ function register(getMainWindow) {
         entry.downloadPath,
         `${safeFileName(entry.name)}.%(ext)s`,
       );
+      let hlsProxy = null;
+      let downloadUrl = entry.m3u8Url;
+      if (entry.m3u8Url && /^https?:\/\//i.test(entry.m3u8Url)) {
+        try {
+          hlsProxy = await createHlsProxy(entry.m3u8Url, entry.m3u8Context);
+          downloadUrl = hlsProxy.url;
+          try {
+            fs.appendFileSync(
+              entry.logPath,
+              `Using local HLS proxy: ${downloadUrl}\n`,
+              "utf8",
+            );
+          } catch {}
+        } catch (proxyError) {
+          try {
+            fs.appendFileSync(
+              entry.logPath,
+              `Local HLS proxy unavailable: ${proxyError.message}\n`,
+              "utf8",
+            );
+          } catch {}
+        }
+      }
+      const downloadHeaders = buildDownloadHeaders(entry.m3u8Context, userAgent);
       const args = [
         "--newline",
         "--no-playlist",
-        "--retries",
-        "10",
+          "--retries",
+          "3",
         "--fragment-retries",
-        "10",
+        "2",
+        "--socket-timeout",
+        "15",
+        "--abort-on-unavailable-fragments",
+        "--impersonate",
+        "chrome",
         "--ffmpeg-location",
         path.dirname(status.ffmpeg.path),
-        "-f",
-        "best",
         "--merge-output-format",
         "mp4",
       ];
@@ -1003,16 +1440,28 @@ function register(getMainWindow) {
       if (userAgent) {
         args.push("--user-agent", userAgent);
       }
-      args.push("--extractor-args", "generic:impersonate");
-      args.push("-o", outputTemplate, entry.m3u8Url);
+      for (const [header, value] of downloadHeaders) {
+        if (header.toLowerCase() === "user-agent") continue;
+        args.push("--add-headers", `${header}:${value}`);
+      }
+      args.push("-o", outputTemplate, downloadUrl);
 
       const proc = spawn(status.ytDlp.path, args, {
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
       });
+      proc.__orionCleanup = () => hlsProxy?.close();
       activeProcs.set(id, proc);
 
-      trackProcess(id, proc, entry.name, entry.downloadPath, entry.logPath, cookiePath);
+      trackProcess(
+        id,
+        proc,
+        entry.name,
+        entry.downloadPath,
+        entry.logPath,
+        cookiePath,
+        proc.__orionCleanup,
+      );
 
       return { ok: true };
     } catch (e) {

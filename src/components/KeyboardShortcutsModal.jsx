@@ -153,11 +153,11 @@ export default function KeyboardShortcutsModal({ onClose }) {
             </div>
           </div>
           <a
-            href="https://github.com/OK-ALI/orion"
+            href="https://github.com/OK-ALI/Orion"
             onClick={(e) => {
               e.preventDefault();
               window.electron?.openExternal(
-                "https://github.com/OK-ALI/orion",
+                "https://github.com/OK-ALI/Orion",
               );
             }}
             style={{
