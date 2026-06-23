@@ -1,0 +1,66 @@
+# Orion Execution Progress Tracker
+
+Based on [version_implementations.md](file:///d:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/docs/version_implementations.md).
+
+Last updated: 2026-06-23
+
+## Implemented
+
+- Core Electron/Vite/React shell with custom titlebar, sidebar, routes, onboarding, and secure storage.
+- Streambert source parity is present for playback sources: Videasy, VidSrc, Vidking, and AllManga.
+- Home, Discover, Search, Movie, TV, Library, Downloads, and Settings routes are wired.
+- Movie and TV detail pages expose visible download actions.
+- Quick search now uses a dedicated command-palette overlay with stronger backdrop isolation and scroll lock.
+- Home now exposes saved titles as a visible My List row.
+- Library now has Continue / My List / History tabs with compact, consistent card grids.
+- Sidebar now labels the saved destination as My Library, groups navigation into Browse / Personal / System, and uses a visible edge rail plus top pin control instead of the hidden bottom arrow.
+- My Library/My List saved-count badges were removed; Downloads keeps an active-download badge only.
+- Global media card sizing tokens now bound compact, standard, and collection cards so wide screens do not create oversized movie, TV, anime, season, library, or collection cards.
+- Home My List now renders a compact shelf for 1-3 saved titles and a clearer "View all in My Library" path.
+- Bundled TMDB token fallback plumbing exists through `VITE_TMDB_READ_TOKEN` / `VITE_TMDB_TOKEN`; user-configured tokens still override it.
+- Settings and System Check now show TMDB token source as Bundled, User configured, or Missing.
+- Home carousel cards were reduced slightly to lower vertical emptiness while keeping the cinematic motion.
+- Movie and TV playback now scroll/navigates to the player when playback starts.
+- Movie and TV player overlays now fade on cursor idle and return on interaction.
+- TV episode cards now expose per-episode download buttons.
+- TV episode cards received UI polish for alignment, selected/playing state, action placement, and cleaner expandable descriptions.
+- TV seasons now expose a visible Download Season entry point that starts capture/download flow for the first pending episode in the selected season.
+- Download backend now targets direct `yt-dlp + ffmpeg` instead of Streambert's helper-folder binary flow.
+- Orion can detect downloader tools from PATH or its app-managed tools folder.
+- Windows app-managed downloader install/repair IPC exists for `yt-dlp.exe` and `ffmpeg.exe`.
+- Video downloads do not require subtitle API keys; subtitle APIs are only used when online subtitle search is enabled.
+- System Check now considers Orion's managed downloader tools folder before PATH.
+- Build verification passed with `npm run build`.
+
+## Needs Runtime Verification
+
+- Electron smoke test for Home, Discover, quick search, full search, Movie, TV, Library, Downloads, and Settings.
+- Quick search overlay over every main page, especially Discover and detail pages.
+- Windows downloader install/repair flow from the download modal.
+- Known download blocker: Orion may keep asking to start streaming first because the active m3u8 capture is not being recognized even while video is playing. Backend/download work is paused until the UI polish pass is reviewed.
+- Sidebar hover peek, click-to-pin, and grouped expanded navigation in Electron.
+- Bundled TMDB token fallback with a packaged build env value set.
+- Global card sizing on Home, My Library, Discover, Search, Movie collections, related titles, TV/anime/seasons, and narrow windows.
+- Movie download: start playback, capture m3u8, start yt-dlp, track progress, complete file, open/delete file.
+- TV episode download: click episode card Download, auto-open player/download flow, capture m3u8, complete one episode.
+- TV Download Season entry point: confirm it selects the first pending episode and explains/behaves correctly.
+- Resume interrupted download using direct `yt-dlp + ffmpeg` tools.
+- Subtitle opt-in behavior with no Wyzie/SubDL keys configured.
+- Packaging smoke after runtime behavior is stable.
+
+## Known Limitations
+
+- Download Season is not yet a true unattended bulk-season queue because Orion must capture a playable stream URL for each episode before yt-dlp can download it.
+- Download capture recognition still needs backend debugging after the UI-first pass.
+- The bundled TMDB token fallback requires the free token to be supplied at build time through `VITE_TMDB_READ_TOKEN` or `VITE_TMDB_TOKEN`; no real token is committed in source.
+- App-managed downloader installation is currently Windows-focused. macOS/Linux users need `yt-dlp` and `ffmpeg` on PATH for now.
+- Some older UI text/comments still contain mojibake from the source port; user-facing cleanup should continue during UI polish.
+- Git commands currently report this workspace as not a repository even though a `.git` directory exists; verification used build/syntax checks instead of Git diff.
+
+## Next Queue
+
+1. Run Electron smoke and screenshots for quick search over Home, Discover, Movie, TV, Library, Downloads, and Settings.
+2. Test Windows downloader install/repair and direct yt-dlp download completion.
+3. Polish episode/season download messaging after seeing the runtime flow.
+4. Continue UI polish for media cards, Discover tiles, detail action rows, modal hierarchy, and empty states.
+5. Re-run build and package smoke once runtime checks pass.

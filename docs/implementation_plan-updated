@@ -1,0 +1,432 @@
+# Orion — A Multiverse of Stories
+
+Build a premium Electron desktop streaming app with full feature parity (and beyond) compared to Streambert, but with a completely original Netflix-inspired dark UI.
+
+## Live Progress Tracker
+
+Implementation progress is tracked in [`docs/orion_completion_tracker.md`](orion_completion_tracker.md). Keep that file updated as work lands so the plan remains useful during development.
+
+Version-based implementation planning is tracked in [`docs/version_implementations.md`](version_implementations.md). That document defines Orion's own roadmap, using Streambert as the functional reference while preserving Orion's separate UI identity.
+
+## Decisions Made
+
+| Decision | Choice |
+|---|---|
+| Platform | **Electron** (request interception, ad-blocking, AllManga proxy) |
+| Frontend | **React 18** + **Vite** (same stack, proven for this use case) |
+| Styling | **Vanilla CSS** with CSS custom properties (design tokens) |
+| Metadata | **TMDB API** (free key, prompted on first launch) |
+| Anime metadata | **AniList GraphQL** (no key) |
+| Streaming sources | Videasy, VidSrc, Vidking, AllManga (same as Streambert) |
+| UI aesthetic | **Netflix-style dark** — clean and premium, not cosmic |
+| Scope | Full feature parity + new features |
+| Download tool | **yt-dlp + ffmpeg** (widely available, no custom binary needed) |
+| Branding | Netflix-inspired, clean premium — no cosmic/space theme |
+| Accent color | **#E50914** (Netflix red) |
+
+---
+
+## Resolved Questions
+
+- ✅ **App Identity** — Icon concept generated (minimal flat play-triangle inside an "O" circle, red on dark). Accent color: `#E50914`.
+- ✅ **Branding Direction** — Netflix-style, clean and premium. No cosmic/space theme.
+- ✅ **Download Tool** — **yt-dlp + ffmpeg** directly (no vid-dl-cli-only). User is familiar with yt-dlp. This also means users don't need a separate custom binary — just `yt-dlp` and `ffmpeg` on PATH.
+
+---
+
+## UI/UX Design — How Orion Differs from Streambert
+
+### Design Philosophy
+
+Streambert has a functional but utilitarian UI — Orion should feel like a **premium streaming platform**. Key differentiators:
+
+| Aspect | Streambert | Orion |
+|---|---|---|
+| Layout | Sidebar nav + content area | **Full-width immersive layout** with collapsible slim sidebar |
+| Home page | Simple trending grid | **Netflix-style hero banner** with auto-rotating spotlight + categorized carousels |
+| Player page | Info above, player below | **Cinema mode** — player dominates, info slides in from below |
+| Navigation | Simple page state | **Smooth page transitions** with crossfade/slide animations |
+| Cards | Basic poster cards | **Rich hover cards** with backdrop preview, rating, quick-play button |
+| Typography | DM Sans | **Inter** (body) + **Bebas Neue** or **Outfit** (headings) |
+| Colors | Flat dark (#0a0a0a) | **Layered dark** with subtle gradients, glassmorphic surfaces |
+| Micro-animations | Minimal | **Everywhere** — hover lifts, skeleton loaders, progress pulses |
+
+### Color System (Design Tokens)
+
+```css
+:root {
+  /* Backgrounds — layered dark, not flat */
+  --bg-base: #0a0a0f;           /* Deepest background */
+  --bg-elevated: #12121a;       /* Cards, sidebar */
+  --bg-surface: #1a1a26;        /* Modals, dropdowns */
+  --bg-hover: #22223a;          /* Hover states */
+  
+  /* Accent — configurable, defaults to cinematic red */
+  --accent: #E50914;
+  --accent-hover: #ff1a1a;
+  --accent-soft: rgba(229, 9, 20, 0.15);
+  --accent-glow: rgba(229, 9, 20, 0.4);
+  
+  /* Text hierarchy */
+  --text-primary: #f0f0f5;
+  --text-secondary: #a0a0b0;
+  --text-muted: #606078;
+  
+  /* Semantic */
+  --success: #48c774;
+  --warning: #ffb845;
+  --danger: #ff4757;
+  
+  /* Glass effects */
+  --glass-bg: rgba(18, 18, 26, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: 20px;
+}
+```
+
+---
+
+## Proposed Project Structure
+
+```
+orion/
+├── index.js                    # Electron main process
+├── preload.js                  # Context bridge (renderer ↔ main)
+├── popout-preload.js           # PiP window preload
+├── vite.config.js
+├── package.json
+├── index.html
+├── public/
+│   ├── icon.png
+│   └── logo.svg
+├── src/
+│   ├── main.jsx                # React entry
+│   ├── App.jsx                 # Root component + state manager
+│   ├── styles/
+│   │   ├── tokens.css          # Design tokens (colors, spacing, typography)
+│   │   ├── global.css          # Reset, base styles, animations
+│   │   ├── components.css      # Component-specific styles
+│   │   └── fonts/              # Inter, Outfit woff2 files
+│   ├── components/
+│   │   ├── layout/
+│   │   │   ├── Sidebar.jsx         # Slim collapsible sidebar
+│   │   │   ├── WindowTitlebar.jsx   # Custom Windows/Linux titlebar
+│   │   │   └── Toast.jsx            # Notification toasts
+│   │   ├── media/
+│   │   │   ├── HeroBanner.jsx       # Auto-rotating spotlight banner [NEW]
+│   │   │   ├── MediaCarousel.jsx    # Horizontal scroll carousel [NEW]
+│   │   │   ├── MediaCard.jsx        # Poster card with hover preview
+│   │   │   ├── MediaCardExpanded.jsx # Hover detail card [NEW]
+│   │   │   └── SkeletonLoader.jsx   # Loading placeholders [NEW]
+│   │   ├── player/
+│   │   │   ├── PlayerEmbed.jsx      # Webview player wrapper [NEW]
+│   │   │   ├── SourceSelector.jsx   # Streaming source picker [NEW]
+│   │   │   └── ProgressTracker.jsx  # Watch progress logic [NEW]
+│   │   ├── modals/
+│   │   │   ├── SearchModal.jsx
+│   │   │   ├── DownloadModal.jsx
+│   │   │   ├── SubtitleModal.jsx
+│   │   │   ├── TrailerModal.jsx
+│   │   │   ├── SettingsModal.jsx    # Settings as modal, not page [NEW]
+│   │   │   ├── KeyboardShortcuts.jsx
+│   │   │   ├── UpdateModal.jsx
+│   │   │   └── CloseConfirmModal.jsx
+│   │   ├── setup/
+│   │   │   └── SetupScreen.jsx      # First-launch TMDB key setup
+│   │   └── common/
+│   │       ├── Icons.jsx
+│   │       ├── Button.jsx           # Reusable button component [NEW]
+│   │       ├── Badge.jsx            # Rating/genre badges [NEW]
+│   │       └── ErrorBoundary.jsx
+│   ├── pages/
+│   │   ├── HomePage.jsx             # Hero + carousels (Trending, Top Rated, etc.)
+│   │   ├── DiscoverPage.jsx         # Browse by genre/category [NEW]
+│   │   ├── MoviePage.jsx            # Movie detail + player
+│   │   ├── TVPage.jsx               # TV detail + season/episode picker + player
+│   │   ├── LibraryPage.jsx          # Watchlist + History + Continue Watching
+│   │   ├── DownloadsPage.jsx        # Download manager
+│   │   └── SearchResultsPage.jsx    # Dedicated search results [NEW]
+│   ├── ipc/                         # Main process IPC modules
+│   │   ├── allmanga.js               # AllManga anime scraper
+│   │   ├── blockStats.js            # Ad-block statistics
+│   │   ├── downloads.js             # Download manager
+│   │   ├── player.js                # Player controls, window management
+│   │   ├── storage.js               # Secure storage, file operations
+│   │   └── subtitles.js             # SubDL/Wyzie subtitle search
+│   └── utils/                       # Renderer-side utilities
+│       ├── api.js                   # TMDB/AniList fetch, player sources
+│       ├── storage.js               # localStorage wrapper, keys
+│       ├── appearance.js            # Theme/accent management
+│       ├── ageRating.js             # Content rating logic
+│       ├── aniSkip.js               # Intro/outro skip timings
+│       ├── backup.js                # Data backup/restore
+│       ├── episodeMappings.js       # Episode group mappings
+│       ├── subtitles.js             # Subtitle language list
+│       └── updates.js               # Auto-update checker
+```
+
+---
+
+## Proposed Changes — Component by Component
+
+### Home Page — The First Impression
+
+Streambert shows a simple carousel + trending grid. Orion should wow users immediately.
+
+#### [NEW] HeroBanner.jsx
+A full-width cinematic banner that auto-rotates through 5 trending items every 8 seconds:
+- Full backdrop image with cinematic gradient overlay
+- Title, year, rating, genre tags, and a 2-line synopsis
+- "▶ Play" and "＋ My List" buttons
+- Dot indicators at the bottom for manual navigation
+- Smooth crossfade transition between items
+
+#### [NEW] MediaCarousel.jsx
+Netflix-style horizontal scrollable rows with titles like:
+- 🔥 Trending Movies
+- 📺 Trending TV Shows
+- ⭐ Top Rated
+- 🎬 Continue Watching (from local progress data)
+- 📚 My Watchlist (quick access)
+- 🎌 Popular Anime
+
+Each row scrolls with arrow buttons on hover, cards scale up on hover.
+
+#### [NEW] DiscoverPage.jsx
+A browse-by-genre page that Streambert doesn't have:
+- Grid of genre cards (Action, Comedy, Sci-Fi, etc.)
+- Click a genre → loads TMDB `/discover/movie?with_genres=28` results
+- Filter by year, rating, sort order
+
+---
+
+### Movie/TV Detail Pages — Cinema Mode
+
+#### MoviePage.jsx & TVPage.jsx
+Redesigned with a cinematic split layout:
+
+```
+┌──────────────────────────────────────────┐
+│ ▼ BACKDROP IMAGE (full width, 50vh)      │
+│   gradient overlay                        │
+│   ┌──────┐  Title                        │
+│   │POSTER│  ★ 8.5 · 2024 · 148 min · R  │
+│   │      │  Action, Sci-Fi, Drama         │
+│   └──────┘  Synopsis text...              │
+│             [▶ Play] [＋ List] [⬇ DL]    │
+├──────────────────────────────────────────┤
+│ ┌── Player (16:9, full width) ──────────┐│
+│ │                                        ││
+│ │  (webview loads here when Play is hit) ││
+│ │                                        ││
+│ └────────────────────────────────────────┘│
+│  Source: [Videasy ▾]  |  Blocked: 42 ads │
+├──────────────────────────────────────────┤
+│ Similar Movies (carousel)                 │
+│ Collection / Sequels (if applicable)      │
+└──────────────────────────────────────────┘
+```
+
+**TV-specific additions:**
+- Season dropdown + episode grid with thumbnails
+- Episode progress bars per episode
+- "Continue" button that resumes from last watched episode
+- Anime detection → auto-switch to AllManga source + show AniList metadata
+
+### Playback & Media Player Experience (Phase 3)
+
+To deliver a premium, customized experience that outperforms Streambert's basic player interface:
+
+1. **Custom Webview Keyboard Controls Injection**: Inject custom listeners to capture keystrokes inside the sandboxed player webview. This maps native player hotkeys:
+   - `Space`: Toggle Play/Pause.
+   - `Left/Right Arrows`: Seek backward/forward 10 seconds.
+   - `Up/Down Arrows`: Adjust volume.
+   - `F` / `Double Click`: Toggle fullscreen.
+   - `M`: Toggle mute.
+2. **Immersive Loading Screen Overlay**: Overlay a custom loading HUD featuring a blurred background of the media's TMDB backdrop, title details, and a spinner. This hides the raw, ad-heavy, or unstyled third-party webview initialization phase.
+3. **Netflix-Style Autoplay Countdown**: When a series episode reaches its final 30 seconds, display a custom countdown overlay in the bottom right corner: *"Next episode starts in 5s... [Play Now]"*.
+4. **Auto-Failover Source switching HUD**: If a streaming source fails to load or times out, display a neat overlay: *"Source taking too long to load. [Try another source]"* rather than leaving the user with a broken iframe.
+5. **Resume Playback memory overlay**: When a user selects a video with watch progress, display a prompt modal allowing them to *"Resume from [Timestamp]"* or *"Start over"*.
+
+
+---
+
+### Sidebar — Slim & Collapsible
+
+```
+┌────┐  Expanded:  ┌──────────────┐
+│ 🏠 │             │ 🏠  Home      │
+│ 🔍 │             │ 🔍  Search    │
+│ 🧭 │             │ 🧭  Discover  │
+│ 📚 │             │ 📚  Library   │
+│ ⬇  │ ←badge      │ ⬇  Downloads │
+│    │             │              │
+│    │             │              │
+│ ⚙  │             │ ⚙  Settings  │
+└────┘             └──────────────┘
+```
+- Collapsed: 60px wide, icon-only
+- Expanded: 200px, icon + label
+- Toggle via hamburger or hover
+- Download badge shows active count
+- Active page highlighted with accent bar on left edge
+
+---
+
+### Search — Dedicated Experience
+
+#### SearchModal.jsx (Quick Search)
+- `Ctrl+F` opens a floating command-palette style search bar
+- Instant results as you type (debounced TMDB `/search/multi`)
+- Shows poster thumbnail, title, year, type badge (Movie/TV/Anime)
+- Click result → navigate to detail page
+
+#### [NEW] SearchResultsPage.jsx
+- Full page results with filters (Movies / TV / All)
+- Grid layout with rich media cards
+- Sort by relevance, year, rating
+
+---
+
+### Settings — Modal Instead of Page
+
+Streambert's settings is a 139KB monolith page. Orion should use a **modal with tabs**:
+
+```
+┌─────────────────────────────────────────┐
+│ ⚙ Settings                          ✕  │
+├──────┬──────────────────────────────────┤
+│      │                                   │
+│ 🎨   │  Appearance                       │
+│ ▶️   │  ── Theme: Dark / OLED / Light    │
+│ 📥   │  ── Accent Color: [presets]       │
+│ 🔤   │  ── Font Size: S / M / L         │
+│ 🔒   │  ── Compact Mode: [toggle]       │
+│ 🔑   │                                   │
+│ ℹ️   │                                   │
+│      │                                   │
+├──────┴──────────────────────────────────┤
+│                           [Save Changes] │
+└─────────────────────────────────────────┘
+```
+
+Tabs: Appearance / Player / Downloads / Subtitles / Privacy / API Keys / About
+
+---
+
+## New Features Beyond Streambert
+
+### 1. Continue Watching Row
+A "Continue Watching" carousel on the home page showing items with in-progress watch progress. Streambert tracks progress but doesn't surface it prominently on the home page.
+
+### 2. Genre Discovery Page
+Browse content by genre — Streambert only has trending + search.
+
+### 3. Hover Preview Cards
+Netflix-style expanded cards on hover showing backdrop, rating, year, genres, and a "Quick Play" button — no need to navigate to the detail page for basic info.
+
+### 4. Keyboard Navigation
+Full keyboard navigation — arrow keys to browse carousels, Enter to select, Escape to go back. Streambert only has basic shortcuts.
+
+### 5. Improved Episode Grid
+TV episode grid with thumbnails (TMDB provides still images), air dates, and individual progress bars. Streambert has a simpler list.
+
+### 6. Watch Party Indicators
+Visual "New Episode" badges on TV shows in the library when new episodes air (Streambert has notifications but no visual badge in the library grid).
+
+### 7. Smarter Source Switching
+Auto-detect when a source fails (timeout/error) and offer to switch — with a "remember this choice" option per title.
+
+---
+
+## IPC / Backend Architecture
+
+The main process modules from Streambert will be **ported with improvements**:
+
+### [REUSE] AllManga Pipeline
+Port the entire [allmanga.js](file:///d:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/streambert-main/src/ipc/allmanga.js) — hex cipher, AES-256-CTR decryption, GraphQL queries, local proxy server. This is battle-tested and mirrors ani-cli's approach.
+
+### [REUSE] Ad-Blocking & Session Setup
+Port the blocked hosts list and session interceptor from [index.js](file:///d:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/streambert-main/index.js). Same header stripping, same m3u8/vtt interception.
+
+### [REUSE] Download Pipeline
+Reuse Streambert's download queue, progress parsing, subtitle bundling, and file management concepts, but Orion's backend should spawn direct `yt-dlp + ffmpeg` tools from PATH or Orion's app-managed tools folder. Do not require the `vid-dl-cli-only` helper folder.
+
+### [REUSE] Subtitle System
+Port [subtitles.js](file:///d:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/streambert-main/src/ipc/subtitles.js) — SubDL + Wyzie search, ZIP extraction, subtitle file management.
+
+### [REUSE] Player Controls & Window Management
+Port [player.js](file:///d:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/streambert-main/src/ipc/player.js) — mpv/VLC launch, video progress query across frames, window controls.
+
+### [REUSE] Secure Storage
+Port [storage.js IPC](file:///d:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/streambert-main/src/ipc/storage.js) — safeStorage for API keys.
+
+### [REUSE] Utils
+Port the renderer-side utilities — TMDB/AniList API layer, player sources, caching, age ratings, AniSkip, etc.
+
+---
+
+## Build Phases
+
+### Phase 1: Foundation
+- [x] Initialize Electron + Vite + React project
+- [x] Design token system (tokens.css)
+- [x] Global styles, typography, animations
+- [x] Sidebar + WindowTitlebar + main layout shell
+- [x] Setup screen (TMDB key prompt)
+
+### Phase 2: Core Streaming
+- [x] Port TMDB API layer (api.js, storage.js)
+- [x] Port main process IPC modules (all 6 files)
+- [x] Port preload.js context bridge
+- [x] Port ad-blocker + session setup in index.js
+- [x] Home page with HeroBanner + MediaCarousels
+- [x] Search modal with TMDB multi-search
+- [x] MediaCard component with hover effects
+
+### Phase 3: Playback
+- [x] MoviePage with cinema-mode layout
+- [x] TVPage with season/episode grid
+- [x] PlayerEmbed (webview wrapper with source selector)
+- [x] Progress tracking (auto-save every 5s)
+- [x] Anime detection + AllManga source auto-switch
+- [x] AniList metadata overlay for anime
+- [x] PiP pop-out window
+
+### Phase 4: Library & Downloads
+- [ ] LibraryPage (watchlist, history, continue watching)
+- [ ] DownloadsPage (download manager with progress)
+- [ ] DownloadModal (source selection, subtitle bundling)
+- [ ] SubtitleModal (SubDL/Wyzie search + download)
+
+### Phase 5: Settings & Polish
+- [ ] Settings modal with all tabs
+- [ ] Appearance system (themes, accents, font sizes)
+- [ ] Auto-updater
+- [ ] Keyboard shortcuts
+- [ ] Discover/genre browsing page
+- [ ] Final polish — animations, transitions, edge cases
+
+### Phase 6: Packaging
+- [ ] electron-builder config (Windows NSIS, macOS DMG, Linux deb/AppImage)
+- [ ] App icons and installer assets
+- [ ] Production build optimization
+
+---
+
+## Verification Plan
+
+### Automated
+- `npm run build` — Vite production build completes without errors
+- `npm start` — App launches, loads the setup screen
+
+### Manual
+- First-launch flow: enter TMDB key → validates → shows home page
+- Home page: hero banner rotates, carousels scroll, cards show posters
+- Search: `Ctrl+F` → type "Inception" → results appear → click → movie page
+- Play: click Play on a movie → webview loads Videasy → video plays
+- Source switch: change to VidSrc → player reloads with new source
+- Anime: search "Attack on Titan" → detected as anime → AllManga source → video plays
+- Downloads: capture m3u8 → open download modal → start download → progress shows
+- Library: save to watchlist → appears in library → remove from watchlist
+- Settings: change accent color → UI updates immediately
