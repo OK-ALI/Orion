@@ -10,6 +10,7 @@ import {
 } from "../components/common/Icons";
 import { storage, isElectron, STORAGE_KEYS } from "../utils/storage";
 import SubtitleDownloaderModal from "../components/SubtitleDownloaderModal";
+import ConfirmModal from "../components/common/ConfirmModal";
 import { imgUrl } from "../utils/api";
 
 const STATUS_CLASS = {
@@ -106,6 +107,7 @@ export default function DownloadsPage({
   );
   const highlightRef = useRef(null);
   const [subtitleModalDl, setSubtitleModalDl] = useState(null);
+  const [deleteConfirmDl, setDeleteConfirmDl] = useState(null);
 
   // ── Toolbar state ─────────────────────────────────────────────
   const [showUntracked, setShowUntracked] = useState(
@@ -312,26 +314,10 @@ export default function DownloadsPage({
   }, [scanFolder, downloads, finished, onUpdateDownload]);
 
   const handleDelete = useCallback(
-    async (dl) => {
-      if (!confirm(`Delete "${dl.name}"${dl.filePath ? " and its file" : ""}?`))
-        return;
-      await window.electron.deleteDownload({
-        id: dl.id,
-        filePath: dl.filePath,
-      });
-      // Clean up persisted duration
-      if (dl.id) storage.set(DURATION_PREFIX + dl.id, null);
-      // Clean up persisted progress time
-      const watchedKey =
-        dl.mediaType === "movie"
-          ? `movie_${dl.tmdbId || dl.mediaId}`
-          : dl.mediaType === "tv" && dl.tmdbId && dl.season && dl.episode
-            ? `tv_${dl.tmdbId}_s${dl.season}e${dl.episode}`
-            : null;
-      if (watchedKey) storage.set(PROGRESS_TIME_PREFIX + watchedKey, null);
-      onDeleteDownload(dl.id);
+    (dl) => {
+      setDeleteConfirmDl(dl);
     },
-    [onDeleteDownload],
+    [],
   );
 
   const handlePause = useCallback(async (dl) => {
@@ -396,6 +382,32 @@ export default function DownloadsPage({
               prev ? { ...prev, subtitlePaths: updated } : null,
             );
           }}
+        />
+      )}
+      {deleteConfirmDl && (
+        <ConfirmModal
+          title="Delete Download"
+          message={`Delete "${deleteConfirmDl.name}"${deleteConfirmDl.filePath ? " and its file" : ""}?`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={async () => {
+            const dl = deleteConfirmDl;
+            setDeleteConfirmDl(null);
+            await window.electron.deleteDownload({
+              id: dl.id,
+              filePath: dl.filePath,
+            });
+            if (dl.id) storage.set(DURATION_PREFIX + dl.id, null);
+            const watchedKey =
+              dl.mediaType === "movie"
+                ? `movie_${dl.tmdbId || dl.mediaId}`
+                : dl.mediaType === "tv" && dl.tmdbId && dl.season && dl.episode
+                  ? `tv_${dl.tmdbId}_s${dl.season}e${dl.episode}`
+                  : null;
+            if (watchedKey) storage.set(PROGRESS_TIME_PREFIX + watchedKey, null);
+            onDeleteDownload(dl.id);
+          }}
+          onCancel={() => setDeleteConfirmDl(null)}
         />
       )}
       <div className="dl-page__title">DOWNLOADS</div>

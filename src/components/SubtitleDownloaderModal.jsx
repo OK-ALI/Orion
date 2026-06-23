@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { TrashIcon, SubtitlesIcon, SettingsIcon } from "./common/Icons";
 import { storage, STORAGE_KEYS, secureStorage } from "../utils/storage";
 import { SUBTITLE_LANGUAGES } from "../utils/subtitles";
+import ConfirmModal from "./common/ConfirmModal";
 
 // ── Subtitle Downloader Modal (for retroactive subtitle download) ──────────────
 export default function SubtitleDownloaderModal({
@@ -46,6 +47,7 @@ export default function SubtitleDownloaderModal({
     [],
   );
   const [deletingPath, setDeletingPath] = useState(null); // path currently being deleted
+  const [deleteConfirmSub, setDeleteConfirmSub] = useState(null);
 
   const existingSubs = dl.subtitlePaths || [];
   const existingFileIds = new Set(
@@ -116,25 +118,8 @@ export default function SubtitleDownloaderModal({
     }
   };
 
-  const handleDeleteSub = async (sp) => {
-    if (
-      !confirm(
-        `Delete subtitle "${(sp.lang || "?").toUpperCase()}"${sp.release ? ` (${sp.release})` : ""}?`,
-      )
-    )
-      return;
-    setDeletingPath(sp.path);
-    try {
-      await window.electron.deleteSubtitleFile({
-        downloadId: dl.id,
-        subtitlePath: sp.path,
-      });
-      onSubtitleDeleted(sp.path);
-    } catch (e) {
-      console.error("Delete subtitle error:", e);
-    } finally {
-      setDeletingPath(null);
-    }
+  const handleDeleteSub = (sp) => {
+    setDeleteConfirmSub(sp);
   };
 
   return (
@@ -749,6 +734,31 @@ export default function SubtitleDownloaderModal({
           </div>
         </div>
       </div>
+      {deleteConfirmSub && (
+        <ConfirmModal
+          title="Delete Subtitle"
+          message={`Delete subtitle "${(deleteConfirmSub.lang || "?").toUpperCase()}"${deleteConfirmSub.release ? ` (${deleteConfirmSub.release})` : ""}?`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={async () => {
+            const sp = deleteConfirmSub;
+            setDeleteConfirmSub(null);
+            setDeletingPath(sp.path);
+            try {
+              await window.electron.deleteSubtitleFile({
+                downloadId: dl.id,
+                subtitlePath: sp.path,
+              });
+              onSubtitleDeleted(sp.path);
+            } catch (e) {
+              console.error("Delete subtitle error:", e);
+            } finally {
+              setDeletingPath(null);
+            }
+          }}
+          onCancel={() => setDeleteConfirmSub(null)}
+        />
+      )}
     </>
   );
 }
