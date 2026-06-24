@@ -4,14 +4,14 @@ import MediaCard from "../components/media/MediaCard";
 import { SearchIcon } from "../components/common/Icons";
 
 export default function SearchResultsPage({ apiKey, item: initialQuery, onNavigate, isActive }) {
-  const [query, setQuery] = useState(initialQuery || "");
+  const [query, setQuery] = useState(typeof initialQuery === "string" ? initialQuery : "");
   const [filter, setFilter] = useState("all"); // "all" | "movie" | "tv"
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef();
 
   useEffect(() => {
-    if (initialQuery) {
+    if (typeof initialQuery === "string") {
       setQuery(initialQuery);
     }
   }, [initialQuery]);
@@ -27,7 +27,8 @@ export default function SearchResultsPage({ apiKey, item: initialQuery, onNaviga
   }, [isActive]);
 
   useEffect(() => {
-    if (!query.trim() || !apiKey) {
+    const qStr = typeof query === "string" ? query : "";
+    if (!qStr.trim() || !apiKey) {
       setResults([]);
       return;
     }

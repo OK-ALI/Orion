@@ -1100,7 +1100,7 @@ export default function App() {
             <div style={{ display: page === "search" ? "contents" : "none" }}>
               <SearchResultsPage
                 apiKey={apiKey}
-                item={selected}
+                item={page === "search" && typeof selected === "string" ? selected : ""}
                 onNavigate={navigate}
                 isActive={page === "search"}
               />
@@ -1175,7 +1175,7 @@ export default function App() {
                 apiKey={apiKey}
                 apiKeySource={apiKeySource}
                 onChangeApiKey={changeApiKey}
-                initialSection={selected?.section}
+                initialSection={page === "settings" ? selected?.section : null}
               />
             </div>
             <div style={{ display: page === "downloads" ? "contents" : "none" }}>
