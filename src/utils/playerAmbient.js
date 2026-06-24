@@ -56,7 +56,11 @@ export function setupAmbientGlow(webview, onColor) {
   };
 
   const handleLoad = () => {
-    webview.executeJavaScript(AMBIENT_INJECTION_SCRIPT).catch(() => {});
+    try {
+      webview.executeJavaScript(AMBIENT_INJECTION_SCRIPT).catch(() => {});
+    } catch (e) {
+      console.warn("Ambient injection failed (webview not ready):", e);
+    }
   };
 
   webview.addEventListener('console-message', handleConsole);

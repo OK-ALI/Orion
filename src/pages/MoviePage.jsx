@@ -475,14 +475,6 @@ export default function MoviePage({
   useEffect(() => {
     autoplayDoneRef.current = false;
   }, [item.id]);
-
-  useEffect(() => {
-    if (item.autoplay && !loading && !autoplayDoneRef.current) {
-      autoplayDoneRef.current = true;
-      handlePlay();
-    }
-  }, [item.autoplay, loading, handlePlay]);
-
   // Reset videoPaused state
   useEffect(() => {
     setVideoPaused(false);
@@ -502,7 +494,11 @@ export default function MoviePage({
     };
 
     const handleLoad = () => {
-      wv.executeJavaScript(PLAY_PAUSE_INJECTION_SCRIPT).catch(() => {});
+      try {
+        wv.executeJavaScript(PLAY_PAUSE_INJECTION_SCRIPT).catch(() => {});
+      } catch (err) {
+        console.warn("Webview not ready for play/pause injection:", err);
+      }
     };
 
     wv.addEventListener("console-message", handleConsole);
@@ -847,7 +843,11 @@ export default function MoviePage({
         }
       })()
     `;
-    wv.executeJavaScript(js).catch(() => {});
+    try {
+      wv.executeJavaScript(js).catch(() => {});
+    } catch (e) {
+      console.warn("Voice boost injection failed (webview not ready):", e);
+    }
   }, [voiceBoost]);
 
   useEffect(() => {
@@ -1211,6 +1211,13 @@ export default function MoviePage({
     }
     startMoviePlayback(0);
   }, [playing, progressKey, startMoviePlayback]);
+
+  useEffect(() => {
+    if (item.autoplay && !loading && !autoplayDoneRef.current) {
+      autoplayDoneRef.current = true;
+      handlePlay();
+    }
+  }, [item.autoplay, loading, handlePlay]);
 
   // Intercept fullscreen requests from embedded players (vidsrc / 2embed use
   // the native Fullscreen API which would otherwise fullscreen the entire app).

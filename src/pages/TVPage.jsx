@@ -697,18 +697,6 @@ export default function TVPage({
     autoplayDoneRef.current = false;
   }, [item.id]);
 
-  useEffect(() => {
-    if (item.autoplay && currentSeasonEpisodes.length > 0 && !autoplayDoneRef.current) {
-      autoplayDoneRef.current = true;
-      // Locate target episode
-      const targetEpNum = item.episode ? Number(item.episode) : 1;
-      const ep = currentSeasonEpisodes.find((e) => e.episode_number === targetEpNum) || currentSeasonEpisodes[0];
-      if (ep) {
-        playEpisode(ep);
-      }
-    }
-  }, [item.autoplay, currentSeasonEpisodes, playEpisode]);
-
   // Reset videoPaused state
   useEffect(() => {
     setVideoPaused(false);
@@ -728,7 +716,11 @@ export default function TVPage({
     };
 
     const handleLoad = () => {
-      wv.executeJavaScript(PLAY_PAUSE_INJECTION_SCRIPT).catch(() => {});
+      try {
+        wv.executeJavaScript(PLAY_PAUSE_INJECTION_SCRIPT).catch(() => {});
+      } catch (err) {
+        console.warn("Webview not ready for play/pause injection:", err);
+      }
     };
 
     wv.addEventListener("console-message", handleConsole);
@@ -1441,7 +1433,11 @@ export default function TVPage({
         }
       })()
     `;
-    wv.executeJavaScript(js).catch(() => {});
+    try {
+      wv.executeJavaScript(js).catch(() => {});
+    } catch (e) {
+      console.warn("Voice boost injection failed (webview not ready):", e);
+    }
   }, [voiceBoost]);
 
   useEffect(() => {
@@ -1963,6 +1959,17 @@ export default function TVPage({
     },
     [item.id, selectedSeason, d, onHistory]
   );
+  useEffect(() => {
+    if (item.autoplay && currentSeasonEpisodes.length > 0 && !autoplayDoneRef.current) {
+      autoplayDoneRef.current = true;
+      // Locate target episode
+      const targetEpNum = item.episode ? Number(item.episode) : 1;
+      const ep = currentSeasonEpisodes.find((e) => e.episode_number === targetEpNum) || currentSeasonEpisodes[0];
+      if (ep) {
+        playEpisode(ep);
+      }
+    }
+  }, [item.autoplay, currentSeasonEpisodes, playEpisode]);
 
   const startEpisodeDownload = useCallback(
     (ep) => {

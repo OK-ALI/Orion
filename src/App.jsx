@@ -790,8 +790,8 @@ export default function App() {
 
   const toggleSave = useCallback(
     (item) => {
-      const mt = getMediaType(item);
-      const id = `${mt}_${item.id}`;
+      const mType = getMediaType(item);
+      const id = `${mType}_${item.id}`;
       const currentSaved = savedRef.current;
       const isRemoving = !!currentSaved[id];
       const next = { ...currentSaved };
@@ -810,7 +810,7 @@ export default function App() {
           id: item.id,
           title: item.title || item.name,
           poster_path: item.poster_path,
-          media_type: mt,
+          media_type: mType,
           vote_average: item.vote_average,
           year: (item.release_date || item.first_air_date || "").slice(0, 4),
         };

@@ -137,14 +137,16 @@ export default function TrailerModal({ trailerKey, title, onClose }) {
     };
 
     const endedPoll = setInterval(() => {
-      wv.executeJavaScript("!!window.__trailerEnded")
-        .then((ended) => {
-          if (ended) {
-            clearInterval(endedPoll);
-            setTimeout(onClose, 1200);
-          }
-        })
-        .catch(() => {});
+      try {
+        wv.executeJavaScript("!!window.__trailerEnded")
+          .then((ended) => {
+            if (ended) {
+              clearInterval(endedPoll);
+              setTimeout(onClose, 1200);
+            }
+          })
+          .catch(() => {});
+      } catch {}
     }, 800);
 
     wv.addEventListener("did-finish-load", onLoad);
