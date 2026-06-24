@@ -83,24 +83,30 @@ const PLAY_PAUSE_INJECTION_SCRIPT = `
 (function() {
   try {
     const setup = () => {
-      const v = document.querySelector('video');
-      if (!v) return;
-      if (v._pauseTracked) return;
-      v._pauseTracked = true;
+      const videos = Array.from(document.querySelectorAll('video'));
+      for (const v of videos) {
+        if (v._pauseTracked) continue;
+        
+        const rect = v.getBoundingClientRect();
+        if (rect.width > 0 && rect.width < 120) continue;
+        if (rect.height > 0 && rect.height < 80) continue;
 
-      // Log current state immediately
-      console.log(v.paused ? '__orion_video_paused' : '__orion_video_playing');
+        v._pauseTracked = true;
 
-      v.addEventListener('pause', () => console.log('__orion_video_paused'));
-      v.addEventListener('play', () => console.log('__orion_video_playing'));
-      v.addEventListener('playing', () => console.log('__orion_video_playing'));
+        // Log current state immediately
+        console.log(v.paused ? '__orion_video_paused' : '__orion_video_playing');
+
+        v.addEventListener('pause', () => console.log('__orion_video_paused'));
+        v.addEventListener('play', () => console.log('__orion_video_playing'));
+        v.addEventListener('playing', () => console.log('__orion_video_playing'));
+      }
     };
 
     setup();
     const observer = new MutationObserver(setup);
     observer.observe(document.body, { childList: true, subtree: true });
   } catch (e) {
-    console.error("Play/pause tracker setup failed:", e);
+    console.error("Play/pause Sniffer setup failed:", e);
   }
 })();
 `;
@@ -717,7 +723,11 @@ export default function TVPage({
 
     const handleLoad = () => {
       try {
-        wv.executeJavaScript(PLAY_PAUSE_INJECTION_SCRIPT).catch(() => {});
+        if (window.electron?.injectScriptAllFrames) {
+          window.electron.injectScriptAllFrames(wv.getWebContentsId(), PLAY_PAUSE_INJECTION_SCRIPT).catch(() => {});
+        } else {
+          wv.executeJavaScript(PLAY_PAUSE_INJECTION_SCRIPT).catch(() => {});
+        }
       } catch (err) {
         console.warn("Webview not ready for play/pause injection:", err);
       }
@@ -726,6 +736,7 @@ export default function TVPage({
     wv.addEventListener("console-message", handleConsole);
     wv.addEventListener("did-finish-load", handleLoad);
     wv.addEventListener("dom-ready", handleLoad);
+    wv.addEventListener("did-frame-finish-load", handleLoad);
 
     // Trigger setup in case it already loaded
     handleLoad();
@@ -735,6 +746,7 @@ export default function TVPage({
         wv.removeEventListener("console-message", handleConsole);
         wv.removeEventListener("did-finish-load", handleLoad);
         wv.removeEventListener("dom-ready", handleLoad);
+        wv.removeEventListener("did-frame-finish-load", handleLoad);
       } catch {}
     };
   }, [playing, resolvedPlayerUrl, playerSource, selectedEp?.episode_number, selectedSeason]);
@@ -1648,7 +1660,7 @@ export default function TVPage({
             result = await wv.executeJavaScript(`
               (() => {
                 const v = document.querySelector('video')
-                if (!v || !v.duration || v.duration === Infinity || v.paused) return null
+                if (!v) return null
                 // Re-attach seek tracker if video element was recreated (e.g. quality change)
                 if (!v._seekTracked) {
                   v._seekTracked = true
@@ -1659,12 +1671,19 @@ export default function TVPage({
                 }
                 return {
                   currentTime: v.currentTime,
-                  duration: v.duration,
+                  duration: v.duration || 0,
+                  paused: v.paused,
                   recentUserSeek: v._lastUserSeek ? (Date.now() - v._lastUserSeek < 6000) : false,
                   lastUserSeekTo: v._lastUserSeekTo ?? null,
                 }
               })()
             `);
+          }
+
+          if (result) {
+            if (result.paused !== undefined) {
+              setVideoPaused(result.paused);
+            }
           }
 
           // ── AniSkip logic: runs every tick (only when aniSkipActive) ────
@@ -1697,7 +1716,7 @@ export default function TVPage({
           tickCount++;
           if (aniSkipActive && tickCount % 5 !== 0) return;
 
-          if (result && result.duration > 0) {
+          if (result && result.duration > 0 && result.duration !== Infinity) {
             durationRef.current = result.duration;
             const ct = result.currentTime;
 
@@ -1936,12 +1955,16 @@ export default function TVPage({
   const resumePlayback = useCallback(() => {
     const wv = webviewRef.current;
     if (wv) {
-      wv.executeJavaScript(`
-        (() => {
-          const v = document.querySelector('video');
-          if (v) v.play().catch(() => {});
-        })()
-      `).catch(() => {});
+      if (window.electron?.resumeVideo) {
+        window.electron.resumeVideo(wv.getWebContentsId()).catch(() => {});
+      } else {
+        wv.executeJavaScript(`
+          (() => {
+            const v = document.querySelector('video');
+            if (v) v.play().catch(() => {});
+          })()
+        `).catch(() => {});
+      }
     }
   }, []);
 

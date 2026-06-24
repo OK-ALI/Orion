@@ -470,7 +470,7 @@ function register(getMainWindow, { writeSecretMigration }) {
       const JS = `
         (() => {
           const v = document.querySelector('video');
-          if (!v || !v.duration || v.duration === Infinity || v.paused) return null;
+          if (!v) return null;
           if (!v._seekTracked) {
             v._seekTracked = true;
             v.addEventListener('seeked', () => {
@@ -480,7 +480,8 @@ function register(getMainWindow, { writeSecretMigration }) {
           }
           return {
             currentTime: v.currentTime,
-            duration: v.duration,
+            duration: v.duration || 0,
+            paused: v.paused,
             recentUserSeek: v._lastUserSeek ? (Date.now() - v._lastUserSeek < 6000) : false,
             lastUserSeekTo: v._lastUserSeekTo ?? null,
           };
@@ -490,12 +491,70 @@ function register(getMainWindow, { writeSecretMigration }) {
       for (const frame of allFrames) {
         try {
           const result = await frame.executeJavaScript(JS);
-          if (result && result.duration > 0) return result;
+          if (result && result.duration > 0 && result.duration !== Infinity) return result;
         } catch {}
       }
       return null;
     } catch {
       return null;
+    }
+  });
+
+  ipcMain.handle("inject-script-all-frames", async (_, webContentsId, script) => {
+    try {
+      const { webContents } = require("electron");
+      const wc = webContents.fromId(webContentsId);
+      if (!wc || wc.isDestroyed()) return false;
+
+      const allFrames = [];
+      const collect = (frame) => {
+        allFrames.push(frame);
+        for (const child of frame.frames || []) collect(child);
+      };
+      collect(wc.mainFrame);
+
+      for (const frame of allFrames) {
+        try {
+          frame.executeJavaScript(script).catch(() => {});
+        } catch {}
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+  ipcMain.handle("resume-video", async (_, webContentsId) => {
+    try {
+      const { webContents } = require("electron");
+      const wc = webContents.fromId(webContentsId);
+      if (!wc || wc.isDestroyed()) return false;
+
+      const allFrames = [];
+      const collect = (frame) => {
+        allFrames.push(frame);
+        for (const child of frame.frames || []) collect(child);
+      };
+      collect(wc.mainFrame);
+
+      for (const frame of allFrames) {
+        try {
+          const res = await frame.executeJavaScript(`
+            (() => {
+              const v = document.querySelector('video');
+              if (v) {
+                v.play().catch(() => {});
+                return true;
+              }
+              return false;
+            })()
+          `);
+          if (res) return true;
+        } catch {}
+      }
+      return false;
+    } catch {
+      return false;
     }
   });
 }
