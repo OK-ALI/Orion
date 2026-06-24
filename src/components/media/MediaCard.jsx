@@ -77,6 +77,14 @@ const MediaCard = memo(function MediaCard({
     setMenu(null);
   };
 
+  const handlePlayClick = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (onClick) {
+      onClick({ ...item, autoplay: true });
+    }
+  };
+
   return (
     <>
       <div
@@ -116,7 +124,7 @@ const MediaCard = memo(function MediaCard({
                 <span>🔒 Soon</span>
               </div>
             ) : (
-              <div className="media-card-play-btn">
+              <div className="media-card-play-btn" onClick={handlePlayClick}>
                 <PlayIcon size={24} />
               </div>
             )}

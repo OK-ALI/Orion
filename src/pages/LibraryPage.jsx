@@ -224,7 +224,7 @@ export default function LibraryPage({
                 <MediaCard
                   key={pk}
                   item={item}
-                  onClick={() => onSelect(item)}
+                  onClick={(itemData) => onSelect(itemData || item)}
                   progress={progress[pk] || 0}
                   watched={watched}
                   onMarkWatched={onMarkWatched}
@@ -276,7 +276,7 @@ export default function LibraryPage({
                 >
                   <MediaCard
                     item={item}
-                    onClick={() => onSelect(item)}
+                    onClick={(itemData) => onSelect(itemData || item)}
                     watched={watched}
                     onMarkWatched={onMarkWatched}
                     onMarkUnwatched={onMarkUnwatched}

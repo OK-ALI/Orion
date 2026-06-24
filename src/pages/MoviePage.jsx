@@ -46,6 +46,7 @@ import BlockedStatsModal from "../components/BlockedStatsModal";
 import { formatDate } from "../utils/date";
 import { useBlockedStats } from "../utils/useBlockedStats";
 import MediaCard from "../components/media/MediaCard";
+import { setupAmbientGlow } from "../utils/playerAmbient";
 import {
   storage,
   STORAGE_KEYS,
@@ -67,6 +68,32 @@ import {
     <path d="M2 11v2" />
   </svg>
 );
+
+const PLAY_PAUSE_INJECTION_SCRIPT = `
+(function() {
+  try {
+    const setup = () => {
+      const v = document.querySelector('video');
+      if (!v) return;
+      if (v._pauseTracked) return;
+      v._pauseTracked = true;
+
+      // Log current state immediately
+      console.log(v.paused ? '__orion_video_paused' : '__orion_video_playing');
+
+      v.addEventListener('pause', () => console.log('__orion_video_paused'));
+      v.addEventListener('play', () => console.log('__orion_video_playing'));
+      v.addEventListener('playing', () => console.log('__orion_video_playing'));
+    };
+
+    setup();
+    const observer = new MutationObserver(setup);
+    observer.observe(document.body, { childList: true, subtree: true });
+  } catch (e) {
+    console.error("Play/pause tracker setup failed:", e);
+  }
+})();
+`;
 
 
 // Injected into the webview DOM
@@ -274,6 +301,9 @@ export default function MoviePage({
   const [playerSource, setPlayerSource] = useState(
     () => storage.get("playerSource") || NON_ANIME_DEFAULT_SOURCE,
   );
+  const [ambientColor, setAmbientColor] = useState("");
+  const [videoPaused, setVideoPaused] = useState(false);
+  const autoplayDoneRef = useRef(false);
 
   // Accent colour + subtitle lang come from App-level state (via props),
   // so they are always fresh after Settings save without any extra storage reads.
@@ -440,6 +470,74 @@ export default function MoviePage({
       mounted = false;
     };
   }, [item.id, apiKey, ratingCountry]);
+
+  // Autoplay hook
+  useEffect(() => {
+    autoplayDoneRef.current = false;
+  }, [item.id]);
+
+  useEffect(() => {
+    if (item.autoplay && !loading && !autoplayDoneRef.current) {
+      autoplayDoneRef.current = true;
+      handlePlay();
+    }
+  }, [item.autoplay, loading, handlePlay]);
+
+  // Reset videoPaused state
+  useEffect(() => {
+    setVideoPaused(false);
+  }, [item.id, playerSource, resolvedPlayerUrl]);
+
+  // Play/pause logs listener
+  useEffect(() => {
+    const wv = webviewRef.current;
+    if (!wv || !playing) return;
+
+    const handleConsole = (e) => {
+      if (e.message === "__orion_video_paused") {
+        setVideoPaused(true);
+      } else if (e.message === "__orion_video_playing") {
+        setVideoPaused(false);
+      }
+    };
+
+    const handleLoad = () => {
+      wv.executeJavaScript(PLAY_PAUSE_INJECTION_SCRIPT).catch(() => {});
+    };
+
+    wv.addEventListener("console-message", handleConsole);
+    wv.addEventListener("did-finish-load", handleLoad);
+    wv.addEventListener("dom-ready", handleLoad);
+
+    // Trigger setup in case it already loaded
+    handleLoad();
+
+    return () => {
+      try {
+        wv.removeEventListener("console-message", handleConsole);
+        wv.removeEventListener("did-finish-load", handleLoad);
+        wv.removeEventListener("dom-ready", handleLoad);
+      } catch {}
+    };
+  }, [playing, resolvedPlayerUrl, playerSource]);
+
+  // Ambient glow hook
+  useEffect(() => {
+    if (!playing) {
+      setAmbientColor("");
+      return;
+    }
+    const wv = webviewRef.current;
+    if (!wv) return;
+
+    const cleanup = setupAmbientGlow(wv, (colorDataUrl) => {
+      setAmbientColor(colorDataUrl);
+    });
+
+    return () => {
+      cleanup();
+    };
+  }, [playing, resolvedPlayerUrl, playerSource]);
 
   useEffect(() => {
     let mounted = true;
@@ -674,11 +772,13 @@ export default function MoviePage({
           
           if (!${voiceBoost}) {
             if (window.__orionAudioNodes) {
-              const { source, highpass, peaking, compressor, dest } = window.__orionAudioNodes;
+              const { source, highpass, peaking, highshelf, compressor, gain, dest } = window.__orionAudioNodes;
               source.disconnect();
               highpass.disconnect();
               peaking.disconnect();
+              if (highshelf) highshelf.disconnect();
               compressor.disconnect();
+              if (gain) gain.disconnect();
               source.connect(dest);
               window.__orionVoiceBoostActive = false;
             }
@@ -701,32 +801,44 @@ export default function MoviePage({
           
           const highpass = ctx.createBiquadFilter();
           highpass.type = 'highpass';
-          highpass.frequency.value = 100;
+          highpass.frequency.value = 150;
           
           const peaking = ctx.createBiquadFilter();
           peaking.type = 'peaking';
-          peaking.frequency.value = 1500;
-          peaking.Q.value = 1.0;
-          peaking.gain.value = 8;
+          peaking.frequency.value = 2500;
+          peaking.Q.value = 0.8;
+          peaking.gain.value = 12;
+
+          const highshelf = ctx.createBiquadFilter();
+          highshelf.type = 'highshelf';
+          highshelf.frequency.value = 6000;
+          highshelf.gain.value = -6;
           
           const compressor = ctx.createDynamicsCompressor();
-          compressor.threshold.value = -20;
+          compressor.threshold.value = -24;
           compressor.knee.value = 30;
-          compressor.ratio.value = 3;
+          compressor.ratio.value = 4;
           compressor.attack.value = 0.003;
           compressor.release.value = 0.25;
+
+          const gain = ctx.createGain();
+          gain.gain.value = 1.4;
           
           sourceNode.disconnect();
           sourceNode.connect(highpass);
           highpass.connect(peaking);
-          peaking.connect(compressor);
-          compressor.connect(ctx.destination);
+          peaking.connect(highshelf);
+          highshelf.connect(compressor);
+          compressor.connect(gain);
+          gain.connect(ctx.destination);
           
           window.__orionAudioNodes = {
             source: sourceNode,
             highpass,
             peaking,
+            highshelf,
             compressor,
+            gain,
             dest: ctx.destination
           };
           window.__orionVoiceBoostActive = true;
@@ -1073,6 +1185,18 @@ export default function MoviePage({
     }, 80);
     onHistory({ ...d, media_type: "movie" });
   }, [d, onHistory, progressKey, saveProgress]);
+
+  const resumePlayback = useCallback(() => {
+    const wv = webviewRef.current;
+    if (wv) {
+      wv.executeJavaScript(`
+        (() => {
+          const v = document.querySelector('video');
+          if (v) v.play().catch(() => {});
+        })()
+      `).catch(() => {});
+    }
+  }, []);
 
   const handlePlay = useCallback(() => {
     if (playing) {
@@ -1601,6 +1725,14 @@ export default function MoviePage({
                 </button>
               </div>
             )}
+            {ambientColor && (
+              <div
+                className="player-ambient-glow"
+                style={{
+                  backgroundImage: `url(${ambientColor})`,
+                }}
+              />
+            )}
             <webview
               ref={webviewRef}
               src={
@@ -1622,6 +1754,7 @@ export default function MoviePage({
               partition="persist:player"
               allowpopups="false"
               sandbox="allow-scripts allow-same-origin allow-forms"
+              webpreferences="webSecurity=no"
               style={{
                 position: "absolute",
                 inset: 0,
@@ -1633,8 +1766,22 @@ export default function MoviePage({
                   (sourceIsAsync(playerSource) && !resolvedPlayerUrl)
                     ? "hidden"
                     : "visible",
+                zIndex: 2,
               }}
             />
+            {playing && videoPaused && !webviewLoading && !resolveError && !pipOpen && (
+              <div className="player-pause-overlay" onClick={resumePlayback} style={{ zIndex: 5 }}>
+                <div className="player-pause-overlay-content">
+                  <div className="player-pause-play-btn">
+                    <PlayIcon size={48} />
+                  </div>
+                  <div className="player-pause-meta">
+                    <span className="player-pause-type-tag">PAUSED</span>
+                    <h3 className="player-pause-title">{title}</h3>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Unified HUD player header bar */}
             <div className="player-overlay-group">
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -2019,7 +2166,7 @@ const CollectionCard = memo(function CollectionCard({
   onMarkWatched,
   onMarkUnwatched,
 }) {
-  const handleClick = useCallback(() => onSelect(part), [onSelect, part]);
+  const handleClick = useCallback((itemData) => onSelect(itemData || part), [onSelect, part]);
   return (
     <div
       style={{

@@ -47,6 +47,7 @@ import {
   PopOutIcon,
   MiniPlayerIcon,
 } from "../components/common/Icons";
+import { setupAmbientGlow } from "../utils/playerAmbient";
 import DownloadModal from "../components/DownloadModal";
 import TrailerModal from "../components/TrailerModal";
 import BlockedStatsModal from "../components/BlockedStatsModal";
@@ -77,6 +78,32 @@ const VoiceBoostIcon = ({ size = 16 }) => (
     <path d="M2 11v2" />
   </svg>
 );
+
+const PLAY_PAUSE_INJECTION_SCRIPT = `
+(function() {
+  try {
+    const setup = () => {
+      const v = document.querySelector('video');
+      if (!v) return;
+      if (v._pauseTracked) return;
+      v._pauseTracked = true;
+
+      // Log current state immediately
+      console.log(v.paused ? '__orion_video_paused' : '__orion_video_playing');
+
+      v.addEventListener('pause', () => console.log('__orion_video_paused'));
+      v.addEventListener('play', () => console.log('__orion_video_playing'));
+      v.addEventListener('playing', () => console.log('__orion_video_playing'));
+    };
+
+    setup();
+    const observer = new MutationObserver(setup);
+    observer.observe(document.body, { childList: true, subtree: true });
+  } catch (e) {
+    console.error("Play/pause tracker setup failed:", e);
+  }
+})();
+`;
 
 // ── Partial-circle progress icon (cached per pct tier) ───────────────────────
 // Uses a single SVG arc. Three instances (25/50/75)
@@ -196,49 +223,44 @@ function ContextMenu({
   );
 }
 
-// Expandable episode description
-function EpisodeDesc({ overview, episodeName }) {
-  const [open, setOpen] = useState(false);
+// Expandable episode description (inline collapsible)
+function EpisodeDesc({ overview }) {
+  const [expanded, setExpanded] = useState(false);
   if (!overview) return <div className="episode-desc" />;
 
   return (
-    <>
-      <div className="episode-desc-wrap">
-        <div className="episode-desc">{overview}</div>
-        <button
-          className="episode-desc-toggle"
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpen(true);
-          }}
-        >
-          Read more
-        </button>
+    <div className="episode-desc-wrap">
+      <div
+        className="episode-desc"
+        style={
+          expanded
+            ? { WebkitLineClamp: "unset", display: "block" }
+            : undefined
+        }
+      >
+        {overview}
       </div>
-
-      {open && (
-        <div
-          className="ep-desc-overlay"
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpen(false);
-          }}
-        >
-          <div className="ep-desc-popup" onClick={(e) => e.stopPropagation()}>
-            {episodeName && (
-              <div className="ep-desc-popup-title">{episodeName}</div>
-            )}
-            <p className="ep-desc-popup-text">{overview}</p>
-            <button
-              className="ep-desc-popup-close"
-              onClick={() => setOpen(false)}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-    </>
+      <button
+        className="episode-desc-toggle"
+        onClick={(e) => {
+          e.stopPropagation();
+          setExpanded(!expanded);
+        }}
+        style={{
+          background: "none",
+          border: "none",
+          color: "var(--accent)",
+          cursor: "pointer",
+          padding: 0,
+          marginTop: "4px",
+          fontSize: "11.5px",
+          fontWeight: 600,
+          display: "inline-block",
+        }}
+      >
+        {expanded ? "Read less" : "Read more"}
+      </button>
+    </div>
   );
 }
 
@@ -442,6 +464,9 @@ export default function TVPage({
   );
   const [selectedEp, setSelectedEp] = useState(null);
   const [playing, setPlaying] = useState(false);
+  const [ambientColor, setAmbientColor] = useState("");
+  const [videoPaused, setVideoPaused] = useState(false);
+  const autoplayDoneRef = useRef(false);
 
   // Resume playback & auto-failover states
   const [showResumePrompt, setShowResumePrompt] = useState(false);
@@ -666,6 +691,79 @@ export default function TVPage({
       mounted = false;
     };
   }, [item.id, apiKey, ratingCountry]);
+
+  // Autoplay hook
+  useEffect(() => {
+    autoplayDoneRef.current = false;
+  }, [item.id]);
+
+  useEffect(() => {
+    if (item.autoplay && currentSeasonEpisodes.length > 0 && !autoplayDoneRef.current) {
+      autoplayDoneRef.current = true;
+      // Locate target episode
+      const targetEpNum = item.episode ? Number(item.episode) : 1;
+      const ep = currentSeasonEpisodes.find((e) => e.episode_number === targetEpNum) || currentSeasonEpisodes[0];
+      if (ep) {
+        playEpisode(ep);
+      }
+    }
+  }, [item.autoplay, currentSeasonEpisodes, playEpisode]);
+
+  // Reset videoPaused state
+  useEffect(() => {
+    setVideoPaused(false);
+  }, [item.id, selectedEp?.episode_number, selectedSeason, playerSource, resolvedPlayerUrl]);
+
+  // Play/pause logs listener
+  useEffect(() => {
+    const wv = webviewRef.current;
+    if (!wv || !playing) return;
+
+    const handleConsole = (e) => {
+      if (e.message === "__orion_video_paused") {
+        setVideoPaused(true);
+      } else if (e.message === "__orion_video_playing") {
+        setVideoPaused(false);
+      }
+    };
+
+    const handleLoad = () => {
+      wv.executeJavaScript(PLAY_PAUSE_INJECTION_SCRIPT).catch(() => {});
+    };
+
+    wv.addEventListener("console-message", handleConsole);
+    wv.addEventListener("did-finish-load", handleLoad);
+    wv.addEventListener("dom-ready", handleLoad);
+
+    // Trigger setup in case it already loaded
+    handleLoad();
+
+    return () => {
+      try {
+        wv.removeEventListener("console-message", handleConsole);
+        wv.removeEventListener("did-finish-load", handleLoad);
+        wv.removeEventListener("dom-ready", handleLoad);
+      } catch {}
+    };
+  }, [playing, resolvedPlayerUrl, playerSource, selectedEp?.episode_number, selectedSeason]);
+
+  // Ambient glow hook
+  useEffect(() => {
+    if (!playing) {
+      setAmbientColor("");
+      return;
+    }
+    const wv = webviewRef.current;
+    if (!wv) return;
+
+    const cleanup = setupAmbientGlow(wv, (colorDataUrl) => {
+      setAmbientColor(colorDataUrl);
+    });
+
+    return () => {
+      cleanup();
+    };
+  }, [playing, resolvedPlayerUrl, playerSource, selectedEp?.episode_number, selectedSeason]);
 
   useEffect(() => {
     if (!apiKey || !item.id) return;
@@ -1268,11 +1366,13 @@ export default function TVPage({
           
           if (!${voiceBoost}) {
             if (window.__orionAudioNodes) {
-              const { source, highpass, peaking, compressor, dest } = window.__orionAudioNodes;
+              const { source, highpass, peaking, highshelf, compressor, gain, dest } = window.__orionAudioNodes;
               source.disconnect();
               highpass.disconnect();
               peaking.disconnect();
+              if (highshelf) highshelf.disconnect();
               compressor.disconnect();
+              if (gain) gain.disconnect();
               source.connect(dest);
               window.__orionVoiceBoostActive = false;
             }
@@ -1286,7 +1386,6 @@ export default function TVPage({
           }
           const ctx = window.__orionAudioCtx;
           
-          
           let sourceNode;
           if (window.__orionAudioNodes) {
             sourceNode = window.__orionAudioNodes.source;
@@ -1296,32 +1395,44 @@ export default function TVPage({
           
           const highpass = ctx.createBiquadFilter();
           highpass.type = 'highpass';
-          highpass.frequency.value = 100;
+          highpass.frequency.value = 150;
           
           const peaking = ctx.createBiquadFilter();
           peaking.type = 'peaking';
-          peaking.frequency.value = 1500;
-          peaking.Q.value = 1.0;
-          peaking.gain.value = 8;
+          peaking.frequency.value = 2500;
+          peaking.Q.value = 0.8;
+          peaking.gain.value = 12;
+
+          const highshelf = ctx.createBiquadFilter();
+          highshelf.type = 'highshelf';
+          highshelf.frequency.value = 6000;
+          highshelf.gain.value = -6;
           
           const compressor = ctx.createDynamicsCompressor();
-          compressor.threshold.value = -20;
+          compressor.threshold.value = -24;
           compressor.knee.value = 30;
-          compressor.ratio.value = 3;
+          compressor.ratio.value = 4;
           compressor.attack.value = 0.003;
           compressor.release.value = 0.25;
+
+          const gain = ctx.createGain();
+          gain.gain.value = 1.4;
           
           sourceNode.disconnect();
           sourceNode.connect(highpass);
           highpass.connect(peaking);
-          peaking.connect(compressor);
-          compressor.connect(ctx.destination);
+          peaking.connect(highshelf);
+          highshelf.connect(compressor);
+          compressor.connect(gain);
+          gain.connect(ctx.destination);
           
           window.__orionAudioNodes = {
             source: sourceNode,
             highpass,
             peaking,
+            highshelf,
             compressor,
+            gain,
             dest: ctx.destination
           };
           window.__orionVoiceBoostActive = true;
@@ -1825,6 +1936,18 @@ export default function TVPage({
       episodeName: ep.name,
     });
   };
+
+  const resumePlayback = useCallback(() => {
+    const wv = webviewRef.current;
+    if (wv) {
+      wv.executeJavaScript(`
+        (() => {
+          const v = document.querySelector('video');
+          if (v) v.play().catch(() => {});
+        })()
+      `).catch(() => {});
+    }
+  }, []);
 
   const playEpisode = useCallback(
     (ep) => {
@@ -2486,6 +2609,14 @@ export default function TVPage({
                     </div>
                   </div>
                 )}
+                {ambientColor && (
+                  <div
+                    className="player-ambient-glow"
+                    style={{
+                      backgroundImage: `url(${ambientColor})`,
+                    }}
+                  />
+                )}
                 <webview
                   ref={webviewRef}
                   src={
@@ -2507,6 +2638,7 @@ export default function TVPage({
                   partition="persist:player"
                   allowpopups="false"
                   sandbox="allow-scripts allow-same-origin allow-forms"
+                  webpreferences="webSecurity=no"
                   style={{
                     position: "absolute",
                     inset: 0,
@@ -2520,9 +2652,28 @@ export default function TVPage({
                       webviewLoading || (isAsync && !resolvedPlayerUrl)
                         ? "hidden"
                         : "visible",
+                    zIndex: 2,
                   }}
                   tabIndex={-1}
                 />
+                {playing && videoPaused && !webviewLoading && !resolveError && !pipOpen && (
+                  <div className="player-pause-overlay" onClick={resumePlayback} style={{ zIndex: 5 }}>
+                    <div className="player-pause-overlay-content">
+                      <div className="player-pause-play-btn">
+                        <PlayIcon size={48} />
+                      </div>
+                      <div className="player-pause-meta">
+                        <span className="player-pause-type-tag">PAUSED</span>
+                        <h3 className="player-pause-title">{title}</h3>
+                        {selectedEp && (
+                          <h4 className="player-pause-subtitle">
+                            Season {selectedSeason} · Episode {selectedEp.episode_number} — {selectedEp.name}
+                          </h4>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {/* Unified HUD player header bar */}
                 <div className="player-overlay-group">
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -3256,7 +3407,7 @@ const EpisodeCard = memo(function EpisodeCard({
             {formatDate(ep.air_date)}
           </div>
         )}
-        <EpisodeDesc overview={ep.overview} episodeName={ep.name} />
+        <EpisodeDesc overview={ep.overview} />
         {!restricted && !epUnreleased && (
           <button
             className="episode-download-btn"

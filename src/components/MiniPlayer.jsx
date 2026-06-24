@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { setupAmbientGlow } from "../utils/playerAmbient";
 
 export default function MiniPlayer({ url, title, onClose, onExpand }) {
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -10,6 +11,7 @@ export default function MiniPlayer({ url, title, onClose, onExpand }) {
   const webviewRef = useRef(null);
   const dragStart = useRef({ x: 0, y: 0 });
   const playerStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
+  const [ambientColor, setAmbientColor] = useState("");
 
   // Inject CSS to scale down subtitles for the mini-player
   useEffect(() => {
@@ -41,6 +43,20 @@ export default function MiniPlayer({ url, title, onClose, onExpand }) {
     wv.addEventListener("dom-ready", injectStyles);
     return () => wv.removeEventListener("dom-ready", injectStyles);
   }, []);
+
+  // Ambient glow hook
+  useEffect(() => {
+    const wv = webviewRef.current;
+    if (!wv) return;
+
+    const cleanup = setupAmbientGlow(wv, (colorDataUrl) => {
+      setAmbientColor(colorDataUrl);
+    });
+
+    return () => {
+      cleanup();
+    };
+  }, [url]);
 
   // Load saved position and size on mount
   useEffect(() => {
@@ -198,9 +214,19 @@ export default function MiniPlayer({ url, title, onClose, onExpand }) {
         left: `${position.x}px`,
         top: `${position.y}px`,
         width: `${size.width}px`,
-        height: `${size.height}px`
+        height: `${size.height}px`,
+        position: "fixed",
+        zIndex: 9999
       }}
     >
+      {ambientColor && (
+        <div
+          className="player-ambient-glow"
+          style={{
+            backgroundImage: `url(${ambientColor})`,
+          }}
+        />
+      )}
       {/* Drag Handle & Header */}
       <div className="orion-mini-player-drag-handle" onMouseDown={handleDragStart}>
         <div className="orion-mini-player-title" title={title}>
@@ -243,7 +269,8 @@ export default function MiniPlayer({ url, title, onClose, onExpand }) {
           partition="persist:player"
           allowpopups="false"
           sandbox="allow-scripts allow-same-origin allow-forms"
-          style={{ width: "100%", height: "100%", border: "none" }}
+          webpreferences="webSecurity=no"
+          style={{ width: "100%", height: "100%", border: "none", position: "relative", zIndex: 2 }}
         />
         {/* Resize Grip (visible in bottom right) */}
         <div

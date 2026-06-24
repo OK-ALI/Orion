@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { tmdbFetch } from "../utils/api";
 import MediaCard from "../components/media/MediaCard";
+import { REGION_PRESETS, SUBFILTER_PRESETS, getRegionQueryParams } from "../utils/discoverRegions";
 
 const MOVIE_GENRES = [
   { id: 28, name: "Action", gradient: "linear-gradient(135deg, #e50914 0%, #7d0008 100%)" },
@@ -18,7 +19,7 @@ const MOVIE_GENRES = [
   { id: 10749, name: "Romance", gradient: "linear-gradient(135deg, #ff4500 0%, #b22222 100%)" },
   { id: 878, name: "Sci-Fi", gradient: "linear-gradient(135deg, #00bfff 0%, #00008b 100%)" },
   { id: 53, name: "Thriller", gradient: "linear-gradient(135deg, #ff4757 0%, #c21c2c 100%)" },
-  { id: 10752, name: "War", gradient: "linear-gradient(135deg, #556b2f 0%, #3b4d20 100%)" },
+  { id: 10752, name: "War", gradient: "linear-gradient(135deg, #8fbc8f 0%, #556b2f 100%)" },
   { id: 37, name: "Western", gradient: "linear-gradient(135deg, #cd853f 0%, #8b5a2b 100%)" },
 ];
 
@@ -41,29 +42,11 @@ const TV_GENRES = [
   { id: 37, name: "Western", gradient: "linear-gradient(135deg, #cd853f 0%, #8b5a2b 100%)" },
 ];
 
-const REGION_PRESETS = {
-  all: {
-    name: "Global",
-    countries: "",
-  },
-  hollywood: {
-    name: "Hollywood",
-    countries: "US",
-  },
-  bollywood: {
-    name: "Bollywood",
-    countries: "IN",
-  },
-  asian: {
-    name: "Asian Content",
-    countries: "KR|JP|CN|TW|HK|TH",
-  },
-};
-
 export default function DiscoverPage({ apiKey, onNavigate }) {
   const [type, setType] = useState("movie"); // "movie" | "tv"
   const [selectedGenre, setSelectedGenre] = useState(null); // null or genre object
   const [region, setRegion] = useState("all"); // "all" | "hollywood" | "bollywood" | "asian"
+  const [subfilter, setSubfilter] = useState("all"); // active regional subfilter
   const [regionItems, setRegionItems] = useState([]);
   const [loadingRegionItems, setLoadingRegionItems] = useState(false);
 
@@ -87,7 +70,12 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
     setItems([]);
   };
 
-  // Fetch regional trending items when region or type changes, if no genre is selected
+  const handleRegionChange = (newRegion) => {
+    setRegion(newRegion);
+    setSubfilter("all");
+  };
+
+  // Fetch regional trending items when region or subfilter or type changes, if no genre is selected
   useEffect(() => {
     if (region === "all" || selectedGenre || !apiKey) {
       setRegionItems([]);
@@ -98,8 +86,8 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
     const fetchRegionItems = async () => {
       setLoadingRegionItems(true);
       try {
-        const countries = REGION_PRESETS[region].countries;
-        const path = `/discover/${type}?sort_by=popularity.desc&with_origin_country=${countries}&page=1`;
+        const { countryParam, languageParam } = getRegionQueryParams(region, subfilter);
+        const path = `/discover/${type}?sort_by=popularity.desc${countryParam}${languageParam}&page=1`;
         const data = await tmdbFetch(path, apiKey);
         if (mounted) {
           setRegionItems(data.results || []);
@@ -115,9 +103,9 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
     return () => {
       mounted = false;
     };
-  }, [region, type, selectedGenre, apiKey]);
+  }, [region, subfilter, type, selectedGenre, apiKey]);
 
-  // Fetch results when filters/genre/region change
+  // Fetch results when filters/genre/region/subfilter change
   const fetchDiscoverResults = useCallback(
     async (pageNum = 1) => {
       if (!selectedGenre || !apiKey) return;
@@ -125,9 +113,9 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
       try {
         const yearParam = year ? (type === "movie" ? `&primary_release_year=${year}` : `&first_air_date_year=${year}`) : "";
         const ratingParam = minRating !== "0" ? `&vote_average.gte=${minRating}` : "";
-        const countries = REGION_PRESETS[region]?.countries || "";
-        const countryParam = countries ? `&with_origin_country=${countries}` : "";
-        const path = `/discover/${type}?with_genres=${selectedGenre.id}${countryParam}&sort_by=${sortBy}${yearParam}${ratingParam}&page=${pageNum}`;
+        const { countryParam, languageParam } = getRegionQueryParams(region, subfilter);
+        const genreParam = selectedGenre.id && selectedGenre.id !== "all" ? `&with_genres=${selectedGenre.id}` : "";
+        const path = `/discover/${type}?sort_by=${sortBy}${genreParam}${countryParam}${languageParam}${yearParam}${ratingParam}&page=${pageNum}`;
         const data = await tmdbFetch(path, apiKey);
 
         if (pageNum === 1) {
@@ -143,7 +131,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
         setLoading(false);
       }
     },
-    [selectedGenre, type, sortBy, year, minRating, region, apiKey],
+    [selectedGenre, type, sortBy, year, minRating, region, subfilter, apiKey],
   );
 
   useEffect(() => {
@@ -152,7 +140,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
       setPage(1);
       fetchDiscoverResults(1);
     }
-  }, [selectedGenre, sortBy, year, minRating, region, fetchDiscoverResults]);
+  }, [selectedGenre, sortBy, year, minRating, region, subfilter, fetchDiscoverResults]);
 
   const loadMore = () => {
     if (page < totalPages && !loading) {
@@ -192,28 +180,55 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
         </div>
 
         {!selectedGenre && (
-          <div className="region-filter-bar" style={{ display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" }}>
-            {Object.entries(REGION_PRESETS).map(([id, preset]) => (
-              <button
-                key={id}
-                className={`toggle-btn ${region === id ? "active" : ""}`}
-                onClick={() => setRegion(id)}
-                style={{
-                  padding: "8px 18px",
-                  borderRadius: "999px",
-                  fontSize: "13px",
-                  fontWeight: 800,
-                  cursor: "pointer",
-                  border: "1px solid var(--border)",
-                  background: region === id ? "var(--accent)" : "var(--surface)",
-                  color: region === id ? "#fff" : "var(--text3)",
-                  transition: "all var(--duration-normal) var(--ease-out)"
-                }}
-              >
-                {preset.name}
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="region-filter-bar" style={{ display: "flex", gap: 10, marginBottom: region !== "all" ? 12 : 24, flexWrap: "wrap" }}>
+              {Object.entries(REGION_PRESETS).map(([id, preset]) => (
+                <button
+                  key={id}
+                  className={`toggle-btn ${region === id ? "active" : ""}`}
+                  onClick={() => handleRegionChange(id)}
+                  style={{
+                    padding: "8px 18px",
+                    borderRadius: "999px",
+                    fontSize: "13px",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    border: "1px solid var(--border)",
+                    background: region === id ? "var(--accent)" : "var(--surface)",
+                    color: region === id ? "#fff" : "var(--text3)",
+                    transition: "all var(--duration-normal) var(--ease-out)"
+                  }}
+                >
+                  {preset.name}
+                </button>
+              ))}
+            </div>
+
+            {region !== "all" && SUBFILTER_PRESETS[region] && (
+              <div className="subfilter-bar" style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
+                {SUBFILTER_PRESETS[region].map((sf) => (
+                  <button
+                    key={sf.id}
+                    className={`toggle-btn ${subfilter === sf.id ? "active" : ""}`}
+                    onClick={() => setSubfilter(sf.id)}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "999px",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      border: "1px solid var(--border)",
+                      background: subfilter === sf.id ? "var(--accent)" : "var(--surface2)",
+                      color: subfilter === sf.id ? "#fff" : "var(--text3)",
+                      transition: "all var(--duration-normal) var(--ease-out)"
+                    }}
+                  >
+                    {sf.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {selectedGenre && (
@@ -221,11 +236,35 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
             <button className="btn btn-secondary btn-back" onClick={handleBackToGenres}>
               ← Genres
             </button>
-            <span className="current-genre-label" style={{ background: selectedGenre.gradient }}>
+            <span className="current-genre-label" style={{ background: selectedGenre.gradient || "linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%)" }}>
               {selectedGenre.name}
             </span>
 
             <div className="filter-controls">
+              {/* Region Filter */}
+              <div className="filter-select-wrap">
+                <select value={region} onChange={(e) => handleRegionChange(e.target.value)}>
+                  {Object.entries(REGION_PRESETS).map(([id, preset]) => (
+                    <option key={id} value={id}>
+                      {preset.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Subfilter Filter */}
+              {region !== "all" && SUBFILTER_PRESETS[region] && (
+                <div className="filter-select-wrap">
+                  <select value={subfilter} onChange={(e) => setSubfilter(e.target.value)}>
+                    {SUBFILTER_PRESETS[region].map((sf) => (
+                      <option key={sf.id} value={sf.id}>
+                        {sf.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Year Filter */}
               <div className="filter-select-wrap">
                 <select value={year} onChange={(e) => setYear(e.target.value)}>
@@ -269,9 +308,18 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
             {/* Regional Popular Shelf */}
             {region !== "all" && (
               <div style={{ marginBottom: "36px" }}>
-                <h2 style={{ fontSize: "22px", fontWeight: 700, marginBottom: "16px", color: "var(--text)" }}>
-                  Popular in {REGION_PRESETS[region].name}
-                </h2>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                  <h2 style={{ fontSize: "22px", fontWeight: 700, margin: 0, color: "var(--text)" }}>
+                    Popular in {REGION_PRESETS[region].name}
+                  </h2>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => handleSelectGenre({ id: "all", name: "All Titles" })}
+                    style={{ padding: "6px 14px", fontSize: "13px", fontWeight: 600 }}
+                  >
+                    Browse All
+                  </button>
+                </div>
                 {loadingRegionItems ? (
                   <div className="loader" style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <div className="spinner" />
@@ -282,7 +330,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
                       <MediaCard
                         key={`${item.id}_${item.media_type || type}`}
                         item={{ ...item, media_type: type }}
-                        onClick={() => onNavigate(type, item)}
+                        onClick={(itemData) => onNavigate(type, itemData || { ...item, media_type: type })}
                       />
                     ))}
                   </div>
@@ -322,7 +370,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
                 <MediaCard
                   key={`${item.id}_${item.media_type || type}`}
                   item={{ ...item, media_type: type }}
-                  onClick={() => onNavigate(type, item)}
+                  onClick={(itemData) => onNavigate(type, itemData || { ...item, media_type: type })}
                 />
               ))}
             </div>

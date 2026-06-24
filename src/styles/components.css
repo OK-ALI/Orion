@@ -1878,6 +1878,8 @@ button {
     border-radius: 8px;
     background: var(--surface2);
     box-shadow: 0 22px 52px rgba(0, 0, 0, 0.55);
+    transition: transform 0.25s var(--ease-out), border-color 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out);
+    border: 1.5px solid transparent;
 }
 
 .media-carousel-poster {
@@ -2009,6 +2011,7 @@ button {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    transition: color 0.25s ease, text-shadow 0.25s ease;
 }
 
 .media-carousel-info-meta {
@@ -4201,4 +4204,107 @@ button {
   border-radius: var(--radius-full);
   box-shadow: 0 0 8px var(--accent);
   z-index: 10;
+}
+
+/* ── Media Carousel Hover Animations ── */
+.media-carousel-item.active:hover .media-carousel-poster-wrap {
+    transform: translateY(-6px);
+    border-color: var(--accent);
+    box-shadow: 0 24px 56px rgba(0,0,0,0.65), 0 0 25px var(--accent-alpha, rgba(229, 9, 20, 0.4));
+}
+
+.media-carousel-item.active:hover .media-carousel-poster {
+    transform: scale(1.08);
+}
+
+.media-carousel-item.active:hover .media-carousel-info-title {
+    color: var(--accent);
+    text-shadow: 0 0 10px rgba(229, 9, 20, 0.35);
+}
+
+/* ── Video Player Pause Overlay ── */
+.player-pause-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 10, 0.62);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  animation: fadeIn 250ms ease;
+  user-select: none;
+}
+
+.player-pause-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+  padding: 24px;
+  color: #ffffff;
+}
+
+.player-pause-play-btn {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 30px var(--accent-alpha, rgba(229, 9, 20, 0.45));
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.2s ease;
+}
+
+.player-pause-overlay:hover .player-pause-play-btn {
+  transform: scale(1.12);
+  background: var(--accent-hover, #ff1e27);
+}
+
+.player-pause-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.player-pause-type-tag {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.player-pause-title {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+
+.player-pause-subtitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary, #b3b3b3);
+  margin: 4px 0 0 0;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+/* ── YouTube-Style Ambient Glow ── */
+.player-ambient-glow {
+  position: absolute;
+  inset: -40px;
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: blur(80px);
+  opacity: 0.75;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  transition: background-image 0.5s ease;
+  z-index: 1;
 }
