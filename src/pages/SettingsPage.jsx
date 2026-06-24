@@ -1213,6 +1213,9 @@ function AppearanceSection() {
   const [accentInPlayer, setAccentInPlayer] = useState(
     () => storage.get(STORAGE_KEYS.ACCENT_IN_PLAYER) !== false,
   );
+  const [ambientGlow, setAmbientGlow] = useState(
+    () => storage.get(STORAGE_KEYS.AMBIENT_GLOW) !== false,
+  );
   const [theme, setTheme] = useState(
     () => storage.get(STORAGE_KEYS.THEME) || "dark",
   );
@@ -1269,6 +1272,7 @@ function AppearanceSection() {
   const handleSave = () => {
     storage.set(STORAGE_KEYS.ACCENT_COLOR, accent);
     storage.set(STORAGE_KEYS.ACCENT_IN_PLAYER, accentInPlayer);
+    storage.set(STORAGE_KEYS.AMBIENT_GLOW, ambientGlow);
     storage.set(STORAGE_KEYS.FONT_SIZE, fontSize);
     storage.set(STORAGE_KEYS.COMPACT_MODE, compact ? 1 : 0);
     storage.set(STORAGE_KEYS.REDUCE_ANIMATIONS, noAnim ? 1 : 0);
@@ -1659,6 +1663,19 @@ function AppearanceSection() {
             </div>
             <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>
               Disables transitions and hover effects throughout the app.
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Toggle value={ambientGlow} onChange={setAmbientGlow} />
+          <div>
+            <div
+              style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}
+            >
+              Dynamic Ambient Glow
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>
+              Renders a matching colored glow behind the player (Ambient Mode).
             </div>
           </div>
         </div>

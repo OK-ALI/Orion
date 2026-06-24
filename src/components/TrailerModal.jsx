@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { CloseIcon, ExternalLinkIcon } from "./common/Icons";
-import { storage } from "../utils/storage";
+import { storage, STORAGE_KEYS } from "../utils/storage";
+import { setupAmbientGlow } from "../utils/playerAmbient";
 
 export const DEFAULT_INVIDIOUS_BASE = "https://inv.nadeko.net";
 
@@ -64,6 +65,10 @@ export default function TrailerModal({ trailerKey, title, onClose }) {
   const [currentSrc, setCurrentSrc] = useState(null);
   const [statusMsg, setStatusMsg] = useState("Loading trailer…");
   const [failed, setFailed] = useState(false);
+  const [ambientColor, setAmbientColor] = useState("");
+  const [ambientGlowEnabled, setAmbientGlowEnabled] = useState(
+    () => storage.get(STORAGE_KEYS.AMBIENT_GLOW) !== false,
+  );
   const instanceIndexRef = useRef(-1);
 
   const tryNextInstance = useCallback(() => {
@@ -160,6 +165,36 @@ export default function TrailerModal({ trailerKey, title, onClose }) {
     };
   }, [currentSrc, tryNextInstance, onClose]);
 
+  // Ambient glow settings sync
+  useEffect(() => {
+    const handler = () => {
+      setAmbientGlowEnabled(storage.get(STORAGE_KEYS.AMBIENT_GLOW) !== false);
+    };
+    window.addEventListener("orion:player-settings-changed", handler);
+    return () => {
+      window.removeEventListener("orion:player-settings-changed", handler);
+    };
+  }, []);
+
+  // Ambient glow hook
+  useEffect(() => {
+    if (!ambientGlowEnabled) {
+      setAmbientColor("");
+      return;
+    }
+    const wv = webviewRef.current;
+    if (!wv || !currentSrc || statusMsg) {
+      setAmbientColor("");
+      return;
+    }
+    const cleanup = setupAmbientGlow(wv, (colorDataUrl) => {
+      setAmbientColor(colorDataUrl);
+    });
+    return () => {
+      cleanup();
+    };
+  }, [currentSrc, statusMsg, ambientGlowEnabled]);
+
   return (
     <div className="trailer-overlay" onClick={onClose}>
       <div className="trailer-modal" onClick={(e) => e.stopPropagation()}>
@@ -233,12 +268,21 @@ export default function TrailerModal({ trailerKey, title, onClose }) {
             </div>
           )}
 
+          {ambientColor && (
+            <div
+              className="player-ambient-glow"
+              style={{
+                backgroundImage: `url(${ambientColor})`,
+              }}
+            />
+          )}
           {currentSrc && (
             <webview
               ref={webviewRef}
               src={currentSrc}
               partition="persist:trailer"
               allowpopups="false"
+              webpreferences="webSecurity=no"
               style={{
                 position: "absolute",
                 inset: 0,
@@ -247,6 +291,7 @@ export default function TrailerModal({ trailerKey, title, onClose }) {
                 border: "none",
                 opacity: statusMsg ? 0 : 1,
                 transition: "opacity 0.2s",
+                zIndex: 2,
               }}
             />
           )}

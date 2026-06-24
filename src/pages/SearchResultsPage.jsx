@@ -131,7 +131,10 @@ export default function SearchResultsPage({ apiKey, item: initialQuery, onNaviga
               <MediaCard
                 key={`${item.media_type}_${item.id}`}
                 item={item}
-                onClick={(itemData) => onNavigate((itemData && itemData.media_type) || item.media_type || "movie", itemData || item)}
+                onClick={(itemData) => {
+                  const actualItem = itemData && !itemData.nativeEvent ? itemData : item;
+                  onNavigate(actualItem.media_type || "movie", actualItem);
+                }}
               />
             ))}
           </div>

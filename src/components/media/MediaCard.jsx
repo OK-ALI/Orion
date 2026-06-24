@@ -89,7 +89,9 @@ const MediaCard = memo(function MediaCard({
     <>
       <div
         className={`media-card${isWatched ? " watched" : ""}${isUnreleased ? " unreleased" : ""}`}
-        onClick={onClick}
+        onClick={() => {
+          if (onClick) onClick(item);
+        }}
         onContextMenu={isUnreleased ? undefined : openMenu}
       >
         <div className="media-card-poster">

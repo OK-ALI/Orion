@@ -69,37 +69,7 @@ import {
   </svg>
 );
 
-const PLAY_PAUSE_INJECTION_SCRIPT = `
-(function() {
-  try {
-    const setup = () => {
-      const videos = Array.from(document.querySelectorAll('video'));
-      for (const v of videos) {
-        if (v._pauseTracked) continue;
-        
-        const rect = v.getBoundingClientRect();
-        if (rect.width > 0 && rect.width < 120) continue;
-        if (rect.height > 0 && rect.height < 80) continue;
 
-        v._pauseTracked = true;
-
-        // Log current state immediately
-        console.log(v.paused ? '__orion_video_paused' : '__orion_video_playing');
-
-        v.addEventListener('pause', () => console.log('__orion_video_paused'));
-        v.addEventListener('play', () => console.log('__orion_video_playing'));
-        v.addEventListener('playing', () => console.log('__orion_video_playing'));
-      }
-    };
-
-    setup();
-    const observer = new MutationObserver(setup);
-    observer.observe(document.body, { childList: true, subtree: true });
-  } catch (e) {
-    console.error("Play/pause Sniffer setup failed:", e);
-  }
-})();
-`;
 
 
 // Injected into the webview DOM
@@ -308,7 +278,9 @@ export default function MoviePage({
     () => storage.get("playerSource") || NON_ANIME_DEFAULT_SOURCE,
   );
   const [ambientColor, setAmbientColor] = useState("");
-  const [videoPaused, setVideoPaused] = useState(false);
+  const [ambientGlowEnabled, setAmbientGlowEnabled] = useState(
+    () => storage.get(STORAGE_KEYS.AMBIENT_GLOW) !== false,
+  );
   const autoplayDoneRef = useRef(false);
 
   // Accent colour + subtitle lang come from App-level state (via props),
@@ -481,62 +453,31 @@ export default function MoviePage({
   useEffect(() => {
     autoplayDoneRef.current = false;
   }, [item.id]);
-  // Reset videoPaused state
+
+
+  // Ambient glow settings sync
   useEffect(() => {
-    setVideoPaused(false);
-  }, [item.id, playerSource, resolvedPlayerUrl]);
-
-  // Play/pause logs listener
-  useEffect(() => {
-    const wv = webviewRef.current;
-    if (!wv || !playing) return;
-
-    const handleConsole = (e) => {
-      if (e.message === "__orion_video_paused") {
-        setVideoPaused(true);
-      } else if (e.message === "__orion_video_playing") {
-        setVideoPaused(false);
-      }
+    const handler = () => {
+      setAmbientGlowEnabled(storage.get(STORAGE_KEYS.AMBIENT_GLOW) !== false);
     };
-
-    const handleLoad = () => {
-      try {
-        if (window.electron?.injectScriptAllFrames) {
-          window.electron.injectScriptAllFrames(wv.getWebContentsId(), PLAY_PAUSE_INJECTION_SCRIPT).catch(() => {});
-        } else {
-          wv.executeJavaScript(PLAY_PAUSE_INJECTION_SCRIPT).catch(() => {});
-        }
-      } catch (err) {
-        console.warn("Webview not ready for play/pause injection:", err);
-      }
-    };
-
-    wv.addEventListener("console-message", handleConsole);
-    wv.addEventListener("did-finish-load", handleLoad);
-    wv.addEventListener("dom-ready", handleLoad);
-    wv.addEventListener("did-frame-finish-load", handleLoad);
-
-    // Trigger setup in case it already loaded
-    handleLoad();
-
+    window.addEventListener("orion:player-settings-changed", handler);
     return () => {
-      try {
-        wv.removeEventListener("console-message", handleConsole);
-        wv.removeEventListener("did-finish-load", handleLoad);
-        wv.removeEventListener("dom-ready", handleLoad);
-        wv.removeEventListener("did-frame-finish-load", handleLoad);
-      } catch {}
+      window.removeEventListener("orion:player-settings-changed", handler);
     };
-  }, [playing, resolvedPlayerUrl, playerSource]);
+  }, []);
 
   // Ambient glow hook
   useEffect(() => {
-    if (!playing) {
+    window.electron?.logToTerminal(`[MoviePage Ambient Hook] playing: ${playing}, resolvedPlayerUrl: ${resolvedPlayerUrl ? 'yes' : 'no'}, playerSource: ${playerSource}, ambientGlowEnabled: ${ambientGlowEnabled}`);
+    if (!playing || !ambientGlowEnabled) {
       setAmbientColor("");
       return;
     }
     const wv = webviewRef.current;
-    if (!wv) return;
+    if (!wv) {
+      window.electron?.logToTerminal("[MoviePage Ambient Hook] webviewRef.current is null.");
+      return;
+    }
 
     const cleanup = setupAmbientGlow(wv, (colorDataUrl) => {
       setAmbientColor(colorDataUrl);
@@ -545,7 +486,7 @@ export default function MoviePage({
     return () => {
       cleanup();
     };
-  }, [playing, resolvedPlayerUrl, playerSource]);
+  }, [playing, resolvedPlayerUrl, playerSource, ambientGlowEnabled]);
 
   useEffect(() => {
     let mounted = true;
@@ -1110,11 +1051,7 @@ export default function MoviePage({
               })()
             `);
           }
-          if (result) {
-            if (result.paused !== undefined) {
-              setVideoPaused(result.paused);
-            }
-          }
+
           if (result && result.duration > 0 && result.duration !== Infinity) {
             setShowFailoverPrompt(false);
             clearTimeout(failoverTimeoutRef.current);
@@ -1204,21 +1141,7 @@ export default function MoviePage({
     onHistory({ ...d, media_type: "movie" });
   }, [d, onHistory, progressKey, saveProgress]);
 
-  const resumePlayback = useCallback(() => {
-    const wv = webviewRef.current;
-    if (wv) {
-      if (window.electron?.resumeVideo) {
-        window.electron.resumeVideo(wv.getWebContentsId()).catch(() => {});
-      } else {
-        wv.executeJavaScript(`
-          (() => {
-            const v = document.querySelector('video');
-            if (v) v.play().catch(() => {});
-          })()
-        `).catch(() => {});
-      }
-    }
-  }, []);
+
 
   const handlePlay = useCallback(() => {
     if (playing) {
@@ -1618,7 +1541,15 @@ export default function MoviePage({
       </div>
 
       {playing && !restricted && !isUnreleased && (
-        <div className="section">
+        <div className="section" style={{ position: "relative" }}>
+          {ambientColor && (
+            <div
+              className="player-ambient-glow"
+              style={{
+                backgroundImage: `url(${ambientColor})`,
+              }}
+            />
+          )}
           <div
             className={`player-wrap${playerFullscreen ? " player-wrap--fullscreen" : ""}${!playerControlsVisible ? " player-wrap--idle" : ""}`}
             ref={playerWrapRef}
@@ -1655,7 +1586,7 @@ export default function MoviePage({
               <div
                 style={{
                   position: "absolute",
-                  top: 20,
+                  top: 72,
                   right: 20,
                   zIndex: 35,
                   display: "flex",
@@ -1754,14 +1685,7 @@ export default function MoviePage({
                 </button>
               </div>
             )}
-            {ambientColor && (
-              <div
-                className="player-ambient-glow"
-                style={{
-                  backgroundImage: `url(${ambientColor})`,
-                }}
-              />
-            )}
+
             <webview
               ref={webviewRef}
               src={
@@ -1798,19 +1722,7 @@ export default function MoviePage({
                 zIndex: 2,
               }}
             />
-            {playing && videoPaused && !webviewLoading && !resolveError && !pipOpen && (
-              <div className="player-pause-overlay" onClick={resumePlayback} style={{ zIndex: 5 }}>
-                <div className="player-pause-overlay-content">
-                  <div className="player-pause-play-btn">
-                    <PlayIcon size={48} />
-                  </div>
-                  <div className="player-pause-meta">
-                    <span className="player-pause-type-tag">PAUSED</span>
-                    <h3 className="player-pause-title">{title}</h3>
-                  </div>
-                </div>
-              </div>
-            )}
+
             {/* Unified HUD player header bar */}
             <div className="player-overlay-group">
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -2195,7 +2107,7 @@ const CollectionCard = memo(function CollectionCard({
   onMarkWatched,
   onMarkUnwatched,
 }) {
-  const handleClick = useCallback((itemData) => onSelect(itemData || part), [onSelect, part]);
+  const handleClick = useCallback((itemData) => onSelect(itemData && !itemData.nativeEvent ? itemData : part), [onSelect, part]);
   return (
     <div
       style={{

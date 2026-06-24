@@ -79,37 +79,7 @@ const VoiceBoostIcon = ({ size = 16 }) => (
   </svg>
 );
 
-const PLAY_PAUSE_INJECTION_SCRIPT = `
-(function() {
-  try {
-    const setup = () => {
-      const videos = Array.from(document.querySelectorAll('video'));
-      for (const v of videos) {
-        if (v._pauseTracked) continue;
-        
-        const rect = v.getBoundingClientRect();
-        if (rect.width > 0 && rect.width < 120) continue;
-        if (rect.height > 0 && rect.height < 80) continue;
 
-        v._pauseTracked = true;
-
-        // Log current state immediately
-        console.log(v.paused ? '__orion_video_paused' : '__orion_video_playing');
-
-        v.addEventListener('pause', () => console.log('__orion_video_paused'));
-        v.addEventListener('play', () => console.log('__orion_video_playing'));
-        v.addEventListener('playing', () => console.log('__orion_video_playing'));
-      }
-    };
-
-    setup();
-    const observer = new MutationObserver(setup);
-    observer.observe(document.body, { childList: true, subtree: true });
-  } catch (e) {
-    console.error("Play/pause Sniffer setup failed:", e);
-  }
-})();
-`;
 
 // ── Partial-circle progress icon (cached per pct tier) ───────────────────────
 // Uses a single SVG arc. Three instances (25/50/75)
@@ -471,7 +441,9 @@ export default function TVPage({
   const [selectedEp, setSelectedEp] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [ambientColor, setAmbientColor] = useState("");
-  const [videoPaused, setVideoPaused] = useState(false);
+  const [ambientGlowEnabled, setAmbientGlowEnabled] = useState(
+    () => storage.get(STORAGE_KEYS.AMBIENT_GLOW) !== false,
+  );
   const autoplayDoneRef = useRef(false);
 
   // Resume playback & auto-failover states
@@ -703,62 +675,31 @@ export default function TVPage({
     autoplayDoneRef.current = false;
   }, [item.id]);
 
-  // Reset videoPaused state
+
+
+  // Ambient glow settings sync
   useEffect(() => {
-    setVideoPaused(false);
-  }, [item.id, selectedEp?.episode_number, selectedSeason, playerSource, resolvedPlayerUrl]);
-
-  // Play/pause logs listener
-  useEffect(() => {
-    const wv = webviewRef.current;
-    if (!wv || !playing) return;
-
-    const handleConsole = (e) => {
-      if (e.message === "__orion_video_paused") {
-        setVideoPaused(true);
-      } else if (e.message === "__orion_video_playing") {
-        setVideoPaused(false);
-      }
+    const handler = () => {
+      setAmbientGlowEnabled(storage.get(STORAGE_KEYS.AMBIENT_GLOW) !== false);
     };
-
-    const handleLoad = () => {
-      try {
-        if (window.electron?.injectScriptAllFrames) {
-          window.electron.injectScriptAllFrames(wv.getWebContentsId(), PLAY_PAUSE_INJECTION_SCRIPT).catch(() => {});
-        } else {
-          wv.executeJavaScript(PLAY_PAUSE_INJECTION_SCRIPT).catch(() => {});
-        }
-      } catch (err) {
-        console.warn("Webview not ready for play/pause injection:", err);
-      }
-    };
-
-    wv.addEventListener("console-message", handleConsole);
-    wv.addEventListener("did-finish-load", handleLoad);
-    wv.addEventListener("dom-ready", handleLoad);
-    wv.addEventListener("did-frame-finish-load", handleLoad);
-
-    // Trigger setup in case it already loaded
-    handleLoad();
-
+    window.addEventListener("orion:player-settings-changed", handler);
     return () => {
-      try {
-        wv.removeEventListener("console-message", handleConsole);
-        wv.removeEventListener("did-finish-load", handleLoad);
-        wv.removeEventListener("dom-ready", handleLoad);
-        wv.removeEventListener("did-frame-finish-load", handleLoad);
-      } catch {}
+      window.removeEventListener("orion:player-settings-changed", handler);
     };
-  }, [playing, resolvedPlayerUrl, playerSource, selectedEp?.episode_number, selectedSeason]);
+  }, []);
 
   // Ambient glow hook
   useEffect(() => {
-    if (!playing) {
+    window.electron?.logToTerminal(`[TVPage Ambient Hook] playing: ${playing}, resolvedPlayerUrl: ${resolvedPlayerUrl ? 'yes' : 'no'}, playerSource: ${playerSource}, ambientGlowEnabled: ${ambientGlowEnabled}`);
+    if (!playing || !ambientGlowEnabled) {
       setAmbientColor("");
       return;
     }
     const wv = webviewRef.current;
-    if (!wv) return;
+    if (!wv) {
+      window.electron?.logToTerminal("[TVPage Ambient Hook] webviewRef.current is null.");
+      return;
+    }
 
     const cleanup = setupAmbientGlow(wv, (colorDataUrl) => {
       setAmbientColor(colorDataUrl);
@@ -767,7 +708,7 @@ export default function TVPage({
     return () => {
       cleanup();
     };
-  }, [playing, resolvedPlayerUrl, playerSource, selectedEp?.episode_number, selectedSeason]);
+  }, [playing, resolvedPlayerUrl, playerSource, selectedEp?.episode_number, selectedSeason, ambientGlowEnabled]);
 
   useEffect(() => {
     if (!apiKey || !item.id) return;
@@ -1680,11 +1621,7 @@ export default function TVPage({
             `);
           }
 
-          if (result) {
-            if (result.paused !== undefined) {
-              setVideoPaused(result.paused);
-            }
-          }
+
 
           // ── AniSkip logic: runs every tick (only when aniSkipActive) ────
           if (aniSkipActive && result?.currentTime != null) {
@@ -1952,21 +1889,7 @@ export default function TVPage({
     });
   };
 
-  const resumePlayback = useCallback(() => {
-    const wv = webviewRef.current;
-    if (wv) {
-      if (window.electron?.resumeVideo) {
-        window.electron.resumeVideo(wv.getWebContentsId()).catch(() => {});
-      } else {
-        wv.executeJavaScript(`
-          (() => {
-            const v = document.querySelector('video');
-            if (v) v.play().catch(() => {});
-          })()
-        `).catch(() => {});
-      }
-    }
-  }, []);
+
 
   const playEpisode = useCallback(
     (ep) => {
@@ -2277,7 +2200,15 @@ export default function TVPage({
           </div>
 
           {playing && selectedEp && (
-            <div className="section">
+            <div className="section" style={{ position: "relative" }}>
+              {ambientColor && (
+                <div
+                  className="player-ambient-glow"
+                  style={{
+                    backgroundImage: `url(${ambientColor})`,
+                  }}
+                />
+              )}
               <div
                 style={{
                   marginBottom: 12,
@@ -2372,7 +2303,7 @@ export default function TVPage({
                   <div
                     style={{
                       position: "absolute",
-                      top: "20px",
+                      top: "72px",
                       right: "20px",
                       zIndex: 35,
                       display: "flex",
@@ -2639,14 +2570,7 @@ export default function TVPage({
                     </div>
                   </div>
                 )}
-                {ambientColor && (
-                  <div
-                    className="player-ambient-glow"
-                    style={{
-                      backgroundImage: `url(${ambientColor})`,
-                    }}
-                  />
-                )}
+
                 <webview
                   ref={webviewRef}
                   src={
@@ -2686,24 +2610,7 @@ export default function TVPage({
                   }}
                   tabIndex={-1}
                 />
-                {playing && videoPaused && !webviewLoading && !resolveError && !pipOpen && (
-                  <div className="player-pause-overlay" onClick={resumePlayback} style={{ zIndex: 5 }}>
-                    <div className="player-pause-overlay-content">
-                      <div className="player-pause-play-btn">
-                        <PlayIcon size={48} />
-                      </div>
-                      <div className="player-pause-meta">
-                        <span className="player-pause-type-tag">PAUSED</span>
-                        <h3 className="player-pause-title">{title}</h3>
-                        {selectedEp && (
-                          <h4 className="player-pause-subtitle">
-                            Season {selectedSeason} · Episode {selectedEp.episode_number} — {selectedEp.name}
-                          </h4>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
+
                 {/* Unified HUD player header bar */}
                 <div className="player-overlay-group">
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

@@ -504,22 +504,26 @@ function register(getMainWindow, { writeSecretMigration }) {
     try {
       const { webContents } = require("electron");
       const wc = webContents.fromId(webContentsId);
-      if (!wc || wc.isDestroyed()) return false;
+      if (!wc || wc.isDestroyed()) {
+        console.error(`[inject-script-all-frames] webContents ${webContentsId} not found or destroyed.`);
+        return false;
+      }
 
-      const allFrames = [];
-      const collect = (frame) => {
-        allFrames.push(frame);
-        for (const child of frame.frames || []) collect(child);
-      };
-      collect(wc.mainFrame);
+      const allFrames = wc.mainFrame.framesInSubtree || [];
+      console.log(`[inject-script-all-frames] Injecting script into ${allFrames.length} frames for webContents ID: ${webContentsId}`);
 
       for (const frame of allFrames) {
         try {
-          frame.executeJavaScript(script).catch(() => {});
-        } catch {}
+          frame.executeJavaScript(script).catch((err) => {
+            console.error(`[inject-script-all-frames] executeJavaScript rejected in frame ${frame.url}:`, err.message || err);
+          });
+        } catch (err) {
+          console.error(`[inject-script-all-frames] executeJavaScript threw in frame ${frame.url}:`, err.message || err);
+        }
       }
       return true;
-    } catch {
+    } catch (err) {
+      console.error("[inject-script-all-frames] Failed to run handler:", err.message || err);
       return false;
     }
   });

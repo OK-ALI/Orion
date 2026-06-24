@@ -1623,6 +1623,12 @@ button {
     padding: 22px 38px 70px;
 }
 
+.homepage-content > *:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 28px;
+    margin-bottom: 28px;
+}
+
 .home-section {
     margin-bottom: 34px;
 }

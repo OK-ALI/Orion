@@ -330,7 +330,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
                       <MediaCard
                         key={`${item.id}_${item.media_type || type}`}
                         item={{ ...item, media_type: type }}
-                        onClick={(itemData) => onNavigate(type, itemData || { ...item, media_type: type })}
+                        onClick={(itemData) => onNavigate(type, itemData && !itemData.nativeEvent ? itemData : { ...item, media_type: type })}
                       />
                     ))}
                   </div>
@@ -370,7 +370,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
                 <MediaCard
                   key={`${item.id}_${item.media_type || type}`}
                   item={{ ...item, media_type: type }}
-                  onClick={(itemData) => onNavigate(type, itemData || { ...item, media_type: type })}
+                  onClick={(itemData) => onNavigate(type, itemData && !itemData.nativeEvent ? itemData : { ...item, media_type: type })}
                 />
               ))}
             </div>

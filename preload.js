@@ -147,6 +147,7 @@ contextBridge.exposeInMainWorld("electron", {
   // ── App control / memory ───────────────────────────────────────────────────
   quitApp: () => ipcRenderer.invoke("quit-app"),
   playerStopped: () => ipcRenderer.send("player-stopped"),
+  logToTerminal: (msg) => ipcRenderer.send("log-to-terminal", msg),
 
   // ── Cache operations ───────────────────────────────────────────────────────
   getCacheSize: () => ipcRenderer.invoke("get-cache-size"),

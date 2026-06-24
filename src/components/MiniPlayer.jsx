@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { setupAmbientGlow } from "../utils/playerAmbient";
+import { storage, STORAGE_KEYS } from "../utils/storage";
 
 export default function MiniPlayer({ url, title, onClose, onExpand }) {
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -12,6 +13,9 @@ export default function MiniPlayer({ url, title, onClose, onExpand }) {
   const dragStart = useRef({ x: 0, y: 0 });
   const playerStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
   const [ambientColor, setAmbientColor] = useState("");
+  const [ambientGlowEnabled, setAmbientGlowEnabled] = useState(
+    () => storage.get(STORAGE_KEYS.AMBIENT_GLOW) !== false,
+  );
 
   // Inject CSS to scale down subtitles for the mini-player
   useEffect(() => {
@@ -44,8 +48,23 @@ export default function MiniPlayer({ url, title, onClose, onExpand }) {
     return () => wv.removeEventListener("dom-ready", injectStyles);
   }, []);
 
+  // Ambient glow settings sync
+  useEffect(() => {
+    const handler = () => {
+      setAmbientGlowEnabled(storage.get(STORAGE_KEYS.AMBIENT_GLOW) !== false);
+    };
+    window.addEventListener("orion:player-settings-changed", handler);
+    return () => {
+      window.removeEventListener("orion:player-settings-changed", handler);
+    };
+  }, []);
+
   // Ambient glow hook
   useEffect(() => {
+    if (!ambientGlowEnabled) {
+      setAmbientColor("");
+      return;
+    }
     const wv = webviewRef.current;
     if (!wv) return;
 
@@ -56,7 +75,7 @@ export default function MiniPlayer({ url, title, onClose, onExpand }) {
     return () => {
       cleanup();
     };
-  }, [url]);
+  }, [url, ambientGlowEnabled]);
 
   // Load saved position and size on mount
   useEffect(() => {
@@ -207,77 +226,85 @@ export default function MiniPlayer({ url, title, onClose, onExpand }) {
   }, [isDragging, isResizing, position, size]);
 
   return (
-    <div
-      ref={playerRef}
-      className={`orion-mini-player ${isDragging ? "is-dragging" : ""}`}
-      style={{
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        width: `${size.width}px`,
-        height: `${size.height}px`,
-        position: "fixed",
-        zIndex: 9999
-      }}
-    >
+    <>
       {ambientColor && (
         <div
           className="player-ambient-glow"
           style={{
             backgroundImage: `url(${ambientColor})`,
+            left: `${position.x}px`,
+            top: `${position.y}px`,
+            width: `${size.width}px`,
+            height: `${size.height}px`,
+            position: "fixed",
+            zIndex: 9998,
           }}
         />
       )}
-      {/* Drag Handle & Header */}
-      <div className="orion-mini-player-drag-handle" onMouseDown={handleDragStart}>
-        <div className="orion-mini-player-title" title={title}>
-          {title || "Now Playing"}
+      <div
+        ref={playerRef}
+        className={`orion-mini-player ${isDragging ? "is-dragging" : ""}`}
+        style={{
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          width: `${size.width}px`,
+          height: `${size.height}px`,
+          position: "fixed",
+          zIndex: 9999,
+        }}
+      >
+        {/* Drag Handle & Header */}
+        <div className="orion-mini-player-drag-handle" onMouseDown={handleDragStart}>
+          <div className="orion-mini-player-title" title={title}>
+            {title || "Now Playing"}
+          </div>
+          <div className="orion-mini-player-actions">
+            {/* Expand Button */}
+            <button
+              className="orion-mini-player-btn expand"
+              onClick={onExpand}
+              title="Expand to Full Player"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 3h6v6" />
+                <path d="M9 21H3v-6" />
+                <path d="M21 3l-7 7" />
+                <path d="M3 21l7-7" />
+              </svg>
+            </button>
+            {/* Close Button */}
+            <button
+              className="orion-mini-player-btn close"
+              onClick={onClose}
+              title="Close Player"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
         </div>
-        <div className="orion-mini-player-actions">
-          {/* Expand Button */}
-          <button
-            className="orion-mini-player-btn expand"
-            onClick={onExpand}
-            title="Expand to Full Player"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 3h6v6" />
-              <path d="M9 21H3v-6" />
-              <path d="M21 3l-7 7" />
-              <path d="M3 21l7-7" />
-            </svg>
-          </button>
-          {/* Close Button */}
-          <button
-            className="orion-mini-player-btn close"
-            onClick={onClose}
-            title="Close Player"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-      </div>
 
-      {/* Webview Content */}
-      <div className="orion-mini-player-content">
-        <webview
-          ref={webviewRef}
-          className="orion-mini-player-webview"
-          src={url}
-          partition="persist:player"
-          allowpopups="false"
-          sandbox="allow-scripts allow-same-origin allow-forms"
-          webpreferences="webSecurity=no"
-          style={{ width: "100%", height: "100%", border: "none", position: "relative", zIndex: 2 }}
-        />
-        {/* Resize Grip (visible in bottom right) */}
-        <div
-          className="orion-mini-player-resize-handle"
-          onMouseDown={handleResizeStart}
-        />
+        {/* Webview Content */}
+        <div className="orion-mini-player-content">
+          <webview
+            ref={webviewRef}
+            className="orion-mini-player-webview"
+            src={url}
+            partition="persist:player"
+            allowpopups="false"
+            sandbox="allow-scripts allow-same-origin allow-forms"
+            webpreferences="webSecurity=no"
+            style={{ width: "100%", height: "100%", border: "none", position: "relative", zIndex: 2 }}
+          />
+          {/* Resize Grip (visible in bottom right) */}
+          <div
+            className="orion-mini-player-resize-handle"
+            onMouseDown={handleResizeStart}
+          />
+        </div>
       </div>
-    </div>
+    </>
   );
 }

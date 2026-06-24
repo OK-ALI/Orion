@@ -230,7 +230,7 @@ export default function HomePage({
               <MediaCard
                 key={`${item.media_type}_${item.id}_${item.season || ""}_${item.episode || ""}`}
                 item={item}
-                onClick={(itemData) => onSelect(itemData || item)}
+                onClick={(itemData) => onSelect(itemData && !itemData.nativeEvent ? itemData : item)}
                 progress={progress[pk] || 0}
                 watched={watched}
                 onMarkWatched={onMarkWatched}
@@ -296,7 +296,7 @@ export default function HomePage({
                 <MediaCard
                   key={`${item.media_type || "movie"}_${item.id}`}
                   item={item}
-                  onClick={(itemData) => onSelect(itemData || item)}
+                  onClick={(itemData) => onSelect(itemData && !itemData.nativeEvent ? itemData : item)}
                   ageRating={getRating(item).cert}
                   restricted={itemRestricted(item)}
                 />

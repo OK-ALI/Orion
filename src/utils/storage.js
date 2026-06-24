@@ -71,6 +71,7 @@ export const STORAGE_KEYS = {
   // Sidebar collapsed/expanded state
   SIDEBAR_EXPANDED: "sidebarExpanded",
   CLOSE_TO_TRAY: "closeToTray",
+  AMBIENT_GLOW: "ambientGlow",
 };
 
 export const storage = {
