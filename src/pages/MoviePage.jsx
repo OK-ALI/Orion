@@ -1547,6 +1547,9 @@ export default function MoviePage({
               className="player-ambient-glow"
               style={{
                 backgroundImage: `url(${ambientColor})`,
+                transition: "background-image 900ms ease, opacity 900ms ease, filter 900ms ease, transform 900ms ease",
+                willChange: "background-image, opacity, filter, transform",
+                transform: "translateZ(0) scale(1.05)",
               }}
             />
           )}
@@ -1707,7 +1710,6 @@ export default function MoviePage({
               partition="persist:player"
               allowpopups="false"
               sandbox="allow-scripts allow-same-origin allow-forms"
-              webpreferences="webSecurity=no"
               style={{
                 position: "absolute",
                 inset: 0,
@@ -2126,3 +2128,8 @@ const CollectionCard = memo(function CollectionCard({
     </div>
   );
 });
+
+
+
+
+

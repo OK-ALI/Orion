@@ -15,6 +15,12 @@ const {
   dialog,
   nativeImage,
 } = require("electron");
+
+/* ORION_PLAYER_RUNTIME_SWITCHES */
+try {
+  app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+  app.commandLine.appendSwitch("force-webrtc-ip-handling-policy", "disable_non_proxied_udp");
+} catch {}
 const path = require("path");
 
 // ── Performance flags ────────────────────────────────────────────────────────
@@ -145,6 +151,8 @@ function createWindow() {
   blockStats.loadBlockStats();
   createTray();
 
+
+
   mainWindow = new BrowserWindow({
     width: 1380,
     height: 860,
@@ -181,9 +189,7 @@ function createWindow() {
 
   // Block popups from webviews, intercept fullscreen, lazy-init sessions
   mainWindow.webContents.on("did-attach-webview", (_, wc) => {
-    wc.on("console-message", (event, level, message, line, sourceId) => {
-      console.log(`[Webview Console] [Level ${level}] ${message} (at ${sourceId}:${line})`);
-    });
+
 
     if (!sessionsConfigured) {
       sessionsConfigured = true;
@@ -464,7 +470,7 @@ ipcMain.handle("open-pip-window", (_, { url, title }) => {
     sessionsConfigured = true;
     const playerSession = session.fromPartition("persist:player");
     const trailerSession = session.fromPartition("persist:trailer");
-    setupSession(playerSession, trailerSession);
+    setupSession(playerSession, trailerSession, getMainWindow);
   }
 
   if (pipWindow && !pipWindow.isDestroyed()) {
@@ -646,3 +652,4 @@ if (!gotTheLock) {
     if (mainWindow === null) createWindow();
   });
 }
+

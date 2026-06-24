@@ -344,6 +344,8 @@ export default function App() {
     };
   }, []);
 
+
+
   // ── Detect platform for Windows titlebar ──────────────────────────────────
   useEffect(() => {
     if (!window.electron?.getPlatform) return;

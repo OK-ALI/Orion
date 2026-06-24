@@ -282,7 +282,6 @@ export default function TrailerModal({ trailerKey, title, onClose }) {
               src={currentSrc}
               partition="persist:trailer"
               allowpopups="false"
-              webpreferences="webSecurity=no"
               style={{
                 position: "absolute",
                 inset: 0,

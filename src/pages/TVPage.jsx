@@ -2206,6 +2206,9 @@ export default function TVPage({
                   className="player-ambient-glow"
                   style={{
                     backgroundImage: `url(${ambientColor})`,
+                    transition: "background-image 900ms ease, opacity 900ms ease, filter 900ms ease, transform 900ms ease",
+                    willChange: "background-image, opacity, filter, transform",
+                    transform: "translateZ(0) scale(1.05)",
                   }}
                 />
               )}
@@ -2413,7 +2416,7 @@ export default function TVPage({
                           : "flex-end",
                       background: "rgba(0,0,0,0.88)",
                       borderRadius: "inherit",
-                      backdropFilter: "blur(6px)",
+                      backdropFilter: "blur(76px) saturate(1.35)",
                       animation: "fadeIn 0.4s ease",
                     }}
                   >
@@ -2591,8 +2594,8 @@ export default function TVPage({
                   }
                   partition="persist:player"
                   allowpopups="false"
+                  
                   sandbox="allow-scripts allow-same-origin allow-forms"
-                  webpreferences="webSecurity=no"
                   style={{
                     position: "absolute",
                     inset: 0,
@@ -2881,8 +2884,8 @@ export default function TVPage({
                       color: "white",
                       cursor: "pointer",
                       padding: "9px 18px",
-                      backdropFilter: "blur(6px)",
-                      WebkitBackdropFilter: "blur(6px)",
+                      backdropFilter: "blur(76px) saturate(1.35)",
+                      WebkitBackdropFilter: "blur(76px) saturate(1.35)",
                       transition: "background 0.15s, border-color 0.15s",
                       fontFamily: "var(--font-body)",
                       animation: "slideDown 0.2s ease",
@@ -3380,3 +3383,8 @@ const EpisodeCard = memo(function EpisodeCard({
     </div>
   );
 });
+
+
+
+
+

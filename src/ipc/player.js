@@ -509,7 +509,12 @@ function register(getMainWindow, { writeSecretMigration }) {
         return false;
       }
 
-      const allFrames = wc.mainFrame.framesInSubtree || [];
+      const allFrames = [];
+      const collect = (frame) => {
+        allFrames.push(frame);
+        for (const child of frame.frames || []) collect(child);
+      };
+      collect(wc.mainFrame);
       console.log(`[inject-script-all-frames] Injecting script into ${allFrames.length} frames for webContents ID: ${webContentsId}`);
 
       for (const frame of allFrames) {

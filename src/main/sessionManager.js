@@ -56,9 +56,12 @@ const BLOCKED_HOSTS = [
   "*://rzjzjnavztycv.online/*",
   "*://tmstr4.cloudnestra.com/*",
   "*://tmstr4.neonhorizonworkshops.com/*",
+  "*://unpkg.com/disable-devtool*",
+  "*://cdn.jsdelivr.net/npm/disable-devtool*",
 ];
 
 function setupSession(playerSession, trailerSession, getMainWindow) {
+  console.log("[sessionManager] setupSession initialized for persist:player and persist:trailer");
   const mediaRequestContexts = new Map();
   const requestOrigins = new Map();
 
@@ -71,47 +74,20 @@ function setupSession(playerSession, trailerSession, getMainWindow) {
 
   const stripHeaders = (details, callback) => {
     const headers = { ...details.responseHeaders };
+    let stripped = false;
     for (const key of Object.keys(headers)) {
       const lower = key.toLowerCase();
       if (
         lower === "x-frame-options" ||
-        lower === "content-security-policy" ||
-        lower === "access-control-allow-origin" ||
-        lower === "access-control-allow-methods" ||
-        lower === "access-control-allow-headers" ||
-        lower === "access-control-expose-headers" ||
-        lower === "access-control-allow-credentials"
+        lower === "content-security-policy"
       ) {
         delete headers[key];
+        stripped = true;
       }
     }
-
-    // Retrieve the requesting origin captured in onBeforeSendHeaders
-    let origin = requestOrigins.get(details.id);
-    requestOrigins.delete(details.id); // Clean up immediately to prevent leaks
-
-    if (!origin && details.referrer) {
-      try {
-        origin = new URL(details.referrer).origin;
-      } catch {}
+    if (stripped) {
+      console.log(`[sessionManager] Stripped security headers for URL: ${details.url}`);
     }
-    if (!origin && details.frame && details.frame.url) {
-      try {
-        origin = new URL(details.frame.url).origin;
-      } catch {}
-    }
-
-    if (origin && origin !== "null") {
-      headers["Access-Control-Allow-Origin"] = [origin];
-      headers["Access-Control-Allow-Credentials"] = ["true"];
-    } else {
-      headers["Access-Control-Allow-Origin"] = ["*"];
-    }
-
-    headers["Access-Control-Allow-Methods"] = ["GET, POST, OPTIONS, HEAD"];
-    headers["Access-Control-Allow-Headers"] = ["*"];
-    headers["Access-Control-Expose-Headers"] = ["*"];
-
     callback({ responseHeaders: headers });
   };
 
@@ -121,11 +97,11 @@ function setupSession(playerSession, trailerSession, getMainWindow) {
   trailerSession.setUserAgent(UA);
 
   playerSession.webRequest.onHeadersReceived(
-    { urls: ["<all_urls>"] },
+    { urls: ["*://*/*"] },
     stripHeaders,
   );
   trailerSession.webRequest.onHeadersReceived(
-    { urls: ["<all_urls>"] },
+    { urls: ["*://*/*"] },
     stripHeaders,
   );
 
@@ -173,16 +149,10 @@ function setupSession(playerSession, trailerSession, getMainWindow) {
     }
     callback({ requestHeaders });
   };
-
   playerSession.webRequest.onBeforeSendHeaders(
-    { urls: ["<all_urls>"] },
+    { urls: MEDIA_URLS },
     handleBeforeSendHeaders,
   );
-  trailerSession.webRequest.onBeforeSendHeaders(
-    { urls: ["<all_urls>"] },
-    handleBeforeSendHeaders,
-  );
-
   playerSession.webRequest.onBeforeRequest(
     { urls: [...BLOCKED_HOSTS, ...MEDIA_URLS] },
     (details, callback) => {

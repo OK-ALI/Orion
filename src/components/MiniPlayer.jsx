@@ -232,6 +232,9 @@ export default function MiniPlayer({ url, title, onClose, onExpand }) {
           className="player-ambient-glow"
           style={{
             backgroundImage: `url(${ambientColor})`,
+            transition: "background-image 900ms ease, opacity 900ms ease, filter 900ms ease, transform 900ms ease",
+            willChange: "background-image, opacity, filter, transform",
+            transform: "translateZ(0) scale(1.05)",
             left: `${position.x}px`,
             top: `${position.y}px`,
             width: `${size.width}px`,
@@ -294,8 +297,8 @@ export default function MiniPlayer({ url, title, onClose, onExpand }) {
             src={url}
             partition="persist:player"
             allowpopups="false"
+            
             sandbox="allow-scripts allow-same-origin allow-forms"
-            webpreferences="webSecurity=no"
             style={{ width: "100%", height: "100%", border: "none", position: "relative", zIndex: 2 }}
           />
           {/* Resize Grip (visible in bottom right) */}
@@ -308,3 +311,8 @@ export default function MiniPlayer({ url, title, onClose, onExpand }) {
     </>
   );
 }
+
+
+
+
+
