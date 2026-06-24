@@ -41,9 +41,31 @@ const TV_GENRES = [
   { id: 37, name: "Western", gradient: "linear-gradient(135deg, #cd853f 0%, #8b5a2b 100%)" },
 ];
 
+const REGION_PRESETS = {
+  all: {
+    name: "Global",
+    countries: "",
+  },
+  hollywood: {
+    name: "Hollywood",
+    countries: "US",
+  },
+  bollywood: {
+    name: "Bollywood",
+    countries: "IN",
+  },
+  asian: {
+    name: "Asian Content",
+    countries: "KR|JP|CN|TW|HK|TH",
+  },
+};
+
 export default function DiscoverPage({ apiKey, onNavigate }) {
   const [type, setType] = useState("movie"); // "movie" | "tv"
   const [selectedGenre, setSelectedGenre] = useState(null); // null or genre object
+  const [region, setRegion] = useState("all"); // "all" | "hollywood" | "bollywood" | "asian"
+  const [regionItems, setRegionItems] = useState([]);
+  const [loadingRegionItems, setLoadingRegionItems] = useState(false);
 
   // Filter & Sorting state
   const [sortBy, setSortBy] = useState("popularity.desc");
@@ -65,7 +87,37 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
     setItems([]);
   };
 
-  // Fetch results when filters/genre change
+  // Fetch regional trending items when region or type changes, if no genre is selected
+  useEffect(() => {
+    if (region === "all" || selectedGenre || !apiKey) {
+      setRegionItems([]);
+      return;
+    }
+
+    let mounted = true;
+    const fetchRegionItems = async () => {
+      setLoadingRegionItems(true);
+      try {
+        const countries = REGION_PRESETS[region].countries;
+        const path = `/discover/${type}?sort_by=popularity.desc&with_origin_country=${countries}&page=1`;
+        const data = await tmdbFetch(path, apiKey);
+        if (mounted) {
+          setRegionItems(data.results || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch region items:", err);
+      } finally {
+        if (mounted) setLoadingRegionItems(false);
+      }
+    };
+
+    fetchRegionItems();
+    return () => {
+      mounted = false;
+    };
+  }, [region, type, selectedGenre, apiKey]);
+
+  // Fetch results when filters/genre/region change
   const fetchDiscoverResults = useCallback(
     async (pageNum = 1) => {
       if (!selectedGenre || !apiKey) return;
@@ -73,7 +125,9 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
       try {
         const yearParam = year ? (type === "movie" ? `&primary_release_year=${year}` : `&first_air_date_year=${year}`) : "";
         const ratingParam = minRating !== "0" ? `&vote_average.gte=${minRating}` : "";
-        const path = `/discover/${type}?with_genres=${selectedGenre.id}&sort_by=${sortBy}${yearParam}${ratingParam}&page=${pageNum}`;
+        const countries = REGION_PRESETS[region]?.countries || "";
+        const countryParam = countries ? `&with_origin_country=${countries}` : "";
+        const path = `/discover/${type}?with_genres=${selectedGenre.id}${countryParam}&sort_by=${sortBy}${yearParam}${ratingParam}&page=${pageNum}`;
         const data = await tmdbFetch(path, apiKey);
 
         if (pageNum === 1) {
@@ -89,7 +143,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
         setLoading(false);
       }
     },
-    [selectedGenre, type, sortBy, year, minRating, apiKey],
+    [selectedGenre, type, sortBy, year, minRating, region, apiKey],
   );
 
   useEffect(() => {
@@ -98,7 +152,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
       setPage(1);
       fetchDiscoverResults(1);
     }
-  }, [selectedGenre, sortBy, year, minRating, fetchDiscoverResults]);
+  }, [selectedGenre, sortBy, year, minRating, region, fetchDiscoverResults]);
 
   const loadMore = () => {
     if (page < totalPages && !loading) {
@@ -136,6 +190,31 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
             </button>
           </div>
         </div>
+
+        {!selectedGenre && (
+          <div className="region-filter-bar" style={{ display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" }}>
+            {Object.entries(REGION_PRESETS).map(([id, preset]) => (
+              <button
+                key={id}
+                className={`toggle-btn ${region === id ? "active" : ""}`}
+                onClick={() => setRegion(id)}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "999px",
+                  fontSize: "13px",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  border: "1px solid var(--border)",
+                  background: region === id ? "var(--accent)" : "var(--surface)",
+                  color: region === id ? "#fff" : "var(--text3)",
+                  transition: "all var(--duration-normal) var(--ease-out)"
+                }}
+              >
+                {preset.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {selectedGenre && (
           <div className="discover-filters">
@@ -186,19 +265,54 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
       {/* ── Content ── */}
       <div className="discover-content">
         {!selectedGenre ? (
-          /* Genre Grid View */
-          <div className="genre-grid fade-in">
-            {genres.map((genre) => (
-              <div
-                key={genre.id}
-                className="genre-card"
-                style={{ background: genre.gradient }}
-                onClick={() => handleSelectGenre(genre)}
-              >
-                <div className="genre-card-overlay" />
-                <span className="genre-card-name">{genre.name}</span>
+          <div className="fade-in">
+            {/* Regional Popular Shelf */}
+            {region !== "all" && (
+              <div style={{ marginBottom: "36px" }}>
+                <h2 style={{ fontSize: "22px", fontWeight: 700, marginBottom: "16px", color: "var(--text)" }}>
+                  Popular in {REGION_PRESETS[region].name}
+                </h2>
+                {loadingRegionItems ? (
+                  <div className="loader" style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div className="spinner" />
+                  </div>
+                ) : regionItems.length > 0 ? (
+                  <div className="scroll-row">
+                    {regionItems.map((item) => (
+                      <MediaCard
+                        key={`${item.id}_${item.media_type || type}`}
+                        item={{ ...item, media_type: type }}
+                        onClick={() => onNavigate(type, item)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ padding: "32px", textAlign: "center", color: "var(--text3)", background: "var(--surface)", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
+                    No trending titles found for this region.
+                  </div>
+                )}
               </div>
-            ))}
+            )}
+
+            {/* Genre list */}
+            <div>
+              <h2 style={{ fontSize: "22px", fontWeight: 700, marginBottom: "16px", color: "var(--text)" }}>
+                Browse by Genre
+              </h2>
+              <div className="genre-grid">
+                {genres.map((genre) => (
+                  <div
+                    key={genre.id}
+                    className="genre-card"
+                    style={{ background: genre.gradient }}
+                    onClick={() => handleSelectGenre(genre)}
+                  >
+                    <div className="genre-card-overlay" />
+                    <span className="genre-card-name">{genre.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
           /* Discover Results Grid View */

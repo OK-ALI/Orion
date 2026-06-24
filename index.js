@@ -483,18 +483,22 @@ function createWindow() {
         // Let normal quit happen
         app.isQuiting = true;
         downloadsIpc.killAllDownloads();
+        if (pipWindow && !pipWindow.isDestroyed()) pipWindow.close();
         app.quit();
         return;
       }
 
       // closeBehavior === "ask"
       e.preventDefault();
+      const isPopout = pipWindow && !pipWindow.isDestroyed();
       dialog.showMessageBox(mainWindow, {
         type: "question",
         buttons: ["Minimize to Tray", "Quit Orion", "Cancel"],
         defaultId: 0,
         title: "Orion Media Player",
-        message: "Orion is currently streaming in a mini-player.",
+        message: isPopout
+          ? "Orion is currently streaming in a pop-out window."
+          : "Orion is currently streaming in a mini-player.",
         detail: "Would you like to keep streaming in the background (system tray) or close the application?",
         checkboxLabel: "Remember my choice",
         checkboxChecked: false,
@@ -514,6 +518,7 @@ function createWindow() {
           }
           app.isQuiting = true;
           downloadsIpc.killAllDownloads();
+          if (pipWindow && !pipWindow.isDestroyed()) pipWindow.close();
           app.quit();
         }
       });
@@ -656,6 +661,9 @@ ipcMain.handle("open-pip-window", (_, { url, title }) => {
     },
   });
 
+  pipWindow.setAlwaysOnTop(true, "screen-saver");
+  pipWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
   const injectPopoutCSS = (wc) => {
     const css = `
       video::cue {
@@ -747,7 +755,14 @@ ipcMain.handle("open-pip-window", (_, { url, title }) => {
   pipWindow.on("closed", () => {
     pipWindow = null;
     notifyMain("pip-window-closed");
+    miniPlayerActive = false;
+    miniPlayerTitle = "";
+    updateTrayMenu();
   });
+
+  miniPlayerActive = true;
+  miniPlayerTitle = title || "Pop-out Stream";
+  updateTrayMenu();
 
   notifyMain("pip-window-opened");
   return { ok: true };

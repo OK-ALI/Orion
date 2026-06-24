@@ -3,7 +3,7 @@ import { tmdbFetch } from "../utils/api";
 import MediaCard from "../components/media/MediaCard";
 import { SearchIcon } from "../components/common/Icons";
 
-export default function SearchResultsPage({ apiKey, item: initialQuery, onNavigate }) {
+export default function SearchResultsPage({ apiKey, item: initialQuery, onNavigate, isActive }) {
   const [query, setQuery] = useState(initialQuery || "");
   const [filter, setFilter] = useState("all"); // "all" | "movie" | "tv"
   const [results, setResults] = useState([]);
@@ -19,6 +19,12 @@ export default function SearchResultsPage({ apiKey, item: initialQuery, onNaviga
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (isActive) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [isActive]);
 
   useEffect(() => {
     if (!query.trim() || !apiKey) {

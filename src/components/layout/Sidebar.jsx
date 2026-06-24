@@ -7,10 +7,9 @@ import {
   LibraryIcon,
   DownloadIcon,
   SettingsIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   BackIcon,
   HelpIcon,
+  PinIcon,
 } from "../common/Icons";
 import { storage } from "../../utils/storage";
 
@@ -95,7 +94,14 @@ export default function Sidebar({
           aria-label={pinned ? "Unpin sidebar" : "Pin sidebar open"}
           title={pinned ? "Unpin sidebar" : "Pin sidebar open"}
         >
-          {pinned ? <ChevronLeftIcon size={16} /> : <ChevronRightIcon size={16} />}
+          <PinIcon
+            size={16}
+            fill={pinned ? "currentColor" : "none"}
+            style={{
+              transform: pinned ? "rotate(0deg)" : "rotate(-45deg)",
+              transition: "transform var(--duration-normal) var(--ease-out)",
+            }}
+          />
         </button>
       </div>
 

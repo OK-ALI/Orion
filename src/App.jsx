@@ -611,12 +611,15 @@ export default function App() {
     selectedRef.current = selected;
   }, [selected]);
 
+  const pendingScrollRestore = useRef(null);
+
   const navigateBack = useCallback(() => {
     setNavStack((prev) => {
       if (prev.length === 0) return prev;
       const last = prev[prev.length - 1];
       setPage(last.page);
       setSelected(last.selected);
+      pendingScrollRestore.current = { page: last.page, scrollTop: last.scrollTop || 0 };
       if (typeof gc === "function") {
         requestIdleCallback(() => gc(), { timeout: 2000 });
       }
@@ -625,18 +628,51 @@ export default function App() {
   }, []);
 
   const navigate = useCallback((pg, data = null) => {
+    const scrollContainer = document.querySelector(".app-content");
+    const currentScroll = scrollContainer ? scrollContainer.scrollTop : 0;
+
     setNavStack((prev) => [
       ...prev,
-      { page: pageRef.current, selected: selectedRef.current },
+      { page: pageRef.current, selected: selectedRef.current, scrollTop: currentScroll },
     ]);
     setSelected(data);
     setPage(pg);
     setShowSearch(false);
-    // After navigating away, the previous page's component unmounts
+
+    // Scroll new page to top
+    requestAnimationFrame(() => {
+      const container = document.querySelector(".app-content");
+      if (container) container.scrollTop = 0;
+    });
+
     if (typeof gc === "function") {
       requestIdleCallback(() => gc(), { timeout: 2000 });
     }
   }, []);
+
+  useEffect(() => {
+    if (pendingScrollRestore.current && pendingScrollRestore.current.page === page) {
+      const targetScroll = pendingScrollRestore.current.scrollTop;
+      pendingScrollRestore.current = null;
+
+      const restore = () => {
+        const container = document.querySelector(".app-content");
+        if (container) {
+          container.scrollTop = targetScroll;
+        }
+      };
+
+      restore();
+      const t1 = setTimeout(restore, 30);
+      const t2 = setTimeout(restore, 100);
+      const t3 = setTimeout(restore, 300);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
+    }
+  }, [page]);
 
   const handleExpandMiniPlayer = useCallback(() => {
     setMiniPlayer((current) => {
@@ -1037,7 +1073,7 @@ export default function App() {
               </div>
             }
           >
-            {page === "home" && (
+            <div style={{ display: page === "home" ? "contents" : "none" }}>
               <HomePage
                 trending={trending}
                 trendingTV={trendingTV}
@@ -1057,17 +1093,18 @@ export default function App() {
                 onSave={(item) => toggleSave(item)}
                 isSaved={isSaved}
               />
-            )}
-            {page === "discover" && (
+            </div>
+            <div style={{ display: page === "discover" ? "contents" : "none" }}>
               <DiscoverPage apiKey={apiKey} onNavigate={navigate} />
-            )}
-            {page === "search" && (
+            </div>
+            <div style={{ display: page === "search" ? "contents" : "none" }}>
               <SearchResultsPage
                 apiKey={apiKey}
                 item={selected}
                 onNavigate={navigate}
+                isActive={page === "search"}
               />
-            )}
+            </div>
             {page === "movie" && selected && (
               <MoviePage
                 item={selected}
@@ -1117,7 +1154,7 @@ export default function App() {
                 onPlay={() => setMiniPlayer(null)}
               />
             )}
-            {page === "library" && (
+            <div style={{ display: page === "library" ? "contents" : "none" }}>
               <LibraryPage
                 history={history}
                 inProgress={inProgress}
@@ -1132,16 +1169,16 @@ export default function App() {
                 onReorderSaved={handleReorderSaved}
                 downloads={downloads}
               />
-            )}
-            {page === "settings" && (
+            </div>
+            <div style={{ display: page === "settings" ? "contents" : "none" }}>
               <SettingsPage
                 apiKey={apiKey}
                 apiKeySource={apiKeySource}
                 onChangeApiKey={changeApiKey}
                 initialSection={selected?.section}
               />
-            )}
-            {page === "downloads" && (
+            </div>
+            <div style={{ display: page === "downloads" ? "contents" : "none" }}>
               <DownloadsPage
                 downloads={downloads}
                 onDeleteDownload={handleDeleteDownload}
@@ -1165,7 +1202,7 @@ export default function App() {
                   )
                 }
               />
-            )}
+            </div>
           </Suspense>
         </main>
         </div>

@@ -43,6 +43,7 @@ import {
 import DownloadModal from "../components/DownloadModal";
 import TrailerModal from "../components/TrailerModal";
 import BlockedStatsModal from "../components/BlockedStatsModal";
+import { formatDate } from "../utils/date";
 import { useBlockedStats } from "../utils/useBlockedStats";
 import MediaCard from "../components/media/MediaCard";
 import {
@@ -1321,7 +1322,7 @@ export default function MoviePage({
                   <StarIcon /> {displayScore}
                 </span>
               )}
-              {year && <span>{year}</span>}
+              {d.release_date && <span>{formatDate(d.release_date)}</span>}
               {d.runtime && <span>{d.runtime} min</span>}
               {d.original_language && (
                 <span>{d.original_language?.toUpperCase()}</span>

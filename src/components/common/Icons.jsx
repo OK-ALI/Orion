@@ -369,3 +369,12 @@ export function MiniPlayerIcon({ size = 16, ...props }) {
   );
 }
 
+export function PinIcon({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <line x1="12" y1="17" x2="12" y2="22" />
+      <path d="M5 17h14v-1.76a2 2 0 0 0-.44-1.24l-2.78-3.56A2 2 0 0 1 15 9.2V5a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4.2a2 2 0 0 1-.78 1.56L5.44 14a2 2 0 0 0-.44 1.24z" />
+    </svg>
+  );
+}
+

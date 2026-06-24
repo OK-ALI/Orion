@@ -50,6 +50,7 @@ import {
 import DownloadModal from "../components/DownloadModal";
 import TrailerModal from "../components/TrailerModal";
 import BlockedStatsModal from "../components/BlockedStatsModal";
+import { formatDate } from "../utils/date";
 import { useBlockedStats } from "../utils/useBlockedStats";
 import {
   storage,
@@ -2036,7 +2037,7 @@ export default function TVPage({
                       <StarIcon /> {displayScore}
                     </span>
                   )}
-                  {year && <span>{year}</span>}
+                  {d.first_air_date && <span>{formatDate(d.first_air_date)}</span>}
                   {displaySeasonCount > 0 && (
                     <span>
                       {displaySeasonCount} Season
@@ -3250,6 +3251,11 @@ const EpisodeCard = memo(function EpisodeCard({
           )}
         </div>
         <div className="episode-name">{ep.name}</div>
+        {ep.air_date && (
+          <div className="episode-air-date" style={{ fontSize: "11px", color: "var(--text3)", marginTop: "2px", marginBottom: "4px" }}>
+            {formatDate(ep.air_date)}
+          </div>
+        )}
         <EpisodeDesc overview={ep.overview} episodeName={ep.name} />
         {!restricted && !epUnreleased && (
           <button

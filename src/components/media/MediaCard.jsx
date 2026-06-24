@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { imgUrl, isAnimeContent } from "../../utils/api";
+import { formatDate } from "../../utils/date";
 import {
   PlayIcon,
   FilmIcon,
@@ -141,7 +142,7 @@ const MediaCard = memo(function MediaCard({
           <div className="media-card-meta">
             {isTV && item.season != null && item.episode != null
               ? `S${item.season}E${item.episode}${item.episodeName ? ` · ${item.episodeName}` : ""}`
-              : `${year} · ${isTV ? "Series" : "Movie"}`}
+              : `${formatDate(item.release_date || item.first_air_date)} · ${isTV ? "Series" : "Movie"}`}
           </div>
         </div>
         <span

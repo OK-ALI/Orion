@@ -1220,6 +1220,12 @@ function AppearanceSection() {
     () =>
       storage.get(STORAGE_KEYS.CUSTOM_THEME_VARS) || { ...DEFAULT_CUSTOM_VARS },
   );
+  const [customInputs, setCustomInputs] = useState(() => ({
+    ...(storage.get(STORAGE_KEYS.CUSTOM_THEME_VARS) || DEFAULT_CUSTOM_VARS)
+  }));
+  useEffect(() => {
+    setCustomInputs({ ...customVars });
+  }, [customVars]);
   const [showCustomEditor, setShowCustomEditor] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -1388,7 +1394,7 @@ function AppearanceSection() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
                 gap: 12,
                 padding: 16,
                 background: "var(--surface2)",
@@ -1396,50 +1402,104 @@ function AppearanceSection() {
                 border: "1px solid var(--border)",
               }}
             >
-              {Object.entries(CUSTOM_VAR_LABELS).map(([prop, label]) => (
-                <div
-                  key={prop}
-                  style={{ display: "flex", alignItems: "center", gap: 8 }}
-                >
-                  <input
-                    type="color"
-                    value={customVars[prop] || "#000000"}
-                    onChange={(e) =>
-                      handleCustomVarChange(prop, e.target.value)
-                    }
+              {Object.entries(CUSTOM_VAR_LABELS).map(([prop, label]) => {
+                const val = customInputs[prop] || "";
+                const isValidHex = val.startsWith("#") && (val.length === 4 || val.length === 7 || val.length === 9);
+                return (
+                  <div
+                    key={prop}
                     style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 4,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                      padding: 12,
+                      background: "var(--surface3)",
+                      borderRadius: 6,
                       border: "1px solid var(--border)",
-                      cursor: "pointer",
-                      background: "none",
-                      padding: 2,
-                      flexShrink: 0,
                     }}
-                  />
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "var(--text)",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {label}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{label}</span>
+                      <span style={{ fontSize: 11, fontFamily: "monospace", color: "var(--text3)" }}>{prop}</span>
                     </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "var(--text3)",
-                        fontFamily: "monospace",
-                      }}
-                    >
-                      {customVars[prop]}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {isValidHex ? (
+                        <input
+                          type="color"
+                          value={val.slice(0, 7)}
+                          onChange={(e) => {
+                            const newColor = e.target.value;
+                            setCustomInputs((prev) => ({ ...prev, [prop]: newColor }));
+                            handleCustomVarChange(prop, newColor);
+                          }}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 4,
+                            border: "1px solid var(--border)",
+                            cursor: "pointer",
+                            background: "none",
+                            padding: 2,
+                            flexShrink: 0,
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 4,
+                            border: "1px solid var(--border)",
+                            background: "var(--surface2)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 10,
+                            color: "var(--text3)",
+                            flexShrink: 0,
+                          }}
+                          title="Non-hex color (e.g. rgba)"
+                        >
+                          A
+                        </div>
+                      )}
+                      <input
+                        type="text"
+                        value={val}
+                        onChange={(e) => {
+                          const newText = e.target.value;
+                          setCustomInputs((prev) => ({ ...prev, [prop]: newText }));
+                        }}
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          height: 32,
+                          padding: "0 8px",
+                          background: "var(--surface)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 4,
+                          color: "var(--text)",
+                          fontSize: 12,
+                          fontFamily: "monospace",
+                        }}
+                      />
+                      <button
+                        className="btn btn-secondary"
+                        style={{
+                          fontSize: 11,
+                          padding: "0 10px",
+                          height: 32,
+                          borderRadius: 4,
+                          flexShrink: 0,
+                        }}
+                        onClick={() => handleCustomVarChange(prop, val)}
+                      >
+                        Update
+                      </button>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <div
                 style={{
                   gridColumn: "1 / -1",
@@ -3417,7 +3477,7 @@ export default function SettingsPage({
       el.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
     return () => clearTimeout(t);
-  }, []);
+  }, [initialSection]);
 
   // Age Rating
   const [ratingCountry, setRatingCountry] = useState(

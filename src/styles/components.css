@@ -1544,9 +1544,9 @@ button {
     inset: 0;
     z-index: 5000;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
-    padding: clamp(82px, 12vh, 132px) 20px 28px;
+    padding: 20px;
     background:
         radial-gradient(circle at 50% 16%, rgba(229, 9, 20, 0.16), transparent 32%),
         rgba(0, 0, 0, 0.9);
@@ -3156,6 +3156,11 @@ button {
     height: 100%;
     object-fit: cover;
     display: block;
+    transition: transform var(--duration-slow) var(--ease-out);
+}
+
+.media-card:hover .media-card-poster img {
+    transform: scale(1.05);
 }
 
 .media-card-placeholder {
@@ -3206,6 +3211,7 @@ button {
     transition: transform var(--duration-fast) var(--ease-spring);
 }
 
+.media-card:hover .media-card-play-btn,
 .media-card-play-btn:hover {
     transform: scale(1.1);
 }
