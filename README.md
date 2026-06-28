@@ -1,76 +1,72 @@
 # Orion — A Multiverse of Stories
 
-Orion is a premium, feature-rich desktop Electron streaming application designed for streaming, downloading, and organizing movies, TV series, anime, and local media. 
+Orion is a Windows-first Electron application for discovering, streaming, downloading, and tracking movies, TV series, and anime.
 
-With a cinematic dark design system, modern layouts, and micro-animations, Orion offers a high-end platform for tracking your personal watch library.
+The v1.0.9 working tree is the Cosmic Polish and Playback Continuity release candidate, built on the completed v1.0.8 behavior-preserving refactor. It is not ready to publish until the v1.0.9 release checklist passes.
 
----
+## Features
 
-## 🌟 Key Features
+- Movie, TV, and anime discovery powered by TMDB metadata.
+- Embedded, mini, pop-out, and restricted local playback with state handoffs, progress, resume, fullscreen, subtitles, and ambient glow.
+- Managed `yt-dlp` and ffmpeg downloads with HLS capture, browser-session proxy fallback, pause/resume/retry, tray progress, and organized Movie/Series folders.
+- Sidecar subtitle search and download through user-configured SubDL or Wyzie credentials.
+- Watchlist, history, watched state, backups, appearance preferences, and update checks.
+- OS-protected storage for user provider keys and optional TMDB overrides.
 
-### 🎬 Discovery & Streaming
-* **Cinematic Home Carousel**: Smooth fade and slide transitions displaying top trending titles, age ratings, genres, and anime tags.
-* **Smart Details Pages**: Organized grids for TV seasons, episodes, sequels/prequels collections, and similar recommendations.
-* **Ad-Free Media Webview**: Sandboxed webview integration playing streams with ad/tracker blockers, custom key-injections, and automatic picture-in-picture.
+DRM circumvention is not supported. Download only media you are authorized to access.
 
-### 📥 Managed Downloads
-* **Automated Downloader Setup**: Instant installer that downloads and configures `yt-dlp` and `ffmpeg` into a sandboxed environment (`%APPDATA%/Orion/tools`).
-* **Title-Based Organization**: Downloads are automatically saved inside clean, title-specific folders (e.g. `Toy Story (1995)/` or `Breaking Bad (2008)/`) in your selected destination directory.
-* **Full Queue Controls**: Run, pause, resume, cancel, or delete downloads with live fragment counts, speeds, and progress bars.
-* **Subtitle Integration**: Search and download subtitle files via **SubDL** and **Wyzie** APIs directly inside the download manager.
+## Requirements
 
-### 🔒 Secure Architecture & Storage
-* **Secure Key Storage**: Leverages Electron's OS-native keychain encryption (via `safeStorage` DPAPI on Windows) to encrypt sensitive credentials (TMDB API token, SubDL/Wyzie keys) inside `secure-store.json`.
-* **Watch History & Progress**: Automatically tracks watch states, current durations, and local configurations.
-* **Automatic Backups**: Creates scheduled daily/weekly/monthly setting backups and manages maximum retention sizes.
+- Windows 10 or later for the fully supported desktop and managed-tool workflow.
+- Node.js 22 or later for local development.
+- npm 10 or later.
 
----
+macOS and Linux retain PATH-based compatibility, but managed-tool installer parity is not part of v1.0.9.
 
-## 🎹 Keyboard Shortcuts
+## Run locally
 
-Orion contains system-wide key bindings for fast navigation:
-* `Ctrl + F` : Open / close global Search modal.
-* `Ctrl + K` : Focus search filter on the Downloads page.
-* `Esc` : Close active search overlays or open modals.
-* `Ctrl + Z` : Navigate back to the previous screen.
-* `Ctrl + R` : Reload the application.
-* `?` : Toggle the keyboard shortcuts cheat-sheet.
-
----
-
-## 🛠️ Technology Stack
-
-* **Shell**: Electron (v40.4.1)
-* **Frontend Logic**: React (v18.2.0)
-* **Build System**: Vite (v7)
-* **Styles**: Modern Vanilla CSS structured with a tailormade HSL color system, glassmorphism overlays, and cubic-bezier animations.
-* **Downloader Backend**: Spawns native `yt-dlp` and `ffmpeg` processes.
-
----
-
-## 🚀 Installation & Local Development
-
-### 1. Prerequisites
-Ensure you have **Node.js** (v18+ recommended) installed.
-
-### 2. Setup
-Clone the repository and install dependencies:
-```bash
+```powershell
 git clone https://github.com/OK-ALI/orion.git
 cd orion
-npm install
+npm.cmd ci
+npm.cmd start
 ```
 
-### 3. Run Development Build
-To start the Vite builder watcher and launch the Electron application:
-```bash
-npm start
+Use `npm.cmd` in PowerShell if script execution policy blocks `npm.ps1`.
+
+Orion uses its bundled TMDB read token when available. SubDL and Wyzie keys belong to each user and are configured in Settings. Local `.env` files are private and excluded from Git.
+
+## Verify the refactor
+
+```powershell
+npm.cmd run check
+npm.cmd run test:electron
 ```
 
-### 4. Build Production Binaries
-To package the app for Windows (NSIS Installer `.exe` and a `.zip` release bundle):
-```bash
-npm run dist:win
+The check suite enforces the additive v1.0.9 IPC surface and retained aliases, rejects unresolved JavaScript/JSX bindings and dependency cycles, scans for committed credentials, fails source files above 800 lines, runs node/renderer tests, and creates a production renderer build.
+
+## Package Windows builds
+
+```powershell
+npm.cmd run dist:win
 ```
 
-*Build artifacts will be located under the `dist/` directory.*
+Artifacts are written to `release/`. Packaging does not publish a GitHub release.
+
+## Architecture
+
+- `src/main`: Electron lifecycle, windows, native IPC, sessions, downloader, player, and subtitles.
+- `src/preload`: domain-based APIs composed into the compatible flat `window.electron` bridge.
+- `src/renderer`: app shell, features, components, services, shared utilities, and styles.
+- `src/shared`: cross-boundary contracts and runtime constants.
+- `tests`: unit, integration, Electron, fixtures, and future visual baselines.
+
+See [architecture overview](docs/architecture/overview.md), [refactoring plan](docs/refactoring-plan.md), and [testing guide](docs/testing.md).
+
+## Security
+
+Do not commit `.env`, user data, logs, managed tools, `dist/`, `release/`, or `node_modules/`. Provider keys, cookies, captured headers, executable paths, and spawn arguments must remain main-process-only.
+
+## License
+
+GPL-3.0.

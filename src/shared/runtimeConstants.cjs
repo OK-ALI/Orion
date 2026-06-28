@@ -1,0 +1,9 @@
+module.exports = Object.freeze({
+  DOWNLOAD_SCHEMA_VERSION: 2,
+  DOWNLOAD_CONCURRENCY_DEFAULT: 2,
+  DOWNLOAD_CONCURRENCY_MIN: 1,
+  DOWNLOAD_CONCURRENCY_MAX: 3,
+  PLAYER_PARTITION: "persist:player",
+  TRAILER_PARTITION: "persist:trailer",
+  STORAGE_PREFIX: "orion_",
+});

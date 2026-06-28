@@ -1,0 +1,565 @@
+.detail-poster {
+    width: 200px;
+    flex-shrink: 0;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    aspect-ratio: 2/3;
+    transform: translateY(20px);
+}
+
+.detail-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.detail-info {
+    flex: 1;
+    min-width: 0;
+    padding-bottom: 8px;
+}
+
+.detail-type {
+    font-size: var(--text-xs);
+    font-weight: var(--weight-bold);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+}
+
+.detail-title {
+    font-family: var(--font-heading);
+    font-size: var(--text-2xl);
+    font-weight: var(--weight-extrabold);
+    line-height: 1.1;
+    margin-bottom: 12px;
+    color: #ffffff;
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    font-size: var(--text-sm);
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: var(--sp-4);
+}
+
+.detail-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.detail-meta span:not(:last-child)::after {
+    content: "•";
+    margin-left: 16px;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.detail-rating {
+    color: #f5c518;
+    font-weight: var(--weight-semibold);
+}
+
+.detail-rating svg {
+    width: 14px;
+    height: 14px;
+}
+
+.detail-overview {
+    font-size: var(--text-base);
+    color: rgba(255, 255, 255, 0.75);
+    line-height: var(--leading-relaxed);
+    margin-bottom: var(--sp-6);
+    max-width: 720px;
+}
+
+.detail-actions {
+    display: flex;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.detail-actions .btn {
+    min-height: 40px;
+}
+
+.detail-actions .btn-secondary {
+    background: rgba(255, 255, 255, 0.12) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.detail-actions .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.22) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.detail-actions .btn-secondary:active {
+    transform: scale(0.97) !important;
+}
+
+.detail-actions .btn.btn-restricted {
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: rgba(255, 255, 255, 0.35) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    cursor: not-allowed !important;
+}
+
+.detail-hero .genre-tag {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.detail-hero .age-rating-pill:not(.age-rating-pill--restricted) {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    color: rgba(255, 255, 255, 0.95) !important;
+}
+
+/* Download modal */
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.download-modal {
+    width: min(760px, calc(100vw - 40px));
+    max-height: min(86vh, 820px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 26px 90px rgba(0, 0, 0, 0.72);
+}
+
+.download-modal-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface3) transparent;
+}
+
+.download-modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.download-modal-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.download-modal-body::-webkit-scrollbar-thumb {
+    background: var(--surface3);
+    border-radius: 3px;
+}
+
+.download-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface2) 72%, transparent);
+    color: var(--text);
+    font-weight: 800;
+}
+
+.download-modal .icon-btn {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    color: var(--text3);
+    transition: background 0.15s, color 0.15s;
+}
+
+.download-modal .icon-btn:hover {
+    background: var(--surface3);
+    color: var(--text);
+}
+
+.download-waiting {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 42px 24px;
+    color: var(--text2);
+    font-size: 14px;
+    text-align: center;
+}
+
+.download-url-block {
+    margin: 18px 20px 0;
+    padding: 13px 14px;
+    border-radius: 8px;
+    background: rgba(72, 199, 116, 0.08);
+    border: 1px solid rgba(72, 199, 116, 0.22);
+}
+
+.download-url-label {
+    margin-bottom: 7px;
+    color: #71d99a;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.download-url-code {
+    display: block;
+    max-height: 58px;
+    overflow: auto;
+    color: var(--text2);
+    font-size: 11px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.download-modal input[type="checkbox"] {
+    accent-color: var(--accent);
+}
+
+.download-instructions,
+.download-ready {
+    margin: 18px 20px 20px;
+    padding: 18px;
+    border-radius: 9px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+}
+
+.download-instructions-title {
+    margin-bottom: 10px;
+    color: var(--text);
+    font-weight: 800;
+    font-size: 15px;
+}
+
+.download-tool-copy {
+    margin: 0 0 16px;
+    color: var(--text2);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.download-tool-copy code {
+    color: var(--text);
+}
+
+.download-steps {
+    margin: 0 0 16px 18px;
+    padding: 0;
+    color: var(--text2);
+    font-size: 13px;
+    line-height: 1.7;
+    list-style: decimal;
+}
+
+.download-steps li {
+    margin-bottom: 6px;
+}
+
+.download-link {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.download-folder-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.download-folder-path {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text3);
+    font-size: 12px;
+}
+
+.download-checking {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    color: var(--text3);
+    font-size: 13px;
+}
+
+.download-error {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 7px;
+    background: rgba(255, 71, 87, 0.1);
+    border: 1px solid rgba(255, 71, 87, 0.28);
+    color: #ff7583;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.download-found-badge,
+.download-success {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 14px;
+    padding: 7px 10px;
+    border-radius: 999px;
+    background: rgba(72, 199, 116, 0.12);
+    border: 1px solid rgba(72, 199, 116, 0.24);
+    color: #7be3a0;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.genres {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: var(--sp-4);
+}
+
+.genre-tag {
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    padding: 4px 12px;
+    border-radius: var(--radius-full);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+}
+
+/* ── Player Wrapper & HUDs ── */
+
+.player-wrap {
+    position: relative;
+    background: #000;
+    overflow: hidden;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    aspect-ratio: 16/9;
+    width: 100%;
+    cursor: default;
+}
+
+.player-wrap--idle {
+    cursor: none;
+}
+
+.player-wrap--fullscreen {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 9999;
+    border-radius: 0 !important;
+    border: none !important;
+    height: 100vh !important;
+    width: 100vw !important;
+}
+
+.player-wrap--fullscreen .player-overlay-group,
+.player-wrap--fullscreen .player-overlay-btn {
+    display: none !important;
+}
+
+.player-overlay-group {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    right: 16px;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    pointer-events: auto;
+}
+
+.player-wrap .player-overlay-group {
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+        opacity 220ms var(--ease-out),
+        transform 220ms var(--ease-out),
+        filter 220ms var(--ease-out);
+}
+
+.player-wrap--idle .player-overlay-group {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-8px);
+    filter: blur(1px);
+}
+
+.player-overlay-title {
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    background: rgba(10, 10, 15, 0.75);
+    padding: 0 14px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 6px;
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.player-overlay-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 6px;
+    background: rgba(10, 10, 15, 0.75);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.player-overlay-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.24);
+    transform: translateY(-1px);
+}
+
+.player-overlay-btn:active:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(0);
+}
+
+.player-overlay-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.player-overlay-btn.active {
+    color: var(--red) !important;
+    border-color: rgba(229, 9, 20, 0.42) !important;
+    background: rgba(229, 9, 20, 0.1) !important;
+    box-shadow: 0 0 10px rgba(229, 9, 20, 0.25) !important;
+}
+
+.player-blocked-badge {
+    background: var(--red);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 4px;
+}
+
+/* ── Season / Episode Layout ── */
+
+.section {
+    padding: 32px var(--sp-12) var(--sp-12);
+    width: 100%;
+}
+
+.section-title {
+    font-family: var(--font-heading);
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 20px;
+    color: var(--text-primary);
+}
+
+.season-selector {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.season-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: var(--sp-6);
+}
+
+.season-download-btn {
+    flex-shrink: 0;
+    min-height: 38px;
+}
+
+.season-btn {
+    padding: 8px 20px;
+    border-radius: var(--radius-full);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    transition: all var(--duration-fast) var(--ease-out);
+}
+
+.season-btn:hover {
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+}
+
+.season-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+    box-shadow: var(--shadow-glow);
+}
+
+.episodes-grid {
+    display: grid;
+    gap: 14px 16px;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    margin-top: var(--sp-4);
+}

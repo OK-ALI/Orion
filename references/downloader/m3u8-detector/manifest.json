@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "M3U8 Link Finder",
+  "version": "2.4.1",
+  "description": "Detect .m3u8 Links on any website to download them",
+  "author": "true_lock",
+  "icons": {
+    "16": "icons/icon.svg",
+    "24": "icons/icon.svg",
+    "32": "icons/icon.svg",
+    "48": "icons/icon.svg",
+    "64": "icons/icon.svg",
+    "128": "icons/icon.svg"
+  },
+  "permissions": [
+    "activeTab",
+    "storage",
+    "webRequest",
+    "webRequestFilterResponse",
+    "notifications"
+  ],
+  "host_permissions": [
+    "*://*/*"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_area": "navbar",
+    "default_icon": {
+      "16": "icons/icon.svg",
+      "24": "icons/icon.svg",
+      "32": "icons/icon.svg",
+      "48": "icons/icon.svg",
+      "64": "icons/icon.svg",
+      "128": "icons/icon.svg"
+    }
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{f3aa4a03-eb29-4983-a834-6e1210b61d94}"
+    }
+  }
+}

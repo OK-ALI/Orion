@@ -1,0 +1,62 @@
+const path = require("path");
+const os = require("os");
+const { test, expect, _electron: electron } = require("@playwright/test");
+
+test("Orion starts without an uncaught renderer error", async ({}, testInfo) => {
+  const userDataDir = path.join(
+    os.tmpdir(),
+    `orion-pw-${process.pid}-${testInfo.workerIndex}-${Date.now()}`,
+  );
+  const app = await electron.launch({
+    args: [
+      path.join(__dirname, "../.."),
+      `--user-data-dir=${userDataDir}`,
+      "--disable-gpu",
+    ],
+  });
+  await app.evaluate(({ app }) => {
+    globalThis.__orionTestRenderGone = null;
+    app.once("render-process-gone", (_event, _contents, details) => {
+      globalThis.__orionTestRenderGone = details;
+    });
+  });
+  const page = await app.firstWindow();
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  try {
+    await page.waitForLoadState("domcontentloaded");
+  } catch (error) {
+    const details = await app.evaluate(() => globalThis.__orionTestRenderGone);
+    throw new Error(`${error.message}; render-process-gone=${JSON.stringify(details)}`);
+  }
+  await expect(page.locator("#root")).toBeAttached();
+  await expect(page.locator(".titlebar")).toBeVisible();
+  await expect(page.locator(".titlebar-controls button")).toHaveCount(3);
+  const bridge = await page.evaluate(() => ({
+    available: Boolean(window.electron),
+    installDownloaderTools: typeof window.electron?.installDownloaderTools,
+    resolveAllManga: typeof window.electron?.resolveAllManga,
+    openPipWindow: typeof window.electron?.openPipWindow,
+    controlVideo: typeof window.electron?.controlVideo,
+  }));
+  expect(bridge).toEqual({
+    available: true,
+    installDownloaderTools: "function",
+    resolveAllManga: "function",
+    openPipWindow: "function",
+    controlVideo: "function",
+  });
+
+  const popoutResult = await page.evaluate(() =>
+    window.electron.openPipWindow(
+      "data:text/html,<html><body style='background:black'></body></html>",
+      "Orion smoke test",
+    ),
+  );
+  expect(popoutResult.ok).toBe(true);
+  await expect.poll(async () => (await app.windows()).length).toBe(2);
+  await page.evaluate(() => window.electron.closePipWindow());
+  await expect.poll(async () => (await app.windows()).length).toBe(1);
+  expect(errors).toEqual([]);
+  await app.close();
+});

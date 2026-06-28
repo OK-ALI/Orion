@@ -1,0 +1,203 @@
+@keyframes orion-mini-player-entrance {
+  from {
+    opacity: 0;
+    transform: scale(0.85) translate3d(40px, 40px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+}
+
+.orion-mini-player {
+  position: fixed;
+  z-index: 999;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(10, 10, 15, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 25px rgba(229, 9, 20, 0.1);
+  display: flex;
+  flex-direction: column;
+  transition: opacity 0.3s ease, transform 0.1s ease;
+  user-select: none;
+  animation: orion-mini-player-entrance 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+.orion-mini-player::before {
+  content: "";
+  position: absolute;
+  inset: -28px;
+  z-index: -1;
+  background-image: var(--mini-ambient, none);
+  background-size: cover;
+  filter: blur(30px) saturate(1.35);
+  opacity: .58;
+  pointer-events: none;
+  transition: background-image .7s ease, opacity .7s ease;
+}
+
+.orion-mini-player.is-dragging {
+  opacity: 0.9;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(229, 9, 20, 0.2);
+  cursor: grabbing;
+}
+
+.orion-mini-player-drag-handle {
+  height: 32px;
+  background: linear-gradient(180, rgba(20, 20, 25, 0.9) 0%, rgba(10, 10, 15, 0.9) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  cursor: grab;
+  color: #a0a0b0;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.orion-mini-player.is-dragging .orion-mini-player-drag-handle {
+  cursor: grabbing;
+}
+
+.orion-mini-player-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 48px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.orion-mini-player-title span,
+.orion-mini-player-title small { display: block; overflow: hidden; text-overflow: ellipsis; }
+.orion-mini-player-title small { color: var(--text3, #8b8fa3); font-size: 9px; margin-top: -2px; }
+
+.orion-mini-player-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.orion-mini-player-btn {
+  background: none;
+  border: none;
+  color: #a0a0b0;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.orion-mini-player-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.orion-mini-player-btn.close:hover {
+  color: #ff3344;
+  background: rgba(255, 51, 68, 0.15);
+}
+
+.orion-mini-player-content {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  height: calc(100% - 32px);
+  background: #000000;
+}
+
+.orion-mini-player-transport {
+  position: absolute;
+  z-index: 12;
+  left: 8px;
+  right: 8px;
+  bottom: 7px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 7px;
+  border-radius: 9px;
+  opacity: 0;
+  transform: translateY(5px);
+  transition: opacity .18s ease, transform .18s ease;
+  background: rgba(5, 6, 12, .82);
+  backdrop-filter: blur(12px);
+}
+.orion-mini-player-content:hover .orion-mini-player-transport,
+.orion-mini-player-transport:focus-within { opacity: 1; transform: none; }
+.orion-mini-player-transport button { border: 0; background: transparent; color: #fff; font: inherit; cursor: pointer; }
+.orion-mini-player-transport input[type="range"] { min-width: 0; flex: 1; accent-color: var(--accent, #8b5cf6); }
+.orion-mini-player-transport .orion-mini-player-volume { flex: 0 1 58px; }
+
+.orion-mini-player-webview {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.orion-mini-player-resize-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.3) 50%);
+  border-bottom-right-radius: 12px;
+  z-index: 1000;
+}
+
+.orion-mini-player-resize-handle:hover {
+  background: linear-gradient(135deg, transparent 50%, rgba(229, 9, 20, 0.8) 50%);
+}
+
+.orion-mini-player-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.orion-mini-player-content:hover .orion-mini-player-overlay {
+  opacity: 1;
+}
+
+.orion-mini-player-status {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.78);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.orion-mini-player-status .btn {
+  min-height: 28px;
+  padding: 4px 12px;
+  font-size: 11px;
+}
+
+/* Enable pointer events on hover overlay children if needed, e.g. for mid-screen quick controls */

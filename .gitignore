@@ -5,7 +5,10 @@ dist/
 Thumbs.db
 .env
 .env.*
+!.env.example
 _backup/
 release/
-streambert-main/
-src/utils/playerAmbient.capture.backup.js
+coverage/
+test-results/
+playwright-report/
+.publish-*/

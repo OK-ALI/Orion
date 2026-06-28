@@ -1,6 +1,6 @@
 {
   "name": "orion",
-  "version": "1.0.6",
+  "version": "1.0.9",
   "description": "Orion — A Multiverse of Stories",
   "author": "Orion",
   "license": "GPL-3.0",
@@ -16,6 +16,16 @@
   "private": true,
   "scripts": {
     "build": "vite build",
+    "test": "npm run test:node && npm run test:renderer",
+    "test:node": "node --test tests/unit/main/*.test.js tests/integration/*.test.js",
+    "test:renderer": "vitest run",
+    "test:electron": "playwright test --config tests/electron/playwright.config.js",
+    "check:source-size": "node scripts/check-source-size.js",
+    "check:bindings": "node scripts/check-renderer-bindings.js",
+    "check:ipc": "node scripts/check-ipc-contract.js",
+    "check:secrets": "node scripts/check-secrets.js",
+    "check:cycles": "madge --circular --extensions js,jsx src/renderer src/main",
+    "check": "npm run check:source-size && npm run check:bindings && npm run check:ipc && npm run check:secrets && npm run check:cycles && npm test && npm run build",
     "dev": "vite build --watch",
     "start": "vite build && electron .",
     "dist:win": "cross-env ELECTRON_DIST=1 vite build && electron-builder --win --publish never",
@@ -23,16 +33,27 @@
     "dist:mac": "cross-env ELECTRON_DIST=1 vite build && electron-builder --mac --universal --publish never"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/space-grotesk": "^5.2.8",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@babel/parser": "^7.29.7",
+    "@babel/traverse": "^7.29.7",
+    "@playwright/test": "^1.61.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^4.7.0",
     "cross-env": "^7.0.3",
     "electron": "37.3.1",
     "electron-builder": "^26.7.0",
+    "jsdom": "^29.1.1",
+    "madge": "^8.0.0",
     "terser": "^5.46.0",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^4.1.9"
   },
   "build": {
     "appId": "com.orion.app",
@@ -40,10 +61,11 @@
     "asar": true,
     "files": [
       "dist/**/*",
-      "src/ipc/**/*",
       "src/main/**/*",
+      "src/preload/**/*",
       "index.js",
       "preload.js",
+      "popout-preload.js",
       "package.json",
       "!**/*.map",
       "!**/node_modules/.cache/**",

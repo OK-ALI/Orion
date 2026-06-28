@@ -1,0 +1,23 @@
+name: Windows build
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run dist:win
+        env:
+          VITE_TMDB_READ_TOKEN: ${{ secrets.VITE_TMDB_READ_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orion-windows
+          path: release/*

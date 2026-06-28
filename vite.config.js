@@ -7,6 +7,10 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     base: "./",
     build: {
+      // A development build can occur while Electron still references the
+      // previous hashed lazy chunks. Keep them until Orion is restarted.
+      // Distribution builds stay clean and never package stale assets.
+      emptyOutDir: isDist,
       minify: "terser",
       terserOptions: {
         compress: {
