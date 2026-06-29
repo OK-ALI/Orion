@@ -3,11 +3,11 @@
 
 :root {
   /* ── Backgrounds — layered dark ──────────────────────────────────────────── */
-  --bg-base: #070914;
-  --bg-elevated: #0e1224;
-  --bg-surface: #151a31;
-  --bg-hover: #202744;
-  --bg-input: #11162b;
+  --bg-base: #08070c;
+  --bg-elevated: #100e17;
+  --bg-surface: #191622;
+  --bg-hover: #252033;
+  --bg-input: #14111c;
 
   /* ── Accent — cinematic red ──────────────────────────────────────────────── */
   --accent: #8b5cf6;
@@ -16,6 +16,8 @@
   --accent-glow: rgba(139, 92, 246, 0.38);
   --spectral: #67e8f9;
   --focus-ring: #67e8f9;
+  --cinema-gold: #e5bd73;
+  --cinema-velvet: #5b214f;
 
   /* ── Text ────────────────────────────────────────────────────────────────── */
   --text-primary: #f0f0f5;

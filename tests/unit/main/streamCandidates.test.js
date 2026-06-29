@@ -22,6 +22,18 @@ test("classifies DASH, direct video, and extensionless manifests", () => {
   assert.equal(classifyStream("https://video.test/manifest.mpd", {}), "dash");
   assert.equal(classifyStream("https://video.test/play", { "content-type": ["application/dash+xml"] }), "dash");
   assert.equal(classifyStream("https://video.test/file.mp4", {}), "direct");
+  assert.equal(classifyStream("https://video.test/master/manifest.m3u8/chunk", {}), "hls");
+  assert.equal(classifyStream("https://video.test/playback?type=m3u8&id=7", {}), "hls");
+  assert.equal(classifyStream("https://video.test/media/42", { "content-type": ["video/mp4"] }, "other"), "direct");
+  assert.equal(classifyStream("https://video.test/manifest", { "content-type": ["application/octet-stream"] }, "xhr"), "hls");
+});
+
+test("keeps a late modal connected to a compatible restarted capture session", () => {
+  const identity = { mediaType: "tv", mediaId: 7, season: 1, episode: 2 };
+  const first = beginCaptureSession({ mediaIdentity: identity, sourceId: "source-a" });
+  addCandidate({ url: "https://cdn.test/master.m3u8", sessionId: first.id });
+  const restarted = beginCaptureSession({ mediaIdentity: identity, sourceId: "source-a" });
+  assert.equal(listCandidates({ sessionId: restarted.id }).length, 1);
 });
 
 test("scopes candidates to capture sessions", () => {

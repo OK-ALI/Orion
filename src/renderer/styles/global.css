@@ -27,8 +27,8 @@ body {
   user-select: none;
   -webkit-user-drag: none;
   background-image:
-    radial-gradient(circle at 82% 8%, color-mix(in srgb, var(--spectral) 9%, transparent) 0, transparent 28%),
-    radial-gradient(circle at 18% 92%, color-mix(in srgb, var(--accent) 12%, transparent) 0, transparent 34%);
+    radial-gradient(circle at 82% 8%, color-mix(in srgb, var(--cinema-gold) 8%, transparent) 0, transparent 28%),
+    radial-gradient(circle at 18% 92%, color-mix(in srgb, var(--cinema-velvet) 18%, transparent) 0, transparent 34%);
 }
 
 body::before {

@@ -144,14 +144,8 @@ const currentProgressKey = selectedEp
     }
   }, [playing]);
 
-  // On unmount: signal main process to destroy the player WebContents and flush session cache
-  useEffect(() => {
-    return () => {
-      if (!switchingToMiniPlayerRef.current) {
-        window.electron?.playerStopped?.();
-      }
-    };
-  }, []);
+  // Removing the webview from the DOM disposes its guest WebContents. A global
+  // cleanup here can race an automatic handoff and destroy the new mini-player.
 
   const applyVoiceBoost = useCallback(() => {
     const wv = webviewRef.current;

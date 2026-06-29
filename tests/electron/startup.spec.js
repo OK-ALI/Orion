@@ -1,8 +1,15 @@
 const path = require("path");
 const os = require("os");
+const http = require("http");
 const { test, expect, _electron: electron } = require("@playwright/test");
 
 test("Orion starts without an uncaught renderer error", async ({}, testInfo) => {
+  const popoutServer = http.createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.end("<!doctype html><html><body style='margin:0;background:black'><video></video></body></html>");
+  });
+  await new Promise((resolve) => popoutServer.listen(0, "127.0.0.1", resolve));
+  const popoutUrl = `http://127.0.0.1:${popoutServer.address().port}/player`;
   const userDataDir = path.join(
     os.tmpdir(),
     `orion-pw-${process.pid}-${testInfo.workerIndex}-${Date.now()}`,
@@ -47,16 +54,18 @@ test("Orion starts without an uncaught renderer error", async ({}, testInfo) => 
     controlVideo: "function",
   });
 
-  const popoutResult = await page.evaluate(() =>
-    window.electron.openPipWindow(
-      "data:text/html,<html><body style='background:black'></body></html>",
-      "Orion smoke test",
-    ),
+  const popoutResult = await page.evaluate(
+    (url) => window.electron.openPipWindow(url, "Orion smoke test"),
+    popoutUrl,
   );
-  expect(popoutResult.ok).toBe(true);
+  expect(popoutResult.ok, popoutResult.error).toBe(true);
   await expect.poll(async () => (await app.windows()).length).toBe(2);
+  const popout = (await app.windows()).find((window) => window !== page);
+  await expect(popout.locator("#__orion_transport__")).toBeVisible();
+  await expect(popout.locator("#__orion_ambient__")).toBeAttached();
   await page.evaluate(() => window.electron.closePipWindow());
   await expect.poll(async () => (await app.windows()).length).toBe(1);
   expect(errors).toEqual([]);
   await app.close();
+  await new Promise((resolve) => popoutServer.close(resolve));
 });

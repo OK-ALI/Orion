@@ -12,6 +12,15 @@ const {
   dialog,
 } = require("electron");
 
+// Playwright and recovery launches pass this as an application argument (after
+// the Electron entry point), so Chromium does not consume it automatically.
+// Apply it explicitly before ready to keep headless Windows runs deterministic.
+if (process.argv.includes("--disable-gpu")) {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch("disable-gpu");
+  app.commandLine.appendSwitch("in-process-gpu");
+}
+
 /* ORION_PLAYER_RUNTIME_SWITCHES */
 try {
   app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
@@ -31,7 +40,9 @@ app.commandLine.appendSwitch(
 );
 app.commandLine.appendSwitch("enable-features", "NetworkServiceInProcess2");
 app.commandLine.appendSwitch("disk-cache-size", String(80 * 1024 * 1024));
-app.commandLine.appendSwitch("renderer-process-limit", "3");
+// Streaming webviews, the app shell, and a pop-out window need independent
+// renderers. A limit of three caused the pop-out renderer to fail to launch.
+app.commandLine.appendSwitch("renderer-process-limit", "8");
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 // ── Sub-modules ──────────────────────────────────────────────────────────────

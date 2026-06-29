@@ -62,5 +62,11 @@ export function inferWatchRegion() {
 
 export function findProviderId(catalog, hub) {
   const names = hub.aliases.map((name) => name.toLowerCase());
-  return catalog.find((provider) => names.includes(String(provider.provider_name || "").toLowerCase()))?.provider_id || null;
+  const normalized = catalog.map((provider) => ({
+    provider,
+    name: String(provider.provider_name || "").toLowerCase(),
+  }));
+  const exact = normalized.find((entry) => names.includes(entry.name));
+  if (exact) return exact.provider.provider_id;
+  return normalized.find((entry) => names.some((name) => entry.name.includes(name)))?.provider.provider_id || null;
 }

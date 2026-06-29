@@ -26,6 +26,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
   const ambientCleanupRef = useRef(null);
   const [ambientImage, setAmbientImage] = useState("");
   const lastProgressSavedRef = useRef(0);
+  const readyTimeoutRef = useRef(null);
 
   // Inject CSS to scale down subtitles for the mini-player
   useEffect(() => {
@@ -70,8 +71,12 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
         window.setTimeout(restore, 350);
         window.setTimeout(restore, 1400);
       }
+      window.clearTimeout(readyTimeoutRef.current);
+      readyTimeoutRef.current = window.setTimeout(() => setLoading(false), 2500);
     };
-    const handleStart = () => setLoading(true);
+    const handleStart = () => {
+      if (!webContentsIdRef.current) setLoading(true);
+    };
     const handleStop = () => setLoading(false);
     const handleFailure = (event) => {
       if (event?.errorCode === -3) return;
@@ -88,6 +93,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       wv.removeEventListener("did-stop-loading", handleStop);
       wv.removeEventListener("did-fail-load", handleFailure);
       ambientCleanupRef.current?.();
+      window.clearTimeout(readyTimeoutRef.current);
     };
   }, [initialState, isLocal]);
 
@@ -118,6 +124,8 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       if (!id || !window.electron?.queryVideoProgress) return;
       const state = await window.electron.queryVideoProgress(id).catch(() => null);
       if (!state) return;
+      setLoading(false);
+      setLoadError("");
       setPaused(Boolean(state.paused));
       setMuted(Boolean(state.muted));
       setCurrentTime(Number(state.currentTime) || 0);
@@ -387,7 +395,11 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
               title={paused ? "Play" : "Pause"}
               aria-label={paused ? "Play" : "Pause"}
             >
-              {paused ? "▶" : "Ⅱ"}
+              {paused ? (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z" /></svg>
+              )}
             </button>
             <button
               className="orion-mini-player-btn"
@@ -395,7 +407,11 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
               title={muted ? "Unmute" : "Mute"}
               aria-label={muted ? "Unmute" : "Mute"}
             >
-              {muted ? "🔇" : "🔊"}
+              {muted ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="m23 9-6 6m0-6 6 6" /></svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18 6a9 9 0 0 1 0 12" /></svg>
+              )}
             </button>
             {onPopOut && (
               <button
@@ -404,7 +420,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
                 title="Open always-on-top pop-out"
                 aria-label="Open always-on-top pop-out"
               >
-                ↗
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><path d="M14 3h7v7" /><path d="M10 14 21 3" /><path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h6" /></svg>
               </button>
             )}
             {/* Expand Button */}
@@ -466,7 +482,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
           </div>
           {(loading || loadError) && (
             <div className="orion-mini-player-status" role={loadError ? "alert" : "status"}>
-              <div>{loadError || "Loading player…"}</div>
+              <div>{loadError || "Preparing mini-player…"}</div>
               {loadError && (
                 <button
                   className="btn btn-ghost"

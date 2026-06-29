@@ -104,7 +104,7 @@ const [details, setDetails] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [ambientColor, setAmbientColor] = useState("");
   const [ambientGlowEnabled, setAmbientGlowEnabled] = useState(
-    () => storage.get(STORAGE_KEYS.AMBIENT_GLOW) !== false,
+    () => (storage.get(STORAGE_KEYS.AMBIENT_PROFILE) || (storage.get(STORAGE_KEYS.AMBIENT_GLOW) === false ? "off" : "balanced")) !== "off",
   );
   const autoplayDoneRef = useRef(false);
 
@@ -370,7 +370,7 @@ const [details, setDetails] = useState(null);
   // Ambient glow settings sync
   useEffect(() => {
     const handler = () => {
-      setAmbientGlowEnabled(storage.get(STORAGE_KEYS.AMBIENT_GLOW) !== false);
+      setAmbientGlowEnabled((storage.get(STORAGE_KEYS.AMBIENT_PROFILE) || (storage.get(STORAGE_KEYS.AMBIENT_GLOW) === false ? "off" : "balanced")) !== "off");
     };
     window.addEventListener("orion:player-settings-changed", handler);
     return () => {

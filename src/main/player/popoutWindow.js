@@ -1,5 +1,6 @@
 const path = require("path");
-const { BrowserWindow, ipcMain } = require("electron");
+const { BrowserWindow, ipcMain, powerMonitor } = require("electron");
+const { extractPaletteFromBitmap } = require("./ambientPalette");
 
 const POPOUT_CSS = `
   video::cue {
@@ -68,10 +69,32 @@ function createPopoutWindowController({
   let popoutWindow = null;
   let activePlayback = null;
   let closeSnapshotReady = false;
+  let ambientTimer = null;
 
   const isOpen = () => Boolean(popoutWindow && !popoutWindow.isDestroyed());
   const close = () => {
     if (isOpen()) popoutWindow.close();
+  };
+  const stopAmbient = () => {
+    if (ambientTimer) clearInterval(ambientTimer);
+    ambientTimer = null;
+  };
+  const startAmbient = () => {
+    stopAmbient();
+    const tick = async () => {
+      if (!isOpen() || popoutWindow.isMinimized() || !popoutWindow.isVisible() || powerMonitor.isOnBatteryPower()) return;
+      try {
+        const state = await snapshotState();
+        if (state?.paused) return;
+        const image = await popoutWindow.webContents.capturePage();
+        if (image.isEmpty()) return;
+        const sample = image.resize({ width: 32, height: 18, quality: "good" });
+        const colors = extractPaletteFromBitmap(sample.toBitmap());
+        popoutWindow.webContents.send("popout-ambient-palette", colors);
+      } catch {}
+    };
+    ambientTimer = setInterval(tick, 900);
+    tick();
   };
   const notifyMain = (channel, payload) => {
     const mainWindow = getMainWindow();
@@ -79,6 +102,13 @@ function createPopoutWindowController({
   };
   const injectCss = (contents) => contents.insertCSS(POPOUT_CSS).catch(() => {});
   const buildLoadUrl = (url, state) => {
+    if (String(url).startsWith("data:text/html")) {
+      const comma = String(url).indexOf(",");
+      const raw = comma >= 0 ? String(url).slice(comma + 1) : "";
+      let html = raw;
+      try { html = decodeURIComponent(raw); } catch {}
+      return `data:text/html;charset=utf-8;base64,${Buffer.from(html, "utf8").toString("base64")}`;
+    }
     if (!String(url).startsWith("orion-media://")) return url;
     const safeUrl = String(url).replaceAll("&", "&amp;").replaceAll('"', "&quot;");
     const tracks = (state?.orionContext?.subtitles || [])
@@ -131,6 +161,32 @@ function createPopoutWindowController({
     return activePlayback?.state || null;
   };
 
+  const controlPlayback = async (action, value) => {
+    if (!isOpen()) return { ok: false, error: "The pop-out player is closed." };
+    const safeAction = JSON.stringify(String(action || ""));
+    const safeValue = Number.isFinite(Number(value)) ? Number(value) : 0;
+    const script = `(() => {
+      const v = document.querySelector('video');
+      if (!v) return null;
+      const action = ${safeAction}; const value = ${safeValue};
+      if (action === 'toggle') { if (v.paused) v.play().catch(() => {}); else v.pause(); }
+      if (action === 'mute') v.muted = !v.muted;
+      if (action === 'seek') v.currentTime = Math.max(0, Math.min(v.duration || Infinity, v.currentTime + value));
+      if (action === 'position') v.currentTime = Math.max(0, Math.min(v.duration || Infinity, value));
+      if (action === 'volume') { v.volume = Math.max(0, Math.min(1, value)); v.muted = false; }
+      return { currentTime:v.currentTime||0, duration:v.duration||0, paused:v.paused, muted:v.muted, volume:v.volume };
+    })()`;
+    const frames = [popoutWindow.webContents.mainFrame];
+    for (let i = 0; i < frames.length; i += 1) frames.push(...(frames[i].frames || []));
+    for (const frame of frames) {
+      try {
+        const state = await frame.executeJavaScript(script);
+        if (state) return { ok: true, ...state };
+      } catch {}
+    }
+    return { ok: false, error: "The video is still preparing." };
+  };
+
   const open = async (_event, { url, title, state }) => {
     if (!url || url === "about:blank") {
       return { ok: false, error: "The player has not produced a stream URL yet." };
@@ -164,6 +220,10 @@ function createPopoutWindowController({
         partition: "persist:player",
         nodeIntegration: false,
         contextIsolation: true,
+        // The preload is a local CommonJS bridge, matching the main window.
+        // Keep Node unavailable to page content while allowing that bridge to
+        // initialize reliably on Windows.
+        sandbox: false,
         preload: path.join(rootDir, "popout-preload.js"),
       },
     });
@@ -171,6 +231,15 @@ function createPopoutWindowController({
     popoutWindow.setAlwaysOnTop(true, "screen-saver");
     popoutWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     popoutWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    popoutWindow.webContents.on("did-fail-load", (_event, code, description, failedUrl, isMainFrame) => {
+      if (isMainFrame) console.error("[popout] load failed", { code, description, failedUrl });
+    });
+    popoutWindow.webContents.on("render-process-gone", (_event, details) => {
+      console.error("[popout] renderer exited", details);
+    });
+    popoutWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
+      console.error("[popout] preload failed", preloadPath, error?.message || error);
+    });
     popoutWindow.webContents.on("did-attach-webview", (_attachedEvent, contents) => {
       contents.setWindowOpenHandler(() => ({ action: "deny" }));
       contents.on("dom-ready", () => injectCss(contents));
@@ -197,6 +266,7 @@ function createPopoutWindowController({
       });
     });
     popoutWindow.on("closed", () => {
+      stopAmbient();
       const payload = activePlayback;
       popoutWindow = null;
       activePlayback = null;
@@ -209,6 +279,7 @@ function createPopoutWindowController({
       if (!isOpen()) return { ok: false, error: "The pop-out window was closed." };
       popoutWindow.show();
       await restoreState(popoutWindow.webContents, state);
+      startAmbient();
       popoutWindow.focus();
       setMiniPlayerStatus({ active: true, title: title || "Pop-out Stream" });
       notifyMain("pip-window-opened");
@@ -243,6 +314,8 @@ function createPopoutWindowController({
     ipcMain.handle("popout-window-is-maximized", () =>
       isOpen() ? popoutWindow.isMaximized() : false,
     );
+    ipcMain.handle("popout-playback-state", async () => ({ ok: true, ...(await snapshotState()) }));
+    ipcMain.handle("popout-control", (_event, action, value) => controlPlayback(action, value));
   };
 
   return { close, isOpen, register };

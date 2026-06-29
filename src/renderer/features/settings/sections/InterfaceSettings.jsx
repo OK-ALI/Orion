@@ -22,7 +22,7 @@ export function AppearanceSection() {
     () => storage.get(STORAGE_KEYS.MOTION_PRESET) || "balanced",
   );
   const [ambientProfile, setAmbientProfile] = useState(
-    () => storage.get(STORAGE_KEYS.AMBIENT_PROFILE) || "balanced",
+    () => storage.get(STORAGE_KEYS.AMBIENT_PROFILE) || (storage.get(STORAGE_KEYS.AMBIENT_GLOW) === false ? "off" : "balanced"),
   );
   const [accentInPlayer, setAccentInPlayer] = useState(
     () => storage.get(STORAGE_KEYS.ACCENT_IN_PLAYER) !== false,
@@ -90,6 +90,7 @@ export function AppearanceSection() {
     storage.set(STORAGE_KEYS.REDUCE_ANIMATIONS, noAnim ? 1 : 0);
     storage.set(STORAGE_KEYS.MOTION_PRESET, motionPreset);
     storage.set(STORAGE_KEYS.AMBIENT_PROFILE, ambientProfile);
+    storage.set(STORAGE_KEYS.AMBIENT_GLOW, ambientProfile !== "off");
     storage.set(STORAGE_KEYS.THEME, theme);
     if (theme === "custom") {
       storage.set(STORAGE_KEYS.CUSTOM_THEME_VARS, customVars);

@@ -21,12 +21,19 @@ function headerValue(headers, name) {
 function classifyStream(url, responseHeaders = {}, resourceType = "") {
   const value = String(url || "").toLowerCase();
   const contentType = headerValue(responseHeaders, "content-type").toLowerCase();
-  if (/\.m3u8(?:$|[?#])/.test(value) || contentType.includes("mpegurl")) return "hls";
-  if (/\.mpd(?:$|[?#])/.test(value) || contentType.includes("dash+xml")) return "dash";
+  const disposition = headerValue(responseHeaders, "content-disposition").toLowerCase();
+  const hlsUrl = /(?:\.m3u8|\/m3u8)(?:$|[/?#&])/.test(value) ||
+    /[?&](?:format|type|ext)=m3u8(?:&|$)/.test(value);
+  const dashUrl = /(?:\.mpd|\/mpd)(?:$|[/?#&])/.test(value) ||
+    /[?&](?:format|type|ext)=mpd(?:&|$)/.test(value);
+  const manifestEndpoint = /\/(?:master|manifest|playlist|playback)(?:[/?#]|$)/.test(value);
+  if (hlsUrl || contentType.includes("mpegurl") || disposition.includes(".m3u8") ||
+      (manifestEndpoint && contentType.includes("application/octet-stream"))) return "hls";
+  if (dashUrl || contentType.includes("dash+xml") || disposition.includes(".mpd")) return "dash";
   if (
-    /\.(?:mp4|m4v|webm|mov)(?:$|[?#])/.test(value) ||
-    ((resourceType === "media" || resourceType === "xhr") &&
-      /video\/(?:mp4|webm|quicktime)/.test(contentType))
+    /\.(?:mp4|m4v|webm|mov)(?:$|[/?#&])/.test(value) ||
+    disposition.match(/\.(?:mp4|m4v|webm|mov)(?:["';]|$)/) ||
+    (contentType.startsWith("video/") && !contentType.includes("vtt"))
   ) return "direct";
   return null;
 }
@@ -183,8 +190,17 @@ function summary(item) {
 function listCandidates({ sessionId, webContentsIds } = {}) {
   prune();
   const allowed = Array.isArray(webContentsIds) && webContentsIds.length ? new Set(webContentsIds) : null;
+  const requestedSession = sessionId ? captureSessions.get(sessionId) : null;
+  const sameCaptureScope = (candidate) => {
+    if (!sessionId || candidate.sessionId === sessionId) return true;
+    if (!requestedSession) return false;
+    const candidateSession = captureSessions.get(candidate.sessionId);
+    if (!candidateSession || candidateSession.sourceId !== requestedSession.sourceId) return false;
+    return JSON.stringify(candidateSession.mediaIdentity || null) ===
+      JSON.stringify(requestedSession.mediaIdentity || null);
+  };
   return [...candidates.values()]
-    .filter((item) => !sessionId || item.sessionId === sessionId)
+    .filter(sameCaptureScope)
     .filter((item) => !allowed || allowed.has(item.webContentsId))
     .sort((a, b) => b.score - a.score || b.capturedAt - a.capturedAt)
     .map(summary);

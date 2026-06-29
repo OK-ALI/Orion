@@ -353,11 +353,11 @@
   background-position: center;
   background-repeat: no-repeat;
   filter: blur(80px);
-  opacity: 0.75;
+  opacity: 0.68;
   mix-blend-mode: screen;
   pointer-events: none;
   transition: background-image 0.5s ease;
-  z-index: 1;
+  z-index: 0;
 }
 
 /* Downloader */

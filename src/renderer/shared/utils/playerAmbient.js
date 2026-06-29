@@ -8,10 +8,15 @@ function paletteDataUrl(colors, profile) {
 }
 
 export function setupAmbientGlow(webview, onColor) {
-  const profile = storage.get(STORAGE_KEYS.AMBIENT_PROFILE) || "balanced";
-  if (profile === "off" || storage.get(STORAGE_KEYS.AMBIENT_GLOW) === false || storage.get(STORAGE_KEYS.REDUCE_ANIMATIONS) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  const savedProfile = storage.get(STORAGE_KEYS.AMBIENT_PROFILE);
+  const profile = savedProfile || (storage.get(STORAGE_KEYS.AMBIENT_GLOW) === false ? "off" : "balanced");
+  if (profile === "off" || storage.get(STORAGE_KEYS.REDUCE_ANIMATIONS) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     return () => {};
   }
+  // A visible, low-cost cinematic fallback prevents the glow from disappearing
+  // when Chromium cannot capture a protected guest frame or power-saving pauses
+  // dynamic sampling. A real sampled palette replaces it as soon as available.
+  onColor(paletteDataUrl(["#4c1d95", "#0e7490"], profile));
   const targetId = `player-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let active = true;
   const start = () => {
