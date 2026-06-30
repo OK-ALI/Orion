@@ -369,6 +369,7 @@
 
 .player-wrap {
     position: relative;
+    z-index: 2;
     background: #000;
     overflow: hidden;
     border-radius: var(--radius-md);

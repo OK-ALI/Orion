@@ -9,6 +9,7 @@ export default function AppOverlays({ model }) {
   const {
     activeDownloadCount, apiKey, episodeCheckStatus, episodeDismissTimerRef,
     handleExpandMiniPlayer, handleSelectResult, hasCustomTitlebar, miniPlayer,
+    handleMiniReady,
     navigate, offline, setEpisodeCheckStatus, setMiniPlayer, setShowSearch,
     setShowShortcuts, setShowUpdateModal, setUpdateBanner, showSearch,
     showShortcuts, showUpdateModal, toast, updateBanner, saveProgress, markWatched,
@@ -277,6 +278,8 @@ export default function AppOverlays({ model }) {
             title={miniPlayer.title}
             context={miniPlayer.context || (miniPlayer.mediaType === "tv" ? `Season ${miniPlayer.season}, episode ${miniPlayer.episode}` : "Movie")}
             initialState={miniPlayer.playbackState || miniPlayer}
+            active={!miniPlayer.handoffPending}
+            onReady={handleMiniReady}
             subtitles={miniPlayer.subtitles || []}
             onProgress={(state) => {
               const key = miniPlayer.mediaType === "tv"

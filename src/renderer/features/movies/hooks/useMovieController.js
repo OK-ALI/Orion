@@ -334,16 +334,12 @@ const [details, setDetails] = useState(null);
 
   // Ambient glow hook
   useEffect(() => {
-    window.electron?.logToTerminal(`[MoviePage Ambient Hook] playing: ${playing}, resolvedPlayerUrl: ${resolvedPlayerUrl ? 'yes' : 'no'}, playerSource: ${playerSource}, ambientGlowEnabled: ${ambientGlowEnabled}`);
     if (!playing || !ambientGlowEnabled) {
       setAmbientColor("");
       return;
     }
     const wv = webviewRef.current;
-    if (!wv) {
-      window.electron?.logToTerminal("[MoviePage Ambient Hook] webviewRef.current is null.");
-      return;
-    }
+    if (!wv) return;
 
     const cleanup = setupAmbientGlow(wv, (colorDataUrl) => {
       setAmbientColor(colorDataUrl);

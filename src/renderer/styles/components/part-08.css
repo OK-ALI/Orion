@@ -257,18 +257,18 @@
 /* ── Media Carousel Hover Animations ── */
 
 .media-carousel-item.active:hover .media-carousel-poster-wrap {
-    transform: translateY(-6px);
-    border-color: var(--accent);
-    box-shadow: 0 24px 56px rgba(0,0,0,0.65), 0 0 25px var(--accent-alpha, rgba(229, 9, 20, 0.4));
+    transform: translateY(-4px);
+    border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+    box-shadow: 0 22px 46px rgba(0,0,0,0.46), 0 0 20px color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
 .media-carousel-item.active:hover .media-carousel-poster {
-    transform: scale(1.08);
+    transform: scale(1.055);
 }
 
 .media-carousel-item.active:hover .media-carousel-info-title {
     color: var(--accent);
-    text-shadow: 0 0 10px rgba(229, 9, 20, 0.35);
+    text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 /* ── Video Player Pause Overlay ── */
@@ -348,17 +348,19 @@
 
 .player-ambient-glow {
   position: absolute;
-  inset: -40px;
+  inset: -56px;
   background-size: 100% 100%;
   background-position: center;
   background-repeat: no-repeat;
-  filter: blur(80px);
-  opacity: 0.68;
+  filter: blur(54px) saturate(1.55);
+  opacity: 0.9;
   mix-blend-mode: screen;
   pointer-events: none;
-  transition: background-image 0.5s ease;
+  transition: background-image 0.75s ease, opacity 0.75s ease;
   z-index: 0;
 }
+
+.section:has(> .player-ambient-glow) { isolation:isolate; overflow:visible; }
 
 /* Downloader */
 

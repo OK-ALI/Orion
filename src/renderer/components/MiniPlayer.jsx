@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from "react";
 import { setupAmbientGlow } from "../shared/utils/playerAmbient";
 import { getReadyWebContentsId } from "../features/player/services/webviewLifecycle";
 
-export default function MiniPlayer({ url, title, context, initialState, subtitles = [], onClose, onExpand, onPopOut, onProgress }) {
+export default function MiniPlayer({ url, title, context, initialState, subtitles = [], onClose, onExpand, onPopOut, onProgress, onReady, active = true }) {
   const isLocal = String(url || "").startsWith("orion-media://");
   const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [size, setSize] = useState({ width: 360, height: 202 }); // 16:9 aspect ratio
+  const [size, setSize] = useState({ width: 360, height: 272 });
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
 
@@ -25,8 +25,15 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
   const restoredRef = useRef(false);
   const ambientCleanupRef = useRef(null);
   const [ambientImage, setAmbientImage] = useState("");
+  const [ambientColors, setAmbientColors] = useState(["#6d3bd1", "#168aa4"]);
   const lastProgressSavedRef = useRef(0);
   const readyTimeoutRef = useRef(null);
+  const readyReportedRef = useRef(false);
+  const reportReady = () => {
+    if (readyReportedRef.current) return;
+    readyReportedRef.current = true;
+    onReady?.();
+  };
 
   // Inject CSS to scale down subtitles for the mini-player
   useEffect(() => {
@@ -59,7 +66,10 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       `;
       wv.insertCSS(css).catch(() => {});
       ambientCleanupRef.current?.();
-      ambientCleanupRef.current = setupAmbientGlow(wv, setAmbientImage);
+      ambientCleanupRef.current = setupAmbientGlow(wv, (image, colors) => {
+        setAmbientImage(image);
+        if (Array.isArray(colors)) setAmbientColors(colors);
+      });
       if (!restoredRef.current && window.electron?.setVideoState) {
         restoredRef.current = true;
         const restore = () => window.electron.setVideoState(webContentsIdRef.current, {
@@ -72,7 +82,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
         window.setTimeout(restore, 1400);
       }
       window.clearTimeout(readyTimeoutRef.current);
-      readyTimeoutRef.current = window.setTimeout(() => setLoading(false), 2500);
+      readyTimeoutRef.current = window.setTimeout(() => { setLoading(false); reportReady(); }, 2500);
     };
     const handleStart = () => {
       if (!webContentsIdRef.current) setLoading(true);
@@ -106,9 +116,20 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       video.volume = Math.max(0, Math.min(1, Number(initialState?.volume ?? 1)));
       video.muted = Boolean(initialState?.muted);
       if (!initialState?.paused) video.play().catch(() => {});
+      setLoading(false);
+      setLoadError("");
     };
+    const ready = () => { setLoading(false); setLoadError(""); reportReady(); };
+    const failed = () => { setLoading(false); setLoadError("The downloaded file could not be played."); };
     video.addEventListener("loadedmetadata", restore, { once: true });
-    return () => video.removeEventListener("loadedmetadata", restore);
+    video.addEventListener("canplay", ready);
+    video.addEventListener("error", failed);
+    if (video.readyState >= 2) ready();
+    return () => {
+      video.removeEventListener("loadedmetadata", restore);
+      video.removeEventListener("canplay", ready);
+      video.removeEventListener("error", failed);
+    };
   }, [isLocal, initialState, url]);
 
   useEffect(() => {
@@ -126,6 +147,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       if (!state) return;
       setLoading(false);
       setLoadError("");
+      reportReady();
       setPaused(Boolean(state.paused));
       setMuted(Boolean(state.muted));
       setCurrentTime(Number(state.currentTime) || 0);
@@ -201,6 +223,15 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
     }
   };
 
+  useEffect(() => {
+    if (!active || !readyReportedRef.current) return;
+    applyState({
+      paused: Boolean(initialState?.paused),
+      muted: Boolean(initialState?.muted),
+      volume: Number(initialState?.volume ?? 1),
+    });
+  }, [active]);
+
   const handlePopOut = async () => {
     const state = await snapshot();
     await applyState({ ...state, paused: true });
@@ -221,7 +252,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
   useEffect(() => {
     const saved = localStorage.getItem("orion-mini-player-settings");
     let initialWidth = 360;
-    let initialHeight = 202;
+    let initialHeight = Math.round(initialWidth * (9 / 16)) + 70;
     let initialX = window.innerWidth - initialWidth - 24;
     let initialY = window.innerHeight - initialHeight - 24;
 
@@ -229,7 +260,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       try {
         const parsed = JSON.parse(saved);
         if (parsed.width) initialWidth = parsed.width;
-        if (parsed.height) initialHeight = parsed.height;
+        if (parsed.width) initialHeight = Math.round(parsed.width * (9 / 16)) + 70;
         if (parsed.x !== undefined) initialX = parsed.x;
         if (parsed.y !== undefined) initialY = parsed.y;
       } catch (e) {
@@ -300,7 +331,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
         // Calculate new width
         let newWidth = playerStart.current.w + dx;
         newWidth = Math.max(280, Math.min(640, newWidth)); // constraints: 280 to 640
-        const newHeight = Math.round(newWidth * (9 / 16));
+        const newHeight = Math.round(newWidth * (9 / 16)) + 70;
 
         // Constrain so it doesn't expand offscreen to the right/bottom
         if (playerStart.current.x + newWidth > window.innerWidth - 10) {
@@ -309,7 +340,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
 
         setSize({
           width: newWidth,
-          height: Math.round(newWidth * (9 / 16))
+          height: Math.round(newWidth * (9 / 16)) + 70
         });
       }
     };
@@ -368,7 +399,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
   return (
       <div
         ref={playerRef}
-        className={`orion-mini-player ${isDragging ? "is-dragging" : ""}`}
+        className={`orion-mini-player${isDragging ? " is-dragging" : ""}${active ? " is-active" : " is-handoff-pending"}`}
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
@@ -380,6 +411,8 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
             ? `0 20px 52px rgba(0,0,0,.72), 0 0 52px color-mix(in srgb, var(--accent) 45%, transparent)`
             : undefined,
           "--mini-ambient": ambientImage ? `url(${ambientImage})` : "none",
+          "--mini-ambient-a": ambientColors[0],
+          "--mini-ambient-b": ambientColors[1],
         }}
       >
         {/* Drag Handle & Header */}
@@ -466,20 +499,6 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
               style={{ width: "100%", height: "100%", border: "none", position: "relative", zIndex: 2 }}
             />
           )}
-          <div className="orion-mini-player-transport">
-            <button onClick={() => applyState({ currentTime: Math.max(0, currentTime - 10) })} aria-label="Seek back 10 seconds">-10</button>
-            <input
-              type="range" min="0" max={Math.max(1, duration)} step="1" value={Math.min(currentTime, Math.max(1, duration))}
-              onChange={(event) => applyState({ currentTime: Number(event.target.value) })}
-              aria-label="Playback position"
-            />
-            <button onClick={() => applyState({ currentTime: Math.min(duration || currentTime + 10, currentTime + 10) })} aria-label="Seek forward 10 seconds">+10</button>
-            <input
-              className="orion-mini-player-volume" type="range" min="0" max="1" step="0.05" value={volume}
-              onChange={(event) => applyState({ volume: Number(event.target.value), muted: false })}
-              aria-label="Volume"
-            />
-          </div>
           {(loading || loadError) && (
             <div className="orion-mini-player-status" role={loadError ? "alert" : "status"}>
               <div>{loadError || "Preparing mini-player…"}</div>
@@ -501,6 +520,20 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
           <div
             className="orion-mini-player-resize-handle"
             onMouseDown={handleResizeStart}
+          />
+        </div>
+        <div className="orion-mini-player-transport" aria-label="Mini-player controls">
+          <button onClick={() => applyState({ currentTime: Math.max(0, currentTime - 10) })} aria-label="Seek back 10 seconds">−10</button>
+          <input
+            type="range" min="0" max={Math.max(1, duration)} step="1" value={Math.min(currentTime, Math.max(1, duration))}
+            onChange={(event) => applyState({ currentTime: Number(event.target.value) })}
+            aria-label="Playback position"
+          />
+          <button onClick={() => applyState({ currentTime: Math.min(duration || currentTime + 10, currentTime + 10) })} aria-label="Seek forward 10 seconds">+10</button>
+          <input
+            className="orion-mini-player-volume" type="range" min="0" max="1" step="0.05" value={volume}
+            onChange={(event) => applyState({ volume: Number(event.target.value), muted: false })}
+            aria-label="Volume"
           />
         </div>
       </div>

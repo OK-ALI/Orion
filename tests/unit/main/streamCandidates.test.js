@@ -8,6 +8,7 @@ const {
   resolveCandidate,
   classifyStream,
   beginCaptureSession,
+  endCaptureSession,
 } = require("../../../src/main/downloader/streamCandidates");
 
 test.beforeEach(() => clearCandidates());
@@ -34,6 +35,24 @@ test("keeps a late modal connected to a compatible restarted capture session", (
   addCandidate({ url: "https://cdn.test/master.m3u8", sessionId: first.id });
   const restarted = beginCaptureSession({ mediaIdentity: identity, sourceId: "source-a" });
   assert.equal(listCandidates({ sessionId: restarted.id }).length, 1);
+});
+
+test("reused player webContents moves on from an ended capture session", () => {
+  const first = beginCaptureSession({
+    mediaIdentity: { mediaType: "tv", mediaId: 7, season: 1, episode: 1 },
+    sourceId: "source-a",
+    webContentsId: 44,
+  });
+  endCaptureSession(first.id);
+  const second = beginCaptureSession({
+    mediaIdentity: { mediaType: "tv", mediaId: 7, season: 1, episode: 2 },
+    sourceId: "source-a",
+  });
+  const captured = addCandidate({
+    url: "https://cdn.test/episode-two.m3u8",
+    webContentsId: 44,
+  });
+  assert.equal(captured.sessionId, second.id);
 });
 
 test("scopes candidates to capture sessions", () => {

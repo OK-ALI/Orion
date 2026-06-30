@@ -13,7 +13,7 @@ contextBridge.exposeInMainWorld("electronPopout", {
 // Constants & helpers
 // ---------------------------------------------------------------------------
 
-const BAR_H = 32;
+const BAR_H = 44;
 
 function css(el, styles) {
   Object.assign(el.style, styles);
@@ -192,7 +192,7 @@ function injectTitlebar() {
   }
 
   showBar();
-  injectPlaybackControls();
+  injectPlaybackControls(bar, btns);
 
   ipcRenderer.invoke("popout-window-is-maximized").then((isMax) => {
     applyMaximizeIcon(maximizeBtn, isMax);
@@ -207,17 +207,16 @@ function injectTitlebar() {
   }
 }
 
-function injectPlaybackControls() {
+function injectPlaybackControls(bar, windowButtons) {
   if (document.getElementById("__orion_transport__")) return;
   const transport = document.createElement("div");
   transport.id = "__orion_transport__";
   css(transport, {
-    position: "fixed", left: "50%", bottom: "14px", transform: "translateX(-50%)",
-    zIndex: "2147483647", display: "flex", alignItems: "center", gap: "8px",
-    width: "min(560px, calc(100% - 28px))", minHeight: "42px", padding: "7px 10px",
-    border: "1px solid rgba(255,255,255,.14)", borderRadius: "12px",
-    background: "rgba(8,7,12,.84)", backdropFilter: "blur(16px)",
-    boxShadow: "0 16px 45px rgba(0,0,0,.5), 0 0 34px rgba(139,92,246,.2)",
+    position: "relative", zIndex: "2147483647", display: "flex", alignItems: "center", gap: "6px",
+    flex: "1 1 320px", maxWidth: "420px", minWidth: "150px", minHeight: "32px", padding: "2px 8px",
+    border: "1px solid rgba(255,255,255,.1)", borderRadius: "9px",
+    background: "rgba(255,255,255,.055)", backdropFilter: "blur(12px)",
+    boxShadow: "0 0 26px rgba(139,92,246,.16)",
     color: "#f7f2ea", fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
     opacity: ".92", transition: "opacity .2s",
   });
@@ -238,14 +237,15 @@ function injectPlaybackControls() {
   css(progress, { flex:"1", minWidth:"70px", accentColor:"#8b5cf6" });
   progress.addEventListener("change", () => ipcRenderer.invoke("popout-control", "position", Number(progress.value)));
   transport.append(back, play, next, progress, mute);
-  document.body?.appendChild(transport);
+  bar.insertBefore(transport, windowButtons);
   const ambient = document.createElement("div");
   ambient.id = "__orion_ambient__";
-  css(ambient, { position:"fixed", inset:"0", zIndex:"2147483645", pointerEvents:"none", boxShadow:"inset 40px 0 80px rgba(76,29,149,.28), inset -40px 0 80px rgba(14,116,144,.24)", transition:"box-shadow .8s ease" });
+  css(ambient, { position:"fixed", inset:"0", zIndex:"2147483645", pointerEvents:"none", background:"linear-gradient(90deg,rgba(109,59,209,.22),transparent 24%,transparent 76%,rgba(22,138,164,.2))", boxShadow:"inset 54px 0 96px rgba(109,59,209,.34), inset -54px 0 96px rgba(22,138,164,.3)", transition:"box-shadow .8s ease, background .8s ease" });
   document.body?.appendChild(ambient);
   ipcRenderer.on("popout-ambient-palette", (_event, colors) => {
     if (!Array.isArray(colors) || colors.length < 2) return;
     ambient.style.boxShadow = `inset 44px 0 92px ${colors[0]}66, inset -44px 0 92px ${colors[1]}55`;
+    ambient.style.background = `linear-gradient(90deg,${colors[0]}38,transparent 25%,transparent 75%,${colors[1]}34)`;
     transport.style.boxShadow = `0 16px 45px rgba(0,0,0,.5), 0 0 38px ${colors[0]}55`;
   });
   const sync = async () => {
@@ -260,6 +260,13 @@ function injectPlaybackControls() {
   };
   sync();
   setInterval(sync, 1000);
+  const fit = () => {
+    const compact = window.innerWidth < 520;
+    back.style.display = compact ? "none" : "block";
+    next.style.display = compact ? "none" : "block";
+  };
+  fit();
+  window.addEventListener("resize", fit);
 }
 
 if (document.readyState === "loading") {

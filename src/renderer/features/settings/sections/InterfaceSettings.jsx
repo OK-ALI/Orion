@@ -5,7 +5,7 @@ import { ACCENT_PRESETS, applyAccentColor, THEME_PRESETS, applyTheme, DEFAULT_CU
 import { SUBTITLE_LANGUAGES } from "../../../shared/utils/subtitles";
 import { SettingsSelect, Toggle } from "../components/SettingsControls";
 
-export function AppearanceSection() {
+export function AppearanceSection({ sectionRef = null }) {
   const [accent, setAccent] = useState(
     () => storage.get(STORAGE_KEYS.ACCENT_COLOR) || "orion",
   );
@@ -20,6 +20,9 @@ export function AppearanceSection() {
   );
   const [motionPreset, setMotionPreset] = useState(
     () => storage.get(STORAGE_KEYS.MOTION_PRESET) || "balanced",
+  );
+  const [backgroundScene, setBackgroundScene] = useState(
+    () => storage.get(STORAGE_KEYS.BACKGROUND_SCENE) || "orbit",
   );
   const [ambientProfile, setAmbientProfile] = useState(
     () => storage.get(STORAGE_KEYS.AMBIENT_PROFILE) || (storage.get(STORAGE_KEYS.AMBIENT_GLOW) === false ? "off" : "balanced"),
@@ -50,6 +53,7 @@ export function AppearanceSection() {
     customVars: storage.get(STORAGE_KEYS.CUSTOM_THEME_VARS) || {
       ...DEFAULT_CUSTOM_VARS,
     },
+    backgroundScene: storage.get(STORAGE_KEYS.BACKGROUND_SCENE) || "orbit",
   });
   const savedRef = useRef(false);
 
@@ -57,9 +61,10 @@ export function AppearanceSection() {
   useEffect(() => {
     return () => {
       if (!savedRef.current) {
-        const { accent, theme, customVars } = committedRef.current;
+        const { accent, theme, customVars, backgroundScene: committedBackground } = committedRef.current;
         applyAccentColor(accent);
         applyTheme(theme, theme === "custom" ? customVars : null);
+        document.body.dataset.background = committedBackground;
       }
     };
   }, []);
@@ -89,6 +94,7 @@ export function AppearanceSection() {
     storage.set(STORAGE_KEYS.COMPACT_MODE, compact ? 1 : 0);
     storage.set(STORAGE_KEYS.REDUCE_ANIMATIONS, noAnim ? 1 : 0);
     storage.set(STORAGE_KEYS.MOTION_PRESET, motionPreset);
+    storage.set(STORAGE_KEYS.BACKGROUND_SCENE, backgroundScene);
     storage.set(STORAGE_KEYS.AMBIENT_PROFILE, ambientProfile);
     storage.set(STORAGE_KEYS.AMBIENT_GLOW, ambientProfile !== "off");
     storage.set(STORAGE_KEYS.THEME, theme);
@@ -103,10 +109,13 @@ export function AppearanceSection() {
       window.electron.setZoomFactor(zoomMap[fontSize] ?? 1);
     document.body.classList.toggle("compact-mode", compact);
     document.body.classList.toggle("no-anim", noAnim);
-    document.body.dataset.motion = noAnim ? "calm" : motionPreset;
+    const appliedMotion = noAnim ? "calm" : motionPreset;
+    document.body.dataset.motion = appliedMotion;
+    document.documentElement.dataset.motion = appliedMotion;
+    document.body.dataset.background = backgroundScene;
     // Mark as saved so the cleanup effect doesn't revert
     savedRef.current = true;
-    committedRef.current = { accent, theme, customVars };
+    committedRef.current = { accent, theme, customVars, backgroundScene };
     // Notify App.jsx so playerSettings prop (accent + lang) is refreshed
     window.dispatchEvent(new CustomEvent("orion:player-settings-changed"));
     setSaved(true);
@@ -125,7 +134,7 @@ export function AppearanceSection() {
   };
 
   return (
-    <div style={{ marginBottom: 40 }}>
+    <div ref={sectionRef} style={{ marginBottom: 40, scrollMarginTop: 80 }}>
       <div className="settings-section-title">Appearance</div>
 
       {/* Theme */}
@@ -450,6 +459,32 @@ export function AppearanceSection() {
       </div>
 
       {/* Toggles */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)", marginBottom: 10 }}>Background scene</div>
+        <div className="orion-background-presets">
+          {[
+            { id: "orbit", label: "Orbit", description: "Half-orbits at Orion's edges" },
+            { id: "nebula", label: "Nebula", description: "Slow spectral star field" },
+            { id: "minimal", label: "Minimal", description: "Clean cinematic vignette" },
+          ].map((scene) => (
+            <button
+              key={scene.id}
+              type="button"
+              className={`orion-background-preset${backgroundScene === scene.id ? " active" : ""}`}
+              onClick={() => {
+                savedRef.current = false;
+                setBackgroundScene(scene.id);
+                document.body.dataset.background = scene.id;
+              }}
+            >
+              <span className={`orion-background-preview ${scene.id}`} aria-hidden="true" />
+              <strong>{scene.label}</strong>
+              <small>{scene.description}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="orion-appearance-grid" style={{ marginBottom: 24 }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)", marginBottom: 8 }}>Motion preset</div>

@@ -149,7 +149,7 @@ export const SECTION_NAV = [
   },
   {
     id: "interface",
-    label: "Interface",
+    label: "Interface & layout",
     icon: "✦",
     keywords: [
       "home",
@@ -166,6 +166,12 @@ export const SECTION_NAV = [
       "rows",
       "hero",
     ],
+  },
+  {
+    id: "appearance",
+    label: "Appearance",
+    icon: "◐",
+    keywords: ["appearance", "theme", "background", "orbit", "nebula", "minimal", "accent", "font", "motion", "ambient", "light", "dark"],
   },
   {
     id: "library",

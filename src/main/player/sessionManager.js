@@ -62,7 +62,6 @@ const BLOCKED_HOSTS = [
 ];
 
 function setupSession(playerSession, trailerSession, getMainWindow) {
-  console.log("[sessionManager] setupSession initialized for persist:player and persist:trailer");
   const mediaRequestContexts = new Map();
   const requestOrigins = new Map();
   const requestContextsById = new Map();
@@ -76,7 +75,6 @@ function setupSession(playerSession, trailerSession, getMainWindow) {
 
   const stripHeaders = (details, callback, captureMedia = false) => {
     const headers = { ...details.responseHeaders };
-    let stripped = false;
     for (const key of Object.keys(headers)) {
       const lower = key.toLowerCase();
       if (
@@ -84,11 +82,7 @@ function setupSession(playerSession, trailerSession, getMainWindow) {
         lower === "content-security-policy"
       ) {
         delete headers[key];
-        stripped = true;
       }
-    }
-    if (stripped) {
-      console.log(`[sessionManager] Stripped security headers for URL: ${details.url}`);
     }
     if (captureMedia) {
       const requestContext = requestContextsById.get(details.id) || {};

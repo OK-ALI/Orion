@@ -380,16 +380,12 @@ const [details, setDetails] = useState(null);
 
   // Ambient glow hook
   useEffect(() => {
-    window.electron?.logToTerminal(`[TVPage Ambient Hook] playing: ${playing}, resolvedPlayerUrl: ${resolvedPlayerUrl ? 'yes' : 'no'}, playerSource: ${playerSource}, ambientGlowEnabled: ${ambientGlowEnabled}`);
     if (!playing || !ambientGlowEnabled) {
       setAmbientColor("");
       return;
     }
     const wv = webviewRef.current;
-    if (!wv) {
-      window.electron?.logToTerminal("[TVPage Ambient Hook] webviewRef.current is null.");
-      return;
-    }
+    if (!wv) return;
 
     const cleanup = setupAmbientGlow(wv, (colorDataUrl) => {
       setAmbientColor(colorDataUrl);

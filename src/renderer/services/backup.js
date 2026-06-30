@@ -20,6 +20,7 @@ export const BACKUP_KEYS = [
   "ambientProfile",
   "miniPlayerBehavior",
   "motionPreset",
+  "backgroundScene",
   "discoveryRegion",
   "introSkipMode",
   "ageLimit",

@@ -7,7 +7,7 @@ function paletteDataUrl(colors, profile) {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-export function setupAmbientGlow(webview, onColor) {
+export function setupAmbientGlow(webview, onColor, options = {}) {
   const savedProfile = storage.get(STORAGE_KEYS.AMBIENT_PROFILE);
   const profile = savedProfile || (storage.get(STORAGE_KEYS.AMBIENT_GLOW) === false ? "off" : "balanced");
   if (profile === "off" || storage.get(STORAGE_KEYS.REDUCE_ANIMATIONS) || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -16,17 +16,18 @@ export function setupAmbientGlow(webview, onColor) {
   // A visible, low-cost cinematic fallback prevents the glow from disappearing
   // when Chromium cannot capture a protected guest frame or power-saving pauses
   // dynamic sampling. A real sampled palette replaces it as soon as available.
-  onColor(paletteDataUrl(["#4c1d95", "#0e7490"], profile));
+  const fallback = ["#6d3bd1", "#168aa4"];
+  onColor(paletteDataUrl(fallback, profile), fallback);
   const targetId = `player-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let active = true;
   const start = () => {
     const webContentsId = getReadyWebContentsId(webview);
     if (!webContentsId || !window.electron?.startAmbientSampling) return;
-    window.electron.startAmbientSampling({ targetId, webContentsId, profile }).catch(() => {});
+    window.electron.startAmbientSampling({ targetId, webContentsId, profile, cropRect: options.cropRect }).catch(() => {});
   };
   const paletteHandler = window.electron?.onAmbientPalette?.((payload) => {
     if (!active || payload?.targetId !== targetId || !Array.isArray(payload.colors)) return;
-    onColor(paletteDataUrl(payload.colors, profile));
+    onColor(paletteDataUrl(payload.colors, profile), payload.colors);
   });
   webview?.addEventListener?.("dom-ready", start);
   try { start(); } catch {}

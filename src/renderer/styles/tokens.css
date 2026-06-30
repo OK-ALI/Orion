@@ -109,7 +109,7 @@
   --media-card-standard: 176px;
   --media-card-collection: 164px;
 
-  /* Streambert compatibility aliases for ported parity pages */
+  /* Legacy Orion aliases retained while feature styles move to semantic tokens */
   --bg: var(--bg-base);
   --red: var(--accent);
   --red-soft: var(--accent-soft);

@@ -38,9 +38,9 @@ Status in this working tree:
 - Explicit embedded → mini → pop-out state snapshots, one active owner, resume time, volume, mute, and pause restoration.
 - Automatic mini-player on navigation with Auto, Ask, and Manual settings.
 - Mini-player seek, scrub, volume, resize, snap, retry, expand, and pop-out controls.
-- Main-process ambient sampler that sends derived color palettes only and stops while hidden, minimized, on battery, or disabled.
-- Offline Inter and Space Grotesk fonts, Midnight Premiere/Silver Matinee cinema tokens, nebula background, consistent focus rings, and motion presets.
-- Dynamic regional provider hubs with all-offer/subscription/rent/buy filters plus checked-in Marvel, DC, Star Wars, and Pixar manifests.
+- Main-process ambient sampler that sends derived color palettes only, pauses while inactive, and lowers its sampling rate on battery power.
+- Offline Inter and Space Grotesk fonts, Midnight Premiere/Projector Silver cinema tokens, Orbit/Nebula/Minimal backgrounds, consistent focus rings, and motion presets.
+- Dynamic regional provider hubs that automatically include every offer type and regional provider variant, plus checked-in Marvel, DC, Star Wars, and Pixar manifests.
 - Latest-entry-per-series Continue cards, progress details, visible Library search/sort, Downloads tab, and local playback.
 
 Release validation still requires clean-machine Windows installer/ZIP smoke tests, live protected-host download tests, and the visual/Electron matrix described in `docs/releases/v1.0.9.md`.

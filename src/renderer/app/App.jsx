@@ -3,6 +3,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
 } from "react";
 import ErrorBoundary from "../components/common/ErrorBoundary";
 import WindowTitlebar from "../components/layout/WindowTitlebar";
@@ -94,6 +95,7 @@ export default function App() {
   const [miniPlayer, setMiniPlayer] = useState(null);
   const [playbackSession, setPlaybackSession] = useState(null);
   const [expandedLocalDownload, setExpandedLocalDownload] = useState(null);
+  const miniReadyResolverRef = useRef(null);
 
   // ── Scheduled backup: run on startup if due ─────────────────────────────────
   useEffect(() => {
@@ -252,9 +254,12 @@ export default function App() {
     // Reduce animations
     const noAnim = !!storage.get(STORAGE_KEYS.REDUCE_ANIMATIONS);
     document.body.classList.toggle("no-anim", noAnim);
-    document.body.dataset.motion = noAnim
+    const motion = noAnim
       ? "calm"
       : storage.get(STORAGE_KEYS.MOTION_PRESET) || "balanced";
+    document.body.dataset.motion = motion;
+    document.documentElement.dataset.motion = motion;
+    document.body.dataset.background = storage.get(STORAGE_KEYS.BACKGROUND_SCENE) || "orbit";
   }, []);
   useEffect(() => {
     const goOnline = () => setOffline(false);
@@ -281,13 +286,42 @@ export default function App() {
     let playbackState = session.playbackState || {};
     if (session.webContentsId && window.electron?.queryVideoProgress) {
       playbackState = await window.electron.queryVideoProgress(session.webContentsId).catch(() => null) || playbackState;
-      await window.electron?.setVideoState?.(session.webContentsId, { ...playbackState, paused: true }).catch(() => {});
     }
-    const handoff = buildPlaybackHandoff(session, { ...playbackState, paused: false }, "mini");
+    const shouldResume = !playbackState.paused;
+    const handoff = {
+      ...buildPlaybackHandoff(session, { ...playbackState, paused: true }, "mini"),
+      handoffPending: true,
+      shouldResume,
+    };
+    const ready = new Promise((resolve) => {
+      miniReadyResolverRef.current = resolve;
+      window.setTimeout(resolve, 3500);
+    });
     setMiniPlayer(handoff);
     setPlaybackSession(handoff);
+    await ready;
+    if (session.webContentsId) {
+      await window.electron?.setVideoState?.(session.webContentsId, { paused: true }).catch(() => {});
+    }
+    setMiniPlayer((current) => current ? {
+      ...current,
+      handoffPending: false,
+      playbackState: { ...(current.playbackState || {}), paused: !shouldResume },
+    } : current);
     return true;
   }, [playbackSession]);
+
+  const handleMiniReady = useCallback(() => {
+    miniReadyResolverRef.current?.();
+    miniReadyResolverRef.current = null;
+  }, []);
+
+  const transitionNavigation = useCallback((action) => {
+    const reduced = storage.get(STORAGE_KEYS.REDUCE_ANIMATIONS) ||
+      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (!reduced && document.startViewTransition) document.startViewTransition(action);
+    else action();
+  }, []);
 
   const navigate = useCallback(async (nextPage, data = null) => {
     const beginsAnotherTitle = (nextPage === "movie" || nextPage === "tv") &&
@@ -298,13 +332,13 @@ export default function App() {
       setMiniPlayer(null);
       setPlaybackSession(null);
     }
-    baseNavigate(nextPage, data);
-  }, [baseNavigate, createMiniHandoff, playbackSession]);
+    transitionNavigation(() => baseNavigate(nextPage, data));
+  }, [baseNavigate, createMiniHandoff, playbackSession, transitionNavigation]);
 
   const navigateBack = useCallback(async () => {
     if (playbackSession?.mode === "embedded") await createMiniHandoff();
-    baseNavigateBack();
-  }, [baseNavigateBack, createMiniHandoff, playbackSession]);
+    transitionNavigation(baseNavigateBack);
+  }, [baseNavigateBack, createMiniHandoff, playbackSession, transitionNavigation]);
 
   const handlePlaybackSession = useCallback((session) => {
     if (session) setPlaybackSession({ ...session, mode: "embedded" });
@@ -525,6 +559,7 @@ export default function App() {
         <AppOverlays model={{
           activeDownloadCount, apiKey, episodeCheckStatus, episodeDismissTimerRef,
           handleExpandMiniPlayer, handleSelectResult, hasCustomTitlebar, miniPlayer,
+          handleMiniReady,
           navigate, offline, setEpisodeCheckStatus, setMiniPlayer, setShowSearch,
           setShowShortcuts, setShowUpdateModal, setUpdateBanner, showSearch,
           showShortcuts, showUpdateModal, toast, updateBanner,

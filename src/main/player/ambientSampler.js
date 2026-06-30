@@ -1,5 +1,6 @@
 const { ipcMain, webContents, powerMonitor } = require("electron");
 const { extractPaletteFromBitmap } = require("./ambientPalette");
+const { samplingInterval } = require("./ambientSampling");
 
 const samplers = new Map();
 
@@ -11,7 +12,7 @@ function extractPalette(image) {
 function stop(targetId) {
   const sampler = samplers.get(targetId);
   if (!sampler) return;
-  clearInterval(sampler.timer);
+  clearTimeout(sampler.timer);
   samplers.delete(targetId);
 }
 
@@ -34,23 +35,27 @@ function register(getMainWindow) {
     const contentsId = Number(options.webContentsId);
     if (!targetId || !contentsId) return { ok: false, error: "Invalid ambient target." };
     stop(targetId);
-    const interval = options.profile === "low" ? 1400 : options.profile === "vivid" ? 500 : 750;
     const tick = async () => {
       const contents = webContents.fromId(contentsId);
       const owner = getMainWindow();
       if (!contents || contents.isDestroyed()) return stop(targetId);
-      if (!owner || owner.isDestroyed() || !owner.isVisible() || owner.isMinimized()) return;
-      if (powerMonitor.isOnBatteryPower()) return;
-      try {
-        if (await videoIsPaused(contents)) return;
-        const image = await contents.capturePage();
-        if (image.isEmpty()) return;
-        const colors = extractPalette(image);
-        if (!event.sender.isDestroyed()) event.sender.send("ambient:palette", { targetId, colors, at: Date.now() });
-      } catch {}
+      if (owner && !owner.isDestroyed() && owner.isVisible() && !owner.isMinimized()) {
+        try {
+          if (!(await videoIsPaused(contents))) {
+            const image = options.cropRect
+              ? await contents.capturePage(options.cropRect)
+              : await contents.capturePage();
+            if (!image.isEmpty()) {
+              const colors = extractPalette(image);
+              if (!event.sender.isDestroyed()) event.sender.send("ambient:palette", { targetId, colors, at: Date.now() });
+            }
+          }
+        } catch {}
+      }
+      const sampler = samplers.get(targetId);
+      if (sampler) sampler.timer = setTimeout(tick, samplingInterval(options.profile, powerMonitor.isOnBatteryPower()));
     };
-    const timer = setInterval(tick, interval);
-    samplers.set(targetId, { timer, contentsId });
+    samplers.set(targetId, { timer: null, contentsId });
     tick();
     return { ok: true };
   });

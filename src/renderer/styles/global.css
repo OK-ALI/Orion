@@ -31,24 +31,25 @@ body {
     radial-gradient(circle at 18% 92%, color-mix(in srgb, var(--cinema-velvet) 18%, transparent) 0, transparent 34%);
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  opacity: .42;
-  background-image:
-    radial-gradient(circle at 12% 17%, rgba(255,255,255,.48) 0 1px, transparent 1.5px),
-    radial-gradient(circle at 71% 34%, rgba(255,255,255,.32) 0 1px, transparent 1.5px),
-    radial-gradient(circle at 44% 72%, rgba(103,232,249,.26) 0 1px, transparent 1.5px);
-  background-size: 173px 173px, 241px 241px, 311px 311px;
-  animation: orion-nebula-drift 34s linear infinite alternate;
-}
+body::before,
+body::after { content:""; position:fixed; pointer-events:none; z-index:0; transition:opacity .5s ease, transform .8s var(--ease-out); }
 
-@keyframes orion-nebula-drift { to { transform: translate3d(18px, -12px, 0); } }
-body[data-motion="calm"]::before { animation: none; }
-body[data-motion="expressive"]::before { animation-duration: 22s; opacity: .58; }
+body:not([data-background])::before,
+body[data-background="orbit"]::before { width:520px; height:520px; left:-330px; top:8%; border-radius:50%; opacity:.52; background:repeating-radial-gradient(circle,transparent 0 54px,color-mix(in srgb,var(--accent) 34%,transparent) 55px 57px,transparent 58px 86px),conic-gradient(from 210deg,transparent,var(--spectral),transparent 42%); filter:blur(.2px) drop-shadow(0 0 28px var(--accent-glow)); animation:orion-orbit-left 38s ease-in-out infinite alternate; }
+body:not([data-background])::after,
+body[data-background="orbit"]::after { width:620px; height:620px; right:-410px; bottom:-8%; border-radius:50%; opacity:.42; background:repeating-radial-gradient(circle,transparent 0 66px,color-mix(in srgb,var(--spectral) 28%,transparent) 67px 69px,transparent 70px 102px),conic-gradient(from 30deg,transparent,var(--cinema-gold),transparent 38%); filter:drop-shadow(0 0 32px var(--accent-glow)); animation:orion-orbit-right 46s ease-in-out infinite alternate; }
+
+body[data-background="nebula"]::before,
+body[data-background="nebula"]::after { inset:0; opacity:.42; background-image:radial-gradient(circle at 12% 17%,rgba(255,255,255,.48) 0 1px,transparent 1.5px),radial-gradient(circle at 71% 34%,rgba(255,255,255,.32) 0 1px,transparent 1.5px),radial-gradient(circle at 44% 72%,color-mix(in srgb,var(--spectral) 36%,transparent) 0 1px,transparent 1.5px); background-size:173px 173px,241px 241px,311px 311px; animation:orion-nebula-drift 34s linear infinite alternate; }
+body[data-background="nebula"]::after { transform:scale(-1); opacity:.18; }
+body[data-background="minimal"]::before { inset:0; opacity:.24; background:radial-gradient(ellipse at 50% -20%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 58%); }
+body[data-background="minimal"]::after { opacity:0; }
+
+@keyframes orion-nebula-drift { to { transform:translate3d(18px,-12px,0); } }
+@keyframes orion-orbit-left { to { transform:rotate(8deg) translate3d(12px,-8px,0); } }
+@keyframes orion-orbit-right { to { transform:rotate(-7deg) translate3d(-10px,10px,0); } }
+body[data-motion="calm"]::before,body[data-motion="calm"]::after { animation:none!important; }
+body[data-motion="expressive"]::before,body[data-motion="expressive"]::after { animation-duration:24s; }
 
 body.compact-mode {
   --media-card-compact: 132px;
@@ -84,6 +85,39 @@ body.no-anim *::after {
 
 body[data-motion="expressive"] .media-card:hover { transform: translateY(-7px) scale(1.018); }
 body[data-motion="calm"] .media-card:hover { transform: translateY(-1px); }
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: var(--ease-out);
+}
+
+::view-transition-old(root) { animation-name: orion-page-out; }
+::view-transition-new(root) { animation-name: orion-page-in; }
+
+html[data-motion="calm"]::view-transition-old(root),
+html[data-motion="calm"]::view-transition-new(root) { animation-duration: 130ms; }
+
+html[data-motion="expressive"]::view-transition-old(root),
+html[data-motion="expressive"]::view-transition-new(root) { animation-duration: 300ms; }
+
+@keyframes orion-page-out {
+  to { opacity: 0; transform: translate3d(-5px,0,0) scale(.997); filter:blur(1px); }
+}
+
+@keyframes orion-page-in {
+  from { opacity: 0; transform: translate3d(9px,0,0) scale(.997); filter:blur(2px); }
+}
+
+.modal-panel,
+.download-dialog,
+.local-player-shell,
+.settings-card,
+.discovery-hub-card {
+  transition-property: transform, opacity, border-color, background-color, box-shadow;
+  transition-duration: var(--duration-normal);
+  transition-timing-function: var(--ease-out);
+}
 
 a {
   color: inherit;

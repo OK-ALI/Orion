@@ -12,7 +12,8 @@ export default function InterfaceSettingsGroup({
   model
 }) {
   const {
-    secInterface
+    secInterface,
+    secAppearance,
   } = model;
   return <div ref={secInterface} style={{
     scrollMarginTop: 80
@@ -24,6 +25,6 @@ export default function InterfaceSettingsGroup({
           <Divider />
           <CloseBehaviorSection />
           <Divider />
-          <AppearanceSection />
+          <AppearanceSection sectionRef={secAppearance} />
         </div>;
 }

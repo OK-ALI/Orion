@@ -79,6 +79,7 @@ export const STORAGE_KEYS = {
   AMBIENT_PROFILE: "ambientProfile",
   MINI_PLAYER_BEHAVIOR: "miniPlayerBehavior",
   MOTION_PRESET: "motionPreset",
+  BACKGROUND_SCENE: "backgroundScene",
   DISCOVERY_REGION: "discoveryRegion",
 };
 

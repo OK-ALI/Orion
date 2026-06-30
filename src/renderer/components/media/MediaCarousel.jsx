@@ -46,9 +46,9 @@ const CarouselSlot = memo(function CarouselSlot({
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
   const poster = imgUrl(item.poster_path, "w342");
 
-  const scale = isCenter ? 1 : abs === 1 ? 0.76 : 0.55;
-  const opacity = isCenter ? 1 : abs === 1 ? 0.65 : 0.35;
-  const tx = offset * 210;
+  const scale = isCenter ? 1 : abs === 1 ? 0.8 : 0.62;
+  const opacity = isCenter ? 1 : abs === 1 ? 0.78 : 0.52;
+  const tx = offset * 220;
 
   const rawDate = item.release_date || item.first_air_date;
   const isUnreleased = useMemo(() => {
@@ -99,7 +99,7 @@ const CarouselSlot = memo(function CarouselSlot({
 
         {isUnreleased && (
           <div className="media-carousel-unreleased-overlay">
-            <span className="media-carousel-unreleased-label">🔒 Coming Soon</span>
+            <span className="media-carousel-unreleased-label">Coming soon</span>
             {releaseLabel && (
               <span className="media-carousel-unreleased-date">{releaseLabel}</span>
             )}

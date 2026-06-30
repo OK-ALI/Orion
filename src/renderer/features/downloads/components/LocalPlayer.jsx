@@ -22,7 +22,7 @@ export default function LocalPlayer({
   const lastSavedRef = useRef(0);
   const [media, setMedia] = useState(null);
   const [error, setError] = useState("");
-  const [ambientColors, setAmbientColors] = useState(["#8b5cf6", "#67e8f9"]);
+  const [ambientColors, setAmbientColors] = useState(["#6d3bd1", "#168aa4"]);
   const key = useMemo(() => media ? progressKey(media) : null, [media]);
 
   useEffect(() => {
@@ -44,7 +44,14 @@ export default function LocalPlayer({
     let disposed = false;
     window.electron.getRendererWebContentsId?.().then((webContentsId) => {
       if (disposed) return;
-      window.electron.startAmbientSampling({ targetId, webContentsId, profile: ambientProfile });
+      const rect = videoRef.current?.getBoundingClientRect?.();
+      const cropRect = rect ? {
+        x: Math.max(0, Math.round(rect.x)),
+        y: Math.max(0, Math.round(rect.y)),
+        width: Math.max(1, Math.round(rect.width)),
+        height: Math.max(1, Math.round(rect.height)),
+      } : undefined;
+      window.electron.startAmbientSampling({ targetId, webContentsId, profile: ambientProfile, cropRect });
       paletteHandler = window.electron.onAmbientPalette?.((payload) => {
         if (payload?.targetId === targetId && payload.colors?.length === 2) setAmbientColors(payload.colors);
       });

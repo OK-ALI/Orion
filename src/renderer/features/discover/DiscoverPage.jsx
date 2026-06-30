@@ -3,7 +3,7 @@ import { tmdbFetch } from "../../services/tmdb";
 import MediaCard from "../../components/media/MediaCard";
 import { REGION_PRESETS, SUBFILTER_PRESETS, getRegionQueryParams } from "../../shared/utils/discoverRegions";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
-import { PROVIDER_HUBS, WORLD_HUBS, findProviderId, inferWatchRegion } from "./discoveryHubs";
+import { PROVIDER_HUBS, WORLD_HUBS, findProviderIds, inferWatchRegion } from "./discoveryHubs";
 
 const MOVIE_GENRES = [
   { id: 28, name: "Action", gradient: "linear-gradient(135deg, #e50914 0%, #7d0008 100%)" },
@@ -53,7 +53,6 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
   const [loadingRegionItems, setLoadingRegionItems] = useState(false);
   const [selectedHub, setSelectedHub] = useState(null);
   const [hubFilter, setHubFilter] = useState("all");
-  const [providerOffer, setProviderOffer] = useState("all");
   const [watchRegion, setWatchRegion] = useState(
     () => storage.get(STORAGE_KEYS.DISCOVERY_REGION) || inferWatchRegion(),
   );
@@ -151,10 +150,9 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
           const genreParam = !selectedHub && selectedGenre.id && selectedGenre.id !== "all" ? `&with_genres=${selectedGenre.id}` : "";
           let hubParam = "";
           if (selectedHub?.kind === "provider") {
-            const providerId = findProviderId(providerCatalog[mediaType] || [], selectedHub);
-            if (!providerId) return Promise.resolve({ results: [], page: pageNum, total_pages: 1 });
-            const offerParam = providerOffer === "all" ? "" : `&with_watch_monetization_types=${providerOffer}`;
-            hubParam = `&watch_region=${watchRegion}&with_watch_providers=${providerId}${offerParam}`;
+            const providerIds = findProviderIds(providerCatalog[mediaType] || [], selectedHub);
+            if (!providerIds.length) return Promise.resolve({ results: [], page: pageNum, total_pages: 1 });
+            hubParam = `&watch_region=${watchRegion}&with_watch_providers=${providerIds.join("|")}`;
           } else if (selectedHub?.kind === "world") {
             const filter = selectedHub.filters.find((entry) => entry.id === hubFilter) || selectedHub.filters[0];
             hubParam = `&${filter[mediaType]}`;
@@ -180,7 +178,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
         setLoading(false);
       }
     },
-    [selectedGenre, selectedHub, hubFilter, providerOffer, providerCatalog, watchRegion, type, sortBy, year, minRating, region, subfilter, apiKey],
+    [selectedGenre, selectedHub, hubFilter, providerCatalog, watchRegion, type, sortBy, year, minRating, region, subfilter, apiKey],
   );
 
   useEffect(() => {
@@ -189,7 +187,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
       setPage(1);
       fetchDiscoverResults(1);
     }
-  }, [selectedGenre, selectedHub, hubFilter, providerOffer, sortBy, year, minRating, region, subfilter, fetchDiscoverResults]);
+  }, [selectedGenre, selectedHub, hubFilter, sortBy, year, minRating, region, subfilter, fetchDiscoverResults]);
 
   const loadMore = () => {
     if (page < totalPages && !loading) {
@@ -205,7 +203,6 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
   const handleSelectHub = (hub, kind) => {
     setSelectedHub({ ...hub, kind });
     setHubFilter(hub.filters?.[0]?.id || "all");
-    setProviderOffer("all");
     setSelectedGenre({ id: "hub", name: hub.name, gradient: hub.gradient });
     setItems([]);
   };
@@ -249,7 +246,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
             <section className="discovery-hubs" aria-labelledby="discovery-hubs-title">
               <div className="discovery-hubs-heading">
                 <div><span className="eyebrow">Editorial hubs</span><h2 id="discovery-hubs-title">Choose your orbit</h2></div>
-                <label className="discovery-region-select">Availability region
+                <label className="discovery-region-select">Provider region
                   <select value={watchRegion} onChange={(event) => {
                     const value = event.target.value;
                     setWatchRegion(value);
@@ -263,8 +260,8 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
               <div className="discovery-hub-grid discovery-hub-grid--providers">
                 {PROVIDER_HUBS.map((hub) => {
                   const available = type === "all"
-                    ? Boolean(findProviderId(providerCatalog.movie, hub) || findProviderId(providerCatalog.tv, hub))
-                    : Boolean(findProviderId(providerCatalog[type] || [], hub));
+                    ? Boolean(findProviderIds(providerCatalog.movie, hub).length || findProviderIds(providerCatalog.tv, hub).length)
+                    : Boolean(findProviderIds(providerCatalog[type] || [], hub).length);
                   return <button key={hub.id} className="discovery-hub-card" style={{ background: hub.gradient }} onClick={() => handleSelectHub(hub, "provider")} disabled={!available}>
                     <span>{hub.name}</span><small>{available ? `Explore in ${watchRegion}` : `Unavailable in ${watchRegion}`}</small>
                   </button>;
@@ -346,20 +343,6 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
                   </button>
                 ))}
               </div>
-            )}
-
-            {selectedHub?.kind === "provider" && (
-              <label className="discovery-offer-filter">
-                Availability
-                <select value={providerOffer} onChange={(event) => setProviderOffer(event.target.value)}>
-                  <option value="all">All offers</option>
-                  <option value="flatrate">Included with subscription</option>
-                  <option value="free">Free</option>
-                  <option value="ads">Free with ads</option>
-                  <option value="rent">Rent</option>
-                  <option value="buy">Buy</option>
-                </select>
-              </label>
             )}
 
             <div className="filter-controls">

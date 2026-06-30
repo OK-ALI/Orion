@@ -61,12 +61,18 @@ export function inferWatchRegion() {
 }
 
 export function findProviderId(catalog, hub) {
+  return findProviderIds(catalog, hub)[0] || null;
+}
+
+export function findProviderIds(catalog, hub) {
   const names = hub.aliases.map((name) => name.toLowerCase());
-  const normalized = catalog.map((provider) => ({
-    provider,
-    name: String(provider.provider_name || "").toLowerCase(),
-  }));
-  const exact = normalized.find((entry) => names.includes(entry.name));
-  if (exact) return exact.provider.provider_id;
-  return normalized.find((entry) => names.some((name) => entry.name.includes(name)))?.provider.provider_id || null;
+  const matches = (catalog || []).filter((provider) => {
+    const providerName = String(provider.provider_name || "").trim().toLowerCase();
+    return names.some((name) =>
+      providerName === name ||
+      providerName.startsWith(`${name} `) ||
+      (name.length >= 6 && providerName.includes(name)),
+    );
+  });
+  return [...new Set(matches.map((provider) => Number(provider.provider_id)).filter(Boolean))];
 }

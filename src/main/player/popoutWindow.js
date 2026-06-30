@@ -1,6 +1,7 @@
 const path = require("path");
-const { BrowserWindow, ipcMain, powerMonitor } = require("electron");
+const { app, BrowserWindow, ipcMain, powerMonitor } = require("electron");
 const { extractPaletteFromBitmap } = require("./ambientPalette");
+const { samplingInterval } = require("./ambientSampling");
 
 const POPOUT_CSS = `
   video::cue {
@@ -76,24 +77,28 @@ function createPopoutWindowController({
     if (isOpen()) popoutWindow.close();
   };
   const stopAmbient = () => {
-    if (ambientTimer) clearInterval(ambientTimer);
+    if (ambientTimer) clearTimeout(ambientTimer);
     ambientTimer = null;
   };
   const startAmbient = () => {
     stopAmbient();
     const tick = async () => {
-      if (!isOpen() || popoutWindow.isMinimized() || !popoutWindow.isVisible() || powerMonitor.isOnBatteryPower()) return;
-      try {
-        const state = await snapshotState();
-        if (state?.paused) return;
-        const image = await popoutWindow.webContents.capturePage();
-        if (image.isEmpty()) return;
-        const sample = image.resize({ width: 32, height: 18, quality: "good" });
-        const colors = extractPaletteFromBitmap(sample.toBitmap());
-        popoutWindow.webContents.send("popout-ambient-palette", colors);
-      } catch {}
+      if (!isOpen()) return;
+      if (!popoutWindow.isMinimized() && popoutWindow.isVisible()) {
+        try {
+          const state = await snapshotState();
+          if (!state?.paused) {
+            const image = await popoutWindow.webContents.capturePage();
+            if (!image.isEmpty()) {
+              const sample = image.resize({ width: 32, height: 18, quality: "good" });
+              const colors = extractPaletteFromBitmap(sample.toBitmap());
+              popoutWindow.webContents.send("popout-ambient-palette", colors);
+            }
+          }
+        } catch {}
+      }
+      ambientTimer = setTimeout(tick, samplingInterval("balanced", powerMonitor.isOnBatteryPower()));
     };
-    ambientTimer = setInterval(tick, 900);
     tick();
   };
   const notifyMain = (channel, payload) => {
@@ -231,14 +236,14 @@ function createPopoutWindowController({
     popoutWindow.setAlwaysOnTop(true, "screen-saver");
     popoutWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     popoutWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-    popoutWindow.webContents.on("did-fail-load", (_event, code, description, failedUrl, isMainFrame) => {
-      if (isMainFrame) console.error("[popout] load failed", { code, description, failedUrl });
+    popoutWindow.webContents.on("did-fail-load", (_event, code, description, _failedUrl, isMainFrame) => {
+      if (isMainFrame && !app.isPackaged) console.error("[popout] load failed", { code, description });
     });
     popoutWindow.webContents.on("render-process-gone", (_event, details) => {
-      console.error("[popout] renderer exited", details);
+      if (!app.isPackaged) console.error("[popout] renderer exited", details?.reason || "unknown");
     });
-    popoutWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
-      console.error("[popout] preload failed", preloadPath, error?.message || error);
+    popoutWindow.webContents.on("preload-error", (_event, _preloadPath, error) => {
+      if (!app.isPackaged) console.error("[popout] preload failed", error?.message || error);
     });
     popoutWindow.webContents.on("did-attach-webview", (_attachedEvent, contents) => {
       contents.setWindowOpenHandler(() => ({ action: "deny" }));

@@ -126,6 +126,9 @@ function endCaptureSession(sessionId) {
   if (!session) return false;
   session.status = "ended";
   session.updatedAt = Date.now();
+  for (const [webContentsId, boundSessionId] of webContentsSessions) {
+    if (boundSessionId === sessionId) webContentsSessions.delete(webContentsId);
+  }
   if (activeSessionId === sessionId) activeSessionId = null;
   return true;
 }

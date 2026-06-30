@@ -493,11 +493,14 @@
 }
 
 .homepage-content {
-    padding: 22px 38px 70px;
+    position: relative;
+    z-index: 2;
+    margin-top: -38px;
+    padding: 58px 38px 70px;
+    background: linear-gradient(180deg, transparent 0, color-mix(in srgb, var(--bg-base) 92%, transparent) 38px, transparent 150px);
 }
 
 .homepage-content > *:not(:last-child) {
-    border-bottom: 1px solid var(--border);
     padding-bottom: 28px;
     margin-bottom: 28px;
 }

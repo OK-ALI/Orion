@@ -103,37 +103,28 @@
 
 .sidebar-edge-rail {
   position: absolute;
-  top: 76px;
-  right: -18px;
-  width: 30px;
-  height: 62px;
-  display: grid;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
-  border-radius: 0 14px 14px 0;
-  background: color-mix(in srgb, var(--bg-elevated) 92%, var(--accent) 8%);
-  color: var(--text-secondary);
-  box-shadow: 8px 8px 24px rgba(0,0,0,.24), inset 1px 0 rgba(255,255,255,.04);
+  top: 72px;
+  right: -7px;
+  width: 12px;
+  height: 118px;
+  border: 0;
+  border-radius: 999px;
+  background:linear-gradient(180deg,var(--spectral),var(--accent));
+  box-shadow:0 0 22px var(--accent-glow);
   cursor: pointer;
-  opacity: .9;
-  transition: color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+  opacity:.78;
+  transition:opacity var(--duration-fast) var(--ease-out),transform var(--duration-fast) var(--ease-out);
 }
-
-.sidebar-edge-orbit { position:absolute; width:7px; height:7px; left:5px; border-radius:50%; background:var(--spectral); box-shadow:0 0 10px var(--spectral), 0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent); }
-.sidebar-edge-chevron { margin-left:8px; transition:transform var(--duration-normal) var(--ease-out); }
 
 .sidebar:hover .sidebar-edge-rail,
 .sidebar-edge-rail:hover {
   opacity: 1;
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-hover) 82%, var(--accent) 18%);
-  transform: translateX(2px);
+  transform:scaleX(1.12);
 }
 
 .sidebar.pinned .sidebar-edge-rail {
-  color: var(--accent-hover);
-  background: color-mix(in srgb, var(--bg-elevated) 84%, var(--accent) 16%);
-  opacity: 1;
+  background:linear-gradient(180deg,var(--accent),var(--spectral));
+  opacity:.72;
 }
 
 .sidebar-brand-row {

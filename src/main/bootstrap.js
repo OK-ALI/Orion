@@ -354,9 +354,8 @@ ipcMain.on("mini-player-status", (_, status) => {
   trayController.setMiniPlayerStatus(status);
 });
 
-ipcMain.on("log-to-terminal", (_, msg) => {
-  console.log("[Renderer Log]", msg);
-});
+// Retained as a no-op compatibility channel for v1.0.8 renderer/preload clients.
+ipcMain.on("log-to-terminal", () => {});
 
 ipcMain.on("set-close-behavior", (_, behavior) => {
   closeBehavior = behavior;
