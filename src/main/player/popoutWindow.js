@@ -80,6 +80,23 @@ function createPopoutWindowController({
     if (ambientTimer) clearTimeout(ambientTimer);
     ambientTimer = null;
   };
+  const queryVideoRect = async () => {
+    if (!isOpen()) return null;
+    const frames = [popoutWindow.webContents.mainFrame];
+    for (let i = 0; i < frames.length; i += 1) frames.push(...(frames[i].frames || []));
+    for (const frame of frames) {
+      try {
+        const rect = await frame.executeJavaScript(`(() => {
+          const v = document.querySelector('video');
+          if (!v) return null;
+          const box = v.getBoundingClientRect();
+          return { x: Math.max(0, Math.round(box.left)), y: Math.max(0, Math.round(box.top)), width: Math.max(1, Math.round(box.width)), height: Math.max(1, Math.round(box.height)) };
+        })()`);
+        if (rect?.width && rect?.height) return rect;
+      } catch {}
+    }
+    return null;
+  };
   const startAmbient = () => {
     stopAmbient();
     const tick = async () => {
@@ -88,7 +105,10 @@ function createPopoutWindowController({
         try {
           const state = await snapshotState();
           if (!state?.paused) {
-            const image = await popoutWindow.webContents.capturePage();
+            const cropRect = await queryVideoRect();
+            const image = cropRect
+              ? await popoutWindow.webContents.capturePage(cropRect)
+              : await popoutWindow.webContents.capturePage();
             if (!image.isEmpty()) {
               const sample = image.resize({ width: 32, height: 18, quality: "good" });
               const colors = extractPaletteFromBitmap(sample.toBitmap());

@@ -116,6 +116,7 @@ export default function LocalPlayer({
       item: historyItem(),
       subtitles: media.subtitles || [],
       download,
+      sourceRect: video?.getBoundingClientRect?.() || null,
     });
     onClose();
   };

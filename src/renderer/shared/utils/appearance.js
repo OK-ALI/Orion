@@ -77,6 +77,52 @@ export function applyAccentColor(presetId) {
   root.style.setProperty("--border-accent", preset.border);
 }
 
+export const FONT_PRESETS = [
+  {
+    id: "orion",
+    label: "Orion",
+    description: "Space Grotesk headings with Inter body copy",
+    body: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    heading: '"Space Grotesk", "Inter", sans-serif',
+  },
+  {
+    id: "sora",
+    label: "Sora",
+    description: "Futurist headings with relaxed Manrope reading text",
+    body: '"Manrope", "Inter", sans-serif',
+    heading: '"Sora", "Manrope", sans-serif',
+  },
+  {
+    id: "outfit",
+    label: "Outfit",
+    description: "Rounded contemporary titles with clean interface rhythm",
+    body: '"Inter", "Manrope", sans-serif',
+    heading: '"Outfit", "Inter", sans-serif',
+  },
+  {
+    id: "editorial",
+    label: "Editorial",
+    description: "Fraunces for prestige headers with modern supporting text",
+    body: '"Manrope", "Inter", sans-serif',
+    heading: '"Fraunces", "Manrope", serif',
+  },
+  {
+    id: "screen",
+    label: "Screen",
+    description: "Sharp all-screen typography tuned for long browsing sessions",
+    body: '"Inter", "Manrope", sans-serif',
+    heading: '"Manrope", "Inter", sans-serif',
+  },
+];
+
+export function applyFontPreset(presetId) {
+  const preset = FONT_PRESETS.find((item) => item.id === presetId) || FONT_PRESETS[0];
+  const root = document.documentElement;
+  root.style.setProperty("--font-body", preset.body);
+  root.style.setProperty("--font-heading", preset.heading);
+  root.style.setProperty("--font-display", preset.heading);
+}
+
 // ── Theme presets ─────────────────────────────────────────────────────────────
 
 export const THEME_PRESETS = [

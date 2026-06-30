@@ -192,7 +192,7 @@ function injectTitlebar() {
   }
 
   showBar();
-  injectPlaybackControls(bar, btns);
+  injectAmbientGlow();
 
   ipcRenderer.invoke("popout-window-is-maximized").then((isMax) => {
     applyMaximizeIcon(maximizeBtn, isMax);
@@ -207,37 +207,8 @@ function injectTitlebar() {
   }
 }
 
-function injectPlaybackControls(bar, windowButtons) {
-  if (document.getElementById("__orion_transport__")) return;
-  const transport = document.createElement("div");
-  transport.id = "__orion_transport__";
-  css(transport, {
-    position: "relative", zIndex: "2147483647", display: "flex", alignItems: "center", gap: "6px",
-    flex: "1 1 320px", maxWidth: "420px", minWidth: "150px", minHeight: "32px", padding: "2px 8px",
-    border: "1px solid rgba(255,255,255,.1)", borderRadius: "9px",
-    background: "rgba(255,255,255,.055)", backdropFilter: "blur(12px)",
-    boxShadow: "0 0 26px rgba(139,92,246,.16)",
-    color: "#f7f2ea", fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
-    opacity: ".92", transition: "opacity .2s",
-  });
-  const button = (label, title, action, value) => {
-    const el = document.createElement("button");
-    el.textContent = label; el.title = title;
-    css(el, { border:"0", borderRadius:"8px", minWidth:"34px", height:"28px", padding:"0 8px", background:"rgba(255,255,255,.08)", color:"inherit", cursor:"pointer", fontWeight:"700" });
-    el.addEventListener("click", () => ipcRenderer.invoke("popout-control", action, value));
-    return el;
-  };
-  const play = button("Pause", "Play or pause", "toggle", 0);
-  const back = button("−10", "Back 10 seconds", "seek", -10);
-  const next = button("+10", "Forward 10 seconds", "seek", 10);
-  const mute = button("Sound", "Mute or unmute", "mute", 0);
-  const progress = document.createElement("input");
-  progress.type = "range"; progress.min = "0"; progress.max = "1"; progress.step = "1"; progress.value = "0";
-  progress.setAttribute("aria-label", "Playback position");
-  css(progress, { flex:"1", minWidth:"70px", accentColor:"#8b5cf6" });
-  progress.addEventListener("change", () => ipcRenderer.invoke("popout-control", "position", Number(progress.value)));
-  transport.append(back, play, next, progress, mute);
-  bar.insertBefore(transport, windowButtons);
+function injectAmbientGlow() {
+  if (document.getElementById("__orion_ambient__")) return;
   const ambient = document.createElement("div");
   ambient.id = "__orion_ambient__";
   css(ambient, { position:"fixed", inset:"0", zIndex:"2147483645", pointerEvents:"none", background:"linear-gradient(90deg,rgba(109,59,209,.22),transparent 24%,transparent 76%,rgba(22,138,164,.2))", boxShadow:"inset 54px 0 96px rgba(109,59,209,.34), inset -54px 0 96px rgba(22,138,164,.3)", transition:"box-shadow .8s ease, background .8s ease" });
@@ -246,27 +217,7 @@ function injectPlaybackControls(bar, windowButtons) {
     if (!Array.isArray(colors) || colors.length < 2) return;
     ambient.style.boxShadow = `inset 44px 0 92px ${colors[0]}66, inset -44px 0 92px ${colors[1]}55`;
     ambient.style.background = `linear-gradient(90deg,${colors[0]}38,transparent 25%,transparent 75%,${colors[1]}34)`;
-    transport.style.boxShadow = `0 16px 45px rgba(0,0,0,.5), 0 0 38px ${colors[0]}55`;
   });
-  const sync = async () => {
-    try {
-      const state = await ipcRenderer.invoke("popout-playback-state");
-      if (!state?.ok) return;
-      play.textContent = state.paused ? "Play" : "Pause";
-      mute.textContent = state.muted ? "Muted" : "Sound";
-      progress.max = String(Math.max(1, Number(state.duration) || 1));
-      progress.value = String(Math.min(Number(progress.max), Number(state.currentTime) || 0));
-    } catch {}
-  };
-  sync();
-  setInterval(sync, 1000);
-  const fit = () => {
-    const compact = window.innerWidth < 520;
-    back.style.display = compact ? "none" : "block";
-    next.style.display = compact ? "none" : "block";
-  };
-  fit();
-  window.addEventListener("resize", fit);
 }
 
 if (document.readyState === "loading") {

@@ -359,7 +359,9 @@ export default function MoviePlayer({ model }) {
                       mediaType: "movie",
                       mediaId: item.id,
                       posterPath: item.poster_path,
+                      backdropPath: item.backdrop_path,
                       item,
+                      sourceRect: playerWrapRef.current?.getBoundingClientRect?.() || null,
                     });
                     onBack();
                   }}

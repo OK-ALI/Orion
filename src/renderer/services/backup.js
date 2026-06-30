@@ -43,6 +43,7 @@ export const BACKUP_KEYS = [
   "accentInPlayer",
   "theme",
   "customThemeVars",
+  "fontPreset",
   "fontSize",
   "compactMode",
   "reduceAnimations",

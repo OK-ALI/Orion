@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { storage, STORAGE_KEYS, secureStorage } from "../../../services/settingsStore";
 import { clearTmdbCache } from "../../../services/tmdb";
-import { ACCENT_PRESETS, applyAccentColor, THEME_PRESETS, applyTheme, DEFAULT_CUSTOM_VARS } from "../../../shared/utils/appearance";
+import { ACCENT_PRESETS, applyAccentColor, applyFontPreset, THEME_PRESETS, applyTheme, DEFAULT_CUSTOM_VARS, FONT_PRESETS } from "../../../shared/utils/appearance";
 import { SUBTITLE_LANGUAGES } from "../../../shared/utils/subtitles";
 import { SettingsSelect, Toggle } from "../components/SettingsControls";
 
 export function AppearanceSection({ sectionRef = null }) {
   const [accent, setAccent] = useState(
     () => storage.get(STORAGE_KEYS.ACCENT_COLOR) || "orion",
+  );
+  const [fontPreset, setFontPreset] = useState(
+    () => storage.get(STORAGE_KEYS.FONT_PRESET) || "orion",
   );
   const [fontSize, setFontSize] = useState(
     () => storage.get(STORAGE_KEYS.FONT_SIZE) || "normal",
@@ -49,6 +52,7 @@ export function AppearanceSection({ sectionRef = null }) {
   // Remember the committed (saved) values to revert on unmount if unsaved
   const committedRef = useRef({
     accent: storage.get(STORAGE_KEYS.ACCENT_COLOR) || "orion",
+    fontPreset: storage.get(STORAGE_KEYS.FONT_PRESET) || "orion",
     theme: storage.get(STORAGE_KEYS.THEME) || "dark",
     customVars: storage.get(STORAGE_KEYS.CUSTOM_THEME_VARS) || {
       ...DEFAULT_CUSTOM_VARS,
@@ -61,8 +65,9 @@ export function AppearanceSection({ sectionRef = null }) {
   useEffect(() => {
     return () => {
       if (!savedRef.current) {
-        const { accent, theme, customVars, backgroundScene: committedBackground } = committedRef.current;
+        const { accent, fontPreset, theme, customVars, backgroundScene: committedBackground } = committedRef.current;
         applyAccentColor(accent);
+        applyFontPreset(fontPreset);
         applyTheme(theme, theme === "custom" ? customVars : null);
         document.body.dataset.background = committedBackground;
       }
@@ -90,6 +95,7 @@ export function AppearanceSection({ sectionRef = null }) {
   const handleSave = () => {
     storage.set(STORAGE_KEYS.ACCENT_COLOR, accent);
     storage.set(STORAGE_KEYS.ACCENT_IN_PLAYER, accentInPlayer);
+    storage.set(STORAGE_KEYS.FONT_PRESET, fontPreset);
     storage.set(STORAGE_KEYS.FONT_SIZE, fontSize);
     storage.set(STORAGE_KEYS.COMPACT_MODE, compact ? 1 : 0);
     storage.set(STORAGE_KEYS.REDUCE_ANIMATIONS, noAnim ? 1 : 0);
@@ -103,6 +109,7 @@ export function AppearanceSection({ sectionRef = null }) {
     }
     // Apply immediately
     applyAccentColor(accent);
+    applyFontPreset(fontPreset);
     applyTheme(theme, theme === "custom" ? customVars : null);
     const zoomMap = { sm: 0.85, normal: 1, lg: 1.15 };
     if (window.electron?.setZoomFactor)
@@ -115,7 +122,7 @@ export function AppearanceSection({ sectionRef = null }) {
     document.body.dataset.background = backgroundScene;
     // Mark as saved so the cleanup effect doesn't revert
     savedRef.current = true;
-    committedRef.current = { accent, theme, customVars, backgroundScene };
+    committedRef.current = { accent, fontPreset, theme, customVars, backgroundScene };
     // Notify App.jsx so playerSettings prop (accent + lang) is refreshed
     window.dispatchEvent(new CustomEvent("orion:player-settings-changed"));
     setSaved(true);
@@ -420,6 +427,37 @@ export function AppearanceSection({ sectionRef = null }) {
               Vidking). VidSrc does not support colour theming.
             </div>
           </div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: "var(--text2)",
+            marginBottom: 10,
+          }}
+        >
+          Font style
+        </div>
+        <div className="orion-font-presets">
+          {FONT_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              className={`orion-font-preset${fontPreset === preset.id ? " active" : ""}`}
+              onClick={() => {
+                savedRef.current = false;
+                setFontPreset(preset.id);
+                applyFontPreset(preset.id);
+              }}
+            >
+              <strong style={{ fontFamily: preset.heading }}>Orion Cinema</strong>
+              <span style={{ fontFamily: preset.body }}>Browse, discover, continue watching</span>
+              <small>{preset.description}</small>
+            </button>
+          ))}
         </div>
       </div>
 

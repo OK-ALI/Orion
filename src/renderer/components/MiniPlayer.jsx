@@ -1,11 +1,20 @@
 import React, { useState, useEffect, useRef } from "react";
 import { setupAmbientGlow } from "../shared/utils/playerAmbient";
 import { getReadyWebContentsId } from "../features/player/services/webviewLifecycle";
+import {
+  getMiniPlayerBounds,
+  getMiniPlayerStorageKey,
+  MINI_PLAYER_CHROME_HEIGHT,
+  MINI_PLAYER_DEFAULT_WIDTH,
+} from "../shared/utils/miniPlayerGeometry";
 
 export default function MiniPlayer({ url, title, context, initialState, subtitles = [], onClose, onExpand, onPopOut, onProgress, onReady, active = true }) {
   const isLocal = String(url || "").startsWith("orion-media://");
   const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [size, setSize] = useState({ width: 360, height: 272 });
+  const [size, setSize] = useState({
+    width: MINI_PLAYER_DEFAULT_WIDTH,
+    height: Math.round(MINI_PLAYER_DEFAULT_WIDTH * (9 / 16)) + MINI_PLAYER_CHROME_HEIGHT,
+  });
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
 
@@ -69,7 +78,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       ambientCleanupRef.current = setupAmbientGlow(wv, (image, colors) => {
         setAmbientImage(image);
         if (Array.isArray(colors)) setAmbientColors(colors);
-      });
+      }, { captureElement: playerRef.current });
       if (!restoredRef.current && window.electron?.setVideoState) {
         restoredRef.current = true;
         const restore = () => window.electron.setVideoState(webContentsIdRef.current, {
@@ -105,7 +114,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       ambientCleanupRef.current?.();
       window.clearTimeout(readyTimeoutRef.current);
     };
-  }, [initialState, isLocal]);
+  }, [initialState, isLocal, position.x, position.y, size.width, size.height]);
 
   useEffect(() => {
     if (!isLocal) return;
@@ -161,32 +170,6 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
     const timer = window.setInterval(updatePlaybackState, 1000);
     return () => window.clearInterval(timer);
   }, [url, isLocal, onProgress]);
-
-  const controlVideo = async (action) => {
-    if (isLocal) {
-      const video = nativeVideoRef.current;
-      if (!video) return;
-      if (action === "play") video.play().catch(() => {});
-      if (action === "pause") video.pause();
-      if (action === "mute") video.muted = true;
-      if (action === "unmute") video.muted = false;
-      setPaused(video.paused); setMuted(video.muted);
-      return;
-    }
-    const id = webContentsIdRef.current;
-    if (!id || !window.electron?.controlVideo) {
-      setLoadError("Mini-player controls are unavailable. Restart Orion and try again.");
-      return;
-    }
-    const result = await window.electron.controlVideo(id, action);
-    if (!result?.ok) {
-      setLoadError(result?.error || "The video is still loading.");
-      return;
-    }
-    setLoadError("");
-    setPaused(Boolean(result.paused));
-    setMuted(Boolean(result.muted));
-  };
 
   const snapshot = async () => {
     if (isLocal && nativeVideoRef.current) {
@@ -250,30 +233,9 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
 
   // Load saved position and size on mount
   useEffect(() => {
-    const saved = localStorage.getItem("orion-mini-player-settings");
-    let initialWidth = 360;
-    let initialHeight = Math.round(initialWidth * (9 / 16)) + 70;
-    let initialX = window.innerWidth - initialWidth - 24;
-    let initialY = window.innerHeight - initialHeight - 24;
-
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.width) initialWidth = parsed.width;
-        if (parsed.width) initialHeight = Math.round(parsed.width * (9 / 16)) + 70;
-        if (parsed.x !== undefined) initialX = parsed.x;
-        if (parsed.y !== undefined) initialY = parsed.y;
-      } catch (e) {
-        console.error("Error loading mini-player settings:", e);
-      }
-    }
-
-    // Keep within bounds
-    initialX = Math.max(10, Math.min(window.innerWidth - initialWidth - 10, initialX));
-    initialY = Math.max(10, Math.min(window.innerHeight - initialHeight - 10, initialY));
-
-    setSize({ width: initialWidth, height: initialHeight });
-    setPosition({ x: initialX, y: initialY });
+    const bounds = getMiniPlayerBounds(window);
+    setSize({ width: bounds.width, height: bounds.height });
+    setPosition({ x: bounds.x, y: bounds.y });
   }, []);
 
   // Update bounds when window resizes
@@ -330,8 +292,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
         
         // Calculate new width
         let newWidth = playerStart.current.w + dx;
-        newWidth = Math.max(280, Math.min(640, newWidth)); // constraints: 280 to 640
-        const newHeight = Math.round(newWidth * (9 / 16)) + 70;
+        newWidth = Math.max(320, Math.min(640, newWidth)); // keep embedded controls usable
 
         // Constrain so it doesn't expand offscreen to the right/bottom
         if (playerStart.current.x + newWidth > window.innerWidth - 10) {
@@ -340,7 +301,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
 
         setSize({
           width: newWidth,
-          height: Math.round(newWidth * (9 / 16)) + 70
+          height: Math.round(newWidth * (9 / 16)) + MINI_PLAYER_CHROME_HEIGHT,
         });
       }
     };
@@ -371,7 +332,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
         
         // Persist settings
         localStorage.setItem(
-          "orion-mini-player-settings",
+          getMiniPlayerStorageKey(),
           JSON.stringify({ x: finalX, y: finalY, width: size.width, height: size.height })
         );
       }
@@ -379,7 +340,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       if (isResizing) {
         setIsResizing(false);
         localStorage.setItem(
-          "orion-mini-player-settings",
+          getMiniPlayerStorageKey(),
           JSON.stringify({ x: position.x, y: position.y, width: size.width, height: size.height })
         );
       }
@@ -422,30 +383,6 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
             {context && <small>{context}</small>}
           </div>
           <div className="orion-mini-player-actions">
-            <button
-              className="orion-mini-player-btn"
-              onClick={() => controlVideo(paused ? "play" : "pause")}
-              title={paused ? "Play" : "Pause"}
-              aria-label={paused ? "Play" : "Pause"}
-            >
-              {paused ? (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-              ) : (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z" /></svg>
-              )}
-            </button>
-            <button
-              className="orion-mini-player-btn"
-              onClick={() => controlVideo(muted ? "unmute" : "mute")}
-              title={muted ? "Unmute" : "Mute"}
-              aria-label={muted ? "Unmute" : "Mute"}
-            >
-              {muted ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="m23 9-6 6m0-6 6 6" /></svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18 6a9 9 0 0 1 0 12" /></svg>
-              )}
-            </button>
             {onPopOut && (
               <button
                 className="orion-mini-player-btn"
@@ -486,7 +423,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
         {/* Webview Content */}
         <div className="orion-mini-player-content">
           {isLocal ? (
-            <video ref={nativeVideoRef} className="orion-mini-player-webview" src={url} playsInline>
+            <video ref={nativeVideoRef} className="orion-mini-player-webview" src={url} playsInline controls>
               {subtitles.map((subtitle, index) => <track key={subtitle.url} kind="subtitles" src={subtitle.url} srcLang={subtitle.lang || "en"} label={subtitle.lang || `Subtitle ${index + 1}`} default={index === 0} />)}
             </video>
           ) : (
@@ -520,20 +457,6 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
           <div
             className="orion-mini-player-resize-handle"
             onMouseDown={handleResizeStart}
-          />
-        </div>
-        <div className="orion-mini-player-transport" aria-label="Mini-player controls">
-          <button onClick={() => applyState({ currentTime: Math.max(0, currentTime - 10) })} aria-label="Seek back 10 seconds">−10</button>
-          <input
-            type="range" min="0" max={Math.max(1, duration)} step="1" value={Math.min(currentTime, Math.max(1, duration))}
-            onChange={(event) => applyState({ currentTime: Number(event.target.value) })}
-            aria-label="Playback position"
-          />
-          <button onClick={() => applyState({ currentTime: Math.min(duration || currentTime + 10, currentTime + 10) })} aria-label="Seek forward 10 seconds">+10</button>
-          <input
-            className="orion-mini-player-volume" type="range" min="0" max="1" step="0.05" value={volume}
-            onChange={(event) => applyState({ volume: Number(event.target.value), muted: false })}
-            aria-label="Volume"
           />
         </div>
       </div>

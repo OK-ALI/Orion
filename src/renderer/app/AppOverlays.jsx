@@ -4,13 +4,14 @@ import UpdateModal from "../components/UpdateModal";
 import MiniPlayer from "../components/MiniPlayer";
 import LocalPlayer from "../features/downloads/components/LocalPlayer";
 import { storage, STORAGE_KEYS } from "../services/settingsStore";
+import { imgUrl } from "../services/tmdb";
 
 export default function AppOverlays({ model }) {
   const {
     activeDownloadCount, apiKey, episodeCheckStatus, episodeDismissTimerRef,
     handleExpandMiniPlayer, handleSelectResult, hasCustomTitlebar, miniPlayer,
-    handleMiniReady,
-    navigate, offline, setEpisodeCheckStatus, setMiniPlayer, setShowSearch,
+    handleMiniReady, miniTransition,
+    navigate, offline, openMiniPlayer, setEpisodeCheckStatus, setMiniPlayer, setShowSearch,
     setShowShortcuts, setShowUpdateModal, setUpdateBanner, showSearch,
     showShortcuts, showUpdateModal, toast, updateBanner, saveProgress, markWatched,
     expandedLocalDownload, setExpandedLocalDownload, addHistory, handleDeleteDownload,
@@ -86,6 +87,33 @@ export default function AppOverlays({ model }) {
           />
         )}
         {toast && <div className="toast">{toast}</div>}
+        {miniTransition && (
+          <div
+            className="orion-mini-transition"
+            aria-hidden="true"
+            style={{
+              left: miniTransition.sourceRect.left,
+              top: miniTransition.sourceRect.top,
+              width: miniTransition.sourceRect.width,
+              height: miniTransition.sourceRect.height,
+              "--mini-target-x": `${miniTransition.targetRect.left - miniTransition.sourceRect.left}px`,
+              "--mini-target-y": `${miniTransition.targetRect.top - miniTransition.sourceRect.top}px`,
+              "--mini-target-scale-x": `${miniTransition.targetRect.width / miniTransition.sourceRect.width}`,
+              "--mini-target-scale-y": `${miniTransition.targetRect.height / miniTransition.sourceRect.height}`,
+              backgroundImage: miniTransition.backdropPath
+                ? `linear-gradient(180deg, rgba(6,8,14,0.12), rgba(6,8,14,0.78)), url(${imgUrl(miniTransition.backdropPath, "w780")})`
+                : miniTransition.posterPath
+                  ? `linear-gradient(180deg, rgba(6,8,14,0.2), rgba(6,8,14,0.82)), url(${imgUrl(miniTransition.posterPath, "w342")})`
+                  : undefined,
+            }}
+          >
+            <div className="orion-mini-transition-shine" />
+            <div className="orion-mini-transition-caption">
+              <strong>{miniTransition.title}</strong>
+              <span>Continuing in mini-player</span>
+            </div>
+          </div>
+        )}
 
         {/* ── Episode check status pill / result card ── */}
         {episodeCheckStatus && (
@@ -319,7 +347,7 @@ export default function AppOverlays({ model }) {
             onHistory={addHistory}
             onSaveProgress={saveProgress}
             onMarkWatched={markWatched}
-            onOpenMiniPlayer={(session) => { setMiniPlayer(session); setExpandedLocalDownload(null); }}
+            onOpenMiniPlayer={(session) => { openMiniPlayer?.(session); setExpandedLocalDownload(null); }}
             onForget={async (item) => {
               const result = await window.electron.deleteDownload({ id: item.id, filePath: null });
               if (result?.ok) handleDeleteDownload?.(item.id);

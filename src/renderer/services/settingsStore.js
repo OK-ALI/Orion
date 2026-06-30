@@ -40,6 +40,7 @@ export const STORAGE_KEYS = {
   ACCENT_IN_PLAYER: "accentInPlayer",
   THEME: "theme",
   CUSTOM_THEME_VARS: "customThemeVars",
+  FONT_PRESET: "fontPreset",
   FONT_SIZE: "fontSize",
   COMPACT_MODE: "compactMode",
   REDUCE_ANIMATIONS: "reduceAnimations",

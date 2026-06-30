@@ -33,7 +33,11 @@
     "dist:mac": "cross-env ELECTRON_DIST=1 vite build && electron-builder --mac --universal --publish never"
   },
   "dependencies": {
+    "@fontsource/fraunces": "^5.2.9",
     "@fontsource/inter": "^5.2.8",
+    "@fontsource/manrope": "^5.2.8",
+    "@fontsource/outfit": "^5.2.8",
+    "@fontsource/sora": "^5.2.8",
     "@fontsource/space-grotesk": "^5.2.8",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

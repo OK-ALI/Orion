@@ -15,6 +15,10 @@ describe("MiniPlayer", () => {
     };
 
     const { container } = render(<MiniPlayer url="https://player.test/embed" title="Test title" initialState={{ paused: false, muted: false, volume: 1 }} onClose={() => {}} onExpand={() => {}} />);
+    expect(screen.queryByLabelText("Seek back 10 seconds")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Seek forward 10 seconds")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Volume")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Mute")).not.toBeInTheDocument();
     const webview = container.querySelector("webview");
     webview.getWebContentsId = () => 42;
     webview.insertCSS = vi.fn(async () => "css-key");

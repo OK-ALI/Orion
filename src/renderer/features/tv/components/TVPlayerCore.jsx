@@ -585,14 +585,14 @@ export default function TVPlayerCore({ model }) {
                           season: playerEp?.season,
                           episode: playerEp?.episode,
                           posterPath: item.poster_path,
-                          item,
+                          backdropPath: item.backdrop_path,
+                          item, sourceRect: playerWrapRef.current?.getBoundingClientRect?.() || null,
                         });
                         onBack();
                       }}
                     >
                       <MiniPlayerIcon />
                     </button>
-                    
                     {/* Pop-out button */}
                     <button
                       className="player-overlay-btn"

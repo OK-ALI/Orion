@@ -32,19 +32,24 @@ async function videoIsPaused(contents) {
 function register(getMainWindow) {
   ipcMain.handle("ambient:start", async (event, options = {}) => {
     const targetId = String(options.targetId || "");
-    const contentsId = Number(options.webContentsId);
-    if (!targetId || !contentsId) return { ok: false, error: "Invalid ambient target." };
+    const captureContentsId = Number(options.captureWebContentsId || options.webContentsId);
+    const playbackContentsId = Number(options.playbackWebContentsId || captureContentsId);
+    if (!targetId || !captureContentsId) return { ok: false, error: "Invalid ambient target." };
     stop(targetId);
     const tick = async () => {
-      const contents = webContents.fromId(contentsId);
+      const captureContents = webContents.fromId(captureContentsId);
+      const playbackContents = webContents.fromId(playbackContentsId);
       const owner = getMainWindow();
-      if (!contents || contents.isDestroyed()) return stop(targetId);
+      if (!captureContents || captureContents.isDestroyed()) return stop(targetId);
       if (owner && !owner.isDestroyed() && owner.isVisible() && !owner.isMinimized()) {
         try {
-          if (!(await videoIsPaused(contents))) {
+          const stateTarget = playbackContents && !playbackContents.isDestroyed()
+            ? playbackContents
+            : captureContents;
+          if (!(await videoIsPaused(stateTarget))) {
             const image = options.cropRect
-              ? await contents.capturePage(options.cropRect)
-              : await contents.capturePage();
+              ? await captureContents.capturePage(options.cropRect)
+              : await captureContents.capturePage();
             if (!image.isEmpty()) {
               const colors = extractPalette(image);
               if (!event.sender.isDestroyed()) event.sender.send("ambient:palette", { targetId, colors, at: Date.now() });
@@ -55,7 +60,7 @@ function register(getMainWindow) {
       const sampler = samplers.get(targetId);
       if (sampler) sampler.timer = setTimeout(tick, samplingInterval(options.profile, powerMonitor.isOnBatteryPower()));
     };
-    samplers.set(targetId, { timer: null, contentsId });
+    samplers.set(targetId, { timer: null, captureContentsId, playbackContentsId });
     tick();
     return { ok: true };
   });

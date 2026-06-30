@@ -319,6 +319,68 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  z-index: 1;
+  transition:
+    color var(--duration-normal) var(--ease-out),
+    filter var(--duration-normal) var(--ease-out),
+    transform var(--duration-normal) var(--ease-out);
+}
+
+.sidebar-item-icon::before {
+  content: "";
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  z-index: -1;
+  border: 1px solid color-mix(in srgb, var(--spectral) 42%, transparent);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--accent) 13%, transparent) 0 46%, transparent 68%),
+    conic-gradient(from 210deg, transparent 0 24%, color-mix(in srgb, var(--spectral) 28%, transparent) 32%, transparent 46% 72%, color-mix(in srgb, var(--accent) 34%, transparent) 80%, transparent 92%);
+  box-shadow:
+    inset 0 0 11px color-mix(in srgb, var(--accent) 10%, transparent),
+    0 0 14px color-mix(in srgb, var(--spectral) 12%, transparent);
+  opacity: 0;
+  transform: scale(.58) rotate(-52deg);
+  transition:
+    opacity var(--duration-normal) var(--ease-out),
+    transform 420ms var(--ease-out),
+    border-color var(--duration-normal) var(--ease-out),
+    box-shadow var(--duration-normal) var(--ease-out);
+}
+
+.sidebar-item:hover .sidebar-item-icon,
+.sidebar-item:focus-visible .sidebar-item-icon {
+  color: var(--spectral);
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--spectral) 38%, transparent));
+  transform: scale(1.06);
+}
+
+.sidebar-item:hover .sidebar-item-icon::before,
+.sidebar-item:focus-visible .sidebar-item-icon::before {
+  opacity: 1;
+  transform: scale(1) rotate(10deg);
+}
+
+.sidebar-item.active .sidebar-item-icon::before {
+  opacity: .84;
+  transform: scale(.94) rotate(0deg);
+  border-color: color-mix(in srgb, var(--accent) 64%, var(--spectral));
+  box-shadow:
+    inset 0 0 13px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 0 17px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.sidebar-item.active:hover .sidebar-item-icon::before,
+.sidebar-item.active:focus-visible .sidebar-item-icon::before {
+  opacity: 1;
+  transform: scale(1.04) rotate(42deg);
+}
+
+body[data-motion="calm"] .sidebar-item-icon::before {
+  transform: scale(.92);
+  transition-property: opacity, border-color, box-shadow;
 }
 
 .sidebar-item-label {

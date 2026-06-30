@@ -229,6 +229,7 @@ const [details, setDetails] = useState(null);
       ? resolvedPlayerUrl
       : getSourceUrl(playerSource, "movie", item.id, null, null, {}, playerAccentColor, playerSubLang);
     if (!url) return;
+    const playerRect = playerWrapRef.current?.getBoundingClientRect?.();
     onPlaybackSession?.({
       id: `movie:${item.id}:${playerSource}`,
       mediaType: "movie",
@@ -240,6 +241,12 @@ const [details, setDetails] = useState(null);
       title,
       item,
       webContentsId: getReadyWebContentsId(webviewRef.current),
+      playerRect: playerRect ? {
+        left: playerRect.left,
+        top: playerRect.top,
+        width: playerRect.width,
+        height: playerRect.height,
+      } : null,
       currentTime: Number(storage.get("dlTime_" + progressKey)) || 0,
       updatedAt: Date.now(),
     });
@@ -339,11 +346,12 @@ const [details, setDetails] = useState(null);
       return;
     }
     const wv = webviewRef.current;
-    if (!wv) return;
+    const wrap = playerWrapRef.current;
+    if (!wv || !wrap) return;
 
     const cleanup = setupAmbientGlow(wv, (colorDataUrl) => {
       setAmbientColor(colorDataUrl);
-    });
+    }, { captureElement: wrap });
 
     return () => {
       cleanup();

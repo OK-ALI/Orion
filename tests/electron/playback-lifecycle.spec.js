@@ -47,6 +47,7 @@ test("starting a movie never calls WebView methods before dom-ready", async ({},
   await movies.locator(".media-carousel-item.active").click();
   const play = page.getByRole("button", { name: /^Play$/ });
   await expect(play).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(350);
   await play.click();
   await expect(page.locator("webview")).toBeAttached({ timeout: 10_000 });
   await page.waitForTimeout(1_000);
@@ -56,7 +57,7 @@ test("starting a movie never calls WebView methods before dom-ready", async ({},
   await app.close();
 });
 
-test("movie handoff keeps a usable mini-player and pop-out transport", async ({}, testInfo) => {
+test("movie handoff keeps a usable mini-player without duplicate transport", async ({}, testInfo) => {
   const userDataDir = path.join(os.tmpdir(), `orion-handoff-${process.pid}-${testInfo.workerIndex}-${Date.now()}`);
   const app = await electron.launch({
     args: [path.join(__dirname, "../.."), `--user-data-dir=${userDataDir}`, "--disable-gpu"],
@@ -66,15 +67,18 @@ test("movie handoff keeps a usable mini-player and pop-out transport", async ({}
   const movies = page.locator(".media-carousel-section").filter({ hasText: "Trending Movies" });
   await expect(movies).toBeVisible({ timeout: 20_000 });
   await movies.locator(".media-carousel-item.active").click();
-  await page.getByRole("button", { name: /^Play$/ }).click();
+  const play = page.getByRole("button", { name: /^Play$/ });
+  await expect(play).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(350);
+  await play.click();
   await expect(page.locator("webview")).toBeAttached({ timeout: 10_000 });
 
   await page.locator(".sidebar-item").filter({ hasText: /^Home$/ }).click();
   const mini = page.locator(".orion-mini-player");
   await expect(mini).toBeVisible({ timeout: 12_000 });
   await expect(mini.getByText("Preparing mini-player…")).toHaveCount(0, { timeout: 12_000 });
-  await expect(mini.getByRole("button", { name: "Mute" })).toBeVisible();
-
+  await expect(mini.getByRole("button", { name: "Mute" })).toHaveCount(0);
+  await expect(mini.getByLabel("Seek forward 10 seconds")).toHaveCount(0);
   await expect(mini.getByRole("button", { name: "Open always-on-top pop-out" })).toBeVisible();
   await app.close();
 });

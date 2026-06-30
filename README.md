@@ -2,7 +2,20 @@
 
 Orion is a Windows-first Electron application for discovering, streaming, downloading, and tracking movies, TV series, and anime.
 
-The v1.0.9 working tree is the Cosmic Polish and Playback Continuity release candidate, built on the completed v1.0.8 behavior-preserving refactor. It is not ready to publish until the v1.0.9 release checklist passes.
+The current release is **v1.0.9 — Cosmic Polish and Playback Continuity**, built on Orion's behavior-preserving architecture refactor.
+
+## What's new in v1.0.9
+
+- Faster page navigation while streaming: embedded playback hands off to the mini-player without blocking the destination page.
+- Reliable embedded, mini, pop-out, and downloaded-media continuity with preserved playback state.
+- Dynamic ambient glow for online and local playback, plus an animated Orbit background with motion controls.
+- Cleaner mini and pop-out players that use the stream's own playback controls instead of overlapping duplicates.
+- A true 16:9, resizable mini-player with improved default sizing and position persistence.
+- Orion's Cosmic Editorial identity, locally bundled font choices, refined light themes, and constellation sidebar effects.
+- Discovery provider/world hubs, richer Downloads and Library surfaces, restricted local playback, and improved stream detection.
+- Downloader reliability, subtitle sidecars, resumable jobs, protected-HLS fallback, and managed tool installation retained from the recovery work.
+
+See the complete [v1.0.9 release notes](docs/releases/v1.0.9.md).
 
 ## Features
 

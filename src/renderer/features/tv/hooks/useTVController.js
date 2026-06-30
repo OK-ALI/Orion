@@ -385,11 +385,12 @@ const [details, setDetails] = useState(null);
       return;
     }
     const wv = webviewRef.current;
-    if (!wv) return;
+    const wrap = playerWrapRef.current;
+    if (!wv || !wrap) return;
 
     const cleanup = setupAmbientGlow(wv, (colorDataUrl) => {
       setAmbientColor(colorDataUrl);
-    });
+    }, { captureElement: wrap });
 
     return () => {
       cleanup();
@@ -726,6 +727,7 @@ const [details, setDetails] = useState(null);
       : getSourceUrl(playerSource, "tv", item.id, selectedSeason, episode, {}, playerAccentColor, playerSubLang);
     if (!url) return;
     const progressKey = `tv_${item.id}_s${selectedSeason}e${episode}`;
+    const playerRect = playerWrapRef.current?.getBoundingClientRect?.();
     onPlaybackSession?.({
       id: `tv:${item.id}:${selectedSeason}:${episode}:${playerSource}`,
       mediaType: "tv",
@@ -740,6 +742,12 @@ const [details, setDetails] = useState(null);
       season: selectedSeason,
       episode,
       webContentsId: getReadyWebContentsId(webviewRef.current),
+      playerRect: playerRect ? {
+        left: playerRect.left,
+        top: playerRect.top,
+        width: playerRect.width,
+        height: playerRect.height,
+      } : null,
       currentTime: Number(storage.get("dlTime_" + progressKey)) || 0,
       updatedAt: Date.now(),
     });

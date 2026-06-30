@@ -10,6 +10,7 @@ import WindowTitlebar from "../components/layout/WindowTitlebar";
 import { storage, STORAGE_KEYS } from "../services/settingsStore";
 import {
   applyAccentColor,
+  applyFontPreset,
   applyTheme,
   ACCENT_PRESETS,
 } from "../shared/utils/appearance";
@@ -29,7 +30,11 @@ import { useEpisodeNotifications } from "./hooks/useEpisodeNotifications";
 import { useApiSession } from "./hooks/useApiSession";
 import AppRoutes from "./AppRoutes";
 import AppOverlays from "./AppOverlays";
-import { buildPlaybackHandoff } from "../features/player/services/playbackSession";
+import {
+  buildPlaybackHandoff,
+  settlePlaybackStateWithin,
+} from "../features/player/services/playbackSession";
+import { getMiniPlayerBounds } from "../shared/utils/miniPlayerGeometry";
 
 export default function App() {
   const {
@@ -94,8 +99,12 @@ export default function App() {
   const [playerSettings, setPlayerSettings] = useState(readPlayerSettings);
   const [miniPlayer, setMiniPlayer] = useState(null);
   const [playbackSession, setPlaybackSession] = useState(null);
+  const [miniTransition, setMiniTransition] = useState(null);
   const [expandedLocalDownload, setExpandedLocalDownload] = useState(null);
   const miniReadyResolverRef = useRef(null);
+  const miniTransitionTimerRef = useRef(null);
+  const manualMiniRequestRef = useRef(false);
+  const manualMiniResetTimerRef = useRef(null);
 
   // ── Scheduled backup: run on startup if due ─────────────────────────────────
   useEffect(() => {
@@ -239,6 +248,7 @@ export default function App() {
     // Accent colour
     const accent = storage.get(STORAGE_KEYS.ACCENT_COLOR) || "orion";
     applyAccentColor(accent);
+    applyFontPreset(storage.get(STORAGE_KEYS.FONT_PRESET) || "orion");
     // Theme
     const theme = storage.get(STORAGE_KEYS.THEME) || "dark";
     const customVars = storage.get(STORAGE_KEYS.CUSTOM_THEME_VARS) || null;
@@ -277,6 +287,59 @@ export default function App() {
     page, selected, setPage, setSelected, setNavStack, setShowSearch,
   });
 
+  const normalizeRect = useCallback((rect) => {
+    if (!rect) return null;
+    const left = Number.isFinite(Number(rect.left)) ? Number(rect.left) : Number(rect.x);
+    const top = Number.isFinite(Number(rect.top)) ? Number(rect.top) : Number(rect.y);
+    const width = Number(rect.width);
+    const height = Number(rect.height);
+    if (![left, top, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
+    return { left, top, width, height };
+  }, []);
+
+  const beginMiniTransition = useCallback((payload) => {
+    const sourceRect = normalizeRect(payload?.sourceRect || playbackSession?.playerRect);
+    if (!sourceRect) return;
+    const bounds = getMiniPlayerBounds(window);
+    const targetRect = {
+      left: bounds.x,
+      top: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+    };
+    const transition = {
+      id: Date.now(),
+      sourceRect,
+      targetRect,
+      title: payload?.title || playbackSession?.title || "Now Playing",
+      posterPath: payload?.posterPath || payload?.item?.poster_path || playbackSession?.posterPath || playbackSession?.item?.poster_path || null,
+      backdropPath: payload?.backdropPath || payload?.item?.backdrop_path || playbackSession?.backdropPath || playbackSession?.item?.backdrop_path || null,
+    };
+    window.clearTimeout(miniTransitionTimerRef.current);
+    setMiniTransition(transition);
+    miniTransitionTimerRef.current = window.setTimeout(() => {
+      setMiniTransition((current) => current?.id === transition.id ? null : current);
+    }, 430);
+  }, [normalizeRect, playbackSession]);
+
+  useEffect(() => () => window.clearTimeout(miniTransitionTimerRef.current), []);
+  useEffect(() => () => window.clearTimeout(manualMiniResetTimerRef.current), []);
+
+  const handleOpenMiniPlayer = useCallback((payload) => {
+    manualMiniRequestRef.current = true;
+    window.clearTimeout(manualMiniResetTimerRef.current);
+    manualMiniResetTimerRef.current = window.setTimeout(() => {
+      manualMiniRequestRef.current = false;
+    }, 700);
+    beginMiniTransition(payload);
+    const next = payload ? { ...payload, mode: "mini", handoffPending: true } : null;
+    setMiniPlayer(next);
+    setPlaybackSession(next);
+    window.setTimeout(() => {
+      setMiniPlayer((current) => current ? { ...current, handoffPending: false } : current);
+    }, 360);
+  }, [beginMiniTransition]);
+
   const createMiniHandoff = useCallback(async () => {
     const session = playbackSession;
     if (!session?.url) return false;
@@ -285,31 +348,28 @@ export default function App() {
     if (behavior === "ask" && !window.confirm("Continue playing in the mini-player?")) return false;
     let playbackState = session.playbackState || {};
     if (session.webContentsId && window.electron?.queryVideoProgress) {
-      playbackState = await window.electron.queryVideoProgress(session.webContentsId).catch(() => null) || playbackState;
+      playbackState = await settlePlaybackStateWithin(
+        window.electron.queryVideoProgress(session.webContentsId),
+        160,
+        null,
+      ) || playbackState;
     }
-    const shouldResume = !playbackState.paused;
     const handoff = {
-      ...buildPlaybackHandoff(session, { ...playbackState, paused: true }, "mini"),
+      ...buildPlaybackHandoff(session, playbackState, "mini"),
       handoffPending: true,
-      shouldResume,
+      shouldResume: !playbackState.paused,
     };
-    const ready = new Promise((resolve) => {
-      miniReadyResolverRef.current = resolve;
-      window.setTimeout(resolve, 3500);
-    });
+    beginMiniTransition(handoff);
     setMiniPlayer(handoff);
     setPlaybackSession(handoff);
-    await ready;
-    if (session.webContentsId) {
-      await window.electron?.setVideoState?.(session.webContentsId, { paused: true }).catch(() => {});
-    }
-    setMiniPlayer((current) => current ? {
-      ...current,
-      handoffPending: false,
-      playbackState: { ...(current.playbackState || {}), paused: !shouldResume },
-    } : current);
+    window.setTimeout(() => {
+      setMiniPlayer((current) => current?.id === handoff.id ? {
+        ...current,
+        handoffPending: false,
+      } : current);
+    }, 280);
     return true;
-  }, [playbackSession]);
+  }, [beginMiniTransition, playbackSession]);
 
   const handleMiniReady = useCallback(() => {
     miniReadyResolverRef.current?.();
@@ -336,6 +396,11 @@ export default function App() {
   }, [baseNavigate, createMiniHandoff, playbackSession, transitionNavigation]);
 
   const navigateBack = useCallback(async () => {
+    if (manualMiniRequestRef.current) {
+      manualMiniRequestRef.current = false;
+      transitionNavigation(baseNavigateBack);
+      return;
+    }
     if (playbackSession?.mode === "embedded") await createMiniHandoff();
     transitionNavigation(baseNavigateBack);
   }, [baseNavigateBack, createMiniHandoff, playbackSession, transitionNavigation]);
@@ -545,22 +610,22 @@ export default function App() {
           )}
           <AppRoutes model={{
             addHistory, apiKey, apiKeySource, changeApiKey, clearHistory, dlSearchOpen,
-            downloads, handleDeleteDownload, handleDownloadStarted, handleGoToDownloads,
-            handleReorderSaved, handleSelectResult, highlightDownload, history, inProgress,
-            isSaved, librarySort, loadingHome, markUnwatched, markWatched, navigate, navigateBack,
-            offline, page, playerSettings, progress, removeHistory, retryHome, savedList,
-            saveProgress, selected, setDlSearchOpen, setDownloads, setHighlightDownload,
-            setLibrarySort, setMiniPlayer, toggleSave, trending, trendingTV, watched,
-            onPlaybackSession: handlePlaybackSession,
-          }} />
+          downloads, handleDeleteDownload, handleDownloadStarted, handleGoToDownloads,
+          handleReorderSaved, handleSelectResult, highlightDownload, history, inProgress,
+          isSaved, librarySort, loadingHome, markUnwatched, markWatched, navigate, navigateBack,
+          offline, page, playerSettings, progress, removeHistory, retryHome, savedList,
+          saveProgress, selected, setDlSearchOpen, setDownloads, setHighlightDownload,
+          setLibrarySort, setMiniPlayer: handleOpenMiniPlayer, toggleSave, trending, trendingTV, watched,
+          onPlaybackSession: handlePlaybackSession,
+        }} />
         </main>
         </div>
 
         <AppOverlays model={{
           activeDownloadCount, apiKey, episodeCheckStatus, episodeDismissTimerRef,
           handleExpandMiniPlayer, handleSelectResult, hasCustomTitlebar, miniPlayer,
-          handleMiniReady,
-          navigate, offline, setEpisodeCheckStatus, setMiniPlayer, setShowSearch,
+          handleMiniReady, miniTransition,
+          navigate, offline, openMiniPlayer: handleOpenMiniPlayer, setEpisodeCheckStatus, setMiniPlayer, setShowSearch,
           setShowShortcuts, setShowUpdateModal, setUpdateBanner, showSearch,
           showShortcuts, showUpdateModal, toast, updateBanner,
           saveProgress, markWatched,

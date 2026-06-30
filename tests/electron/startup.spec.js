@@ -61,8 +61,8 @@ test("Orion starts without an uncaught renderer error", async ({}, testInfo) => 
   expect(popoutResult.ok, popoutResult.error).toBe(true);
   await expect.poll(async () => (await app.windows()).length).toBe(2);
   const popout = (await app.windows()).find((window) => window !== page);
-  await expect(popout.locator("#__orion_transport__")).toBeVisible();
   await expect(popout.locator("#__orion_ambient__")).toBeAttached();
+  await expect(popout.locator("#__orion_transport__")).toHaveCount(0);
   await page.evaluate(() => window.electron.closePipWindow());
   await expect.poll(async () => (await app.windows()).length).toBe(1);
   expect(errors).toEqual([]);

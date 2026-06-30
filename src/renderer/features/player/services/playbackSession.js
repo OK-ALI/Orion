@@ -13,3 +13,17 @@ export function buildPlaybackHandoff(session, playbackState, to) {
     updatedAt: Date.now(),
   };
 }
+
+export function settlePlaybackStateWithin(promise, timeoutMs, fallback = null) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = globalThis.setTimeout(() => finish(fallback), timeoutMs);
+    function finish(value) {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timer);
+      resolve(value);
+    }
+    Promise.resolve(promise).then(finish, () => finish(fallback));
+  });
+}

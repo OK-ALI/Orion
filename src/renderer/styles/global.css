@@ -28,16 +28,17 @@ body {
   -webkit-user-drag: none;
   background-image:
     radial-gradient(circle at 82% 8%, color-mix(in srgb, var(--cinema-gold) 8%, transparent) 0, transparent 28%),
-    radial-gradient(circle at 18% 92%, color-mix(in srgb, var(--cinema-velvet) 18%, transparent) 0, transparent 34%);
+    radial-gradient(circle at 18% 92%, color-mix(in srgb, var(--cinema-velvet) 18%, transparent) 0, transparent 34%),
+    linear-gradient(180deg, rgba(255,255,255,.02), transparent 18%);
 }
 
 body::before,
 body::after { content:""; position:fixed; pointer-events:none; z-index:0; transition:opacity .5s ease, transform .8s var(--ease-out); }
 
 body:not([data-background])::before,
-body[data-background="orbit"]::before { width:520px; height:520px; left:-330px; top:8%; border-radius:50%; opacity:.52; background:repeating-radial-gradient(circle,transparent 0 54px,color-mix(in srgb,var(--accent) 34%,transparent) 55px 57px,transparent 58px 86px),conic-gradient(from 210deg,transparent,var(--spectral),transparent 42%); filter:blur(.2px) drop-shadow(0 0 28px var(--accent-glow)); animation:orion-orbit-left 38s ease-in-out infinite alternate; }
+body[data-background="orbit"]::before { width:560px; height:560px; left:-362px; top:5%; border-radius:50%; opacity:.62; background:radial-gradient(circle at 50% 50%,transparent 0 43%,color-mix(in srgb,var(--spectral) 20%,transparent) 43.5% 44%,transparent 44.8% 52%,color-mix(in srgb,var(--accent) 50%,transparent) 52.8% 53.8%,transparent 54.6% 68%,color-mix(in srgb,var(--spectral) 34%,transparent) 68.6% 69.2%,transparent 70%),conic-gradient(from 208deg,transparent 0 16%,color-mix(in srgb,var(--spectral) 62%,transparent) 23%,transparent 34%,color-mix(in srgb,var(--accent) 54%,transparent) 43%,transparent 57%,color-mix(in srgb,var(--cinema-gold) 30%,transparent) 67%,transparent 76%); filter:blur(.2px) drop-shadow(0 0 42px var(--accent-glow)); mask:linear-gradient(90deg,rgba(0,0,0,.98) 0 58%,transparent 84%); transform-origin:50% 50%; will-change:transform,filter,opacity; animation:orion-orbit-left 22s cubic-bezier(.45,.05,.55,.95) infinite alternate; }
 body:not([data-background])::after,
-body[data-background="orbit"]::after { width:620px; height:620px; right:-410px; bottom:-8%; border-radius:50%; opacity:.42; background:repeating-radial-gradient(circle,transparent 0 66px,color-mix(in srgb,var(--spectral) 28%,transparent) 67px 69px,transparent 70px 102px),conic-gradient(from 30deg,transparent,var(--cinema-gold),transparent 38%); filter:drop-shadow(0 0 32px var(--accent-glow)); animation:orion-orbit-right 46s ease-in-out infinite alternate; }
+body[data-background="orbit"]::after { width:660px; height:660px; right:-432px; bottom:-12%; border-radius:50%; opacity:.5; background:radial-gradient(circle at 50% 50%,transparent 0 46%,color-mix(in srgb,var(--accent) 16%,transparent) 46.5% 47%,transparent 47.8% 55%,color-mix(in srgb,var(--cinema-gold) 40%,transparent) 55.8% 56.8%,transparent 57.8% 71%,color-mix(in srgb,var(--spectral) 28%,transparent) 71.6% 72.2%,transparent 73%),conic-gradient(from 32deg,transparent 0 16%,color-mix(in srgb,var(--cinema-gold) 42%,transparent) 23%,transparent 35%,color-mix(in srgb,var(--spectral) 34%,transparent) 45%,transparent 57%,color-mix(in srgb,var(--accent) 44%,transparent) 66%,transparent 78%); filter:drop-shadow(0 0 44px var(--accent-glow)); mask:linear-gradient(270deg,rgba(0,0,0,.98) 0 58%,transparent 84%); transform-origin:50% 50%; will-change:transform,filter,opacity; animation:orion-orbit-right 27s cubic-bezier(.45,.05,.55,.95) infinite alternate; }
 
 body[data-background="nebula"]::before,
 body[data-background="nebula"]::after { inset:0; opacity:.42; background-image:radial-gradient(circle at 12% 17%,rgba(255,255,255,.48) 0 1px,transparent 1.5px),radial-gradient(circle at 71% 34%,rgba(255,255,255,.32) 0 1px,transparent 1.5px),radial-gradient(circle at 44% 72%,color-mix(in srgb,var(--spectral) 36%,transparent) 0 1px,transparent 1.5px); background-size:173px 173px,241px 241px,311px 311px; animation:orion-nebula-drift 34s linear infinite alternate; }
@@ -46,8 +47,16 @@ body[data-background="minimal"]::before { inset:0; opacity:.24; background:radia
 body[data-background="minimal"]::after { opacity:0; }
 
 @keyframes orion-nebula-drift { to { transform:translate3d(18px,-12px,0); } }
-@keyframes orion-orbit-left { to { transform:rotate(8deg) translate3d(12px,-8px,0); } }
-@keyframes orion-orbit-right { to { transform:rotate(-7deg) translate3d(-10px,10px,0); } }
+@keyframes orion-orbit-left {
+  0% { transform:rotate(-4deg) translate3d(-4px,8px,0) scale(.985); filter:blur(.2px) drop-shadow(0 0 34px var(--accent-glow)); }
+  48% { transform:rotate(4deg) translate3d(12px,-7px,0) scale(1.015); filter:blur(.4px) drop-shadow(0 0 52px var(--accent-glow)); }
+  100% { transform:rotate(11deg) translate3d(24px,-14px,0) scale(1.045); filter:blur(.2px) drop-shadow(0 0 40px var(--accent-glow)); }
+}
+@keyframes orion-orbit-right {
+  0% { transform:rotate(5deg) translate3d(5px,-7px,0) scale(.99); filter:drop-shadow(0 0 34px var(--accent-glow)); }
+  52% { transform:rotate(-3deg) translate3d(-10px,7px,0) scale(1.015); filter:drop-shadow(0 0 50px var(--accent-glow)); }
+  100% { transform:rotate(-10deg) translate3d(-22px,15px,0) scale(1.04); filter:drop-shadow(0 0 39px var(--accent-glow)); }
+}
 body[data-motion="calm"]::before,body[data-motion="calm"]::after { animation:none!important; }
 body[data-motion="expressive"]::before,body[data-motion="expressive"]::after { animation-duration:24s; }
 
@@ -90,7 +99,11 @@ body[data-motion="calm"] .media-card:hover { transform: translateY(-1px); }
 ::view-transition-new(root) {
   animation-duration: 220ms;
   animation-timing-function: var(--ease-out);
+  pointer-events: none;
 }
+
+::view-transition-group(root),
+::view-transition-image-pair(root) { pointer-events: none; }
 
 ::view-transition-old(root) { animation-name: orion-page-out; }
 ::view-transition-new(root) { animation-name: orion-page-in; }

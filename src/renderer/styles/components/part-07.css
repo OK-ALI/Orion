@@ -375,9 +375,21 @@
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     box-shadow: var(--shadow-lg);
+    transition:
+        box-shadow 900ms ease,
+        border-color 500ms ease;
     aspect-ratio: 16/9;
     width: 100%;
     cursor: default;
+}
+
+.player-wrap[data-ambient-active="true"] {
+    border-color: color-mix(in srgb, var(--player-ambient-a, var(--accent)) 30%, var(--border));
+    box-shadow:
+        var(--shadow-lg),
+        -34px 6px 78px color-mix(in srgb, var(--player-ambient-a, var(--accent)) 46%, transparent),
+        34px 6px 78px color-mix(in srgb, var(--player-ambient-b, var(--spectral)) 40%, transparent),
+        0 28px 88px color-mix(in srgb, var(--player-ambient-a, var(--accent)) 24%, transparent);
 }
 
 .player-wrap--idle {
