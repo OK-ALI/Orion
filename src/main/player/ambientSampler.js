@@ -1,6 +1,6 @@
 const { ipcMain, webContents, powerMonitor } = require("electron");
 const { extractPaletteFromBitmap } = require("./ambientPalette");
-const { samplingInterval } = require("./ambientSampling");
+const { boundedSampleRect, samplingInterval } = require("./ambientSampling");
 
 const samplers = new Map();
 
@@ -29,7 +29,7 @@ async function videoIsPaused(contents) {
   return found;
 }
 
-function register(getMainWindow) {
+function register(getMainWindow, getPerformanceTier = () => "balanced") {
   ipcMain.handle("ambient:start", async (event, options = {}) => {
     const targetId = String(options.targetId || "");
     const captureContentsId = Number(options.captureWebContentsId || options.webContentsId);
@@ -47,9 +47,18 @@ function register(getMainWindow) {
             ? playbackContents
             : captureContents;
           if (!(await videoIsPaused(stateTarget))) {
-            const image = options.cropRect
-              ? await captureContents.capturePage(options.cropRect)
-              : await captureContents.capturePage();
+            let sourceRect = options.cropRect || null;
+            if (!sourceRect) {
+              try {
+                sourceRect = await captureContents.mainFrame.executeJavaScript(
+                  `({ x: 0, y: 0, width: Math.max(1, innerWidth), height: Math.max(1, innerHeight) })`,
+                );
+              } catch {}
+            }
+            const efficiency = getPerformanceTier() === "efficiency";
+            const image = await captureContents.capturePage(
+              boundedSampleRect(sourceRect, efficiency ? 160 : 320, efficiency ? 90 : 180),
+            );
             if (!image.isEmpty()) {
               const colors = extractPalette(image);
               if (!event.sender.isDestroyed()) event.sender.send("ambient:palette", { targetId, colors, at: Date.now() });
@@ -58,7 +67,10 @@ function register(getMainWindow) {
         } catch {}
       }
       const sampler = samplers.get(targetId);
-      if (sampler) sampler.timer = setTimeout(tick, samplingInterval(options.profile, powerMonitor.isOnBatteryPower()));
+      if (sampler) {
+        const profile = getPerformanceTier() === "efficiency" ? "low" : options.profile;
+        sampler.timer = setTimeout(tick, samplingInterval(profile, powerMonitor.isOnBatteryPower()));
+      }
     };
     samplers.set(targetId, { timer: null, captureContentsId, playbackContentsId });
     tick();

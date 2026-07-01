@@ -52,6 +52,8 @@ export function tmdbTokenDetail(source) {
 
 export function SystemCheckSection({ apiKey, apiKeySource = "missing", downloadPath }) {
   const [status, setStatus] = useState(null);
+  const [performanceStatus, setPerformanceStatus] = useState(null);
+  const [batteryStatus, setBatteryStatus] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const refresh = async () => {
@@ -64,12 +66,18 @@ export function SystemCheckSection({ apiKey, apiKeySource = "missing", downloadP
     }
     setLoading(true);
     try {
-      const result = await window.electron.getBackendStatus({
-        tmdbTokenSet: !!apiKey,
-        tmdbTokenSource: apiKeySource,
-        downloadPath,
-      });
+      const [result, performanceResult, batteryResult] = await Promise.all([
+        window.electron.getBackendStatus({
+          tmdbTokenSet: !!apiKey,
+          tmdbTokenSource: apiKeySource,
+          downloadPath,
+        }),
+        window.electron.getPerformanceSnapshot?.().catch(() => null),
+        window.electron.getBatteryStatus?.().catch(() => null),
+      ]);
       setStatus(result);
+      setPerformanceStatus(performanceResult);
+      setBatteryStatus(batteryResult);
     } catch (e) {
       setStatus({ ok: false, error: e.message });
     } finally {
@@ -119,6 +127,20 @@ export function SystemCheckSection({ apiKey, apiKeySource = "missing", downloadP
           ok: status.downloads.errors === 0,
           detail: `${status.downloads.active} active, ${status.downloads.completed} completed, ${status.downloads.errors} failed`,
         },
+        {
+          label: "Adaptive performance",
+          ok: true,
+          detail: performanceStatus
+            ? `${performanceStatus.tier} · CPU ${performanceStatus.cpuPercent}% · ${performanceStatus.freeMemoryMb} MB free`
+            : "Collecting a local performance sample",
+        },
+        {
+          label: "Battery awareness",
+          ok: true,
+          detail: batteryStatus?.available
+            ? `${Math.round(Number(batteryStatus.level || 0) * 100)}% · ${batteryStatus.charging ? "charging" : "on battery"}`
+            : "No battery detected",
+        },
       ]
     : [];
 
@@ -141,6 +163,25 @@ export function SystemCheckSection({ apiKey, apiKeySource = "missing", downloadP
         </div>
         <button className="btn btn-ghost" onClick={refresh} disabled={loading}>
           {loading ? "Checking..." : "Refresh"}
+        </button>
+        <button className="btn btn-ghost" onClick={() => {
+          const report = {
+            checkedAt: status?.checkedAt,
+            runtime: status?.runtime ? {
+              platform: status.runtime.platform,
+              arch: status.runtime.arch,
+              electron: status.runtime.electron,
+              memoryMb: status.runtime.memoryMb,
+              cpuCount: status.runtime.cpuCount,
+            } : null,
+            performance: performanceStatus,
+            battery: batteryStatus,
+            downloads: status?.downloads,
+            media: status?.media,
+          };
+          navigator.clipboard?.writeText(JSON.stringify(report, null, 2));
+        }} disabled={!status?.ok}>
+          Copy diagnostics
         </button>
       </div>
 

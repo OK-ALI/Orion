@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import MiniPlayer from "../../../src/renderer/components/MiniPlayer";
 
@@ -28,5 +28,38 @@ describe("MiniPlayer", () => {
     fireEvent(webview, new Event("did-start-loading"));
     expect(screen.queryByText("Preparing mini-player…")).not.toBeInTheDocument();
     await waitFor(() => expect(window.electron.setVideoState).toHaveBeenCalledWith(42, expect.objectContaining({ muted: false, paused: false })));
+  });
+
+  it("auto-hides chrome and keeps it visible while a toolbar control is focused", () => {
+    vi.useFakeTimers();
+    window.matchMedia = vi.fn(() => ({ matches: false }));
+    window.electron = {
+      startAmbientSampling: vi.fn(async () => ({ ok: true })),
+      stopAmbientSampling: vi.fn(async () => ({ ok: true })),
+      onAmbientPalette: vi.fn(() => null),
+    };
+
+    const { container, unmount } = render(
+      <MiniPlayer
+        url="https://player.test/embed"
+        title="Test title"
+        onClose={() => {}}
+        onExpand={() => {}}
+      />,
+    );
+    const player = container.querySelector(".orion-mini-player");
+    expect(player).toHaveClass("chrome-visible");
+
+    act(() => vi.advanceTimersByTime(2501));
+    expect(player).not.toHaveClass("chrome-visible");
+
+    fireEvent.mouseMove(player);
+    expect(player).toHaveClass("chrome-visible");
+    container.querySelector(".orion-mini-player-btn.close").focus();
+    act(() => vi.advanceTimersByTime(2600));
+    expect(player).toHaveClass("chrome-visible");
+
+    unmount();
+    vi.useRealTimers();
   });
 });

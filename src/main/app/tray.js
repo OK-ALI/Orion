@@ -15,6 +15,7 @@ function createTrayController({ rootDir, downloads, getMainWindow }) {
   let shownTrayBalloon = false;
   let monitorTimer = null;
   let lastSignature = "";
+  let batteryStatus = null;
 
   const getActiveDownloads = () =>
     downloads
@@ -81,6 +82,14 @@ function createTrayController({ rootDir, downloads, getMainWindow }) {
       { label: "Open Orion", click: () => showMainWindow() },
       { label: "Open Downloads", click: () => showMainWindow("downloads") },
       { type: "separator" },
+      ...(batteryStatus?.available
+        ? [{
+            label: batteryStatus.level == null
+              ? (batteryStatus.charging ? "Battery: Charging" : "Battery power")
+              : `Battery: ${Math.round(batteryStatus.level * 100)}%${batteryStatus.charging ? " · Charging" : ""}`,
+            enabled: false,
+          }, { type: "separator" }]
+        : []),
       {
         label: activeCount
           ? `Downloads: ${activeCount} active · ${totalProgress}% overall`
@@ -204,6 +213,11 @@ function createTrayController({ rootDir, downloads, getMainWindow }) {
     updateMenu();
   };
 
+  const setBatteryStatus = (value) => {
+    batteryStatus = value;
+    updateMenu();
+  };
+
   const destroy = () => {
     if (monitorTimer) clearInterval(monitorTimer);
     monitorTimer = null;
@@ -216,6 +230,7 @@ function createTrayController({ rootDir, downloads, getMainWindow }) {
     destroy,
     isMiniPlayerActive: () => miniPlayerActive,
     setMiniPlayerStatus,
+    setBatteryStatus,
     showBalloonOnce,
     showMainWindow,
     startDownloadMonitor,

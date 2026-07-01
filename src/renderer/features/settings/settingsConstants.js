@@ -118,6 +118,15 @@ export const SECTION_NAV = [
     ],
   },
   {
+    id: "systemIntegration",
+    label: "System integration",
+    icon: "⌁",
+    keywords: [
+      "windows", "media", "session", "bluetooth", "headphones", "buds",
+      "speaker", "audio", "output", "volume", "keyboard", "controls", "background",
+    ],
+  },
+  {
     id: "downloads",
     label: "Downloads",
     icon: "⬇",
@@ -145,6 +154,10 @@ export const SECTION_NAV = [
       "watchlist",
       "new episode",
       "release",
+      "battery",
+      "power",
+      "charging",
+      "critical",
     ],
   },
   {

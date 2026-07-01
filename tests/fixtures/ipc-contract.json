@@ -26,7 +26,13 @@
     "setScheduledBackupSettings", "performScheduledBackup", "onScheduledBackupRequested",
     "offScheduledBackupRequested", "setMiniPlayerStatus", "onStopMiniPlayer",
     "offStopMiniPlayer", "onTrayRestore", "offTrayRestore", "onTrayOpenPage",
-    "offTrayOpenPage", "onUpdateCloseBehavior", "offUpdateCloseBehavior"
+    "offTrayOpenPage", "onUpdateCloseBehavior", "offUpdateCloseBehavior",
+    "updateSystemMediaSession", "getSystemMediaStatus", "openWindowsSoundSettings", "onSystemMediaCommand", "offSystemMediaCommand", "onPlayerShortcut", "offPlayerShortcut",
+    "getBatteryStatus", "updateBatteryStatus", "updateBatteryPreferences",
+    "onBatteryStatus", "offBatteryStatus", "onBatteryAlert", "offBatteryAlert",
+    "onBatteryResumeDownloads", "offBatteryResumeDownloads", "getPerformanceSnapshot",
+    "reportPlaybackHealth", "onPerformanceSnapshot", "offPerformanceSnapshot",
+    "onPerformanceResumeDownloads", "offPerformanceResumeDownloads"
   ],
   "channels": [
     "blocked-stats-update", "cancel-update", "check-downloader", "check-helper-downloader",
@@ -50,6 +56,11 @@
     "update-close-behavior", "update-progress", "webview-enter-fullscreen",
     "webview-leave-fullscreen", "window-close", "window-is-maximized", "window-maximized",
     "window-minimize", "window-toggle-maximize", "wyzie-open-redeem", "wyzie-validate-key",
-    "ambient:start", "ambient:stop", "ambient:palette"
+    "ambient:start", "ambient:stop", "ambient:palette",
+    "media-control:update-session", "media-control:get-status", "media-control:open-sound-settings", "media-control:command", "player-shortcut",
+    "battery:get-status", "battery:update-status", "battery:update-preferences",
+    "battery:status", "battery:alert", "battery:resume-downloads",
+    "performance:get-snapshot", "performance:report-playback", "performance:snapshot",
+    "performance:resume-downloads"
   ]
 }

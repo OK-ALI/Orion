@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { extractPaletteFromBitmap } = require("../../../src/main/player/ambientPalette");
-const { samplingInterval } = require("../../../src/main/player/ambientSampling");
+const { boundedSampleRect, samplingInterval } = require("../../../src/main/player/ambientSampling");
 
 test("ambient palette returns two dominant colors without retaining frames", () => {
   const pixels = Buffer.from([
@@ -15,8 +15,19 @@ test("ambient palette returns two dominant colors without retaining frames", () 
 });
 
 test("ambient sampling adapts to profile and battery power", () => {
-  assert.equal(samplingInterval("balanced", false), 750);
-  assert.equal(samplingInterval("balanced", true), 2250);
-  assert.equal(samplingInterval("low", true), 3000);
-  assert.equal(samplingInterval("vivid", true), 1500);
+  assert.equal(samplingInterval("balanced", false), 1100);
+  assert.equal(samplingInterval("balanced", true), 2600);
+  assert.equal(samplingInterval("low", true), 3600);
+  assert.equal(samplingInterval("vivid", true), 1800);
+});
+
+test("ambient sampling bounds fullscreen GPU readback area", () => {
+  assert.deepEqual(
+    boundedSampleRect({ x: 0, y: 0, width: 1920, height: 1080 }),
+    { x: 800, y: 450, width: 320, height: 180 },
+  );
+  assert.deepEqual(
+    boundedSampleRect({ x: 20, y: 30, width: 200, height: 100 }),
+    { x: 20, y: 30, width: 200, height: 100 },
+  );
 });

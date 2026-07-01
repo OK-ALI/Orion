@@ -473,6 +473,14 @@ function register(getMainWindow, { writeSecretMigration }) {
             paused: v.paused,
             muted: v.muted,
             volume: v.volume,
+            readyState: v.readyState,
+            networkState: v.networkState,
+            bufferedAhead: v.buffered && v.buffered.length
+              ? Math.max(0, v.buffered.end(v.buffered.length - 1) - v.currentTime)
+              : 0,
+            droppedFrames: v.getVideoPlaybackQuality
+              ? v.getVideoPlaybackQuality().droppedVideoFrames
+              : 0,
             recentUserSeek: v._lastUserSeek ? (Date.now() - v._lastUserSeek < 6000) : false,
             lastUserSeekTo: v._lastUserSeekTo ?? null,
           };
@@ -498,6 +506,7 @@ function register(getMainWindow, { writeSecretMigration }) {
       pause: `v.pause();`,
       mute: `v.muted = true;`,
       unmute: `v.muted = false;`,
+      restart: `v.currentTime = 0; v.play().catch(() => {});`,
     };
     if (!Object.hasOwn(scripts, action)) {
       return { ok: false, error: "Unsupported player action" };

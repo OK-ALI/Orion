@@ -62,5 +62,23 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
     return handler;
   },
   offStopMiniPlayer: (handler) =>
-    ipcRenderer.removeListener("stop-mini-player", handler)
+    ipcRenderer.removeListener("stop-mini-player", handler),
+  updateSystemMediaSession: (state) =>
+    ipcRenderer.invoke("media-control:update-session", state),
+  getSystemMediaStatus: () => ipcRenderer.invoke("media-control:get-status"),
+  openWindowsSoundSettings: () =>
+    ipcRenderer.invoke("media-control:open-sound-settings"),
+  onSystemMediaCommand: (cb) => {
+    const handler = (_, command) => cb(command);
+    ipcRenderer.on("media-control:command", handler);
+    return handler;
+  },
+  offSystemMediaCommand: (handler) =>
+    ipcRenderer.removeListener("media-control:command", handler),
+  onPlayerShortcut: (cb) => {
+    const handler = (_, command) => cb(command);
+    ipcRenderer.on("player-shortcut", handler);
+    return handler;
+  },
+  offPlayerShortcut: (handler) => ipcRenderer.removeListener("player-shortcut", handler)
 });

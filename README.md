@@ -2,20 +2,22 @@
 
 Orion is a Windows-first Electron application for discovering, streaming, downloading, and tracking movies, TV series, and anime.
 
-The current release is **v1.0.9 — Cosmic Polish and Playback Continuity**, built on Orion's behavior-preserving architecture refactor.
+The current development milestone is **v1.0.10 — Performance, Windows Integration and Final Visual Polish**, built on Orion's behavior-preserving architecture refactor.
 
-## What's new in v1.0.9
+## What's new in v1.0.10
 
-- Faster page navigation while streaming: embedded playback hands off to the mini-player without blocking the destination page.
-- Reliable embedded, mini, pop-out, and downloaded-media continuity with preserved playback state.
-- Dynamic ambient glow for online and local playback, plus an animated Orbit background with motion controls.
-- Cleaner mini and pop-out players that use the stream's own playback controls instead of overlapping duplicates.
-- A true 16:9, resizable mini-player with improved default sizing and position persistence.
-- Orion's Cosmic Editorial identity, locally bundled font choices, refined light themes, and constellation sidebar effects.
-- Discovery provider/world hubs, richer Downloads and Library surfaces, restricted local playback, and improved stream detection.
-- Downloader reliability, subtitle sidecars, resumable jobs, protected-HLS fallback, and managed tool installation retained from the recovery work.
+- Invisible Quality, Balanced, and Efficiency adaptation prioritizes streaming under CPU, memory, battery, or buffering pressure.
+- Battery status appears in Orion's title bar and tray, with low/critical alerts and resumable critical-battery download pausing.
+- Windows media-session support adds Bluetooth headset, speaker, and media-key playback controls plus media-flyout metadata.
+- Windows owns Bluetooth/output volume so Volume Up, Volume Down, and Mute work without double volume changes.
+- Settings includes redacted local diagnostics for performance, playback pressure, battery state, and downloads.
+- The mini-player is now a true 16:9 floating surface with a pop-out-inspired auto-hiding toolbar and theme-aware resize affordance.
+- Home rails preserve poster hover lift and glow without clipping.
+- Appearance adds live hover intensity, hover-color and glow controls with a themed preview and Reduced Motion-safe feedback.
+- Player chrome, overlays, Downloads, local playback and shortcut surfaces share semantic colors across all six themes.
+- v1.0.9 playback continuity, ambient safeguards, downloader reliability, and local playback remain intact.
 
-See the complete [v1.0.9 release notes](docs/releases/v1.0.9.md).
+See the complete [v1.0.10 release notes](docs/releases/v1.0.10.md).
 
 ## Features
 
@@ -34,7 +36,7 @@ DRM circumvention is not supported. Download only media you are authorized to ac
 - Node.js 22 or later for local development.
 - npm 10 or later.
 
-macOS and Linux retain PATH-based compatibility, but managed-tool installer parity is not part of v1.0.9.
+macOS and Linux retain PATH-based compatibility, but managed-tool installer and Windows media-control parity are not part of v1.0.10.
 
 ## Run locally
 
@@ -56,7 +58,7 @@ npm.cmd run check
 npm.cmd run test:electron
 ```
 
-The check suite enforces the additive v1.0.9 IPC surface and retained aliases, rejects unresolved JavaScript/JSX bindings and dependency cycles, scans for committed credentials, fails source files above 800 lines, runs node/renderer tests, and creates a production renderer build.
+The check suite enforces the additive v1.0.10 IPC surface and retained aliases, rejects unresolved JavaScript/JSX bindings and dependency cycles, scans for committed credentials and new theme-color leaks, fails source files above 800 lines, runs node/renderer tests, and creates a production renderer build.
 
 ## Package Windows builds
 

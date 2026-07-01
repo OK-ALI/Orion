@@ -382,6 +382,7 @@ export function CleanRow({
   onAction,
   danger,
   sizeLabel,
+  right,
 }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState(null);
@@ -452,7 +453,7 @@ export function CleanRow({
         <StatusBadge status={status} />
       </div>
       <div style={{ flexShrink: 0, paddingTop: 2 }}>
-        <button
+        {right || (buttonLabel && onAction ? <button
           className="btn btn-ghost"
           disabled={busy}
           onClick={handle}
@@ -471,7 +472,7 @@ export function CleanRow({
           }
         >
           {busy ? "Working…" : buttonLabel}
-        </button>
+        </button> : null)}
       </div>
     </div>
   );

@@ -4,19 +4,20 @@ import { getReadyWebContentsId } from "../features/player/services/webviewLifecy
 import {
   getMiniPlayerBounds,
   getMiniPlayerStorageKey,
-  MINI_PLAYER_CHROME_HEIGHT,
   MINI_PLAYER_DEFAULT_WIDTH,
 } from "../shared/utils/miniPlayerGeometry";
+import { handleNativePlayerKey } from "../features/player/services/nativeKeyboard";
 
 export default function MiniPlayer({ url, title, context, initialState, subtitles = [], onClose, onExpand, onPopOut, onProgress, onReady, active = true }) {
   const isLocal = String(url || "").startsWith("orion-media://");
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [size, setSize] = useState({
     width: MINI_PLAYER_DEFAULT_WIDTH,
-    height: Math.round(MINI_PLAYER_DEFAULT_WIDTH * (9 / 16)) + MINI_PLAYER_CHROME_HEIGHT,
+    height: Math.round(MINI_PLAYER_DEFAULT_WIDTH * (9 / 16)),
   });
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [chromeVisible, setChromeVisible] = useState(true);
 
   const playerRef = useRef(null);
   const webviewRef = useRef(null);
@@ -34,15 +35,57 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
   const restoredRef = useRef(false);
   const ambientCleanupRef = useRef(null);
   const [ambientImage, setAmbientImage] = useState("");
-  const [ambientColors, setAmbientColors] = useState(["#6d3bd1", "#168aa4"]);
+  const [ambientColors, setAmbientColors] = useState(["var(--accent)", "var(--spectral)"]);
   const lastProgressSavedRef = useRef(0);
   const readyTimeoutRef = useRef(null);
   const readyReportedRef = useRef(false);
+  const chromeTimerRef = useRef(null);
+
+  const revealChrome = () => {
+    setChromeVisible(true);
+    window.clearTimeout(chromeTimerRef.current);
+    if (!isDragging && !isResizing) {
+      chromeTimerRef.current = window.setTimeout(() => {
+        const focused = playerRef.current?.contains(document.activeElement);
+        if (!focused) setChromeVisible(false);
+      }, 2500);
+    }
+  };
+
+  useEffect(() => {
+    revealChrome();
+    return () => window.clearTimeout(chromeTimerRef.current);
+  }, [isDragging, isResizing]);
   const reportReady = () => {
     if (readyReportedRef.current) return;
     readyReportedRef.current = true;
-    onReady?.();
+    onReady?.({ webContentsId: webContentsIdRef.current, local: isLocal });
   };
+
+  useEffect(() => {
+    const handler = (event) => {
+      const command = event.detail;
+      if (command === "stop") { onClose?.(); return; }
+      if (isLocal && nativeVideoRef.current) {
+        const video = nativeVideoRef.current;
+        if (command === "play") video.play().catch(() => {});
+        if (command === "pause") video.pause();
+        if (command === "toggle") video.paused ? video.play().catch(() => {}) : video.pause();
+        if (command === "restart") { video.currentTime = 0; video.play().catch(() => {}); }
+      }
+    };
+    window.addEventListener("orion:media-command", handler);
+    return () => window.removeEventListener("orion:media-command", handler);
+  }, [isLocal, onClose]);
+
+  useEffect(() => {
+    if (!isLocal || !active) return undefined;
+    const handler = (event) => handleNativePlayerKey(event, nativeVideoRef.current, {
+      onMini: () => {},
+    });
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [active, isLocal]);
 
   // Inject CSS to scale down subtitles for the mini-player
   useEffect(() => {
@@ -301,7 +344,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
 
         setSize({
           width: newWidth,
-          height: Math.round(newWidth * (9 / 16)) + MINI_PLAYER_CHROME_HEIGHT,
+          height: Math.round(newWidth * (9 / 16)),
         });
       }
     };
@@ -333,7 +376,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
         // Persist settings
         localStorage.setItem(
           getMiniPlayerStorageKey(),
-          JSON.stringify({ x: finalX, y: finalY, width: size.width, height: size.height })
+          JSON.stringify({ x: finalX, y: finalY, width: size.width })
         );
       }
 
@@ -341,7 +384,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
         setIsResizing(false);
         localStorage.setItem(
           getMiniPlayerStorageKey(),
-          JSON.stringify({ x: position.x, y: position.y, width: size.width, height: size.height })
+          JSON.stringify({ x: position.x, y: position.y, width: size.width })
         );
       }
     };
@@ -360,7 +403,13 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
   return (
       <div
         ref={playerRef}
-        className={`orion-mini-player${isDragging ? " is-dragging" : ""}${active ? " is-active" : " is-handoff-pending"}`}
+        className={`orion-mini-player${isDragging ? " is-dragging" : ""}${isResizing ? " is-resizing" : ""}${chromeVisible ? " chrome-visible" : ""}${active ? " is-active" : " is-handoff-pending"}`}
+        onMouseMove={revealChrome}
+        onTouchStart={revealChrome}
+        onFocusCapture={revealChrome}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) revealChrome();
+        }}
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
@@ -368,15 +417,13 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
           height: `${size.height}px`,
           position: "fixed",
           zIndex: 9999,
-          boxShadow: ambientImage
-            ? `0 20px 52px rgba(0,0,0,.72), 0 0 52px color-mix(in srgb, var(--accent) 45%, transparent)`
-            : undefined,
           "--mini-ambient": ambientImage ? `url(${ambientImage})` : "none",
           "--mini-ambient-a": ambientColors[0],
           "--mini-ambient-b": ambientColors[1],
         }}
       >
-        {/* Drag Handle & Header */}
+        <div className="orion-mini-player-frame">
+        {/* Auto-hiding drag handle and player actions */}
         <div className="orion-mini-player-drag-handle" onMouseDown={handleDragStart}>
           <div className="orion-mini-player-title" title={title}>
             <span>{title || "Now Playing"}</span>
@@ -453,11 +500,12 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
               )}
             </div>
           )}
-          {/* Resize Grip (visible in bottom right) */}
+          {/* Theme-aware resize target in the bottom-right corner */}
           <div
             className="orion-mini-player-resize-handle"
             onMouseDown={handleResizeStart}
           />
+        </div>
         </div>
       </div>
   );

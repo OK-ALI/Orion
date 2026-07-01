@@ -1,12 +1,28 @@
 // Keyboard Shortcuts reference modal
 export default function KeyboardShortcutsModal({ onClose }) {
   const shortcuts = [
+    { keys: ["APP"], desc: "Application", heading: true },
     { keys: ["Ctrl", "F"], desc: "Open search" },
     { keys: ["Ctrl", "K"], desc: "Search on a page" },
     { keys: ["Esc"], desc: "Close search / modal" },
     { keys: ["Ctrl", "Z"], desc: "Navigate back" },
     { keys: ["Ctrl", "R"], desc: "Reload app" },
     { keys: ["?"], desc: "Show this shortcuts overview" },
+    { keys: ["PLAYER"], desc: "Player", heading: true },
+    { keys: ["Space", "K"], desc: "Play or pause" },
+    { keys: ["J", "←"], desc: "Seek backward 10 seconds" },
+    { keys: ["L", "→"], desc: "Seek forward 10 seconds" },
+    { keys: ["↑", "↓"], desc: "Player volume up or down" },
+    { keys: ["M"], desc: "Mute or unmute" },
+    { keys: ["F"], desc: "Enter or leave fullscreen" },
+    { keys: ["I"], desc: "Continue in mini-player" },
+    { keys: ["C"], desc: "Toggle available subtitles" },
+    { keys: ["Home", "0"], desc: "Jump to the beginning" },
+    { keys: ["End"], desc: "Jump to the end" },
+    { keys: ["1–9"], desc: "Jump to 10–90 percent" },
+    { keys: ["<", ">"], desc: "Decrease or increase playback speed" },
+    { keys: ["Shift", "N"], desc: "Next episode" },
+    { keys: ["Shift", "P"], desc: "Previous episode" },
   ];
 
   return (
@@ -16,7 +32,7 @@ export default function KeyboardShortcutsModal({ onClose }) {
         position: "fixed",
         inset: 0,
         zIndex: 5000,
-        background: "rgba(0,0,0,0.72)",
+        background: "var(--overlay-backdrop)",
         backdropFilter: "blur(8px)",
         display: "flex",
         alignItems: "center",
@@ -33,7 +49,9 @@ export default function KeyboardShortcutsModal({ onClose }) {
           minWidth: 380,
           maxWidth: 480,
           width: "90%",
-          boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+          maxHeight: "86vh",
+          overflowY: "auto",
+          boxShadow: "var(--shadow-xl)",
         }}
       >
         {/* Header */}
@@ -78,7 +96,11 @@ export default function KeyboardShortcutsModal({ onClose }) {
 
         {/* Shortcut rows */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {shortcuts.map(({ keys, desc }, i) => (
+          {shortcuts.map(({ keys, desc, heading }, i) => heading ? (
+            <div key={i} style={{ color: "var(--red)", fontSize: 11, fontWeight: 800, letterSpacing: 1.6, marginTop: i ? 10 : 0 }}>
+              {desc}
+            </div>
+          ) : (
             <div
               key={i}
               style={{
@@ -106,7 +128,7 @@ export default function KeyboardShortcutsModal({ onClose }) {
                       padding: "3px 9px",
                       background: "var(--surface)",
                       border: "1px solid var(--border)",
-                      borderBottom: "2px solid rgba(255,255,255,0.12)",
+                      borderBottom: "2px solid var(--border-hover)",
                       borderRadius: 5,
                       fontSize: 12,
                       fontWeight: 600,

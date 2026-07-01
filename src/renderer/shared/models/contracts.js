@@ -89,6 +89,32 @@
  * @property {"off"|"low"|"balanced"|"vivid"} ambientProfile
  * @property {"calm"|"balanced"|"expressive"} motionPreset
  * @property {string} discoveryRegion
+ * @property {"subtle"|"balanced"|"vivid"} interactionHoverPreset
+ * @property {string} interactionHoverColor Empty for automatic, otherwise a six-digit hex color.
+ * @property {number} interactionGlowStrength Integer from 0 through 100.
+ */
+
+/**
+ * @typedef {Object} BatteryStatus
+ * @property {boolean} available
+ * @property {boolean} charging
+ * @property {boolean} onBattery
+ * @property {number|null} level
+ * @property {number} updatedAt
+ */
+
+/**
+ * @typedef {Object} AdaptivePerformanceState
+ * @property {"efficiency"|"balanced"|"quality"} tier
+ * @property {number} cpuPercent
+ * @property {number} freeMemoryMb
+ * @property {number} eventLoopLagMs
+ * @property {number} bufferingEvents
+ * @property {string} reason
+ */
+
+/**
+ * @typedef {"play"|"pause"|"toggle"|"stop"|"next"|"previous"|"restart"} MediaControlCommand
  */
 
 export const CONTRACT_VERSION = "1.0.9";

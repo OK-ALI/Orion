@@ -1,6 +1,7 @@
 import GeneralSettingsGroup from "./groups/GeneralSettingsGroup";
 import ContentSettingsGroup from "./groups/ContentSettingsGroup";
 import PlaybackSettingsGroup from "./groups/PlaybackSettingsGroup";
+import SystemIntegrationSettingsGroup from "./groups/SystemIntegrationSettingsGroup";
 import SubtitleSettingsGroup from "./groups/SubtitleSettingsGroup";
 import DownloadSettingsGroup from "./groups/DownloadSettingsGroup";
 import NotificationSettingsGroup from "./groups/NotificationSettingsGroup";
@@ -46,6 +47,7 @@ export default function SettingsContent({ model }) {
         {/* GROUP: PLAYBACK                                                    */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         <PlaybackSettingsGroup model={model} />
+        <SystemIntegrationSettingsGroup model={model} />
 
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* GROUP: SUBTITLES                                                   */}

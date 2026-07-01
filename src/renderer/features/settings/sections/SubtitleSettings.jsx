@@ -349,13 +349,32 @@ export function NotificationsSection() {
     const stored = storage.get(STORAGE_KEYS.NOTIFY_NEW_EPISODE);
     return stored === null || stored === undefined ? true : !!stored;
   });
+  const [showBattery, setShowBattery] = useState(
+    () => storage.get(STORAGE_KEYS.SHOW_BATTERY_STATUS) !== false,
+  );
+  const [batteryAlerts, setBatteryAlerts] = useState(
+    () => storage.get(STORAGE_KEYS.BATTERY_ALERTS) !== false,
+  );
+  const [batteryOptimization, setBatteryOptimization] = useState(
+    () => storage.get(STORAGE_KEYS.BATTERY_OPTIMIZATION) !== false,
+  );
   const [saved, setSaved] = useState(false);
 
   const saveSettings = () => {
     storage.set(STORAGE_KEYS.NOTIFY_DOWNLOAD_COMPLETE, notifyDownload);
     storage.set(STORAGE_KEYS.NOTIFY_NEW_EPISODE, notifyEpisode);
+    storage.set(STORAGE_KEYS.SHOW_BATTERY_STATUS, showBattery);
+    storage.set(STORAGE_KEYS.BATTERY_ALERTS, batteryAlerts);
+    storage.set(STORAGE_KEYS.BATTERY_OPTIMIZATION, batteryOptimization);
+    window.dispatchEvent(new CustomEvent("orion:battery-settings-changed"));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const applyBatterySetting = (key, setter, value) => {
+    setter(value);
+    storage.set(key, value);
+    window.dispatchEvent(new CustomEvent("orion:battery-settings-changed"));
   };
 
   const ToggleRow = ({ label, description, value, onChange }) => (
@@ -422,6 +441,28 @@ export function NotificationsSection() {
           value={notifyEpisode}
           onChange={setNotifyEpisode}
         />
+        <ToggleRow
+          label="Show battery status"
+          description="Displays charging state and percentage in Orion's title bar and tray. Hidden automatically on desktops without a battery."
+          value={showBattery}
+          onChange={(value) => applyBatterySetting(STORAGE_KEYS.SHOW_BATTERY_STATUS, setShowBattery, value)}
+        />
+        <ToggleRow
+          label="Low-battery alerts"
+          description="Notifies once at 20% and again at 10% during each discharge cycle."
+          value={batteryAlerts}
+          onChange={(value) => applyBatterySetting(STORAGE_KEYS.BATTERY_ALERTS, setBatteryAlerts, value)}
+        />
+        <ToggleRow
+          label="Automatic battery optimization"
+          description="Reduces visual and download pressure at 20%, and resumably pauses downloads at 10%. Playback continues."
+          value={batteryOptimization}
+          onChange={(value) => applyBatterySetting(STORAGE_KEYS.BATTERY_OPTIMIZATION, setBatteryOptimization, value)}
+        />
+      </div>
+
+      <div style={{ color: "#63cab7", fontSize: 12, marginBottom: 16 }}>
+        Battery changes apply immediately.
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

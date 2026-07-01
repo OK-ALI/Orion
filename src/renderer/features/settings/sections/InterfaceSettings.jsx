@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { storage, STORAGE_KEYS, secureStorage } from "../../../services/settingsStore";
 import { clearTmdbCache } from "../../../services/tmdb";
-import { ACCENT_PRESETS, applyAccentColor, applyFontPreset, THEME_PRESETS, applyTheme, DEFAULT_CUSTOM_VARS, FONT_PRESETS } from "../../../shared/utils/appearance";
+import { ACCENT_PRESETS, applyAccentColor, applyFontPreset, applyInteractionAppearance, THEME_PRESETS, applyTheme, DEFAULT_CUSTOM_VARS, FONT_PRESETS } from "../../../shared/utils/appearance";
 import { SUBTITLE_LANGUAGES } from "../../../shared/utils/subtitles";
 import { SettingsSelect, Toggle } from "../components/SettingsControls";
 
@@ -36,6 +36,15 @@ export function AppearanceSection({ sectionRef = null }) {
   const [theme, setTheme] = useState(
     () => storage.get(STORAGE_KEYS.THEME) || "dark",
   );
+  const [hoverPreset, setHoverPreset] = useState(
+    () => storage.get(STORAGE_KEYS.INTERACTION_HOVER_PRESET) || "balanced",
+  );
+  const [hoverColor, setHoverColor] = useState(
+    () => storage.get(STORAGE_KEYS.INTERACTION_HOVER_COLOR) || "",
+  );
+  const [glowStrength, setGlowStrength] = useState(
+    () => storage.get(STORAGE_KEYS.INTERACTION_GLOW_STRENGTH) ?? 50,
+  );
   const [customVars, setCustomVars] = useState(
     () =>
       storage.get(STORAGE_KEYS.CUSTOM_THEME_VARS) || { ...DEFAULT_CUSTOM_VARS },
@@ -47,7 +56,6 @@ export function AppearanceSection({ sectionRef = null }) {
     setCustomInputs({ ...customVars });
   }, [customVars]);
   const [showCustomEditor, setShowCustomEditor] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   // Remember the committed (saved) values to revert on unmount if unsaved
   const committedRef = useRef({
@@ -104,6 +112,12 @@ export function AppearanceSection({ sectionRef = null }) {
     storage.set(STORAGE_KEYS.AMBIENT_PROFILE, ambientProfile);
     storage.set(STORAGE_KEYS.AMBIENT_GLOW, ambientProfile !== "off");
     storage.set(STORAGE_KEYS.THEME, theme);
+    storage.set(STORAGE_KEYS.INTERACTION_HOVER_PRESET, hoverPreset);
+    storage.set(
+      STORAGE_KEYS.INTERACTION_HOVER_COLOR,
+      /^#[0-9a-f]{6}$/i.test(hoverColor) ? hoverColor : "",
+    );
+    storage.set(STORAGE_KEYS.INTERACTION_GLOW_STRENGTH, glowStrength);
     if (theme === "custom") {
       storage.set(STORAGE_KEYS.CUSTOM_THEME_VARS, customVars);
     }
@@ -120,14 +134,23 @@ export function AppearanceSection({ sectionRef = null }) {
     document.body.dataset.motion = appliedMotion;
     document.documentElement.dataset.motion = appliedMotion;
     document.body.dataset.background = backgroundScene;
+    applyInteractionAppearance({
+      preset: hoverPreset,
+      override: hoverColor,
+      strength: glowStrength,
+      accentId: accent,
+      themeId: theme,
+    });
     // Mark as saved so the cleanup effect doesn't revert
     savedRef.current = true;
     committedRef.current = { accent, fontPreset, theme, customVars, backgroundScene };
     // Notify App.jsx so playerSettings prop (accent + lang) is refreshed
     window.dispatchEvent(new CustomEvent("orion:player-settings-changed"));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   };
+
+  useEffect(() => {
+    handleSave();
+  }, [accent, accentInPlayer, ambientProfile, backgroundScene, compact, customVars, fontPreset, fontSize, glowStrength, hoverColor, hoverPreset, motionPreset, noAnim, theme]);
 
   const CUSTOM_VAR_LABELS = {
     "--bg": "Background",
@@ -579,14 +602,47 @@ export function AppearanceSection({ sectionRef = null }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <button className="btn btn-primary" onClick={handleSave}>
-          Save
-        </button>
-        {saved && (
-          <span style={{ fontSize: 13, color: "#48c774" }}>✓ Saved</span>
-        )}
+      <div className="interaction-appearance" style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)", marginBottom: 10 }}>Interaction appearance</div>
+        <div className="interaction-appearance-controls">
+          <div>
+            <div className="settings-label">Hover intensity</div>
+            <SettingsSelect value={hoverPreset} onChange={setHoverPreset} options={[
+              { value: "subtle", label: "Subtle" },
+              { value: "balanced", label: "Balanced" },
+              { value: "vivid", label: "Vivid" },
+            ]} />
+          </div>
+          <div>
+            <div className="settings-label">Hover accent</div>
+            <div className="interaction-color-row">
+              <button type="button" aria-pressed={!hoverColor} className={!hoverColor ? "btn btn-primary" : "btn btn-ghost"} onClick={() => setHoverColor("")}>Automatic</button>
+              <button type="button" aria-pressed={!!hoverColor} className={hoverColor ? "btn btn-primary" : "btn btn-ghost"} onClick={() => setHoverColor(ACCENT_PRESETS.find((item) => item.id === accent)?.hover || "#a78bfa")}>Custom</button>
+              {hoverColor && <>
+                <input type="color" value={/^#[0-9a-f]{6}$/i.test(hoverColor) ? hoverColor : "#a78bfa"} onChange={(event) => setHoverColor(event.target.value)} aria-label="Custom hover color" />
+                <input className="interaction-color-input" value={hoverColor} onChange={(event) => setHoverColor(event.target.value)} aria-label="Custom hover color value" maxLength={7} />
+              </>}
+            </div>
+            {hoverColor && !/^#[0-9a-f]{6}$/i.test(hoverColor) && <div className="interaction-color-error">Use a six-digit hex color such as #8b5cf6.</div>}
+          </div>
+          <div>
+            <div className="settings-label">Glow intensity · {glowStrength}%</div>
+            <input type="range" min="0" max="100" step="1" value={glowStrength} onChange={(event) => setGlowStrength(Number(event.target.value))} aria-label="Hover glow intensity" />
+          </div>
+        </div>
+        <div className="interaction-preview" aria-label="Interaction appearance preview">
+          <button type="button" className="interaction-preview-nav">✦ Discover</button>
+          <button type="button" className="btn btn-secondary interaction-preview-button">Preview button</button>
+          <button type="button" className="interaction-preview-card"><span>ORION</span><strong>Preview card</strong></button>
+        </div>
+        <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => {
+          setHoverPreset("balanced");
+          setHoverColor("");
+          setGlowStrength(50);
+        }}>Reset interaction defaults</button>
+        <div style={{ color: "var(--success)", fontSize: 12, marginTop: 10 }}>Changes apply immediately.</div>
       </div>
+
     </div>
   );
 }

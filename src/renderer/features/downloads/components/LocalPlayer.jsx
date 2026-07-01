@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CloseIcon, MiniPlayerIcon, PopOutIcon } from "../../../components/common/Icons";
 import { storage, STORAGE_KEYS } from "../../../services/settingsStore";
+import { handleNativePlayerKey } from "../../player/services/nativeKeyboard";
 
 function progressKey(media) {
   if (media.mediaType === "tv") {
@@ -120,6 +121,12 @@ export default function LocalPlayer({
     });
     onClose();
   };
+
+  useEffect(() => {
+    const handler = (event) => handleNativePlayerKey(event, videoRef.current, { onMini: openMini });
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [media]);
 
   if (error) {
     return (

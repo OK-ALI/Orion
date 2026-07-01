@@ -77,6 +77,43 @@ export function applyAccentColor(presetId) {
   root.style.setProperty("--border-accent", preset.border);
 }
 
+export const INTERACTION_PRESETS = Object.freeze({
+  subtle: { lift: -2, scale: 1.01 },
+  balanced: { lift: -4, scale: 1.02 },
+  vivid: { lift: -6, scale: 1.035 },
+});
+
+export function normalizeInteractionSettings(value = {}) {
+  const preset = Object.hasOwn(INTERACTION_PRESETS, value.preset) ? value.preset : "balanced";
+  const override = /^#[0-9a-f]{6}$/i.test(String(value.override || "").trim())
+    ? String(value.override).trim()
+    : "";
+  const strength = Math.max(0, Math.min(100, Number(value.strength ?? 50) || 0));
+  return { preset, override, strength };
+}
+
+export function applyInteractionAppearance(value = {}) {
+  const settings = normalizeInteractionSettings(value);
+  const preset = INTERACTION_PRESETS[settings.preset];
+  const accent = ACCENT_PRESETS.find((item) => item.id === value.accentId) || ACCENT_PRESETS[0];
+  const rawColor = settings.override || accent.hover;
+  const hoverColor = value.themeId === "light"
+    ? `color-mix(in srgb, ${rawColor} 76%, #181b22)`
+    : rawColor;
+  const root = document.documentElement;
+  const softPercent = Math.round(8 + settings.strength * 0.14);
+  const borderPercent = Math.round(38 + settings.strength * 0.32);
+  const glowPercent = Math.round(settings.strength * 0.5);
+  root.style.setProperty("--interaction-hover", hoverColor);
+  root.style.setProperty("--interaction-hover-soft", `color-mix(in srgb, var(--interaction-hover) ${softPercent}%, transparent)`);
+  root.style.setProperty("--interaction-hover-border", `color-mix(in srgb, var(--interaction-hover) ${borderPercent}%, transparent)`);
+  root.style.setProperty("--interaction-hover-glow", `color-mix(in srgb, var(--interaction-hover) ${glowPercent}%, transparent)`);
+  root.style.setProperty("--interaction-lift", `${preset.lift}px`);
+  root.style.setProperty("--interaction-scale", String(preset.scale));
+  root.style.setProperty("--interaction-glow-blur", `${Math.round(12 + settings.strength * 0.36)}px`);
+  return settings;
+}
+
 export const FONT_PRESETS = [
   {
     id: "orion",

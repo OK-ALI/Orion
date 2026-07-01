@@ -37,12 +37,18 @@ describe("v1.0.7 renderer storage compatibility", () => {
     storage.set(STORAGE_KEYS.DOWNLOAD_FRAGMENT_CONCURRENCY, 8);
     storage.set(STORAGE_KEYS.CUSTOM_THEME_VARS, { "--bg": "#101010" });
     storage.set(STORAGE_KEYS.CLOSE_TO_TRAY, "tray");
+    storage.set(STORAGE_KEYS.INTERACTION_HOVER_PRESET, "vivid");
+    storage.set(STORAGE_KEYS.INTERACTION_HOVER_COLOR, "#7c3aed");
+    storage.set(STORAGE_KEYS.INTERACTION_GLOW_STRENGTH, 72);
     storage.set(STORAGE_KEYS.SUBDL_API_KEY, "must-not-export");
 
     const backup = collectBackupData();
     expect(backup.downloadFragmentConcurrency).toBe(8);
     expect(backup.customThemeVars).toEqual({ "--bg": "#101010" });
     expect(backup.closeToTray).toBe("tray");
+    expect(backup.interactionHoverPreset).toBe("vivid");
+    expect(backup.interactionHoverColor).toBe("#7c3aed");
+    expect(backup.interactionGlowStrength).toBe(72);
     expect(backup.subdlApiKey).toBeUndefined();
     expect(BACKUP_KEYS).not.toContain(STORAGE_KEYS.SUBDL_API_KEY);
     expect(BACKUP_KEYS).not.toContain(STORAGE_KEYS.WYZIE_API_KEY);

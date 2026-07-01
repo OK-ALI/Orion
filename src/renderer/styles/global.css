@@ -59,6 +59,20 @@ body[data-background="minimal"]::after { opacity:0; }
 }
 body[data-motion="calm"]::before,body[data-motion="calm"]::after { animation:none!important; }
 body[data-motion="expressive"]::before,body[data-motion="expressive"]::after { animation-duration:24s; }
+html[data-player-fullscreen] body::before,
+html[data-player-fullscreen] body::after { animation-play-state:paused!important; }
+
+html[data-performance-tier="efficiency"] body::before,
+html[data-performance-tier="efficiency"] body::after {
+  animation-duration: 60s !important;
+  filter: none !important;
+}
+
+html[data-performance-tier="efficiency"] .media-card,
+html[data-performance-tier="efficiency"] .poster-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 220px 330px;
+}
 
 body.compact-mode {
   --media-card-compact: 132px;

@@ -37,6 +37,32 @@
   --warning-soft: rgba(255, 184, 69, 0.12);
   --danger: #ff4757;
   --danger-soft: rgba(255, 71, 87, 0.12);
+  --provider-subdl: #7da5ff;
+  --provider-subdl-soft: rgba(99, 149, 255, 0.12);
+  --provider-wyzie: #b993ff;
+  --provider-wyzie-soft: rgba(180, 130, 255, 0.12);
+  --provider-stream: #a6b0bd;
+  --provider-stream-soft: rgba(166, 176, 189, 0.10);
+
+  /* Semantic interaction and media colors */
+  --on-accent: #ffffff;
+  --on-media: #ffffff;
+  --media-black: #000000;
+  --media-scrim: rgba(4, 6, 12, 0.78);
+  --media-scrim-soft: rgba(4, 6, 12, 0.48);
+  --overlay-backdrop: rgba(2, 4, 10, 0.82);
+  --surface-translucent: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  --player-chrome: linear-gradient(180deg, rgba(4, 6, 12, 0.9), rgba(4, 6, 12, 0.58), transparent);
+  --player-border: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  --shadow-color: rgba(0, 0, 0, 0.55);
+  --scrollbar-thumb: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  --interaction-hover: var(--accent-hover);
+  --interaction-hover-soft: color-mix(in srgb, var(--interaction-hover) 14%, transparent);
+  --interaction-hover-border: color-mix(in srgb, var(--interaction-hover) 58%, transparent);
+  --interaction-hover-glow: color-mix(in srgb, var(--interaction-hover) 25%, transparent);
+  --interaction-lift: -4px;
+  --interaction-scale: 1.02;
+  --interaction-glow-blur: 30px;
 
   /* ── Glassmorphism ───────────────────────────────────────────────────────── */
   --glass-bg: rgba(18, 18, 26, 0.88);

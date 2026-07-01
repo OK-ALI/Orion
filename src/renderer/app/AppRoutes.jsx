@@ -22,7 +22,7 @@ export default function AppRoutes({ model }) {
   } = model;
   return (
     <Suspense fallback={<div style={{ padding: 60, color: "var(--text3)", textAlign: "center", fontSize: 15 }}>Loading…</div>}>
-      <div style={{ display: page === "home" ? "contents" : "none" }}>
+      {page === "home" && (
         <HomePage
           trending={trending} trendingTV={trendingTV} loading={loadingHome}
           onSelect={handleSelectResult} progress={progress} inProgress={inProgress}
@@ -31,18 +31,18 @@ export default function AppRoutes({ model }) {
           history={history} saved={savedList} apiKey={apiKey} onNavigate={navigate}
           onSave={toggleSave} isSaved={isSaved}
         />
-      </div>
-      <div style={{ display: page === "discover" ? "contents" : "none" }}>
+      )}
+      {page === "discover" && (
         <DiscoverPage apiKey={apiKey} onNavigate={navigate} />
-      </div>
-      <div style={{ display: page === "search" ? "contents" : "none" }}>
+      )}
+      {page === "search" && (
         <SearchResultsPage
           apiKey={apiKey}
           item={page === "search" && typeof selected === "string" ? selected : ""}
           onNavigate={navigate}
           isActive={page === "search"}
         />
-      </div>
+      )}
       {page === "movie" && selected && (
         <MoviePage
           item={selected} apiKey={apiKey} playerSettings={playerSettings}
@@ -70,7 +70,7 @@ export default function AppRoutes({ model }) {
           onPlaybackSession={onPlaybackSession}
         />
       )}
-      <div style={{ display: page === "library" ? "contents" : "none" }}>
+      {page === "library" && (
         <LibraryPage
           history={history} inProgress={inProgress} saved={savedList} progress={progress}
           onSelect={handleSelectResult} watched={watched} onMarkWatched={markWatched}
@@ -79,14 +79,14 @@ export default function AppRoutes({ model }) {
           downloads={downloads}
           onHistory={addHistory} onSaveProgress={saveProgress} onOpenMiniPlayer={setMiniPlayer} onDeleteDownload={handleDeleteDownload}
         />
-      </div>
-      <div style={{ display: page === "settings" ? "contents" : "none" }}>
+      )}
+      {page === "settings" && (
         <SettingsPage
           apiKey={apiKey} apiKeySource={apiKeySource} onChangeApiKey={changeApiKey}
           initialSection={page === "settings" ? selected?.section : null}
         />
-      </div>
-      <div style={{ display: page === "downloads" ? "contents" : "none" }}>
+      )}
+      {page === "downloads" && (
         <DownloadsPage
           downloads={downloads} onDeleteDownload={handleDeleteDownload}
           onHistory={addHistory} onSaveProgress={saveProgress} progress={progress}
@@ -98,7 +98,7 @@ export default function AppRoutes({ model }) {
           onOpenMiniPlayer={setMiniPlayer}
           onUpdateDownload={(id, updates) => setDownloads((previous) => previous.map((download) => download.id === id ? { ...download, ...updates } : download))}
         />
-      </div>
+      )}
     </Suspense>
   );
 }

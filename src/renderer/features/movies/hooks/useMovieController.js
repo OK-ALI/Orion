@@ -341,7 +341,7 @@ const [details, setDetails] = useState(null);
 
   // Ambient glow hook
   useEffect(() => {
-    if (!playing || !ambientGlowEnabled) {
+    if (!playing || !ambientGlowEnabled || playerFullscreen) {
       setAmbientColor("");
       return;
     }
@@ -356,7 +356,7 @@ const [details, setDetails] = useState(null);
     return () => {
       cleanup();
     };
-  }, [playing, resolvedPlayerUrl, playerSource, ambientGlowEnabled]);
+  }, [playing, resolvedPlayerUrl, playerSource, ambientGlowEnabled, playerFullscreen]);
 
   useEffect(() => {
     let mounted = true;

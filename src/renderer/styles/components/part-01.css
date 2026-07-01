@@ -51,6 +51,54 @@
   gap: 0;
 }
 
+.titlebar-battery {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+}
+
+.titlebar-battery-shell {
+  display: block;
+  position: relative;
+  width: 20px;
+  height: 10px;
+  padding: 2px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+}
+
+.titlebar-battery-shell::after {
+  content: "";
+  position: absolute;
+  right: -3px;
+  top: 2px;
+  width: 2px;
+  height: 4px;
+  border-radius: 0 2px 2px 0;
+  background: currentColor;
+}
+
+.titlebar-battery-shell > span {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  border-radius: 1px;
+  background: #63cab7;
+}
+
+.titlebar-battery.is-critical { color: var(--danger); }
+.titlebar-battery.is-critical .titlebar-battery-shell > span { background: var(--danger); }
+.titlebar-battery.is-charging .titlebar-battery-shell > span { background: #63cab7; }
+
 .titlebar-btn {
   width: 46px;
   height: var(--titlebar-height);

@@ -1,7 +1,7 @@
 const path = require("path");
 const { app, BrowserWindow, ipcMain, powerMonitor } = require("electron");
 const { extractPaletteFromBitmap } = require("./ambientPalette");
-const { samplingInterval } = require("./ambientSampling");
+const { boundedSampleRect, samplingInterval } = require("./ambientSampling");
 
 const POPOUT_CSS = `
   video::cue {
@@ -66,6 +66,7 @@ function createPopoutWindowController({
   getMainWindow,
   ensurePlayerSessions,
   setMiniPlayerStatus,
+  getPerformanceTier = () => "balanced",
 }) {
   let popoutWindow = null;
   let activePlayback = null;
@@ -106,9 +107,10 @@ function createPopoutWindowController({
           const state = await snapshotState();
           if (!state?.paused) {
             const cropRect = await queryVideoRect();
-            const image = cropRect
-              ? await popoutWindow.webContents.capturePage(cropRect)
-              : await popoutWindow.webContents.capturePage();
+            const efficiency = getPerformanceTier() === "efficiency";
+            const image = await popoutWindow.webContents.capturePage(
+              boundedSampleRect(cropRect, efficiency ? 160 : 320, efficiency ? 90 : 180),
+            );
             if (!image.isEmpty()) {
               const sample = image.resize({ width: 32, height: 18, quality: "good" });
               const colors = extractPaletteFromBitmap(sample.toBitmap());
@@ -117,7 +119,8 @@ function createPopoutWindowController({
           }
         } catch {}
       }
-      ambientTimer = setTimeout(tick, samplingInterval("balanced", powerMonitor.isOnBatteryPower()));
+      const profile = getPerformanceTier() === "efficiency" ? "low" : "balanced";
+      ambientTimer = setTimeout(tick, samplingInterval(profile, powerMonitor.isOnBatteryPower()));
     };
     tick();
   };
@@ -179,7 +182,7 @@ function createPopoutWindowController({
     for (let i = 0; i < frames.length; i += 1) frames.push(...(frames[i].frames || []));
     for (const frame of frames) {
       try {
-        const result = await frame.executeJavaScript(`(() => { const v = document.querySelector('video'); return v ? { currentTime:v.currentTime||0, duration:v.duration||0, paused:v.paused, muted:v.muted, volume:v.volume } : null; })()`);
+        const result = await frame.executeJavaScript(`(() => { const v = document.querySelector('video'); return v ? { currentTime:v.currentTime||0, duration:v.duration||0, paused:v.paused, muted:v.muted, volume:v.volume, playbackRate:v.playbackRate||1 } : null; })()`);
         if (result) return result;
       } catch {}
     }
@@ -195,11 +198,19 @@ function createPopoutWindowController({
       if (!v) return null;
       const action = ${safeAction}; const value = ${safeValue};
       if (action === 'toggle') { if (v.paused) v.play().catch(() => {}); else v.pause(); }
+      if (action === 'play') v.play().catch(() => {});
+      if (action === 'pause' || action === 'stop') v.pause();
+      if (action === 'restart') { v.currentTime = 0; v.play().catch(() => {}); }
       if (action === 'mute') v.muted = !v.muted;
       if (action === 'seek') v.currentTime = Math.max(0, Math.min(v.duration || Infinity, v.currentTime + value));
       if (action === 'position') v.currentTime = Math.max(0, Math.min(v.duration || Infinity, value));
       if (action === 'volume') { v.volume = Math.max(0, Math.min(1, value)); v.muted = false; }
-      return { currentTime:v.currentTime||0, duration:v.duration||0, paused:v.paused, muted:v.muted, volume:v.volume };
+      if (action === 'rate') v.playbackRate = Math.max(.25, Math.min(2, value));
+      if (action === 'captions') {
+        const tracks = Array.from(v.textTracks || []); const showing = tracks.some((track) => track.mode === 'showing');
+        tracks.forEach((track, index) => { track.mode = !showing && index === 0 ? 'showing' : 'disabled'; });
+      }
+      return { currentTime:v.currentTime||0, duration:v.duration||0, paused:v.paused, muted:v.muted, volume:v.volume, playbackRate:v.playbackRate||1 };
     })()`;
     const frames = [popoutWindow.webContents.mainFrame];
     for (let i = 0; i < frames.length; i += 1) frames.push(...(frames[i].frames || []));
@@ -256,6 +267,41 @@ function createPopoutWindowController({
     popoutWindow.setAlwaysOnTop(true, "screen-saver");
     popoutWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     popoutWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    popoutWindow.webContents.on("before-input-event", async (event, input) => {
+      if (input.type !== "keyDown" || input.control || input.meta || input.alt) return;
+      const key = String(input.key || "").toLowerCase();
+      if (input.shift && (key === "n" || key === "p")) {
+        event.preventDefault();
+        notifyMain("player-shortcut", key === "n" ? "next" : "previous");
+        return;
+      }
+      if (key === "i") { event.preventDefault(); close(); return; }
+      const recognized = new Set([
+        " ", "k", "j", "l", "arrowleft", "arrowright", "arrowup", "arrowdown",
+        "m", "f", "home", "end", "0", "c", ">", "<",
+      ]);
+      if (!recognized.has(key) && !/^[1-9]$/.test(key)) return;
+      event.preventDefault();
+      if (key === "f") {
+        popoutWindow.setFullScreen(!popoutWindow.isFullScreen());
+        return;
+      }
+      const state = await snapshotState();
+      const commands = {
+        " ": ["toggle"], k: ["toggle"], j: ["seek", -10], l: ["seek", 10],
+        arrowleft: ["seek", -10], arrowright: ["seek", 10], m: ["mute"],
+        home: ["position", 0], "0": ["position", 0], c: ["captions"],
+      };
+      if (key === "arrowup") commands[key] = ["volume", Math.min(1, Number(state?.volume || 0) + 0.1)];
+      if (key === "arrowdown") commands[key] = ["volume", Math.max(0, Number(state?.volume || 0) - 0.1)];
+      if (key === "end") commands[key] = ["position", Math.max(0, Number(state?.duration || 0) - 0.25)];
+      if (/^[1-9]$/.test(key)) commands[key] = ["position", Number(state?.duration || 0) * (Number(key) / 10)];
+      if (key === ">") commands[key] = ["rate", Math.min(2, Number(state?.playbackRate || 1) + 0.25)];
+      if (key === "<") commands[key] = ["rate", Math.max(0.25, Number(state?.playbackRate || 1) - 0.25)];
+      const command = commands[key];
+      if (!command) return;
+      controlPlayback(command[0], command[1]);
+    });
     popoutWindow.webContents.on("did-fail-load", (_event, code, description, _failedUrl, isMainFrame) => {
       if (isMainFrame && !app.isPackaged) console.error("[popout] load failed", { code, description });
     });
@@ -343,7 +389,7 @@ function createPopoutWindowController({
     ipcMain.handle("popout-control", (_event, action, value) => controlPlayback(action, value));
   };
 
-  return { close, isOpen, register };
+  return { close, controlPlayback, isOpen, register };
 }
 
 module.exports = { createPopoutWindowController };

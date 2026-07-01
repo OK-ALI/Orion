@@ -36,7 +36,7 @@ app.commandLine.appendSwitch(
 );
 app.commandLine.appendSwitch(
   "disable-features",
-  "HardwareMediaKeyHandling,MediaSessionService,UseSandboxedXdgPortal",
+  "UseSandboxedXdgPortal",
 );
 app.commandLine.appendSwitch("enable-features", "NetworkServiceInProcess2");
 app.commandLine.appendSwitch("disk-cache-size", String(80 * 1024 * 1024));
@@ -58,6 +58,9 @@ const { registerNotifications } = require("./app/notifications");
 const { createPopoutWindowController } = require("./player/popoutWindow");
 const localMedia = require("./player/localMedia");
 const ambientSampler = require("./player/ambientSampler");
+const { createBatteryService } = require("./battery/service");
+const { createPerformanceCoordinator } = require("./performance/coordinator");
+const { createMediaControls } = require("./player/mediaControls");
 localMedia.registerScheme();
 
 // ── Session Manager ──────────────────────────────────────────────────────────
@@ -79,6 +82,24 @@ const trayController = createTrayController({
   getMainWindow,
 });
 
+const batteryService = createBatteryService({
+  getMainWindow,
+  downloads: downloadsIpc,
+  tray: trayController,
+});
+const performanceCoordinator = createPerformanceCoordinator({
+  getMainWindow,
+  getBatteryStatus: () => ({
+    ...batteryService.getStatus(),
+    optimizationEnabled: batteryService.getPreferences().automaticOptimization,
+  }),
+  downloads: downloadsIpc,
+});
+const mediaControls = createMediaControls({
+  getMainWindow,
+  getPopoutController: () => popoutController,
+});
+
 function ensurePlayerSessions() {
   if (sessionsConfigured) return;
   sessionsConfigured = true;
@@ -92,6 +113,7 @@ const popoutController = createPopoutWindowController({
   getMainWindow,
   ensurePlayerSessions,
   setMiniPlayerStatus: trayController.setMiniPlayerStatus,
+  getPerformanceTier: () => performanceCoordinator.getSnapshot()?.tier || "balanced",
 });
 
 if (process.platform === "win32") {
@@ -168,16 +190,39 @@ function createWindow() {
         playerWcIds.add(wc.id);
         wc.once("destroyed", () => playerWcIds.delete(wc.id));
 
-        // Inject custom keyboard hotkeys (Space, Arrows, F, M) inside sandboxed player webview
+        // Consistent YouTube-style keyboard controls inside sandboxed player webviews.
         wc.on("before-input-event", async (event, input) => {
           if (input.type === "keyDown") {
             const key = input.key.toLowerCase();
+            const hostCommand = input.shift && key === "n"
+              ? "next"
+              : input.shift && key === "p"
+                ? "previous"
+                : key === "i"
+                  ? "mini"
+                  : null;
+            if (hostCommand) {
+              event.preventDefault();
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send("player-shortcut", hostCommand);
+              }
+              return;
+            }
             if (
               key === " " ||
+              key === "k" ||
+              key === "j" ||
+              key === "l" ||
               key === "arrowleft" ||
               key === "arrowright" ||
               key === "arrowup" ||
               key === "arrowdown" ||
+              key === "home" ||
+              key === "end" ||
+              /^[0-9]$/.test(key) ||
+              key === "c" ||
+              key === ">" ||
+              key === "<" ||
               key === "f" ||
               key === "m"
             ) {
@@ -187,16 +232,30 @@ function createWindow() {
                   const v = document.querySelector('video');
                   if (!v) return false;
                   const key = "${key}";
-                  if (key === " ") {
+                  if (key === " " || key === "k") {
                     if (v.paused) v.play(); else v.pause();
-                  } else if (key === "arrowleft") {
+                  } else if (key === "arrowleft" || key === "j") {
                     v.currentTime = Math.max(0, v.currentTime - 10);
-                  } else if (key === "arrowright") {
+                  } else if (key === "arrowright" || key === "l") {
                     v.currentTime = Math.min(v.duration || Infinity, v.currentTime + 10);
                   } else if (key === "arrowup") {
                     v.volume = Math.min(1, v.volume + 0.1);
                   } else if (key === "arrowdown") {
                     v.volume = Math.max(0, v.volume - 0.1);
+                  } else if (key === "home" || key === "0") {
+                    v.currentTime = 0;
+                  } else if (key === "end") {
+                    v.currentTime = Math.max(0, (v.duration || 0) - 0.25);
+                  } else if (/^[1-9]$/.test(key) && Number.isFinite(v.duration)) {
+                    v.currentTime = v.duration * (Number(key) / 10);
+                  } else if (key === ">") {
+                    v.playbackRate = Math.min(2, Math.round((v.playbackRate + 0.25) * 4) / 4);
+                  } else if (key === "<") {
+                    v.playbackRate = Math.max(0.25, Math.round((v.playbackRate - 0.25) * 4) / 4);
+                  } else if (key === "c") {
+                    const tracks = Array.from(v.textTracks || []);
+                    const showing = tracks.some((track) => track.mode === "showing");
+                    tracks.forEach((track, index) => { track.mode = !showing && index === 0 ? "showing" : "disabled"; });
                   } else if (key === "f") {
                     if (document.fullscreenElement) {
                       document.exitFullscreen().catch(() => {});
@@ -343,7 +402,10 @@ allmangaIpc.register();
 playerIpc.register(getMainWindow, {
   writeSecretMigration: storageIpc.writeSecretMigration,
 });
-ambientSampler.register(getMainWindow);
+ambientSampler.register(
+  getMainWindow,
+  () => performanceCoordinator.getSnapshot()?.tier || "balanced",
+);
 blockStats.init(getMainWindow);
 diagnosticsIpc.register({
   getDownloads: downloadsIpc.getDownloads,
@@ -365,6 +427,9 @@ app.on("will-quit", () => {
   localMedia.clear();
   ambientSampler.clear();
   trayController.destroy();
+  batteryService.destroy();
+  performanceCoordinator.destroy();
+  mediaControls.destroy();
 });
 
 app.on("before-quit", () => {
@@ -420,6 +485,9 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+    batteryService.register();
+    performanceCoordinator.register();
+    mediaControls.register();
     localMedia.register({ getDownloads: downloadsIpc.getDownloads, saveDownloads: downloadsIpc.saveDownloads });
     createWindow();
   });

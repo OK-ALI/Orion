@@ -1,6 +1,6 @@
 {
   "name": "orion",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Orion — A Multiverse of Stories",
   "author": "Orion",
   "license": "GPL-3.0",
@@ -24,8 +24,9 @@
     "check:bindings": "node scripts/check-renderer-bindings.js",
     "check:ipc": "node scripts/check-ipc-contract.js",
     "check:secrets": "node scripts/check-secrets.js",
+    "check:theme-colors": "node scripts/check-theme-colors.js",
     "check:cycles": "madge --circular --extensions js,jsx src/renderer src/main",
-    "check": "npm run check:source-size && npm run check:bindings && npm run check:ipc && npm run check:secrets && npm run check:cycles && npm test && npm run build",
+    "check": "npm run check:source-size && npm run check:bindings && npm run check:ipc && npm run check:secrets && npm run check:theme-colors && npm run check:cycles && npm test && npm run build",
     "dev": "vite build --watch",
     "start": "vite build && electron .",
     "dist:win": "cross-env ELECTRON_DIST=1 vite build && electron-builder --win --publish never",

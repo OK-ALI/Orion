@@ -55,6 +55,15 @@ export const STORAGE_KEYS = {
   // Notification preferences
   NOTIFY_DOWNLOAD_COMPLETE: "notifyDownloadComplete",
   NOTIFY_NEW_EPISODE: "notifyNewEpisode",
+  SHOW_BATTERY_STATUS: "showBatteryStatus",
+  BATTERY_ALERTS: "batteryAlerts",
+  BATTERY_OPTIMIZATION: "batteryOptimization",
+  MEDIA_CONTROLS_ENABLED: "mediaControlsEnabled",
+  MEDIA_METADATA_ENABLED: "mediaMetadataEnabled",
+  MEDIA_BACKGROUND_CONTROLS: "mediaBackgroundControls",
+  INTERACTION_HOVER_PRESET: "interactionHoverPreset",
+  INTERACTION_HOVER_COLOR: "interactionHoverColor",
+  INTERACTION_GLOW_STRENGTH: "interactionGlowStrength",
   // TMDB metadata lang (BCP-47 locale, e.g. "en-US")
   TMDB_LANG: "tmdbLang",
   // Intro skip (anime only, allmanga source)

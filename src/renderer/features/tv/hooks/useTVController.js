@@ -380,7 +380,7 @@ const [details, setDetails] = useState(null);
 
   // Ambient glow hook
   useEffect(() => {
-    if (!playing || !ambientGlowEnabled) {
+    if (!playing || !ambientGlowEnabled || playerFullscreen) {
       setAmbientColor("");
       return;
     }
@@ -395,7 +395,7 @@ const [details, setDetails] = useState(null);
     return () => {
       cleanup();
     };
-  }, [playing, resolvedPlayerUrl, playerSource, selectedEp?.episode_number, selectedSeason, ambientGlowEnabled]);
+  }, [playing, resolvedPlayerUrl, playerSource, selectedEp?.episode_number, selectedSeason, ambientGlowEnabled, playerFullscreen]);
 
   useEffect(() => {
     if (!apiKey || !item.id) return;
@@ -749,9 +749,11 @@ const [details, setDetails] = useState(null);
         height: playerRect.height,
       } : null,
       currentTime: Number(storage.get("dlTime_" + progressKey)) || 0,
+      nextAction: nextEp ? () => playEpisode(nextEp) : null,
+      previousAction: prevEp ? () => playEpisode(prevEp) : null,
       updatedAt: Date.now(),
     });
-  }, [playing, selectedEp, selectedSeason, pipOpen, isAsync, resolvedPlayerUrl, playerSource, webviewLoading, item.id, title, onPlaybackSession]);
+  }, [playing, selectedEp, selectedSeason, pipOpen, isAsync, resolvedPlayerUrl, playerSource, webviewLoading, item.id, title, onPlaybackSession, nextEp, prevEp, playEpisode]);
 
   const currentEpWatched = currentProgressKey
     ? !!watched?.[currentProgressKey]

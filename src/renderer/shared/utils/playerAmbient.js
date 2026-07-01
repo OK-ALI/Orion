@@ -22,6 +22,7 @@ export function setupAmbientGlow(webview, onColor, options = {}) {
   let resizeObserver = null;
   let restartTimer = null;
   let lastRectKey = "";
+  let fullscreenPaused = false;
   const captureElement = options.captureElement || webview;
   const applyPalette = (colors) => {
     const safeColors = Array.isArray(colors) && colors.length >= 2 ? colors : fallback;
@@ -45,6 +46,7 @@ export function setupAmbientGlow(webview, onColor, options = {}) {
     };
   };
   const start = async () => {
+    if (!active || fullscreenPaused) return;
     const playbackWebContentsId = getReadyWebContentsId(webview);
     if (!playbackWebContentsId || !window.electron?.startAmbientSampling) return;
     // Electron renders <webview> media in a separate guest surface. Capturing
@@ -78,6 +80,21 @@ export function setupAmbientGlow(webview, onColor, options = {}) {
     if (!active || payload?.targetId !== targetId || !Array.isArray(payload.colors)) return;
     applyPalette(payload.colors);
   });
+  const fullscreenEnterHandler = window.electron?.onWebviewEnterFullscreen?.(() => {
+    fullscreenPaused = true;
+    lastRectKey = "";
+    start.lastPlaybackId = null;
+    document.documentElement.setAttribute("data-player-fullscreen", "1");
+    onColor("", fallback);
+    if (captureElement?.style) delete captureElement.dataset.ambientActive;
+    window.electron?.stopAmbientSampling?.(targetId).catch(() => {});
+  });
+  const fullscreenLeaveHandler = window.electron?.onWebviewLeaveFullscreen?.(() => {
+    fullscreenPaused = false;
+    document.documentElement.removeAttribute("data-player-fullscreen");
+    applyPalette(fallback);
+    scheduleRestart();
+  });
   webview?.addEventListener?.("dom-ready", start);
   window.addEventListener("resize", scheduleRestart);
   window.addEventListener("scroll", scheduleRestart, true);
@@ -93,12 +110,15 @@ export function setupAmbientGlow(webview, onColor, options = {}) {
     window.removeEventListener("scroll", scheduleRestart, true);
     resizeObserver?.disconnect?.();
     window.clearTimeout(restartTimer);
+    if (fullscreenPaused) document.documentElement.removeAttribute("data-player-fullscreen");
     if (captureElement?.style) {
       captureElement.style.removeProperty("--player-ambient-a");
       captureElement.style.removeProperty("--player-ambient-b");
       delete captureElement.dataset.ambientActive;
     }
     if (paletteHandler) window.electron?.offAmbientPalette?.(paletteHandler);
+    if (fullscreenEnterHandler) window.electron?.offWebviewEnterFullscreen?.(fullscreenEnterHandler);
+    if (fullscreenLeaveHandler) window.electron?.offWebviewLeaveFullscreen?.(fullscreenLeaveHandler);
     window.electron?.stopAmbientSampling?.(targetId).catch(() => {});
   };
 }

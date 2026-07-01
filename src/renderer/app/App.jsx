@@ -11,6 +11,7 @@ import { storage, STORAGE_KEYS } from "../services/settingsStore";
 import {
   applyAccentColor,
   applyFontPreset,
+  applyInteractionAppearance,
   applyTheme,
   ACCENT_PRESETS,
 } from "../shared/utils/appearance";
@@ -35,6 +36,7 @@ import {
   settlePlaybackStateWithin,
 } from "../features/player/services/playbackSession";
 import { getMiniPlayerBounds } from "../shared/utils/miniPlayerGeometry";
+import { useSystemIntegration } from "./hooks/useSystemIntegration";
 
 export default function App() {
   const {
@@ -253,6 +255,13 @@ export default function App() {
     const theme = storage.get(STORAGE_KEYS.THEME) || "dark";
     const customVars = storage.get(STORAGE_KEYS.CUSTOM_THEME_VARS) || null;
     applyTheme(theme, customVars);
+    applyInteractionAppearance({
+      preset: storage.get(STORAGE_KEYS.INTERACTION_HOVER_PRESET) || "balanced",
+      override: storage.get(STORAGE_KEYS.INTERACTION_HOVER_COLOR) || "",
+      strength: storage.get(STORAGE_KEYS.INTERACTION_GLOW_STRENGTH) ?? 50,
+      accentId: accent,
+      themeId: theme,
+    });
     // Font size
     const font = storage.get(STORAGE_KEYS.FONT_SIZE) || "normal";
     const zoomMap = { sm: 0.85, normal: 1, lg: 1.15 };
@@ -371,9 +380,64 @@ export default function App() {
     return true;
   }, [beginMiniTransition, playbackSession]);
 
-  const handleMiniReady = useCallback(() => {
+  const handleMiniReady = useCallback((owner) => {
     miniReadyResolverRef.current?.();
     miniReadyResolverRef.current = null;
+    if (owner) {
+      setPlaybackSession((current) => current ? { ...current, ...owner, mode: "mini" } : current);
+    }
+  }, []);
+
+  const handleSystemMediaCommand = useCallback(async (command) => {
+    const session = playbackSession;
+    if (!session) return;
+    if (command === "next") {
+      session.nextAction?.();
+      return;
+    }
+    if (command === "previous") {
+      const state = session.webContentsId
+        ? await window.electron?.queryVideoProgress?.(session.webContentsId).catch(() => null)
+        : null;
+      if (Number(state?.currentTime) > 5 || session.mediaType !== "tv") {
+        if (session.webContentsId) window.electron?.controlVideo?.(session.webContentsId, "restart");
+        else window.dispatchEvent(new CustomEvent("orion:media-command", { detail: "restart" }));
+      } else session.previousAction?.();
+      return;
+    }
+    if (command === "stop") {
+      if (session.webContentsId) await window.electron?.controlVideo?.(session.webContentsId, "pause");
+      if (session.mode === "popout") window.electron?.closePipWindow?.();
+      window.dispatchEvent(new CustomEvent("orion:media-command", { detail: "stop" }));
+      setMiniPlayer(null);
+      setPlaybackSession(null);
+      return;
+    }
+    if (session.webContentsId) window.electron?.controlVideo?.(session.webContentsId, command);
+    else window.dispatchEvent(new CustomEvent("orion:media-command", { detail: command }));
+  }, [playbackSession]);
+
+  useSystemIntegration({ playbackSession, onMediaCommand: handleSystemMediaCommand, setToast });
+
+  useEffect(() => {
+    if (!window.electron?.onPlayerShortcut) return undefined;
+    const handler = window.electron.onPlayerShortcut((command) => {
+      if (command === "mini") {
+        if (playbackSession?.mode === "embedded") createMiniHandoff();
+        return;
+      }
+      handleSystemMediaCommand(command);
+    });
+    return () => window.electron.offPlayerShortcut?.(handler);
+  }, [createMiniHandoff, handleSystemMediaCommand, playbackSession?.mode]);
+
+  useEffect(() => {
+    if (!window.electron?.onPipOpened) return undefined;
+    const handler = window.electron.onPipOpened(async () => {
+      const webContentsId = await window.electron.getPipWebContentsId?.().catch(() => null);
+      setPlaybackSession((current) => current ? { ...current, mode: "popout", webContentsId } : current);
+    });
+    return () => window.electron.offPipOpened?.(handler);
   }, []);
 
   const transitionNavigation = useCallback((action) => {

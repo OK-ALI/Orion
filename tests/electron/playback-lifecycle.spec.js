@@ -76,6 +76,9 @@ test("movie handoff keeps a usable mini-player without duplicate transport", asy
   await page.locator(".sidebar-item").filter({ hasText: /^Home$/ }).click();
   const mini = page.locator(".orion-mini-player");
   await expect(mini).toBeVisible({ timeout: 12_000 });
+  const miniBounds = await mini.boundingBox();
+  expect(miniBounds.width).toBeGreaterThanOrEqual(320);
+  expect(Math.abs((miniBounds.width / miniBounds.height) - (16 / 9))).toBeLessThan(0.02);
   await expect(mini.getByText("Preparing mini-player…")).toHaveCount(0, { timeout: 12_000 });
   await expect(mini.getByRole("button", { name: "Mute" })).toHaveCount(0);
   await expect(mini.getByLabel("Seek forward 10 seconds")).toHaveCount(0);

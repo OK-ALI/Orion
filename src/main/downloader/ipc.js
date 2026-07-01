@@ -743,5 +743,6 @@ module.exports = {
   killAllDownloads,
   pauseDownload,
   pauseAllDownloads,
+  saveDownloads,
   getDownloads: () => downloads,
 };
