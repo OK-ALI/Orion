@@ -67,6 +67,23 @@ describe("v1.1 people UI", () => {
     expect(onViewAll).toHaveBeenCalledWith("example");
   });
 
+  it("filters quick results without hiding people beyond the all-results cap", async () => {
+    mocks.searchTmdb.mockResolvedValue({
+      page: 1,
+      totalPages: 1,
+      results: [
+        ...Array.from({ length: 13 }, (_, index) => ({ id: index + 1, media_type: "movie", title: `Film ${index + 1}` })),
+        { id: 99, media_type: "person", name: "Person Fourteen", known_for_department: "Acting", known_for: [{ id: 3, media_type: "movie", title: "Known Film" }] },
+      ],
+    });
+    render(<SearchModal isOpen apiKey="token" onSelect={() => {}} onViewAll={() => {}} onClose={() => {}} offline={false} />);
+    fireEvent.change(screen.getByPlaceholderText(/Search movies, series and people/), { target: { value: "mixed" } });
+    fireEvent.click(await screen.findByRole("tab", { name: /People.*1/ }));
+    expect(await screen.findByText("Person Fourteen")).toBeInTheDocument();
+    expect(screen.getByText("Known for")).toBeInTheDocument();
+    expect(screen.getByText("Known Film")).toBeInTheDocument();
+  });
+
   it("offers retry when both person requests fail", async () => {
     mocks.tmdbFetch.mockRejectedValue(new Error("offline"));
     render(<PersonPage item={{ id: 10, name: "Jane Example", media_type: "person" }} apiKey="token" onNavigate={() => {}} onBack={() => {}} />);

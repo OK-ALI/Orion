@@ -9,7 +9,8 @@ function knownForText(person) {
 }
 
 export default function PersonCard({ person, onSelect, compact = false, subtitle = "" }) {
-  const supportingText = subtitle || knownForText(person) || person.known_for_department || "Person";
+  const knownFor = !subtitle ? knownForText(person) : "";
+  const supportingText = subtitle || person.known_for_department || "Person";
   return (
     <button
       type="button"
@@ -29,6 +30,7 @@ export default function PersonCard({ person, onSelect, compact = false, subtitle
       <span className="person-card__copy">
         <strong>{person.name || "Unknown person"}</strong>
         <small>{supportingText}</small>
+        {knownFor && <small className="person-card__known-for">Known for {knownFor}</small>}
       </span>
     </button>
   );

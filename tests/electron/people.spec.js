@@ -13,8 +13,7 @@ test("quick search opens a TMDB person and preserves back navigation", async ({}
   const page = await app.firstWindow();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.waitForTimeout(1200);
-  await page.evaluate(() => {
+  await page.addInitScript(() => {
     const originalFetch = window.fetch;
     window.fetch = (input, options) => {
       const url = String(input);
@@ -31,6 +30,8 @@ test("quick search opens a TMDB person and preserves back navigation", async ({}
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }));
     };
   });
+  await page.reload();
+  await page.waitForTimeout(500);
   await page.evaluate(() => {
     [...document.querySelectorAll(".sidebar-item")]
       .find((element) => element.textContent.includes("Search"))
@@ -46,5 +47,58 @@ test("quick search opens a TMDB person and preserves back navigation", async ({}
   await expect(page.locator(".sidebar-item.active")).toContainText("Home");
   await expect(page.getByRole("heading", { name: "Jane Example" })).toHaveCount(0);
   expect(errors).toEqual([]);
+  await app.close();
+});
+
+test("quick search visually separates people and same-title media", async ({}, testInfo) => {
+  const userDataDir = path.join(os.tmpdir(), `orion-search-layout-${process.pid}-${testInfo.workerIndex}-${Date.now()}`);
+  const app = await electron.launch({
+    args: [path.join(__dirname, "../.."), `--user-data-dir=${userDataDir}`, "--disable-gpu"],
+  });
+  const page = await app.firstWindow();
+  const layoutErrors = [];
+  page.on("pageerror", (error) => layoutErrors.push(error.message));
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch;
+    window.fetch = (input, options) => {
+      const url = String(input);
+      if (!url.startsWith("https://api.themoviedb.org/3/")) return originalFetch(input, options);
+      const results = [
+        { id: 10, media_type: "person", name: "Tom Cruise", known_for_department: "Acting", known_for: [{ id: 1, media_type: "movie", title: "Edge of Tomorrow" }, { id: 2, media_type: "movie", title: "Oblivion" }] },
+        { id: 20, media_type: "movie", title: "Tom Cruise", original_title: "Tom Cruise", original_language: "en", release_date: "2024-01-01", vote_average: 6.4 },
+        { id: 21, media_type: "movie", title: "Tom Cruise", original_title: "टॉम क्रूज़", original_language: "hi", release_date: "2021-01-01", vote_average: 7.2 },
+      ];
+      const body = url.includes("/search/multi") ? { page: 1, total_pages: 1, results } : {};
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }));
+    };
+  });
+  await page.reload();
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    [...document.querySelectorAll(".sidebar-item")].find((element) => element.textContent.includes("Search"))?.click();
+  });
+  await page.getByPlaceholder(/Search movies, series and people/).fill("Tom Cruise");
+  await expect(page.getByRole("tab", { name: /All.*3/ })).toBeVisible();
+  await expect(page.getByText("Known for", { exact: true })).toBeVisible();
+  await expect(page.locator(".search-result-supporting").first()).toContainText("Edge of Tomorrow, Oblivion");
+  await expect(page.getByText("Same-title match", { exact: true })).toHaveCount(2);
+  await expect(page.getByText("Hindi", { exact: true })).toBeVisible();
+  await expect(page.getByText("Original title", { exact: true })).toBeVisible();
+  const screenshotPath = testInfo.outputPath("search-layout.png");
+  await page.screenshot({ path: screenshotPath });
+  await testInfo.attach("search-layout", { path: screenshotPath, contentType: "image/png" });
+  await page.evaluate(() => localStorage.setItem("orion_theme", JSON.stringify("light")));
+  await page.reload();
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    [...document.querySelectorAll(".sidebar-item")].find((element) => element.textContent.includes("Search"))?.click();
+  });
+  await page.getByPlaceholder(/Search movies, series and people/).fill("Tom Cruise");
+  await expect(page.getByRole("tab", { name: /All.*3/ })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  const lightScreenshotPath = testInfo.outputPath("search-layout-light.png");
+  await page.screenshot({ path: lightScreenshotPath });
+  await testInfo.attach("search-layout-light", { path: lightScreenshotPath, contentType: "image/png" });
+  expect(layoutErrors).toEqual([]);
   await app.close();
 });

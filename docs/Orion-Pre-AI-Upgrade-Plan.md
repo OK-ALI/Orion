@@ -63,6 +63,8 @@ v1.1.0 is a focused metadata and navigation release. It must not absorb download
 - Add an explicit **Load more** action to full-page search, preserving the current query/filter while fetching successive TMDB pages.
 - Deduplicate appended results by `media_type` and TMDB ID, ignore stale responses after query changes, and retain recent-search behavior.
 - Give people a distinct result layout with profile image, name, known department and representative known-for titles.
+- Disambiguate same-name media with year, original language, available origin-region context, rating and original title; mark repeated localized titles in the current result set rather than making users guess between otherwise identical cards.
+- Provide All, Movies, TV and People filters in quick search as well as full search, while keeping each quick-filter view capped at 12 visible results.
 
 ### Person page and filmography
 

@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SearchIcon, CloseIcon } from "../common/Icons";
-import { searchTmdb } from "../../services/search";
-import { imgUrl } from "../../services/tmdb";
+import { findDuplicateSearchTitles, getSearchTitleKey, searchTmdb } from "../../services/search";
 import { storage } from "../../services/settingsStore";
+import SearchResultRow from "../media/SearchResultRow";
 
 const HISTORY_KEY = "searchHistory";
 const MAX_HISTORY = 12;
+const QUICK_RESULT_LIMIT = 12;
+const QUICK_FILTERS = [["all", "All"], ["movie", "Movies"], ["tv", "TV"], ["person", "People"]];
 const loadHistory = () => storage.get(HISTORY_KEY) || [];
 const saveHistory = (history) => storage.set(HISTORY_KEY, history);
 
@@ -17,6 +19,7 @@ export default function SearchModal({ isOpen, apiKey, onSelect, onViewAll, onClo
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState(loadHistory);
+  const [quickFilter, setQuickFilter] = useState("all");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef();
   const requestRef = useRef(0);
@@ -28,7 +31,7 @@ export default function SearchModal({ isOpen, apiKey, onSelect, onViewAll, onClo
       return () => clearTimeout(timer);
     }
     setAnimState("exiting");
-    const timer = setTimeout(() => { setShouldRender(false); setAnimState(""); setQuery(""); setResults([]); }, 300);
+    const timer = setTimeout(() => { setShouldRender(false); setAnimState(""); setQuery(""); setResults([]); setQuickFilter("all"); }, 300);
     return () => clearTimeout(timer);
   }, [isOpen]);
 
@@ -49,7 +52,7 @@ export default function SearchModal({ isOpen, apiKey, onSelect, onViewAll, onClo
       setLoading(true);
       try {
         const response = await searchTmdb(term, 1, apiKey);
-        if (requestRef.current === requestId) setResults(response.results.slice(0, 12));
+        if (requestRef.current === requestId) setResults(response.results);
       } catch {
         if (requestRef.current === requestId) { setResults([]); setError("Search is temporarily unavailable."); }
       } finally {
@@ -81,13 +84,27 @@ export default function SearchModal({ isOpen, apiKey, onSelect, onViewAll, onClo
     onClose();
   }, [addToHistory, onClose, onViewAll, query]);
 
+  const counts = useMemo(() => Object.fromEntries(QUICK_FILTERS.map(([value]) => [
+    value,
+    value === "all" ? results.length : results.filter((result) => result.media_type === value).length,
+  ])), [results]);
+  const visibleResults = useMemo(() => (quickFilter === "all"
+    ? results
+    : results.filter((result) => result.media_type === quickFilter)).slice(0, QUICK_RESULT_LIMIT), [quickFilter, results]);
+  const duplicateTitles = useMemo(() => findDuplicateSearchTitles(visibleResults), [visibleResults]);
+
+  useEffect(() => { setActiveIndex(0); }, [quickFilter]);
+  useEffect(() => {
+    if (activeIndex >= visibleResults.length) setActiveIndex(Math.max(0, visibleResults.length - 1));
+  }, [activeIndex, visibleResults.length]);
+
   const handleKey = (event) => {
     if (event.key === "Escape") { event.preventDefault(); onClose(); }
-    if (event.key === "ArrowDown" && results.length) { event.preventDefault(); setActiveIndex((index) => (index + 1) % results.length); }
-    if (event.key === "ArrowUp" && results.length) { event.preventDefault(); setActiveIndex((index) => (index - 1 + results.length) % results.length); }
+    if (event.key === "ArrowDown" && visibleResults.length) { event.preventDefault(); setActiveIndex((index) => (index + 1) % visibleResults.length); }
+    if (event.key === "ArrowUp" && visibleResults.length) { event.preventDefault(); setActiveIndex((index) => (index - 1 + visibleResults.length) % visibleResults.length); }
     if (event.key === "Enter" && query.trim()) {
       event.preventDefault();
-      if (results[activeIndex]) handleSelect(results[activeIndex]);
+      if (visibleResults[activeIndex]) handleSelect(visibleResults[activeIndex]);
       else addToHistory(query);
     }
   };
@@ -97,19 +114,15 @@ export default function SearchModal({ isOpen, apiKey, onSelect, onViewAll, onClo
   return (
     <div className={`quick-search-overlay ${animState}`} onClick={(event) => event.target === event.currentTarget && onClose()} role="dialog" aria-modal="true" aria-label="Quick search">
       <div className={`search-box ${animState}`}>
-        <div className="search-input-wrap"><SearchIcon /><input ref={inputRef} className="search-input" placeholder="Search movies, series and people…" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={handleKey} aria-activedescendant={results[activeIndex] ? `quick-search-${results[activeIndex].media_type}-${results[activeIndex].id}` : undefined} /><button type="button" className="btn btn-ghost btn-icon" onClick={query ? () => setQuery("") : onClose} aria-label={query ? "Clear search" : "Close search"}><CloseIcon /></button></div>
+        <div className="search-input-wrap"><SearchIcon /><input ref={inputRef} className="search-input" placeholder="Search movies, series and people…" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={handleKey} aria-activedescendant={visibleResults[activeIndex] ? `quick-search-${visibleResults[activeIndex].media_type}-${visibleResults[activeIndex].id}` : undefined} /><button type="button" className="btn btn-ghost btn-icon" onClick={query ? () => setQuery("") : onClose} aria-label={query ? "Clear search" : "Close search"}><CloseIcon /></button></div>
         <div className="search-results" aria-live="polite">
           {offline && <div className="search-offline">No internet connection. Search is unavailable.</div>}
           {!offline && loading && <div className="loader"><div className="spinner" /></div>}
           {!offline && !loading && error && <div className="search-empty">{error}</div>}
+          {!offline && !loading && !error && query.trim() && results.length > 0 && <div className="quick-search-filters" role="tablist" aria-label="Quick search result type">{QUICK_FILTERS.map(([value, label]) => <button type="button" role="tab" aria-selected={quickFilter === value} className={quickFilter === value ? "active" : ""} key={value} onClick={() => setQuickFilter(value)}>{label}<span>{counts[value]}</span></button>)}</div>}
           {!loading && !error && query && results.length === 0 && <div className="search-empty">No results for “{query}”</div>}
-          {!loading && results.map((result, index) => {
-            const isPerson = result.media_type === "person";
-            const metadata = isPerson
-              ? (result.known_for || []).map((known) => known.title || known.name).filter(Boolean).slice(0, 2).join(" · ") || result.known_for_department || "Person"
-              : `${(result.release_date || result.first_air_date || "").slice(0, 4)}${result.vote_average ? ` · ★ ${result.vote_average.toFixed(1)}` : ""}`;
-            return <button type="button" id={`quick-search-${result.media_type}-${result.id}`} key={`${result.media_type}_${result.id}`} className={`search-result${activeIndex === index ? " active" : ""}`} onMouseEnter={() => setActiveIndex(index)} onClick={() => handleSelect(result)}><span className="search-result-image">{result.poster_path || result.profile_path ? <img src={imgUrl(result.poster_path || result.profile_path, "w92")} alt="" /> : <span>{(result.title || result.name || "?")[0]}</span>}</span><span className="search-result-info"><span className="search-result-title">{result.title || result.name}</span><span className="search-result-meta">{metadata}</span></span><span className={`search-result-type ${isPerson ? "type-person" : result.media_type === "tv" ? "type-tv" : "type-movie"}`}>{isPerson ? "Person" : result.media_type === "tv" ? "Series" : "Movie"}</span></button>;
-          })}
+          {!loading && !error && results.length > 0 && visibleResults.length === 0 && <div className="search-empty">No {QUICK_FILTERS.find(([value]) => value === quickFilter)?.[1].toLowerCase()} found on this result page.</div>}
+          {!loading && visibleResults.map((result, index) => <SearchResultRow key={`${result.media_type}_${result.id}`} result={result} active={activeIndex === index} duplicateTitle={duplicateTitles.has(getSearchTitleKey(result))} onHover={() => setActiveIndex(index)} onActivate={() => handleSelect(result)} />)}
           {!offline && !loading && !error && query.trim() && <button type="button" className="search-view-all" onClick={handleViewAll}>View all results for “{query.trim()}”</button>}
           {showHistory && <div className="search-history"><div className="search-history-header"><span className="search-history-label">Recent searches</span><button type="button" className="search-history-clear" onClick={clearHistory}>Clear all</button></div>{history.map((term) => <div key={term} className="search-history-item" role="button" tabIndex={0} onClick={() => { setQuery(term); inputRef.current?.focus(); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setQuery(term); inputRef.current?.focus(); } }}><span className="search-history-icon"><SearchIcon /></span><span className="search-history-term">{term}</span><button type="button" className="search-history-remove" onClick={(event) => removeFromHistory(event, term)} title="Remove recent search" aria-label={`Remove ${term} from recent searches`}><CloseIcon /></button></div>)}</div>}
           {!query && history.length === 0 && <div className="search-hint">Search movies, series and people · <kbd>ESC</kbd> to close</div>}

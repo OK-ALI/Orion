@@ -7,6 +7,9 @@ import {
 } from "../../../src/renderer/shared/utils/credits";
 import {
   appendUniqueSearchResults,
+  findDuplicateSearchTitles,
+  getSearchResultIdentity,
+  getSearchTitleKey,
   normalizeSearchResults,
 } from "../../../src/renderer/services/search";
 
@@ -50,5 +53,19 @@ describe("people and credit normalization", () => {
     const first = [normalizePersonSummary({ id: 1, name: "Person" })];
     const next = [normalizePersonSummary({ id: 1, name: "Person" }), { id: 1, media_type: "movie" }];
     expect(appendUniqueSearchResults(first, next)).toHaveLength(2);
+  });
+
+  it("provides language, region, original-title and duplicate context", () => {
+    const hindi = { id: 1, media_type: "movie", title: "Don", original_title: "डॉन", original_language: "hi", release_date: "2006-10-20", vote_average: 7.1 };
+    const english = { id: 2, media_type: "movie", title: "Don", original_language: "en", release_date: "1978-04-01" };
+    const duplicates = findDuplicateSearchTitles([hindi, english]);
+    expect(duplicates.has(getSearchTitleKey(hindi))).toBe(true);
+    expect(getSearchResultIdentity(hindi, true)).toEqual(expect.objectContaining({
+      title: "Don",
+      originalTitle: "डॉन",
+      duplicateTitle: true,
+      facts: expect.arrayContaining(["2006", "Hindi", "★ 7.1"]),
+      supportingLabel: "Original title",
+    }));
   });
 });

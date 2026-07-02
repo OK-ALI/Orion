@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MediaCard from "../../components/media/MediaCard";
 import PersonCard from "../../components/media/PersonCard";
+import { SearchMediaContext } from "../../components/media/SearchResultRow";
 import { SearchIcon } from "../../components/common/Icons";
-import { appendUniqueSearchResults, searchTmdb } from "../../services/search";
+import { appendUniqueSearchResults, findDuplicateSearchTitles, getSearchTitleKey, searchTmdb } from "../../services/search";
 
 const FILTERS = [
   ["all", "All"],
@@ -63,6 +64,7 @@ export default function SearchResultsPage({ apiKey, item: initialQuery, onNaviga
     value === "all" ? results.length : results.filter((item) => item.media_type === value).length,
   ])), [results]);
   const displayedResults = useMemo(() => filter === "all" ? results : results.filter((item) => item.media_type === filter), [results, filter]);
+  const duplicateTitles = useMemo(() => findDuplicateSearchTitles(displayedResults), [displayedResults]);
 
   const loadMore = async () => {
     if (loadingMore || page >= totalPages) return;
@@ -93,7 +95,7 @@ export default function SearchResultsPage({ apiKey, item: initialQuery, onNaviga
         {!loading && error && <div className="search-error-state"><p>{error}</p><button type="button" className="btn btn-secondary" onClick={() => setRetryKey((value) => value + 1)}>Retry</button></div>}
         {!loading && !error && query.trim() && displayedResults.length === 0 && <div className="search-empty-state"><p>No {filter === "all" ? "" : `${FILTERS.find(([value]) => value === filter)?.[1].toLowerCase()} `}results found for “{query.trim()}”.</p></div>}
         {!loading && !query.trim() && <div className="search-prompt-state"><SearchIcon size={30} /><p>Search titles, performers, directors and creators.</p></div>}
-        {!loading && displayedResults.length > 0 && <div className="search-results-grid fade-in">{displayedResults.map((result) => result.media_type === "person" ? <PersonCard key={`person_${result.id}`} person={result} onSelect={(person) => onNavigate("person", person)} /> : <MediaCard key={`${result.media_type}_${result.id}`} item={result} onClick={(selected) => onNavigate(selected.media_type || result.media_type, selected)} />)}</div>}
+        {!loading && displayedResults.length > 0 && <div className="search-results-grid fade-in">{displayedResults.map((result) => result.media_type === "person" ? <PersonCard key={`person_${result.id}`} person={result} onSelect={(person) => onNavigate("person", person)} /> : <div className="search-media-result" key={`${result.media_type}_${result.id}`}><MediaCard item={result} onClick={(selected) => onNavigate(selected.media_type || result.media_type, selected)} /><SearchMediaContext result={result} duplicateTitle={duplicateTitles.has(getSearchTitleKey(result))} /></div>)}</div>}
         {!loading && results.length > 0 && page < totalPages && <div className="search-load-more"><button type="button" className="btn btn-secondary" disabled={loadingMore} onClick={loadMore}>{loadingMore ? "Loading…" : "Load more"}</button><span>Page {page} of {totalPages}</span></div>}
       </div>
     </div>
