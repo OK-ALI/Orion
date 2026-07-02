@@ -62,6 +62,7 @@ import {
 } from "../../../shared/utils/ageRating";
 import { useMovieWebview } from "./useMovieWebview";
 import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
+import { useTitleCredits } from "../../../shared/hooks/useTitleCredits";
 
 export function useMovieController({
   item,
@@ -86,6 +87,7 @@ export function useMovieController({
   onPlaybackSession,
 }) {
 const [details, setDetails] = useState(null);
+  const { cast, keyCrew, loading: creditsLoading } = useTitleCredits({ mediaType: "movie", mediaId: item.id, apiKey });
   const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [showDownload, setShowDownload] = useState(false);
@@ -639,6 +641,9 @@ const [details, setDetails] = useState(null);
   };
 
     const viewModel = { ambientColor, blockedAlltime, blockedSession, collection, d, displayGenres, displayOverview, displayPct, displayScore, downloaderFolder, dubMode, formatResumeTime, getBlockedDomains, handleFailoverNextSource, handlePlay, handleSetDownloaderFolder, hasProgress, interceptedSubs, isSaved, isUnreleased, isWatched, item, m3u8Context, m3u8Url, mediaName, menuPos, movieDownload, onBack, onDownloadStarted, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave, onSelect, onSettings, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progress, progressKey, progressLabel, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, sourceRef, startMoviePlayback, switchingToMiniPlayerRef, title, trailerKey, voiceBoost, watched, webviewLoading, webviewRef };
+    viewModel.cast = cast;
+    viewModel.keyCrew = keyCrew;
+    viewModel.creditsLoading = creditsLoading;
     viewModel.captureSessionId = captureSessionId;
     return viewModel;
 }

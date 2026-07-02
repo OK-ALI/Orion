@@ -4,6 +4,7 @@ import TVFailover from "./components/TVFailover";
 import TVPlayerCore from "./components/TVPlayerCore";
 import TVPlayerChrome from "./components/TVPlayerChrome";
 import TVOverlays from "./components/TVOverlays";
+import CreditsSection from "../../components/media/CreditsSection";
 import { useTVController } from "./hooks/useTVController";
 
 export default function TVPage(props) {
@@ -19,6 +20,13 @@ export default function TVPage(props) {
       {!loading && (
         <>
           <TVDetails model={viewModel} />
+
+          <CreditsSection
+            cast={viewModel.cast}
+            keyCrew={viewModel.keyCrew}
+            loading={viewModel.creditsLoading}
+            onPersonSelect={(person) => viewModel.onSelect?.({ ...person, media_type: "person" })}
+          />
 
           {playing && selectedEp && (
             <div className="section" style={{ position: "relative" }}>

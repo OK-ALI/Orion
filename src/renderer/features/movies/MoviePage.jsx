@@ -1,6 +1,7 @@
 import MovieDetails from "./components/MovieDetails";
 import MoviePlayer from "./components/MoviePlayer";
 import MovieOverlays from "./components/MovieOverlays";
+import CreditsSection from "../../components/media/CreditsSection";
 import { useMovieController } from "./hooks/useMovieController";
 
 export default function MoviePage(props) {
@@ -18,6 +19,13 @@ export default function MoviePage(props) {
           <MovieDetails model={viewModel} />
 
       <MoviePlayer model={viewModel} />
+
+      <CreditsSection
+        cast={viewModel.cast}
+        keyCrew={viewModel.keyCrew}
+        loading={viewModel.creditsLoading}
+        onPersonSelect={(person) => viewModel.onSelect?.({ ...person, media_type: "person" })}
+      />
 
       <MovieOverlays model={viewModel} />
         </>

@@ -84,6 +84,32 @@
  * @property {string} release
  * @property {string} downloadToken
  *
+ * @typedef {Object} PersonSummary
+ * @property {number} id
+ * @property {"person"} media_type
+ * @property {string} name
+ * @property {string|null} profile_path
+ * @property {string} known_for_department
+ * @property {Array<Object>} known_for
+ *
+ * @typedef {Object} PersonDetails
+ * @property {number} id
+ * @property {string} name
+ * @property {string|null} profile_path
+ * @property {string} biography
+ * @property {string|null} birthday
+ * @property {string|null} deathday
+ * @property {string|null} place_of_birth
+ * @property {string} known_for_department
+ *
+ * @typedef {Object} CreditItem
+ * @property {number} id
+ * @property {"movie"|"tv"} media_type
+ * @property {string} title
+ * @property {string} release_date
+ * @property {Array<string>} roles
+ * @property {Array<string>} jobs
+ *
  * @typedef {Object} SettingsSchema
  * @property {"auto"|"ask"|"manual"} miniPlayerBehavior
  * @property {"off"|"low"|"balanced"|"vivid"} ambientProfile
@@ -117,4 +143,4 @@
  * @typedef {"play"|"pause"|"toggle"|"stop"|"next"|"previous"|"restart"} MediaControlCommand
  */
 
-export const CONTRACT_VERSION = "1.0.9";
+export const CONTRACT_VERSION = "1.1.0";

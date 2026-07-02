@@ -89,8 +89,16 @@ const MediaCard = memo(function MediaCard({
     <>
       <div
         className={`media-card${isWatched ? " watched" : ""}${isUnreleased ? " unreleased" : ""}`}
+        role="button"
+        tabIndex={0}
+        aria-label={`Open ${title}`}
         onClick={() => {
           if (onClick) onClick(item);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          onClick?.(item);
         }}
         onContextMenu={isUnreleased ? undefined : openMenu}
       >

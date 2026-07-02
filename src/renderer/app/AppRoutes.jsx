@@ -8,6 +8,7 @@ const LibraryPage = lazy(() => import("../features/library/LibraryPage"));
 const SettingsPage = lazy(() => import("../features/settings/SettingsPage"));
 const DownloadsPage = lazy(() => import("../features/downloads/DownloadsPage"));
 const SearchResultsPage = lazy(() => import("../features/discover/SearchResultsPage"));
+const PersonPage = lazy(() => import("../features/people/PersonPage"));
 
 export default function AppRoutes({ model }) {
   const {
@@ -43,6 +44,14 @@ export default function AppRoutes({ model }) {
           isActive={page === "search"}
         />
       )}
+      {page === "person" && selected && (
+        <PersonPage
+          item={selected}
+          apiKey={apiKey}
+          onNavigate={navigate}
+          onBack={navigateBack}
+        />
+      )}
       {page === "movie" && selected && (
         <MoviePage
           item={selected} apiKey={apiKey} playerSettings={playerSettings}
@@ -67,6 +76,7 @@ export default function AppRoutes({ model }) {
           onMarkWatched={markWatched} onMarkUnwatched={markUnwatched}
           downloads={downloads} onGoToDownloads={handleGoToDownloads}
           onOpenMiniPlayer={setMiniPlayer} onPlay={() => setMiniPlayer(null)}
+          onSelect={handleSelectResult}
           onPlaybackSession={onPlaybackSession}
         />
       )}

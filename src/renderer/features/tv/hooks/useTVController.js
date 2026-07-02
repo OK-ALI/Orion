@@ -72,6 +72,7 @@ import { useTVEpisodeCatalog } from "./useTVEpisodeCatalog";
 import { useTVWebview } from "./useTVWebview";
 import { useTVEpisodeActions } from "./useTVEpisodeActions";
 import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
+import { useTitleCredits } from "../../../shared/hooks/useTitleCredits";
 
 export function useTVController({
   item,
@@ -93,8 +94,10 @@ export function useTVController({
   onOpenMiniPlayer,
   onPlay,
   onPlaybackSession,
+  onSelect,
 }) {
 const [details, setDetails] = useState(null);
+  const { cast, keyCrew, loading: creditsLoading } = useTitleCredits({ mediaType: "tv", mediaId: item.id, apiKey, creators: details?.created_by || [] });
   const [seasonData, setSeasonData] = useState(null);
   const [failedSeasons, setFailedSeasons] = useState(() => new Set()); // season numbers which give 404 on TMDB
   const [selectedSeason, setSelectedSeason] = useState(() =>
@@ -760,6 +763,10 @@ const [details, setDetails] = useState(null);
     : false;
 
     const viewModel = { ambientColor, autoplayCountdown, autoplayNextLayout, blockedAlltime, blockedSession, cancelAutoplay, currentEpDownload, currentEpWatched, currentProgressKey, currentSeasonEpisodes, d, displayEpisodeCount, displayGenres, displayOverview, displayScore, displaySeasonCount, downloaderFolder, downloadsByEpisodeKey, dubMode, durationRef, epMenu, episodeGroupCurrentEpisodes, getBlockedDomains, handleFailoverNextSource, handleManualSkip, handleSetDownloaderFolder, interceptedSubs, isAsync, isSaved, isSeasonWatched, item, loadingSeason, m3u8Context, m3u8Url, markSeasonUnwatched, markSeasonWatched, mediaName, menuPos, nextEp, onBack, onDownloadStarted, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave, onSettings, pendingEpToPlay, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, prevEp, progress, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, seasonData, seasonMenu, seasonWatchedMap, seasons, selectedEp, selectedSeason, setDubMode, setEpMenu, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSeasonMenu, setSelectedSeason, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, skipPrompt, skipTimings, sourceHealth, sourceRef, startEpisodeDownload, startPlayingEp, startSeasonDownload, supportsProgress, switchingToMiniPlayerRef, title, trailerKey, voiceBoost, watched, webviewLoading, webviewRef };
+    viewModel.cast = cast;
+    viewModel.keyCrew = keyCrew;
+    viewModel.creditsLoading = creditsLoading;
+    viewModel.onSelect = onSelect;
     viewModel.captureSessionId = captureSessionId;
     return viewModel;
 }

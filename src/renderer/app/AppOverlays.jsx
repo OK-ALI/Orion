@@ -22,6 +22,7 @@ export default function AppOverlays({ model }) {
           isOpen={showSearch}
           apiKey={apiKey}
           onSelect={handleSelectResult}
+          onViewAll={(query) => navigate("search", query)}
           onClose={() => setShowSearch(false)}
           offline={offline}
         />

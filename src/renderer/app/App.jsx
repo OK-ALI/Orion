@@ -590,7 +590,10 @@ export default function App() {
   // ── Helpers ───────────────────────────────────────────────────────────────
   const handleSelectResult = useCallback(
     (item) => {
-      navigate(item.media_type === "tv" ? "tv" : "movie", item);
+      const target = item.media_type === "person"
+        ? "person"
+        : item.media_type === "tv" ? "tv" : "movie";
+      navigate(target, item);
     },
     [navigate],
   );
