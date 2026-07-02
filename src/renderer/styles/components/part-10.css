@@ -1,9 +1,13 @@
 .search-results-page,.person-page { padding:34px clamp(24px,4vw,58px) 72px; }
-.search-results-header { max-width:1050px; margin:0 auto 28px; }
+.search-results-header { max-width:1250px; margin:0 auto 28px; }
 .search-results-header h1,.person-page h1 { margin:5px 0 22px; font:700 clamp(34px,5vw,58px)/1 var(--font-heading); }
 .search-bar-full { display:flex; align-items:center; gap:11px; min-height:54px; padding:0 17px; border:1px solid var(--border); border-radius:14px; background:var(--surface-translucent); color:var(--text3); box-shadow:var(--shadow-sm); }
 .search-input-full { min-width:0; flex:1; border:0; outline:0; background:transparent; color:var(--text); font:500 17px/1 var(--font-body); }
 .search-filter-tabs,.person-filter-tabs { display:flex; flex-wrap:wrap; gap:7px; margin-top:14px; }
+.search-filter-groups { display:grid; gap:12px; margin-top:16px; }
+.search-filter-group { display:grid; grid-template-columns:62px minmax(0,1fr); align-items:start; gap:10px; }
+.search-filter-group > span { padding-top:12px; color:var(--text3); font-size:9px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.search-filter-group .search-filter-tabs { margin-top:0; }
 .filter-tab,.person-filter-tabs button { min-height:36px; padding:0 12px; border:1px solid var(--border); border-radius:999px; background:var(--surface); color:var(--text3); font:600 12px/1 var(--font-body); }
 .filter-tab:hover,.person-filter-tabs button:hover { border-color:var(--interaction-hover-border); color:var(--interaction-hover); }
 .filter-tab.active,.person-filter-tabs button.active { border-color:var(--interaction-hover-border); background:var(--interaction-hover-soft); color:var(--text); }
@@ -24,7 +28,8 @@
 .person-card--compact { width:142px; flex:0 0 142px; }
 .person-card--compact .person-card__portrait { aspect-ratio:1/1.18; }
 
-.search-box { width:min(820px,calc(100vw - 42px)); border-color:var(--border); background:var(--surface); box-shadow:var(--shadow-lg); }
+.search-box { width:min(1120px,calc(100vw - 42px)); max-height:min(820px,calc(100vh - 48px)); border-color:var(--border); background:var(--surface); box-shadow:var(--shadow-lg); }
+.search-results { max-height:700px; }
 .search-result { width:100%; min-height:92px; align-items:center; gap:15px; padding:10px 18px; border-bottom-color:var(--border); color:inherit; text-align:left; }
 .search-result.active { background:var(--interaction-hover-soft); box-shadow:inset 3px 0 var(--interaction-hover); }
 .search-result-image { width:48px; height:72px; display:grid; place-items:center; overflow:hidden; flex:0 0 auto; border-radius:8px; background:var(--surface2); color:var(--text3); }
@@ -39,11 +44,17 @@
 .search-result-supporting { max-width:100%; overflow:hidden; color:var(--text2); font-size:11px; line-height:1.35; text-overflow:ellipsis; white-space:nowrap; }
 .search-result-supporting b { margin-right:6px; color:var(--text3); font-size:9px; letter-spacing:.04em; text-transform:uppercase; }
 .search-result-type { align-self:center; }
-.quick-search-filters { position:sticky; top:0; z-index:2; display:flex; gap:6px; padding:9px 18px; border-bottom:1px solid var(--border); background:color-mix(in srgb,var(--surface) 94%,transparent); backdrop-filter:blur(16px); }
+.quick-search-filter-stack { position:sticky; top:0; z-index:2; display:grid; gap:8px; padding:10px 18px; border-bottom:1px solid var(--border); background:var(--surface); }
+.quick-search-filter-row { display:grid; grid-template-columns:54px minmax(0,1fr); align-items:center; gap:8px; }
+.quick-search-filter-row > span { color:var(--text3); font-size:8px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.quick-search-filters { display:flex; gap:6px; overflow-x:auto; padding:1px; scrollbar-width:thin; }
 .quick-search-filters button { display:flex; align-items:center; gap:6px; min-height:30px; padding:0 10px; border:1px solid var(--border); border-radius:999px; background:var(--surface2); color:var(--text3); font:700 10px/1 var(--font-body); }
 .quick-search-filters button span { color:var(--text-muted); font-size:9px; }
 .quick-search-filters button:hover,.quick-search-filters button.active { border-color:var(--interaction-hover-border); background:var(--interaction-hover-soft); color:var(--text); }
 .quick-search-filters button.active span { color:var(--interaction-hover); }
+.quick-search-result-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:stretch; }
+.quick-search-result-grid .search-result { min-height:104px; border-right:1px solid var(--border); }
+.quick-search-result-grid .search-result:nth-child(2n) { border-right:0; }
 .search-offline { padding:14px 18px; border-bottom:1px solid var(--border); background:var(--warning-soft); color:var(--warning); font-size:12px; }
 .search-view-all { width:calc(100% - 24px); margin:8px 12px 12px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface-translucent); color:var(--interaction-hover); text-align:center; cursor:pointer; }
 .search-view-all:hover { border-color:var(--interaction-hover-border); background:var(--interaction-hover-soft); }
@@ -99,4 +110,5 @@
 body.no-anim .person-card:hover { transform:none; }
 body.no-anim .credits-rail--loading span { animation:none; }
 @media (prefers-reduced-motion:reduce) { .person-card:hover { transform:none; } }
-@media (max-width:720px) { .person-hero { grid-template-columns:1fr; } .person-hero__portrait { width:min(260px,75vw); margin:auto; } .search-results-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .filmography-row { grid-template-columns:44px minmax(0,1fr); } .filmography-row em { display:none; } .search-result { padding-inline:12px; } .search-result-image { width:44px; height:66px; } .search-result--person .search-result-image { width:48px; } .search-result-type { display:none; } .quick-search-filters { padding-inline:12px; overflow-x:auto; } }
+@media (max-width:900px) { .quick-search-result-grid { grid-template-columns:1fr; } .quick-search-result-grid .search-result { border-right:0; } }
+@media (max-width:720px) { .person-hero { grid-template-columns:1fr; } .person-hero__portrait { width:min(260px,75vw); margin:auto; } .search-results-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .filmography-row { grid-template-columns:44px minmax(0,1fr); } .filmography-row em { display:none; } .search-result { padding-inline:12px; } .search-result-image { width:44px; height:66px; } .search-result--person .search-result-image { width:48px; } .search-result-type { display:none; } .quick-search-filter-stack { padding-inline:12px; } .quick-search-filter-row { grid-template-columns:1fr; } .search-filter-group { grid-template-columns:1fr; } .search-filter-group > span { padding-top:0; } }

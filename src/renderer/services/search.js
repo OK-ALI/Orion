@@ -8,6 +8,52 @@ const regionNames = typeof Intl.DisplayNames === "function"
   ? new Intl.DisplayNames(["en"], { type: "region" })
   : null;
 
+export const SEARCH_CINEMAS = [
+  { id: "global", label: "Global" },
+  { id: "hollywood", label: "Hollywood" },
+  { id: "bollywood", label: "Bollywood" },
+  { id: "south-indian", label: "South Indian" },
+  { id: "korean", label: "Korean" },
+  { id: "japanese", label: "Japanese" },
+  { id: "chinese", label: "Chinese" },
+];
+
+const SOUTH_INDIAN_LANGUAGES = new Set(["ta", "te", "ml", "kn"]);
+const HOLLYWOOD_COUNTRIES = new Set(["US", "GB", "CA", "AU", "IE", "NZ"]);
+const CHINESE_COUNTRIES = new Set(["CN", "HK", "TW"]);
+
+function searchCountries(item = {}) {
+  return [...(item.origin_country || []), ...(item.production_countries || [])]
+    .map((country) => typeof country === "string" ? country : country?.iso_3166_1)
+    .filter(Boolean);
+}
+
+export function getSearchCinemaId(item = {}) {
+  if (item.media_type === "person") return "people";
+  const language = String(item.original_language || "").toLowerCase();
+  const countries = searchCountries(item);
+  if (SOUTH_INDIAN_LANGUAGES.has(language)) return "south-indian";
+  if (language === "ko" || countries.includes("KR")) return "korean";
+  if (language === "ja" || countries.includes("JP")) return "japanese";
+  if (language.startsWith("zh") || countries.some((country) => CHINESE_COUNTRIES.has(country))) return "chinese";
+  if (language === "hi" || countries.includes("IN")) return "bollywood";
+  if (countries.some((country) => HOLLYWOOD_COUNTRIES.has(country)) || (language === "en" && !countries.length)) return "hollywood";
+  return "other";
+}
+
+export function getSearchCinemaLabel(item = {}) {
+  const cinemaId = getSearchCinemaId(item);
+  return SEARCH_CINEMAS.find((cinema) => cinema.id === cinemaId)?.label || "";
+}
+
+export function filterSearchResults(results = [], type = "all", cinema = "global") {
+  return results.filter((item) => {
+    if (type !== "all" && item.media_type !== type) return false;
+    if (cinema === "global") return true;
+    return getSearchCinemaId(item) === cinema;
+  });
+}
+
 export function getSearchResultTitle(item = {}) {
   return item.title || item.name || "Untitled";
 }
@@ -50,10 +96,11 @@ export function getSearchResultIdentity(item = {}, duplicateTitle = false) {
   const language = displayLanguage(item.original_language);
   const regions = displayRegions(item.origin_country || []);
   const rating = Number(item.vote_average) > 0 ? `★ ${Number(item.vote_average).toFixed(1)}` : "";
+  const cinema = getSearchCinemaLabel(item);
   return {
     title,
     originalTitle: sameLocalizedTitle ? "" : originalTitle,
-    facts: [year, language, regions, rating].filter(Boolean),
+    facts: [year, cinema, language, regions, rating].filter(Boolean),
     supportingLabel: originalTitle && !sameLocalizedTitle ? "Original title" : "",
     supportingText: originalTitle && !sameLocalizedTitle ? originalTitle : "",
     duplicateTitle,

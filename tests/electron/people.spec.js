@@ -84,6 +84,11 @@ test("quick search visually separates people and same-title media", async ({}, t
   await expect(page.getByText("Same-title match", { exact: true })).toHaveCount(2);
   await expect(page.getByText("Hindi", { exact: true })).toBeVisible();
   await expect(page.getByText("Original title", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: /Bollywood.*1/ }).click();
+  await expect(page.locator(".quick-search-result-grid .search-result")).toHaveCount(1);
+  await expect(page.getByText("Bollywood", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: /Global.*3/ }).click();
+  await expect(page.getByText("Same-title match", { exact: true })).toHaveCount(2);
   const screenshotPath = testInfo.outputPath("search-layout.png");
   await page.screenshot({ path: screenshotPath });
   await testInfo.attach("search-layout", { path: screenshotPath, contentType: "image/png" });

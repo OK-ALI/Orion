@@ -3,7 +3,7 @@ import MediaCard from "../../components/media/MediaCard";
 import PersonCard from "../../components/media/PersonCard";
 import { SearchMediaContext } from "../../components/media/SearchResultRow";
 import { SearchIcon } from "../../components/common/Icons";
-import { appendUniqueSearchResults, findDuplicateSearchTitles, getSearchTitleKey, searchTmdb } from "../../services/search";
+import { appendUniqueSearchResults, filterSearchResults, findDuplicateSearchTitles, getSearchTitleKey, SEARCH_CINEMAS, searchTmdb } from "../../services/search";
 
 const FILTERS = [
   ["all", "All"],
@@ -15,6 +15,7 @@ const FILTERS = [
 export default function SearchResultsPage({ apiKey, item: initialQuery, onNavigate, isActive }) {
   const [query, setQuery] = useState(typeof initialQuery === "string" ? initialQuery : "");
   const [filter, setFilter] = useState("all");
+  const [cinemaFilter, setCinemaFilter] = useState("global");
   const [results, setResults] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
@@ -60,10 +61,12 @@ export default function SearchResultsPage({ apiKey, item: initialQuery, onNaviga
   }, [query, apiKey, retryKey]);
 
   const counts = useMemo(() => Object.fromEntries(FILTERS.map(([value]) => [
-    value,
-    value === "all" ? results.length : results.filter((item) => item.media_type === value).length,
-  ])), [results]);
-  const displayedResults = useMemo(() => filter === "all" ? results : results.filter((item) => item.media_type === filter), [results, filter]);
+    value, filterSearchResults(results, value, cinemaFilter).length,
+  ])), [cinemaFilter, results]);
+  const cinemaCounts = useMemo(() => Object.fromEntries(SEARCH_CINEMAS.map(({ id }) => [
+    id, filterSearchResults(results, filter, id).length,
+  ])), [filter, results]);
+  const displayedResults = useMemo(() => filterSearchResults(results, filter, cinemaFilter), [cinemaFilter, filter, results]);
   const duplicateTitles = useMemo(() => findDuplicateSearchTitles(displayedResults), [displayedResults]);
 
   const loadMore = async () => {
@@ -87,7 +90,10 @@ export default function SearchResultsPage({ apiKey, item: initialQuery, onNaviga
       <div className="search-results-header">
         <span className="eyebrow">Explore Orion</span><h1>Search</h1>
         <div className="search-bar-full"><SearchIcon size={22} className="search-icon-inside" /><input ref={inputRef} type="search" className="search-input-full" placeholder="Search movies, series and people…" value={query} onChange={(event) => setQuery(event.target.value)} /></div>
-        {query.trim() && <div className="search-filter-tabs" role="tablist" aria-label="Search result type">{FILTERS.map(([value, label]) => <button type="button" role="tab" aria-selected={filter === value} className={`filter-tab${filter === value ? " active" : ""}`} onClick={() => setFilter(value)} key={value}>{label} ({counts[value]})</button>)}</div>}
+        {query.trim() && <div className="search-filter-groups">
+          <div className="search-filter-group"><span>Type</span><div className="search-filter-tabs" role="tablist" aria-label="Search result type">{FILTERS.map(([value, label]) => <button type="button" role="tab" aria-selected={filter === value} className={`filter-tab${filter === value ? " active" : ""}`} onClick={() => { setFilter(value); if (value === "person") setCinemaFilter("global"); }} key={value}>{label} ({counts[value]})</button>)}</div></div>
+          <div className="search-filter-group"><span>Cinema</span><div className="search-filter-tabs search-cinema-tabs" role="tablist" aria-label="Search cinema">{SEARCH_CINEMAS.map(({ id, label }) => <button type="button" role="tab" aria-selected={cinemaFilter === id} className={`filter-tab${cinemaFilter === id ? " active" : ""}`} onClick={() => { setCinemaFilter(id); if (id !== "global" && filter === "person") setFilter("all"); }} key={id}>{label} ({cinemaCounts[id]})</button>)}</div></div>
+        </div>}
       </div>
 
       <div className="search-results-content" aria-live="polite">

@@ -54,6 +54,25 @@ describe("v1.1 people UI", () => {
     expect(mocks.searchTmdb).toHaveBeenLastCalledWith("example", 2, "token");
   });
 
+  it("separates same-title search results with cinema filters", async () => {
+    mocks.searchTmdb.mockResolvedValue({
+      page: 1, totalPages: 1,
+      results: [
+        { id: 1, media_type: "movie", title: "Don", original_title: "डॉन", original_language: "hi", release_date: "2006-01-01" },
+        { id: 2, media_type: "movie", title: "Don", original_language: "en", release_date: "1978-01-01" },
+        { id: 3, media_type: "movie", title: "Don", original_language: "te", release_date: "2024-01-01" },
+      ],
+    });
+    render(<SearchResultsPage apiKey="token" item="Don" onNavigate={() => {}} isActive />);
+    const bollywood = await screen.findByRole("tab", { name: /Bollywood \(1\)/ });
+    expect(screen.getByRole("tab", { name: /Hollywood \(1\)/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /South Indian \(1\)/ })).toBeInTheDocument();
+    fireEvent.click(bollywood);
+    expect(screen.getAllByText("Don")).toHaveLength(1);
+    expect(screen.getByText(/2006.*Bollywood.*Hindi/)).toBeInTheDocument();
+    expect(screen.queryByText("1978")).not.toBeInTheDocument();
+  });
+
   it("opens the complete results page from capped quick search", async () => {
     mocks.searchTmdb.mockResolvedValue({
       page: 1,
@@ -82,6 +101,23 @@ describe("v1.1 people UI", () => {
     expect(await screen.findByText("Person Fourteen")).toBeInTheDocument();
     expect(screen.getByText("Known for")).toBeInTheDocument();
     expect(screen.getByText("Known Film")).toBeInTheDocument();
+  });
+
+  it("uses cinema filters in the expanded quick-search workspace", async () => {
+    mocks.searchTmdb.mockResolvedValue({
+      page: 1, totalPages: 1,
+      results: [
+        { id: 1, media_type: "movie", title: "Don", original_language: "hi", release_date: "2006-01-01" },
+        { id: 2, media_type: "movie", title: "Don", original_language: "en", release_date: "1978-01-01" },
+      ],
+    });
+    const { container } = render(<SearchModal isOpen apiKey="token" onSelect={() => {}} onViewAll={() => {}} onClose={() => {}} offline={false} />);
+    fireEvent.change(screen.getByPlaceholderText(/Search movies, series and people/), { target: { value: "Don" } });
+    fireEvent.click(await screen.findByRole("tab", { name: /Bollywood.*1/ }));
+    expect(container.querySelectorAll(".search-result")).toHaveLength(1);
+    expect(container.querySelector(".search-result")).toHaveTextContent("2006");
+    expect(container.querySelector(".search-result")).toHaveTextContent("Bollywood");
+    expect(container.querySelector(".search-result")).toHaveTextContent("Hindi");
   });
 
   it("offers retry when both person requests fail", async () => {

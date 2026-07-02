@@ -419,13 +419,9 @@
     align-items: center;
     justify-content: center;
     padding: 20px;
-    background:
-        radial-gradient(circle at 50% 16%, rgba(229, 9, 20, 0.16), transparent 32%),
-        rgba(0, 0, 0, 0.9);
-    backdrop-filter: blur(0px) saturate(1);
-    -webkit-backdrop-filter: blur(0px) saturate(1);
+    background: color-mix(in srgb, var(--bg) 94%, var(--overlay-backdrop));
     opacity: 0;
-    transition: opacity 300ms cubic-bezier(0.16, 1, 0.3, 1), backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1), -webkit-backdrop-filter 300ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: opacity 300ms cubic-bezier(0.16, 1, 0.3, 1);
     isolation: isolate;
     pointer-events: none;
 }
@@ -433,15 +429,11 @@
 .quick-search-overlay.entering,
 .quick-search-overlay.entered {
     opacity: 1;
-    backdrop-filter: blur(18px) saturate(0.78);
-    -webkit-backdrop-filter: blur(18px) saturate(0.78);
     pointer-events: auto;
 }
 
 .quick-search-overlay.exiting {
     opacity: 0;
-    backdrop-filter: blur(0px) saturate(1);
-    -webkit-backdrop-filter: blur(0px) saturate(1);
     pointer-events: none;
 }
 

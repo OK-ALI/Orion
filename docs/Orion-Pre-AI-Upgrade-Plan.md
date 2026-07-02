@@ -59,11 +59,13 @@ v1.1.0 is a focused metadata and navigation release. It must not absorb download
 
 - Retain TMDB person results in quick search and full-page search instead of discarding them.
 - Add All, Movies, TV and People filters with accurate visible counts.
+- Add an independent cinema filter to quick and full search: Global, Hollywood, Bollywood, South Indian, Korean, Japanese and Chinese. Classify media from original-language and available origin-country metadata, never from title text or a person's birthplace.
 - Keep quick search debounced and capped for fast keyboard use.
 - Add an explicit **Load more** action to full-page search, preserving the current query/filter while fetching successive TMDB pages.
 - Deduplicate appended results by `media_type` and TMDB ID, ignore stale responses after query changes, and retain recent-search behavior.
 - Give people a distinct result layout with profile image, name, known department and representative known-for titles.
 - Disambiguate same-name media with year, original language, available origin-region context, rating and original title; mark repeated localized titles in the current result set rather than making users guess between otherwise identical cards.
+- Present cinema identity directly in each media result and allow users to isolate the intended cinema instead of manually scanning a mixed TMDB relevance list.
 - Provide All, Movies, TV and People filters in quick search as well as full search, while keeping each quick-filter view capped at 12 visible results.
 
 ### Person page and filmography

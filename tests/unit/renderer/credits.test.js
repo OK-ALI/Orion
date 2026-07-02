@@ -7,7 +7,9 @@ import {
 } from "../../../src/renderer/shared/utils/credits";
 import {
   appendUniqueSearchResults,
+  filterSearchResults,
   findDuplicateSearchTitles,
+  getSearchCinemaId,
   getSearchResultIdentity,
   getSearchTitleKey,
   normalizeSearchResults,
@@ -67,5 +69,19 @@ describe("people and credit normalization", () => {
       facts: expect.arrayContaining(["2006", "Hindi", "★ 7.1"]),
       supportingLabel: "Original title",
     }));
+  });
+
+  it("classifies and filters cinema regions without mixing same-title results", () => {
+    const results = [
+      { id: 1, media_type: "movie", title: "Don", original_language: "hi" },
+      { id: 2, media_type: "movie", title: "Don", original_language: "en" },
+      { id: 3, media_type: "movie", title: "Don", original_language: "te", origin_country: ["IN"] },
+      { id: 4, media_type: "tv", name: "Don", original_language: "ko" },
+      { id: 5, media_type: "person", name: "Don Person" },
+    ];
+    expect(results.map(getSearchCinemaId)).toEqual(["bollywood", "hollywood", "south-indian", "korean", "people"]);
+    expect(filterSearchResults(results, "movie", "bollywood").map((item) => item.id)).toEqual([1]);
+    expect(filterSearchResults(results, "all", "hollywood").map((item) => item.id)).toEqual([2]);
+    expect(filterSearchResults(results, "all", "global")).toHaveLength(5);
   });
 });
