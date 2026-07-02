@@ -27,4 +27,4 @@ Electron tests use a temporary Chromium profile and disable GPU acceleration for
 
 Live provider tests are intentionally manual because hosts and signed URLs change independently of Orion.
 
-For v1.1.0, add fixtures for person search, partial person metadata, duplicate cast/crew credits, multi-page results and stale-query responses. Electron coverage must verify Search → Person → Movie/TV navigation and back-stack scroll restoration without disturbing active mini-player playback.
+The v1.1.0 automated suite covers retained person search results, role/job merging, known-for ranking, key-crew extraction, explicit pagination, stale-query rejection, retryable Person failures, keyboard media-card activation, cast/crew navigation and quick-search-to-Person back-stack behavior. The remaining release checks are the six-theme visual matrix, live Movie/TV regression smoke tests, copied-profile validation and clean Windows packaging.

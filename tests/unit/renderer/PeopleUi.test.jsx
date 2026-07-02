@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ tmdbFetch: vi.fn(), searchTmdb: vi.fn() }));
@@ -81,5 +81,26 @@ describe("v1.1 people UI", () => {
     fireEvent.click(screen.getByRole("button", { name: /Director Two/ }));
     expect(onPersonSelect).toHaveBeenNthCalledWith(1, expect.objectContaining({ id: 1 }));
     expect(onPersonSelect).toHaveBeenNthCalledWith(2, expect.objectContaining({ id: 2 }));
+  });
+
+  it("ignores a stale search response after the query changes", async () => {
+    let resolveFirst;
+    let resolveSecond;
+    mocks.searchTmdb.mockImplementation((query) => new Promise((resolve) => {
+      if (query === "first") resolveFirst = resolve;
+      if (query === "second") resolveSecond = resolve;
+    }));
+    const view = render(<SearchResultsPage apiKey="token" item="first" onNavigate={() => {}} isActive />);
+    await waitFor(() => expect(mocks.searchTmdb).toHaveBeenCalledWith("first", 1, "token"));
+    view.rerender(<SearchResultsPage apiKey="token" item="second" onNavigate={() => {}} isActive />);
+    await waitFor(() => expect(mocks.searchTmdb).toHaveBeenCalledWith("second", 1, "token"));
+    await act(async () => {
+      resolveSecond({ page: 1, totalPages: 1, results: [{ id: 2, media_type: "person", name: "Second Person", known_for: [] }] });
+    });
+    expect(await screen.findByText("Second Person")).toBeInTheDocument();
+    await act(async () => {
+      resolveFirst({ page: 1, totalPages: 1, results: [{ id: 1, media_type: "person", name: "Stale Person", known_for: [] }] });
+    });
+    expect(screen.queryByText("Stale Person")).not.toBeInTheDocument();
   });
 });

@@ -13,4 +13,12 @@ Renderer features own their page, components, and hooks. Movie and TV controller
 
 Main-process ownership is similarly explicit: `app/tray.js` owns tray state and taskbar download progress, `battery/` owns power status and alerts, `performance/` owns adaptive policy, `player/mediaControls.js` owns Windows media-session integration, and `player/popoutWindow.js` owns the PiP window lifecycle. The AllManga integration separates HTTP transport, title resolution, payload decoding, local serving, and IPC registration.
 
-The latest stable architecture baseline is v1.0.10. v1.1.0 extends renderer metadata and navigation with Search, People and Cast while preserving these Electron and downloader boundaries.
+The latest stable architecture baseline is v1.0.10. The v1.1.0 implementation extends renderer metadata and navigation while preserving these Electron and downloader boundaries:
+
+- `renderer/services/search.js` owns normalized, paginated TMDB multi-search.
+- `renderer/features/people/PersonPage.jsx` owns person details, partial/error states, Known For and normalized filmography.
+- `renderer/shared/utils/credits.js` owns person, role and job normalization without depending on a page.
+- `renderer/shared/hooks/useTitleCredits.js` supplies Movie and TV controllers with cast and key-crew view models.
+- `renderer/components/media/PersonCard.jsx` and `CreditsSection.jsx` provide shared keyboard-accessible presentation.
+
+The custom navigation stack now accepts a `person` target. No new main-process capability, preload method, credential, provider or storage schema is introduced by v1.1.0.
