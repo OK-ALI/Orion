@@ -77,7 +77,7 @@ export default function App() {
     addHistory, clearHistory, getMediaType, handleReorderSaved, history,
     inProgress, isSaved, markUnwatched, markWatched, progress, removeHistory,
     saved, savedList, saveProgress, showToast, toggleSave, watched,
-  } = useLibraryState({ librarySort, setToast });
+  } = useLibraryState({ librarySort, setToast, apiKey });
   const [updateBanner, setUpdateBanner] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
 

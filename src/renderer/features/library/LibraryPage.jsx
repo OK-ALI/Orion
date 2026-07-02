@@ -237,7 +237,8 @@ export default function LibraryPage({
             const value = event.target.value;
             setSort(value);
             storage.set(STORAGE_KEYS.LIBRARY_SORT, value);
-          }} aria-label="Sort library">
+            window.dispatchEvent(new CustomEvent("orion:library-sort-changed", { detail: value }));
+          }} aria-label="Sort My List">
             {Object.entries(sortLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </div>

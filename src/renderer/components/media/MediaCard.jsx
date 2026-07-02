@@ -22,6 +22,7 @@ const MediaCard = memo(function MediaCard({
 }) {
   const title = item.title || item.name;
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
+  const libraryYear = year || String(item.year || "").slice(0, 4);
   const isTV = item.media_type === "tv";
   const isAnime = isAnimeContent(item);
 
@@ -160,7 +161,7 @@ const MediaCard = memo(function MediaCard({
           <div className="media-card-meta">
             {isTV && item.season != null && item.episode != null
               ? `S${item.season}E${item.episode}${item.episodeName ? ` · ${item.episodeName}` : ""}`
-              : `${formatDate(item.release_date || item.first_air_date)} · ${isTV ? "Series" : "Movie"}`}
+              : `${item.release_date || item.first_air_date ? formatDate(item.release_date || item.first_air_date) : libraryYear || "N/A"} · ${isTV ? "Series" : "Movie"}`}
           </div>
         </div>
         <span

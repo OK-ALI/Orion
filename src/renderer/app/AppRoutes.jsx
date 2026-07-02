@@ -55,7 +55,7 @@ export default function AppRoutes({ model }) {
       {page === "movie" && selected && (
         <MoviePage
           item={selected} apiKey={apiKey} playerSettings={playerSettings}
-          onSave={() => toggleSave(selected)} isSaved={isSaved(selected)}
+          onSave={toggleSave} isSaved={isSaved(selected)}
           onHistory={addHistory} progress={progress} saveProgress={saveProgress}
           onBack={navigateBack} onSettings={(section) => navigate("settings", { section: section || null })}
           onDownloadStarted={handleDownloadStarted} watched={watched}
@@ -69,7 +69,7 @@ export default function AppRoutes({ model }) {
       {page === "tv" && selected && (
         <TVPage
           item={selected} apiKey={apiKey} playerSettings={playerSettings}
-          onSave={() => toggleSave(selected)} isSaved={isSaved(selected)}
+          onSave={toggleSave} isSaved={isSaved(selected)}
           onHistory={addHistory} progress={progress} saveProgress={saveProgress}
           onBack={navigateBack} onSettings={(section) => navigate("settings", { section: section || null })}
           onDownloadStarted={handleDownloadStarted} watched={watched}

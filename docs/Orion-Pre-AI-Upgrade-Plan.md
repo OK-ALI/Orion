@@ -53,7 +53,7 @@ The application package remains at v1.0.10 until v1.1.0 passes its release gates
 
 v1.1.0 is a focused metadata and navigation release. It must not absorb downloader, playback, manual-collection, social-profile or AI work.
 
-**Implementation status (July 2, 2026):** the renderer implementation and automated acceptance coverage are complete on top of v1.0.10. Quick/full search now retains people, the Person route and normalized filmography are active, and Movie/TV pages expose cast and key crew. The package remains v1.0.10 while six-theme visual review, live regression smoke tests, copied-profile validation and clean Windows packaging remain pending.
+**Implementation status (July 2, 2026):** the renderer implementation and automated acceptance coverage are complete on top of v1.0.10. Quick/full search now retains people, the Person route and normalized filmography are active, and Movie/TV pages expose cast and key crew. Release hardening also repairs legacy My List metadata and stale manual-order records without replacing user data. The package remains v1.0.10 while six-theme visual review, live regression smoke tests, copied-profile validation and clean Windows packaging remain pending.
 
 ### Search
 

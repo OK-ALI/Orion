@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
+import { tmdbFetch } from "../../services/tmdb";
+import {
+  getLibraryMediaType,
+  mergeLibraryOrder,
+  needsLibraryMetadata,
+  sortLibraryItems,
+  toLibraryRecord,
+} from "../../shared/utils/library";
 
-export function useLibraryState({ librarySort, setToast }) {
+export function useLibraryState({ librarySort, setToast, apiKey }) {
   const [saved, setSaved] = useState(() => storage.get("saved") || {});
   const [savedOrder, setSavedOrder] = useState(() => storage.get("savedOrder") || null);
   const [progress, setProgress] = useState(() => storage.get("progress") || {});
@@ -9,6 +17,7 @@ export function useLibraryState({ librarySort, setToast }) {
   const [watched, setWatched] = useState(() => storage.get("watched") || {});
   const toastTimerRef = useRef(null);
   const savedRef = useRef(saved);
+  const hydrationAttemptsRef = useRef(new Set());
 
   useEffect(() => { savedRef.current = saved; }, [saved]);
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
@@ -35,10 +44,40 @@ export function useLibraryState({ librarySort, setToast }) {
     toastTimerRef.current = setTimeout(() => setToast(null), 2500);
   }, [setToast]);
 
-  const getMediaType = useCallback(
-    (item) => item.media_type || (item.first_air_date ? "tv" : "movie"),
-    [],
-  );
+  const getMediaType = useCallback((item) => getLibraryMediaType(item), []);
+
+  useEffect(() => {
+    if (!apiKey) return undefined;
+    const candidates = Object.entries(saved).filter(([key, item]) => {
+      if (!needsLibraryMetadata(item) || hydrationAttemptsRef.current.has(key)) return false;
+      hydrationAttemptsRef.current.add(key);
+      return true;
+    });
+    if (!candidates.length) return undefined;
+    let cancelled = false;
+    Promise.allSettled(candidates.map(async ([key, item]) => {
+      const mediaType = getLibraryMediaType(item);
+      const details = await tmdbFetch(`/${mediaType}/${item.id}`, apiKey);
+      return [key, toLibraryRecord({ ...item, ...details }, mediaType)];
+    })).then((outcomes) => {
+      if (cancelled) return;
+      const repaired = outcomes.flatMap((outcome) => outcome.status === "fulfilled" ? [outcome.value] : []);
+      if (!repaired.length) return;
+      setSaved((previous) => {
+        const next = { ...previous };
+        let changed = false;
+        for (const [key, item] of repaired) {
+          if (!next[key]) continue;
+          next[key] = item;
+          changed = true;
+        }
+        if (!changed) return previous;
+        storage.set(STORAGE_KEYS.SAVED, next);
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+  }, [apiKey, saved]);
 
   const toggleSave = useCallback((item) => {
     const mediaType = getMediaType(item);
@@ -54,14 +93,7 @@ export function useLibraryState({ librarySort, setToast }) {
         return order;
       });
     } else {
-      next[key] = {
-        id: item.id,
-        title: item.title || item.name,
-        poster_path: item.poster_path,
-        media_type: mediaType,
-        vote_average: item.vote_average,
-        year: (item.release_date || item.first_air_date || "").slice(0, 4),
-      };
+      next[key] = toLibraryRecord(item, mediaType);
       showToast("Added to watchlist");
       setSavedOrder((previous) => {
         const order = [...(previous || Object.keys(current)), key];
@@ -150,12 +182,9 @@ export function useLibraryState({ librarySort, setToast }) {
   }), [historyWithKeys, progress, watched]);
 
   const savedList = useMemo(() => {
-    const keys = savedOrder ? savedOrder.filter((key) => saved[key]) : Object.keys(saved);
+    const keys = mergeLibraryOrder(saved, savedOrder);
     const list = keys.map((key) => saved[key]).filter(Boolean);
-    if (librarySort === "title") return [...list].sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-    if (librarySort === "rating") return [...list].sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0));
-    if (librarySort === "year") return [...list].sort((a, b) => (b.year || "").localeCompare(a.year || ""));
-    return list;
+    return sortLibraryItems(list, librarySort);
   }, [librarySort, saved, savedOrder]);
 
   const handleReorderSaved = useCallback((nextOrder) => {
