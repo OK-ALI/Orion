@@ -6,6 +6,10 @@ The latest stable release is **v1.0.10 — Performance, Windows Integration and 
 
 See the authoritative [pre-AI roadmap](docs/Orion-Pre-AI-Upgrade-Plan.md) for current milestone status and acceptance requirements.
 
+## v1.1.0 validation preview
+
+The unreleased v1.1.0 workspace adds people-aware Search, independent cinema filtering, Person pages, Movie/TV cast and key crew, the Constellation people catalog, progressive Constellation pagination, repaired legacy Library metadata, and measured Online/Offline latency beside Battery status. Publishing is intentionally paused until final user, theme, live-playback, copied-profile, and clean-package validation succeeds. See the [draft v1.1.0 notes](docs/releases/v1.1.0.md).
+
 ## What's new in v1.0.10
 
 - Invisible Quality, Balanced, and Efficiency adaptation prioritizes streaming under CPU, memory, battery, or buffering pressure.

@@ -57,4 +57,30 @@ describe("Constellation page", () => {
     expect(screen.getAllByText("Ava Example").length).toBeGreaterThan(0);
     expect(mocks.fetchPool).not.toHaveBeenCalled();
   });
+
+  it("uses a valid 24-hour cache without remapping the first page", async () => {
+    mocks.getCache.mockReturnValue(pool);
+    render(<ConstellationPage apiKey="token" history={[]} saved={[]} offline={false} onNavigate={() => {}} />);
+    expect((await screen.findAllByText("Ava Example")).length).toBeGreaterThan(0);
+    expect(mocks.fetchPool).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Showing saved people while/)).not.toBeInTheDocument();
+  });
+
+  it("shows progressively mapped people before Load more finishes", async () => {
+    let finishLoadMore;
+    const secondPerson = { ...person, id: 8, name: "Bea Example", score: 80 };
+    mocks.fetchPool
+      .mockResolvedValueOnce(pool)
+      .mockImplementationOnce(({ onProgress }) => {
+        onProgress({ phase: "discovering", completed: 2, total: 2, people: [] });
+        onProgress({ phase: "mapping", completed: 1, total: 10, people: [secondPerson] });
+        return new Promise((resolve) => { finishLoadMore = () => resolve({ ...pool, people: [secondPerson], seedPage: 2, totalPages: 2 }); });
+      });
+    render(<ConstellationPage apiKey="token" history={[]} saved={[]} offline={false} onNavigate={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Load more" }));
+    expect(await screen.findByText("Bea Example")).toBeInTheDocument();
+    expect(screen.getByText(/Mapping title credits.*1\/10/)).toBeInTheDocument();
+    finishLoadMore();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument());
+  });
 });

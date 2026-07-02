@@ -174,7 +174,7 @@ async function fetchCreditSeeds(mediaSeeds, apiKey, onProgress) {
     return { media, credits: await tmdbFetch(endpoint, apiKey) };
   }, (outcome, _index, completed, total) => {
     if (outcome.status === "fulfilled") successful.push(outcome.value);
-    onProgress?.({ completed, total, people: aggregateConstellationCredits(successful) });
+    onProgress?.({ phase: "mapping", completed, total, people: aggregateConstellationCredits(successful) });
   });
   return { successful, failures: outcomes.filter((outcome) => outcome.status === "rejected").length };
 }
@@ -205,7 +205,7 @@ export async function fetchGlobalConstellationPool({ page = 1, apiKey, onProgres
     trending.map((person, index) => normalizeGlobalPerson(person, Math.max(0, 40 - index))),
     (popularResponse.results || []).map((person) => normalizeGlobalPerson(person)),
   );
-  onProgress?.({ completed: responses.length, total: responses.length, people });
+  onProgress?.({ phase: "mapping", completed: responses.length, total: responses.length, people });
   if (!people.length) throw new Error("No people data is currently available.");
   return {
     version: CONSTELLATION_CACHE_VERSION, cinemaId: "global", people,
@@ -220,7 +220,9 @@ export async function fetchCinemaConstellationPool({ cinemaId, page = 1, apiKey,
   const discoverTasks = ["movie", "tv"].flatMap((mediaType) => buildCinemaDiscoverPaths(cinema.id, mediaType, page).map((path) => ({ mediaType, path })));
   const discover = await mapWithConcurrency(discoverTasks, CREDIT_CONCURRENCY, async (task) => ({
     ...task, data: await tmdbFetch(task.path, apiKey),
-  }));
+  }), (_outcome, _index, completed, total) => {
+    onProgress?.({ phase: "discovering", completed, total, people: [] });
+  });
   const successfulDiscover = discover.flatMap((outcome) => outcome.status === "fulfilled" ? [outcome.value] : []);
   const seeds = ["movie", "tv"].flatMap((mediaType) => {
     const seen = new Set();

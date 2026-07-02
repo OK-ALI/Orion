@@ -156,6 +156,14 @@
  */
 
 /**
+ * @typedef {Object} NetworkStatus
+ * @property {"checking"|"online"|"offline"} status
+ * @property {number|null} latencyMs Rounded HTTP round-trip time to Orion's metadata service.
+ * @property {"unknown"|"fast"|"fair"|"slow"} tier
+ * @property {number} checkedAt
+ */
+
+/**
  * @typedef {Object} AdaptivePerformanceState
  * @property {"efficiency"|"balanced"|"quality"} tier
  * @property {number} cpuPercent

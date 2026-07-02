@@ -93,6 +93,7 @@ describe("Constellation data layer", () => {
   });
 
   it("builds Bollywood pools from movie credits and TV aggregate credits", async () => {
+    const progress = [];
     mocks.tmdbFetch.mockImplementation((path) => {
       if (path.startsWith("/discover/movie")) return Promise.resolve({ results: [movie], total_pages: 3 });
       if (path.startsWith("/discover/tv")) return Promise.resolve({ results: [tv], total_pages: 2 });
@@ -100,11 +101,13 @@ describe("Constellation data layer", () => {
       if (path === "/tv/2/aggregate_credits") return Promise.resolve({ cast: [{ id: 11, name: "TV Actor" }], crew: [] });
       return Promise.reject(new Error("unexpected path"));
     });
-    const pool = await fetchCinemaConstellationPool({ cinemaId: "bollywood", apiKey: "token" });
+    const pool = await fetchCinemaConstellationPool({ cinemaId: "bollywood", apiKey: "token", onProgress: (value) => progress.push(value) });
     expect(pool.people.map((person) => person.id).sort()).toEqual([10, 11]);
     expect(pool.totalPages).toBe(3);
     expect(mocks.tmdbFetch).toHaveBeenCalledWith(expect.stringContaining("with_original_language=hi"), "token");
     expect(mocks.tmdbFetch).toHaveBeenCalledWith("/tv/2/aggregate_credits", "token");
+    expect(progress.some((value) => value.phase === "discovering")).toBe(true);
+    expect(progress.some((value) => value.phase === "mapping" && value.people.length > 0)).toBe(true);
   });
 
   it("retains partial credit successes and merges subsequent pages", async () => {

@@ -6,10 +6,12 @@ import {
   RestoreIcon,
   CloseIcon,
 } from "../common/Icons";
+import useNetworkStatus from "../../shared/hooks/useNetworkStatus";
 
 export default function WindowTitlebar() {
   const [maximized, setMaximized] = useState(false);
   const [battery, setBattery] = useState(null);
+  const network = useNetworkStatus();
 
   useEffect(() => {
     if (!window.electron) return;
@@ -38,6 +40,17 @@ export default function WindowTitlebar() {
       </div>
 
       <div className="titlebar-controls titlebar-no-drag">
+        <div
+          className={`titlebar-network is-${network.status}${network.tier !== "unknown" ? ` is-${network.tier}` : ""}`}
+          title={network.status === "online"
+            ? `Online · ${network.latencyMs} ms round trip to Orion's metadata service`
+            : network.status === "checking" ? "Checking Orion connectivity" : "Orion is offline"}
+          aria-label={network.status === "online" ? `Online, ${network.latencyMs} milliseconds latency` : network.status === "checking" ? "Checking network status" : "Offline"}
+        >
+          <span className="titlebar-network-dot" aria-hidden="true" />
+          <span>{network.status === "online" ? "Online" : network.status === "checking" ? "Checking" : "Offline"}</span>
+          {network.status === "online" && <span className="titlebar-network-latency">{network.latencyMs} ms</span>}
+        </div>
         {battery?.available && battery?.visible !== false && (
           <div
             className={`titlebar-battery${battery.charging ? " is-charging" : ""}${Number(battery.level) <= 0.1 ? " is-critical" : ""}`}

@@ -21,5 +21,6 @@ The latest stable architecture baseline is v1.0.10. The v1.1.0 implementation ex
 - `renderer/shared/hooks/useTitleCredits.js` supplies Movie and TV controllers with cast and key-crew view models.
 - `renderer/components/media/PersonCard.jsx` and `CreditsSection.jsx` provide shared keyboard-accessible presentation.
 - `renderer/features/people/constellation/` owns the Constellation page, filters, editorial presentation, regional manifests, two-request credit mapper and bounded 24-hour renderer cache.
+- `renderer/services/networkStatus.js` measures a small, uncached HTTP round trip to Orion's existing TMDB metadata service; `shared/hooks/useNetworkStatus.js` owns the 30-second lifecycle and browser online/offline events used by the title bar.
 
 The custom navigation stack now accepts `person` and `constellation` targets. Constellation preferences are ordinary renderer settings and are included in backup; generated pools remain disposable cache data and are excluded. No new main-process capability, preload method, credential or provider is introduced by v1.1.0.

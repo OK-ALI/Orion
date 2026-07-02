@@ -4,7 +4,7 @@ import { storage, STORAGE_KEYS } from "../../../services/settingsStore";
 import ConstellationEditorial from "./ConstellationEditorial";
 import ConstellationFilters from "./ConstellationFilters";
 import { DEFAULT_CONSTELLATION_PREFERENCES, getConstellationCinema } from "./manifest";
-import { fetchCinemaConstellationPool, fetchPersonalConstellation, filterConstellationPeople, getCachedConstellationPool, mergeConstellationPools, setCachedConstellationPool } from "./service";
+import { fetchCinemaConstellationPool, fetchPersonalConstellation, filterConstellationPeople, getCachedConstellationPool, mergeConstellationPeople, mergeConstellationPools, setCachedConstellationPool } from "./service";
 
 function initialPreferences() {
   const saved = storage.get(STORAGE_KEYS.CONSTELLATION_PREFERENCES);
@@ -19,6 +19,7 @@ export default function ConstellationPage({ apiKey, history = [], saved = [], of
   const [loading, setLoading] = useState(true);
   const [personalLoading, setPersonalLoading] = useState(false);
   const [progress, setProgress] = useState(null);
+  const [progressivePeople, setProgressivePeople] = useState([]);
   const [error, setError] = useState("");
   const [usingCache, setUsingCache] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
@@ -36,9 +37,14 @@ export default function ConstellationPage({ apiKey, history = [], saved = [], of
     const requestId = ++requestRef.current;
     const cached = getCachedConstellationPool(preferences.cinema);
     setPool(cached);
-    setUsingCache(Boolean(cached));
+    setUsingCache(Boolean(cached && offline));
     setError("");
     setProgress(null);
+    setProgressivePeople([]);
+    if (cached) {
+      setLoading(false);
+      return undefined;
+    }
     if (offline || !apiKey) {
       setLoading(false);
       if (!cached) setError("Constellation is unavailable offline until this cinema has been mapped once.");
@@ -58,7 +64,6 @@ export default function ConstellationPage({ apiKey, history = [], saved = [], of
       if (requestRef.current !== requestId) return;
       setPool(nextPool);
       setCachedConstellationPool(nextPool);
-      setUsingCache(false);
     }).catch((reason) => {
       if (requestRef.current !== requestId) return;
       if (!cached) setError(reason?.message || "This constellation could not be mapped.");
@@ -80,7 +85,8 @@ export default function ConstellationPage({ apiKey, history = [], saved = [], of
     return () => { active = false; };
   }, [apiKey, history, offline, preferences.cinema, saved]);
 
-  const displayed = useMemo(() => filterConstellationPeople(pool?.people || [], { craft: preferences.craft, media: preferences.media, sort: preferences.sort, query }), [pool, preferences, query]);
+  const catalogPeople = useMemo(() => mergeConstellationPeople(pool?.people || [], progressivePeople), [pool, progressivePeople]);
+  const displayed = useMemo(() => filterConstellationPeople(catalogPeople, { craft: preferences.craft, media: preferences.media, sort: preferences.sort, query }), [catalogPeople, preferences, query]);
   const defaultView = preferences.cinema === "global" && preferences.craft === "all" && preferences.media === "all" && !query.trim();
   const canLoadMore = Boolean(pool && pool.seedPage < pool.totalPages);
   const openPerson = useCallback((person) => onNavigate("person", person), [onNavigate]);
@@ -88,16 +94,20 @@ export default function ConstellationPage({ apiKey, history = [], saved = [], of
   const loadMore = async () => {
     if (!canLoadMore || loading || offline) return;
     const requestId = ++requestRef.current;
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setProgressivePeople([]);
     try {
-      const next = await fetchCinemaConstellationPool({ cinemaId: preferences.cinema, page: pool.seedPage + 1, apiKey, onProgress: (value) => { if (requestRef.current === requestId) setProgress(value); } });
+      const next = await fetchCinemaConstellationPool({ cinemaId: preferences.cinema, page: pool.seedPage + 1, apiKey, onProgress: (value) => {
+        if (requestRef.current !== requestId) return;
+        setProgress(value);
+        if (value.people?.length) setProgressivePeople(value.people);
+      } });
       if (requestRef.current !== requestId) return;
       const merged = mergeConstellationPools(pool, next);
       setPool(merged); setCachedConstellationPool(merged);
     } catch (reason) {
       if (requestRef.current === requestId) setError(reason?.message || "More people could not be mapped.");
     } finally {
-      if (requestRef.current === requestId) { setLoading(false); setProgress(null); }
+      if (requestRef.current === requestId) { setLoading(false); setProgress(null); setProgressivePeople([]); }
     }
   };
 
@@ -108,7 +118,7 @@ export default function ConstellationPage({ apiKey, history = [], saved = [], of
       {usingCache && <div className="constellation-notice">{offline ? "Offline — showing a saved constellation." : "Showing saved people while Orion refreshes this constellation."}</div>}
       {error && <div className="constellation-warning"><span>{error}</span><button type="button" className="btn btn-ghost" onClick={() => setRetryKey((value) => value + 1)} disabled={offline}>Retry</button></div>}
       {pool?.partialFailures > 0 && <div className="constellation-warning">Some credits could not be mapped. The successful people are still shown.</div>}
-      {progress && <div className="constellation-progress"><span className="spinner" /><span>Mapping titles… {progress.completed}/{progress.total}</span></div>}
+      {progress && <div className="constellation-progress"><span className="spinner" /><span>{progress.phase === "discovering" ? "Finding regional titles" : "Mapping title credits"}… {progress.completed}/{progress.total}</span></div>}
       {defaultView && <ConstellationEditorial people={pool?.people || []} personalPeople={personalPeople} personalLoading={personalLoading} onSelect={openPerson} />}
       <section className="constellation-section constellation-catalog">
         <div className="constellation-section-heading"><div><span className="eyebrow">{getConstellationCinema(preferences.cinema).label}</span><h2>{query ? "Filtered people" : "People catalog"}</h2></div><span>{displayed.length} mapped</span></div>
