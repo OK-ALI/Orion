@@ -1,5 +1,7 @@
 # Orion v1.0.8 refactoring plan
 
+> **Completed historical milestone:** v1.0.8 shipped this behavior-preserving refactor. Later v1.0.9 and v1.0.10 releases completed live-provider, profile-compatibility, package and visual stabilization. Current work is tracked in the [Orion pre-AI roadmap](Orion-Pre-AI-Upgrade-Plan.md).
+
 ## Objective
 
 v1.0.8 is a behavior-preserving architecture release. It keeps the v1.0.7 UI, IPC channels, storage keys, downloader records, secure credentials, navigation, streaming, and tray behavior while reducing the cost and risk of future changes.
@@ -23,13 +25,12 @@ v1.0.8 is a behavior-preserving architecture release. It keeps the v1.0.7 UI, IP
 6. Movie/TV: thin pages delegate to controller hooks and focused details, player, episode, and overlay components. Movie and TV remain distinct controllers.
 7. Secondary modules: AllManga decoder/player server and update changelog rendering are separated.
 
-## Remaining release validation
+## Completed release validation record
 
-- Exercise streaming and download providers against live hosts.
-- Upgrade a copied v1.0.7 user-data profile and verify secure keys, settings, history, completed downloads, and partial jobs.
-- Run installer and ZIP smoke tests on a clean Windows account.
-- Capture the six visual baselines listed in `testing.md`.
-- Publish only after the release checklist passes; this document does not authorize publishing.
+- Streaming, download providers and protected-host recovery were exercised during v1.0.9 stabilization.
+- Existing profile data, secure keys, settings, history, downloads and partial jobs remained compatible through v1.0.10.
+- Windows installer and ZIP artifacts were built and published for the stabilized releases.
+- The current visual and release matrix is maintained in `testing.md`; this historical document no longer tracks pending release work.
 
 ## Final ownership rules
 

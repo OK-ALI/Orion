@@ -2,7 +2,9 @@
 
 Orion is a Windows-first Electron application for discovering, streaming, downloading, and tracking movies, TV series, and anime.
 
-The current development milestone is **v1.0.10 — Performance, Windows Integration and Final Visual Polish**, built on Orion's behavior-preserving architecture refactor.
+The latest stable release is **v1.0.10 — Performance, Windows Integration and Final Visual Polish**. Active development is now focused on **v1.1.0 — Search, People and Cast**; the application version remains 1.0.10 until that milestone is release-ready.
+
+See the authoritative [pre-AI roadmap](docs/Orion-Pre-AI-Upgrade-Plan.md) for current milestone status and acceptance requirements.
 
 ## What's new in v1.0.10
 

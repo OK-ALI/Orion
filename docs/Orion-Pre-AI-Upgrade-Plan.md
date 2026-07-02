@@ -1,103 +1,146 @@
 # Orion pre-AI roadmap
 
-**Baseline:** v1.0.8
-**Current milestone:** v1.0.9 — Cosmic Polish and Playback Continuity
-**Next milestone:** v1.1.0 — Search + Cast Metadata
-**Audit date:** June 2026
+> **Authoritative roadmap:** This document supersedes the older post-v1.0.7 and AI concept roadmaps for release sequencing and milestone status.
+
+- **Latest stable release:** v1.0.10 — Performance, Windows Integration and Final Visual Polish
+- **Active development milestone:** v1.1.0 — Search, People and Cast
+- **Roadmap baseline:** v1.0.10
+- **Audit date:** July 2, 2026
 
 ## Product direction
 
-Orion should be a reliable, distinctive desktop media application before AI features become part of its identity. Downloader recovery and the behavior-preserving architecture refactor are complete. The current work improves continuity, local playback, discovery, accessibility, and visual consistency without adding AI or DRM circumvention.
+Orion will become a reliable, distinctive desktop media application before AI features become part of its identity. Streaming, downloader recovery, architecture refactoring, playback continuity, local playback, adaptive performance, Windows integration and the first visual-polish cycle are complete foundations. The next milestones deepen metadata, offline ownership, curation, playback capabilities, privacy and resilience without adding AI or DRM circumvention.
+
+The application package remains at v1.0.10 until v1.1.0 passes its release gates. Roadmap status does not change the shipped application version.
 
 ## Completed foundations
 
-### v1.0.7 — downloader recovery
+### v1.0.7 — Downloader recovery
 
-- Managed Windows installation of pinned `yt-dlp` and ffmpeg tools.
-- HLS capture with private browser headers/cookies and a restricted loopback proxy fallback.
-- Queue persistence, retry, pause/resume, process-tree cleanup, subtitles, and tray progress.
-- Movie/series output organization and resumable partial files.
+- Added app-managed Windows installation and repair of pinned `yt-dlp` and ffmpeg tools.
+- Added scoped HLS capture using private browser headers and cookies, protected-stream proxy fallback, resumable fragments and provider retries.
+- Added persistent queues, pause/resume/retry/cancel, process-tree cleanup, tray progress, movie/series organization and subtitle sidecars.
+- Reconnected downloader installation, settings, download-dialog and Downloads-page controls.
 
-### v1.0.8 — behavior-preserving refactor
+### v1.0.8 — Behavior-preserving refactor
 
-- Main, preload, and renderer boundaries organized by domain.
-- Settings, App shell, downloader, Movie, TV, AllManga, and subtitle responsibilities split into focused modules.
-- Existing `window.electron` aliases, storage keys, secure credentials, profiles, and download records retained.
-- Binding, IPC, secret, cycle, size, unit, renderer, Electron, and build checks established.
+- Organized main, preload and renderer code by domain while preserving navigation, playback, settings and storage behavior.
+- Split Settings, App shell, downloader, Movie, TV, AllManga and subtitle responsibilities into focused modules.
+- Preserved `window.electron`, `orion_*` storage, secure credentials, download records and existing user profiles.
+- Established binding, IPC, secret, cycle, source-size, unit, renderer, Electron and production-build gates.
 
-## v1.0.9 — Cosmic Polish and Playback Continuity
+### v1.0.9 — Cosmic Polish and Playback Continuity
 
-Status in this working tree:
+- Added capture sessions for HLS, DASH, direct video and extensionless manifests, including live detection updates and actionable unsupported states.
+- Added Download Record v3 metrics, filters, sorting, expandable diagnostics and bulk actions.
+- Added restricted `orion-media://` local playback with range requests, resume, watched state and sidecar subtitles.
+- Added one logical playback session across embedded, mini, pop-out and local modes, with exclusive audio ownership and state handoffs.
+- Added adaptive ambient sampling, cinematic themes, bundled fonts, motion/background choices, discovery hubs and improved Continue Watching and Library experiences.
+- Added deterministic recommendations from recent history, configurable Home row order/visibility, carousel/grid presentation and editorial Top Rated/K-drama rows.
+- Completed live streaming/downloader stabilization and v1.0.7/v1.0.8 profile compatibility checks.
 
-- Scoped stream capture sessions tied to title, episode, source, and player contents.
-- HLS, DASH, direct-video, MIME-based extensionless response classification.
-- Live download-dialog detection updates, polling, elapsed detection time, and refresh guidance.
-- Download Record v3 metrics: bytes, ETA, elapsed time, fragments, retries, strategy, host, and update time.
-- All/Active/Completed/Failed download views, filters, sorting, expandable diagnostics, and bulk controls.
-- Restricted `orion-media://` local playback with opaque grants, range requests, resume, watched state, and sidecar subtitles.
-- Explicit embedded → mini → pop-out state snapshots, one active owner, resume time, volume, mute, and pause restoration.
-- Automatic mini-player on navigation with Auto, Ask, and Manual settings.
-- Mini-player seek, scrub, volume, resize, snap, retry, expand, and pop-out controls.
-- Main-process ambient sampler that sends derived color palettes only, pauses while inactive, and lowers its sampling rate on battery power.
-- Offline Inter and Space Grotesk fonts, Midnight Premiere/Projector Silver cinema tokens, Orbit/Nebula/Minimal backgrounds, consistent focus rings, and motion presets.
-- Dynamic regional provider hubs that automatically include every offer type and regional provider variant, plus checked-in Marvel, DC, Star Wars, and Pixar manifests.
-- Latest-entry-per-series Continue cards, progress details, visible Library search/sort, Downloads tab, and local playback.
+### v1.0.10 — Performance, Windows Integration and Final Visual Polish
 
-Release validation still requires clean-machine Windows installer/ZIP smoke tests, live protected-host download tests, and the visual/Electron matrix described in `docs/releases/v1.0.9.md`.
+- Added local Quality, Balanced and Efficiency adaptation driven by CPU, memory, playback pressure, battery and Windows power state.
+- Added title-bar/tray battery state, low and critical alerts, and resumable critical-battery download pausing.
+- Added Windows media-session metadata and Bluetooth/media-key support without competing with Windows-owned output volume.
+- Added YouTube-style shortcuts across embedded, mini, pop-out and local playback.
+- Added a true 16:9 mini-player with migrated dimensions, auto-hiding overlay chrome and preserved handoff behavior.
+- Added live interaction appearance controls, six-theme semantic synchronization, carousel hover fixes and a theme-color regression gate.
+- Preserved downloader, playback, subtitles, secure credentials, history, progress and partial-job compatibility.
 
-## v1.1.0 — Search + Cast Metadata
+## v1.1.0 — Search, People and Cast
 
-This remains the next feature release. It must not absorb AI work.
+v1.1.0 is a focused metadata and navigation release. It must not absorb downloader, playback, manual-collection, social-profile or AI work.
 
-- Preserve media search while retaining TMDB person results.
-- Add person result cards, cast/crew rails, and a focused Person page.
-- Show known-for titles and filmography with movie/TV normalization and deduplication.
-- Add accessible keyboard navigation, loading states, empty states, and cached metadata.
-- Keep person metadata separate from playback and downloader concerns.
+### Search
+
+- Retain TMDB person results in quick search and full-page search instead of discarding them.
+- Add All, Movies, TV and People filters with accurate visible counts.
+- Keep quick search debounced and capped for fast keyboard use.
+- Add an explicit **Load more** action to full-page search, preserving the current query/filter while fetching successive TMDB pages.
+- Deduplicate appended results by `media_type` and TMDB ID, ignore stale responses after query changes, and retain recent-search behavior.
+- Give people a distinct result layout with profile image, name, known department and representative known-for titles.
+
+### Person page and filmography
+
+- Add a `person` navigation target that participates in Orion’s existing back stack and scroll restoration.
+- Show profile art, biography, birth/death details, place of birth, known department and missing-data fallbacks.
+- Build a Known For rail from the selected person’s TMDB credits, not from a new provider or a text search for their name.
+- Normalize movie and TV credits into one filmography model, deduplicate repeated titles, and merge multiple characters/jobs for the same media identity.
+- Add All, Movies and TV filmography filters and display release year plus character or job context.
+- Navigate filmography cards into existing Movie and TV pages and return to the same Person-page position when navigating back.
+- Defer social links, external IDs, alternate-name galleries and image galleries.
+
+### Movie and TV credits
+
+- Add a cast rail to Movie and TV detail pages with profile image, person name and character.
+- Add a compact key-crew group for directors, writers, creators and lead producers.
+- Add **View all** behavior without introducing department-heavy crew pages.
+- Make every cast and crew entry keyboard accessible and navigable to the Person page.
+- Defer episode guest stars and complete crew-department browsing.
+
+### Contracts and boundaries
+
+- Define `PersonSummary`, `PersonDetails` and normalized `CreditItem` JSDoc contracts.
+- Keep TMDB requests behind the existing renderer metadata service and session cache; do not add credentials or providers.
+- Keep person metadata independent from playback, downloader, local-media and subtitle state.
+- Preserve the custom route/navigation system; do not introduce React Router or a global state library.
+
+### Experience and acceptance
+
+- Provide loading skeletons, empty results, partial biography/credit states, missing-image placeholders, retryable API errors and offline guidance.
+- Preserve quick-search focus, Escape behavior and recent searches; support logical arrow/Tab navigation and visible focus.
+- Use semantic tokens across Midnight Premiere, AMOLED, Mocha, Slate, Projector Silver and Custom.
+- Reduced Motion removes movement while retaining focus, tint and border feedback.
+- Test normalization, role merging, pagination, stale-response rejection, route/back-stack behavior and Movie/TV/Person navigation.
+- Release only after the full repository gates, Electron navigation flows and six-theme visual matrix pass without downloader or playback regressions.
 
 ## Later pre-AI milestones
 
-### v1.2.0 — Local library and offline catalog
+### v1.2.0 — Manual collections
 
-- Reconnect local-folder scanning through the existing restricted filesystem boundary.
-- Match local files to TMDB identities without exposing arbitrary paths to React.
-- Add missing/moved-file repair, offline catalog state, and explicit rescan controls.
+- Add user-created collections that can contain both movies and series without changing My List.
+- Support collection names, descriptions, optional artwork, manual title ordering and membership in multiple collections.
+- Add create, rename, duplicate, delete and add/remove-title workflows with clear destructive confirmations.
+- Include collection records and ordering in backup/restore and privacy-safe export.
+- Reuse Orion’s existing media cards, TMDB identities, navigation and semantic theme tokens.
+- Keep already-completed Home recommendations, Home row customization and TMDB franchise rails out of this milestone.
 
-### v1.3.0 — Collections and home curation
+### v1.3.0 — Advanced playback and diagnostics
 
-- Manual collections with reorder, artwork, privacy-safe export, and backup support.
-- Improved Home rail personalization using deterministic local rules.
-- Additional editorial rails without impersonating provider branding.
+- Add Orion-owned audio and subtitle track selection where the active source exposes usable tracks.
+- Add codec/container compatibility reporting and controlled support for additional local formats where Chromium can play or safely remux them.
+- Add a user-facing playback diagnostics panel for resolution, codec, dropped frames, buffering, selected source and current performance tier.
+- Persist privacy-safe source-health summaries without storing signed URLs, cookies or request headers.
+- Add monitor selection, per-display window placement and stronger multi-monitor fullscreen restoration.
+- Preserve completed source failover, adaptive performance, battery behavior, ambient safeguards and basic fullscreen/pop-out functionality.
 
-### v1.4.0 — Advanced playback
+### v1.4.0 — Privacy, notifications and recovery
 
-- Audio/subtitle track selection where sources expose it.
-- More local formats, playback diagnostics, and source-health history.
-- Performance/battery modes and improved multi-monitor/fullscreen behavior.
+- Add quiet hours and finer event controls on top of existing download, episode and battery notifications.
+- Add history/progress retention periods and clearer credential inventory with individual delete/revoke actions.
+- Version backup schemas and test supported cross-version migrations using sanitized fixtures.
+- Add failed-update recovery, updater rollback guidance and health checks for recoverable local state.
+- Build on existing secure storage, redacted diagnostics, scheduled backups, reset controls and downloader repair instead of replacing them.
 
-### v1.5.0 — Privacy, notifications, and resilience
+### v1.5.0 — AI readiness, without AI features
 
-- Granular notification policy and quiet hours.
-- Clear storage/credential visibility, retention controls, and export diagnostics redaction.
-- Backup migration testing, recovery tooling, and updater rollback guidance.
-
-### v1.6.0 — AI readiness (no AI features yet)
-
-- Stable metadata, library, playback, collection, and search contracts.
-- Consent and privacy boundaries for any future indexing.
-- Explicit local/cloud processing policy and deletion lifecycle.
-- Performance budgets and opt-in migration design.
+- Stabilize and version metadata, person, playback, collection, search and settings contracts.
+- Define explicit consent and data classification for any future catalog or preference indexing.
+- Define local/cloud processing policy, export/deletion lifecycle, storage/performance budgets and opt-in migrations.
+- Require a separate product decision and release plan before any AI capability can be enabled.
 
 ## AI boundary
 
-AI features remain deferred until the pre-AI milestones pass acceptance. Future work may include semantic search, mood discovery, local indexing, personalized recommendations, or AI collections, but none should be enabled by silently uploading watch data or provider credentials.
+AI remains deferred until the pre-AI milestones pass acceptance. Future work may include semantic search, mood discovery or enhanced personalized recommendations, but Orion must never silently upload watch data, search history, subtitles or provider credentials.
 
 ## Non-negotiable engineering rules
 
-- DRM circumvention is out of scope.
-- Cookies, captured headers, provider keys, tool paths, arbitrary filesystem paths, and spawn arguments remain outside React.
-- Profile and record migrations are additive and reversible where possible.
-- Existing flat preload aliases remain available through v1.0.9.
-- Feature modules do not import sibling feature internals.
-- New source files stay below 800 lines and should normally stay below 500.
-- A release is not complete until the full check suite, Electron flows, clean-machine packages, upgrade profile, and live smoke tests pass.
+- DRM circumvention remains out of scope.
+- Cookies, captured headers, provider keys, tool paths, arbitrary filesystem paths and spawn arguments remain outside React.
+- Profile and record migrations are additive and reversible where practical.
+- Flat preload aliases remain until an explicitly planned breaking migration includes compatibility tests and release guidance.
+- Feature modules do not import sibling feature internals, and pages do not import other pages.
+- Hand-written source files remain below 800 lines and should normally remain below 500.
+- A release is incomplete until repository checks, Electron flows, clean Windows packages, upgrade-profile testing and live streaming/downloader smoke tests pass.

@@ -1,5 +1,7 @@
 # AI-Features Plan for Orion
 
+> **Concept document:** This is retained as long-term product research, not an active release plan. Its internal version labels are illustrative phases, not Orion release numbers. The authoritative [Orion pre-AI roadmap](Orion-Pre-AI-Upgrade-Plan.md) keeps AI disabled through the current pre-AI milestones and governs release sequencing.
+
 ## Project
 
 **Orion**  
