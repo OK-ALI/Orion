@@ -20,5 +20,6 @@ The latest stable architecture baseline is v1.0.10. The v1.1.0 implementation ex
 - `renderer/shared/utils/credits.js` owns person, role and job normalization without depending on a page.
 - `renderer/shared/hooks/useTitleCredits.js` supplies Movie and TV controllers with cast and key-crew view models.
 - `renderer/components/media/PersonCard.jsx` and `CreditsSection.jsx` provide shared keyboard-accessible presentation.
+- `renderer/features/people/constellation/` owns the Constellation page, filters, editorial presentation, regional manifests, two-request credit mapper and bounded 24-hour renderer cache.
 
-The custom navigation stack now accepts a `person` target. No new main-process capability, preload method, credential, provider or storage schema is introduced by v1.1.0.
+The custom navigation stack now accepts `person` and `constellation` targets. Constellation preferences are ordinary renderer settings and are included in backup; generated pools remain disposable cache data and are excluded. No new main-process capability, preload method, credential or provider is introduced by v1.1.0.

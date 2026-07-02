@@ -9,6 +9,7 @@ const SettingsPage = lazy(() => import("../features/settings/SettingsPage"));
 const DownloadsPage = lazy(() => import("../features/downloads/DownloadsPage"));
 const SearchResultsPage = lazy(() => import("../features/discover/SearchResultsPage"));
 const PersonPage = lazy(() => import("../features/people/PersonPage"));
+const ConstellationPage = lazy(() => import("../features/people/constellation/ConstellationPage"));
 
 export default function AppRoutes({ model }) {
   const {
@@ -51,6 +52,9 @@ export default function AppRoutes({ model }) {
           onNavigate={navigate}
           onBack={navigateBack}
         />
+      )}
+      {page === "constellation" && (
+        <ConstellationPage apiKey={apiKey} history={history} saved={savedList} offline={offline} onNavigate={navigate} />
       )}
       {page === "movie" && selected && (
         <MoviePage

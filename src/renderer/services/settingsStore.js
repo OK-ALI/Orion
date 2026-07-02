@@ -91,6 +91,8 @@ export const STORAGE_KEYS = {
   MOTION_PRESET: "motionPreset",
   BACKGROUND_SCENE: "backgroundScene",
   DISCOVERY_REGION: "discoveryRegion",
+  CONSTELLATION_PREFERENCES: "constellationPreferences",
+  CONSTELLATION_CACHE: "constellationCache",
 };
 
 export const storage = {

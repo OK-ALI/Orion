@@ -53,7 +53,7 @@ The application package remains at v1.0.10 until v1.1.0 passes its release gates
 
 v1.1.0 is a focused metadata and navigation release. It must not absorb downloader, playback, manual-collection, social-profile or AI work.
 
-**Implementation status (July 2, 2026):** the renderer implementation and automated acceptance coverage are complete on top of v1.0.10. Quick/full search now retains people, the Person route and normalized filmography are active, and Movie/TV pages expose cast and key crew. Release hardening also repairs legacy My List metadata and stale manual-order records without replacing user data. The package remains v1.0.10 while six-theme visual review, live regression smoke tests, copied-profile validation and clean Windows packaging remain pending.
+**Implementation status (July 2, 2026):** the renderer implementation and automated acceptance coverage are complete on top of v1.0.10. Quick/full search retains people, the Person route and normalized filmography are active, Movie/TV pages expose cast and key crew, and Constellation provides a dedicated credit-derived people catalog. Release hardening also repairs legacy My List metadata and stale manual-order records without replacing user data. The package remains v1.0.10 while the complete six-theme visual review, live regression smoke tests, copied-profile validation and clean Windows packaging remain pending.
 
 ### Search
 
@@ -84,9 +84,22 @@ v1.1.0 is a focused metadata and navigation release. It must not absorb download
 - Make every cast and crew entry keyboard accessible and navigable to the Person page.
 - Defer episode guest stars and complete crew-department browsing.
 
+### Constellation
+
+- Add **Constellation** after Discover in Browse navigation as Orion's dedicated performers-and-creators catalog.
+- Provide a Featured person, Trending this week, device-local From Your Stories rail and filterable people catalog.
+- Map Hollywood, Bollywood, South Indian, Korean, Japanese and Chinese pools from representative TMDB movie/TV discoveries and their actual credits; never infer cinema membership from birthplace.
+- Use TV aggregate credits, the first twelve cast members and key directing, writing and production roles to build deduplicated person records.
+- Bound Constellation credit work to two concurrent requests and preserve successful results after partial failures.
+- Support cinema, craft, media-influence and sorting preferences plus instant session-only filtering of the loaded pool.
+- Persist compact generated pools for 24 hours with a seven-pool limit, exclude those pools from backup, and retain user filter preferences in backup/restore.
+- Derive From Your Stories from up to eight unique History/My List titles on the device without uploading or persisting a preference profile.
+- Reuse the Person page, Movie/TV routes, semantic themes, custom navigation stack, scroll restoration and automatic mini-player continuity.
+
 ### Contracts and boundaries
 
 - Define `PersonSummary`, `PersonDetails` and normalized `CreditItem` JSDoc contracts.
+- Define `ConstellationPerson`, `ConstellationPool` and `ConstellationPreferences` contracts.
 - Keep TMDB requests behind the existing renderer metadata service and session cache; do not add credentials or providers.
 - Keep person metadata independent from playback, downloader, local-media and subtitle state.
 - Preserve the custom route/navigation system; do not introduce React Router or a global state library.
@@ -97,7 +110,7 @@ v1.1.0 is a focused metadata and navigation release. It must not absorb download
 - Preserve quick-search focus, Escape behavior and recent searches; support logical arrow/Tab navigation and visible focus.
 - Use semantic tokens across Midnight Premiere, AMOLED, Mocha, Slate, Projector Silver and Custom.
 - Reduced Motion removes movement while retaining focus, tint and border feedback.
-- Test normalization, role merging, pagination, stale-response rejection, route/back-stack behavior and Movie/TV/Person navigation.
+- Test normalization, role merging, pagination, stale-response rejection, cinema query generation, South Indian pool merging, bounded credit aggregation, cache rules, preference persistence, route/back-stack behavior and Movie/TV/Person navigation.
 - Release only after the full repository gates, Electron navigation flows and six-theme visual matrix pass without downloader or playback regressions.
 
 ## Later pre-AI milestones

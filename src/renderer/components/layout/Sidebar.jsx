@@ -4,6 +4,7 @@ import {
   HomeIcon,
   SearchIcon,
   CompassIcon,
+  ConstellationIcon,
   LibraryIcon,
   DownloadIcon,
   SettingsIcon,
@@ -22,6 +23,7 @@ const NAV_GROUPS = [
   { id: "home", label: "Home", icon: HomeIcon },
   { id: "search", label: "Search", icon: SearchIcon },
   { id: "discover", label: "Discover", icon: CompassIcon },
+  { id: "constellation", label: "Constellation", icon: ConstellationIcon },
     ],
   },
   {

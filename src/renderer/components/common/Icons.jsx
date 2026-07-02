@@ -38,6 +38,19 @@ export function CompassIcon({ size = 20, ...props }) {
   );
 }
 
+export function ConstellationIcon({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M5 17.5 9.5 12l5 2 4.5-7" />
+      <circle cx="5" cy="17.5" r="1.7" fill="currentColor" stroke="none" />
+      <circle cx="9.5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="14.5" cy="14" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="7" r="1.8" fill="currentColor" stroke="none" />
+      <path d="m5 5 .45 1.05L6.5 6.5l-1.05.45L5 8l-.45-1.05L3.5 6.5l1.05-.45L5 5Z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function LibraryIcon({ size = 20, ...props }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -377,4 +390,3 @@ export function PinIcon({ size = 20, ...props }) {
     </svg>
   );
 }
-

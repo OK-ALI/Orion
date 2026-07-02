@@ -22,6 +22,7 @@ export const BACKUP_KEYS = [
   "motionPreset",
   "backgroundScene",
   "discoveryRegion",
+  "constellationPreferences",
   "introSkipMode",
   "ageLimit",
   "ratingCountry",

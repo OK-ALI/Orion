@@ -110,6 +110,32 @@
  * @property {Array<string>} roles
  * @property {Array<string>} jobs
  *
+ * @typedef {Object} ConstellationPerson
+ * @property {number} id
+ * @property {"person"} media_type
+ * @property {string} name
+ * @property {string|null} profile_path
+ * @property {Array<"acting"|"directing"|"writing"|"production">} crafts
+ * @property {Array<"movie"|"tv">} mediaTypes
+ * @property {Array<Object>} representativeCredits
+ * @property {number} contributionCount
+ * @property {number} score
+ *
+ * @typedef {Object} ConstellationPool
+ * @property {1} version
+ * @property {string} cinemaId
+ * @property {Array<ConstellationPerson>} people
+ * @property {number} seedPage
+ * @property {number} totalPages
+ * @property {number} generatedAt
+ * @property {number} partialFailures
+ *
+ * @typedef {Object} ConstellationPreferences
+ * @property {string} cinema
+ * @property {"all"|"acting"|"directing"|"writing"|"production"} craft
+ * @property {"all"|"movie"|"tv"} media
+ * @property {"popular"|"credits"|"name"} sort
+ *
  * @typedef {Object} SettingsSchema
  * @property {"auto"|"ask"|"manual"} miniPlayerBehavior
  * @property {"off"|"low"|"balanced"|"vivid"} ambientProfile
