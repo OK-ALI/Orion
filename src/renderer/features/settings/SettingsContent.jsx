@@ -9,6 +9,7 @@ import InterfaceSettingsGroup from "./groups/InterfaceSettingsGroup";
 import LibrarySettingsGroup from "./groups/LibrarySettingsGroup";
 import BackupSettingsGroup from "./groups/BackupSettingsGroup";
 import StorageSettingsGroup from "./groups/StorageSettingsGroup";
+import MusicAppearanceSettings from "./sections/MusicAppearanceSettings";
 
 export default function SettingsContent({ model }) {
   const { contentRef } = model;
@@ -68,6 +69,7 @@ export default function SettingsContent({ model }) {
         {/* GROUP: INTERFACE                                                   */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         <InterfaceSettingsGroup model={model} />
+        <MusicAppearanceSettings sectionRef={model.secMusicAppearance} />
 
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* GROUP: LIBRARY                                                     */}

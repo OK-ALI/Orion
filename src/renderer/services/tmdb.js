@@ -81,7 +81,7 @@ function _releaseSlot() {
   }
 }
 
-export const tmdbFetch = async (path, apiKey) => {
+export const tmdbFetch = async (path, apiKey, options = {}) => {
   const localizedPath = withLanguage(path);
   const cacheKey = `${apiKey}|${localizedPath}`;
   const cached = _tmdbCache.get(cacheKey);
@@ -93,9 +93,11 @@ export const tmdbFetch = async (path, apiKey) => {
   try {
     res = await fetch(`${TMDB_BASE}${localizedPath}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
+      signal: options.signal,
     });
-  } catch {
+  } catch (error) {
     _releaseSlot();
+    if (error?.name === "AbortError") throw error;
     _onUnreachable?.();
     throw new Error("TMDB unreachable");
   }

@@ -11,6 +11,7 @@ import {
   BackIcon,
   HelpIcon,
   PinIcon,
+  MusicPlanetIcon,
 } from "../common/Icons";
 import { storage } from "../../services/settingsStore";
 
@@ -39,6 +40,16 @@ const FOOTER_ITEMS = [
   { id: "settings", label: "Settings", icon: SettingsIcon },
 ];
 
+const MUSIC_ITEMS = [
+  { id: "music-home", label: "Music Home", icon: MusicPlanetIcon },
+  { id: "music-search", label: "Search", icon: SearchIcon },
+  { id: "music-library", label: "Library", icon: LibraryIcon },
+  { id: "music-playlists", label: "Playlists", icon: ConstellationIcon },
+  { id: "music-favorites", label: "Favorites", icon: HomeIcon },
+  { id: "music-sources", label: "Sources", icon: CompassIcon },
+  { id: "music-plugins", label: "Plugins", icon: ConstellationIcon },
+];
+
 export default function Sidebar({
   activePage,
   page,
@@ -55,6 +66,7 @@ export default function Sidebar({
   const currentPage = activePage || page;
   const activeDownloadCount = downloadCount || activeDownloads;
   const expanded = pinned || peeking;
+  const musicWorld = String(currentPage || "").startsWith("music-");
 
   const togglePinned = useCallback(() => {
     setPinned((prev) => {
@@ -119,7 +131,7 @@ export default function Sidebar({
             <span className="sidebar-item-label">Back</span>
           </div>
         )}
-        {NAV_GROUPS.map((group) => (
+        {(musicWorld ? [{ label: "Music", items: MUSIC_ITEMS }] : NAV_GROUPS).map((group) => (
           <div className="sidebar-group" key={group.label}>
             <div className="sidebar-group-label">{group.label}</div>
             {group.items.map(({ id, label, icon: Icon }) => (
@@ -144,6 +156,15 @@ export default function Sidebar({
             ))}
           </div>
         ))}
+        <button
+          className={`sidebar-world-switch${musicWorld ? " music-active" : ""}`}
+          onClick={() => onNavigate(musicWorld ? "home" : "music-home")}
+          aria-label={musicWorld ? "Return to Cinema" : "Enter Music Planet"}
+          title={musicWorld ? "Cinema world" : "Music Planet"}
+        >
+          <span className="sidebar-world-orbit"><MusicPlanetIcon size={21} /></span>
+          <span className="sidebar-item-label">{musicWorld ? "Cinema" : "Music Planet"}</span>
+        </button>
       </div>
 
       <div className="sidebar-footer">

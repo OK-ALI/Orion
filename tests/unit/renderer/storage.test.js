@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { STORAGE_KEYS, formatBytes, storage } from "../../../src/renderer/services/settingsStore";
 import {
   BACKUP_KEYS,
   collectBackupData,
+  collectCompleteBackupData,
+  restoreCompleteBackupData,
 } from "../../../src/renderer/services/backup";
 
 describe("v1.0.7 renderer storage compatibility", () => {
@@ -53,5 +55,16 @@ describe("v1.0.7 renderer storage compatibility", () => {
     expect(BACKUP_KEYS).not.toContain(STORAGE_KEYS.SUBDL_API_KEY);
     expect(BACKUP_KEYS).not.toContain(STORAGE_KEYS.WYZIE_API_KEY);
     expect(BACKUP_KEYS).not.toContain(STORAGE_KEYS.API_KEY);
+  });
+
+  it("includes portable SQLite Music state without placing credentials in renderer storage", async () => {
+    window.electron = {
+      musicExportBackup: vi.fn().mockResolvedValue({ ok: true, state: { version: 1, playlists: [{ name: "Orbit" }] } }),
+      musicImportBackup: vi.fn().mockResolvedValue({ ok: true }),
+    };
+    const backup = await collectCompleteBackupData();
+    expect(backup.musicState.playlists[0].name).toBe("Orbit");
+    await restoreCompleteBackupData(backup);
+    expect(window.electron.musicImportBackup).toHaveBeenCalledWith(backup.musicState);
   });
 });

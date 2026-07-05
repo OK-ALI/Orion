@@ -1,0 +1,111 @@
+import { RenderResult, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+import { SearchWrapper } from '../Search/Search.test-wrapper';
+
+const user = userEvent.setup();
+
+export const ArtistWrapper = {
+  async mount(header: string): Promise<RenderResult> {
+    const component = await SearchWrapper.mount('test artist');
+    const artistLink = await screen.findByText('Test Artist');
+    await user.click(artistLink);
+    await screen.findByRole('heading', {
+      name: new RegExp(header),
+    });
+    return component;
+  },
+  async mountNoWait(): Promise<RenderResult> {
+    const component = await SearchWrapper.mount('test artist');
+    const artistLink = await screen.findByText('Test Artist');
+    await user.click(artistLink);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return component;
+  },
+
+  getHeader: (name: string) => screen.getByRole('heading', { name }),
+
+  bioHeader: {
+    get loader() {
+      return screen.queryByTestId('artist-header-loader');
+    },
+    async findLoader() {
+      return screen.findByTestId('artist-header-loader');
+    },
+  },
+
+  socialHeader: {
+    get element() {
+      return screen.queryByTestId('artist-social-header');
+    },
+    get loader() {
+      return screen.queryByTestId('artist-social-header-loader');
+    },
+    async findLoader() {
+      return screen.findByTestId('artist-social-header-loader');
+    },
+  },
+
+  popularTracks: {
+    get heading() {
+      return screen.getByRole('heading', { name: /popular tracks/i });
+    },
+    get table() {
+      return screen.queryByRole('table');
+    },
+    get loader() {
+      return screen.queryByTestId('popular-tracks-loader');
+    },
+    async findLoader() {
+      return screen.findByTestId('popular-tracks-loader');
+    },
+  },
+
+  similarArtists: {
+    get heading() {
+      return screen.getByRole('heading', { name: /similar artists/i });
+    },
+    get items() {
+      return screen.queryAllByRole('listitem');
+    },
+    get loader() {
+      return screen.queryByTestId('similar-artists-loader');
+    },
+    async findLoader() {
+      return screen.findByTestId('similar-artists-loader');
+    },
+    inspectItem(listItem: HTMLElement) {
+      const utils = within(listItem);
+      return {
+        img: utils.queryByRole('img'),
+        name: utils.getByText(/.+/),
+      };
+    },
+  },
+
+  albums: {
+    get cards() {
+      return screen.queryAllByTestId('card');
+    },
+    get loader() {
+      return screen.queryByTestId('artist-albums-loader');
+    },
+    async findLoader() {
+      return screen.findByTestId('artist-albums-loader');
+    },
+  },
+
+  playlists: {
+    get loader() {
+      return screen.queryByTestId('artist-playlists-loader');
+    },
+    async findLoader() {
+      return screen.findByTestId('artist-playlists-loader');
+    },
+  },
+
+  async toggleFavorite() {
+    const button = await screen.findByTestId('artist-favorite-button');
+    await user.click(button);
+  },
+};

@@ -104,6 +104,8 @@ export function useSystemIntegration({ playbackSession, onMediaCommand, setToast
     const apply = (snapshot) => {
       if (!snapshot) return;
       document.documentElement.dataset.performanceTier = snapshot.tier || "balanced";
+      document.documentElement.dataset.performanceOnBattery = snapshot.onBattery ? "true" : "false";
+      window.dispatchEvent(new CustomEvent("orion:performance-tier-changed", { detail: snapshot }));
     };
     window.electron.getPerformanceSnapshot?.().then(apply).catch(() => {});
     const snapshotHandler = window.electron.onPerformanceSnapshot?.(apply);

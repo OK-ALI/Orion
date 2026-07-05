@@ -1,0 +1,90 @@
+import type { DashboardHost } from '../types/dashboard';
+import type { DiscoveryHost } from '../types/discovery';
+import type { EventsHost } from '../types/events';
+import type { FavoritesHost } from '../types/favorites';
+import type { HttpHost } from '../types/http';
+import type { LoggerHost } from '../types/logger';
+import type { MetadataHost } from '../types/metadata';
+import type { PlaybackHost } from '../types/playback';
+import type { PlaylistsHost } from '../types/playlists';
+import { ProvidersHost } from '../types/providers';
+import type { QueueHost } from '../types/queue';
+import type { SettingsHost, WidgetRegistry } from '../types/settings';
+import type { ShellHost } from '../types/shell';
+import type { StreamingHost } from '../types/streaming';
+import type { YtdlpHost } from '../types/ytdlp';
+import { DashboardAPI } from './dashboard';
+import { DiscoveryAPI } from './discovery';
+import { EventsAPI } from './events';
+import { FavoritesAPI } from './favorites';
+import { HttpAPI } from './http';
+import { LoggerAPI } from './logger';
+import { MetadataAPI } from './metadata';
+import { PlaybackAPI } from './playback';
+import { PlaylistsAPI } from './playlists';
+import { Providers } from './providers';
+import { QueueAPI } from './queue';
+import { Settings } from './settings';
+import { ShellAPI } from './shell';
+import { StreamingAPI } from './streaming';
+import { YtdlpAPI } from './ytdlp';
+
+export class NuclearAPI {
+  readonly Settings: Settings;
+  readonly Providers: Providers;
+  readonly Queue: QueueAPI;
+  readonly Streaming: StreamingAPI;
+  readonly Metadata: MetadataAPI;
+  readonly Http: HttpAPI;
+  readonly Ytdlp: YtdlpAPI;
+  readonly Favorites: FavoritesAPI;
+  readonly Logger: LoggerAPI;
+  readonly Dashboard: DashboardAPI;
+  readonly Discovery: DiscoveryAPI;
+  readonly Playback: PlaybackAPI;
+  readonly Playlists: PlaylistsAPI;
+  readonly Events: EventsAPI;
+  readonly Shell: ShellAPI;
+
+  constructor(opts?: {
+    settingsHost?: SettingsHost;
+    providersHost?: ProvidersHost;
+    queueHost?: QueueHost;
+    streamingHost?: StreamingHost;
+    metadataHost?: MetadataHost;
+    httpHost?: HttpHost;
+    ytdlpHost?: YtdlpHost;
+    favoritesHost?: FavoritesHost;
+    loggerHost?: LoggerHost;
+    dashboardHost?: DashboardHost;
+    discoveryHost?: DiscoveryHost;
+    playbackHost?: PlaybackHost;
+    playlistsHost?: PlaylistsHost;
+    eventsHost?: EventsHost;
+    shellHost?: ShellHost;
+    widgetRegistry?: WidgetRegistry;
+    pluginId?: string;
+  }) {
+    this.Settings = new Settings(
+      opts?.settingsHost,
+      opts?.widgetRegistry,
+      opts?.pluginId,
+    );
+    this.Providers = new Providers(opts?.providersHost);
+    this.Queue = new QueueAPI(opts?.queueHost);
+    this.Streaming = new StreamingAPI(opts?.streamingHost);
+    this.Metadata = new MetadataAPI(opts?.metadataHost);
+    this.Http = new HttpAPI(opts?.httpHost);
+    this.Ytdlp = new YtdlpAPI(opts?.ytdlpHost);
+    this.Favorites = new FavoritesAPI(opts?.favoritesHost);
+    this.Logger = new LoggerAPI(opts?.loggerHost);
+    this.Dashboard = new DashboardAPI(opts?.dashboardHost);
+    this.Discovery = new DiscoveryAPI(opts?.discoveryHost);
+    this.Playback = new PlaybackAPI(opts?.playbackHost);
+    this.Playlists = new PlaylistsAPI(opts?.playlistsHost);
+    this.Events = new EventsAPI(opts?.eventsHost);
+    this.Shell = new ShellAPI(opts?.shellHost);
+  }
+}
+
+export class NuclearPluginAPI extends NuclearAPI {}

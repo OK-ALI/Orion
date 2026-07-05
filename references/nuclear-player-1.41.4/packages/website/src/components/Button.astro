@@ -1,0 +1,44 @@
+---
+type Props = {
+  href: string;
+  variant?: 'default' | 'secondary' | 'text' | 'discord';
+  size?: 'default' | 'lg' | 'sm';
+  class?: string;
+};
+
+const {
+  href,
+  variant = 'default',
+  size = 'default',
+  class: className,
+} = Astro.props;
+
+const baseClasses =
+  'inline-flex cursor-pointer items-center rounded-md transition-all border-border themed-border btn-interactive shadow-shadow hover:translate-x-shadow-x hover:translate-y-shadow-y hover:shadow-none';
+
+const variantClasses = {
+  default: 'text-foreground bg-primary',
+  secondary: 'text-foreground bg-background-secondary',
+  text: 'text-foreground bg-transparent border-transparent shadow-none! hover:translate-x-0! hover:translate-y-0! px-0!',
+  discord:
+    'text-foreground bg-(--color-discord) prefers-dark:text-foreground prefers-dark:bg-background prefers-dark:border-(--color-discord)',
+};
+
+const sizeClasses = {
+  default: 'h-10 px-4 py-2',
+  sm: 'h-9 px-3',
+  lg: 'h-11 px-8',
+};
+---
+
+<a
+  href={href}
+  class:list={[
+    baseClasses,
+    variantClasses[variant],
+    sizeClasses[size],
+    className,
+  ]}
+>
+  <slot />
+</a>

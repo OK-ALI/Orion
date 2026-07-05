@@ -1,4 +1,6 @@
 import { lazy, Suspense } from "react";
+import ErrorBoundary from "../components/common/ErrorBoundary";
+import MusicPlanet from "../features/music/MusicPlanet";
 
 const HomePage = lazy(() => import("../features/home/HomePage"));
 const DiscoverPage = lazy(() => import("../features/discover/DiscoverPage"));
@@ -23,6 +25,7 @@ export default function AppRoutes({ model }) {
     trendingTV, watched, onPlaybackSession,
   } = model;
   return (
+    <ErrorBoundary resetKey={`${page}:${selected?.id || selected || ""}`} context={`route:${page}`}>
     <Suspense fallback={<div style={{ padding: 60, color: "var(--text3)", textAlign: "center", fontSize: 15 }}>Loading…</div>}>
       {page === "home" && (
         <HomePage
@@ -35,7 +38,7 @@ export default function AppRoutes({ model }) {
         />
       )}
       {page === "discover" && (
-        <DiscoverPage apiKey={apiKey} onNavigate={navigate} />
+        <DiscoverPage apiKey={apiKey} onNavigate={navigate} offline={offline} />
       )}
       {page === "search" && (
         <SearchResultsPage
@@ -55,6 +58,9 @@ export default function AppRoutes({ model }) {
       )}
       {page === "constellation" && (
         <ConstellationPage apiKey={apiKey} history={history} saved={savedList} offline={offline} onNavigate={navigate} />
+      )}
+      {page.startsWith("music-") && (
+        <MusicPlanet page={page} selected={selected} onNavigate={navigate} />
       )}
       {page === "movie" && selected && (
         <MoviePage
@@ -114,5 +120,6 @@ export default function AppRoutes({ model }) {
         />
       )}
     </Suspense>
+    </ErrorBoundary>
   );
 }

@@ -15,12 +15,21 @@ Main-process ownership is similarly explicit: `app/tray.js` owns tray state and 
 
 The latest stable architecture baseline is v1.0.10. The v1.1.0 implementation extends renderer metadata and navigation while preserving these Electron and downloader boundaries:
 
-- `renderer/services/search.js` owns normalized, paginated TMDB multi-search.
+- `renderer/services/search.js` owns normalized, paginated TMDB multi-search and dedicated person lookup used by Constellation.
 - `renderer/features/people/PersonPage.jsx` owns person details, partial/error states, Known For and normalized filmography.
 - `renderer/shared/utils/credits.js` owns person, role and job normalization without depending on a page.
 - `renderer/shared/hooks/useTitleCredits.js` supplies Movie and TV controllers with cast and key-crew view models.
 - `renderer/components/media/PersonCard.jsx` and `CreditsSection.jsx` provide shared keyboard-accessible presentation.
 - `renderer/features/people/constellation/` owns the Constellation page, filters, editorial presentation, regional manifests, two-request credit mapper and bounded 24-hour renderer cache.
-- `renderer/services/networkStatus.js` measures a small, uncached HTTP round trip to Orion's existing TMDB metadata service; `shared/hooks/useNetworkStatus.js` owns the 30-second lifecycle and browser online/offline events used by the title bar.
+- `renderer/services/networkStatus.js` measures a small, uncached HTTP round trip to Orion's existing TMDB metadata service; `shared/hooks/useNetworkStatus.js` owns the single 30-second lifecycle shared by the application shell, pages and title bar.
+- `renderer/services/errors.js` classifies renderer failures and redacts diagnostics before they reach recovery UI.
 
 The custom navigation stack now accepts `person` and `constellation` targets. Constellation preferences are ordinary renderer settings and are included in backup; generated pools remain disposable cache data and are excluded. No new main-process capability, preload method, credential or provider is introduced by v1.1.0.
+
+## Experimental v2.0 boundary
+
+Music Planet foundation work lives under `main/music`, `renderer/features/music`, and `shared/musicConstants.cjs`. It is deliberately separated from Cinema's player and downloader. The first checkpoint establishes SQLite library indexing, private range streaming, first-party provider contracts, queue/playlists/favorites storage and one-owner playback coordination. See [Music Planet architecture](music.md).
+
+This experimental boundary does not change the latest stable version or imply that v2.0 is release-ready. Nuclear is used only as clean-room architecture research; no Nuclear source or runtime plugin code is included.
+
+The complete remaining implementation sequence is maintained in the [Music Planet Roadmap](../Music-Planet-Roadmap.md).

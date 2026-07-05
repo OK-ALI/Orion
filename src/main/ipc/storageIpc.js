@@ -257,4 +257,6 @@ module.exports = {
   loadScheduledBackupSettings,
   shouldRunScheduledBackup,
   resetStoredSettings,
+  secureStoreGet,
+  secureStoreSet,
 };

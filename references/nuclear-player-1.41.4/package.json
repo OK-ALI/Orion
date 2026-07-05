@@ -1,0 +1,49 @@
+{
+  "name": "nuclear",
+  "version": "0.0.10",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.4",
+  "scripts": {
+    "dev": "turbo dev --filter=@nuclearplayer/player --filter=@nuclearplayer/ui",
+    "dev:remote": "VITE_HOST=0.0.0.0 turbo dev --filter=@nuclearplayer/player --filter=@nuclearplayer/ui",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "lint:fix": "turbo lint:fix",
+    "test": "turbo test",
+    "test:coverage": "turbo test:coverage",
+    "tauri": "pnpm --filter player tauri",
+    "storybook": "pnpm --filter @nuclearplayer/storybook dev",
+    "prepare": "husky",
+    "clean": "turbo clean && rm -rf node_modules/.cache",
+    "type-check": "turbo type-check"
+  },
+  "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "^4.5.1",
+    "@tailwindcss/vite": "^4.1.11",
+    "@vitejs/plugin-react": "^5.0.1",
+    "@vitest/coverage-v8": "^4.0.0",
+    "eslint": "^10.0.0",
+    "husky": "^9.1.7",
+    "jsdom": "^26.1.0",
+    "lint-staged": "^16.1.4",
+    "prettier-plugin-astro": "^0.14.1",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "tailwindcss": "^4.1.11",
+    "turbo": "^2.5.6",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3",
+    "vite-plugin-dts": "^4.5.4",
+    "vite-plugin-svgr": "^4.3.0",
+    "vitest": "^4.0.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix"
+    ]
+  },
+  "author": {
+    "name": "nukeop <12746779+nukeop@users.noreply.github.com>"
+  },
+  "license": "AGPL-3.0-only"
+}

@@ -156,6 +156,7 @@ export default function SettingsPage({
   const secNotifications = useRef(null);
   const secInterface = useRef(null);
   const secAppearance = useRef(null);
+  const secMusicAppearance = useRef(null);
   const secLibrary = useRef(null);
   const secBackup = useRef(null);
   const secStorage = useRef(null);
@@ -170,6 +171,7 @@ export default function SettingsPage({
     notifications: secNotifications,
     interface: secInterface,
     appearance: secAppearance,
+    musicAppearance: secMusicAppearance,
     library: secLibrary,
     backup: secBackup,
     storage: secStorage,
@@ -407,7 +409,7 @@ export default function SettingsPage({
           flash, handleClearCache, handleSavePath, handleSaveThreshold, introSkipMode,
           invidiousBase, invidiousChecking, invidiousSaved, invidiousStatus, onChangeApiKey,
           pickFolder, ratingCountry, resetHovered, saveAgeSettings, saveInvidiousBase, saved, secBackup,
-          secContent, secDownloads, secInterface, secAppearance, secLibrary, secNotifications,
+          secContent, secDownloads, secInterface, secAppearance, secMusicAppearance, secLibrary, secNotifications,
           secPlayback, secSystemIntegration, secStorage, secSubtitles, secUpdates, setAgeLimit,
           setAutoplayNextDuration, setAutoplayNextEnabled, setAutoplayNextLayout,
           setDownloadPath, setIntroSkipMode, setInvidiousBase, setInvidiousStatus,

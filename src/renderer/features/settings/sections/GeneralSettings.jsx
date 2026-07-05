@@ -4,7 +4,7 @@ import UpdateModal from "../../../components/UpdateModal";
 import { storage, STORAGE_KEYS, isElectron } from "../../../services/settingsStore";
 import { checkForUpdates } from "../../../shared/utils/updates";
 import { HOME_ROWS, loadHomeLayout, loadHomeViewMode, saveHomeViewMode } from "../../../shared/utils/homeLayout";
-import { collectBackupData, restoreBackupData } from "../../../services/backup";
+import { collectCompleteBackupData, restoreCompleteBackupData } from "../../../services/backup";
 import { SettingsSelect, Toggle } from "../components/SettingsControls";
 
 export function VersionSection() {
@@ -552,11 +552,11 @@ export function ScheduledBackupSection() {
 export function BackupRestoreSection({ onRestored }) {
   const [restoreStatus, setRestoreStatus] = useState(null);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const backup = {
       version: 1,
       exportedAt: new Date().toISOString(),
-      data: collectBackupData(),
+      data: await collectCompleteBackupData(),
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], {
       type: "application/json",
@@ -573,12 +573,12 @@ export function BackupRestoreSection({ onRestored }) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
         const backup = JSON.parse(ev.target.result);
         if (!backup?.data)
           throw new Error("Invalid backup file, missing data field.");
-        restoreBackupData(backup.data);
+        await restoreCompleteBackupData(backup.data);
         setRestoreStatus("✓ Backup restored: reloading…");
         setTimeout(() => window.location.reload(), 1200);
         onRestored?.();

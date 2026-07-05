@@ -187,6 +187,12 @@ export const SECTION_NAV = [
     keywords: ["appearance", "theme", "background", "orbit", "nebula", "minimal", "accent", "font", "motion", "ambient", "light", "dark"],
   },
   {
+    id: "musicAppearance",
+    label: "Music appearance",
+    icon: "♫",
+    keywords: ["music", "atmosphere", "visualizer", "orbit", "wave", "lyrics", "portal", "sound", "artwork"],
+  },
+  {
     id: "library",
     label: "Library",
     icon: "📚",

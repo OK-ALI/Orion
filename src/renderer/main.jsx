@@ -20,12 +20,11 @@ import "@fontsource/space-grotesk/latin-500.css";
 import "@fontsource/space-grotesk/latin-600.css";
 import "@fontsource/space-grotesk/latin-700.css";
 import App from "./app/App";
+import { MusicProvider } from "./features/music/context/MusicProvider";
 import "./styles/tokens.css";
 import "./styles/global.css";
 import "./styles/components.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+  <React.StrictMode><MusicProvider><App /></MusicProvider></React.StrictMode>,
 );

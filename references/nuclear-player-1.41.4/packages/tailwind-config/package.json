@@ -1,0 +1,25 @@
+{
+  "name": "@nuclearplayer/tailwind-config",
+  "version": "0.0.10",
+  "description": "Shared Tailwind CSS configuration for Nuclear",
+  "type": "module",
+  "main": "./global.css",
+  "exports": {
+    ".": "./global.css"
+  },
+  "files": [
+    "global.css"
+  ],
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.11",
+    "tailwindcss": "^4.1.11",
+    "tw-animate-css": "^1.3.6"
+  },
+  "devDependencies": {
+    "@nuclearplayer/eslint-config": "workspace:*"
+  }
+}

@@ -33,8 +33,10 @@ export async function measureNetworkStatus({
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     const latencyMs = Math.max(0, Math.round(now() - startedAt));
-    response.body?.cancel?.().catch?.(() => {});
-    return { status: "online", latencyMs, tier: networkLatencyTier(latencyMs), checkedAt: Date.now() };
+    Promise.resolve(response.body?.cancel?.()).catch(() => {});
+    const healthy = response.ok === true || response.status === 401 || response.status === 403 || (response.ok == null && response.status >= 200 && response.status < 400);
+    const status = healthy ? "online" : "degraded";
+    return { status, latencyMs, tier: networkLatencyTier(latencyMs), checkedAt: Date.now(), serviceStatus: response.status };
   } catch {
     return { status: "offline", latencyMs: null, tier: "unknown", checkedAt: Date.now() };
   } finally {

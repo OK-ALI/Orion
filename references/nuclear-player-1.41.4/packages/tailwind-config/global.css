@@ -1,0 +1,152 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import './utilities.css';
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+@source '../player';
+@source '../ui';
+@source '../storybook';
+
+@theme {
+  --color-background: var(--background);
+  --color-background-secondary: var(--background-secondary);
+  --color-background-input: var(--background-input);
+
+  --color-foreground: var(--foreground);
+  --color-foreground-secondary: var(--foreground-secondary);
+  --color-foreground-input: var(--foreground-input);
+
+  --color-primary: var(--primary);
+
+  --color-border: var(--border);
+  --color-border-input: var(--border-input);
+  --color-ring: var(--ring);
+
+  --color-accent-green: var(--accent-green);
+  --color-accent-yellow: var(--accent-yellow);
+  --color-accent-purple: var(--accent-purple);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-orange: var(--accent-orange);
+  --color-accent-cyan: var(--accent-cyan);
+  --color-accent-red: var(--accent-red);
+
+  --color-shadow: var(--shadow-color);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+
+  --font-weight-normal: var(--font-weight-normal);
+  --font-weight-bold: var(--font-weight-bold);
+  --font-weight-extra-bold: var(--font-weight-extra-bold);
+
+  --font-sans: var(--font-family);
+  --font-heading: var(--font-family-heading);
+  --font-mono: var(--font-family-mono);
+
+  --shadow: var(--shadow-x) var(--shadow-y) 0px 0px var(--border);
+  --shadow-shadow: var(--shadow);
+  --shadow-nav: 4px 4px 0px 0px var(--border);
+  --shadow-darkNav: 4px 4px 0px 0px var(--dark-border);
+  --spacing-shadow-x: var(--shadow-x);
+  --spacing-shadow-y: var(--shadow-y);
+}
+
+:root {
+  /* Core Backgrounds */
+  --background: oklch(0.9163 0.0361 7.16);
+  --background-secondary: oklch(100% 0 0);
+  --background-input: oklch(100% 0 0);
+
+  /* Text Colors */
+  --foreground: oklch(0% 0 0);
+  --foreground-secondary: oklch(0.42 0.1 5);
+  --foreground-input: oklch(0% 0 0);
+
+  /* Interactive Elements */
+  --primary: oklch(0.8 0.12 4.56);
+
+  /* Borders & Outlines */
+  --border: oklch(0% 0 0);
+  --ring: oklch(100% 0 0);
+
+  /* Accent Colors */
+  --accent-green: oklch(0.88 0.13 145);
+  --accent-yellow: oklch(0.8882 0.15 95);
+  --accent-purple: oklch(0.82 0.1 300);
+  --accent-blue: oklch(0.84 0.083 250);
+  --accent-orange: oklch(0.88 0.085 65);
+  --accent-cyan: oklch(0.88 0.09 200);
+  --accent-red: oklch(0.7327 0.2428 18);
+
+  /* Borders */
+  --border-width: 2px;
+
+  /* Shadows */
+  --shadow-color: oklch(0% 0 0);
+  --shadow-x: 2px;
+  --shadow-y: 2px;
+  --shadow-blur: 0px;
+
+  /* Typography */
+  --font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --default-font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-family-heading: 'Bricolage Grotesque', var(--default-font-family);
+  --font-family-mono:
+    'Space Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
+  --font-weight-normal: 400;
+  --font-weight-bold: 700;
+  --font-weight-extra-bold: 800;
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+@layer base {
+  body {
+    @apply text-foreground bg-background cursor-default font-normal select-none;
+  }
+
+  h1 {
+    @apply font-heading font-extrabold;
+  }
+
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-bold;
+  }
+}
+
+[data-theme='dark'] {
+  --background: oklch(0.22 0.03 5);
+  --background-secondary: oklch(0.27 0.035 5);
+  --background-input: oklch(0.15 0.02 5);
+
+  --foreground: oklch(0.9 0.008 5);
+  --foreground-secondary: oklch(0.78 0.1 5);
+  --foreground-input: oklch(0.93 0 0);
+
+  --primary: oklch(0.5 0.1 5);
+
+  --border: oklch(0.48 0.04 5);
+
+  --accent-green: oklch(0.72 0.14 145);
+  --accent-yellow: oklch(0.78 0.14 95);
+  --accent-purple: oklch(0.7 0.13 300);
+  --accent-blue: oklch(0.72 0.12 250);
+  --accent-orange: oklch(0.75 0.12 65);
+  --accent-cyan: oklch(0.75 0.11 200);
+  --accent-red: oklch(0.68 0.14 18);
+
+  --border-width: 1px;
+
+  --shadow-x: 0px;
+  --shadow-y: 0px;
+}

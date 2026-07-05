@@ -93,6 +93,23 @@ export const STORAGE_KEYS = {
   DISCOVERY_REGION: "discoveryRegion",
   CONSTELLATION_PREFERENCES: "constellationPreferences",
   CONSTELLATION_CACHE: "constellationCache",
+  MUSIC_VOLUME: "musicVolume",
+  MUSIC_MUTED: "musicMuted",
+  MUSIC_ATMOSPHERE: "musicAtmosphere",
+  MUSIC_VISUALIZER: "musicVisualizer",
+  MUSIC_VISUAL_INTENSITY: "musicVisualIntensity",
+  MUSIC_ARTWORK_COLOR: "musicArtworkColor",
+  MUSIC_PORTAL_SOUND: "musicPortalSound",
+  MUSIC_PORTAL_VOLUME: "musicPortalVolume",
+  MUSIC_LYRICS_MOTION: "musicLyricsMotion",
+  MUSIC_PERFORMANCE_ADAPT: "musicPerformanceAdapt",
+  MUSIC_REPLAY_GAIN: "musicReplayGain",
+  MUSIC_CROSSFADE_DURATION: "musicCrossfadeDuration",
+  MUSIC_LOW_GPU: "musicLowGpu",
+  MUSIC_DISABLE_AUDIO_REACTIVE_BG: "musicDisableAudioReactiveBg",
+  MUSIC_STATIC_BG: "musicStaticBg",
+  MUSIC_PARTICLE_DENSITY: "musicParticleDensity",
+  MUSIC_BATTERY_SAVER: "musicBatterySaver",
 };
 
 export const storage = {

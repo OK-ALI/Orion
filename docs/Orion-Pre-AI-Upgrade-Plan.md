@@ -53,7 +53,7 @@ The application package remains at v1.0.10 until v1.1.0 passes its release gates
 
 v1.1.0 is a focused metadata and navigation release. It must not absorb downloader, playback, manual-collection, social-profile or AI work.
 
-**Implementation status (July 2, 2026):** the renderer implementation and automated acceptance coverage are complete on top of v1.0.10. Quick/full search retains people and adds independent cinema filtering, the Person route and normalized filmography are active, Movie/TV pages expose cast and key crew, and Constellation provides a dedicated credit-derived people catalog. The title bar now reports measured online/offline state and rounded metadata-service round-trip latency beside battery status. Constellation reuses valid 24-hour pools and reveals Load more results progressively while preserving its two-request concurrency boundary. Release hardening also repairs legacy My List metadata and stale manual-order records without replacing user data. The package remains v1.0.10 and no v1.1.0 release is published while user validation, the complete six-theme visual review, live regression smoke tests, copied-profile validation and clean Windows packaging remain pending.
+**Implementation status (July 3, 2026):** the renderer implementation and automated acceptance coverage are complete on top of v1.0.10. Quick/full search retains people and adds independent cinema filtering, the Person route and normalized filmography are active, Movie/TV pages expose cast and key crew, and Constellation provides a dedicated credit-derived people catalog. Constellation search now merges filtered mapped matches with independent paginated global person lookup, removing the previous dependency on Load more mapping. A shared measured Online/Degraded/Offline state now drives the title bar and renderer recovery states, with redacted route diagnostics. Existing v1.0.10 streaming behavior is intentionally preserved after experimental media-readiness changes proved incompatible with some nested provider players. The package remains v1.0.10 and no v1.1.0 release is published while user validation, the complete six-theme visual review, live regression smoke tests, copied-profile validation and clean Windows packaging remain pending.
 
 ### Search
 
@@ -94,6 +94,7 @@ v1.1.0 is a focused metadata and navigation release. It must not absorb download
 - Use TV aggregate credits, the first twelve cast members and key directing, writing and production roles to build deduplicated person records.
 - Bound Constellation credit work to two concurrent requests and preserve successful results after partial failures.
 - Support cinema, craft, media-influence and sorting preferences plus instant session-only filtering of the loaded pool.
+- Search TMDB people independently after two characters, present global results separately from filter-truthful mapped matches, cancel stale queries and paginate without blocking regional mapping.
 - Persist compact generated pools for 24 hours with a seven-pool limit, exclude those pools from backup, and retain user filter preferences in backup/restore.
 - Derive From Your Stories from up to eight unique History/My List titles on the device without uploading or persisting a preference profile.
 - Reuse the Person page, Movie/TV routes, semantic themes, custom navigation stack, scroll restoration and automatic mini-player continuity.
@@ -116,6 +117,7 @@ v1.1.0 is a focused metadata and navigation release. It must not absorb download
 - Test normalization, role merging, pagination, stale-response rejection, cinema query generation, South Indian pool merging, bounded credit aggregation, cache rules, preference persistence, route/back-stack behavior and Movie/TV/Person navigation.
 - Release only after the full repository gates, Electron navigation flows and six-theme visual matrix pass without downloader or playback regressions.
 - Show Online with rounded milliseconds, slow-link warning styling, Checking during startup and immediate Offline state beside battery status in the custom title bar.
+- Preserve the application shell and local features during route failures, expose redacted diagnostics, and retry one failed metadata request after confirmed reconnection.
 
 ## Later pre-AI milestones
 

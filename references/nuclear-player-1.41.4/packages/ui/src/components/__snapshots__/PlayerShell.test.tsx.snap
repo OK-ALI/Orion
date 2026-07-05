@@ -1,0 +1,119 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`PlayerShell > matches snapshot with complete layout 1`] = `
+<DocumentFragment>
+  <div
+    class="grid h-screen w-screen grid-rows-[auto_1fr_auto] overflow-hidden"
+  >
+    <header
+      class="bg-background-secondary border-border grid h-12 grid-cols-[1fr_4fr_1fr] items-center gap-2 border-b-(length:--border-width) px-3 select-none"
+      data-tauri-drag-region="true"
+    />
+    <div
+      class="bg-background-secondary relative grid h-full min-h-0 grid-cols-[auto_1fr_auto]"
+    >
+      <div
+        animate="[object Object]"
+        class="bg-background-secondary border-border relative flex flex-col overflow-hidden border-r-(length:--border-width) p-2"
+        transition="[object Object]"
+      >
+        <span
+          class="mb-4 flex flex-row items-center justify-end"
+        >
+          <button
+            class="inline-flex cursor-pointer items-center rounded-md whitespace-nowrap transition-all outline-none disabled:cursor-not-allowed disabled:opacity-50 text-foreground bg-primary border-border shadow-shadow hover:translate-x-shadow-x hover:translate-y-shadow-y border-(length:--border-width) hover:shadow-none size-10 justify-center top-2 px-2 right-1"
+            data-headlessui-state=""
+            data-testid="sidebar-toggle-left"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-panel-left"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <rect
+                height="18"
+                rx="2"
+                width="18"
+                x="3"
+                y="3"
+              />
+              <path
+                d="M9 3v18"
+              />
+            </svg>
+          </button>
+        </span>
+        <div
+          class="flex flex-1 flex-col overflow-hidden"
+        />
+        <div
+          class="absolute top-0 bottom-0 w-1 cursor-col-resize transition-colors right-0"
+        />
+      </div>
+      <main
+        class="bg-background-secondary overflow-auto"
+        data-testid="player-workspace-main"
+      />
+      <div
+        animate="[object Object]"
+        class="bg-background-secondary border-border relative flex flex-col overflow-hidden border-l-(length:--border-width) p-2"
+        transition="[object Object]"
+      >
+        <span
+          class="mb-4 flex flex-row items-center justify-start"
+        >
+          <button
+            class="inline-flex cursor-pointer items-center rounded-md whitespace-nowrap transition-all outline-none disabled:cursor-not-allowed disabled:opacity-50 text-foreground bg-primary border-border shadow-shadow hover:translate-x-shadow-x hover:translate-y-shadow-y border-(length:--border-width) hover:shadow-none size-10 justify-center top-2 px-2 left-1"
+            data-headlessui-state=""
+            data-testid="sidebar-toggle-right"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-panel-right"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <rect
+                height="18"
+                rx="2"
+                width="18"
+                x="3"
+                y="3"
+              />
+              <path
+                d="M15 3v18"
+              />
+            </svg>
+          </button>
+        </span>
+        <div
+          class="flex flex-1 flex-col overflow-hidden"
+        />
+        <div
+          class="absolute top-0 bottom-0 w-1 cursor-col-resize transition-colors left-0"
+        />
+      </div>
+    </div>
+    <footer
+      class="bg-background-secondary border-border flex h-16 items-center border-t-(length:--border-width) px-4"
+    />
+  </div>
+</DocumentFragment>
+`;

@@ -61,7 +61,9 @@ const ambientSampler = require("./player/ambientSampler");
 const { createBatteryService } = require("./battery/service");
 const { createPerformanceCoordinator } = require("./performance/coordinator");
 const { createMediaControls } = require("./player/mediaControls");
+const music = require("./music");
 localMedia.registerScheme();
+music.registerScheme();
 
 // ── Session Manager ──────────────────────────────────────────────────────────
 const { setupSession } = require("./player/sessionManager");
@@ -425,6 +427,7 @@ ipcMain.on("set-close-behavior", (_, behavior) => {
 
 app.on("will-quit", () => {
   localMedia.clear();
+  music.stop().catch(() => {});
   ambientSampler.clear();
   trayController.destroy();
   batteryService.destroy();
@@ -489,6 +492,7 @@ if (!gotTheLock) {
     performanceCoordinator.register();
     mediaControls.register();
     localMedia.register({ getDownloads: downloadsIpc.getDownloads, saveDownloads: downloadsIpc.saveDownloads });
+    music.register().catch((error) => console.error("[music] startup failed", error));
     createWindow();
   });
   app.on("window-all-closed", () => app.quit());

@@ -21,7 +21,7 @@ describe("Window titlebar system status", () => {
   });
 
   it("shows measured connectivity beside battery status", async () => {
-    render(<WindowTitlebar />);
+    render(<WindowTitlebar network={{ status: "online", latencyMs: 47, tier: "fast" }} />);
     expect(screen.getByLabelText("Online, 47 milliseconds latency")).toHaveTextContent("Online47 ms");
     expect(await screen.findByLabelText("72 percent battery")).toBeInTheDocument();
   });

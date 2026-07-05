@@ -15,7 +15,8 @@ import {
   applyTheme,
   ACCENT_PRESETS,
 } from "../shared/utils/appearance";
-import { collectBackupData } from "../services/backup";
+import { collectCompleteBackupData } from "../services/backup";
+import { playPortalSound } from "../features/music/services/portalSound";
 import { tmdbFetch } from "../services/tmdb";
 import { clearAppCaches } from "../services/settingsStore";
 
@@ -37,6 +38,9 @@ import {
 } from "../features/player/services/playbackSession";
 import { getMiniPlayerBounds } from "../shared/utils/miniPlayerGeometry";
 import { useSystemIntegration } from "./hooks/useSystemIntegration";
+import useNetworkStatus from "../shared/hooks/useNetworkStatus";
+import { claimPlayback, getPlaybackOwner } from "./playback/PlaybackCoordinator";
+import MusicPlayerBar from "../features/music/player/MusicPlayerBar";
 
 export default function App() {
   const {
@@ -61,6 +65,7 @@ export default function App() {
     () => storage.get(STORAGE_KEYS.LIBRARY_SORT) || "manual",
   );
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [worldTransition, setWorldTransition] = useState(false);
   const [platform, setPlatform] = useState(() => {
     const userAgent = navigator.userAgent || "";
     if (userAgent.includes("Windows")) return "win32";
@@ -84,7 +89,9 @@ export default function App() {
   const [trending, setTrending] = useState([]);
   const [trendingTV, setTrendingTV] = useState([]);
   const [loadingHome, setLoadingHome] = useState(false);
-  const [offline, setOffline] = useState(() => !navigator.onLine);
+  const network = useNetworkStatus();
+  const offline = network.status === "offline";
+  const previousNetworkStatusRef = useRef(network.status);
 
   // ── Player accent + subtitle lang ─────────────────────────────────────────
   // Computed once here and passed as a prop to MoviePage / TVPage so neither
@@ -107,6 +114,7 @@ export default function App() {
   const miniTransitionTimerRef = useRef(null);
   const manualMiniRequestRef = useRef(false);
   const manualMiniResetTimerRef = useRef(null);
+  const worldHistoryRef = useRef({ cinema: { page: "home", selected: null }, music: { page: "music-home", selected: null } });
 
   // ── Scheduled backup: run on startup if due ─────────────────────────────────
   useEffect(() => {
@@ -115,7 +123,7 @@ export default function App() {
       try {
         const settings = await window.electron.getScheduledBackupSettings();
         if (!settings?.enabled || !settings?.path) return;
-        const data = collectBackupData();
+        const data = await collectCompleteBackupData();
         await window.electron.performScheduledBackup({ data, settings });
       } catch {
         // silently ignore errors on scheduled backup
@@ -281,15 +289,13 @@ export default function App() {
     document.body.dataset.background = storage.get(STORAGE_KEYS.BACKGROUND_SCENE) || "orbit";
   }, []);
   useEffect(() => {
-    const goOnline = () => setOffline(false);
-    const goOffline = () => setOffline(true);
-    window.addEventListener("online", goOnline);
-    window.addEventListener("offline", goOffline);
-    return () => {
-      window.removeEventListener("online", goOnline);
-      window.removeEventListener("offline", goOffline);
-    };
-  }, []);
+    const previous = previousNetworkStatusRef.current;
+    previousNetworkStatusRef.current = network.status;
+    if ((previous === "offline" || previous === "degraded") && network.status === "online") {
+      fetchTrending();
+      window.dispatchEvent(new CustomEvent("orion:network-restored"));
+    }
+  }, [fetchTrending, network.status]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const { navigate: baseNavigate, navigateBack: baseNavigateBack, pageRef } = useNavigation({
@@ -389,6 +395,7 @@ export default function App() {
   }, []);
 
   const handleSystemMediaCommand = useCallback(async (command) => {
+    if (getPlaybackOwner() === "music") return;
     const session = playbackSession;
     if (!session) return;
     if (command === "next") {
@@ -420,6 +427,18 @@ export default function App() {
   useSystemIntegration({ playbackSession, onMediaCommand: handleSystemMediaCommand, setToast });
 
   useEffect(() => {
+    const pauseVideoForMusic = () => {
+      if (playbackSession?.webContentsId) {
+        window.electron?.controlVideo?.(playbackSession.webContentsId, "pause");
+      } else if (playbackSession) {
+        window.dispatchEvent(new CustomEvent("orion:media-command", { detail: "pause" }));
+      }
+    };
+    window.addEventListener("orion:music-playback-start", pauseVideoForMusic);
+    return () => window.removeEventListener("orion:music-playback-start", pauseVideoForMusic);
+  }, [playbackSession]);
+
+  useEffect(() => {
     if (!window.electron?.onPlayerShortcut) return undefined;
     const handler = window.electron.onPlayerShortcut((command) => {
       if (command === "mini") {
@@ -448,16 +467,36 @@ export default function App() {
   }, []);
 
   const navigate = useCallback(async (nextPage, data = null) => {
-    const beginsAnotherTitle = (nextPage === "movie" || nextPage === "tv") &&
-      (!playbackSession || nextPage !== playbackSession.mediaType || Number(data?.id) !== Number(playbackSession.mediaId));
+    const currentIsMusic = String(pageRef.current || "").startsWith("music-");
+    let targetPage = nextPage;
+    let targetData = data;
+    if (currentIsMusic && nextPage === "home" && data == null) {
+      ({ page: targetPage, selected: targetData } = worldHistoryRef.current.cinema);
+    } else if (!currentIsMusic && nextPage === "music-home" && data == null) {
+      ({ page: targetPage, selected: targetData } = worldHistoryRef.current.music);
+    }
+    const targetIsMusic = String(targetPage || "").startsWith("music-");
+    const changingWorld = currentIsMusic !== targetIsMusic;
+    if (changingWorld) {
+      worldHistoryRef.current[currentIsMusic ? "music" : "cinema"] = { page: pageRef.current, selected };
+      playPortalSound(targetIsMusic ? "music" : "cinema");
+      setWorldTransition(targetIsMusic ? "to-music" : "to-cinema");
+      window.setTimeout(() => setWorldTransition(null), 820);
+    }
+    const beginsAnotherTitle = (targetPage === "movie" || targetPage === "tv") &&
+      (!playbackSession || targetPage !== playbackSession.mediaType || Number(targetData?.id) !== Number(playbackSession.mediaId));
     if (playbackSession?.mode === "embedded" && !beginsAnotherTitle) await createMiniHandoff();
     if (beginsAnotherTitle) {
       if (playbackSession?.webContentsId) window.electron?.controlVideo?.(playbackSession.webContentsId, "pause");
       setMiniPlayer(null);
       setPlaybackSession(null);
     }
-    transitionNavigation(() => baseNavigate(nextPage, data));
-  }, [baseNavigate, createMiniHandoff, playbackSession, transitionNavigation]);
+    if (changingWorld) {
+      window.setTimeout(() => baseNavigate(targetPage, targetData), 180);
+      return;
+    }
+    transitionNavigation(() => baseNavigate(targetPage, targetData));
+  }, [baseNavigate, createMiniHandoff, playbackSession, selected, transitionNavigation]);
 
   const navigateBack = useCallback(async () => {
     if (manualMiniRequestRef.current) {
@@ -470,7 +509,11 @@ export default function App() {
   }, [baseNavigateBack, createMiniHandoff, playbackSession, transitionNavigation]);
 
   const handlePlaybackSession = useCallback((session) => {
-    if (session) setPlaybackSession({ ...session, mode: "embedded" });
+    if (session) {
+      claimPlayback("video");
+      setPlaybackSession({ ...session, mode: "embedded" });
+      window.dispatchEvent(new CustomEvent("orion:video-playback-start"));
+    }
   }, []);
 
   const handleExpandMiniPlayer = useCallback((playbackState) => {
@@ -611,7 +654,7 @@ export default function App() {
   const standaloneShell = (content) => (
     <ErrorBoundary>
       <div className="app-shell">
-        {hasCustomTitlebar && <WindowTitlebar />}
+        {hasCustomTitlebar && <WindowTitlebar network={network} />}
         <div className="app-body">{content}</div>
       </div>
     </ErrorBoundary>
@@ -628,8 +671,8 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="app-shell">
-        {hasCustomTitlebar && <WindowTitlebar />}
+      <div className={`app-shell${String(page).startsWith("music-") ? " music-world" : ""}`}>
+        {hasCustomTitlebar && <WindowTitlebar network={network} />}
         <div className="app-body">
         <Sidebar
           activePage={page}
@@ -675,6 +718,8 @@ export default function App() {
               </button>
             </div>
           )}
+          {network.status === "offline" && apiKeyStatus !== "unreachable" && <div className="api-status-banner api-status-warn"><span>Orion is offline. Local playback, downloads and your library remain available.</span></div>}
+          {network.status === "degraded" && <div className="api-status-banner api-status-warn"><span>Orion's metadata service is responding slowly or temporarily degraded. Existing content remains available.</span></div>}
           <AppRoutes model={{
             addHistory, apiKey, apiKeySource, changeApiKey, clearHistory, dlSearchOpen,
           downloads, handleDeleteDownload, handleDownloadStarted, handleGoToDownloads,
@@ -686,6 +731,7 @@ export default function App() {
           onPlaybackSession: handlePlaybackSession,
         }} />
         </main>
+        <MusicPlayerBar page={page} onNavigate={navigate} />
         </div>
 
         <AppOverlays model={{
@@ -699,6 +745,7 @@ export default function App() {
           expandedLocalDownload, setExpandedLocalDownload, addHistory,
           handleDeleteDownload,
         }} />
+        {worldTransition && <div className={`music-world-transition ${worldTransition}`} aria-hidden="true" />}
       </div>
     </ErrorBoundary>
   );

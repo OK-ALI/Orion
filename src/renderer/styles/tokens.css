@@ -18,6 +18,25 @@
   --focus-ring: #67e8f9;
   --cinema-gold: #e5bd73;
   --cinema-velvet: #5b214f;
+  --music-violet: #8b5cf6;
+  --music-cyan: #22d3ee;
+  --music-magenta: #d946ef;
+  --music-surface: color-mix(in srgb, var(--bg-elevated) 88%, var(--music-violet));
+  --music-surface-soft: color-mix(in srgb, var(--bg-surface) 92%, var(--music-cyan));
+  --music-border: color-mix(in srgb, var(--music-violet) 30%, var(--border));
+  --music-glow: color-mix(in srgb, var(--music-violet) 28%, transparent);
+  --music-palette-base-1: #09081a;
+  --music-palette-primary-1: #8b5cf6;
+  --music-palette-spectral-1: #22d3ee;
+  --music-palette-base-2: #100719;
+  --music-palette-primary-2: #d946ef;
+  --music-palette-spectral-2: #67e8f9;
+  --music-palette-base-3: #06111c;
+  --music-palette-primary-3: #6366f1;
+  --music-palette-spectral-3: #2dd4bf;
+  --music-palette-base-4: #130a13;
+  --music-palette-primary-4: #a855f7;
+  --music-palette-spectral-4: #f472b6;
 
   /* ── Text ────────────────────────────────────────────────────────────────── */
   --text-primary: #f0f0f5;
@@ -126,6 +145,7 @@
   --duration-fast: 150ms;
   --duration-normal: 250ms;
   --duration-slow: 400ms;
+  --duration-world: 760ms;
 
   /* ── Layout ──────────────────────────────────────────────────────────────── */
   --sidebar-width: 60px;

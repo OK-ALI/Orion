@@ -14,8 +14,8 @@ export default function ConstellationFilters({ preferences, query, onPreference,
         <FilterTabs label="Media influence" items={CONSTELLATION_MEDIA} value={preferences.media} onChange={(value) => onPreference("media", value)} />
         <label className="constellation-sort">Sort<select value={preferences.sort} onChange={(event) => onPreference("sort", event.target.value)}>{CONSTELLATION_SORTS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
       </div>
-      <label className="constellation-search"><SearchIcon size={18} /><span className="sr-only">Filter loaded people</span><input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Filter people in this constellation…" /></label>
-      <p className="constellation-search-note">This filters the people already mapped here. Use Orion Search for a global person lookup.</p>
+      <label className="constellation-search"><SearchIcon size={18} /><span className="sr-only">Search people</span><input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Search this constellation and all people…" /></label>
+      <p className="constellation-search-note">Mapped matches respect these filters. Orion also searches TMDB globally so missing people appear immediately.</p>
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PersonCard from "../../../components/media/PersonCard";
 import { storage, STORAGE_KEYS } from "../../../services/settingsStore";
+import { appendUniqueSearchResults, searchTmdbPeople } from "../../../services/search";
 import ConstellationEditorial from "./ConstellationEditorial";
 import ConstellationFilters from "./ConstellationFilters";
 import { DEFAULT_CONSTELLATION_PREFERENCES, getConstellationCinema } from "./manifest";
@@ -23,7 +24,14 @@ export default function ConstellationPage({ apiKey, history = [], saved = [], of
   const [error, setError] = useState("");
   const [usingCache, setUsingCache] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [globalPeople, setGlobalPeople] = useState([]);
+  const [globalPage, setGlobalPage] = useState(1);
+  const [globalTotalPages, setGlobalTotalPages] = useState(0);
+  const [globalLoading, setGlobalLoading] = useState(false);
+  const [globalLoadingMore, setGlobalLoadingMore] = useState(false);
+  const [globalError, setGlobalError] = useState("");
   const requestRef = useRef(0);
+  const searchRequestRef = useRef(0);
 
   const updatePreference = useCallback((key, value) => {
     setPreferences((current) => {
@@ -87,9 +95,52 @@ export default function ConstellationPage({ apiKey, history = [], saved = [], of
 
   const catalogPeople = useMemo(() => mergeConstellationPeople(pool?.people || [], progressivePeople), [pool, progressivePeople]);
   const displayed = useMemo(() => filterConstellationPeople(catalogPeople, { craft: preferences.craft, media: preferences.media, sort: preferences.sort, query }), [catalogPeople, preferences, query]);
+  const mappedIds = useMemo(() => new Set(displayed.map((person) => person.id)), [displayed]);
+  const externalPeople = useMemo(() => globalPeople.filter((person) => !mappedIds.has(person.id)), [globalPeople, mappedIds]);
   const defaultView = preferences.cinema === "global" && preferences.craft === "all" && preferences.media === "all" && !query.trim();
   const canLoadMore = Boolean(pool && pool.seedPage < pool.totalPages);
   const openPerson = useCallback((person) => onNavigate("person", person), [onNavigate]);
+
+  useEffect(() => {
+    const term = query.trim();
+    const requestId = ++searchRequestRef.current;
+    setGlobalError("");
+    if (term.length < 2 || offline || !apiKey) {
+      setGlobalPeople([]); setGlobalPage(1); setGlobalTotalPages(0); setGlobalLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setGlobalLoading(true);
+      try {
+        const response = await searchTmdbPeople(term, 1, apiKey, controller.signal);
+        if (searchRequestRef.current !== requestId) return;
+        setGlobalPeople(response.results); setGlobalPage(response.page); setGlobalTotalPages(response.totalPages);
+      } catch (reason) {
+        if (controller.signal.aborted || searchRequestRef.current !== requestId) return;
+        setGlobalPeople([]); setGlobalError(reason?.message || "Global person search is temporarily unavailable.");
+      } finally {
+        if (searchRequestRef.current === requestId) setGlobalLoading(false);
+      }
+    }, 250);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [apiKey, offline, query]);
+
+  const loadMoreGlobal = async () => {
+    if (globalLoadingMore || globalPage >= globalTotalPages || offline) return;
+    const requestId = searchRequestRef.current;
+    setGlobalLoadingMore(true); setGlobalError("");
+    try {
+      const response = await searchTmdbPeople(query, globalPage + 1, apiKey);
+      if (searchRequestRef.current !== requestId) return;
+      setGlobalPeople((current) => appendUniqueSearchResults(current, response.results));
+      setGlobalPage(response.page); setGlobalTotalPages(response.totalPages);
+    } catch (reason) {
+      if (searchRequestRef.current === requestId) setGlobalError(reason?.message || "More global matches could not be loaded.");
+    } finally {
+      if (searchRequestRef.current === requestId) setGlobalLoadingMore(false);
+    }
+  };
 
   const loadMore = async () => {
     if (!canLoadMore || loading || offline) return;
@@ -121,13 +172,23 @@ export default function ConstellationPage({ apiKey, history = [], saved = [], of
       {progress && <div className="constellation-progress"><span className="spinner" /><span>{progress.phase === "discovering" ? "Finding regional titles" : "Mapping title credits"}… {progress.completed}/{progress.total}</span></div>}
       {defaultView && <ConstellationEditorial people={pool?.people || []} personalPeople={personalPeople} personalLoading={personalLoading} onSelect={openPerson} />}
       <section className="constellation-section constellation-catalog">
-        <div className="constellation-section-heading"><div><span className="eyebrow">{getConstellationCinema(preferences.cinema).label}</span><h2>{query ? "Filtered people" : "People catalog"}</h2></div><span>{displayed.length} mapped</span></div>
+        <div className="constellation-section-heading"><div><span className="eyebrow">{getConstellationCinema(preferences.cinema).label}</span><h2>{query ? "In this constellation" : "People catalog"}</h2></div><span>{displayed.length} mapped</span></div>
         {loading && !pool && <div className="constellation-grid constellation-grid--loading">{Array.from({ length: 12 }, (_, index) => <span key={index} />)}</div>}
-        {!loading && !displayed.length && <div className="constellation-empty"><h3>No people match these filters</h3><p>{pool ? "Try another craft, media influence, or search phrase." : "This constellation has no saved results yet."}</p></div>}
+        {!loading && !displayed.length && (!query || (!globalLoading && !externalPeople.length)) && <div className="constellation-empty"><h3>No people match these filters</h3><p>{pool ? "Try another craft, media influence, or search phrase." : "This constellation has no saved results yet."}</p></div>}
         {displayed.length > 0 && <div className="constellation-grid">{displayed.map((person) => <PersonCard key={person.id} person={person} subtitle={`${person.known_for_department || "Person"}${person.contributionCount ? ` · ${person.contributionCount} ${person.contributionCount === 1 ? "title" : "titles"}` : ""}`} onSelect={openPerson} />)}</div>}
         {canLoadMore && <div className="constellation-load-more"><button type="button" className="btn btn-secondary" onClick={loadMore} disabled={loading || offline}>{loading ? "Mapping…" : "Load more"}</button></div>}
-        {!canLoadMore && pool && !loading && <p className="constellation-exhausted">You have reached the end of the mapped pool.</p>}
+        {!canLoadMore && pool && !loading && displayed.length > 0 && <p className="constellation-exhausted">You have reached the end of the mapped pool.</p>}
       </section>
+      {query.trim().length >= 2 && <section className="constellation-section constellation-global-results" aria-labelledby="constellation-global-title">
+        <div className="constellation-section-heading"><div><span className="eyebrow">Global TMDB lookup</span><h2 id="constellation-global-title">More people across Orion</h2></div><span>{externalPeople.length} global</span></div>
+        <p className="constellation-global-note">These matches are global and are not limited by the selected cinema, craft or media filters.</p>
+        {offline && <div className="constellation-notice">Reconnect to search people beyond the saved constellation.</div>}
+        {globalError && <div className="constellation-warning">{globalError}</div>}
+        {globalLoading && <div className="constellation-grid constellation-grid--loading">{Array.from({ length: 6 }, (_, index) => <span key={index} />)}</div>}
+        {!globalLoading && !offline && externalPeople.length > 0 && <div className="constellation-grid">{externalPeople.map((person) => <PersonCard key={person.id} person={person} onSelect={openPerson} />)}</div>}
+        {!globalLoading && !offline && !globalError && !externalPeople.length && <div className="constellation-empty constellation-empty--compact"><h3>No additional global matches</h3><p>Try a fuller name or different spelling.</p></div>}
+        {globalPage < globalTotalPages && <div className="constellation-load-more"><button type="button" className="btn btn-secondary" onClick={loadMoreGlobal} disabled={globalLoadingMore || offline}>{globalLoadingMore ? "Searching…" : "Load more global matches"}</button></div>}
+      </section>}
     </div>
   );
 }

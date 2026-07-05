@@ -136,6 +136,22 @@
  * @property {"all"|"movie"|"tv"} media
  * @property {"popular"|"credits"|"name"} sort
  *
+ * @typedef {Object} ConstellationSearchState
+ * @property {string} query
+ * @property {Array<ConstellationPerson>} mappedMatches
+ * @property {Array<PersonSummary>} globalMatches
+ * @property {number} globalPage
+ * @property {number} globalTotalPages
+ * @property {boolean} loading
+ * @property {string} error
+ *
+ * @typedef {Object} OrionErrorDescriptor
+ * @property {string} code
+ * @property {string} title
+ * @property {string} guidance
+ * @property {string} diagnostic
+ * @property {string} recoveryId
+ *
  * @typedef {Object} SettingsSchema
  * @property {"auto"|"ask"|"manual"} miniPlayerBehavior
  * @property {"off"|"low"|"balanced"|"vivid"} ambientProfile
@@ -157,7 +173,7 @@
 
 /**
  * @typedef {Object} NetworkStatus
- * @property {"checking"|"online"|"offline"} status
+ * @property {"checking"|"online"|"degraded"|"offline"} status
  * @property {number|null} latencyMs Rounded HTTP round-trip time to Orion's metadata service.
  * @property {"unknown"|"fast"|"fair"|"slow"} tier
  * @property {number} checkedAt
@@ -175,6 +191,61 @@
 
 /**
  * @typedef {"play"|"pause"|"toggle"|"stop"|"next"|"previous"|"restart"} MediaControlCommand
+ */
+
+/**
+ * @typedef {Object} MusicProviderRef
+ * @property {string} provider
+ * @property {string} id
+ *
+ * @typedef {Object} MusicTrack
+ * @property {string} id
+ * @property {string} title
+ * @property {string} artistName
+ * @property {string|null} albumTitle
+ * @property {number|null} durationMs
+ * @property {string} provider
+ * @property {Array<MusicProviderRef>=} providerRefs
+ *
+ * @typedef {Object} MusicArtist
+ * @property {string} id
+ * @property {string} name
+ * @property {MusicProviderRef} source
+ *
+ * @typedef {Object} MusicAlbum
+ * @property {string} id
+ * @property {string} title
+ * @property {string} artistName
+ * @property {MusicProviderRef} source
+ *
+ * @typedef {Object} MusicProviderDescriptor
+ * @property {string} id
+ * @property {"metadata"|"streaming"|"lyrics"|"dashboard"|"playlists"|"discovery"} kind
+ * @property {string} name
+ * @property {Array<string>} capabilities
+ *
+ * @typedef {Object} MusicStreamCandidate
+ * @property {string} id
+ * @property {string} providerId
+ * @property {string} title
+ * @property {number|null} durationMs
+ *
+ * @typedef {Object} MusicResolvedStream
+ * @property {string} url Opaque orion-music protocol grant.
+ * @property {number} expiresAt
+ * @property {MusicStreamCandidate} candidate
+ *
+ * @typedef {Object} MusicPlaybackSession
+ * @property {MusicTrack|null} track
+ * @property {boolean} playing
+ * @property {number} currentTime
+ * @property {number} duration
+ * @property {number} volume
+ *
+ * @typedef {Object} MusicLyrics
+ * @property {"plain"|"synced"} type
+ * @property {string=} text
+ * @property {Array<{time:number,text:string}>=} lines
  */
 
 export const CONTRACT_VERSION = "1.1.0";

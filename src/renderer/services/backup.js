@@ -71,6 +71,16 @@ export const BACKUP_KEYS = [
   "hiddenTitles",
   "notInterested",
   "titleSignals",
+  "musicAtmosphere",
+  "musicVisualizer",
+  "musicVisualIntensity",
+  "musicArtworkColor",
+  "musicPortalSound",
+  "musicPortalVolume",
+  "musicLyricsMotion",
+  "musicPerformanceAdapt",
+  "musicReplayGain",
+  "musicCrossfadeDuration",
 ];
 
 export function collectBackupData() {
@@ -91,4 +101,21 @@ export function restoreBackupData(data) {
       localStorage.setItem(PREFIX + key, JSON.stringify(data[key]));
     }
   }
+}
+
+export async function collectCompleteBackupData() {
+  const data = collectBackupData();
+  try {
+    const result = await window.electron?.musicExportBackup?.();
+    if (result?.ok && result.state) data.musicState = result.state;
+  } catch {}
+  return data;
+}
+
+export async function restoreCompleteBackupData(data) {
+  restoreBackupData(data);
+  if (!data?.musicState) return { ok: true };
+  const result = await window.electron?.musicImportBackup?.(data.musicState);
+  if (result?.ok === false) throw new Error(result.error || "Music data could not be restored.");
+  return result || { ok: true };
 }

@@ -44,7 +44,7 @@ const TV_GENRES = [
   { id: 37, name: "Western", gradient: "linear-gradient(135deg, #cd853f 0%, #8b5a2b 100%)" },
 ];
 
-export default function DiscoverPage({ apiKey, onNavigate }) {
+export default function DiscoverPage({ apiKey, onNavigate, offline = false }) {
   const [type, setType] = useState("movie"); // "all" | "movie" | "tv"
   const [selectedGenre, setSelectedGenre] = useState(null); // null or genre object
   const [region, setRegion] = useState("all"); // "all" | "hollywood" | "bollywood" | "asian"
@@ -67,6 +67,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [requestError, setRequestError] = useState("");
   const scrollRef = useRef(null);
 
   const genres = type === "movie" ? MOVIE_GENRES : type === "tv" ? TV_GENRES : [];
@@ -79,7 +80,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
   };
 
   useEffect(() => {
-    if (!apiKey) return;
+    if (!apiKey || offline) return;
     let active = true;
     const cacheKey = `watchProviderCatalog_${watchRegion}`;
     const cached = storage.get(cacheKey);
@@ -98,7 +99,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
       })
       .catch(() => setProviderCatalog({ movie: [], tv: [] }));
     return () => { active = false; };
-  }, [apiKey, watchRegion]);
+  }, [apiKey, offline, watchRegion]);
 
   const handleRegionChange = (newRegion) => {
     setRegion(newRegion);
@@ -107,7 +108,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
 
   // Fetch regional trending items when region or subfilter or type changes, if no genre is selected
   useEffect(() => {
-    if (region === "all" || selectedGenre || !apiKey) {
+    if (region === "all" || selectedGenre || !apiKey || offline) {
       setRegionItems([]);
       return;
     }
@@ -115,6 +116,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
     let mounted = true;
     const fetchRegionItems = async () => {
       setLoadingRegionItems(true);
+      setRequestError("");
       try {
         const { countryParam, languageParam } = getRegionQueryParams(region, subfilter);
         const requestTypes = type === "all" ? ["movie", "tv"] : [type];
@@ -125,6 +127,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
         }
       } catch (err) {
         console.error("Failed to fetch region items:", err);
+        if (mounted) setRequestError("Regional titles could not be refreshed. Existing results remain available.");
       } finally {
         if (mounted) setLoadingRegionItems(false);
       }
@@ -134,13 +137,14 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
     return () => {
       mounted = false;
     };
-  }, [region, subfilter, type, selectedGenre, apiKey]);
+  }, [region, subfilter, type, selectedGenre, apiKey, offline]);
 
   // Fetch results when filters/genre/region/subfilter change
   const fetchDiscoverResults = useCallback(
     async (pageNum = 1) => {
-      if (!selectedGenre || !apiKey) return;
+      if (!selectedGenre || !apiKey || offline) return;
       setLoading(true);
+      setRequestError("");
       try {
         const { countryParam, languageParam } = getRegionQueryParams(region, subfilter);
         const requestTypes = type === "all" ? ["movie", "tv"] : [type];
@@ -174,11 +178,12 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
         setTotalPages(Math.max(...responses.map((data) => data.total_pages || 1)));
       } catch (err) {
         console.error("Discover fetch failed:", err);
+        setRequestError("Discover results could not be refreshed. Check the connection and retry.");
       } finally {
         setLoading(false);
       }
     },
-    [selectedGenre, selectedHub, hubFilter, providerCatalog, watchRegion, type, sortBy, year, minRating, region, subfilter, apiKey],
+    [selectedGenre, selectedHub, hubFilter, providerCatalog, watchRegion, type, sortBy, year, minRating, region, subfilter, apiKey, offline],
   );
 
   useEffect(() => {
@@ -215,6 +220,7 @@ export default function DiscoverPage({ apiKey, onNavigate }) {
 
   return (
     <div className="discover-container" ref={scrollRef}>
+      {(offline || requestError) && <div className="constellation-warning"><span>{offline ? "Discover is offline. Saved library items and downloads remain available." : requestError}</span>{!offline && <button className="btn btn-ghost" onClick={() => selectedGenre ? fetchDiscoverResults(page || 1) : setRequestError("")}>Retry</button>}</div>}
       {/* ── Page Header ── */}
       <div className="discover-header">
         <div className="discover-title-row">

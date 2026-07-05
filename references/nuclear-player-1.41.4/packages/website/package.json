@@ -1,0 +1,45 @@
+{
+  "name": "@nuclearplayer/website",
+  "version": "2.10.0",
+  "description": "Nuclear website",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "type-check": "astro check",
+    "clean": "rm -rf dist .turbo node_modules/.cache .astro"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "^5.0.6",
+    "@astrojs/react": "^5.0.3",
+    "@astrojs/rss": "^4.0.18",
+    "@astrojs/sitemap": "^3.7.0",
+    "@fontsource-variable/bricolage-grotesque": "^5.2.10",
+    "@fontsource-variable/dm-sans": "^5.2.8",
+    "@fontsource/space-mono": "^5.2.9",
+    "@iconify-json/simple-icons": "^1.2.67",
+    "astro": "^6.0.0",
+    "astro-expressive-code": "^0.42.0",
+    "astro-icon": "^1.1.5",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.542.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.6",
+    "@nuclearplayer/eslint-config": "workspace:*",
+    "@nuclearplayer/tailwind-config": "workspace:*",
+    "@tailwindcss/typography": "^0.5.19",
+    "@tailwindcss/vite": "^4.1.11",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "sharp": "^0.34.5",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.9.2"
+  }
+}

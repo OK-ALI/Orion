@@ -1,0 +1,86 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Nuclear",
+  "mainBinaryName": "nuclear-music-player",
+  "version": "1.41.4",
+  "identifier": "com.nuclearplayer",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "vite",
+    "beforeBuildCommand": "cd ../.. && pnpm --filter @nuclearplayer/player build:frontend"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Nuclear Music Player",
+        "width": 800,
+        "height": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "Music",
+    "shortDescription": "Music streaming app for your desktop",
+    "longDescription": "Nuclear is a free, open-source music player without ads or tracking. Search for any song or artist, build playlists, and start listening.",
+    "copyright": "Copyright 2025-2026 nukeop",
+    "homepage": "https://nuclearplayer.com",
+    "createUpdaterArtifacts": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "appimage": {
+        "bundleMediaFramework": true
+      },
+      "rpm": {
+        "epoch": 0,
+        "files": {},
+        "release": "1"
+      }
+    },
+    "macOS": {
+      "signingIdentity": "-",
+      "dmg": {
+        "appPosition": {
+          "x": 180,
+          "y": 170
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 170
+        },
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        }
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDczRDk0QzBFODNCNDEyNUUKUldSZUVyU0REa3paYzdTaE9IdlErcjNoTmdyMkNLL0d3alFZTHVMcytxQzJ3K1NJRlFWQlVaYk4K",
+      "endpoints": [
+        "https://github.com/nukeop/nuclear/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

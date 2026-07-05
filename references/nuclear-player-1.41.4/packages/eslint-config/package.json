@@ -1,0 +1,40 @@
+{
+  "name": "@nuclearplayer/eslint-config",
+  "version": "0.0.10",
+  "description": "Shared ESLint and Prettier configuration for Nuclear",
+  "type": "module",
+  "main": "eslint.config.ts",
+  "exports": {
+    ".": "./eslint.config.ts",
+    "./prettier": "./prettier.config.js"
+  },
+  "files": [
+    "eslint.config.ts",
+    "prettier.config.ts"
+  ],
+  "scripts": {
+    "lint": "eslint '**/*.{js,jsx,ts,tsx}' --ignore-pattern node_modules",
+    "lint:fix": "eslint '**/*.{js,jsx,ts,tsx}' --ignore-pattern node_modules --fix"
+  },
+  "peerDependencies": {
+    "prettier": "^3",
+    "typescript": "^5"
+  },
+  "devDependencies": {
+    "@eslint/css": "^1.0.0",
+    "@eslint/js": "^10.0.0",
+    "@eslint/json": "^1.0.0",
+    "@eslint/markdown": "^7.1.0",
+    "@ianvs/prettier-plugin-sort-imports": "^4.5.1",
+    "eslint": "^10.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.3",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-storybook": "10.4.6",
+    "globals": "^17.0.0",
+    "jiti": "^2.5.1",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "tailwind-csstree": "^0.3.0",
+    "typescript-eslint": "^8.57.0"
+  }
+}

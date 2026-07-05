@@ -1,0 +1,23 @@
+---
+type Props = {
+  size?: 'sm' | 'default';
+  class?: string;
+};
+
+const { size = 'default', class: className } = Astro.props;
+
+const sizeClasses = {
+  sm: '-top-3.5 px-3 py-0.5 text-xs',
+  default: '-top-4 px-4 py-1 text-sm',
+};
+---
+
+<h2
+  class:list={[
+    'themed-border border-border bg-background font-heading absolute left-1/2 -translate-x-1/2 rounded-md font-black tracking-widest whitespace-nowrap uppercase',
+    sizeClasses[size],
+    className,
+  ]}
+>
+  <slot />
+</h2>

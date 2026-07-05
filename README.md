@@ -8,7 +8,7 @@ See the authoritative [pre-AI roadmap](docs/Orion-Pre-AI-Upgrade-Plan.md) for cu
 
 ## v1.1.0 validation preview
 
-The unreleased v1.1.0 workspace adds people-aware Search, independent cinema filtering, Person pages, Movie/TV cast and key crew, the Constellation people catalog, progressive Constellation pagination, repaired legacy Library metadata, and measured Online/Offline latency beside Battery status. Publishing is intentionally paused until final user, theme, live-playback, copied-profile, and clean-package validation succeeds. See the [draft v1.1.0 notes](docs/releases/v1.1.0.md).
+The unreleased v1.1.0 workspace adds people-aware Search, independent cinema filtering, Person pages, Movie/TV cast and key crew, the Constellation people catalog, hybrid mapped/global person lookup, progressive Constellation pagination, repaired legacy Library metadata, shared connectivity/error states, and measured service latency beside Battery status. Existing v1.0.10 streaming behavior remains unchanged while live provider reliability is investigated separately. Publishing is intentionally paused until final user, theme, live-playback, copied-profile, and clean-package validation succeeds. See the [draft v1.1.0 notes](docs/releases/v1.1.0.md).
 
 ## What's new in v1.0.10
 

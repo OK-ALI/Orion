@@ -1,0 +1,172 @@
+name: Release Player
+
+on:
+  push:
+    tags:
+      - "player@*.*.*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  DO_NOT_TRACK: 1
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-latest"
+            args: "--target aarch64-apple-darwin"
+            arch: "arm64"
+          - platform: "macos-latest"
+            args: "--target x86_64-apple-darwin"
+            arch: "x64"
+          - platform: "ubuntu-22.04"
+            args: ""
+            arch: "x64"
+          - platform: "windows-latest"
+            args: ""
+            arch: "x64"
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-tags: true
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/player@}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v4
+
+      - name: Get PNPM store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup PNPM cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            packages/player/src-tauri/target/
+          key: ${{ runner.os }}-cargo-v2-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install system dependencies (Linux only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate release notes
+        id: release_notes
+        shell: bash
+        run: |
+          NOTES=$(node packages/tools/src/generate-release-notes.mjs "${{ steps.version.outputs.version }}")
+          DELIMITER=$(openssl rand -hex 16)
+          echo "notes<<$DELIMITER" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "$DELIMITER" >> $GITHUB_OUTPUT
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_BUNDLER_DMG_IGNORE_CI: false
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Nuclear Player v${{ steps.version.outputs.version }}"
+          releaseBody: "${{ steps.release_notes.outputs.notes }}"
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+  flatpak:
+    needs: release
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48
+      options: --privileged
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/player@}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install flatpak-node-generator
+        run: pip install --force-reinstall --no-cache-dir git+https://github.com/flatpak/flatpak-builder-tools.git#subdirectory=node
+
+      - name: Download cargo generator
+        run: |
+          pip install tomlkit
+          curl -fsSL https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py \
+            -o /tmp/flatpak-cargo-generator.py
+
+      - name: Generate pnpm-sources.json
+        run: flatpak-node-generator pnpm -o flatpak/pnpm-sources.json pnpm-lock.yaml
+
+      - name: Generate cargo-sources.json
+        run: python3 /tmp/flatpak-cargo-generator.py packages/player/src-tauri/Cargo.lock -o flatpak/cargo-sources.json
+
+      - name: Build Flatpak bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: nuclear-music-player.flatpak
+          manifest-path: flatpak/com.nuclearplayer.Nuclear.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+
+      - name: Upload Flatpak to GitHub Release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          gh release upload "player@${{ steps.version.outputs.version }}" \
+            nuclear-music-player.flatpak \
+            --clobber

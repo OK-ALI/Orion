@@ -1,0 +1,57 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "types": ["vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@nuclearplayer/ui": [
+        "./packages/ui/src"
+      ],
+      "@nuclearplayer/plugin-sdk": [
+        "./packages/plugin-sdk/src"
+      ],
+      "@nuclearplayer/tailwind-config": [
+        "./packages/tailwind-config/src"
+      ],
+      "@nuclearplayer/eslint-config": [
+        "./packages/eslint-config/src"
+      ],
+      "@nuclearplayer/themes": [
+        "./packages/themes/src"
+      ],
+      "@nuclearplayer/i18n": [
+        "./packages/i18n/src"
+      ]
+    }
+  },
+  "include": [
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "packages/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/dist",
+    "**/build"
+  ]
+}

@@ -23,6 +23,12 @@ export default function SearchResultsPage({ apiKey, item: initialQuery, onNaviga
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
+  useEffect(() => {
+    if (!error) return undefined;
+    const retry = () => setRetryKey((value) => value + 1);
+    window.addEventListener("orion:network-restored", retry, { once: true });
+    return () => window.removeEventListener("orion:network-restored", retry);
+  }, [error]);
   const inputRef = useRef();
   const requestRef = useRef(0);
 

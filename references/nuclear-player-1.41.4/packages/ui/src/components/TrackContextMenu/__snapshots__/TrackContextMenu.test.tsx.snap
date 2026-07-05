@@ -1,0 +1,309 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`TrackContextMenu > (Snapshot) renders header without cover image 1`] = `
+<body
+  data-scroll-locked="1"
+  style="pointer-events: none;"
+>
+  <span
+    aria-hidden="true"
+    data-aria-hidden="true"
+    data-radix-focus-guard=""
+    style="outline: none; opacity: 0; position: fixed; pointer-events: none;"
+    tabindex="0"
+  />
+  <div
+    aria-hidden="true"
+    data-aria-hidden="true"
+  >
+    <button
+      aria-controls="radix-:r5:"
+      aria-expanded="true"
+      aria-haspopup="menu"
+      data-state="open"
+      id="radix-:r4:"
+      type="button"
+    >
+      Open
+    </button>
+  </div>
+  <div
+    data-radix-popper-content-wrapper=""
+    dir="ltr"
+    style="position: fixed; left: 0px; top: 0px; transform: translate(0px, 4px); min-width: max-content; --radix-popper-available-width: 0px; --radix-popper-available-height: -4px; --radix-popper-anchor-width: 0px; --radix-popper-anchor-height: 0px; --radix-popper-transform-origin: 100% 0px;"
+  >
+    <div
+      aria-labelledby="radix-:r4:"
+      aria-orientation="vertical"
+      class="bg-background border-border data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 z-50 w-56 origin-top-right overflow-hidden rounded-sm border-(length:--border-width) shadow-lg outline-none"
+      data-align="end"
+      data-orientation="vertical"
+      data-radix-menu-content=""
+      data-side="bottom"
+      data-state="open"
+      dir="ltr"
+      id="radix-:r5:"
+      role="menu"
+      style="outline: none; --radix-dropdown-menu-content-transform-origin: var(--radix-popper-transform-origin); --radix-dropdown-menu-content-available-width: var(--radix-popper-available-width); --radix-dropdown-menu-content-available-height: var(--radix-popper-available-height); --radix-dropdown-menu-trigger-width: var(--radix-popper-anchor-width); --radix-dropdown-menu-trigger-height: var(--radix-popper-anchor-height); pointer-events: auto;"
+      tabindex="-1"
+    >
+      <div
+        class="border-border flex items-center gap-3 border-b"
+      >
+        <div
+          class="min-w-0 flex-1 py-3 pr-3 pl-3"
+        >
+          <div
+            class="text-foreground truncate text-sm font-bold"
+          >
+            Paranoid Android
+          </div>
+          <div
+            class="text-foreground-secondary truncate text-xs"
+          >
+            Radiohead
+          </div>
+        </div>
+      </div>
+      <div
+        class="flex w-full cursor-pointer items-center gap-3 border-t border-transparent px-3 py-2 text-left text-sm outline-none not-last:border-b data-[highlighted]:bg-background-secondary data-[highlighted]:border-border nth-[2]:border-t-transparent"
+        data-orientation="vertical"
+        data-radix-collection-item=""
+        role="menuitem"
+        tabindex="-1"
+      >
+        <span
+          class="shrink-0"
+        >
+          <span>
+            •
+          </span>
+        </span>
+        <span>
+          Play Now
+        </span>
+      </div>
+    </div>
+  </div>
+  <span
+    aria-hidden="true"
+    data-aria-hidden="true"
+    data-radix-focus-guard=""
+    style="outline: none; opacity: 0; position: fixed; pointer-events: none;"
+    tabindex="0"
+  />
+</body>
+`;
+
+exports[`TrackContextMenu > (Snapshot) renders header without subtitle 1`] = `
+<body
+  data-scroll-locked="1"
+  style="pointer-events: none;"
+>
+  <span
+    aria-hidden="true"
+    data-aria-hidden="true"
+    data-radix-focus-guard=""
+    style="outline: none; opacity: 0; position: fixed; pointer-events: none;"
+    tabindex="0"
+  />
+  <div
+    aria-hidden="true"
+    data-aria-hidden="true"
+  >
+    <button
+      aria-controls="radix-:r8:"
+      aria-expanded="true"
+      aria-haspopup="menu"
+      data-state="open"
+      id="radix-:r7:"
+      type="button"
+    >
+      Open
+    </button>
+  </div>
+  <div
+    data-radix-popper-content-wrapper=""
+    dir="ltr"
+    style="position: fixed; left: 0px; top: 0px; transform: translate(0px, 4px); min-width: max-content; --radix-popper-available-width: 0px; --radix-popper-available-height: -4px; --radix-popper-anchor-width: 0px; --radix-popper-anchor-height: 0px; --radix-popper-transform-origin: 100% 0px;"
+  >
+    <div
+      aria-labelledby="radix-:r7:"
+      aria-orientation="vertical"
+      class="bg-background border-border data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 z-50 w-56 origin-top-right overflow-hidden rounded-sm border-(length:--border-width) shadow-lg outline-none"
+      data-align="end"
+      data-orientation="vertical"
+      data-radix-menu-content=""
+      data-side="bottom"
+      data-state="open"
+      dir="ltr"
+      id="radix-:r8:"
+      role="menu"
+      style="outline: none; --radix-dropdown-menu-content-transform-origin: var(--radix-popper-transform-origin); --radix-dropdown-menu-content-available-width: var(--radix-popper-available-width); --radix-dropdown-menu-content-available-height: var(--radix-popper-available-height); --radix-dropdown-menu-trigger-width: var(--radix-popper-anchor-width); --radix-dropdown-menu-trigger-height: var(--radix-popper-anchor-height); pointer-events: auto;"
+      tabindex="-1"
+    >
+      <div
+        class="border-border flex items-center gap-3 border-b"
+      >
+        <img
+          alt=""
+          class="border-border size-16 border-r object-cover"
+          src="https://example.com/night-at-the-opera.jpg"
+        />
+        <div
+          class="min-w-0 flex-1 py-3 pr-3"
+        >
+          <div
+            class="text-foreground truncate text-sm font-bold"
+          >
+            Bohemian Rhapsody
+          </div>
+        </div>
+      </div>
+      <div
+        class="flex w-full cursor-pointer items-center gap-3 border-t border-transparent px-3 py-2 text-left text-sm outline-none not-last:border-b data-[highlighted]:bg-background-secondary data-[highlighted]:border-border nth-[2]:border-t-transparent"
+        data-orientation="vertical"
+        data-radix-collection-item=""
+        role="menuitem"
+        tabindex="-1"
+      >
+        <span
+          class="shrink-0"
+        >
+          <span>
+            •
+          </span>
+        </span>
+        <span>
+          Play Now
+        </span>
+      </div>
+    </div>
+  </div>
+  <span
+    aria-hidden="true"
+    data-aria-hidden="true"
+    data-radix-focus-guard=""
+    style="outline: none; opacity: 0; position: fixed; pointer-events: none;"
+    tabindex="0"
+  />
+</body>
+`;
+
+exports[`TrackContextMenu > (Snapshot) renders with header and actions 1`] = `
+<body
+  data-scroll-locked="1"
+  style="pointer-events: none;"
+>
+  <span
+    aria-hidden="true"
+    data-aria-hidden="true"
+    data-radix-focus-guard=""
+    style="outline: none; opacity: 0; position: fixed; pointer-events: none;"
+    tabindex="0"
+  />
+  <div
+    aria-hidden="true"
+    data-aria-hidden="true"
+  >
+    <button
+      aria-controls="radix-:r1:"
+      aria-expanded="true"
+      aria-haspopup="menu"
+      data-state="open"
+      id="radix-:r0:"
+      type="button"
+    >
+      Open
+    </button>
+  </div>
+  <div
+    data-radix-popper-content-wrapper=""
+    dir="ltr"
+    style="position: fixed; left: 0px; top: 0px; transform: translate(0px, 4px); min-width: max-content; --radix-popper-available-width: 0px; --radix-popper-available-height: -4px; --radix-popper-anchor-width: 0px; --radix-popper-anchor-height: 0px; --radix-popper-transform-origin: 100% 0px;"
+  >
+    <div
+      aria-labelledby="radix-:r0:"
+      aria-orientation="vertical"
+      class="bg-background border-border data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 z-50 w-56 origin-top-right overflow-hidden rounded-sm border-(length:--border-width) shadow-lg outline-none"
+      data-align="end"
+      data-orientation="vertical"
+      data-radix-menu-content=""
+      data-side="bottom"
+      data-state="open"
+      dir="ltr"
+      id="radix-:r1:"
+      role="menu"
+      style="outline: none; --radix-dropdown-menu-content-transform-origin: var(--radix-popper-transform-origin); --radix-dropdown-menu-content-available-width: var(--radix-popper-available-width); --radix-dropdown-menu-content-available-height: var(--radix-popper-available-height); --radix-dropdown-menu-trigger-width: var(--radix-popper-anchor-width); --radix-dropdown-menu-trigger-height: var(--radix-popper-anchor-height); pointer-events: auto;"
+      tabindex="-1"
+    >
+      <div
+        class="border-border flex items-center gap-3 border-b"
+      >
+        <img
+          alt=""
+          class="border-border size-16 border-r object-cover"
+          src="https://example.com/meddle.jpg"
+        />
+        <div
+          class="min-w-0 flex-1 py-3 pr-3"
+        >
+          <div
+            class="text-foreground truncate text-sm font-bold"
+          >
+            Echoes
+          </div>
+          <div
+            class="text-foreground-secondary truncate text-xs"
+          >
+            Pink Floyd
+          </div>
+        </div>
+      </div>
+      <div
+        class="flex w-full cursor-pointer items-center gap-3 border-t border-transparent px-3 py-2 text-left text-sm outline-none not-last:border-b data-[highlighted]:bg-background-secondary data-[highlighted]:border-border nth-[2]:border-t-transparent"
+        data-orientation="vertical"
+        data-radix-collection-item=""
+        role="menuitem"
+        tabindex="-1"
+      >
+        <span
+          class="shrink-0"
+        >
+          <span>
+            •
+          </span>
+        </span>
+        <span>
+          Play Now
+        </span>
+      </div>
+      <div
+        class="flex w-full cursor-pointer items-center gap-3 border-t border-transparent px-3 py-2 text-left text-sm outline-none not-last:border-b data-[highlighted]:bg-background-secondary data-[highlighted]:border-border nth-[2]:border-t-transparent"
+        data-orientation="vertical"
+        data-radix-collection-item=""
+        role="menuitem"
+        tabindex="-1"
+      >
+        <span
+          class="shrink-0"
+        >
+          <span>
+            •
+          </span>
+        </span>
+        <span>
+          Add to Queue
+        </span>
+      </div>
+    </div>
+  </div>
+  <span
+    aria-hidden="true"
+    data-aria-hidden="true"
+    data-radix-focus-guard=""
+    style="outline: none; opacity: 0; position: fixed; pointer-events: none;"
+    tabindex="0"
+  />
+</body>
+`;

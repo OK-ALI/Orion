@@ -6,12 +6,10 @@ import {
   RestoreIcon,
   CloseIcon,
 } from "../common/Icons";
-import useNetworkStatus from "../../shared/hooks/useNetworkStatus";
 
-export default function WindowTitlebar() {
+export default function WindowTitlebar({ network = { status: "checking", latencyMs: null, tier: "unknown" } }) {
   const [maximized, setMaximized] = useState(false);
   const [battery, setBattery] = useState(null);
-  const network = useNetworkStatus();
 
   useEffect(() => {
     if (!window.electron) return;
@@ -42,14 +40,14 @@ export default function WindowTitlebar() {
       <div className="titlebar-controls titlebar-no-drag">
         <div
           className={`titlebar-network is-${network.status}${network.tier !== "unknown" ? ` is-${network.tier}` : ""}`}
-          title={network.status === "online"
+          title={network.status === "online" || network.status === "degraded"
             ? `Online · ${network.latencyMs} ms round trip to Orion's metadata service`
             : network.status === "checking" ? "Checking Orion connectivity" : "Orion is offline"}
-          aria-label={network.status === "online" ? `Online, ${network.latencyMs} milliseconds latency` : network.status === "checking" ? "Checking network status" : "Offline"}
+          aria-label={network.status === "online" || network.status === "degraded" ? `${network.status === "degraded" ? "Service degraded" : "Online"}, ${network.latencyMs} milliseconds latency` : network.status === "checking" ? "Checking network status" : "Offline"}
         >
           <span className="titlebar-network-dot" aria-hidden="true" />
-          <span>{network.status === "online" ? "Online" : network.status === "checking" ? "Checking" : "Offline"}</span>
-          {network.status === "online" && <span className="titlebar-network-latency">{network.latencyMs} ms</span>}
+          <span>{network.status === "online" ? "Online" : network.status === "degraded" ? "Degraded" : network.status === "checking" ? "Checking" : "Offline"}</span>
+          {(network.status === "online" || network.status === "degraded") && <span className="titlebar-network-latency">{network.latencyMs} ms</span>}
         </div>
         {battery?.available && battery?.visible !== false && (
           <div

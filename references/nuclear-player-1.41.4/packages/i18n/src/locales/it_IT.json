@@ -1,0 +1,364 @@
+{
+  "common": {
+    "app": {
+      "name": "Nuclear",
+      "description": "App di streaming musicale gratuita"
+    },
+    "actions": {
+      "save": "Salva",
+      "cancel": "Annulla",
+      "delete": "Elimina",
+      "edit": "Modifica",
+      "close": "Chiudi",
+      "back": "Indietro",
+      "next": "Avanti",
+      "confirm": "Conferma",
+      "apply": "Applica",
+      "reset": "Ripristina",
+      "clear": "Cancella",
+      "search": "Cerca",
+      "loading": "Caricamento...",
+      "retry": "Riprova"
+    },
+    "errors": {
+      "network": "Errore di rete. Controlla la tua connessione.",
+      "notFound": "Non trovato"
+    }
+  },
+  "navigation": {
+    "explore": "Esplora",
+    "dashboard": "Dashboard",
+    "collection": "Raccolta",
+    "favoriteAlbums": "Albums preferiti",
+    "favoriteTracks": "Tracks preferiti",
+    "favoriteArtists": "Artisti preferiti",
+    "playlists": "Scalette"
+  },
+  "favorites": {
+    "albums": {
+      "title": "Album preferiti",
+      "empty": "Non ci sono ancora album preferiti",
+      "emptyDescription": "Gli album contrassegnati come preferiti appariranno qui"
+    },
+    "tracks": {
+      "title": "Brani preferiti",
+      "empty": "Non ci sono ancora brani preferiti",
+      "emptyDescription": "I brani contrassegnati come preferiti appariranno qui"
+    },
+    "artists": {
+      "title": "Artisti preferiti",
+      "empty": "Non ci sono ancora artisti preferiti",
+      "emptyDescription": "Gli artisti contrassegnati come preferiti appariranno qui"
+    }
+  },
+  "playlists": {
+    "title": "Scalette",
+    "empty": "Non ci sono ancora scalette",
+    "emptyDescription": "Crea una scaletta o importane una per iniziare",
+    "emptyTracks": "Nessuna traccia in questa scaletta",
+    "emptyTracksDescription": "Aggiungi brani dai risultati della ricerca o dalla tua libreria",
+    "create": "Crea nuova",
+    "importJson": "Importa da JSON",
+    "exportJson": "Esporta come JSON",
+    "add": "Aggiungi",
+    "delete": "Elimina scaletta",
+    "deleteConfirm": "Sei sicuro di voler eliminare questa scaletta?",
+    "play": "Riproduci",
+    "addToQueue": "Aggiungi alla coda",
+    "saveLocally": "Salva localmente",
+    "readOnlyBadge": "{{source}}",
+    "readOnlyTooltip": "Questa scaletta proviene da {{source}} ed è di sola lettura. Salva una copia locale per modificarla.",
+    "trackCount": "{{count}} brano",
+    "trackCount_other": "{{count}} brani",
+    "addToPlaylist": "Aggiungi alla scaletta",
+    "filterPlaylists": "Filtra scalette...",
+    "createNew": "Crea nuova scaletta",
+    "saveQueueAsPlaylist": "Salva coda come scaletta",
+    "name": "Nome",
+    "namePlaceholder": "Nome scaletta...",
+    "exportSuccess": "Scaletta esportata",
+    "exportError": "Impossibile esportare la scaletta",
+    "importSuccess": "Scaletta importata",
+    "importBatchSuccess": "{{count}} scalette importate",
+    "importError": "Impossibile importare la scaletta",
+    "importNoPlaylists": "Nessuna scaletta trovata in questo file",
+    "importUrl": "Importa da URL",
+    "importUrlTitle": "Importa scaletta da URL",
+    "importUrlPlaceholder": "Incolla l'URL di una scaletta...",
+    "importUrlNoProvider": "Nessuna estensione è in grado di gestire questo URL. Installa un'estensione che supporti questo servizio.",
+    "importUrlImporting": "Importazione in corso...",
+    "descriptionPlaceholder": "Aggiungi una descrizione..."
+  },
+  "search": {
+    "title": "Cerca",
+    "query": "Ricerca",
+    "placeholder": "Cerca",
+    "noResults": "Nessun risultato trovato",
+    "searching": "Ricerca in corso...",
+    "failedToLoad": "Impossibile caricare i risultati.",
+    "results": {
+      "tracks": "Tracks",
+      "albums": "Albums",
+      "artists": "Artisti",
+      "playlists": "Playlists"
+    },
+    "filters": {
+      "all": "Tutto",
+      "tracks": "Tracks",
+      "albums": "Albums",
+      "artists": "Artisti",
+      "playlists": "Playlists"
+    }
+  },
+  "artist": {
+    "title": "Artista",
+    "albums": "Albums",
+    "tracks": "Tracks",
+    "similar": "Artisti simili",
+    "popularTracks": "Tracks popolari",
+    "biography": "Biografia",
+    "discography": "Discografia",
+    "topTracks": "Top tracks",
+    "onTour": "In tour",
+    "notOnTour": "Non in tour",
+    "followers": "Seguaci",
+    "followings": "Seguiti",
+    "playlists": "Scalette",
+    "errors": {
+      "failedToLoadDetails": "Impossibile caricare i dettagli dell'artista.",
+      "failedToLoadAlbums": "Impossibile caricare gli albums.",
+      "failedToLoadPopularTracks": "Impossibile caricare i tracks popolari.",
+      "failedToLoadSimilarArtists": "Impossibile caricare gli artisti simili.",
+      "failedToLoadSocialStats": "Impossibile caricare le statistiche dell'artista.",
+      "failedToLoadPlaylists": "Impossibile caricare le scalette."
+    }
+  },
+  "album": {
+    "title": "Album",
+    "genre": "Genere",
+    "year": "Anno",
+    "tracks": "Brani",
+    "errors": {
+      "failedToLoadDetails": "Impossibile caricare i dettagli dell'album.",
+      "failedToLoadTracks": "Impossibile caricare i brani."
+    }
+  },
+  "themes": {
+    "title": "Temi",
+    "basic": "Temi base",
+    "advanced": "Temi avanzati",
+    "default": "Predefinito",
+    "description": "Temi trovati nella directory dei dati dell'app"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "empty-state": "Nessun dato dashboard disponibile",
+    "empty-state-description": "Abilita un'estensione che fornisce contenuto dashboard.",
+    "top-tracks": "Brani in evidenza",
+    "top-artists": "Artisti in evidenza",
+    "top-albums": "Album in evidenza",
+    "editorial-playlists": "Scalette in evidenza",
+    "new-releases": "Nuove pubblicazioni",
+    "filter-artists": "Filtra artisti...",
+    "filter-albums": "Filtra album...",
+    "filter-playlists": "Filtra scalette...",
+    "filter-releases": "Filtra pubblicazioni...",
+    "nothing-found": "Nessun risultato trovato"
+  },
+  "plugins": {
+    "title": "Estensioni",
+    "addPlugin": "Aggiungi estensione",
+    "tabs": {
+      "installed": "Installato",
+      "store": "Negozio"
+    },
+    "store": {
+      "searchPlaceholder": "Cerca estensione...",
+      "install": "Installa",
+      "installing": "Installazione",
+      "installed": "Installato",
+      "by": "da",
+      "categories": {
+        "all": "Tutto",
+        "streaming": "Streaming",
+        "metadata": "Metadati",
+        "lyrics": "Testi",
+        "scrobbling": "Scrobbling",
+        "other": "Altro"
+      },
+      "error": {
+        "title": "Impossibile caricare le estensioni",
+        "description": "Impossibile recuperare il registro delle estensioni. Controlla la tua connessione a Internet.",
+        "retry": "Riprova"
+      },
+      "noResults": {
+        "title": "Nessuna estensione trovata",
+        "filtered": "Prova a cambiare i parametri di ricerca o i filtri.",
+        "empty": "Nessuna estensione ancora disponibile."
+      },
+      "installError": {
+        "title": "Impossibile installare {{name}}"
+      }
+    }
+  },
+  "updater": {
+    "updateAvailable": "Aggiornamento disponibile"
+  },
+  "flatpak": {
+    "sandboxWarning": "Stai eseguendo Nuclear in una sandbox Flatpak. Alcune funzionalità potrebbero non funzionare correttamente. Se riscontri problemi, prova invece il file .deb o Appimage.",
+    "dismiss": "Capito"
+  },
+  "preferences": {
+    "title": "Preferenze",
+    "general": {
+      "title": "Generali",
+      "language": {
+        "title": "Lingua",
+        "description": "Seleziona la tua lingua preferita"
+      }
+    },
+    "plugins": {
+      "title": "Estensioni"
+    },
+    "themes": {
+      "title": "Temi"
+    },
+    "logs": {
+      "title": "Registri"
+    },
+    "whats-new": {
+      "title": "Novità"
+    },
+    "shortcuts": {
+      "title": "Tasti di scelta rapida",
+      "sections": {
+        "playback": "Riproduzione",
+        "general": "Generale"
+      },
+      "commands": {
+        "playback.toggle": "Riproduci / Pausa",
+        "playback.next": "Prossimo brano",
+        "playback.previous": "Brano precedente",
+        "playback.seekForward": "Cerca avanti",
+        "playback.seekBackward": "Cerca indietro",
+        "playback.volumeUp": "Aumenta volume",
+        "playback.volumeDown": "Riduci volume",
+        "playback.mute": "Disattiva audio / Riattiva audio",
+        "general.toggleSettings": "Apri impostazioni"
+      },
+      "recording": "Premere una combinazione di tasti...",
+      "resetAll": "Ripristina tutto alle impostazioni predefinite",
+      "reset": "Ripristina",
+      "conflict": "Questa scorciatoia è già utilizzata da “{{command}}”"
+    },
+    "appearance": {
+      "title": "Aspetto"
+    },
+    "playback": {
+      "title": "Riproduzione",
+      "skipSeconds": {
+        "title": "Durata del salto",
+        "description": "Numero di secondi da saltare in avanti/indietro"
+      },
+      "crossfadeMs": {
+        "title": "Dissolvenza incrociata",
+        "description": "Durata della dissolvenza incrociata tra i brani in millisecondi"
+      },
+      "streamExpiryMs": {
+        "title": "Tempo di scadenza del flusso",
+        "description": "Quanto tempo deve trascorrere prima che un URL di flusso risolto sia considerato scaduto e debba essere risolto nuovamente"
+      },
+      "streamResolutionRetries": {
+        "title": "Riprova risoluzione flusso",
+        "description": "Numero di tentativi di risoluzione di un URL di flusso prima di passare al candidato successivo"
+      }
+    },
+    "layout": {
+      "title": "Layout"
+    },
+    "updates": {
+      "title": "Aggiornamenti",
+      "checkForUpdates": {
+        "title": "Controlla gli aggiornamenti",
+        "description": "Controlla automaticamente le nuove versioni all'avvio"
+      },
+      "autoInstall": {
+        "title": "Installazione automatica aggiornamenti",
+        "description": "Scarica e installa gli aggiornamenti automaticamente quando disponibile"
+      }
+    },
+    "integrations": {
+      "title": "Integrazioni",
+      "mcp": {
+        "enabled": {
+          "title": "Abilita Server MCP",
+          "description": "Avvia un server MCP locale che consente agli strumenti AI di controllare Nuclear."
+        },
+        "serverUrl": {
+          "title": "URL Server MCP",
+          "description": "Indirizza il tuo strumento di AI a questo URL per collegarti a Nuclear."
+        }
+      }
+    }
+  },
+  "queue": {
+    "title": "Coda",
+    "empty": {
+      "title": "La coda è vuota",
+      "subtitle": "Aggiungi brani per avviare la riproduzione"
+    },
+    "actions": {
+      "remove": "Rimuovi dalla coda",
+      "clear": "Pulisci coda",
+      "saveAsPlaylist": "Salva la coda come scaletta"
+    },
+    "errors": {
+      "playback": "Errore riproduzione"
+    }
+  },
+  "track": {
+    "actions": {
+      "playNow": "Riproduci ora",
+      "playNext": "Riproduci successivo",
+      "addToQueue": "Aggiungi alla coda",
+      "addToFavorites": "Aggiungi ai preferiti",
+      "removeFromFavorites": "Rimuovi dai preferiti"
+    }
+  },
+  "streaming": {
+    "errors": {
+      "noCandidatesFound": "Impossibile trovare i candidati del flusso",
+      "allCandidatesFailed": "Tutti i candidati del flusso non sono riusciti"
+    }
+  },
+  "playerBar": {
+    "noTrackPlaying": "Nessuna traccia in riproduzione"
+  },
+  "logs": {
+    "title": "Registri",
+    "searchPlaceholder": "Ricerca registri...",
+    "searchAriaLabel": "Cerca registri",
+    "levelLabel": "Livello:",
+    "scopeLabel": "Portata:",
+    "clearButton": "Pulisci",
+    "exportButton": "Esporta",
+    "openLogFolderButton": "Apri Cartella Registro",
+    "noLogsMessage": "Nessun registro da mostrare",
+    "invalidRegexMessage": "Modello regex non valido",
+    "entryCount": "{{count}} voce",
+    "entryCount_other": "{{count}} voci",
+    "exportSuccess": "Registri esportati"
+  },
+  "changelog": {
+    "title": "Novità",
+    "seeMore": "Vedi altro ({{count}} più vecchio)",
+    "types": {
+      "feature": "Caratteristica",
+      "fix": "Correzione",
+      "improvement": "Miglioramento",
+      "chore": "Altro",
+      "plugin": "Estensione",
+      "docs": "Documentazione"
+    }
+  }
+}

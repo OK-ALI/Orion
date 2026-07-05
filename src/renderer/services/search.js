@@ -147,3 +147,18 @@ export async function searchTmdb(query, page, apiKey) {
     results: normalizeSearchResults(data.results || []),
   };
 }
+
+export async function searchTmdbPeople(query, page, apiKey, signal) {
+  const normalizedQuery = String(query || "").trim();
+  if (normalizedQuery.length < 2 || !apiKey) return { page: 1, totalPages: 0, results: [] };
+  const data = await tmdbFetch(
+    `/search/person?query=${encodeURIComponent(normalizedQuery)}&page=${Math.max(1, Number(page) || 1)}&include_adult=false`,
+    apiKey,
+    { signal },
+  );
+  return {
+    page: Number(data.page) || 1,
+    totalPages: Math.min(Number(data.total_pages) || 1, 500),
+    results: (data.results || []).map(normalizePersonSummary),
+  };
+}

@@ -2,13 +2,17 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ fetchPool: vi.fn(), fetchPersonal: vi.fn(), getCache: vi.fn(), setCache: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetchPool: vi.fn(), fetchPersonal: vi.fn(), getCache: vi.fn(), setCache: vi.fn(), searchPeople: vi.fn() }));
 vi.mock("../../../src/renderer/features/people/constellation/service", async (importOriginal) => ({
   ...(await importOriginal()),
   fetchCinemaConstellationPool: mocks.fetchPool,
   fetchPersonalConstellation: mocks.fetchPersonal,
   getCachedConstellationPool: mocks.getCache,
   setCachedConstellationPool: mocks.setCache,
+}));
+vi.mock("../../../src/renderer/services/search", async (importOriginal) => ({
+  ...(await importOriginal()),
+  searchTmdbPeople: mocks.searchPeople,
 }));
 
 import ConstellationPage from "../../../src/renderer/features/people/constellation/ConstellationPage";
@@ -28,6 +32,7 @@ describe("Constellation page", () => {
     mocks.fetchPersonal.mockReset().mockResolvedValue([]);
     mocks.getCache.mockReset().mockReturnValue(null);
     mocks.setCache.mockReset();
+    mocks.searchPeople.mockReset().mockResolvedValue({ page: 1, totalPages: 1, results: [] });
   });
 
   it("renders mapped people and opens the existing Person route", async () => {
@@ -46,8 +51,20 @@ describe("Constellation page", () => {
     expect(JSON.parse(localStorage.getItem("orion_constellationPreferences"))).toMatchObject({ craft: "directing" });
     expect(screen.getByRole("heading", { name: "No people match these filters" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Acting" }));
-    fireEvent.change(screen.getByPlaceholderText(/Filter people/), { target: { value: "Example Story" } });
+    fireEvent.change(screen.getByPlaceholderText(/Search this constellation/), { target: { value: "Example Story" } });
     expect(screen.getAllByText("Ava Example").length).toBeGreaterThan(0);
+  });
+
+  it("shows global TMDB people independently of the mapped pool", async () => {
+    mocks.searchPeople.mockResolvedValue({
+      page: 1, totalPages: 2,
+      results: [{ id: 99, name: "Global Person", media_type: "person", profile_path: null, known_for_department: "Acting", known_for: [] }],
+    });
+    render(<ConstellationPage apiKey="token" history={[]} saved={[]} offline={false} onNavigate={() => {}} />);
+    fireEvent.change(screen.getByPlaceholderText(/Search this constellation/), { target: { value: "Global Person" } });
+    expect(await screen.findByText("Global Person")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "More people across Orion" })).toBeInTheDocument();
+    expect(mocks.searchPeople).toHaveBeenCalledWith("Global Person", 1, "token", expect.any(AbortSignal));
   });
 
   it("uses cached people offline and disables network retry", async () => {

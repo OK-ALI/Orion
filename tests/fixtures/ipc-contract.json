@@ -32,7 +32,16 @@
     "onBatteryStatus", "offBatteryStatus", "onBatteryAlert", "offBatteryAlert",
     "onBatteryResumeDownloads", "offBatteryResumeDownloads", "getPerformanceSnapshot",
     "reportPlaybackHealth", "onPerformanceSnapshot", "offPerformanceSnapshot",
-    "onPerformanceResumeDownloads", "offPerformanceResumeDownloads"
+    "onPerformanceResumeDownloads", "offPerformanceResumeDownloads",
+    "musicGetStatus", "musicListFolders", "musicAddFolder", "musicRemoveFolder",
+    "musicScan", "musicCancelScan", "onMusicScanProgress", "musicListTracks", "musicResolveTrack",
+    "musicListTrackCandidates", "musicResolveCandidate", "musicGetArtwork", "musicGetDashboard", "musicGetDetails", "musicGetLyrics",
+    "musicSearch", "musicListProviders", "musicSetActiveProvider", "musicConfigureProvider",
+    "musicListPlugins", "musicInstallPlugin", "musicSetPluginEnabled", "musicRemovePlugin",
+    "musicListPlaylists", "musicListRemotePlaylists", "musicSavePlaylist", "musicDeletePlaylist", "musicImportPlaylist", "musicImportPlaylistFile", "musicExportPlaylistFile",
+    "musicListFavorites", "musicToggleFavorite", "musicLoadQueue",
+    "musicSaveQueue", "musicAddHistory", "musicListHistory", "musicExportBackup", "musicImportBackup",
+    "musicGetCacheStatus", "musicSetCacheLimit", "musicClearCache"
   ],
   "channels": [
     "blocked-stats-update", "cancel-update", "check-downloader", "check-helper-downloader",

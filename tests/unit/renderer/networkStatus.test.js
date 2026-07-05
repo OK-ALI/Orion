@@ -18,6 +18,11 @@ describe("network status measurement", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("distinguishes a reachable but degraded metadata service", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ status: 503, ok: false, body: { cancel: vi.fn() } });
+    expect(await measureNetworkStatus({ fetchImpl, now: vi.fn().mockReturnValueOnce(10).mockReturnValueOnce(40) })).toMatchObject({ status: "degraded", serviceStatus: 503 });
+  });
+
   it("uses stable latency tiers", () => {
     expect(networkLatencyTier(180)).toBe("fast");
     expect(networkLatencyTier(181)).toBe("fair");

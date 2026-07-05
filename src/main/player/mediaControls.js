@@ -59,7 +59,9 @@ function createMediaControls({ getMainWindow, getPopoutController }) {
         active: Boolean(value.active),
         mediaSessionAvailable: value.mediaSessionAvailable !== false,
         title: String(value.title || "").slice(0, 180),
-        mediaType: value.mediaType === "tv" ? "tv" : "movie",
+        mediaType: ["tv", "music"].includes(value.mediaType) ? value.mediaType : "movie",
+        artist: String(value.artist || "").slice(0, 180),
+        album: String(value.album || "").slice(0, 180),
       };
       syncFallbacks();
       return { ok: true, fallbackKeys: registered.size };

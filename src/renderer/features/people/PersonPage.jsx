@@ -16,6 +16,12 @@ export default function PersonPage({ item, apiKey, onNavigate, onBack }) {
   const [error, setError] = useState("");
   const [fatalError, setFatalError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  useEffect(() => {
+    if (!error) return undefined;
+    const retry = () => setRetryKey((value) => value + 1);
+    window.addEventListener("orion:network-restored", retry, { once: true });
+    return () => window.removeEventListener("orion:network-restored", retry);
+  }, [error]);
   const requestRef = useRef(0);
 
   useEffect(() => {

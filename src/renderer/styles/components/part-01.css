@@ -80,6 +80,8 @@
 .titlebar-network.is-online.is-slow .titlebar-network-dot { background: var(--warning); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 16%, transparent); }
 .titlebar-network.is-offline { color: var(--danger); }
 .titlebar-network.is-offline .titlebar-network-dot { background: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent); }
+.titlebar-network.is-degraded { color: var(--warning); }
+.titlebar-network.is-degraded .titlebar-network-dot { background: var(--warning); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 16%, transparent); }
 .titlebar-network-latency { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
 .titlebar-battery {
