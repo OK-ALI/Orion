@@ -1,0 +1,869 @@
+/* Music Planet V2 Base Styles */
+.music-planet-container {
+  /* Default token values */
+  --mp-bg: #07070b;
+  --mp-primary: #e6e6e0;
+  --mp-glow: rgba(230, 230, 224, 0.15);
+  --mp-text: #e6e6e0;
+  --mp-muted: rgba(230, 230, 224, 0.58);
+  --mp-line: rgba(255, 255, 255, 0.10);
+  --mp-surface: rgba(255, 255, 255, 0.03);
+  --mp-surface-active: rgba(255, 255, 255, 0.08);
+  --mp-player-bg: rgba(10, 10, 15, 0.4);
+  --mp-player-glow: rgba(125, 95, 255, 0.1);
+  --music-danger-red: #e50914;
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background-color: var(--mp-bg);
+  color: var(--mp-text);
+  overflow: hidden; /* Scroll is handled inside if we use Lenis or native scroll container */
+  font-family: var(--font-primary, system-ui, sans-serif);
+  transition: background-color 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.music-planet-canvas-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none; /* Let clicks pass through to UI */
+}
+
+/* Scrollable foreground layer */
+.music-planet-scroll-area {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Scroll snapping can be added later if needed */
+  scroll-behavior: smooth;
+}
+
+/* Sections */
+.music-planet-section {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem;
+  box-sizing: border-box;
+}
+
+.music-planet-section-intro {
+  text-align: center;
+}
+
+.music-planet-title {
+  font-size: 5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 1rem 0;
+  color: var(--mp-text);
+  text-shadow: 0 0 40px var(--mp-glow);
+}
+
+.music-planet-subtitle {
+  font-size: 1.5rem;
+  font-weight: 400;
+  color: var(--mp-muted);
+  letter-spacing: 0.05em;
+}
+
+/* Section Header Typography */
+.music-section-header {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--mp-muted);
+  margin-bottom: 2rem;
+  align-self: flex-start;
+}
+
+/* Hide Global Player */
+.app-body:has(.music-planet-container) .music-player-bar {
+  display: none !important;
+}
+
+/* Custom Cursor */
+.music-planet-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  background-color: var(--mp-text);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  mix-blend-mode: difference;
+  transform: translate(-50%, -50%);
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), height 0.3s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s;
+}
+.music-planet-cursor.hovering {
+  width: 40px;
+  height: 40px;
+  background-color: transparent;
+  border: 1px solid var(--mp-text);
+}
+
+/* Base resets for interactive elements */
+.music-planet-container {
+  cursor: none; /* Hide default cursor to use custom one */
+}
+.music-planet-container a, 
+.music-planet-container button, 
+.music-planet-container input {
+  cursor: none;
+}
+
+/* Metaphor: Search Box */
+.planet-search-box {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  margin: 2rem auto;
+}
+.planet-search-box input {
+  width: 100%;
+  padding: 1.2rem 1.5rem;
+  background: var(--mp-surface);
+  border: 1px solid var(--mp-line);
+  border-radius: 40px;
+  color: var(--mp-text);
+  font-size: 1.1rem;
+  backdrop-filter: blur(10px);
+  outline: none;
+  transition: all 0.3s ease;
+}
+.planet-search-box input:focus {
+  background: var(--mp-surface-active);
+  border-color: var(--mp-primary);
+  box-shadow: 0 0 20px var(--mp-glow);
+}
+
+/* Metaphor: Albums as Planets */
+/* The Music Player Overhaul */
+.glass-music-player {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 1200px;
+  height: 80px;
+  background: var(--mp-player-bg);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 40px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: visible; /* Allow absolute floating panels to overlay above the player */
+}
+
+.player-glow-backdrop {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, var(--mp-primary) 0%, transparent 70%);
+  opacity: 0.15;
+  pointer-events: none;
+  border-radius: 40px;
+  overflow: hidden; /* Restrict the glow layout internally */
+}
+
+.player-inner {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+.player-identity {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: none;
+  border: none;
+  color: white;
+  text-align: left;
+  cursor: pointer;
+  min-width: 250px;
+}
+
+.player-art-wrap {
+  position: relative;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+}
+
+.player-art-wrap img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.player-art-ring {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  right: -5px;
+  bottom: -5px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  animation: spin 10s linear infinite;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.player-art-ring.is-spinning {
+  opacity: 1;
+}
+
+.player-meta strong {
+  display: block;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.player-meta small {
+  display: block;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.player-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.player-transport {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.player-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.player-btn:hover {
+  color: white;
+  transform: scale(1.1);
+}
+
+.player-btn.active {
+  color: var(--player-primary);
+  text-shadow: 0 0 10px var(--player-primary);
+}
+
+.player-play-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: white;
+  color: black;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+}
+
+.player-play-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.4);
+}
+
+.player-timeline-wrap {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  max-width: 500px;
+}
+
+.time-text {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: monospace;
+  min-width: 40px;
+}
+
+.timeline-track {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  position: relative;
+}
+
+.timeline-buffered {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.timeline-scrub {
+  position: absolute;
+  top: -10px;
+  left: 0;
+  width: 100%;
+  height: 24px;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.player-utilities {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 250px;
+  justify-content: flex-end;
+}
+
+.player-volume-slider {
+  width: 80px;
+  height: 4px;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.player-volume-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+}
+
+.player-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: black;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.planet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 2rem;
+  width: 100%;
+}
+.planet-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: var(--music-text);
+  text-align: center;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.planet-card:hover {
+  transform: scale(1.05);
+}
+.planet-card .art-container {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  margin-bottom: 1rem;
+  box-shadow: inset -10px -10px 40px rgba(0,0,0,0.8), 0 0 30px rgba(0,0,0,0.5);
+}
+.planet-card .art-container img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  mask-image: radial-gradient(circle, white 99%, transparent 100%);
+  -webkit-mask-image: -webkit-radial-gradient(circle, white 99%, transparent 100%);
+}
+.planet-card .art-container::after {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  right: -10px;
+  bottom: -10px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  transition: border-color 0.4s ease, transform 10s linear infinite;
+}
+.planet-card:hover .art-container::after {
+  border-color: var(--music-glow-secondary);
+  border-style: dashed;
+  transform: rotate(360deg);
+}
+
+/* Metaphor: Artists as Stars */
+.star-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: var(--music-text);
+  text-align: center;
+  transition: transform 0.4s ease;
+}
+.star-card:hover {
+  transform: scale(1.1);
+}
+.star-card .art-container {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  margin-bottom: 1rem;
+  box-shadow: 0 0 30px var(--music-text);
+  transition: box-shadow 0.4s ease;
+}
+.star-card:hover .art-container {
+  box-shadow: 0 0 60px var(--music-text), 0 0 100px var(--music-glow-primary);
+}
+.star-card .art-container img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  mix-blend-mode: screen;
+}
+
+/* Metaphor: Playlists as Constellations */
+.constellation-card {
+  position: relative;
+  background: transparent;
+  border: 1px solid var(--music-line);
+  border-radius: 20px;
+  padding: 2rem;
+  color: var(--music-text);
+  text-align: center;
+  overflow: hidden;
+  transition: all 0.4s ease;
+}
+.constellation-card:hover {
+  border-color: var(--music-text);
+  background: rgba(255,255,255,0.02);
+}
+.constellation-nodes {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-bottom: 1rem;
+}
+.constellation-node {
+  width: 8px;
+  height: 8px;
+  background: var(--music-text);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--music-text);
+}
+
+/* Metaphor: Tracks as Moons */
+.moon-track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+.moon-track-item {
+  display: flex;
+  align-items: center;
+  background: var(--mp-surface);
+  border: 1px solid transparent;
+  border-radius: 50px;
+  padding: 8px 20px 8px 8px;
+  color: var(--mp-text);
+  transition: all 0.3s ease;
+}
+.moon-track-item:hover {
+  background: var(--mp-surface-active);
+  border-color: var(--mp-line);
+}
+.moon-track-item.active {
+  background: rgba(125, 95, 255, 0.12);
+  border-color: var(--mp-primary);
+  box-shadow: 0 0 15px var(--mp-glow);
+}
+.moon-track-item .art-container {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-right: 15px;
+}
+.moon-track-item .art-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.moon-track-item .track-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.moon-track-item strong {
+  font-size: 0.95rem;
+}
+.moon-track-item small {
+  font-size: 0.8rem;
+  color: var(--mp-muted);
+}
+
+/* Glass Player Panel overlay */
+.glass-player-panel {
+  position: absolute;
+  bottom: 90px;
+  right: 2rem;
+  width: 380px;
+  max-height: 400px;
+  background: rgba(10, 10, 15, 0.8);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  color: var(--mp-text);
+  z-index: 1001;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.glass-player-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.2rem 1.5rem 0.8rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-player-panel header strong {
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.glass-player-panel header button {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.glass-player-panel header button:hover {
+  color: white;
+}
+
+.panel-scroll-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+/* List details dl in panel */
+.glass-player-panel dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.8rem 1.5rem;
+  margin: 0;
+}
+
+.glass-player-panel dt {
+  color: var(--mp-muted);
+  font-size: 0.9rem;
+}
+
+.glass-player-panel dd {
+  margin: 0;
+  text-align: right;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* Sources / Queue lists inside panel */
+.music-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.music-panel-list > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+
+.music-panel-list > div:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.music-panel-list > div.active {
+  background: rgba(125, 95, 255, 0.15);
+  border-color: rgba(125, 95, 255, 0.2);
+}
+
+.music-panel-list button {
+  background: none;
+  border: none;
+  color: var(--mp-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.music-panel-list button strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.music-panel-list button small {
+  font-size: 0.75rem;
+  color: var(--mp-muted);
+}
+
+.music-panel-list button[aria-label^="Remove"] {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 1.2rem;
+  transition: color 0.2s;
+  padding: 4px;
+}
+
+.music-panel-list button[aria-label^="Remove"]:hover {
+  color: var(--mp-primary);
+}
+
+.music-panel-state {
+  text-align: center;
+  color: var(--mp-muted);
+  padding: 2rem 0;
+}
+
+.music-panel-state button {
+  margin-top: 1rem;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.music-panel-state button:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Lyrics in panel */
+.music-lyrics-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.music-lyrics-lines p {
+  margin: 0;
+  line-height: 1.6;
+  font-size: 0.95rem;
+  color: var(--mp-text);
+}
+
+/* Music Planet Detail Overlay style */
+.music-planet-detail-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 100;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: radial-gradient(circle at top right, rgba(20, 10, 35, 0.4), rgba(7, 7, 11, 0.95) 75%), var(--mp-bg);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  padding: 4rem 4rem 140px; /* Padding bottom for player bar */
+  box-sizing: border-box;
+  animation: overlayFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(40px);
+  }
+}
+
+/* Back to Planet button */
+.detail-back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 40px;
+  padding: 10px 20px;
+  color: var(--mp-text);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: none; /* Hide default cursor to match Music Planet custom cursor */
+  margin-bottom: 3rem;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.detail-back-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.detail-back-button svg {
+  transition: transform 0.3s ease;
+}
+
+.detail-back-button:hover svg {
+  transform: translateX(-4px);
+}
+
+/* Detail page headers */
+.music-planet-detail-overlay .music-page-header {
+  display: flex;
+  align-items: flex-end;
+  gap: 3rem;
+  margin-bottom: 4rem;
+  max-width: 1000px;
+  text-align: left;
+}
+
+.music-planet-detail-overlay .music-page-header > div {
+  flex: 1;
+}
+
+.music-planet-detail-overlay .music-page-header h1 {
+  font-size: 3.5rem;
+  font-weight: 700;
+  margin: 0.5rem 0 1rem 0;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--mp-text);
+  text-shadow: 0 0 30px var(--mp-glow);
+}
+
+.music-planet-detail-overlay .music-page-header p {
+  font-size: 1.2rem;
+  margin: 0;
+  color: var(--mp-text);
+}
+
+.music-planet-detail-overlay .music-page-header p.music-muted {
+  color: var(--mp-muted);
+  font-size: 1rem;
+  margin-top: 0.5rem;
+}
+
+.music-planet-detail-overlay .music-album-art,
+.music-planet-detail-overlay .music-round-art {
+  width: 240px;
+  height: 240px;
+  flex: 0 0 240px;
+  border-radius: 24px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-size: cover;
+  background-position: center;
+  background-color: var(--mp-surface);
+}
+
+.music-planet-detail-overlay .music-round-art {
+  border-radius: 50%;
+}
+
+.music-planet-detail-overlay .music-section {
+  margin-top: 3rem;
+  max-width: 1000px;
+}
+
+.music-planet-detail-overlay .music-section-heading h2 {
+  font-size: 1.8rem;
+  font-weight: 600;
+  margin: 0 0 1.5rem;
+  color: var(--mp-text);
+}
+
+/* Warnings and notices */
+.music-provider-warning {
+  background: rgba(229, 9, 20, 0.1);
+  border: 1px solid rgba(229, 9, 20, 0.2);
+  color: #ff4a5a;
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 2rem;
+  font-size: 0.95rem;
+}
+
+

@@ -1,5 +1,4 @@
 import { lazy, Suspense } from "react";
-import MusicHome from "./pages/MusicHome";
 const MusicSearch = lazy(() => import("./pages/MusicSearch"));
 const MusicLibrary = lazy(() => import("./pages/MusicLibrary"));
 const PlaylistsPage = lazy(() => import("./pages/PlaylistsPage"));
@@ -13,7 +12,6 @@ const NowPlayingPage = lazy(() => import("./pages/NowPlayingPage"));
 export default function MusicRoutes({ page, selected, onNavigate }) {
   const props = { selected, onNavigate };
   return <Suspense fallback={<div className="music-loading">Tuning Music Planet…</div>}>
-    {page === "music-home" && <MusicHome {...props} />}
     {page === "music-search" && <MusicSearch {...props} />}
     {page === "music-library" && <MusicLibrary {...props} />}
     {page === "music-playlists" && <PlaylistsPage {...props} />}

@@ -40,7 +40,7 @@ function formatBytes(bytes) {
 export default function DownloadsPage({
   downloads = [], onDeleteDownload, highlightId, onClearHighlight, searchOpen,
   onSearchClose, onSettings, onUpdateDownload, onHistory, onSaveProgress,
-  onMarkWatched, onOpenMiniPlayer,
+  onMarkWatched, onOpenMiniPlayer, googleProfile,
 }) {
   const [tab, setTab] = useState("all");
   const [query, setQuery] = useState("");
@@ -51,7 +51,53 @@ export default function DownloadsPage({
   const [localPlayback, setLocalPlayback] = useState(null);
   const [expanded, setExpanded] = useState(() => new Set());
   const [now, setNow] = useState(Date.now());
+  const [backupStates, setBackupStates] = useState({});
   const searchRef = useRef(null);
+
+  const backupToCloud = async (item) => {
+    if (!window.electron?.uploadMediaFile) return;
+    setBackupStates((current) => ({ ...current, [item.id]: "uploading" }));
+    setActionError("");
+    try {
+      const metadata = {
+        mediaType: item.mediaType,
+        name: item.name,
+        season: item.season
+      };
+      const res = await window.electron.uploadMediaFile(item.filePath, item.name, metadata);
+      if (res?.ok && res.fileId) {
+        onUpdateDownload?.(item.id, { driveFileId: res.fileId });
+        setBackupStates((current) => ({ ...current, [item.id]: "success" }));
+        setTimeout(() => {
+          setBackupStates((current) => {
+            const next = { ...current };
+            delete next[item.id];
+            return next;
+          });
+        }, 3000);
+      } else {
+        setBackupStates((current) => ({ ...current, [item.id]: "error" }));
+        setActionError(res?.error || "Failed to upload file to Google Drive.");
+      }
+    } catch (err) {
+      setBackupStates((current) => ({ ...current, [item.id]: "error" }));
+      setActionError(err.message || "An unexpected error occurred during upload.");
+    }
+  };
+
+  const offloadFile = async (item) => {
+    if (!window.electron?.offloadFile) return;
+    const confirm = window.confirm("Are you sure you want to remove the local video file? It will remain playable by streaming from your Google Drive backup.");
+    if (!confirm) return;
+    setActionError("");
+
+    const res = await window.electron.offloadFile(item.id);
+    if (res?.ok) {
+      onUpdateDownload?.(item.id, { filePath: null });
+    } else {
+      setActionError(res?.error || "Failed to remove local file.");
+    }
+  };
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -170,15 +216,64 @@ export default function DownloadsPage({
             const failed = statusGroup(item.status) === "failed";
             const completed = item.status === "completed";
             const isExpanded = expanded.has(item.id);
+            const isUploading = backupStates[item.id] === "uploading" || item.uploading;
             const elapsed = Math.max(0, ((item.completedAt || now) - (item.startedAt || now)) / 1000);
             const bytes = item.downloadedBytes ? `${formatBytes(item.downloadedBytes)}${item.totalBytes ? ` / ${formatBytes(item.totalBytes)}` : ""}` : item.size;
             return (
               <article key={item.id} data-download-id={item.id} className={`download-card${highlightId === item.id ? " highlighted" : ""}${isExpanded ? " expanded" : ""}`}>
                 {item.posterPath ? <img src={`https://image.tmdb.org/t/p/w185${item.posterPath}`} alt="" /> : <div className="download-card-poster"><DownloadIcon size={24} /></div>}
                 <div className="download-card-body">
-                  <div className="download-card-title"><div><h3>{item.name}</h3><p>{item.mediaType === "tv" && item.season ? `Season ${item.season}${item.episode ? ` · Episode ${item.episode}` : ""}` : "Movie"} · {item.qualityPreset === "best" || !item.qualityPreset ? "Best quality" : `${item.qualityPreset}p`}</p></div><span className={`download-status ${statusGroup(item.status)}`}>{STATUS_LABEL[item.status] || item.status}</span></div>
+                  <div className="download-card-title">
+                    <div>
+                      <h3>{item.name}</h3>
+                      <p>{item.mediaType === "tv" && item.season ? `Season ${item.season}${item.episode ? ` · Episode ${item.episode}` : ""}` : "Movie"} · {item.qualityPreset === "best" || !item.qualityPreset ? "Best quality" : `${item.qualityPreset}p`}</p>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span className={`download-status ${statusGroup(item.status)}`}>{STATUS_LABEL[item.status] || item.status}</span>
+                      {item.driveFileId && (
+                        <span style={{
+                          padding: "5px 10px",
+                          borderRadius: "999px",
+                          background: "rgba(0, 168, 255, 0.08)",
+                          color: "#00a8ff",
+                          border: "1px solid rgba(0, 168, 255, 0.15)",
+                          fontSize: "10px",
+                          fontWeight: 600,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.6px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6
+                        }}>
+                          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+                          </svg>
+                          Cloud Saved
+                        </span>
+                      )}
+                      {isUploading && (
+                        <span style={{
+                          padding: "5px 10px",
+                          borderRadius: "999px",
+                          background: "rgba(229, 183, 9, 0.08)",
+                          color: "#e5b709",
+                          border: "1px solid rgba(229, 183, 9, 0.15)",
+                          fontSize: "10px",
+                          fontWeight: 600,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.6px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6
+                        }}>
+                          <span className="spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }} />
+                          Backing up
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   {!completed && <div className="download-progress"><div><span style={{ width: `${Math.max(0, Math.min(100, item.progress || 0))}%` }} /></div><strong>{Math.round(item.progress || 0)}%</strong></div>}
-                  <div className="download-card-meta"><span>{item.lastMessage || (completed ? "Ready to watch" : "Waiting…")}</span>{item.speed && <span>{item.speed}</span>}{bytes && <span>{bytes}</span>}{item.etaSeconds != null && !completed && <span>ETA {formatDuration(item.etaSeconds)}</span>}<span>{formatDuration(elapsed)} elapsed</span></div>
+                  <div className="download-card-meta"><span>{item.lastMessage || (completed ? (isUploading ? "Uploading file to Google Drive..." : "Ready to watch") : "Waiting…")}</span>{item.speed && <span>{item.speed}</span>}{bytes && <span>{bytes}</span>}{item.etaSeconds != null && !completed && <span>ETA {formatDuration(item.etaSeconds)}</span>}<span>{formatDuration(elapsed)} elapsed</span></div>
                   {isExpanded && <div className="download-card-details">
                     <div><span>Fragments</span><strong>{item.completedFragments || 0} / {item.totalFragments || "—"}</strong></div>
                     <div><span>Retries</span><strong>{item.retryCount || 0}</strong></div>
@@ -191,7 +286,53 @@ export default function DownloadsPage({
                   <div className="download-card-actions">
                     {item.status === "downloading" && <button className="btn btn-secondary" onClick={() => pause(item)}>Pause</button>}
                     {(paused || failed) && <button className="btn btn-primary" onClick={() => resume(item)}>{failed ? "Retry" : "Resume"}</button>}
-                    {completed && item.filePath && <><button className="btn btn-primary" onClick={() => setLocalPlayback(item)}>Play in Orion</button><button className="btn btn-secondary" onClick={() => window.electron.openPathAtTime(item.filePath, 0, item.subtitlePaths || [])}>Open externally</button><button className="btn btn-secondary" onClick={() => window.electron.showInFolder(item.filePath)}>Show in folder</button><button className="btn btn-secondary" onClick={() => setSubtitleDownload(item)}>Subtitles</button></>}
+                    {completed && (item.filePath || item.driveFileId) && (
+                      <>
+                        <button className="btn btn-primary" disabled={isUploading} onClick={() => setLocalPlayback(item)}>
+                          {item.filePath ? "Play in Orion" : "☁ Stream from Cloud"}
+                        </button>
+                        {item.filePath ? (
+                          <>
+                            <button className="btn btn-secondary" disabled={isUploading} onClick={() => window.electron.openPathAtTime(item.filePath, 0, item.subtitlePaths || [])}>Open externally</button>
+                            <button className="btn btn-secondary" disabled={isUploading} onClick={() => window.electron.showInFolder(item.filePath)}>Show in folder</button>
+                            <button className="btn btn-secondary" disabled={isUploading} onClick={() => setSubtitleDownload(item)}>Subtitles</button>
+                            {googleProfile && !item.driveFileId && (
+                              <button 
+                                className="btn btn-secondary" 
+                                disabled={isUploading} 
+                                onClick={() => backupToCloud(item)}
+                                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                              >
+                                {isUploading ? (
+                                  <>
+                                    <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+                                    <span>☁ Backing up...</span>
+                                  </>
+                                ) : "☁ Backup to Drive"}
+                              </button>
+                            )}
+                            {googleProfile && item.driveFileId && (
+                              <button 
+                                className="btn btn-secondary danger" 
+                                style={{ background: "rgba(229,9,20,0.08)", color: "var(--red)" }} 
+                                disabled={isUploading}
+                                onClick={() => offloadFile(item)}
+                              >
+                                Offload Local File
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {googleProfile && item.driveFileId && (
+                              <span style={{ fontSize: 12, color: "var(--text3)", marginLeft: 6 }}>
+                                Cloud Only (Local file offloaded)
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </>
+                    )}
                     {failed && item.logPath && <button className="btn btn-secondary" onClick={() => window.electron.openDownloadLog(item.logPath)}>Diagnostics</button>}
                     <button className="btn btn-ghost" onClick={() => setExpanded((current) => { const next = new Set(current); next.has(item.id) ? next.delete(item.id) : next.add(item.id); return next; })}>{isExpanded ? "Less info" : "More info"}</button>
                     <button className="btn btn-ghost danger" onClick={() => remove(item)}>{completed ? "Delete file" : item.status === "downloading" ? "Cancel" : "Remove"}</button>

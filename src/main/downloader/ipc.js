@@ -654,6 +654,12 @@ function register(getMainWindow, { resetSettingsData } = {}) {
       }
       const dlPath = dlEntry?.downloadPath;
       if (dlPath) cleanupTempFiles(dlPath);
+      if (dlEntry?.driveFileId) {
+        try {
+          const { googleDriveRequest } = require("../ipc/googleAuthIpc");
+          googleDriveRequest(`https://www.googleapis.com/drive/v3/files/${dlEntry.driveFileId}`, { method: "DELETE" }).catch(() => {});
+        } catch {}
+      }
       downloads = downloads.filter((d) => d.id !== id);
       saveDownloads();
       return { ok: true };

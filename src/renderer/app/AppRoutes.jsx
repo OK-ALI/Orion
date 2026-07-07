@@ -22,7 +22,7 @@ export default function AppRoutes({ model }) {
     navigateBack, offline, page, playerSettings, progress, removeHistory, retryHome,
     savedList, saveProgress, selected, setDlSearchOpen, setDownloads,
     setHighlightDownload, setLibrarySort, setMiniPlayer, toggleSave, trending,
-    trendingTV, watched, onPlaybackSession,
+    trendingTV, watched, onPlaybackSession, googleProfile,
   } = model;
   return (
     <ErrorBoundary resetKey={`${page}:${selected?.id || selected || ""}`} context={`route:${page}`}>
@@ -117,6 +117,7 @@ export default function AppRoutes({ model }) {
           onSettings={(section) => navigate("settings", { section: section || null })}
           onOpenMiniPlayer={setMiniPlayer}
           onUpdateDownload={(id, updates) => setDownloads((previous) => previous.map((download) => download.id === id ? { ...download, ...updates } : download))}
+          googleProfile={googleProfile}
         />
       )}
     </Suspense>

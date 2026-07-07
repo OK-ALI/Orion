@@ -19,7 +19,7 @@
     "clearWatchData", "deleteAllDownloads", "resetApp", "searchSubtitles", "getSubtitleUrl",
     "downloadSubtitlesForFile", "deleteSubtitleFile", "wyzieOpenRedeem", "wyzieValidateKey",
     "secureGet", "secureSet", "openPipWindow", "closePipWindow", "getPipWebContentsId",
-    "onPipOpened", "offPipOpened", "onPipClosed", "offPipClosed", "getVideoDuration", "getRendererWebContentsId", "openLocalMedia", "repairLocalMedia",
+    "onPipOpened", "offPipOpened", "onPipClosed", "offPipClosed", "getVideoDuration", "getRendererWebContentsId", "openLocalMedia", "offloadFile", "updateDownloadRecord", "repairLocalMedia",
     "startAmbientSampling", "stopAmbientSampling", "onAmbientPalette", "offAmbientPalette",
     "setZoomFactor", "detectUpdateFormat", "downloadAndInstallUpdate", "cancelUpdate",
     "onUpdateProgress", "offUpdateProgress", "getScheduledBackupSettings",
@@ -41,7 +41,8 @@
     "musicListPlaylists", "musicListRemotePlaylists", "musicSavePlaylist", "musicDeletePlaylist", "musicImportPlaylist", "musicImportPlaylistFile", "musicExportPlaylistFile",
     "musicListFavorites", "musicToggleFavorite", "musicLoadQueue",
     "musicSaveQueue", "musicAddHistory", "musicListHistory", "musicExportBackup", "musicImportBackup",
-    "musicGetCacheStatus", "musicSetCacheLimit", "musicClearCache"
+    "musicGetCacheStatus", "musicSetCacheLimit", "musicClearCache",
+    "getClientConfig", "setClientConfig", "getProfile", "login", "logout", "cancelLogin", "uploadSync", "downloadSync", "getStorageQuota", "uploadMediaFile", "deleteMediaFile"
   ],
   "channels": [
     "blocked-stats-update", "cancel-update", "check-downloader", "check-helper-downloader",
@@ -54,7 +55,7 @@
     "get-downloads-size", "get-install-path", "get-pip-webcontents-id", "get-platform",
     "get-scheduled-backup-settings", "get-subtitle-url", "get-video-duration",
     "inject-script-all-frames", "install-downloader-tools", "log-to-terminal", "m3u8-found",
-    "local-media:open", "local-media:repair", "mini-player-status", "open-downloader-tools-folder", "open-download-log", "open-external",
+    "local-media:open", "local-media:repair", "local-media:offload-file", "local-media:update-record", "mini-player-status", "open-downloader-tools-folder", "open-download-log", "open-external",
     "open-path", "open-path-at-time", "open-pip-window", "pause-download",
     "perform-scheduled-backup", "pick-folder", "pip-window-closed", "pip-window-opened",
     "player-stopped", "player:renderer-webcontents-id", "prune-subtitle-paths", "query-video-progress", "quit-app", "reset-app",
@@ -70,6 +71,7 @@
     "battery:get-status", "battery:update-status", "battery:update-preferences",
     "battery:status", "battery:alert", "battery:resume-downloads",
     "performance:get-snapshot", "performance:report-playback", "performance:snapshot",
-    "performance:resume-downloads"
+    "performance:resume-downloads",
+    "google-auth:get-client-config", "google-auth:set-client-config", "google-auth:login", "google-auth:logout", "google-auth:get-profile", "google-auth:cancel-login", "google-auth:upload-sync", "google-auth:download-sync", "google-auth:get-storage-quota", "google-auth:upload-media-file", "google-auth:delete-media-file"
   ]
 }

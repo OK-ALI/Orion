@@ -221,6 +221,22 @@ export const SECTION_NAV = [
     ],
   },
   {
+    id: "google",
+    label: "Google Sync",
+    icon: "🔑",
+    keywords: [
+      "google",
+      "auth",
+      "sync",
+      "backup",
+      "oauth",
+      "drive",
+      "cloud",
+      "signin",
+      "logout",
+    ],
+  },
+  {
     id: "storage",
     label: "Storage & Data",
     icon: "🗄",

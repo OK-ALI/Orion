@@ -45,6 +45,10 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
   getRendererWebContentsId: () => ipcRenderer.invoke("player:renderer-webcontents-id"),
   openLocalMedia: (downloadId) =>
     ipcRenderer.invoke("local-media:open", downloadId),
+  offloadFile: (downloadId) =>
+    ipcRenderer.invoke("local-media:offload-file", downloadId),
+  updateDownloadRecord: (downloadId, updates) =>
+    ipcRenderer.invoke("local-media:update-record", downloadId, updates),
   repairLocalMedia: (downloadId) => ipcRenderer.invoke("local-media:repair", downloadId),
   startAmbientSampling: (options) => ipcRenderer.invoke("ambient:start", options),
   stopAmbientSampling: (targetId) => ipcRenderer.invoke("ambient:stop", targetId),

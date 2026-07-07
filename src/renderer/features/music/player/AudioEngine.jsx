@@ -28,10 +28,10 @@ export default function AudioEngine({ controller }) {
   useEffect(() => {
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     const batteryPaused = visualPreferences.adaptPerformance && document.documentElement.dataset.performanceOnBattery === "true";
-    const shouldRun = playing && playbackStatus === "playing" && document.visibilityState === "visible" && visualPreferences.atmosphere !== "off" && visualPreferences.atmosphere !== "calm" && !reduced && !batteryPaused;
+    const shouldRun = playing && playbackStatus === "playing" && document.visibilityState === "visible" && !reduced && !batteryPaused;
     if (shouldRun) analyserRef.current?.start?.();
     else analyserRef.current?.pause?.();
-  }, [playing, playbackStatus, visualPreferences.adaptPerformance, visualPreferences.atmosphere]);
+  }, [playing, playbackStatus, visualPreferences.adaptPerformance]);
 
   useEffect(() => {
     const sync = () => {

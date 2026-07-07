@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMusic } from "../context/MusicProvider";
 import MusicArtwork from "../components/MusicArtwork";
 import MusicVisualizer from "../visual/MusicVisualizer";
+import { computeThemeTokens } from "../visual/musicThemeTokens";
 
 function time(value) {
   const seconds = Math.max(0, Math.floor(Number(value) || 0));
@@ -55,63 +56,115 @@ export default function MusicPlayerBar({ page, onNavigate }) {
     if (next === "lyrics" && music.lyrics.status === "idle") music.loadLyrics();
     if (next === "sources" && music.candidates.status === "idle") music.loadCandidates();
   };
-  const addToPlaylist = async () => {
-    const playlists = await window.electron?.musicListPlaylists?.() || [];
-    const requested = window.prompt("Add to playlist", playlists[0]?.name || "New playlist");
-    if (!requested?.trim()) return;
-    const existing = playlists.find((item) => item.name.toLowerCase() === requested.trim().toLowerCase());
-    await window.electron?.musicSavePlaylist?.({ ...(existing || {}), name: requested.trim(), items: [...(existing?.items || []), music.current] });
-    setMoreOpen(false);
-  };
 
-  const palette = music.artwork.palette;
-  return <section className={`music-player-bar${compact ? " music-player-compact" : ""}`} aria-label="Music player" style={{ "--music-reactive-base": palette.base, "--music-reactive-primary": palette.primary, "--music-reactive-spectral": palette.spectral }}>
-    <button className="music-player-identity" onClick={openNowPlaying} aria-label={`Open Now Playing for ${music.current.title}`}>
-      <MusicArtwork className="music-player-art" track={music.current} currentArtwork={music.artwork} />
-      <span className="music-player-copy"><strong>{music.current.title}</strong><small>{music.current.artistName || "Unknown artist"}</small></span>
-    </button>
-    {!compact && <button className={`music-icon-button music-favorite${favorite ? " active" : ""}`} onClick={toggleFavorite} aria-label={favorite ? "Remove from favorites" : "Add to favorites"}><Icon name="heart" /></button>}
+  const themeStyles = computeThemeTokens(music.artwork.palette, music.panel || 'idle-space');
+  return (
+    <section 
+      className={`glass-music-player${compact ? " is-compact" : ""}`} 
+      aria-label="Music player" 
+      style={themeStyles}
+    >
+      <div className="player-glow-backdrop" />
+      
+      <div className="player-inner">
+        <button className="player-identity" onClick={openNowPlaying}>
+          <div className="player-art-wrap">
+            <MusicArtwork track={music.current} currentArtwork={music.artwork} />
+            <div className={`player-art-ring ${music.playing ? 'is-spinning' : ''}`} />
+          </div>
+          <div className="player-meta">
+            <strong>{music.current.title}</strong>
+            <small>{music.current.artistName || "Unknown artist"}</small>
+          </div>
+        </button>
 
-    <div className="music-player-transport">
-      {!compact && <button className={`music-icon-button${music.shuffle ? " active" : ""}`} onClick={() => music.setShuffle(!music.shuffle)} aria-label="Shuffle"><Icon name="shuffle" /></button>}
-      <button className="music-icon-button" onClick={music.playPrevious} aria-label="Previous track"><Icon name="previous" /></button>
-      <button className="music-play-button" onClick={music.togglePlaying} aria-label={music.playing ? "Pause" : "Play"}>
-        {music.playbackStatus === "loading" || music.playbackStatus === "buffering" ? <span className="music-control-spinner" /> : <Icon name={music.playing ? "pause" : "play"} />}
-      </button>
-      <button className="music-icon-button" onClick={music.playNext} aria-label="Next track"><Icon name="next" /></button>
-      {!compact && <button className={`music-icon-button${music.repeat !== "off" ? " active" : ""}`} onClick={() => music.setRepeat(music.repeat === "off" ? "all" : music.repeat === "all" ? "one" : "off")} aria-label={`Repeat ${music.repeat}`}><Icon name="repeat" />{music.repeat === "one" && <b>1</b>}</button>}
-    </div>
+        <div className="player-center">
+          <div className="player-transport">
+            {!compact && <button className={`player-btn${music.shuffle ? " active" : ""}`} onClick={() => music.setShuffle(!music.shuffle)} aria-label="Shuffle"><Icon name="shuffle" /></button>}
+            <button className="player-btn" onClick={music.playPrevious} aria-label="Previous track"><Icon name="previous" /></button>
+            
+            <button className="player-play-btn" onClick={music.togglePlaying} aria-label={music.playing ? "Pause" : "Play"}>
+              {music.playbackStatus === "loading" || music.playbackStatus === "buffering" ? (
+                <span className="player-spinner" />
+              ) : (
+                <Icon name={music.playing ? "pause" : "play"} />
+              )}
+            </button>
+            
+            <button className="player-btn" onClick={music.playNext} aria-label="Next track"><Icon name="next" /></button>
+            {!compact && <button className={`player-btn${music.repeat !== "off" ? " active" : ""}`} onClick={() => music.setRepeat(music.repeat === "off" ? "all" : music.repeat === "all" ? "one" : "off")} aria-label={`Repeat ${music.repeat}`}><Icon name="repeat" />{music.repeat === "one" && <b>1</b>}</button>}
+          </div>
+          
+          {!compact && (
+            <div className="player-timeline-wrap">
+              <span className="time-text">{time(music.progress.currentTime)}</span>
+              <div className="timeline-track">
+                <div className="timeline-buffered" style={{ width: `${music.buffered * 100}%` }} />
+                <MusicVisualizer variant="timeline" className="timeline-visualizer" />
+                <input 
+                  type="range" 
+                  className="timeline-scrub" 
+                  min="0" 
+                  max={music.progress.duration || 1} 
+                  step="0.1" 
+                  value={Math.min(music.progress.currentTime, music.progress.duration || 1)} 
+                  onChange={(event) => music.seekTo(Number(event.target.value))} 
+                />
+              </div>
+              <span className="time-text">-{time(remaining)}</span>
+            </div>
+          )}
+        </div>
 
-    {!compact && <div className="music-player-timeline">
-      <span>{time(music.progress.currentTime)}</span>
-      <div className="music-seek-wrap"><span style={{ width: `${music.buffered * 100}%` }} /><MusicVisualizer variant="timeline" />
-        <input aria-label="Seek music" type="range" min="0" max={music.progress.duration || 1} step="0.1" value={Math.min(music.progress.currentTime, music.progress.duration || 1)} onChange={(event) => music.seekTo(Number(event.target.value))} /></div>
-      <span>-{time(remaining)}</span>
-    </div>}
-    {compact && <MusicVisualizer variant="compact" className="music-compact-wave" />}
-
-    <div className="music-player-utilities">
-      {!compact && <><button className="music-icon-button" onClick={music.toggleMute} aria-label={music.muted ? "Unmute" : "Mute"}><Icon name={music.muted ? "muted" : "volume"} /></button>
-        <input className="music-volume" aria-label="Music volume" type="range" min="0" max="1" step="0.01" value={music.volume} onChange={(event) => music.setVolume(Number(event.target.value))} />
-        <button className={`music-icon-button${music.panel === "lyrics" ? " active" : ""}`} onClick={() => openPanel("lyrics")} aria-label="Lyrics"><Icon name="lyrics" /></button>
-        <button className={`music-icon-button${music.panel === "queue" ? " active" : ""}`} onClick={() => openPanel("queue")} aria-label="Queue"><Icon name="queue" /></button></>}
-      <button className="music-icon-button" onClick={openNowPlaying} aria-label="Open Now Playing"><Icon name="expand" /></button>
-      {!compact && <button className="music-icon-button" onClick={() => setMoreOpen((value) => !value)} aria-label="More music actions"><Icon name="more" /></button>}
-    </div>
-
-    {music.stream?.error && <div className="music-player-error" role="status"><span>{music.stream.error}</span><button onClick={music.retryStream}>Retry</button><button onClick={() => openPanel("sources")}>Change source</button></div>}
-    {moreOpen && <div className="music-player-menu"><button onClick={addToPlaylist}>Add to playlist</button><button onClick={() => openPanel("sources")}>Change source</button><button onClick={() => openPanel("details")}>Track details</button><button onClick={() => music.stop(false)}>Stop playback</button><button className="danger" onClick={() => music.stop(true)}>Stop and clear queue</button></div>}
-    {music.panel && !compact && <PlayerPanel music={music} close={() => music.setPanel(null)} />}
-  </section>;
+        <div className="player-utilities">
+          {!compact && (
+            <>
+              <button className={`player-btn${favorite ? " active" : ""}`} onClick={toggleFavorite} aria-label="Favorite"><Icon name="heart" /></button>
+              <button className="player-btn" onClick={music.toggleMute} aria-label={music.muted ? "Unmute" : "Mute"}><Icon name={music.muted ? "muted" : "volume"} /></button>
+              <input className="player-volume-slider" type="range" min="0" max="1" step="0.01" value={music.volume} onChange={(event) => music.setVolume(Number(event.target.value))} />
+              <button className={`player-btn${music.panel === "lyrics" ? " active" : ""}`} onClick={() => openPanel("lyrics")} aria-label="Lyrics"><Icon name="lyrics" /></button>
+              <button className={`player-btn${music.panel === "queue" ? " active" : ""}`} onClick={() => openPanel("queue")} aria-label="Queue"><Icon name="queue" /></button>
+            </>
+          )}
+          <button className="player-btn" onClick={openNowPlaying} aria-label="Expand"><Icon name="expand" /></button>
+        </div>
+      </div>
+      
+      {music.panel && !compact && <PlayerPanel music={music} close={() => music.setPanel(null)} />}
+    </section>
+  );
 }
 
 function PlayerPanel({ music, close }) {
-  if (music.panel === "queue" || music.panel === "lyrics") return null;
-
-  return <aside className="music-player-panel" aria-label={`${music.panel} panel`}><header><strong>{({ details: "Track details", sources: "Playback source" })[music.panel]}</strong><button onClick={close} aria-label="Close panel">×</button></header>
-    {music.panel === "details" && <dl><dt>Title</dt><dd>{music.current.title}</dd><dt>Artist</dt><dd>{music.current.artistName || "Unknown"}</dd><dt>Album</dt><dd>{music.current.albumTitle || "Single"}</dd><dt>Provider</dt><dd>{music.stream?.candidate?.providerId || music.current.provider || "Automatic"}</dd><dt>Duration</dt><dd>{time(music.progress.duration)}</dd></dl>}
-    {music.panel === "sources" && <SourceContent candidates={music.candidates} select={music.selectCandidate} retry={music.loadCandidates} />}
-  </aside>;
+  return (
+    <aside className="glass-player-panel" aria-label={`${music.panel} panel`}>
+      <header>
+        <strong>
+          {({
+            details: "Track details",
+            sources: "Playback source",
+            queue: "Play Queue",
+            lyrics: "Song Lyrics"
+          })[music.panel]}
+        </strong>
+        <button onClick={close} aria-label="Close panel">×</button>
+      </header>
+      <div className="panel-scroll-content">
+        {music.panel === "details" && (
+          <dl>
+            <dt>Title</dt><dd>{music.current.title}</dd>
+            <dt>Artist</dt><dd>{music.current.artistName || "Unknown"}</dd>
+            <dt>Album</dt><dd>{music.current.albumTitle || "Single"}</dd>
+            <dt>Provider</dt><dd>{music.stream?.candidate?.providerId || music.current.provider || "Automatic"}</dd>
+            <dt>Duration</dt><dd>{time(music.progress.duration)}</dd>
+          </dl>
+        )}
+        {music.panel === "sources" && <SourceContent candidates={music.candidates} select={music.selectCandidate} retry={music.loadCandidates} />}
+        {music.panel === "queue" && <QueuePanel music={music} />}
+        {music.panel === "lyrics" && <LyricsContent lyrics={music.lyrics} />}
+      </div>
+    </aside>
+  );
 }
 
 function QueuePanel({ music }) {

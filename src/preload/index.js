@@ -10,6 +10,7 @@ const electronApi = {
   ...require("./api/updates")(dependencies),
   ...require("./api/tray")(dependencies),
   ...require("./api/music")(dependencies),
+  ...require("./api/googleAuth")(dependencies),
 };
 
 contextBridge.exposeInMainWorld("electron", electronApi);

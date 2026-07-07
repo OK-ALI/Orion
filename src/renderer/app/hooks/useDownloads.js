@@ -35,8 +35,39 @@ export function useDownloads() {
   useEffect(() => {
     if (!window.electron) return undefined;
     const handler = window.electron.onDownloadProgress((update) => {
-      if (update.status === "completed" && storage.get(STORAGE_KEYS.NOTIFY_DOWNLOAD_COMPLETE) !== false && window.electron.showNotification) {
-        window.electron.showNotification({ title: "Download complete", body: update.name || "Your download has finished.", silent: false });
+      if (update.status === "completed") {
+        if (storage.get(STORAGE_KEYS.NOTIFY_DOWNLOAD_COMPLETE) !== false && window.electron.showNotification) {
+          window.electron.showNotification({ title: "Download complete", body: update.name || "Your download has finished.", silent: false });
+        }
+        
+        // Auto-backup to Google Drive if configured
+        const autoBackup = localStorage.getItem("orion_google_auto_backup_media") === "true";
+        const isLoggedIn = localStorage.getItem("orion_google_sync_enabled") !== "false";
+        if (autoBackup && isLoggedIn && update.filePath && window.electron.uploadMediaFile && window.electron.updateDownloadRecord) {
+          setDownloads((previous) => previous.map((download) => download.id === update.id ? { ...download, uploading: true } : download));
+          
+          const dlItem = downloads.find((d) => d.id === update.id);
+          const metadata = dlItem ? {
+            mediaType: dlItem.mediaType,
+            name: dlItem.name,
+            season: dlItem.season
+          } : {
+            mediaType: update.mediaType || "movie",
+            name: update.name || "Unknown Title",
+            season: update.season
+          };
+
+          window.electron.uploadMediaFile(update.filePath, update.name, metadata).then((res) => {
+            if (res?.ok && res.fileId) {
+              window.electron.updateDownloadRecord(update.id, { driveFileId: res.fileId });
+              setDownloads((previous) => previous.map((download) => download.id === update.id ? { ...download, driveFileId: res.fileId, uploading: false } : download));
+            } else {
+              setDownloads((previous) => previous.map((download) => download.id === update.id ? { ...download, uploading: false } : download));
+            }
+          }).catch(() => {
+            setDownloads((previous) => previous.map((download) => download.id === update.id ? { ...download, uploading: false } : download));
+          });
+        }
       }
       setDownloads((previous) => {
         const index = previous.findIndex((download) => download.id === update.id);

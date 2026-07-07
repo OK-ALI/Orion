@@ -5,6 +5,7 @@ import { getPlaybackOwner } from "../../../app/playback/PlaybackCoordinator";
 import { normalizeQueueRecovery, previousQueueTarget, shuffledIndices } from "../utils/queueNavigation";
 import { createVisualBus } from "../visual/musicVisualEngine";
 import { deterministicPalette, extractArtworkPalette } from "../visual/artworkPalette";
+import { useFavoritesStore, usePluginStore, useProvidersStore } from "../stores/musicStores";
 
 const MusicContext = createContext(null);
 
@@ -32,6 +33,10 @@ function clamp(value, minimum, maximum) {
 }
 
 export function MusicProvider({ children }) {
+  const favorites = useFavoritesStore();
+  const plugins = usePluginStore();
+  const providers = useProvidersStore();
+
   const [queue, setQueue] = useState([]);
   const [index, setIndex] = useState(-1);
   const [playing, setPlaying] = useState(false);
@@ -272,11 +277,13 @@ export function MusicProvider({ children }) {
     volume, setVolume, muted, setMuted, toggleMute, repeat, setRepeat, shuffle, setShuffle,
     panel, setPanel, lyrics, loadLyrics, candidates, loadCandidates, selectCandidate,
     playTrack, playNext, playPrevious, selectQueueItem, removeFromQueue, moveQueueItem, seekTo, seekBy,
-    stop, retryStream, engineRef, visualBus, visualPreferences, artwork, immersive, setImmersive }),
+    stop, retryStream, engineRef, visualBus, visualPreferences, artwork, immersive, setImmersive,
+    favorites, plugins, providers }),
   [buffered, candidates, current, index, loadCandidates, loadLyrics, lyrics, muted, panel,
     playNext, playPrevious, playTrack, playbackStatus, playing, progress, queue, removeFromQueue, moveQueueItem,
     repeat, retryStream, seekBy, seekTo, selectCandidate, selectQueueItem, setVolume, shuffle,
-    stop, stream, toggleMute, togglePlaying, volume, visualBus, visualPreferences, artwork, immersive]);
+    stop, stream, toggleMute, togglePlaying, volume, visualBus, visualPreferences, artwork, immersive,
+    favorites, plugins, providers]);
 
   return <MusicContext.Provider value={value}>{children}<AudioEngine controller={value} /></MusicContext.Provider>;
 }

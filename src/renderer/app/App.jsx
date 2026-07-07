@@ -15,13 +15,14 @@ import {
   applyTheme,
   ACCENT_PRESETS,
 } from "../shared/utils/appearance";
-import { collectCompleteBackupData } from "../services/backup";
+import { collectCompleteBackupData, restoreCompleteBackupData } from "../services/backup";
 import { playPortalSound } from "../features/music/services/portalSound";
 import { tmdbFetch } from "../services/tmdb";
 import { clearAppCaches } from "../services/settingsStore";
 
 import Sidebar from "../components/layout/Sidebar";
 import SetupScreen from "../components/setup/SetupScreen";
+import GoogleLoginOverlay from "../components/setup/GoogleLoginOverlay";
 import "../styles/mini-player.css";
 
 import { checkForUpdates } from "../shared/utils/updates";
@@ -76,6 +77,142 @@ export default function App() {
 
   // Navigation history stack for Ctrl+Z back navigation
   const [navStack, setNavStack] = useState([]);
+
+  // Google Auth Locker States
+  const [googleProfile, setGoogleProfile] = useState(null);
+  const [googleLoading, setGoogleLoading] = useState(true);
+  const [authSkipped, setAuthSkipped] = useState(() => !!storage.get("google_auth_skipped"));
+  const [syncMessage, setSyncMessage] = useState(null);
+  const lastUploadedDataRef = useRef("");
+
+  // What's New Overlay States & Hooks
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
+
+  useEffect(() => {
+    if (window.electron?.getAppVersion) {
+      window.electron.getAppVersion().then((version) => {
+        const lastSeen = localStorage.getItem("orion_whats_new_seen_version");
+        if (lastSeen !== version) {
+          setShowWhatsNew(true);
+          setAppVersion(version);
+        }
+      });
+    }
+  }, []);
+
+  const dismissWhatsNew = () => {
+    setShowWhatsNew(false);
+    if (appVersion) {
+      localStorage.setItem("orion_whats_new_seen_version", appVersion);
+    }
+  };
+
+  const setupSyncFromWhatsNew = () => {
+    dismissWhatsNew();
+    navigate("settings");
+  };
+
+  const syncFromCloud = useCallback(async () => {
+    if (!window.electron?.downloadSync) return false;
+    try {
+      const syncEnabled = localStorage.getItem("orion_google_sync_enabled") !== "false";
+      if (!syncEnabled) return false;
+
+      const syncRes = await window.electron.downloadSync();
+      if (syncRes?.ok && syncRes.data) {
+        const cloudData = syncRes.data;
+        const cloudTimestamp = cloudData.timestamp ? new Date(cloudData.timestamp).getTime() : 0;
+
+        const localLastSyncStr = localStorage.getItem("orion_google_last_sync_time");
+        const localLastSyncTime = localLastSyncStr ? new Date(localLastSyncStr).getTime() : 0;
+
+        // If cloud timestamp is newer or local is wiped/fresh:
+        if (cloudTimestamp > localLastSyncTime || !localLastSyncStr) {
+          await restoreCompleteBackupData(cloudData);
+          if (cloudData.timestamp) {
+            localStorage.setItem("orion_google_last_sync_time", cloudData.timestamp);
+          }
+          lastUploadedDataRef.current = JSON.stringify(cloudData);
+          return true;
+        } else {
+          // Local is newer, upload local state to cloud
+          const localData = await collectCompleteBackupData();
+          lastUploadedDataRef.current = JSON.stringify(localData);
+          localData.timestamp = new Date().toISOString();
+          await window.electron.uploadSync(localData);
+          localStorage.setItem("orion_google_last_sync_time", localData.timestamp);
+        }
+      } else {
+        // No cloud backup exists yet. Upload current local data to populate it!
+        const localData = await collectCompleteBackupData();
+        lastUploadedDataRef.current = JSON.stringify(localData);
+        localData.timestamp = new Date().toISOString();
+        await window.electron.uploadSync(localData);
+        localStorage.setItem("orion_google_last_sync_time", localData.timestamp);
+      }
+    } catch (err) {
+      console.error("Sync download/upload failed:", err);
+    }
+    return false;
+  }, []);
+
+  useEffect(() => {
+    async function initGoogleAndSync() {
+      if (!window.electron?.getProfile) {
+        setGoogleLoading(false);
+        return;
+      }
+      try {
+        const res = await window.electron.getProfile();
+        if (res?.ok && res.profile) {
+          setGoogleProfile(res.profile);
+          storage.remove("google_auth_skipped");
+          setSyncMessage("Synchronizing Cloud Profile...");
+          await syncFromCloud();
+        }
+      } catch (err) {
+        console.error("Google Auth / Sync failed during startup:", err);
+      } finally {
+        setSyncMessage(null);
+        setGoogleLoading(false);
+      }
+    }
+
+    initGoogleAndSync();
+  }, [syncFromCloud]);
+
+  useEffect(() => {
+    if (!googleProfile) return undefined;
+    
+    const intervalId = setInterval(async () => {
+      const syncEnabled = localStorage.getItem("orion_google_sync_enabled") !== "false";
+      if (!syncEnabled) return;
+
+      try {
+        const localData = await collectCompleteBackupData();
+        const serialized = JSON.stringify(localData);
+
+        if (!lastUploadedDataRef.current) {
+          lastUploadedDataRef.current = serialized;
+          return;
+        }
+
+        if (serialized !== lastUploadedDataRef.current) {
+          lastUploadedDataRef.current = serialized;
+          localData.timestamp = new Date().toISOString();
+          if (window.electron?.uploadSync) {
+            await window.electron.uploadSync(localData);
+            localStorage.setItem("orion_google_last_sync_time", localData.timestamp);
+          }
+        }
+      } catch (err) {
+        console.error("Auto-sync interval failed:", err);
+      }
+    }, 45000);
+
+    return () => clearInterval(intervalId);
+  }, [googleProfile]);
 
   const [toast, setToast] = useState(null);
   const {
@@ -655,10 +792,87 @@ export default function App() {
     <ErrorBoundary>
       <div className="app-shell">
         {hasCustomTitlebar && <WindowTitlebar network={network} />}
-        <div className="app-body">{content}</div>
+        <div className="app-body">
+          {syncMessage ? (
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              flex: 1,
+              gap: 20,
+              color: "var(--text)",
+              height: "100%",
+              background: "radial-gradient(circle at center, #0f0f1b 0%, #050508 100%)",
+              position: "relative",
+              overflow: "hidden"
+            }}>
+              <div style={{
+                position: "absolute",
+                width: "300px",
+                height: "300px",
+                background: "radial-gradient(circle, rgba(229, 9, 20, 0.08) 0%, rgba(0,0,0,0) 70%)",
+                filter: "blur(50px)",
+                pointerEvents: "none"
+              }} />
+              <div 
+                style={{
+                  width: 38,
+                  height: 38,
+                  border: "3px solid rgba(255, 255, 255, 0.06)",
+                  borderTopColor: "var(--accent)",
+                  borderRadius: "50%",
+                  animation: "spin 0.8s linear infinite",
+                  zIndex: 2
+                }} 
+              />
+              <div style={{ 
+                fontFamily: "var(--font-display), sans-serif",
+                fontSize: 16, 
+                fontWeight: 600, 
+                letterSpacing: 0.5,
+                color: "var(--text)",
+                zIndex: 2
+              }}>
+                {syncMessage}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text3)", zIndex: 2 }}>
+                Please wait while we set up your workspace...
+              </div>
+            </div>
+          ) : content}
+        </div>
       </div>
     </ErrorBoundary>
   );
+
+  if (googleLoading) return standaloneShell(null);
+  if (!googleProfile && !authSkipped)
+    return standaloneShell(
+      <GoogleLoginOverlay 
+        onLoginSuccess={async (profile) => {
+          setGoogleLoading(true);
+          setSyncMessage("Connecting to Google Drive...");
+          storage.remove("google_auth_skipped");
+          setAuthSkipped(false);
+          setGoogleProfile(profile);
+          const restored = await syncFromCloud();
+          if (restored) {
+            setSyncMessage("Restoring Settings & Watchlist...");
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          } else {
+            setSyncMessage(null);
+            setGoogleLoading(false);
+          }
+        }} 
+        onSkip={() => {
+          storage.set("google_auth_skipped", true);
+          setAuthSkipped(true);
+        }}
+      />
+    );
 
   if (!apiKeyLoaded) return standaloneShell(null);
   if (!apiKey && !skipped)
@@ -672,7 +886,13 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className={`app-shell${String(page).startsWith("music-") ? " music-world" : ""}`}>
-        {hasCustomTitlebar && <WindowTitlebar network={network} />}
+        {hasCustomTitlebar && (
+          <WindowTitlebar 
+            network={network} 
+            googleProfile={googleProfile} 
+            onNavigate={navigate} 
+          />
+        )}
         <div className="app-body">
         <Sidebar
           activePage={page}
@@ -686,6 +906,7 @@ export default function App() {
           canGoBack={navStack.length > 0}
           onBack={navigateBack}
           onShowShortcuts={() => setShowShortcuts(true)}
+          googleProfile={googleProfile}
         />
 
         <main className="app-content">
@@ -729,6 +950,7 @@ export default function App() {
           saveProgress, selected, setDlSearchOpen, setDownloads, setHighlightDownload,
           setLibrarySort, setMiniPlayer: handleOpenMiniPlayer, toggleSave, trending, trendingTV, watched,
           onPlaybackSession: handlePlaybackSession,
+          googleProfile,
         }} />
         </main>
         <MusicPlayerBar page={page} onNavigate={navigate} />
@@ -745,7 +967,109 @@ export default function App() {
           expandedLocalDownload, setExpandedLocalDownload, addHistory,
           handleDeleteDownload,
         }} />
-        {worldTransition && <div className={`music-world-transition ${worldTransition}`} aria-hidden="true" />}
+         {worldTransition && <div className={`music-world-transition ${worldTransition}`} aria-hidden="true" />}
+
+        {showWhatsNew && (
+          <div className="close-confirm-overlay" style={{ zIndex: 9999999 }}>
+            <div className="close-confirm-modal" style={{ 
+              background: "rgba(20, 20, 20, 0.85)", 
+              backdropFilter: "blur(25px)", 
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              padding: "32px 28px",
+              borderRadius: 16,
+              maxWidth: 480,
+              width: "90%",
+              textAlign: "center"
+            }}>
+              {/* Header */}
+              <div style={{ display: "inline-flex", padding: "6px 12px", background: "rgba(0, 168, 255, 0.12)", border: "1px solid rgba(0, 168, 255, 0.2)", borderRadius: 999, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, color: "#00a8ff", marginBottom: 16 }}>
+                ✨ Update Installed
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 6 }}>
+                What's New in Orion
+              </div>
+              <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 28 }}>
+                Version {appVersion} — Google Cloud Integration
+              </div>
+
+              {/* Feature list */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, textAlign: "left", marginBottom: 32 }}>
+                
+                <div style={{ display: "flex", gap: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 8, background: "rgba(0, 168, 255, 0.08)", border: "1px solid rgba(0, 168, 255, 0.15)", color: "#00a8ff", flexShrink: 0 }}>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                      <circle cx="8.5" cy="7" r="4"/>
+                      <polyline points="17 11 19 13 23 9"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 3 }}>
+                      Multi-Device Cloud Sync
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.4 }}>
+                      Your watchlists, history, custom playlists, and system configurations are automatically synchronized across all your devices.
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 8, background: "rgba(0, 168, 255, 0.08)", border: "1px solid rgba(0, 168, 255, 0.15)", color: "#00a8ff", flexShrink: 0 }}>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 3 }}>
+                      Google Drive Media Locker
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.4 }}>
+                      Backup video downloads into a structured Movie/Series directory tree on Drive. Offload local copies to stream on-demand with Range Seek support.
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 8, background: "rgba(0, 168, 255, 0.08)", border: "1px solid rgba(0, 168, 255, 0.15)", color: "#00a8ff", flexShrink: 0 }}>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                      <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                      <line x1="6" y1="6" x2="6.01" y2="6"/>
+                      <line x1="6" y1="18" x2="6.01" y2="18"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 3 }}>
+                      Storage Quota Indicators
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.4 }}>
+                      Monitor your Google Drive quota via a high-end storage meter inside settings that warns in red when storage is near full.
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: "flex", gap: 12, width: "100%" }}>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={dismissWhatsNew}
+                  style={{ flex: 1, padding: "12px 18px", borderRadius: 8, background: "var(--surface3)", border: "1px solid var(--border)", color: "var(--text)", fontWeight: 600 }}
+                >
+                  Skip for Now
+                </button>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={setupSyncFromWhatsNew}
+                  style={{ flex: 1, padding: "12px 18px", borderRadius: 8, background: "var(--accent)", color: "#fff", border: "none", fontWeight: 600 }}
+                >
+                  Set Up Sync
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </ErrorBoundary>
   );

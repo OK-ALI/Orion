@@ -67,14 +67,14 @@ export default function MusicVisualizer({ variant = "orbit", interactive = false
       const bins = frame.bins || [];
       if (!bins.length || music.visualPreferences.visualizer === "off") return;
       const intensity = Math.max(0, Math.min(1, music.visualPreferences.intensity / 100));
-      const surface = canvas.closest(".music-observatory, .music-listening-orbit, .music-player-bar");
+      const surface = canvas.closest(".music-core-page, .music-core-stage, .music-listening-orbit, .music-player-bar, .glass-music-player");
       surface?.style.setProperty("--music-bass", String(frame.bass * intensity));
       surface?.style.setProperty("--music-mids", String(frame.mids * intensity));
       surface?.style.setProperty("--music-treble", String(frame.treble * intensity));
       surface?.style.setProperty("--music-energy", String(frame.energy * intensity));
       const styles = window.getComputedStyle(canvas);
-      const primaryVar = styles.getPropertyValue("--music-reactive-primary").trim() || styles.getPropertyValue("--music-violet").trim();
-      const spectralVar = styles.getPropertyValue("--music-reactive-spectral").trim() || styles.getPropertyValue("--music-cyan").trim();
+      const primaryVar = styles.getPropertyValue("--mp-primary").trim() || styles.getPropertyValue("--music-reactive-primary").trim() || styles.getPropertyValue("--music-violet").trim();
+      const spectralVar = styles.getPropertyValue("--mp-spectral").trim() || styles.getPropertyValue("--music-reactive-spectral").trim() || styles.getPropertyValue("--music-cyan").trim();
       const primary = resolveColor(primaryVar);
       const spectral = resolveColor(spectralVar);
       context.lineWidth = Math.max(1.4, ratio * 1.4);

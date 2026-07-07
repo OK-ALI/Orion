@@ -17,11 +17,16 @@ export default defineConfig(({ mode }) => {
           drop_console: isDist,
           drop_debugger: isDist,
         },
+        // Preserve ES6 class semantics so Three.js classes aren't
+        // transpiled into plain functions (which breaks R3F).
+        keep_classnames: true,
+        keep_fnames: true,
       },
       rollupOptions: {
         output: {
           manualChunks: {
             react: ["react", "react-dom"],
+            three: ["three", "@react-three/fiber"],
           },
         },
       },
