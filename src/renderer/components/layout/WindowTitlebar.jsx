@@ -14,6 +14,7 @@ export default function WindowTitlebar({
 }) {
   const [maximized, setMaximized] = useState(false);
   const [battery, setBattery] = useState(null);
+  const [showProfileCard, setShowProfileCard] = useState(false);
 
   useEffect(() => {
     if (!window.electron) return;
@@ -64,17 +65,17 @@ export default function WindowTitlebar({
             {battery.charging && <span aria-hidden="true">⚡</span>}
           </div>
         )}
-        {googleProfile && (() => {
-          const [showProfileCard, setShowProfileCard] = useState(false);
-          return (
-            <div style={{ position: "relative", display: "inline-block", height: 22 }}>
+        {googleProfile && (
+            <div style={{ position: "relative", display: "flex", alignItems: "center", height: "100%" }}>
               <button
-                className="titlebar-btn titlebar-no-drag"
+                className="titlebar-no-drag"
                 style={{
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   padding: 0,
+                  width: 22,
+                  height: 22,
                   borderRadius: "50%",
                   border: "none",
                   background: "none",
@@ -124,15 +125,15 @@ export default function WindowTitlebar({
                   className="titlebar-no-drag"
                   style={{
                     position: "absolute",
-                    top: "28px",
+                    top: "34px",
                     right: 6,
                     width: 230,
-                    background: "rgba(22, 22, 22, 0.95)",
+                    background: "var(--surface-translucent)",
                     backdropFilter: "blur(20px)",
                     border: "1px solid var(--border)",
                     borderRadius: 10,
                     padding: "16px 14px",
-                    boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+                    boxShadow: "0 10px 30px var(--shadow-color)",
                     zIndex: 9999999,
                     textAlign: "center",
                     display: "flex",
@@ -153,7 +154,7 @@ export default function WindowTitlebar({
                         height: 50,
                         borderRadius: "50%",
                         border: "2px solid var(--accent)",
-                        boxShadow: "0 0 10px rgba(0, 168, 255, 0.2)"
+                        boxShadow: "0 0 10px var(--accent-glow)"
                       }}
                       referrerPolicy="no-referrer"
                     />
@@ -191,9 +192,9 @@ export default function WindowTitlebar({
                   <div style={{
                     fontSize: 8,
                     fontWeight: 700,
-                    color: "#00a8ff",
-                    background: "rgba(0, 168, 255, 0.08)",
-                    border: "1px solid rgba(0, 168, 255, 0.15)",
+                    color: "var(--accent)",
+                    background: "var(--accent-soft)",
+                    border: "1px solid var(--border-accent)",
                     padding: "3px 8px",
                     borderRadius: 999,
                     textTransform: "uppercase",
@@ -228,8 +229,7 @@ export default function WindowTitlebar({
                 </div>
               )}
             </div>
-          );
-        })()}
+        )}
         <button
           className="titlebar-btn"
           onClick={() => window.electron?.minimize()}

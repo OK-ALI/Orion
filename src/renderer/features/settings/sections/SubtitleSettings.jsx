@@ -358,6 +358,9 @@ export function NotificationsSection() {
   const [batteryOptimization, setBatteryOptimization] = useState(
     () => storage.get(STORAGE_KEYS.BATTERY_OPTIMIZATION) !== false,
   );
+  const [toastPosition, setToastPosition] = useState(
+    () => storage.get(STORAGE_KEYS.TOAST_POSITION) || "bottom-left",
+  );
   const [saved, setSaved] = useState(false);
 
   const saveSettings = () => {
@@ -366,7 +369,9 @@ export function NotificationsSection() {
     storage.set(STORAGE_KEYS.SHOW_BATTERY_STATUS, showBattery);
     storage.set(STORAGE_KEYS.BATTERY_ALERTS, batteryAlerts);
     storage.set(STORAGE_KEYS.BATTERY_OPTIMIZATION, batteryOptimization);
+    storage.set(STORAGE_KEYS.TOAST_POSITION, toastPosition);
     window.dispatchEvent(new CustomEvent("orion:battery-settings-changed"));
+    window.dispatchEvent(new CustomEvent("orion:toast-settings-changed"));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -376,6 +381,41 @@ export function NotificationsSection() {
     storage.set(key, value);
     window.dispatchEvent(new CustomEvent("orion:battery-settings-changed"));
   };
+
+  const SelectRow = ({ label, description, value, onChange, options }) => (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        padding: "16px 0",
+        borderBottom: "1px solid var(--border)",
+      }}
+    >
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>
+          {label}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: "var(--text3)",
+            marginTop: 3,
+            lineHeight: 1.5,
+          }}
+        >
+          {description}
+        </div>
+      </div>
+      <div style={{ width: 180 }}>
+        <SettingsSelect
+          value={value}
+          onChange={onChange}
+          options={options}
+        />
+      </div>
+    </div>
+  );
 
   const ToggleRow = ({ label, description, value, onChange }) => (
     <div
@@ -458,6 +498,20 @@ export function NotificationsSection() {
           description="Reduces visual and download pressure at 20%, and resumably pauses downloads at 10%. Playback continues."
           value={batteryOptimization}
           onChange={(value) => applyBatterySetting(STORAGE_KEYS.BATTERY_OPTIMIZATION, setBatteryOptimization, value)}
+        />
+        <SelectRow
+          label="In-app notification position"
+          description="Choose where toast popups appear on screen (e.g. bottom-left, top-right, etc.)."
+          value={toastPosition}
+          onChange={setToastPosition}
+          options={[
+            { value: "bottom-left", label: "Bottom Left" },
+            { value: "bottom-right", label: "Bottom Right" },
+            { value: "top-left", label: "Top Left" },
+            { value: "top-right", label: "Top Right" },
+            { value: "bottom-center", label: "Bottom Center" },
+            { value: "top-center", label: "Top Center" },
+          ]}
         />
       </div>
 

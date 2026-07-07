@@ -105,10 +105,12 @@
 
 
 /* Legacy now playing styles removed */
-.sidebar-world-switch { min-height: 46px; display: flex; align-items: center; gap: 12px; margin: 2px 8px 8px; padding: 6px 13px; overflow: hidden; color: var(--music-cyan); border: 1px solid var(--music-border); border-radius: 13px; background: linear-gradient(100deg, color-mix(in srgb, var(--music-violet) 14%, transparent), transparent); cursor: pointer; white-space: nowrap; }
+.sidebar-world-switch { min-height: 46px; display: flex; align-items: center; gap: 12px; margin: 2px 8px 8px; padding: 6px 13px; overflow: hidden; color: var(--music-cyan); border: 1px solid var(--music-border); border-radius: 13px; background: linear-gradient(100deg, color-mix(in srgb, var(--music-violet) 14%, transparent), transparent); cursor: pointer; white-space: nowrap; transition: all var(--duration-normal) var(--ease-out); }
+.sidebar-world-switch:hover { border-color: var(--music-cyan); box-shadow: 0 0 14px color-mix(in srgb, var(--music-cyan) 30%, transparent), inset 0 1px 1px color-mix(in srgb, var(--music-cyan) 15%, transparent); }
 .sidebar-world-orbit { width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center; transition: transform var(--duration-slow) var(--ease-out); }
 .sidebar-world-switch:hover .sidebar-world-orbit { transform: rotate(18deg) scale(1.1); }
 .sidebar-world-switch.music-active { color: var(--cinema-gold); border-color: color-mix(in srgb, var(--cinema-gold) 30%, var(--border)); }
+.sidebar-world-switch.music-active:hover { border-color: var(--cinema-gold); box-shadow: 0 0 14px color-mix(in srgb, var(--cinema-gold) 35%, transparent), inset 0 1px 1px color-mix(in srgb, var(--cinema-gold) 20%, transparent); background: linear-gradient(100deg, color-mix(in srgb, var(--cinema-gold) 14%, transparent), transparent); }
 .music-world-transition {
   position: fixed;
   z-index: 20000;

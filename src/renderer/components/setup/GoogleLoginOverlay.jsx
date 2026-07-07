@@ -81,7 +81,7 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
         left: 0,
         right: 0,
         bottom: 0,
-        background: "radial-gradient(circle at center, #0f0f1b 0%, #050508 100%)",
+        background: "radial-gradient(circle at center, var(--bg-elevated) 0%, var(--bg-base) 100%)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -97,7 +97,7 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
           left: "-10%",
           width: "60vw",
           height: "60vw",
-          background: "radial-gradient(circle, rgba(229, 9, 20, 0.12) 0%, rgba(229, 9, 20, 0) 70%)",
+          background: "radial-gradient(circle, var(--accent-soft) 0%, transparent 70%)",
           filter: "blur(90px)",
           pointerEvents: "none",
         }}
@@ -109,7 +109,7 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
           right: "-10%",
           width: "60vw",
           height: "60vw",
-          background: "radial-gradient(circle, rgba(79, 70, 229, 0.12) 0%, rgba(79, 70, 229, 0) 70%)",
+          background: "radial-gradient(circle, color-mix(in srgb, var(--accent) 8%, transparent) 0%, transparent 70%)",
           filter: "blur(90px)",
           pointerEvents: "none",
         }}
@@ -121,13 +121,13 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
           position: "relative",
           width: "100%",
           maxWidth: 460,
-          background: "rgba(18, 18, 28, 0.8)",
-          backdropFilter: "blur(24px)",
-          WebkitBackdropFilter: "blur(24px)",
-          border: "1px solid rgba(255, 255, 255, 0.08)",
+          background: "var(--glass-bg)",
+          backdropFilter: "blur(var(--glass-blur))",
+          WebkitBackdropFilter: "blur(var(--glass-blur))",
+          border: "1px solid var(--glass-border)",
           borderRadius: 24,
           padding: "48px 40px",
-          boxShadow: "0 24px 60px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.15)",
+          boxShadow: "0 24px 60px var(--shadow-color), inset 0 1px 1px var(--glass-border)",
           textAlign: "center",
           zIndex: 10,
         }}
@@ -183,7 +183,7 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
                 borderRadius: 12,
                 background: "var(--accent)",
                 color: "#ffffff",
-                boxShadow: "0 4px 16px rgba(229, 9, 20, 0.2)",
+                boxShadow: "0 4px 16px var(--accent-glow)",
               }}
             >
               {isLoggingIn ? (
@@ -207,8 +207,8 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
         ) : (
           <div
             style={{
-              background: "rgba(229, 9, 20, 0.05)",
-              border: "1px solid rgba(229, 9, 20, 0.15)",
+              background: "var(--danger-soft)",
+              border: "1px solid color-mix(in srgb, var(--danger) 30%, transparent)",
               borderRadius: 12,
               padding: "16px 20px",
               color: "var(--text3)",
@@ -232,7 +232,7 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
                 width: "100%",
                 padding: "10px 24px",
                 fontSize: 13,
-                color: "var(--red)",
+                color: "var(--danger)",
                 borderRadius: 12,
               }}
             >
@@ -268,8 +268,8 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                background: "rgba(255, 255, 255, 0.02)",
-                border: "1px solid rgba(255, 255, 255, 0.05)",
+                background: "var(--bg-hover)",
+                border: "1px solid var(--border)",
                 borderRadius: 8,
               }}
               onClick={() => setShowConfig(!showConfig)}
@@ -282,8 +282,8 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
               <form
                 onSubmit={handleSaveConfig}
                 style={{
-                  background: "rgba(0, 0, 0, 0.2)",
-                  border: "1px solid rgba(255, 255, 255, 0.04)",
+                  background: "var(--bg-input)",
+                  border: "1px solid var(--border)",
                   borderRadius: 12,
                   padding: "18px 20px",
                   marginTop: 12,
@@ -334,10 +334,10 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
           <div
             style={{
               fontSize: 12,
-              color: "var(--red)",
+              color: "var(--danger)",
               marginTop: 20,
-              background: "rgba(229, 9, 20, 0.08)",
-              border: "1px solid rgba(229, 9, 20, 0.2)",
+              background: "var(--danger-soft)",
+              border: "1px solid color-mix(in srgb, var(--danger) 30%, transparent)",
               borderRadius: 10,
               padding: "12px 16px",
               textAlign: "left",

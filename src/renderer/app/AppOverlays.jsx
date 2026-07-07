@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import KeyboardShortcutsModal from "../components/KeyboardShortcutsModal";
 import SearchModal from "../components/modals/SearchModal";
 import UpdateModal from "../components/UpdateModal";
@@ -16,6 +17,21 @@ export default function AppOverlays({ model }) {
     showShortcuts, showUpdateModal, toast, updateBanner, saveProgress, markWatched,
     expandedLocalDownload, setExpandedLocalDownload, addHistory, handleDeleteDownload,
   } = model;
+
+  const [toastPosition, setToastPosition] = useState(
+    () => storage.get(STORAGE_KEYS.TOAST_POSITION) || "bottom-left"
+  );
+
+  useEffect(() => {
+    const handleSettingsChanged = () => {
+      setToastPosition(storage.get(STORAGE_KEYS.TOAST_POSITION) || "bottom-left");
+    };
+    window.addEventListener("orion:toast-settings-changed", handleSettingsChanged);
+    return () => {
+      window.removeEventListener("orion:toast-settings-changed", handleSettingsChanged);
+    };
+  }, []);
+
   return (
     <>
         <SearchModal
@@ -87,7 +103,7 @@ export default function AppOverlays({ model }) {
             onClose={() => setShowUpdateModal(false)}
           />
         )}
-        {toast && <div className="toast">{toast}</div>}
+        {toast && <div className={`toast position-${toastPosition}`}>{toast}</div>}
         {miniTransition && (
           <div
             className="orion-mini-transition"

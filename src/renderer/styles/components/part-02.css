@@ -401,8 +401,6 @@
 
 .toast {
     position: fixed;
-    bottom: 24px;
-    left: calc(var(--sidebar) + 24px);
     z-index: 500;
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -411,18 +409,95 @@
     border-radius: var(--radius);
     font-size: 14px;
     box-shadow: 0 8px 20px color-mix(in srgb, var(--bg) 45%, transparent);
-    animation: slideUp 0.3s ease;
+
+    /* Default position styles (bottom-left) */
+    bottom: 24px;
+    left: calc(var(--sidebar) + 24px);
+    top: auto;
+    right: auto;
+    --toast-tx: 0%;
+    animation: toastSlideUp 0.3s ease;
 }
 
-@keyframes slideUp {
+.toast.position-bottom-left {
+    bottom: 24px;
+    left: calc(var(--sidebar) + 24px);
+    top: auto;
+    right: auto;
+    transform: none;
+    --toast-tx: 0%;
+    animation: toastSlideUp 0.3s ease;
+}
+
+.toast.position-bottom-right {
+    bottom: 24px;
+    right: 24px;
+    left: auto;
+    top: auto;
+    transform: none;
+    --toast-tx: 0%;
+    animation: toastSlideUp 0.3s ease;
+}
+
+.toast.position-top-left {
+    top: calc(var(--titlebar-height) + 24px);
+    left: calc(var(--sidebar) + 24px);
+    bottom: auto;
+    right: auto;
+    transform: none;
+    --toast-tx: 0%;
+    animation: toastSlideDown 0.3s ease;
+}
+
+.toast.position-top-right {
+    top: calc(var(--titlebar-height) + 24px);
+    right: 24px;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    --toast-tx: 0%;
+    animation: toastSlideDown 0.3s ease;
+}
+
+.toast.position-bottom-center {
+    bottom: 24px;
+    left: calc(50% + var(--sidebar) / 2);
+    transform: translateX(-50%);
+    top: auto;
+    right: auto;
+    --toast-tx: -50%;
+    animation: toastSlideUp 0.3s ease;
+}
+
+.toast.position-top-center {
+    top: calc(var(--titlebar-height) + 24px);
+    left: calc(50% + var(--sidebar) / 2);
+    transform: translateX(-50%);
+    bottom: auto;
+    right: auto;
+    --toast-tx: -50%;
+    animation: toastSlideDown 0.3s ease;
+}
+
+@keyframes toastSlideUp {
     from {
         opacity: 0;
-        transform: translateY(16px);
+        transform: translateY(16px) translateX(var(--toast-tx, 0%));
     }
-
     to {
         opacity: 1;
-        transform: translateY(0);
+        transform: translateY(0) translateX(var(--toast-tx, 0%));
+    }
+}
+
+@keyframes toastSlideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-16px) translateX(var(--toast-tx, 0%));
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) translateX(var(--toast-tx, 0%));
     }
 }
 

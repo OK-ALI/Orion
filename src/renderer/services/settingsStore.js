@@ -110,6 +110,7 @@ export const STORAGE_KEYS = {
   MUSIC_STATIC_BG: "musicStaticBg",
   MUSIC_PARTICLE_DENSITY: "musicParticleDensity",
   MUSIC_BATTERY_SAVER: "musicBatterySaver",
+  TOAST_POSITION: "toastPosition",
 };
 
 export const storage = {
