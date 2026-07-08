@@ -1,6 +1,6 @@
 {
   "name": "orion",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Orion — A Multiverse of Stories",
   "author": "Orion",
   "license": "GPL-3.0",
@@ -78,6 +78,7 @@
       "preload.js",
       "popout-preload.js",
       "package.json",
+      ".env",
       "!**/*.map",
       "!**/node_modules/.cache/**",
       "!**/node_modules/vite/**",

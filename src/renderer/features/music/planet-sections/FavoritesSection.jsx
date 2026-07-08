@@ -1,5 +1,5 @@
-import React from 'react';
-import MoonTrackList from '../components/MoonTrackList';
+import React from "react";
+import MusicTrackList from "../components/MusicTrackList";
 
 export default function FavoritesSection({ tracks = [] }) {
   return (
@@ -10,7 +10,7 @@ export default function FavoritesSection({ tracks = [] }) {
           <h2>Favorites</h2>
         </div>
       </div>
-      <MoonTrackList tracks={tracks} empty="Favorite tracks will gather here." />
+      <MusicTrackList tracks={tracks} layout="grid" empty="Favorite tracks will gather here." />
     </section>
   );
 }

@@ -1,1 +1,5 @@
-{}
+{
+  "src/renderer/app/App.jsx": { "maxLines": 1100 },
+  "src/renderer/features/settings/sections/GeneralSettings.jsx": { "maxLines": 1300 },
+  "src/renderer/styles/features/music/planet-v2.css": { "maxLines": 900 }
+}

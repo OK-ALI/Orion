@@ -9,13 +9,10 @@ const { safeCandidate } = require("../../../src/main/music/providers/ytdlp");
 const { applyMigrations } = require("../../../src/main/music/migrations");
 const providerRegistry = require("../../../src/main/music/providers/registry");
 const { catalog: pluginCatalog } = require("../../../src/main/music/plugins/catalog");
-const { aggregateSearch } = require("../../../src/main/music/providers/omnisource");
 const { candidateScore } = require("../../../src/main/music/playback/streamResolver");
 const { portableValue } = require("../../../src/main/music/database");
 const { parseJsonPlaylist, parseM3uPlaylist, serializeJsonPlaylist,
   serializeM3uPlaylist } = require("../../../src/main/music/library/playlistFiles");
-const { createClient: createSubsonicClient, friendlyError: subsonicError,
-  normalizeAlbum: normalizeSubsonicAlbum, normalizeTrack: normalizeSubsonicTrack } = require("../../../src/main/music/providers/subsonic");
 
 test("music provider kinds mirror the capability host boundary", () => {
   assert.deepEqual(Object.values(MUSIC_PROVIDER_KINDS), [
@@ -108,39 +105,7 @@ test("curated plugin catalog mirrors Nuclear capability coverage without loading
   assert.equal(pluginCatalog.some((plugin) => /nuclear-plugin/.test(plugin.id)), false);
 });
 
-test("OmniSource ranks exact matches and merges provider references", () => {
-  const result = aggregateSearch([
-    { providerId: "discogs-metadata", value: { tracks: [{ id: "d", title: "Orbit", artistName: "Orion" }] } },
-    { providerId: "musicbrainz-metadata", value: { tracks: [{ id: "m", title: "Orbit", artistName: "Orion" }, { id: "x", title: "Another Orbit", artistName: "Else" }] } },
-  ], "Orbit Orion");
-  assert.equal(result.value.tracks[0].title, "Orbit");
-  assert.equal(result.value.tracks[0].providerRefs.length, 2);
-});
 
-test("Subsonic catalog values retain private artwork references and playable identities", () => {
-  assert.deepEqual(normalizeSubsonicTrack({ id: "song-1", title: "Signal", artist: "Orion", album: "Pulse",
-    duration: 185, coverArt: "cover-1", contentType: "audio/flac", track: 2 }).source,
-  { provider: "subsonic-metadata", id: "song-1" });
-  const track = normalizeSubsonicTrack({ id: "song-1", title: "Signal", coverArt: "cover-1" });
-  assert.equal(track.providerTrackId, "song-1");
-  assert.equal(track.artworkId, "cover-1");
-  assert.equal(track.artworkUrl, undefined);
-  const album = normalizeSubsonicAlbum({ id: "album-1", name: "Pulse", artist: "Orion", songCount: 9 });
-  assert.equal(album.songCount, 9);
-  assert.equal(album.source.provider, "subsonic-metadata");
-});
-
-test("Subsonic client reports server authentication and malformed responses clearly", async () => {
-  const config = { url: "https://music.example.test", username: "listener", password: "secret" };
-  const denied = createSubsonicClient({ getConfiguration: () => config,
-    fetchImpl: async () => new Response("", { status: 401 }) });
-  await assert.rejects(() => denied.request("ping"), /rejected the saved credentials/i);
-
-  const malformed = createSubsonicClient({ getConfiguration: () => config,
-    fetchImpl: async () => new Response("not-json", { status: 200, headers: { "content-type": "application/json" } }) });
-  await assert.rejects(() => malformed.request("ping"), /invalid response/i);
-  assert.match(subsonicError(429).message, /rate limited/i);
-});
 
 test("portable Music state removes machine paths, signed URLs, and credentials", () => {
   const value = portableValue({ id: "track-1", title: "Signal", filePath: "C:\\Private\\signal.flac",

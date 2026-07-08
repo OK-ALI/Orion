@@ -31,8 +31,18 @@ function candidateScore(track, candidate) {
 function providerOrder(providerId) {
   const preferred = providerId ? registry.get(providerId, "streaming") : registry.getActive("streaming");
   if (providerId) return [preferred].filter(Boolean);
-  return [preferred, ...registry.list("streaming").filter((provider) => provider.id !== preferred?.id)]
-    .filter((provider) => !provider.requiresConfiguration || provider.isConfigured?.());
+  
+  const allProviders = registry.list("streaming");
+  const ordered = [];
+  const saavn = allProviders.find((p) => p.id === "saavn-streaming");
+  if (saavn) ordered.push(saavn);
+  if (preferred && preferred.id !== "saavn-streaming") ordered.push(preferred);
+  for (const provider of allProviders) {
+    if (provider.id !== "saavn-streaming" && (!preferred || provider.id !== preferred.id)) {
+      ordered.push(provider);
+    }
+  }
+  return ordered.filter((provider) => !provider.requiresConfiguration || provider.isConfigured?.());
 }
 
 async function discoverCandidates(track, providerId) {

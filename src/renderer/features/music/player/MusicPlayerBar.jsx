@@ -23,6 +23,8 @@ function Icon({ name }) {
     expand: <><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></>,
     more: <><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></>,
     heart: <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/>,
+    close: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+    sources: <><circle cx="12" cy="12" r="10"/><path d="M12 2a15 15 0 0 0 0 20M2 12h20"/></>,
   };
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
@@ -31,8 +33,20 @@ export default function MusicPlayerBar({ page, onNavigate }) {
   const music = useMusic();
   const [favorite, setFavorite] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [showStuckWarning, setShowStuckWarning] = useState(false);
   const musicWorld = String(page || "").startsWith("music-");
   const compact = !musicWorld;
+
+  useEffect(() => {
+    if (music.playbackStatus === "loading" || music.playbackStatus === "buffering") {
+      const timer = setTimeout(() => {
+        setShowStuckWarning(true);
+      }, 7000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowStuckWarning(false);
+    }
+  }, [music.playbackStatus, music.current?.id]);
 
   useEffect(() => {
     if (!music.current) return;
@@ -122,15 +136,91 @@ export default function MusicPlayerBar({ page, onNavigate }) {
               <button className={`player-btn${favorite ? " active" : ""}`} onClick={toggleFavorite} aria-label="Favorite"><Icon name="heart" /></button>
               <button className="player-btn" onClick={music.toggleMute} aria-label={music.muted ? "Unmute" : "Mute"}><Icon name={music.muted ? "muted" : "volume"} /></button>
               <input className="player-volume-slider" type="range" min="0" max="1" step="0.01" value={music.volume} onChange={(event) => music.setVolume(Number(event.target.value))} />
+              <button className={`player-btn${music.panel === "sources" ? " active" : ""}`} onClick={() => openPanel("sources")} aria-label="Change Source"><Icon name="sources" /></button>
               <button className={`player-btn${music.panel === "lyrics" ? " active" : ""}`} onClick={() => openPanel("lyrics")} aria-label="Lyrics"><Icon name="lyrics" /></button>
               <button className={`player-btn${music.panel === "queue" ? " active" : ""}`} onClick={() => openPanel("queue")} aria-label="Queue"><Icon name="queue" /></button>
             </>
           )}
           <button className="player-btn" onClick={openNowPlaying} aria-label="Expand"><Icon name="expand" /></button>
+          <button className="player-btn" onClick={() => music.stop(true)} aria-label="Close Player"><Icon name="close" /></button>
         </div>
       </div>
       
       {music.panel && !compact && <PlayerPanel music={music} close={() => music.setPanel(null)} />}
+
+      {(showStuckWarning || music.playbackStatus === "error" || music.stream?.error) && !compact && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "90px",
+            left: 0,
+            width: "100%",
+            display: "flex",
+            justifyContent: "center",
+            zIndex: 999,
+            pointerEvents: "none"
+          }}
+        >
+          <div
+            className="player-error-banner"
+            style={{
+              pointerEvents: "auto",
+              background: "rgba" + "(229, 9, 20, 0.15)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              border: "1px solid " + "rgba" + "(229, 9, 20, 0.3)",
+              borderRadius: "20px",
+              padding: "10px 20px",
+              display: "flex",
+              alignItems: "center",
+              gap: "1.5rem",
+              color: "var(--mp-text)",
+              fontSize: "0.9rem",
+              boxShadow: "0 10px 30px " + "rgba" + "(0, 0, 0, 0.5)",
+              animation: "slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "var(--music-danger-red)", display: "inline-block" }} />
+              {music.playbackStatus === "error" || music.stream?.error
+                ? (music.stream?.error || "Signal stream failed to load.")
+                : "Core is taking time to resolve stream..."}
+            </span>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button 
+                onClick={music.retryStream}
+                style={{
+                  background: "rgba" + "(255, 255, 255, 0.08)",
+                  border: "1px solid " + "rgba" + "(255, 255, 255, 0.1)",
+                  borderRadius: "12px",
+                  padding: "4px 12px",
+                  color: "white",
+                  fontSize: "0.8rem",
+                  fontWeight: "600",
+                  cursor: "none"
+                }}
+              >
+                Retry
+              </button>
+              <button 
+                onClick={() => openPanel("sources")}
+                style={{
+                  background: "var(--mp-primary, " + "#" + "7d5fff)",
+                  border: "none",
+                  borderRadius: "12px",
+                  padding: "4px 12px",
+                  color: "white",
+                  fontSize: "0.8rem",
+                  fontWeight: "600",
+                  cursor: "none"
+                }}
+              >
+                Change Source
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

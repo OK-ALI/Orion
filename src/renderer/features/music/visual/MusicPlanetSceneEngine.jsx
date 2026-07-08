@@ -180,7 +180,7 @@ function CoreMesh({ visualBus, starColor, loadingStatus }) {
   });
 
   return (
-    <mesh ref={mesh} position={[0, 0, -5]}>
+    <mesh ref={mesh} position={[0, 0, -7]}>
       {/* High-res sphere for vertex displacement */}
       <sphereGeometry args={[2.5, 128, 128]} />
       <shaderMaterial 
@@ -196,11 +196,32 @@ function CoreMesh({ visualBus, starColor, loadingStatus }) {
   );
 }
 
+function resolveThreeColor(colorStr, fallback) {
+  if (!colorStr || typeof colorStr !== 'string') return fallback;
+  let color = colorStr.trim();
+  
+  if (color.startsWith('var(')) {
+    const varName = color.slice(4, -1).trim();
+    const resolved = typeof window !== 'undefined' ? window.getComputedStyle(document.documentElement).getPropertyValue(varName).trim() : '';
+    color = resolved || fallback;
+  }
+  
+  const srgbMatch = color.match(/color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\)/i);
+  if (srgbMatch) {
+    const r = Math.round(parseFloat(srgbMatch[1]) * 255);
+    const g = Math.round(parseFloat(srgbMatch[2]) * 255);
+    const b = Math.round(parseFloat(srgbMatch[3]) * 255);
+    return 'rg' + 'b(' + r + ', ' + g + ', ' + b + ')';
+  }
+  
+  return color;
+}
+
 export default function MusicPlanetSceneEngine({ sceneState = 'idle-space', visualPreferences = {}, loadingStatus = false }) {
   const { visualBus, artwork } = useMusic();
 
   const sceneConfig = {
-    'idle-space': { color: '#07070b', starColor: '#e6e6e0', fov: 60, speed: 0.05 },
+    'idle-space': { color: '#050508', starColor: '#5c60f5', fov: 60, speed: 0.05 },
     'library': { color: '#0a0a14', starColor: '#7d5fff', fov: 55, speed: 0.1 },
     'playlists': { color: '#050a12', starColor: '#00dcff', fov: 70, speed: 0.08 },
     'albums': { color: '#1a0b12', starColor: '#e50914', fov: 50, speed: 0.15 },
@@ -213,7 +234,9 @@ export default function MusicPlanetSceneEngine({ sceneState = 'idle-space', visu
   const config = sceneConfig[sceneState] || sceneConfig['idle-space'];
   
   // Dynamic color override: blend the star/orb core color with the playing track's artwork palette
-  const effectiveStarColor = artwork?.palette?.primary || config.starColor;
+  const effectiveStarColor = useMemo(() => {
+    return resolveThreeColor(artwork?.palette?.primary || config.starColor, config.starColor);
+  }, [artwork?.palette?.primary, config.starColor]);
   
   // Calculate particle count based on settings
   let count = 2000;

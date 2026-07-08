@@ -5,13 +5,8 @@ const fs = require("fs");
 const { secureStoreGet, secureStoreSet } = require("./storageIpc");
 
 // Scopes: profile, email, openid, hidden appData folder for syncing, and drive.file for media locker
-const SCOPES = [
-  "openid",
-  "profile",
-  "email",
-  "https://www.googleapis.com/auth/drive.appdata",
-  "https://www.googleapis.com/auth/drive.file"
-];
+const SCOPES = ["openid", "profile", "email", "https://www.googleapis.com/auth/drive.appdata", "https://www.googleapis.com/auth/drive.file"];
+
 
 function getAuthResponsePage(isSuccess, title, message, detailText) {
   const iconColor = isSuccess ? "#48c774" : "#f14668";
@@ -262,10 +257,7 @@ async function googleDriveRequest(url, options = {}) {
 
   const reqOptions = {
     ...options,
-    headers: {
-      ...(options.headers || {}),
-      "Authorization": `Bearer ${accessToken}`,
-    }
+    headers: { ...(options.headers || {}), "Authorization": `Bearer ${accessToken}` }
   };
 
   let res = await fetch(url, reqOptions);
@@ -279,9 +271,7 @@ async function googleDriveRequest(url, options = {}) {
         reqOptions.headers["Authorization"] = `Bearer ${newAccessToken}`;
         res = await fetch(url, reqOptions);
       } catch (err) {
-        secureStoreSet("google_access_token", null);
-        secureStoreSet("google_refresh_token", null);
-        secureStoreSet("google_profile", null);
+        ["google_access_token", "google_refresh_token", "google_profile"].forEach(k => secureStoreSet(k, null));
         throw new Error("Google connection expired. Please sign in again.");
       }
     } else {
@@ -710,6 +700,12 @@ function register() {
             secureStoreSet("google_access_token", tokenData.access_token);
             if (tokenData.refresh_token) {
               secureStoreSet("google_refresh_token", tokenData.refresh_token);
+            }
+            if (clientId) {
+              secureStoreSet("google_client_id", clientId);
+            }
+            if (clientSecret) {
+              secureStoreSet("google_client_secret", clientSecret);
             }
 
             const profile = await fetchUserProfile(tokenData.access_token);

@@ -4,13 +4,9 @@ const registry = require("./providers/registry");
 const { createLocalProviders } = require("./providers/local");
 const { createMusicBrainzProvider } = require("./providers/musicbrainz");
 const { createListenBrainzProviders } = require("./providers/listenbrainz");
-const { createSubsonicProviders } = require("./providers/subsonic");
 const { createYtDlpStreamingProvider } = require("./providers/ytdlp");
-const { createDiscogsProvider } = require("./providers/discogs");
-const { createDeezerProviders } = require("./providers/deezer");
+const { createSaavnProviders } = require("./providers/saavn");
 const plugins = require("./plugins/manager");
-const { createYouTubePlaylistProvider } = require("./providers/youtubePlaylists");
-const { createSoundCloudProviders } = require("./providers/soundcloud");
 const { createLrcLibProvider } = require("./providers/lrclib");
 
 function registerScheme() { mediaProtocol.registerScheme(); }
@@ -23,12 +19,14 @@ function registerProviders() {
     "orion-musicbrainz": () => [createMusicBrainzProvider()],
     "orion-youtube": () => [createYtDlpStreamingProvider()],
     "orion-listenbrainz": createListenBrainzProviders,
-    "orion-subsonic": createSubsonicProviders,
-    "orion-discogs": () => [createDiscogsProvider()],
-    "orion-deezer-dashboard": createDeezerProviders,
+    "orion-saavn": createSaavnProviders,
     "orion-lrclib": () => [createLrcLibProvider()],
-    "orion-youtube-playlists": () => [createYouTubePlaylistProvider()],
-    "orion-soundcloud": createSoundCloudProviders,
+    "orion-deezer-dashboard": () => [],
+    "orion-subsonic": () => [],
+    "orion-soundcloud": () => [],
+    "orion-discogs": () => [],
+    "orion-youtube-playlists": () => [],
+    "orion-khinsider": () => [],
   });
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import MusicArtwork from "../components/MusicArtwork";
-import MoonTrackList from "../components/MoonTrackList";
+import MusicTrackList from "../components/MusicTrackList";
 
 export default function AlbumPage({ selected, onNavigate }) {
   const [details, setDetails] = useState({ status: "idle", album: selected });
@@ -21,5 +21,5 @@ export default function AlbumPage({ selected, onNavigate }) {
   if (!details.album) return <div className="music-page"><div className="music-empty"><h2>Signal lost</h2><p>The album data is unavailable.</p></div></div>;
   return <div className="music-page music-album-page"><header className="music-page-header"><div><span className="music-eyebrow">{details.album.provider || "Library"}</span><h1>{details.album.title || details.album.name}</h1><p>{details.album.artistName}</p><p className="music-muted">{details.album.year || ""}</p></div><MusicArtwork className="music-album-art" track={details.album} label={`Artwork for ${details.album.title}`} /></header>
     {details.status === "error" && <div className="music-provider-warning">{details.error}</div>}
-    <section className="music-section"><div className="music-section-heading"><div><span>{tracks.length || 0} tracks</span><h2>Tracklist</h2></div></div><MoonTrackList tracks={tracks} empty={details.status === "loading" ? "Mapping this release…" : "This source has not returned an album tracklist yet."} /></section></div>;
+    <section className="music-section"><div className="music-section-heading"><div><span>{tracks.length || 0} tracks</span><h2>Tracklist</h2></div></div><MusicTrackList tracks={tracks} layout="list" empty={details.status === "loading" ? "Mapping this release…" : "This source has not returned an album tracklist yet."} /></section></div>;
 }

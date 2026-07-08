@@ -11,8 +11,21 @@ function time(value) {
 export default function NowPlayingPage({ onNavigate }) {
   const music = useMusic();
   const [panel, setPanel] = useState("queue");
+  const [showStuckWarning, setShowStuckWarning] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideTimer = useRef(null);
+
+  useEffect(() => {
+    if (music.playbackStatus === "loading" || music.playbackStatus === "buffering") {
+      const timer = setTimeout(() => {
+        setShowStuckWarning(true);
+      }, 7000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowStuckWarning(false);
+    }
+  }, [music.playbackStatus, music.current?.id]);
+
   useEffect(() => {
     if (panel === "lyrics" && music.lyrics.status === "idle") music.loadLyrics();
     if (panel === "source" && music.candidates.status === "idle") music.loadCandidates();
@@ -51,6 +64,41 @@ export default function NowPlayingPage({ onNavigate }) {
         <button onClick={() => music.setRepeat(music.repeat === "off" ? "all" : music.repeat === "all" ? "one" : "off")} className={music.repeat !== "off" ? "active" : ""} aria-label="Toggle repeat">Repeat {music.repeat}</button>
       </div>
       <div className="music-core-timeline"><span>{time(music.progress.currentTime)}</span><div><span style={{ width: `${music.buffered * 100}%` }} /><MusicVisualizer variant="timeline" /><input aria-label="Seek music" type="range" min="0" max={music.progress.duration || 1} step="0.1" value={Math.min(music.progress.currentTime, music.progress.duration || 1)} onChange={(event) => music.seekTo(Number(event.target.value))} /></div><span>-{time(remaining)}</span></div>
+      
+      {(showStuckWarning || music.playbackStatus === "error" || music.stream?.error) && (
+        <div style={{ display: "flex", justifyContent: "center", width: "100%", marginTop: "1rem" }}>
+          <div
+            className="player-error-banner"
+            style={{
+              background: "rgba" + "(229, 9, 20, 0.15)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              border: "1px solid " + "rgba" + "(229, 9, 20, 0.3)",
+              borderRadius: "20px",
+              padding: "8px 16px",
+              display: "flex",
+              alignItems: "center",
+              gap: "1rem",
+              color: "var(--mp-text)",
+              fontSize: "0.85rem",
+              boxShadow: "0 10px 30px " + "rgba" + "(0, 0, 0, 0.5)",
+              animation: "slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "var(--music-danger-red)", display: "inline-block" }} />
+              {music.playbackStatus === "error" || music.stream?.error
+                ? (music.stream?.error || "Signal stream failed to load.")
+                : "Resolve stream is taking time..."}
+            </span>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button onClick={music.retryStream} style={{ background: "rgba" + "(255, 255, 255, 0.08)", border: "1px solid " + "rgba" + "(255, 255, 255, 0.1)", borderRadius: "12px", padding: "2px 10px", color: "white", fontSize: "0.75rem", fontWeight: "600", cursor: "none" }}>Retry</button>
+              <button onClick={() => setPanel("source")} style={{ background: "var(--music-reactive-primary, " + "#" + "7d5fff)", border: "none", borderRadius: "12px", padding: "2px 10px", color: "white", fontSize: "0.75rem", fontWeight: "600", cursor: "none" }}>Change Source</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <button className="music-immersive-toggle" onClick={() => { music.setImmersive(!music.immersive); wakeControls(); }}>{music.immersive ? "Exit immersive" : "Immersive"}</button>
     </section>
 

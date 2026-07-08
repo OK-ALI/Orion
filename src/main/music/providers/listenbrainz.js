@@ -27,7 +27,7 @@ function createListenBrainzProviders() {
         return { sections: [
           { id: "listenbrainz-tracks", title: "Most Listened This Week", type: "tracks", attribution: "ListenBrainz", items: (recordings.payload?.recordings || []).map(normalizedRecording) },
           { id: "listenbrainz-artists", title: "Artists in Orbit", type: "artists", attribution: "ListenBrainz", items: (artists.payload?.artists || []).map((item) => ({ id: `listenbrainz:${item.artist_mbid || item.artist_name}`, name: item.artist_name, listenCount: item.listen_count })) },
-          { id: "listenbrainz-releases", title: "Popular Releases", type: "albums", attribution: "ListenBrainz", items: (releases.payload?.releases || []).map((item) => ({ id: `listenbrainz:${item.release_mbid || item.release_name}`, title: item.release_name, artistName: item.artist_name, listenCount: item.listen_count })) },
+          { id: "listenbrainz-releases", title: "Popular Releases", type: "albums", attribution: "ListenBrainz", items: (releases.payload?.releases || []).map((item) => ({ id: `listenbrainz:${item.release_mbid || item.release_name}`, title: item.release_name, artistName: item.artist_name, listenCount: item.listen_count, artworkUrl: item.release_mbid ? `https://coverartarchive.org/release/${item.release_mbid}/front-500` : null })) },
         ] };
       } },
   ];

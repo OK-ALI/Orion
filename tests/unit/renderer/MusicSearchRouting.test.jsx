@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../../../src/renderer/features/music/components/MusicArtwork", () => ({
   default: ({ label }) => <span aria-label={label} />,
 }));
-vi.mock("../../../src/renderer/features/music/components/MoonTrackList", () => ({
+vi.mock("../../../src/renderer/features/music/components/MusicTrackList", () => ({
   default: ({ tracks }) => <div data-testid="music-track-list">{tracks.map((track) => track.title).join(",")}</div>,
 }));
 

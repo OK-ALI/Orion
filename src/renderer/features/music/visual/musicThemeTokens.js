@@ -1,5 +1,5 @@
 const SCENE_THEMES = {
-  'idle-space': { bg: '#07070b', primary: '#e6e6e0', glow: 'rgba(230, 230, 224, 0.15)' },
+  'idle-space': { bg: '#050508', primary: '#5c60f5', glow: 'rgba(92, 96, 245, 0.15)' },
   'library': { bg: '#0a0a14', primary: '#7d5fff', glow: 'rgba(125, 95, 255, 0.4)' },
   'playlists': { bg: '#050a12', primary: '#00dcff', glow: 'rgba(0, 220, 255, 0.3)' },
   'albums': { bg: '#1a0b12', primary: '#e50914', glow: 'rgba(229, 9, 20, 0.4)' },
@@ -24,7 +24,7 @@ export function computeThemeTokens(palette, sceneState) {
     '--mp-spectral': spectralColor,
     '--mp-glow': palette?.primary ? `color-mix(in srgb, ${primaryColor} 40%, transparent)` : theme.glow,
     '--mp-text': '#e6e6e0',
-    '--mp-muted': 'rgba(230, 230, 224, 0.6)',
+    '--mp-muted': 'rgba(230, 230, 224, 0.78)',
     '--mp-line': 'rgba(255, 255, 255, 0.08)',
     '--mp-surface': 'rgba(255, 255, 255, 0.03)',
     '--mp-surface-active': 'rgba(255, 255, 255, 0.08)',

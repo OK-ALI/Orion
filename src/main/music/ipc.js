@@ -12,10 +12,60 @@ const tokens = require("./playback/tokenRegistry");
 const { artworkUrlFor, cacheArtworkBuffer, cacheRemoteArtwork, cacheStatus,
   clearArtworkCache, pruneArtworkCache } = require("./library/artworkCache");
 const { secureStoreSet } = require("../ipc/storageIpc");
-const { CONFIG_KEY: SUBSONIC_CONFIG_KEY } = require("./providers/subsonic");
 const plugins = require("./plugins/manager");
-const { aggregateSearch } = require("./providers/omnisource");
 const { parseJsonPlaylist, parseM3uPlaylist, serializeJsonPlaylist, serializeM3uPlaylist } = require("./library/playlistFiles");
+
+const SUBSONIC_CONFIG_KEY = "subsonic_config";
+
+const WEIGHTS = { "orion-local-metadata": 1.2, "musicbrainz-metadata": 1.05, "saavn-metadata": 1.1 };
+
+function text(item) { return `${item.name || item.title || ""} ${item.artistName || ""}`.trim().toLowerCase(); }
+function score(item, query, providerId) {
+  const candidate = text(item); const term = String(query || "").trim().toLowerCase();
+  let relevance = candidate === term ? 4 : candidate.startsWith(term) ? 3 : candidate.includes(term) ? 2 : 1;
+  if (String(item.title || item.name || "").toLowerCase() === term) relevance += 2;
+  return relevance * (WEIGHTS[providerId] || .9) + Math.min(1, Number(item.popularity || item.listenCount || 0) / 1_000_000);
+}
+
+function mergeKind(results, kind, query) {
+  const merged = new Map();
+  for (const result of results) {
+    const items = result.value?.[kind] || [];
+    for (const item of items) {
+      const key = `${String(item.name || item.title || "").toLowerCase()}\0${String(item.artistName || "").toLowerCase()}`;
+      const reference = item.source || { provider: result.providerId, id: item.id };
+      const current = merged.get(key);
+      const scored = {
+        ...item,
+        artworkUrl: item.artworkUrl || current?.artworkUrl || null,
+        profileImageUrl: item.profileImageUrl || current?.profileImageUrl || null,
+        providerRefs: [...(current?.providerRefs || []), ...(item.providerRefs || []), reference]
+          .filter((ref, index, all) => ref && all.findIndex((entry) => entry.provider === ref.provider && entry.id === ref.id) === index),
+        matchScore: Math.max(current?.matchScore || 0, score(item, query, result.providerId))
+      };
+      merged.set(key, current && current.matchScore > scored.matchScore ? {
+        ...current,
+        artworkUrl: current.artworkUrl || scored.artworkUrl,
+        profileImageUrl: current.profileImageUrl || scored.profileImageUrl,
+        providerRefs: scored.providerRefs
+      } : scored);
+    }
+  }
+  return [...merged.values()].sort((a, b) => b.matchScore - a.matchScore);
+}
+
+function aggregateSearch(results, query) {
+  return {
+    providerId: "orion-omnisource",
+    providerName: "OmniSource",
+    value: {
+      artists: mergeKind(results, "artists", query),
+      albums: mergeKind(results, "albums", query),
+      tracks: mergeKind(results, "tracks", query),
+      playlists: mergeKind(results, "playlists", query)
+    }
+  };
+}
 
 let registered = false;
 
@@ -119,23 +169,8 @@ function register() {
     registry.setActive(kind, providerId);
     return { ok: true };
   });
-  ipcMain.handle(MUSIC_IPC.PROVIDER_SAVE_CONFIG, async (_, providerId, value = {}) => {
-    if (!String(providerId).startsWith("subsonic-")) return { ok: false, error: "This provider cannot be configured." };
-    let parsed;
-    try { parsed = new URL(String(value.url || "")); } catch { return { ok: false, error: "Enter a valid server URL." }; }
-    if (!["http:", "https:"].includes(parsed.protocol)) return { ok: false, error: "Only HTTP and HTTPS servers are supported." };
-    if (!value.username || !value.password) return { ok: false, error: "Username and password are required." };
-    const config = { url: parsed.toString().replace(/\/$/, ""), username: String(value.username), password: String(value.password) };
-    secureStoreSet(SUBSONIC_CONFIG_KEY, JSON.stringify(config));
-    try {
-      const { getConfig, testConnection } = require("./providers/subsonic");
-      if (!getConfig()) throw new Error("Credentials were not saved.");
-      await testConnection();
-      return { ok: true };
-    } catch (error) {
-      secureStoreSet(SUBSONIC_CONFIG_KEY, null);
-      return { ok: false, error: error.message };
-    }
+  ipcMain.handle(MUSIC_IPC.PROVIDER_SAVE_CONFIG, async () => {
+    return { ok: false, error: "This provider configuration is deprecated." };
   });
   ipcMain.handle(MUSIC_IPC.SEARCH, async (_, query) => {
     const providers = registry.list("metadata").filter((provider) => typeof provider.search === "function");

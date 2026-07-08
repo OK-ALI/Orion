@@ -64,7 +64,7 @@ import { INJECT_SKIP_CONTROLS } from "../../player/webviewScripts/skipControls";
 import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
 
 export function useMovieWebview(context) {
-  const { autoMarkedRef, autoplayDoneRef, d, dubMode, failoverTimeoutRef, initialSeekDoneRef, isWatched, item, lastKnownTimeRef, loading, onHistory, onMarkWatchedRef, onPlay, pipUrlRef, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressKey, progressViaFrames, resolvedPlayerUrlRef, resolvingUrlRef, saveProgress, saveProgressRef, seekBackCooldownRef, setInterceptedSubs, setM3u8Url, setPipOpen, setPlayerFullscreen, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setResumeTime, setShowFailoverPrompt, setShowResumePrompt, setWebviewLoading, switchingToMiniPlayerRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef } = context;
+  const { autoMarkedRef, autoplayDoneRef, d, dubMode, failoverTimeoutRef, initialSeekDoneRef, isWatched, item, lastKnownTimeRef, loading, onHistory, onMarkWatchedRef, onPlay, pipOpen, pipUrlRef, pipWebContentsIdRef, playerAccentColor, playerSource, playerSubLang, playerWrapRef, playing, progressKey, progressViaFrames, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrlRef, saveProgress, saveProgressRef, seekBackCooldownRef, setInterceptedSubs, setM3u8Url, setPipOpen, setPlayerFullscreen, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setResumeTime, setShowFailoverPrompt, setShowResumePrompt, setWebviewLoading, switchingToMiniPlayerRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef } = context;
 const applyVoiceBoost = useCallback(() => {
     const wv = webviewRef.current;
     if (!wv) return;
@@ -248,25 +248,66 @@ const applyVoiceBoost = useCallback(() => {
     if (playing) setWebviewLoading(true);
   }, [playing]);
 
-  // If a movie source does not expose playable video quickly, give the user a clear next step.
+  // Watchdog timer to detect stuck playback at startup or mid-video (15 seconds hang/buffering)
   useEffect(() => {
     if (!playing) {
       setShowFailoverPrompt(false);
-      clearTimeout(failoverTimeoutRef.current);
-      return;
+      return undefined;
     }
 
     setShowFailoverPrompt(false);
-    clearTimeout(failoverTimeoutRef.current);
 
-    failoverTimeoutRef.current = setTimeout(() => {
-      if (lastKnownTimeRef.current === 0) {
-        setShowFailoverPrompt(true);
+    let lastTime = lastKnownTimeRef.current;
+    let lastChecked = Date.now();
+
+    const interval = setInterval(() => {
+      const currentTime = lastKnownTimeRef.current;
+      const now = Date.now();
+
+      if (webviewLoading || (currentTime === lastTime && playing)) {
+        if (now - lastChecked >= 15000) {
+          setShowFailoverPrompt(true);
+        }
+      } else {
+        setShowFailoverPrompt(false);
+        lastTime = currentTime;
+        lastChecked = now;
       }
-    }, 15000);
+    }, 2000);
 
-    return () => clearTimeout(failoverTimeoutRef.current);
-  }, [playing, playerSource, item.id]);
+    return () => clearInterval(interval);
+  }, [playing, playerSource, item.id, webviewLoading]);
+
+  // Force manual navigation on source/URL change to prevent Electron webview from getting stuck
+  useEffect(() => {
+    if (!playing) return;
+    const wv = webviewRef.current;
+    if (!wv) return;
+    const targetUrl = pipOpen
+      ? "about:blank"
+      : sourceIsAsync(playerSource)
+        ? resolvedPlayerUrl || "about:blank"
+        : getSourceUrl(
+            playerSource,
+            "movie",
+            item.id,
+            null,
+            null,
+            {},
+            playerAccentColor,
+            playerSubLang,
+          );
+    if (targetUrl) {
+      try {
+        wv.src = targetUrl;
+        if (targetUrl !== "about:blank" && typeof wv.loadURL === "function") {
+          wv.loadURL(targetUrl);
+        }
+      } catch (e) {
+        console.warn("Failed to manually navigate webview:", e);
+      }
+    }
+  }, [playing, pipOpen, playerSource, resolvedPlayerUrl, item.id, playerAccentColor, playerSubLang]);
 
   const handleFailoverNextSource = useCallback(() => {
     const next = getNextNonAsyncSource(playerSource);

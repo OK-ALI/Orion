@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import MoonTrackList from "../components/MoonTrackList";
+import MusicTrackList from "../components/MusicTrackList";
 import PlanetGrid from "../components/PlanetGrid";
 import StarGrid from "../components/StarGrid";
+
+const FALLBACK_ART = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'><defs><radialGradient id='g' cx='50%' cy='50%' r='50%'><stop offset='0%' stop-color='%237d5fff' stop-opacity='0.6'/><stop offset='100%' stop-color='%2307070b' stop-opacity='0.95'/></radialGradient></defs><circle cx='100' cy='100' r='100' fill='url(%23g)'/></svg>";
 
 function mergeResults(groups, key) {
   const map = new Map();
@@ -51,14 +53,14 @@ export default function MusicSearch({ selected, onNavigate }) {
     {scope === "all" && topResult && <section className="music-search-feature"><div><span className="music-eyebrow">Top result</span>
       <div className={artists[0] ? "star-card" : "planet-card"} onClick={() => onNavigate(artists[0] ? "music-artist" : "music-album", topResult)} style={{cursor: 'pointer', textAlign: 'left', alignItems: 'flex-start', border: '1px solid var(--music-line)', padding: '2rem', borderRadius: '24px', background: 'rgba(255,255,255,0.02)'}}>
         <div className="art-container" style={{width: '120px', height: '120px'}}>
-          <img src={topResult.profileImageUrl || topResult.artworkUrl || 'fallback-art.png'} alt="top-result" />
+          <img src={topResult.profileImageUrl || topResult.artworkUrl || FALLBACK_ART} onError={(e) => { e.target.src = FALLBACK_ART; }} alt="top-result" />
         </div>
         <h2 style={{margin: '1rem 0 0.5rem 0', fontSize: '2rem'}}>{topResult.name || topResult.title}</h2><p className="music-muted">{artists[0] ? "Artist" : topResult.artistName || "Album"}</p>
       </div>
-    </div>{tracks.length > 0 && <div style={{flex: 1}}><span className="music-eyebrow" style={{display: 'block', marginBottom: '1rem'}}>Quick play</span><MoonTrackList tracks={tracks.slice(0, 5)} /></div>}</section>}
+    </div>{tracks.length > 0 && <div style={{flex: 1}}><span className="music-eyebrow" style={{display: 'block', marginBottom: '1rem'}}>Quick play</span><MusicTrackList tracks={tracks.slice(0, 5)} layout="list" /></div>}</section>}
     {(scope === "all" || scope === "artists") && artists.length > 0 && <section className="music-section"><div className="music-section-heading"><div><span>Profiles</span><h2>Artists</h2></div></div><StarGrid items={artists.slice(0, 10)} onNavigate={onNavigate} /></section>}
     {(scope === "all" || scope === "albums") && albums.length > 0 && <section className="music-section"><div className="music-section-heading"><div><span>Releases</span><h2>Albums</h2></div></div><PlanetGrid items={albums.slice(0, 10)} onNavigate={onNavigate} /></section>}
-    {(scope === "all" || scope === "tracks") && tracks.length > 0 && <section className="music-section"><div className="music-section-heading"><div><span>Playable now</span><h2>Tracks</h2></div></div><MoonTrackList tracks={tracks} /></section>}
+    {(scope === "all" || scope === "tracks") && tracks.length > 0 && <section className="music-section"><div className="music-section-heading"><div><span>Playable now</span><h2>Tracks</h2></div></div><MusicTrackList tracks={tracks} layout="list" /></section>}
     {query.length >= 2 && !loading && !resultCount && <div className="music-empty">No music matched “{query}”. Try a title and artist together.</div>}
   </div>;
 }
