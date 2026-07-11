@@ -22,6 +22,7 @@ import {
   NON_ANIME_DEFAULT_SOURCE,
   NEEDS_INTERCEPT,
   getNextNonAsyncSource,
+  getNextHealthyNonAsyncSource,
 } from "../../../services/tmdb";
 import {
   PlayIcon,
@@ -232,7 +233,7 @@ const [details, setDetails] = useState(null);
     if (!playing || pipOpen) return;
     const url = sourceIsAsync(playerSource)
       ? resolvedPlayerUrl
-      : getSourceUrl(playerSource, "movie", item.id, null, null, {}, playerAccentColor, playerSubLang);
+      : getSourceUrl(playerSource, "movie", { tmdbId: item.id, imdbId: d.imdb_id }, null, null, {}, playerAccentColor, playerSubLang);
     if (!url) return;
     const playerRect = playerWrapRef.current?.getBoundingClientRect?.();
     onPlaybackSession?.({
@@ -517,7 +518,7 @@ const [details, setDetails] = useState(null);
         } else {
           // AllManga doesn't have this title → switch to the next source
           // automatically and remember the choice for next time.
-          const next = getNextNonAsyncSource(playerSource);
+          const next = getNextHealthyNonAsyncSource(playerSource);
           if (next) {
             setFailoverSource(epKey, next);
             setM3u8Url(null);

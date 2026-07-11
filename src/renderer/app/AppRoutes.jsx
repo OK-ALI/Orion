@@ -1,7 +1,7 @@
 import { lazy, Suspense } from "react";
 import ErrorBoundary from "../components/common/ErrorBoundary";
-import MusicPlanet from "../features/music/MusicPlanet";
 
+const MusicPlanet = lazy(() => import("../features/music/MusicPlanet"));
 const HomePage = lazy(() => import("../features/home/HomePage"));
 const DiscoverPage = lazy(() => import("../features/discover/DiscoverPage"));
 const MoviePage = lazy(() => import("../features/movies/MoviePage"));

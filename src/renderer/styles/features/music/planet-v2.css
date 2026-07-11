@@ -31,7 +31,19 @@
   height: 100%;
   z-index: 1;
   pointer-events: none; /* Let clicks pass through to UI */
+  background: var(--music-scene-color, var(--mp-bg));
+  transition: background 1s ease;
 }
+.music-planet-canvas-container[data-scene-style="aurora"] {
+  background:
+    radial-gradient(ellipse at 18% 22%, color-mix(in srgb, var(--music-violet) 16%, transparent), transparent 42%),
+    radial-gradient(ellipse at 78% 68%, color-mix(in srgb, var(--music-highlight) 8%, transparent), transparent 46%),
+    linear-gradient(145deg, var(--music-scene-color, var(--mp-bg)), var(--mp-bg));
+}
+.music-planet-canvas-container[data-scene-style="dust"] {
+  background: radial-gradient(circle at 50% 48%, color-mix(in srgb, var(--music-violet) 10%, transparent), transparent 54%), var(--music-scene-color, var(--mp-bg));
+}
+.music-planet-canvas-container[data-scene-style="minimal"] { background: var(--music-scene-color, var(--mp-bg)); }
 
 /* Scrollable foreground layer */
 .music-planet-scroll-area {
@@ -108,6 +120,7 @@
   z-index: 9999;
   mix-blend-mode: difference;
   transform: translate(-50%, -50%);
+  display: none;
   transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), height 0.3s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s;
 }
 .music-planet-cursor.hovering {
@@ -117,14 +130,23 @@
   border: 1px solid var(--mp-text);
 }
 
-/* Base resets for interactive elements */
+/* The decorative cursor is opt-in for fine pointers only. */
 .music-planet-container {
-  cursor: none; /* Hide default cursor to use custom one */
+  cursor: auto;
 }
 .music-planet-container a, 
 .music-planet-container button, 
 .music-planet-container input {
-  cursor: none;
+  cursor: pointer;
+}
+.music-planet-container input { cursor: text; }
+
+@media (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .music-planet-cursor { display: block; }
+  .music-custom-cursor-active .music-planet-container,
+  .music-custom-cursor-active .music-planet-container a,
+  .music-custom-cursor-active .music-planet-container button,
+  .music-custom-cursor-active .music-planet-container input { cursor: none; }
 }
 
 /* Metaphor: Search Box */
@@ -771,7 +793,7 @@
   color: var(--mp-text);
   font-size: 0.95rem;
   font-weight: 500;
-  cursor: none; /* Hide default cursor to match Music Planet custom cursor */
+  cursor: pointer;
   margin-bottom: 3rem;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
@@ -867,5 +889,3 @@
   margin-bottom: 2rem;
   font-size: 0.95rem;
 }
-
-

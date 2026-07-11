@@ -1,14 +1,26 @@
-# Orion — A Multiverse of Stories
+# Orion X Music Planet
 
-Orion is a Windows-first Electron application for discovering, streaming, downloading, and tracking movies, TV series, and anime.
+**A universe made to be felt.**
 
-The latest stable release is **v1.0.10 — Performance, Windows Integration and Final Visual Polish**. **v1.1.0 — Search, People, Cast and Constellation** is implemented and in release validation; the application version remains 1.0.10 until that validation is complete.
+Orion X Music Planet is a Windows-first Electron application with two connected worlds: Cinema for discovering, streaming and downloading movies, series and anime; and Music Planet for finding, playing and organizing music.
 
-See the authoritative [pre-AI roadmap](docs/Orion-Pre-AI-Upgrade-Plan.md) for current milestone status and acceptance requirements.
+## v2.0.0 stable release
 
-## v1.1.0 validation preview
+Music Planet adds an audio-reactive Orb, YouTube Music catalog and discovery, YouTube Audio playback, Local Library, lyrics, playlists, favorites, queue and radio. Cinema retains protected-stream playback, local playback, subtitles, managed downloads, tray behavior, battery-aware behavior and Windows media controls.
 
-The unreleased v1.1.0 workspace adds people-aware Search, independent cinema filtering, Person pages, Movie/TV cast and key crew, the Constellation people catalog, hybrid mapped/global person lookup, progressive Constellation pagination, repaired legacy Library metadata, shared connectivity/error states, and measured service latency beside Battery status. Existing v1.0.10 streaming behavior remains unchanged while live provider reliability is investigated separately. Publishing is intentionally paused until final user, theme, live-playback, copied-profile, and clean-package validation succeeds. See the [draft v1.1.0 notes](docs/releases/v1.1.0.md).
+Google sign-in is bundled for every user through a central Desktop OAuth client using PKCE. Users sign in with their own Google account; they never need to create or paste Cloud Console credentials. Google Drive backup covers Cinema and Music preferences, playlists, favorites, queue and history, but excludes credentials, caches, signed URLs and machine-specific paths.
+
+See [Music Planet architecture](docs/architecture/music.md) and the [living-world implementation record](docs/Music-Planet-Living-World-Audit-2026-07-10.md).
+The v2.0 release scope is recorded in the [release notes](docs/releases/v2.0.0.md).
+
+## v2.0 highlights
+
+- Music Planet’s Neutral Eclipse visual system, orbital glass surfaces and audio-reactive scene.
+- Persistent Music dock with queue, lyrics, favorite, playlist, radio, seek, volume, next/previous and Windows/Bluetooth media controls.
+- YouTube Music catalog/discovery, YouTube Audio resolution, LRCLib lyrics, Spotify charts/import metadata and Local Library.
+- Cinema Search, People, Cast and Constellation alongside the proven downloader and local playback.
+- Smoothed Orion-service latency and battery alerts that clear as soon as AC power returns.
+- A three-state, world-aware sidebar with Expanded, Compact and Axiom-inspired Collapsed Rail modes remembered independently for Cinema and Music Planet.
 
 ## What's new in v1.0.10
 
@@ -42,7 +54,7 @@ DRM circumvention is not supported. Download only media you are authorized to ac
 - Node.js 22 or later for local development.
 - npm 10 or later.
 
-macOS and Linux retain PATH-based compatibility, but managed-tool installer and Windows media-control parity are not part of v1.0.10.
+macOS and Linux retain PATH-based compatibility, but managed-tool installer and Windows media-control parity are not part of v2.0.0.
 
 ## Run locally
 
@@ -64,7 +76,7 @@ npm.cmd run check
 npm.cmd run test:electron
 ```
 
-The check suite enforces the additive v1.0.10 IPC surface and retained aliases, rejects unresolved JavaScript/JSX bindings and dependency cycles, scans for committed credentials and new theme-color leaks, fails source files above 800 lines, runs node/renderer tests, and creates a production renderer build.
+The check suite enforces the compatible IPC surface and retained aliases, rejects unresolved JavaScript/JSX bindings and dependency cycles, scans for committed credentials and new theme-color leaks, fails source files above 800 lines, runs node/renderer tests, and creates a production renderer build.
 
 ## Package Windows builds
 

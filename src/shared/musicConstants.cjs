@@ -1,4 +1,4 @@
-const MUSIC_SCHEMA_VERSION = 3;
+const MUSIC_SCHEMA_VERSION = 4;
 const MUSIC_CACHE_VERSION = 1;
 
 const MUSIC_PROVIDER_KINDS = Object.freeze({
@@ -30,6 +30,9 @@ const MUSIC_IPC = Object.freeze({
   ARTWORK_GET: "music:artwork:get",
   LYRICS_GET: "music:lyrics:get",
   SEARCH: "music:search",
+  SEARCH_SUGGESTIONS: "music:search:suggestions",
+  SEARCH_CONTINUE: "music:search:continue",
+  RADIO_GET: "music:radio:get",
   DASHBOARD_GET: "music:dashboard:get",
   DETAILS_GET: "music:details:get",
   PROVIDERS_LIST: "music:providers:list",
@@ -46,6 +49,9 @@ const MUSIC_IPC = Object.freeze({
   PLAYLISTS_IMPORT: "music:playlists:import",
   PLAYLISTS_IMPORT_FILE: "music:playlists:import-file",
   PLAYLISTS_EXPORT_FILE: "music:playlists:export-file",
+  PLAYLIST_FOLDERS_LIST: "music:playlist-folders:list",
+  PLAYLIST_FOLDERS_SAVE: "music:playlist-folders:save",
+  PLAYLIST_FOLDERS_DELETE: "music:playlist-folders:delete",
   FAVORITES_LIST: "music:favorites:list",
   FAVORITES_TOGGLE: "music:favorites:toggle",
   QUEUE_LOAD: "music:queue:load",

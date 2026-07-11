@@ -19,6 +19,10 @@ test("Settings, Downloads, Discover, and Library render without page errors", as
   page.on("pageerror", (error) => errors.push(error.message));
 
   await page.waitForTimeout(1500);
+  const skipSignIn = page.getByRole("button", { name: "Skip / Use Offline" });
+  if (await skipSignIn.count()) await skipSignIn.click();
+  const skipWhatsNew = page.getByRole("button", { name: "Continue to Cinema" });
+  if (await skipWhatsNew.count()) await skipWhatsNew.click();
   await page.evaluate(() => {
     [...document.querySelectorAll(".sidebar-footer .sidebar-item")]
       .find((element) => element.textContent.includes("Settings"))

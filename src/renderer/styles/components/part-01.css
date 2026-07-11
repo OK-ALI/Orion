@@ -163,7 +163,7 @@
 /* ── Sidebar ───────────────────────────────────────────────────────────────── */
 
 .sidebar {
-  width: var(--sidebar-width);
+  width: var(--sidebar-compact-width);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -172,14 +172,81 @@
     linear-gradient(180deg, rgba(255,255,255,0.025), transparent 32%),
     var(--bg-elevated);
   border-right: 1px solid var(--border);
-  transition: width var(--duration-slow) var(--ease-out);
+  transition: width var(--sidebar-transition-duration) var(--ease-out), border-color 180ms var(--ease-out), background 180ms var(--ease-out);
   flex-shrink: 0;
   z-index: 50;
   overflow: visible;
 }
 
 .sidebar.expanded {
-  width: var(--sidebar-expanded);
+  width: var(--sidebar-expanded-width);
+}
+
+.sidebar.sidebar-collapsed,
+.sidebar.closing {
+  width: var(--sidebar-rail-width);
+}
+
+.sidebar-body {
+  width: var(--sidebar-compact-width);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 190ms var(--ease-out), transform 190ms var(--ease-out), width var(--sidebar-transition-duration) var(--ease-out);
+  overflow: hidden;
+}
+
+.sidebar.expanded .sidebar-body { width: var(--sidebar-expanded-width); }
+
+.sidebar.closing .sidebar-body {
+  opacity: 0;
+  transform: translateX(-12px);
+  pointer-events: none;
+}
+
+.sidebar-mode-control {
+  display: inline-grid;
+  place-items: center;
+  position: absolute;
+  z-index: 4;
+  top: 18px;
+  right: 7px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--surface-translucent) 86%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 8%, transparent), 0 12px 30px color-mix(in srgb, var(--shadow-color) 34%, transparent);
+  cursor: pointer;
+  transition: color var(--duration-fast), border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.sidebar-mode-control {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+}
+
+.sidebar-mode-control:hover {
+  color: var(--text-primary);
+  border-color: var(--border-accent);
+  background: var(--bg-hover);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 10%, transparent), 0 14px 34px var(--accent-glow);
+  transform: translateX(-1px) rotate(-8deg);
+}
+
+.sidebar-mode-control:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+
+.sidebar-mode-control.mode-expanded {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+}
+
+.music-world .sidebar-mode-control.mode-expanded {
+  color: var(--music-highlight);
+  border-color: color-mix(in srgb, var(--music-highlight) 30%, var(--border));
+  background: color-mix(in srgb, var(--music-highlight) 8%, var(--bg-elevated));
 }
 
 .sidebar-edge-rail {
@@ -211,8 +278,8 @@
 .sidebar-brand-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 12px 8px 8px;
+  gap: 0;
+  padding: 12px 44px 8px 8px;
   min-height: 64px;
 }
 

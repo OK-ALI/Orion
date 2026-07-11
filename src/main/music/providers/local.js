@@ -18,6 +18,21 @@ function createLocalProviders() {
         }])).values()];
         return { tracks, artists, albums, playlists: [] };
       },
+      async getArtist(item) {
+        const name = item.name || item.source?.id || "";
+        const tracks = database.listTracks({ query: name, limit: 1000 }).filter((track) => track.artistName === name || track.albumArtist === name);
+        const albums = [...new Map(tracks.filter((track) => track.albumTitle).map((track) => [`${track.artistName}\0${track.albumTitle}`, {
+          id: `local-album:${track.artistName}:${track.albumTitle}`, title: track.albumTitle,
+          artistName: track.artistName, source: { provider: "orion-local-metadata", id: track.albumTitle },
+        }])).values()];
+        return { artist: { ...item, name }, biography: "Local Library artist", tracks, albums };
+      },
+      async getAlbum(item) {
+        const title = item.title || item.source?.id || "";
+        const tracks = database.listTracks({ query: title, limit: 1000 }).filter((track) => track.albumTitle === title
+          && (!item.artistName || track.artistName === item.artistName || track.albumArtist === item.artistName));
+        return { album: { ...item, title }, tracks };
+      },
     },
     {
       id: "orion-local-streaming", kind: "streaming", name: "Local Library",

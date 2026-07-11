@@ -13,6 +13,11 @@ const STRICT_SURFACES = [
 ];
 const COLOR_LITERAL = /#[0-9a-f]{3,8}\b|rgba?\(/gi;
 const BASELINE_MAX = 786;
+const MUSIC_ROOTS = [
+  path.resolve("src/renderer/features/music"),
+  path.resolve("src/renderer/styles/features/music"),
+];
+const FORBIDDEN_MUSIC_CYAN = /music-cyan|#(?:22d3ee|00dcff|00fa9a|2dd4bf|67e8f9)\b/i;
 
 function sourceFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -31,10 +36,15 @@ for (const file of sourceFiles(ROOT)) {
 const strictFailures = STRICT_SURFACES.filter((file) => (
   new RegExp(COLOR_LITERAL.source, "i").test(fs.readFileSync(file, "utf8"))
 ));
-if (strictFailures.length || literalCount > BASELINE_MAX) {
+const musicCyanFailures = MUSIC_ROOTS.flatMap(sourceFiles).filter((file) => FORBIDDEN_MUSIC_CYAN.test(fs.readFileSync(file, "utf8")));
+if (strictFailures.length || musicCyanFailures.length || literalCount > BASELINE_MAX) {
   if (strictFailures.length) {
     console.error("Theme-sensitive literals found in token-only surfaces:");
     strictFailures.forEach((file) => console.error(`- ${path.relative(process.cwd(), file)}`));
+  }
+  if (musicCyanFailures.length) {
+    console.error("Neutral Eclipse cyan values found in Music surfaces:");
+    musicCyanFailures.forEach((file) => console.error(`- ${path.relative(process.cwd(), file)}`));
   }
   if (literalCount > BASELINE_MAX) {
     console.error(`Renderer color literals increased from the v1.0.10 baseline (${literalCount} > ${BASELINE_MAX}).`);

@@ -2,7 +2,8 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { app, nativeImage } = require("electron");
-const ARTWORK_HOSTS = ["coverartarchive.org", "archive.org", "discogs.com", "dzcdn.net", "listenbrainz.org", "bcbits.com", "sndcdn.com", "ytimg.com"];
+const ARTWORK_HOSTS = ["coverartarchive.org", "archive.org", "discogs.com", "dzcdn.net", "listenbrainz.org", "bcbits.com", "sndcdn.com", "ytimg.com",
+  "yt3.googleusercontent.com", "lh3.googleusercontent.com"];
 const DEFAULT_LIMIT_MB = 256;
 
 function isAllowedArtworkUrl(value) {

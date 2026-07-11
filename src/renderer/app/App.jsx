@@ -33,6 +33,7 @@ import { useEpisodeNotifications } from "./hooks/useEpisodeNotifications";
 import { useApiSession } from "./hooks/useApiSession";
 import AppRoutes from "./AppRoutes";
 import AppOverlays from "./AppOverlays";
+import WhatsNewModal from "./components/WhatsNewModal";
 import {
   buildPlaybackHandoff,
   settlePlaybackStateWithin,
@@ -40,6 +41,8 @@ import {
 import { getMiniPlayerBounds } from "../shared/utils/miniPlayerGeometry";
 import { useSystemIntegration } from "./hooks/useSystemIntegration";
 import useNetworkStatus from "../shared/hooks/useNetworkStatus";
+
+const WHATS_NEW_EDITION = "orion-x-music-planet";
 import { claimPlayback, getPlaybackOwner } from "./playback/PlaybackCoordinator";
 import MusicPlayerBar from "../features/music/player/MusicPlayerBar";
 
@@ -93,9 +96,10 @@ export default function App() {
     if (window.electron?.getAppVersion) {
       window.electron.getAppVersion().then((version) => {
         const lastSeen = localStorage.getItem("orion_whats_new_seen_version");
-        if (lastSeen !== version) {
+        const releaseKey = `${version}:${WHATS_NEW_EDITION}`;
+        setAppVersion(version);
+        if (lastSeen !== releaseKey) {
           setShowWhatsNew(true);
-          setAppVersion(version);
         }
       });
     }
@@ -104,13 +108,18 @@ export default function App() {
   const dismissWhatsNew = () => {
     setShowWhatsNew(false);
     if (appVersion) {
-      localStorage.setItem("orion_whats_new_seen_version", appVersion);
+      localStorage.setItem("orion_whats_new_seen_version", `${appVersion}:${WHATS_NEW_EDITION}`);
     }
   };
 
-  const setupSyncFromWhatsNew = () => {
+  const enterMusicFromWhatsNew = () => {
     dismissWhatsNew();
-    navigate("settings");
+    navigate("music-home");
+  };
+
+  const continueCinemaFromWhatsNew = () => {
+    dismissWhatsNew();
+    navigate("home");
   };
 
   const syncFromCloud = useCallback(async () => {
@@ -394,7 +403,7 @@ export default function App() {
   useEffect(() => {
     // Accent colour
     const accent = storage.get(STORAGE_KEYS.ACCENT_COLOR) || "orion";
-    applyAccentColor(accent);
+    applyAccentColor(accent, storage.get(STORAGE_KEYS.CINEMA_GLOW_STRENGTH) ?? 50);
     applyFontPreset(storage.get(STORAGE_KEYS.FONT_PRESET) || "orion");
     // Theme
     const theme = storage.get(STORAGE_KEYS.THEME) || "dark";
@@ -614,11 +623,14 @@ export default function App() {
     }
     const targetIsMusic = String(targetPage || "").startsWith("music-");
     const changingWorld = currentIsMusic !== targetIsMusic;
+    const reducedWorldMotion = storage.get(STORAGE_KEYS.REDUCE_ANIMATIONS) ||
+      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    const worldDuration = reducedWorldMotion ? 160 : 1200;
     if (changingWorld) {
       worldHistoryRef.current[currentIsMusic ? "music" : "cinema"] = { page: pageRef.current, selected };
       playPortalSound(targetIsMusic ? "music" : "cinema");
       setWorldTransition(targetIsMusic ? "to-music" : "to-cinema");
-      window.setTimeout(() => setWorldTransition(null), 820);
+      window.setTimeout(() => setWorldTransition(null), worldDuration);
     }
     const beginsAnotherTitle = (targetPage === "movie" || targetPage === "tv") &&
       (!playbackSession || targetPage !== playbackSession.mediaType || Number(targetData?.id) !== Number(playbackSession.mediaId));
@@ -629,7 +641,13 @@ export default function App() {
       setPlaybackSession(null);
     }
     if (changingWorld) {
-      window.setTimeout(() => baseNavigate(targetPage, targetData), 180);
+      window.setTimeout(() => baseNavigate(targetPage, targetData), reducedWorldMotion ? 40 : 300);
+      return;
+    }
+    // Music overlays share one living scene; route them immediately instead of
+    // paying the root View Transition capture cost on every panel change.
+    if (currentIsMusic && targetIsMusic) {
+      baseNavigate(targetPage, targetData);
       return;
     }
     transitionNavigation(() => baseNavigate(targetPage, targetData));
@@ -969,7 +987,9 @@ export default function App() {
         }} />
          {worldTransition && <div className={`music-world-transition ${worldTransition}`} aria-hidden="true" />}
 
-        {showWhatsNew && (
+        {showWhatsNew && <WhatsNewModal version={appVersion} onEnterMusic={enterMusicFromWhatsNew} onContinueCinema={continueCinemaFromWhatsNew} />}
+
+        {false && showWhatsNew && (
           <div className="close-confirm-overlay" style={{ zIndex: 9999999 }}>
             <div className="close-confirm-modal" style={{ 
               background: "rgba(20, 20, 20, 0.85)", 
@@ -1061,7 +1081,7 @@ export default function App() {
                 </button>
                 <button 
                   className="btn btn-primary" 
-                  onClick={setupSyncFromWhatsNew}
+                  onClick={enterMusicFromWhatsNew}
                   style={{ flex: 1, padding: "12px 18px", borderRadius: 8, background: "var(--accent)", color: "#fff", border: "none", fontWeight: 600 }}
                 >
                   Set Up Sync

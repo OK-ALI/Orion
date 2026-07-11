@@ -8,6 +8,9 @@ vi.mock("../../../src/renderer/features/music/components/MusicArtwork", () => ({
 vi.mock("../../../src/renderer/features/music/components/MusicTrackList", () => ({
   default: ({ tracks }) => <div data-testid="music-track-list">{tracks.map((track) => track.title).join(",")}</div>,
 }));
+vi.mock("../../../src/renderer/features/music/context/MusicProvider", () => ({
+  useMusic: () => ({ playTrack: vi.fn() }),
+}));
 
 import MusicSearch from "../../../src/renderer/features/music/pages/MusicSearch";
 

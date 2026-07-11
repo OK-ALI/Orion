@@ -34,11 +34,11 @@ function providerOrder(providerId) {
   
   const allProviders = registry.list("streaming");
   const ordered = [];
-  const saavn = allProviders.find((p) => p.id === "saavn-streaming");
-  if (saavn) ordered.push(saavn);
-  if (preferred && preferred.id !== "saavn-streaming") ordered.push(preferred);
+  const ytMusic = allProviders.find((p) => p.id === "ytmusic-streaming");
+  if (ytMusic) ordered.push(ytMusic);
+  if (preferred && preferred.id !== "ytmusic-streaming") ordered.push(preferred);
   for (const provider of allProviders) {
-    if (provider.id !== "saavn-streaming" && (!preferred || provider.id !== preferred.id)) {
+    if (provider.id !== "ytmusic-streaming" && (!preferred || provider.id !== preferred.id)) {
       ordered.push(provider);
     }
   }

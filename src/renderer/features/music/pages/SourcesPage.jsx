@@ -1,33 +1,63 @@
 import { useEffect, useMemo, useState } from "react";
+import { buildSignalSources } from "../services/signalSources";
 
-const SELECTABLE = ["metadata", "streaming", "discovery", "lyrics"];
-
-export default function SourcesPage() {
+export default function SourcesPage({ onNavigate }) {
   const [providers, setProviders] = useState([]);
-  const [configuring, setConfiguring] = useState(null);
-  const [connection, setConnection] = useState({ url: "", username: "", password: "" });
   const [notice, setNotice] = useState("");
-  const load = () => Promise.resolve(window.electron?.musicListProviders?.() || []).then(setProviders).catch(() => {});
+  const load = () => Promise.resolve(window.electron?.musicListProviders?.() || [])
+    .then(setProviders).catch(() => setNotice("Signal source health could not be read."));
   useEffect(() => { load(); }, []);
-  const groups = useMemo(() => Object.groupBy ? Object.groupBy(providers, (item) => item.kind)
-    : providers.reduce((out, item) => ({ ...out, [item.kind]: [...(out[item.kind] || []), item] }), {}), [providers]);
-  const healthy = providers.filter((provider) => ["healthy", "unknown"].includes(provider.health?.status || "unknown")).length;
-  return <div className="music-page music-sources-page"><header className="music-page-header compact music-sources-heading"><div><span className="music-eyebrow">Signal routing</span><h1>Music Sources</h1><p>Choose which installed provider supplies metadata, playback, discovery and lyrics.</p></div><div className="music-source-summary"><strong>{healthy}/{providers.length}</strong><span>sources available</span></div></header>
-    {notice && <div className="music-plugin-notice" role="status">{notice}</div>}
-    <div className="music-source-grid">{Object.entries(groups).map(([kind, items]) => <section key={kind}><header><div><span>{SELECTABLE.includes(kind) ? "Selectable" : "Contributing"}</span><h2>{kind}</h2></div><b>{items.length}</b></header>
-      {items.map((provider) => <div key={provider.id} className={`music-source-option${provider.active ? " active" : ""}`}><div><strong>{provider.name}<span className={`music-health music-health-${provider.health?.status || "unknown"}`}>{String(provider.health?.status || "unknown").replaceAll("_", " ")}</span></strong><small>{provider.capabilities.join(" · ")}</small>{provider.requiresConfiguration && !provider.configured && <em>Configuration required</em>}{provider.health?.lastError && <small title={provider.health.lastError}>{provider.health.lastError}</small>}</div>
-        <div>{provider.requiresConfiguration && !provider.configured && <button onClick={() => { setConfiguring(provider); setNotice(""); }}>Connect</button>}{SELECTABLE.includes(kind) && <input aria-label={`Use ${provider.name} for ${kind}`} type="radio" name={`provider-${kind}`} checked={provider.active} disabled={provider.requiresConfiguration && !provider.configured} onChange={async () => { const result = await window.electron.musicSetActiveProvider(kind, provider.id); setNotice(result?.ok === false ? result.error : `${provider.name} now supplies ${kind}.`); load(); }} />}</div></div>)}</section>)}</div>
-    {configuring && <ConnectionDialog provider={configuring} connection={connection} setConnection={setConnection} close={() => setConfiguring(null)} complete={async (value) => { const result = await window.electron.musicConfigureProvider(configuring.id, value); if (result?.ok) { setConfiguring(null); setConnection({ url: "", username: "", password: "" }); setNotice(`${configuring.name} connected.`); load(); } return result; }} />}
-  </div>;
+
+  const sources = useMemo(() => buildSignalSources(providers), [providers]);
+  const ready = sources.filter((source) => source.setupState === "ready").length;
+
+  return (
+    <div className="music-page music-sources-page music-signal-page">
+      <header className="music-page-header compact music-sources-heading">
+        <div>
+          <span className="music-eyebrow">Signal Sources</span>
+          <h1>Music sources</h1>
+          <p>Only Echo-aligned sources appear here: YouTube Music, YouTube Audio, LRCLib, Spotify import and Local Library.</p>
+        </div>
+        <div className="music-source-summary"><strong>{ready}/{sources.length}</strong><span>signals ready</span></div>
+      </header>
+
+      {notice && <div className="music-plugin-notice" role="status">{notice}</div>}
+      <div className="music-signal-grid">
+        {sources.map((source) => <SignalSourceCard key={source.id} source={source} onNavigate={onNavigate} />)}
+      </div>
+      <div className="music-security-note">
+        <strong>No raw streams leave the main process.</strong>
+        <span>Playback resolves through protected Orion grants. Spotify is metadata/import only and never appears as a playable source.</span>
+      </div>
+    </div>
+  );
 }
 
-function ConnectionDialog({ provider, connection, setConnection, close, complete }) {
-  const [error, setError] = useState("");
-  return <div className="music-source-dialog" role="dialog" aria-modal="true" aria-label={`Connect ${provider.name}`}><form onSubmit={async (event) => { event.preventDefault(); setError(""); const result = await complete(connection); if (!result?.ok) setError(result?.error || "Connection could not be saved."); }}>
-    <h2>Connect {provider.name}</h2><p>Credentials are encrypted by the operating system and remain in Orion's main process.</p>
-    <label>Server URL<input type="url" required placeholder="https://music.example.com" value={connection.url} onChange={(event) => setConnection({ ...connection, url: event.target.value })} /></label>
-    <label>Username<input required value={connection.username} onChange={(event) => setConnection({ ...connection, username: event.target.value })} /></label>
-    <label>Password<input type="password" required value={connection.password} onChange={(event) => setConnection({ ...connection, password: event.target.value })} /></label>
-    {error && <em>{error}</em>}<footer><button type="button" onClick={close}>Cancel</button><button className="primary" type="submit">Save connection</button></footer>
-  </form></div>;
+function SignalSourceCard({ source, onNavigate }) {
+  const health = source.health?.status || source.setupState;
+  const disabled = source.setupState !== "ready";
+  return (
+    <article className={`music-signal-card role-${source.role} status-${health}`}>
+      <header>
+        <span className="music-signal-orb" aria-hidden="true"><i /></span>
+        <div>
+          <small>{source.roleLabel}</small>
+          <h2>{source.label}</h2>
+        </div>
+        <b>{source.setupState}</b>
+      </header>
+      <p>{source.description}</p>
+      <div className="music-signal-meta">
+        <span>{source.providerCount ? `${source.providerCount} provider${source.providerCount === 1 ? "" : "s"}` : "No active adapter"}</span>
+        <span>{String(health).replaceAll("_", " ")}</span>
+      </div>
+      {source.lastError && <em title={source.lastError}>{source.lastError}</em>}
+      <footer>
+        {source.id === "local-library" && <button onClick={() => onNavigate?.("music-library")}>Open Library</button>}
+        {source.id === "spotify-import" && <button disabled>Import adapter pending</button>}
+        {source.id !== "local-library" && source.id !== "spotify-import" && <button disabled={disabled}>{disabled ? "Pending" : "Ready"}</button>}
+      </footer>
+    </article>
+  );
 }

@@ -255,6 +255,92 @@
     }
 }
 
+/* Orion X Music Planet release welcome */
+.whats-new-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999999;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background:
+        radial-gradient(circle at 24% 32%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 34%),
+        radial-gradient(circle at 78% 72%, color-mix(in srgb, var(--music-violet) 13%, transparent), transparent 38%),
+        color-mix(in srgb, var(--bg-base) 82%, transparent);
+    backdrop-filter: blur(22px) saturate(1.06);
+    animation: fadeIn 180ms ease-out;
+}
+
+.whats-new-modal {
+    position: relative;
+    isolation: isolate;
+    width: min(700px, calc(100vw - 40px));
+    max-height: calc(100vh - 46px);
+    overflow: auto;
+    padding: clamp(30px, 4vw, 48px);
+    border: 1px solid color-mix(in srgb, var(--border) 72%, var(--accent) 28%);
+    border-radius: 34px;
+    color: var(--text-primary);
+    background: linear-gradient(145deg, color-mix(in srgb, var(--surface-translucent) 92%, transparent), color-mix(in srgb, var(--bg-elevated) 88%, transparent));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 10%, transparent), 0 36px 110px color-mix(in srgb, var(--shadow-color) 66%, transparent), 0 0 70px color-mix(in srgb, var(--accent) 9%, transparent);
+    animation: slideUp 260ms var(--ease-out);
+}
+
+.whats-new-modal::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 38%, color-mix(in srgb, var(--music-violet) 8%, transparent));
+    pointer-events: none;
+}
+
+.whats-new-orbit { position: absolute; z-index: -1; top: 18px; right: 24px; width: 150px; height: 150px; opacity: .42; pointer-events: none; }
+.whats-new-orbit span { position: absolute; inset: 43px; border-radius: 50%; background: radial-gradient(circle at 34% 30%, var(--music-highlight), var(--music-violet) 44%, var(--accent)); box-shadow: 0 0 42px color-mix(in srgb, var(--music-violet) 36%, transparent); }
+.whats-new-orbit i { position: absolute; inset: 24px 6px; border: 1px solid color-mix(in srgb, var(--music-highlight) 46%, transparent); border-radius: 50%; transform: rotate(-24deg) scaleY(.42); }
+.whats-new-orbit i:last-child { inset: 10px 26px; border-color: color-mix(in srgb, var(--accent) 50%, transparent); transform: rotate(38deg) scaleY(.55); }
+
+.whats-new-badge { display: inline-flex; align-items: center; min-height: 30px; padding: 0 13px; border: 1px solid color-mix(in srgb, var(--music-highlight) 24%, var(--border)); border-radius: 999px; color: var(--text-secondary); background: color-mix(in srgb, var(--surface-translucent) 72%, transparent); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.whats-new-modal > header { max-width: 560px; margin: 30px 0 34px; }
+.whats-new-modal > header p { margin: 0 0 9px; color: var(--accent); font: 700 12px/1 var(--font-heading); letter-spacing: .08em; }
+.whats-new-modal > header h1 { margin: 0; font: 800 clamp(34px, 5vw, 54px)/.98 var(--font-heading); letter-spacing: -.045em; }
+.whats-new-modal > header span { display: block; margin-top: 15px; color: var(--text-muted); font-size: 15px; line-height: 1.55; }
+
+.whats-new-features { display: grid; gap: 3px; }
+.whats-new-features article { display: grid; grid-template-columns: 46px 1fr; gap: 16px; align-items: start; padding: 17px 14px; border-radius: 18px; transition: background var(--duration-fast), transform var(--duration-fast); }
+.whats-new-features article:hover { background: color-mix(in srgb, var(--surface-translucent) 72%, transparent); transform: translateX(3px); }
+.whats-new-feature-icon { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid color-mix(in srgb, currentColor 28%, transparent); border-radius: 14px; color: var(--accent); background: color-mix(in srgb, currentColor 8%, transparent); }
+.whats-new-feature-icon.is-music { color: var(--music-highlight); box-shadow: 0 0 22px color-mix(in srgb, var(--music-violet) 16%, transparent); }
+.whats-new-feature-icon.is-sync { color: var(--success); }
+.whats-new-feature-icon svg { width: 21px; height: 21px; }
+.whats-new-features h2 { margin: 1px 0 5px; font-size: 16px; }
+.whats-new-features p { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.52; }
+
+.whats-new-modal > footer { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 30px; }
+.whats-new-modal > footer button { min-height: 50px; border-radius: 15px; font-weight: 800; cursor: pointer; }
+.whats-new-cinema { border: 1px solid var(--border); color: var(--text-primary); background: var(--surface-translucent); }
+.whats-new-music { border: 1px solid color-mix(in srgb, var(--music-highlight) 25%, transparent); color: var(--bg-base); background: linear-gradient(115deg, var(--music-highlight), color-mix(in srgb, var(--music-highlight) 72%, var(--music-violet))); box-shadow: 0 14px 34px color-mix(in srgb, var(--music-violet) 24%, transparent); }
+.whats-new-modal > footer button:hover { transform: translateY(-2px); }
+.whats-new-modal > footer button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+
+@media (max-width: 620px) {
+    .whats-new-modal { padding: 26px 20px; border-radius: 26px; }
+    .whats-new-modal > footer { grid-template-columns: 1fr; }
+    .whats-new-orbit { opacity: .24; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .whats-new-overlay,
+    .whats-new-modal,
+    .sidebar-collapsed-rail { animation: none; }
+    .sidebar,
+    .sidebar-body,
+    .sidebar-collapsed-rail > span:last-child { transition: opacity 120ms linear; }
+    .whats-new-features article:hover,
+    .whats-new-modal > footer button:hover { transform: none; }
+}
+
 .close-confirm-overlay {
     position: fixed;
     inset: 0;

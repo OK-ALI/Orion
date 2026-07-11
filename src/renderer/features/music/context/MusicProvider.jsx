@@ -10,10 +10,13 @@ import { useFavoritesStore, usePluginStore, useProvidersStore } from "../stores/
 const MusicContext = createContext(null);
 
 function readVisualPreferences() {
+  const storedDockMode = storage.get(STORAGE_KEYS.MUSIC_PLAYER_DOCK_MODE);
+  if (storedDockMode === "compact") storage.set(STORAGE_KEYS.MUSIC_PLAYER_DOCK_MODE, "dock");
   return {
     atmosphere: storage.get(STORAGE_KEYS.MUSIC_ATMOSPHERE) || "pulse",
     visualizer: storage.get(STORAGE_KEYS.MUSIC_VISUALIZER) || "orbit",
     intensity: clamp(storage.get(STORAGE_KEYS.MUSIC_VISUAL_INTENSITY) ?? 65, 0, 100),
+    glowStrength: clamp(storage.get(STORAGE_KEYS.MUSIC_GLOW_STRENGTH) ?? 55, 0, 100),
     artworkColor: storage.get(STORAGE_KEYS.MUSIC_ARTWORK_COLOR) !== false,
     lyricsMotion: storage.get(STORAGE_KEYS.MUSIC_LYRICS_MOTION) !== false,
     adaptPerformance: storage.get(STORAGE_KEYS.MUSIC_PERFORMANCE_ADAPT) !== false,
@@ -23,7 +26,12 @@ function readVisualPreferences() {
     disableAudioReactiveBg: storage.get(STORAGE_KEYS.MUSIC_DISABLE_AUDIO_REACTIVE_BG) === true,
     staticBg: storage.get(STORAGE_KEYS.MUSIC_STATIC_BG) === true,
     particleDensity: storage.get(STORAGE_KEYS.MUSIC_PARTICLE_DENSITY) || "medium",
+    sceneStyle: storage.get(STORAGE_KEYS.MUSIC_SCENE_STYLE) || "aurora",
     batterySaver: storage.get(STORAGE_KEYS.MUSIC_BATTERY_SAVER) === true,
+    displayFont: storage.get(STORAGE_KEYS.MUSIC_DISPLAY_FONT) || "sora",
+    displayScale: storage.get(STORAGE_KEYS.MUSIC_DISPLAY_SCALE) || "comfortable",
+    glassDensity: storage.get(STORAGE_KEYS.MUSIC_GLASS_DENSITY) || "balanced",
+    playerDockMode: storedDockMode === "float" ? "float" : "dock",
     reduceMotion: storage.get(STORAGE_KEYS.REDUCE_ANIMATIONS) === true,
   };
 }
@@ -53,6 +61,13 @@ export function MusicProvider({ children }) {
   const [candidates, setCandidates] = useState({ status: "idle", items: [], error: "" });
   const [resolveNonce, setResolveNonce] = useState(0);
   const [visualPreferences, setVisualPreferences] = useState(readVisualPreferences);
+  useEffect(() => {
+    const glowPercent = Math.round(6 + visualPreferences.glowStrength * 0.56);
+    document.documentElement.style.setProperty("--music-glow-strength", `${glowPercent}%`);
+  }, [visualPreferences.glowStrength]);
+  const [analyserState, setAnalyserState] = useState("idle");
+  const [analyserDiagnostics, setAnalyserDiagnostics] = useState({ state: "idle", contextState: "unavailable",
+    sourceConnected: false, frameCount: 0, nonZeroFrameCount: 0, lastEnergy: 0, lastFrameAt: 0, blockedReason: "" });
   const [artwork, setArtwork] = useState({ url: "", palette: deterministicPalette("orion") });
   const [immersive, setImmersive] = useState(false);
   const engineRef = useRef(null);
@@ -63,12 +78,13 @@ export function MusicProvider({ children }) {
   const shuffleBagRef = useRef([]);
   const shouldAutoplayRef = useRef(false);
   const restoringQueueRef = useRef(false);
+  const resolveGenerationRef = useRef(0);
   queueRef.current = queue;
   indexRef.current = index;
   const current = queue[index] || null;
 
-  useEffect(() => {
-    window.electron?.musicLoadQueue?.().then((saved) => {
+  const reloadPortableQueue = useCallback(() => {
+    return window.electron?.musicLoadQueue?.().then((saved) => {
       restoringQueueRef.current = true;
       const recovered = normalizeQueueRecovery(saved);
       setQueue(recovered.items); setIndex(recovered.index); setRepeat(recovered.repeat); setShuffle(recovered.shuffle);
@@ -76,6 +92,12 @@ export function MusicProvider({ children }) {
       shuffleBagRef.current = recovered.shuffleBag;
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    reloadPortableQueue();
+    window.addEventListener("orion:music-backup-restored", reloadPortableQueue);
+    return () => window.removeEventListener("orion:music-backup-restored", reloadPortableQueue);
+  }, [reloadPortableQueue]);
 
   useEffect(() => {
     const timer = setTimeout(() => window.electron?.musicSaveQueue?.({ items: queue, index, repeat, shuffle,
@@ -110,6 +132,7 @@ export function MusicProvider({ children }) {
   }, [queue.map((item) => `${item.provider || ""}:${item.id}`).join("|")]);
 
   useEffect(() => {
+    const resolveGeneration = ++resolveGenerationRef.current;
     setLyrics({ status: "idle", value: null, error: "" });
     setCandidates({ status: "idle", items: [], error: "" });
     setProgress({ currentTime: 0, duration: 0 });
@@ -119,9 +142,12 @@ export function MusicProvider({ children }) {
       return undefined;
     }
     let cancelled = false;
+    // The old stream must disappear before resolving the next item. Otherwise the
+    // audio element can continue playing it while the next source is loading.
+    setStream(null);
     setPlaybackStatus("loading");
     window.electron?.musicResolveTrack?.(current).then((value) => {
-      if (cancelled) return;
+      if (cancelled || resolveGeneration !== resolveGenerationRef.current) return;
       if (!value?.ok) {
         setStream({ error: value?.error || "This track could not be resolved." });
         setPlaying(false); setPlaybackStatus("error");
@@ -133,7 +159,7 @@ export function MusicProvider({ children }) {
       setPlaying(autoplay);
       setPlaybackStatus(autoplay ? "loading" : "paused");
     }).catch((error) => {
-      if (!cancelled) {
+      if (!cancelled && resolveGeneration === resolveGenerationRef.current) {
         setStream({ error: error?.message || "This track could not be resolved." });
         setPlaying(false); setPlaybackStatus("error");
       }
@@ -147,12 +173,15 @@ export function MusicProvider({ children }) {
   const toggleMute = useCallback(() => setMuted((value) => !value), []);
   const togglePlaying = useCallback(() => {
     if (!current) return;
+    if (playing) { setPlaying(false); return; }
     shouldAutoplayRef.current = true;
-    setPlaying((value) => !value);
-  }, [current]);
+    engineRef.current?.unlockAudio?.();
+    setPlaying(true);
+  }, [current, playing]);
 
   const selectQueueItem = useCallback((position, autoplay = true) => {
     if (position < 0 || position >= queueRef.current.length) return;
+    if (autoplay) engineRef.current?.unlockAudio?.();
     if (indexRef.current >= 0 && position !== indexRef.current) historyRef.current.push(indexRef.current);
     shouldAutoplayRef.current = autoplay;
     if (position === indexRef.current) { seekTo(0); setPlaying(autoplay); }
@@ -160,6 +189,7 @@ export function MusicProvider({ children }) {
   }, [seekTo]);
 
   const playTrack = useCallback((track, context = []) => {
+    engineRef.current?.unlockAudio?.();
     const items = context.length ? context : [track];
     const position = Math.max(0, items.findIndex((item) => item.id === track.id));
     shouldAutoplayRef.current = true;
@@ -167,10 +197,55 @@ export function MusicProvider({ children }) {
     window.dispatchEvent(new CustomEvent("orion:music-playback-start"));
   }, []);
 
+  const addToQueue = useCallback((track) => {
+    if (!track?.id) return;
+    setQueue((items) => items.some((item) => item.id === track.id && item.provider === track.provider)
+      ? items : [...items, track]);
+    setIndex((value) => value < 0 ? 0 : value);
+  }, []);
+
+  const playNextTrack = useCallback((track) => {
+    if (!track?.id) return;
+    setQueue((items) => {
+      const currentIndex = Math.max(-1, indexRef.current);
+      const withoutDuplicate = items.filter((item, itemIndex) => itemIndex <= currentIndex
+        || item.id !== track.id || item.provider !== track.provider);
+      const next = withoutDuplicate.slice();
+      next.splice(currentIndex + 1, 0, track);
+      return next;
+    });
+    setIndex((value) => value < 0 ? 0 : value);
+  }, []);
+
+  const clearUpcoming = useCallback(() => {
+    const currentItem = queueRef.current[indexRef.current];
+    setQueue(currentItem ? [currentItem] : []);
+    setIndex(currentItem ? 0 : -1);
+    historyRef.current = [];
+  }, []);
+
+  const startRadio = useCallback(async (item = queueRef.current[indexRef.current]) => {
+    if (!item) return { ok: false, error: "Choose a track, album or artist first." };
+    engineRef.current?.unlockAudio?.();
+    const result = await window.electron?.musicGetRadio?.(item);
+    if (!result?.ok || !result.tracks?.length) return result || { ok: false, error: "Radio is unavailable." };
+    const base = queueRef.current[indexRef.current] || item;
+    const seen = new Set([`${base.provider || ""}:${base.id}`]);
+    const tracks = result.tracks.filter((track) => {
+      const key = `${track.provider || ""}:${track.id}`;
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    });
+    shouldAutoplayRef.current = true;
+    setQueue([base, ...tracks]); setIndex(0); setPlaying(true);
+    return { ...result, tracks };
+  }, []);
+
   const playNext = useCallback(() => {
     const items = queueRef.current;
     const currentIndex = indexRef.current;
     if (!items.length || currentIndex < 0) return;
+    engineRef.current?.unlockAudio?.();
     if (repeat === "one") { seekTo(0); setPlaying(true); return; }
     let next = -1;
     if (shuffle) {
@@ -178,13 +253,29 @@ export function MusicProvider({ children }) {
       next = shuffleBagRef.current.shift() ?? -1;
     } else if (currentIndex + 1 < items.length) next = currentIndex + 1;
     else if (repeat === "all") next = 0;
-    if (next < 0) { setPlaying(false); setPlaybackStatus("paused"); return; }
+    if (next < 0) {
+      const seed = items[currentIndex];
+      window.electron?.musicGetRadio?.(seed).then((result) => {
+        const existing = new Set(items.map((item) => `${item.provider || ""}:${item.id}`));
+        const additions = (result?.tracks || []).filter((item) => {
+          const key = `${item.provider || ""}:${item.id}`;
+          if (existing.has(key)) return false;
+          existing.add(key); return true;
+        });
+        if (!additions.length) { setPlaying(false); setPlaybackStatus("paused"); return; }
+        shouldAutoplayRef.current = true;
+        setQueue((currentItems) => [...currentItems, ...additions]);
+        setIndex(currentIndex + 1); setPlaying(true);
+      }).catch(() => { setPlaying(false); setPlaybackStatus("paused"); });
+      return;
+    }
     historyRef.current.push(currentIndex);
     shouldAutoplayRef.current = true;
     setIndex(next); setPlaying(true);
   }, [repeat, seekTo, shuffle]);
 
   const playPrevious = useCallback(() => {
+    engineRef.current?.unlockAudio?.();
     const decision = previousQueueTarget({ currentTime: progress.currentTime,
       currentIndex: indexRef.current, history: historyRef.current });
     if (decision.restart) { seekTo(0); return; }
@@ -220,6 +311,7 @@ export function MusicProvider({ children }) {
   }, [current]);
 
   const selectCandidate = useCallback(async (candidateId) => {
+    engineRef.current?.unlockAudio?.();
     setPlaybackStatus("loading");
     const result = await window.electron?.musicResolveCandidate?.(candidateId);
     if (!result?.ok) { setStream({ error: result?.error }); setPlaybackStatus("error"); return; }
@@ -276,13 +368,15 @@ export function MusicProvider({ children }) {
     playbackStatus, setPlaybackStatus, stream, progress, setProgress, buffered, setBuffered,
     volume, setVolume, muted, setMuted, toggleMute, repeat, setRepeat, shuffle, setShuffle,
     panel, setPanel, lyrics, loadLyrics, candidates, loadCandidates, selectCandidate,
-    playTrack, playNext, playPrevious, selectQueueItem, removeFromQueue, moveQueueItem, seekTo, seekBy,
-    stop, retryStream, engineRef, visualBus, visualPreferences, artwork, immersive, setImmersive,
+    playTrack, playNext, playPrevious, addToQueue, playNextTrack, clearUpcoming, startRadio,
+    selectQueueItem, removeFromQueue, moveQueueItem, seekTo, seekBy,
+    stop, retryStream, engineRef, visualBus, visualPreferences, analyserState, setAnalyserState,
+    analyserDiagnostics, setAnalyserDiagnostics, artwork, immersive, setImmersive,
     favorites, plugins, providers }),
   [buffered, candidates, current, index, loadCandidates, loadLyrics, lyrics, muted, panel,
-    playNext, playPrevious, playTrack, playbackStatus, playing, progress, queue, removeFromQueue, moveQueueItem,
+    addToQueue, clearUpcoming, playNext, playNextTrack, playPrevious, playTrack, playbackStatus, playing, progress, queue, removeFromQueue, moveQueueItem, startRadio,
     repeat, retryStream, seekBy, seekTo, selectCandidate, selectQueueItem, setVolume, shuffle,
-    stop, stream, toggleMute, togglePlaying, volume, visualBus, visualPreferences, artwork, immersive,
+    stop, stream, toggleMute, togglePlaying, volume, visualBus, visualPreferences, analyserState, analyserDiagnostics, artwork, immersive,
     favorites, plugins, providers]);
 
   return <MusicContext.Provider value={value}>{children}<AudioEngine controller={value} /></MusicContext.Provider>;

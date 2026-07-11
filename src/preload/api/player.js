@@ -1,3 +1,5 @@
+const path = require("path");
+
 module.exports = ({ ipcRenderer, webFrame }) => ({
   resolveAllManga: (args) => ipcRenderer.invoke("resolve-allmanga", args),
   setPlayerVideo: (args) => ipcRenderer.invoke("set-player-video", args),
@@ -84,5 +86,6 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
     ipcRenderer.on("player-shortcut", handler);
     return handler;
   },
-  offPlayerShortcut: (handler) => ipcRenderer.removeListener("player-shortcut", handler)
+  offPlayerShortcut: (handler) => ipcRenderer.removeListener("player-shortcut", handler),
+  playerWebviewPreloadPath: path.join(__dirname, "..", "playerWebviewPreload.js")
 });

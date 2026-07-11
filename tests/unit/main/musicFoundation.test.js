@@ -10,7 +10,7 @@ const { applyMigrations } = require("../../../src/main/music/migrations");
 const providerRegistry = require("../../../src/main/music/providers/registry");
 const { catalog: pluginCatalog } = require("../../../src/main/music/plugins/catalog");
 const { candidateScore } = require("../../../src/main/music/playback/streamResolver");
-const { portableValue } = require("../../../src/main/music/database");
+const { normalizePortableQueue, portableValue } = require("../../../src/main/music/database");
 const { parseJsonPlaylist, parseM3uPlaylist, serializeJsonPlaylist,
   serializeM3uPlaylist } = require("../../../src/main/music/library/playlistFiles");
 
@@ -64,11 +64,12 @@ test("music candidate ranking favors matching official audio and duration", () =
 test("music database migrations are transactional and repeatable", () => {
   const { DatabaseSync } = require("node:sqlite");
   const database = new DatabaseSync(":memory:");
-  assert.equal(applyMigrations(database), 3);
-  assert.equal(applyMigrations(database), 3);
+  assert.equal(applyMigrations(database), 4);
+  assert.equal(applyMigrations(database), 4);
   const tables = database.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((row) => row.name);
   assert.ok(tables.includes("music_tracks"));
   assert.ok(tables.includes("music_playlists"));
+  assert.ok(tables.includes("music_playlist_folders"));
   database.close();
 });
 
@@ -96,10 +97,13 @@ test("provider health classifies and redacts failures", () => {
   providerRegistry.clear();
 });
 
-test("curated plugin catalog mirrors Nuclear capability coverage without loading Nuclear code", () => {
+test("curated plugin catalog exposes only Echo-aligned Music sources", () => {
   const names = pluginCatalog.map((plugin) => plugin.name);
-  for (const expected of ["OmniSource", "Discogs", "YouTube", "Bandcamp", "SoundCloud", "Spotify", "Deezer Catalog", "MusicBrainz", "ListenBrainz Dashboard", "LRCLib Lyrics", "Last.fm", "YouTube Playlists", "KHInsider"]) {
+  for (const expected of ["Orion Music Core", "YouTube", "LRCLib Lyrics", "Spotify Charts / Import"]) {
     assert.ok(names.includes(expected), `${expected} is missing`);
+  }
+  for (const removed of ["OmniSource", "Discogs", "Bandcamp", "SoundCloud", "Deezer Catalog", "MusicBrainz", "ListenBrainz Dashboard", "Last.fm", "YouTube Playlists", "KHInsider", "JioSaavn"]) {
+    assert.equal(names.includes(removed), false, `${removed} should not be exposed`);
   }
   assert.ok(pluginCatalog.every((plugin) => Array.isArray(plugin.permissions)));
   assert.equal(pluginCatalog.some((plugin) => /nuclear-plugin/.test(plugin.id)), false);
@@ -112,6 +116,15 @@ test("portable Music state removes machine paths, signed URLs, and credentials",
     artworkUrl: "https://signed.example/secret", headers: { Authorization: "secret" },
     nested: { token: "secret", providerTrackId: "safe-id" } });
   assert.deepEqual(value, { id: "track-1", title: "Signal", nested: { providerTrackId: "safe-id" } });
+});
+
+test("portable Music queue keeps playback organization without private media details", () => {
+  const clean = portableValue({ items: [{ id: "track-1", title: "Signal", localPath: "C:\\Music\\Signal.flac",
+    streamUrl: "https://signed.example/secret", headers: { Authorization: "secret" } }], index: 8, repeat: "bad",
+    shuffle: true, history: [0, 8], shuffleBag: [0, 4] });
+  assert.deepEqual(normalizePortableQueue(clean), {
+    items: [{ id: "track-1", title: "Signal" }], index: 0, repeat: "off", shuffle: true, history: [0], shuffleBag: [0],
+  });
 });
 
 test("Music playlists round-trip through validated JSON and extended M3U", () => {

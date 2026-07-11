@@ -23,7 +23,11 @@ test("Constellation opens a person and restores the catalog on Back", async ({},
     };
   });
   await page.reload();
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(900);
+  const skipSignIn = page.getByRole("button", { name: "Skip / Use Offline" });
+  if (await skipSignIn.count()) await skipSignIn.click();
+  const skipWhatsNew = page.getByRole("button", { name: "Continue to Cinema" });
+  if (await skipWhatsNew.count()) await skipWhatsNew.click();
   await page.evaluate(() => {
     [...document.querySelectorAll(".sidebar-item")].find((element) => element.textContent.includes("Constellation"))?.click();
   });

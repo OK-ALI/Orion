@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { measureNetworkStatus, networkLatencyTier } from "../../../src/renderer/services/networkStatus";
+import { measureNetworkStatus, medianLatency, networkLatencyTier } from "../../../src/renderer/services/networkStatus";
 
 describe("network status measurement", () => {
   it("reports rounded HTTP round-trip latency", async () => {
@@ -27,5 +27,11 @@ describe("network status measurement", () => {
     expect(networkLatencyTier(180)).toBe("fast");
     expect(networkLatencyTier(181)).toBe("fair");
     expect(networkLatencyTier(551)).toBe("slow");
+  });
+
+  it("uses a bounded median for the service indicator", () => {
+    expect(medianLatency([80, 300, 120, 110, 600, 90])).toBe(120);
+    expect(medianLatency([120, Number.NaN, 220])).toBe(170);
+    expect(medianLatency([])).toBeNull();
   });
 });

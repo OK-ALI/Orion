@@ -1,11 +1,11 @@
 # Orion Music Planet Completion Goal
 
 **Target:** Stable first-party Music Planet v2  
-**Reference baseline:** Orion v1.0.10 workspace after the v1.1 Search/Constellation work  
+**Reference baseline:** Orion v2.0.0 release workspace
 **Visual direction:** Living Album Cosmos  
 **Navigation:** Dedicated Music shell  
 **Home focus:** Now Playing world  
-**Status:** Active engineering goal
+**Status:** Completed and archived with the v2.0.0 release
 
 ## Engineering progress
 

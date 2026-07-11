@@ -1,7 +1,7 @@
 import { BUNDLED_TMDB_TOKEN } from "./tmdb";
 import { getApiKey } from "./settingsStore";
 
-export const NETWORK_PROBE_INTERVAL = 30_000;
+export const NETWORK_PROBE_INTERVAL = 15_000;
 export const NETWORK_PROBE_TIMEOUT = 6_000;
 const NETWORK_PROBE_URL = "https://api.themoviedb.org/3/authentication";
 
@@ -10,6 +10,13 @@ export function networkLatencyTier(latencyMs) {
   if (latencyMs <= 180) return "fast";
   if (latencyMs <= 550) return "fair";
   return "slow";
+}
+
+export function medianLatency(samples = []) {
+  const values = samples.filter(Number.isFinite).slice(-5).sort((left, right) => left - right);
+  if (!values.length) return null;
+  const middle = Math.floor(values.length / 2);
+  return values.length % 2 ? values[middle] : Math.round((values[middle - 1] + values[middle]) / 2);
 }
 
 export async function measureNetworkStatus({

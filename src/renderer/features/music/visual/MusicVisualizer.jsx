@@ -5,18 +5,18 @@ const THEME_FALLBACKS = {
   "--bg-base": "#08070c",
   "--music-palette-base-1": "#09081a",
   "--music-palette-primary-1": "#8b5cf6",
-  "--music-palette-spectral-1": "#22d3ee",
+  "--music-palette-spectral-1": "#ddd7ee",
   "--music-palette-base-2": "#100719",
   "--music-palette-primary-2": "#d946ef",
-  "--music-palette-spectral-2": "#67e8f9",
+  "--music-palette-spectral-2": "#d8cfeb",
   "--music-palette-base-3": "#06111c",
   "--music-palette-primary-3": "#6366f1",
-  "--music-palette-spectral-3": "#2dd4bf",
+  "--music-palette-spectral-3": "#b9b4cc",
   "--music-palette-base-4": "#130a13",
   "--music-palette-primary-4": "#a855f7",
   "--music-palette-spectral-4": "#f472b6",
   "--music-violet": "#8b5cf6",
-  "--music-cyan": "#22d3ee",
+  "--music-highlight": "#e8e5ee",
   "--music-magenta": "#d946ef"
 };
 
@@ -74,7 +74,7 @@ export default function MusicVisualizer({ variant = "orbit", interactive = false
       surface?.style.setProperty("--music-energy", String(frame.energy * intensity));
       const styles = window.getComputedStyle(canvas);
       const primaryVar = styles.getPropertyValue("--mp-primary").trim() || styles.getPropertyValue("--music-reactive-primary").trim() || styles.getPropertyValue("--music-violet").trim();
-      const spectralVar = styles.getPropertyValue("--mp-spectral").trim() || styles.getPropertyValue("--music-reactive-spectral").trim() || styles.getPropertyValue("--music-cyan").trim();
+      const spectralVar = styles.getPropertyValue("--mp-spectral").trim() || styles.getPropertyValue("--music-reactive-spectral").trim() || styles.getPropertyValue("--music-waveform").trim() || styles.getPropertyValue("--music-highlight").trim();
       const primary = resolveColor(primaryVar);
       const spectral = resolveColor(spectralVar);
       context.lineWidth = Math.max(1.4, ratio * 1.4);

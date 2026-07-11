@@ -38,7 +38,7 @@ export default function WindowTitlebar({
     <header className="titlebar titlebar-drag">
       <div className="titlebar-left titlebar-no-drag">
         <div className="titlebar-logo">
-  <span>Orion</span>
+  <span>Orion X Music Planet</span>
 </div>
       </div>
 

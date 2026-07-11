@@ -2,6 +2,7 @@ const { app, ipcMain, shell } = require("electron");
 const http = require("http");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const { secureStoreGet, secureStoreSet } = require("./storageIpc");
 
 // Scopes: profile, email, openid, hidden appData folder for syncing, and drive.file for media locker
@@ -22,9 +23,6 @@ function getAuthResponsePage(isSuccess, title, message, detailText) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>${title} - Orion</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
     <style>
       body {
         margin: 0;
@@ -38,30 +36,6 @@ function getAuthResponsePage(isSuccess, title, message, detailText) {
         justify-content: center;
         overflow: hidden;
         position: relative;
-      }
-      
-      .glow-1 {
-        position: absolute;
-        top: -10%;
-        left: -10%;
-        width: 60vw;
-        height: 60vw;
-        background: radial-gradient(circle, rgba(229, 9, 20, 0.12) 0%, rgba(229, 9, 20, 0) 70%);
-        filter: blur(80px);
-        z-index: 1;
-        pointer-events: none;
-      }
-      
-      .glow-2 {
-        position: absolute;
-        bottom: -10%;
-        right: -10%;
-        width: 60vw;
-        height: 60vw;
-        background: radial-gradient(circle, rgba(79, 70, 229, 0.12) 0%, rgba(79, 70, 229, 0) 70%);
-        filter: blur(80px);
-        z-index: 1;
-        pointer-events: none;
       }
       
       .card {
@@ -78,11 +52,6 @@ function getAuthResponsePage(isSuccess, title, message, detailText) {
         box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.15);
         text-align: center;
         animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-      }
-      
-      @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
       }
       
       .brand {
@@ -162,10 +131,8 @@ function getAuthResponsePage(isSuccess, title, message, detailText) {
     </style>
   </head>
   <body>
-    <div class="glow-1"></div>
-    <div class="glow-2"></div>
     <div class="card">
-      <div class="brand">Orion</div>
+      <div class="brand">Orion X Music Planet</div>
       <div class="icon-wrap">
         ${iconSvg}
       </div>
@@ -201,18 +168,32 @@ function getEnvValue(name) {
 }
 
 function getGoogleConfig() {
-  // Try secure store first, then fallback to .env file
+  // Orion ships one Desktop OAuth client. A desktop application is a public
+  // client, so authorization uses PKCE rather than treating a bundled secret
+  // as proof of the application's identity.
   const storedId = secureStoreGet("google_client_id");
   const storedSecret = secureStoreGet("google_client_secret");
-
-  const clientId = storedId || getEnvValue("ORION_GOOGLE_CLIENT_ID");
-  const clientSecret = storedSecret || getEnvValue("ORION_GOOGLE_CLIENT_SECRET");
+  const bundledId = getEnvValue("ORION_GOOGLE_CLIENT_ID");
+  const bundledSecret = getEnvValue("ORION_GOOGLE_CLIENT_SECRET");
+  const clientId = bundledId || storedId;
+  const clientSecret = bundledSecret || storedSecret || "";
 
   return {
     clientId,
     clientSecret,
-    source: storedId ? "user" : (clientId ? "env" : "missing"),
+    usesPkce: true,
+    source: bundledId ? "env" : (storedId ? "legacy-user" : "missing"),
   };
+}
+
+function createPkcePair() {
+  const verifier = crypto.randomBytes(48).toString("base64url");
+  const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
+  return { verifier, challenge };
+}
+
+function createOauthState() {
+  return crypto.randomBytes(24).toString("base64url");
 }
 
 async function fetchUserProfile(accessToken) {
@@ -228,10 +209,11 @@ async function fetchUserProfile(accessToken) {
 async function refreshAccessToken(clientId, clientSecret, refreshToken) {
   const body = new URLSearchParams({
     client_id: clientId,
-    client_secret: clientSecret,
     refresh_token: refreshToken,
     grant_type: "refresh_token",
   });
+  // Retain compatibility with tokens created by older configurable clients.
+  if (clientSecret) body.set("client_secret", clientSecret);
 
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -265,7 +247,7 @@ async function googleDriveRequest(url, options = {}) {
   if (res.status === 401) {
     const { clientId, clientSecret } = getGoogleConfig();
     const refreshToken = secureStoreGet("google_refresh_token");
-    if (clientId && clientSecret && refreshToken) {
+    if (clientId && refreshToken) {
       try {
         const newAccessToken = await refreshAccessToken(clientId, clientSecret, refreshToken);
         reqOptions.headers["Authorization"] = `Bearer ${newAccessToken}`;
@@ -407,7 +389,8 @@ function register() {
     const config = getGoogleConfig();
     return {
       clientId: config.clientId ? config.clientId.slice(0, 12) + "••••••••" : "",
-      hasClientSecret: !!config.clientSecret,
+      hasClientSecret: false,
+      usesPkce: true,
       source: config.source,
     };
   });
@@ -415,7 +398,8 @@ function register() {
   ipcMain.handle("google-auth:set-client-config", (_, { clientId, clientSecret }) => {
     try {
       secureStoreSet("google_client_id", clientId || null);
-      secureStoreSet("google_client_secret", clientSecret || null);
+      // Compatibility-only: the bundled Desktop client authenticates with PKCE.
+      if (clientSecret === null) secureStoreSet("google_client_secret", null);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -640,9 +624,11 @@ function register() {
     }
 
     const { clientId, clientSecret } = getGoogleConfig();
-    if (!clientId || !clientSecret) {
-      return { ok: false, error: "Google OAuth Credentials are not configured." };
+    if (!clientId) {
+      return { ok: false, error: "Google sign-in is unavailable in this build. Please contact Orion support." };
     }
+    const { verifier, challenge } = createPkcePair();
+    const expectedState = createOauthState();
 
     return new Promise((resolve) => {
       let serverClosed = false;
@@ -658,8 +644,9 @@ function register() {
 
         const code = url.searchParams.get("code");
         const err = url.searchParams.get("error");
+        const returnedState = url.searchParams.get("state");
 
-        if (code) {
+        if (code && returnedState === expectedState) {
           clearTimeout(timeoutId);
           res.writeHead(200, { "Content-Type": "text/html" });
           res.end(getAuthResponsePage(
@@ -679,10 +666,14 @@ function register() {
             const body = new URLSearchParams({
               code,
               client_id: clientId,
-              client_secret: clientSecret,
               redirect_uri: `http://127.0.0.1:${port}`,
               grant_type: "authorization_code",
+              code_verifier: verifier,
             });
+            // Orion's current centrally managed OAuth client is a confidential
+            // client and requires its bundled secret. Desktop clients can omit
+            // it; both flows retain PKCE and state verification.
+            if (clientSecret) body.set("client_secret", clientSecret);
 
             const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
               method: "POST",
@@ -704,10 +695,6 @@ function register() {
             if (clientId) {
               secureStoreSet("google_client_id", clientId);
             }
-            if (clientSecret) {
-              secureStoreSet("google_client_secret", clientSecret);
-            }
-
             const profile = await fetchUserProfile(tokenData.access_token);
             secureStoreSet("google_profile", JSON.stringify(profile));
 
@@ -728,7 +715,7 @@ function register() {
             false,
             "Authentication Failed",
             "Orion could not connect to your Google account.",
-            err || "No authorization code received"
+            err || (code ? "The sign-in response could not be verified. Please try again." : "No authorization code received")
           ));
           
           if (!serverClosed) {
@@ -770,7 +757,10 @@ function register() {
           `response_type=code&` +
           `scope=${encodeURIComponent(SCOPES.join(" "))}&` +
           `access_type=offline&` +
-          `prompt=consent`;
+          `prompt=consent&` +
+          `state=${encodeURIComponent(expectedState)}&` +
+          `code_challenge=${encodeURIComponent(challenge)}&` +
+          `code_challenge_method=S256`;
 
         shell.openExternal(authUrl);
       });

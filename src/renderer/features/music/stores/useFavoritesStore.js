@@ -91,8 +91,11 @@ export function useFavoritesStore() {
     if (!globalFavorites.loaded) {
       favoritesStore.loadFromDisk();
     }
+    const refreshAfterBackup = () => favoritesStore.loadFromDisk();
+    window.addEventListener('orion:music-backup-restored', refreshAfterBackup);
     return () => {
       listeners.delete(setState);
+      window.removeEventListener('orion:music-backup-restored', refreshAfterBackup);
     };
   }, []);
 

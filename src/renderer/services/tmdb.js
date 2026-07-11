@@ -132,6 +132,10 @@ export const PLAYER_SOURCES = [
     label: "Videasy",
     tag: null,
     note: null,
+    movieIdType: "tmdb",
+    tvIdType: "tmdb",
+    subtitleMode: "captured",
+    health: "ready",
     supportsProgress: true,
     colorParam: "color", // hex without # → e.g. "e50914"
     langParam: null, // no subtitle lang param
@@ -143,24 +147,49 @@ export const PLAYER_SOURCES = [
       `https://player.videasy.to/tv/${id}/${season}/${ep}`,
   },
   {
+    id: "superembed",
+    label: "SuperEmbed",
+    tag: "EXP",
+    note: "Experimental",
+    movieIdType: "tmdb",
+    tvIdType: "tmdb",
+    subtitleMode: "captured",
+    health: "experimental",
+    supportsProgress: true,
+    progressViaFrames: true,
+    colorParam: null,
+    langParam: null,
+    params: { tmdb: "1" },
+    movieUrl: (id) => `https://multiembed.mov/?video_id=${id}`,
+    tvUrl: (id, season, ep) => `https://multiembed.mov/?video_id=${id}&s=${season}&e=${ep}`,
+  },
+  {
     id: "vidsrc",
     label: "VidSrc",
     tag: null,
     note: null,
+    movieIdType: "tmdb",
+    tvIdType: "tmdb",
+    subtitleMode: "url",
+    health: "ready",
     supportsProgress: true,
     progressViaFrames: true, // video is in a nested iframe, needs main-process frame query
     colorParam: null,
     langParam: "ds_lang", // ISO 639-1 language code
     params: {},
-    movieUrl: (id) => `https://vsembed.su/embed/movie/${id}`,
+    movieUrl: (id) => `https://vidsrc.to/embed/movie/${id}`,
     tvUrl: (id, season, ep) =>
-      `https://vsembed.su/embed/tv/${id}/${season}/${ep}`,
+      `https://vidsrc.to/embed/tv/${id}/${season}/${ep}`,
   },
   {
     id: "vidking",
-    label: "Vidking",
+    label: "VidKing",
     tag: null,
     note: null,
+    movieIdType: "tmdb",
+    tvIdType: "tmdb",
+    subtitleMode: "captured",
+    health: "ready",
     supportsProgress: true,
     colorParam: "color", // hex without # → e.g. "e50914"
     langParam: null,
@@ -172,10 +201,172 @@ export const PLAYER_SOURCES = [
       `https://www.vidking.net/embed/tv/${id}/${season}/${ep}`,
   },
   {
+    id: "vidsrccc",
+    label: "VidSrc CC",
+    tag: "EXP",
+    note: "Experimental",
+    movieIdType: "tmdb",
+    tvIdType: "tmdb",
+    subtitleMode: "captured",
+    health: "experimental",
+    supportsProgress: true,
+    progressViaFrames: true,
+    colorParam: null,
+    langParam: null,
+    params: {},
+    movieUrl: (id) => `https://vidsrc.cc/v2/embed/movie/${id}`,
+    tvUrl: (id, season, ep) => `https://vidsrc.cc/v2/embed/tv/${id}/${season}/${ep}`,
+  },
+  {
+    id: "vidlink",
+    label: "VidLink",
+    tag: "EXP",
+    note: "Experimental",
+    movieIdType: "tmdb",
+    tvIdType: "tmdb",
+    subtitleMode: "captured",
+    health: "experimental",
+    supportsProgress: true,
+    progressViaFrames: true,
+    colorParam: "primaryColor",
+    langParam: null,
+    params: {},
+    movieUrl: (id) => `https://vidlink.pro/movie/${id}`,
+    tvUrl: (id, season, ep) => `https://vidlink.pro/tv/${id}/${season}/${ep}`,
+  },
+  {
+    id: "autoembed",
+    label: "AutoEmbed",
+    tag: "EXP",
+    note: "Experimental",
+    movieIdType: "imdb-preferred",
+    tvIdType: "tmdb",
+    subtitleMode: "captured",
+    health: "experimental",
+    supportsProgress: true,
+    progressViaFrames: true,
+    colorParam: null,
+    langParam: null,
+    params: {},
+    movieUrl: (id) =>
+      id.toString().startsWith("tt")
+        ? `https://autoembed.co/movie/imdb/${id}`
+        : `https://autoembed.co/movie/tmdb/${id}`,
+    tvUrl: (id, season, ep) =>
+      `https://autoembed.co/tv/tmdb/${id}/${season}/${ep}`,
+  },
+  {
+    id: "vidfast",
+    label: "VidFast",
+    tag: "EXP",
+    note: "Experimental",
+    movieIdType: "tmdb",
+    tvIdType: "tmdb",
+    subtitleMode: "captured",
+    health: "experimental",
+    supportsProgress: true,
+    progressViaFrames: true,
+    colorParam: null,
+    langParam: null,
+    params: {},
+    movieUrl: (id) => `https://vidfast.co/embed/movie/${id}`,
+    tvUrl: (id, season, ep) => `https://vidfast.co/embed/tv/${id}/${season}/${ep}`,
+  },
+  {
+    id: "vsembed",
+    label: "VsEmbed",
+    tag: "EXP",
+    note: "Experimental",
+    movieIdType: "tmdb",
+    tvIdType: "tmdb",
+    subtitleMode: "captured",
+    health: "experimental",
+    supportsProgress: true,
+    progressViaFrames: true,
+    colorParam: null,
+    langParam: null,
+    params: {},
+    movieUrl: (id) => `https://vsembed.su/embed/movie/${id}`,
+    tvUrl: (id, season, ep) => `https://vsembed.su/embed/tv/${id}/${season}/${ep}`,
+  },
+  {
+    id: "111movies",
+    label: "111Movies",
+    tag: "EXP",
+    note: "Experimental",
+    movieIdType: "tmdb",
+    tvIdType: "tmdb",
+    subtitleMode: "captured",
+    health: "experimental",
+    supportsProgress: true,
+    progressViaFrames: true,
+    colorParam: null,
+    langParam: null,
+    params: {},
+    movieUrl: (id) => `https://111movies.com/embed/movie/${id}`,
+    tvUrl: (id, season, ep) => `https://111movies.com/embed/tv/${id}/${season}/${ep}`,
+  },
+  {
+    id: "vidify",
+    label: "Vidify",
+    tag: "EXP",
+    note: "Experimental",
+    movieIdType: "tmdb",
+    tvIdType: "tmdb",
+    subtitleMode: "captured",
+    health: "experimental",
+    supportsProgress: true,
+    progressViaFrames: true,
+    colorParam: null,
+    langParam: null,
+    params: {},
+    movieUrl: (id) => `https://vidify.co/embed/movie/${id}`,
+    tvUrl: (id, season, ep) => `https://vidify.co/embed/tv/${id}/${season}/${ep}`,
+  },
+  {
+    id: "vixsrc",
+    label: "VixSrc",
+    tag: "EXP",
+    note: "Experimental",
+    movieIdType: "tmdb",
+    tvIdType: "tmdb",
+    subtitleMode: "captured",
+    health: "experimental",
+    supportsProgress: true,
+    progressViaFrames: true,
+    colorParam: null,
+    langParam: null,
+    params: {},
+    movieUrl: (id) => `https://vixsrc.to/embed/movie/${id}`,
+    tvUrl: (id, season, ep) => `https://vixsrc.to/embed/tv/${id}/${season}/${ep}`,
+  },
+  {
+    id: "2embed",
+    label: "2Embed",
+    tag: "EXP",
+    note: "Experimental",
+    movieIdType: "tmdb",
+    tvIdType: "tmdb",
+    subtitleMode: "captured",
+    health: "experimental",
+    supportsProgress: true,
+    progressViaFrames: true, // nested inside iframe
+    colorParam: null,
+    langParam: null,
+    params: {},
+    movieUrl: (id) => `https://www.2embed.skin/embed/${id}`,
+    tvUrl: (id, season, ep) =>
+      `https://www.2embed.skin/embedtv/${id}&s=${season}&e=${ep}`,
+  },
+  {
     id: "allmanga",
     label: "AllManga",
     tag: "ANIME",
     note: null,
+    movieIdType: "async",
+    tvIdType: "async",
+    subtitleMode: "provider",
+    health: "ready",
     supportsProgress: true,
     async: true,
     params: {},
@@ -183,6 +374,28 @@ export const PLAYER_SOURCES = [
     tvUrl: (_id, _season, _ep) => "https://allmanga.to",
   },
 ];
+
+export const getSource = (sourceId) =>
+  PLAYER_SOURCES.find((s) => s.id === sourceId) ?? PLAYER_SOURCES[0];
+
+export const sourceHealth = (sourceId) => getSource(sourceId)?.health || "ready";
+
+export const sourceSubtitleMode = (sourceId) =>
+  getSource(sourceId)?.subtitleMode || "captured";
+
+export const sourceIsExperimental = (sourceId) =>
+  sourceHealth(sourceId) === "experimental";
+
+export function resolveSourceMediaId(sourceId, type, ids = {}) {
+  const src = getSource(sourceId);
+  const idType = type === "movie" ? src.movieIdType : src.tvIdType;
+  const tmdbId = ids.tmdbId ?? ids.id;
+  const imdbId = ids.imdbId;
+
+  if (idType === "imdb") return imdbId || tmdbId;
+  if (idType === "imdb-preferred") return imdbId || tmdbId;
+  return tmdbId || imdbId;
+}
 
 export const getSourceUrl = (
   sourceId,
@@ -194,10 +407,12 @@ export const getSourceUrl = (
   accentColor = null,
   subtitleLang = null,
 ) => {
-  const src =
-    PLAYER_SOURCES.find((s) => s.id === sourceId) ?? PLAYER_SOURCES[0];
+  const src = getSource(sourceId);
+  const mediaId = typeof id === "object" && id !== null
+    ? resolveSourceMediaId(sourceId, type, id)
+    : id;
   const baseUrl =
-    type === "movie" ? src.movieUrl(id) : src.tvUrl(id, season, ep);
+    type === "movie" ? src.movieUrl(mediaId) : src.tvUrl(mediaId, season, ep);
   const url = new URL(baseUrl);
 
   Object.entries(src.params || {}).forEach(([key, value]) => {
@@ -223,25 +438,53 @@ export const getSourceUrl = (
 };
 
 export const sourceSupportsProgress = (sourceId) =>
-  PLAYER_SOURCES.find((s) => s.id === sourceId)?.supportsProgress ?? false;
+  getSource(sourceId)?.supportsProgress ?? false;
 
 export const sourceProgressViaFrames = (sourceId) =>
-  PLAYER_SOURCES.find((s) => s.id === sourceId)?.progressViaFrames ?? false;
+  getSource(sourceId)?.progressViaFrames ?? false;
 
 export const sourceIsAsync = (sourceId) =>
-  PLAYER_SOURCES.find((s) => s.id === sourceId)?.async ?? false;
+  getSource(sourceId)?.async ?? false;
 
 // Return the next non-async source after `currentId` in PLAYER_SOURCES order
 export const getNextNonAsyncSource = (currentId) => {
-  const nonAsync = PLAYER_SOURCES.filter((s) => !s.async);
+  const nonAsync = PLAYER_SOURCES.filter((s) => !s.async && s.health !== "unavailable");
   if (nonAsync.length === 0) return null;
   const idx = nonAsync.findIndex((s) => s.id === currentId);
   if (idx < 0) return nonAsync[0].id;
   return nonAsync[(idx + 1) % nonAsync.length].id;
 };
 
+export const getNextHealthyNonAsyncSource = (currentId, { includeExperimental = false } = {}) => {
+  const candidates = PLAYER_SOURCES.filter((source) =>
+    !source.async &&
+    source.health !== "unavailable" &&
+    (includeExperimental || source.health !== "experimental")
+  );
+  const ordered = candidates.length ? candidates : PLAYER_SOURCES.filter((source) => !source.async);
+  if (!ordered.length) return null;
+  const idx = ordered.findIndex((source) => source.id === currentId);
+  if (idx < 0) return ordered[0].id;
+  return ordered[(idx + 1) % ordered.length].id;
+};
+
 // Sources that require a transparent webRequest intercept to load properly
-export const NEEDS_INTERCEPT = ["vidsrc"];
+export const NEEDS_INTERCEPT = [
+  "videasy",
+  "superembed",
+  "vidsrc",
+  "vidking",
+  "vidsrccc",
+  "vidlink",
+  "autoembed",
+  "vidfast",
+  "vsembed",
+  "111movies",
+  "vidify",
+  "vixsrc",
+  "2embed",
+  "allmanga"
+];
 
 // ── AniList API (anime metadata) ──────────────────────────────────────────────
 const ANILIST_API = "https://graphql.anilist.co";

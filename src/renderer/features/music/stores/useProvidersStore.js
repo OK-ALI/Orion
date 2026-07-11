@@ -70,8 +70,11 @@ export function useProvidersStore() {
     if (!globalProvidersState.loaded) {
       providersStore.loadFromDisk();
     }
+    const refreshAfterBackup = () => providersStore.loadFromDisk();
+    window.addEventListener('orion:music-backup-restored', refreshAfterBackup);
     return () => {
       listeners.delete(setState);
+      window.removeEventListener('orion:music-backup-restored', refreshAfterBackup);
     };
   }, []);
 

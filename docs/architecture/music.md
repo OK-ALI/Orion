@@ -19,7 +19,7 @@ Playback uses two phases: candidate discovery and just-in-time stream resolution
 
 The v2.0 provider host accepts compiled first-party adapters only. Runtime plugins, unsigned packages, arbitrary custom CSS, MCP control, and dynamic code evaluation remain disabled until a utility-process permission model is implemented.
 
-Curated Music plugins are manifest-backed packages bundled with Orion. Installation toggles provider ownership and capabilities in the SQLite-backed plugin state; it does not download or evaluate JavaScript. Disabling or removing a package unregisters its providers immediately, while Orion Music Core remains locked. The dedicated Plugins surface owns catalog, permission review and lifecycle actions; Sources owns provider health, configuration and routing.
+Provider packages are bundled first-party capability modules. Orion does not expose a public plugin installer: `Signal Sources` presents only the active YouTube Music catalog, YouTube Audio playback, LRCLib lyrics, Spotify charts/import metadata and Local Library roles with redacted health diagnostics. Runtime installation, unsigned package execution and direct provider configuration are deferred.
 
 OmniSource queries enabled metadata providers concurrently, merges normalized entities, retains every provider reference and ranks exact matches before partial matches. Provider failures remain isolated and appear as partial-result diagnostics.
 

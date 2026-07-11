@@ -1,10 +1,10 @@
 # Orion Music Planet Roadmap
 
 **Target release:** Orion v2.0  
-**Document status:** Authoritative Music Planet implementation roadmap  
+**Document status:** Completed implementation roadmap / historical record
 **Baseline date:** July 3, 2026  
-**Current application version:** v1.0.10  
-**Prerequisite:** Complete and stabilize Orion v1.1 before publishing Music Planet
+**Current application version:** v2.0.0
+**Prerequisite:** Completed — Orion v1.1 stabilized before Music Planet publication
 
 ## 1. Vision
 

@@ -6,6 +6,7 @@ import { useMusic } from '../context/MusicProvider';
 function Starfield({ count = 5000, visualBus, sceneSpeed }) {
   const points = useRef();
   const material = useRef();
+  const uniforms = useMemo(() => ({ size: { value: 4.2 }, energy: { value: 0 }, color: { value: new THREE.Color("#e6e6e0") } }), []);
 
   // Create geometry directly using standard Three.js to avoid R3F mapping issues
   const geometry = useMemo(() => {
@@ -29,18 +30,19 @@ function Starfield({ count = 5000, visualBus, sceneSpeed }) {
     
     points.current.rotation.y -= delta * sceneSpeed * speedMultiplier;
     points.current.rotation.x -= delta * sceneSpeed * 0.5 * speedMultiplier;
-    material.current.size = 0.05 + (bass * 0.1);
+    uniforms.energy.value += (Math.max(energy, bass) - uniforms.energy.value) * 0.12;
   });
 
   return (
     <points ref={points} geometry={geometry} frustumCulled={false}>
-      <pointsMaterial
+      <shaderMaterial
         ref={material}
         transparent
-        color="#e6e6e0"
-        size={0.05}
-        sizeAttenuation={true}
+        uniforms={uniforms}
+        vertexShader={`uniform float size; uniform float energy; void main(){ vec4 mvPosition=modelViewMatrix*vec4(position,1.0); gl_PointSize=(size+energy*3.0)*(260.0/max(1.0,-mvPosition.z)); gl_Position=projectionMatrix*mvPosition; }`}
+        fragmentShader={`uniform vec3 color; uniform float energy; void main(){ float distanceFromCenter=distance(gl_PointCoord,vec2(.5)); if(distanceFromCenter>.5) discard; float alpha=smoothstep(.5,.16,distanceFromCenter)*(0.34+energy*.38); gl_FragColor=vec4(color,alpha); }`}
         depthWrite={false}
+        blending={THREE.AdditiveBlending}
       />
     </points>
   );
@@ -49,7 +51,8 @@ function Starfield({ count = 5000, visualBus, sceneSpeed }) {
 const vertexShader = `
 uniform float time;
 uniform float bass;
-uniform float loadingPulse;
+uniform float beat;
+uniform float mids;
 varying vec2 vUv;
 varying float vDisplacement;
 
@@ -107,9 +110,10 @@ void main() {
   // Displace based on time and audio bass
   float noise = snoise(vec3(position.x * 1.5 + time * 0.5, position.y * 1.5 + time * 0.3, position.z * 1.5 + time * 0.4));
   
-  // Baseline organic idle breathing + music bass + loading pulse
-  float idleScale = 0.15 + 0.05 * sin(time * 1.5);
-  float intensity = idleScale + (bass * 0.8) + (loadingPulse * 0.5);
+  // Calm organic breathing remains visible at rest. Only analyser data can add
+  // musical deformation; loading and network state never reach this shader.
+  float idleScale = 0.10 + 0.035 * sin(time * 1.2);
+  float intensity = min(0.42, idleScale + (bass * 0.24) + (beat * 0.12) + (mids * 0.08));
   vDisplacement = noise * intensity;
   
   vec3 newPosition = position + normal * vDisplacement;
@@ -120,7 +124,8 @@ void main() {
 const fragmentShader = `
 uniform vec3 color;
 uniform float bass;
-uniform float loadingPulse;
+uniform float beat;
+uniform float treble;
 varying vec2 vUv;
 varying float vDisplacement;
 
@@ -133,22 +138,29 @@ void main() {
   vec3 finalColor = mix(baseColor, highlightColor, mixRatio * 0.8);
   
   // Add base glow and alpha
-  float alpha = 0.5 + (bass * 0.3) + (loadingPulse * 0.4);
+  float alpha = 0.5 + (bass * 0.3) + (beat * 0.18) + (treble * 0.06);
   
   gl_FragColor = vec4(finalColor, min(alpha, 1.0));
 }
 `;
 
-function CoreMesh({ visualBus, starColor, loadingStatus }) {
+function CoreMesh({ visualBus, starColor, visualIntensity = 0.65, anchor = [0, 0, -7] }) {
   const mesh = useRef();
   const material = useRef();
+  const targetScale = useRef(new THREE.Vector3(1, 1, 1));
+  const targetPosition = useMemo(() => new THREE.Vector3(...anchor), [anchor]);
+  const lastVisualTimestamp = useRef(0);
+  const consumedFrames = useRef(0);
+  const lastDiagnosticAt = useRef(0);
   
   // Uniforms for the shader
   const uniforms = useMemo(() => ({
     time: { value: 0 },
     bass: { value: 0 },
-    color: { value: new THREE.Color(starColor) },
-    loadingPulse: { value: 0 }
+    beat: { value: 0 },
+    mids: { value: 0 },
+    treble: { value: 0 },
+    color: { value: new THREE.Color(starColor) }
   }), []);
 
   // Update color dynamically when route changes
@@ -164,19 +176,31 @@ function CoreMesh({ visualBus, starColor, loadingStatus }) {
     
     // Audio reactivity
     const frame = visualBus ? visualBus.getFrame() : null;
-    const currentBass = frame ? frame.bass : 0;
+    const currentBass = (frame ? frame.bass : 0) * visualIntensity;
+    const currentBeat = (frame ? frame.beat : 0) * visualIntensity;
+    const currentMids = (frame ? frame.mids : 0) * visualIntensity;
+    const currentTreble = (frame ? frame.treble : 0) * visualIntensity;
+    if (frame?.timestamp && frame.timestamp !== lastVisualTimestamp.current) {
+      lastVisualTimestamp.current = frame.timestamp;
+      consumedFrames.current += 1;
+    }
+    if (state.clock.elapsedTime - lastDiagnosticAt.current > 0.5) {
+      lastDiagnosticAt.current = state.clock.elapsedTime;
+      document.documentElement.dataset.musicOrbFrames = String(consumedFrames.current);
+      document.documentElement.dataset.musicOrbEnergy = (frame?.energy || 0).toFixed(4);
+    }
     // Smooth the bass transitions
     uniforms.bass.value += (currentBass - uniforms.bass.value) * 0.1;
-    
-    // Loading pulse
-    if (loadingStatus) {
-      uniforms.loadingPulse.value = (Math.sin(uniforms.time.value * 5.0) * 0.5 + 0.5) * 0.8;
-    } else {
-      uniforms.loadingPulse.value += (0 - uniforms.loadingPulse.value) * 0.1;
-    }
+    uniforms.beat.value += (currentBeat - uniforms.beat.value) * 0.2;
+    uniforms.mids.value += (currentMids - uniforms.mids.value) * 0.1;
+    uniforms.treble.value += (currentTreble - uniforms.treble.value) * 0.1;
     
     mesh.current.rotation.y += delta * 0.1;
     mesh.current.rotation.x += delta * 0.05;
+    mesh.current.position.lerp(targetPosition, 0.055);
+    const pulse = 1 + uniforms.bass.value * 0.055 + uniforms.beat.value * 0.075;
+    targetScale.current.set(pulse, pulse, pulse);
+    mesh.current.scale.lerp(targetScale.current, 0.16);
   });
 
   return (
@@ -217,18 +241,19 @@ function resolveThreeColor(colorStr, fallback) {
   return color;
 }
 
-export default function MusicPlanetSceneEngine({ sceneState = 'idle-space', visualPreferences = {}, loadingStatus = false }) {
+export default function MusicPlanetSceneEngine({ sceneState = 'idle-space', visualPreferences = {} }) {
   const { visualBus, artwork } = useMusic();
 
   const sceneConfig = {
-    'idle-space': { color: '#050508', starColor: '#5c60f5', fov: 60, speed: 0.05 },
-    'library': { color: '#0a0a14', starColor: '#7d5fff', fov: 55, speed: 0.1 },
-    'playlists': { color: '#050a12', starColor: '#00dcff', fov: 70, speed: 0.08 },
-    'albums': { color: '#1a0b12', starColor: '#e50914', fov: 50, speed: 0.15 },
-    'artists': { color: '#141405', starColor: '#ffd700', fov: 65, speed: 0.07 },
-    'now-playing': { color: '#05020a', starColor: '#ff00ff', fov: 40, speed: 0.2 },
-    'queue-satellites': { color: '#05020b', starColor: '#a020f0', fov: 45, speed: 0.18 },
-    'lyrics-rings': { color: '#02050a', starColor: '#00fa9a', fov: 52, speed: 0.12 }
+    'idle-space': { color: '#050508', starColor: '#5c60f5', fov: 60, speed: 0.05, anchor: [0, 0, -7] },
+    'library': { color: '#0a0a14', starColor: '#7d5fff', fov: 55, speed: 0.1, anchor: [3.1, 0, -7] },
+    'playlists': { color: '#07070d', starColor: '#8b7cf6', fov: 70, speed: 0.08, anchor: [-3.1, 0, -7] },
+    'favorites': { color: '#090711', starColor: '#9b82f6', fov: 62, speed: 0.08, anchor: [3.1, 0, -7] },
+    'albums': { color: '#1a0b12', starColor: '#e50914', fov: 50, speed: 0.15, anchor: [-3.1, 0, -7] },
+    'artists': { color: '#141405', starColor: '#ffd700', fov: 65, speed: 0.07, anchor: [3.1, 0, -7] },
+    'now-playing': { color: '#05020a', starColor: '#b779f7', fov: 48, speed: 0.2, anchor: [-3.1, 0, -7] },
+    'queue-satellites': { color: '#05020b', starColor: '#a020f0', fov: 52, speed: 0.18, anchor: [-3.1, 0, -7] },
+    'lyrics-rings': { color: '#050509', starColor: '#e6e2ef', fov: 52, speed: 0.12, anchor: [0, 0, -7] }
   };
 
   const config = sceneConfig[sceneState] || sceneConfig['idle-space'];
@@ -242,14 +267,22 @@ export default function MusicPlanetSceneEngine({ sceneState = 'idle-space', visu
   let count = 2000;
   if (visualPreferences.particleDensity === 'low' || visualPreferences.lowGpu) count = 500;
   if (visualPreferences.particleDensity === 'high') count = 5000;
+  const sceneStyle = visualPreferences.sceneStyle || "aurora";
+  if (sceneStyle === "aurora") count = Math.min(count, 260);
+  if (sceneStyle === "dust") count = Math.min(count, 720);
+  if (sceneStyle === "minimal") count = 0;
+  const audioReactive = !visualPreferences.disableAudioReactiveBg
+    && visualPreferences.atmosphere !== "off" && !visualPreferences.reduceMotion;
+  const visualIntensity = Math.max(0, Math.min(1, Number(visualPreferences.intensity ?? 65) / 100));
 
   return (
-    <div className="music-planet-canvas-container" style={{ backgroundColor: config.color, transition: 'background-color 1s ease' }}>
+    <div className="music-planet-canvas-container" data-scene-style={sceneStyle} style={{ "--music-scene-color": config.color }}>
       {!visualPreferences.staticBg && (
         <Canvas camera={{ position: [0, 0, 10], fov: config.fov }}>
           <ambientLight intensity={0.5} />
-          <Starfield visualBus={visualPreferences.disableAudioReactiveBg ? null : visualBus} sceneSpeed={config.speed} count={count} />
-          <CoreMesh visualBus={visualPreferences.disableAudioReactiveBg ? null : visualBus} starColor={effectiveStarColor} loadingStatus={loadingStatus} />
+          {count > 0 && <Starfield visualBus={audioReactive ? visualBus : null} sceneSpeed={config.speed} count={count} />}
+          <CoreMesh visualBus={audioReactive ? visualBus : null} starColor={effectiveStarColor}
+            visualIntensity={visualIntensity} anchor={config.anchor} />
         </Canvas>
       )}
     </div>

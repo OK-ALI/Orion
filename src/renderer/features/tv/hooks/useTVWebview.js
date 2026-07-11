@@ -29,6 +29,7 @@ import {
   NON_ANIME_DEFAULT_SOURCE,
   NEEDS_INTERCEPT,
   getNextNonAsyncSource,
+  getNextHealthyNonAsyncSource,
 } from "../../../services/tmdb";
 import {
   BookmarkIcon,
@@ -116,7 +117,7 @@ const currentProgressKey = selectedEp
   }, [playing, playerSource, selectedEp?.episode_number]);
 
   const handleFailoverNextSource = useCallback(() => {
-    const next = getNextNonAsyncSource(playerSource);
+    const next = getNextHealthyNonAsyncSource(playerSource);
     if (next) {
       clearFailoverSource(`tv_${item.id}_s${selectedSeason}_e${selectedEp?.episode_number}_${dubMode}`);
       setPlayerSource(next);
@@ -325,8 +326,18 @@ const currentProgressKey = selectedEp
     const wv = webviewRef.current;
     if (!wv) return;
     const done = () => setWebviewLoading(false);
+
+    const handleWillNavigate = (event) => {
+      const url = event.url;
+      if (url && (url.includes("/tv/") || url.includes("/movie/")) && url.includes("2embed")) {
+        console.log("[Orion] Cancelled 2Embed redirect will-navigate to:", url);
+        event.preventDefault();
+      }
+    };
+
     wv.addEventListener("did-finish-load", done);
     wv.addEventListener("did-fail-load", done);
+    wv.addEventListener("will-navigate", handleWillNavigate);
 
     // Poll up to 30s for video duration (metadata may load after buffering starts)
     let attempts = 0;
@@ -351,6 +362,7 @@ const currentProgressKey = selectedEp
     return () => {
       wv.removeEventListener("did-finish-load", done);
       wv.removeEventListener("did-fail-load", done);
+      wv.removeEventListener("will-navigate", handleWillNavigate);
       clearInterval(pollDuration);
     };
   }, [playing, playerSource, item.id, selectedEp?.episode_number]);
@@ -630,8 +642,8 @@ const currentProgressKey = selectedEp
       
       const css = `
         video::cue {
-          background: rgba(0, 0, 0, 0.75) !important;
-          color: #ffffff !important;
+          background: color-mix(in srgb, black 75%, transparent) !important;
+          color: white !important;
           font-family: sans-serif !important;
         }
         .jw-captions, .jw-caption-text,

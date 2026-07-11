@@ -66,14 +66,16 @@ export const ACCENT_PRESETS = [
   },
 ];
 
-export function applyAccentColor(presetId) {
+export function applyAccentColor(presetId, glowStrength = 50) {
   const preset =
     ACCENT_PRESETS.find((p) => p.id === presetId) ?? ACCENT_PRESETS[0];
   const root = document.documentElement;
   root.style.setProperty("--accent", preset.color);
   root.style.setProperty("--accent-hover", preset.hover);
   root.style.setProperty("--accent-soft", preset.soft);
-  root.style.setProperty("--accent-glow", preset.glow);
+  const strength = Math.max(0, Math.min(100, Number(glowStrength) || 0));
+  const glowPercent = Math.round(6 + strength * 0.62);
+  root.style.setProperty("--accent-glow", `color-mix(in srgb, ${preset.color} ${glowPercent}%, transparent)`);
   root.style.setProperty("--border-accent", preset.border);
 }
 
@@ -198,6 +200,24 @@ export const THEME_PRESETS = [
     },
   },
   {
+    id: "watchfree",
+    label: "Obsidian Cyan",
+    description: "Midnight obsidian background paired with vibrant electric cyan accents",
+    vars: {
+      "--bg-base": "#090b10",
+      "--bg-elevated": "#11141c",
+      "--bg-surface": "#1a1e29",
+      "--bg-hover": "#252b3b",
+      "--bg-input": "#0d1016",
+      "--text-primary": "#ffffff",
+      "--text-secondary": "#ccd2e3",
+      "--text-muted": "#708090",
+      "--border": "rgba(102, 252, 241, 0.08)",
+      "--cinema-gold": "#66fcf1",
+      "--cinema-velvet": "#1f2833",
+    },
+  },
+  {
     id: "mocha",
     label: "Mocha",
     description: "Warm dark brown tones",
@@ -245,6 +265,15 @@ export const THEME_PRESETS = [
       "--border": "rgba(24, 27, 34, 0.12)",
       "--cinema-gold": "#9a6a20",
       "--cinema-velvet": "#7a315f",
+      "--music-scene-base": "#090b14",
+      "--music-scene-surface": "rgba(17, 23, 37, 0.72)",
+      "--music-scene-surface-active": "rgba(26, 52, 70, 0.84)",
+      "--music-scene-glass": "rgba(17, 23, 37, 0.72)",
+      "--music-scene-glass-strong": "rgba(17, 23, 37, 0.9)",
+      "--music-scene-text": "#f5f7ff",
+      "--music-scene-muted": "#c7d0dc",
+      "--music-scene-label": "#a8edf7",
+      "--music-scene-line": "rgba(225, 236, 255, 0.22)",
     },
   },
   {
@@ -294,6 +323,15 @@ export function applyTheme(themeId, customVars = null) {
     "--border",
     "--cinema-gold",
     "--cinema-velvet",
+    "--music-scene-base",
+    "--music-scene-surface",
+    "--music-scene-surface-active",
+    "--music-scene-glass",
+    "--music-scene-glass-strong",
+    "--music-scene-text",
+    "--music-scene-muted",
+    "--music-scene-label",
+    "--music-scene-line",
   ];
   for (const prop of allProps) {
     root.style.removeProperty(prop);

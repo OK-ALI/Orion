@@ -393,12 +393,12 @@ export function PinIcon({ size = 20, ...props }) {
 
 export function MusicPlanetIcon({ size = 20, ...props }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <circle cx="12" cy="12" r="6.5" />
-      <path d="M3.5 14.5c2.8 2.1 7.6 2.8 12.1 1.6 3.4-.9 5.6-2.5 5.2-3.8-.3-.9-1.7-1.4-3.6-1.5" />
-      <path d="M10 13V8.8l5-1v4.1" />
-      <circle cx="8.8" cy="14.2" r="1.2" fill="currentColor" stroke="none" />
-      <circle cx="13.8" cy="12.8" r="1.2" fill="currentColor" stroke="none" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="12" r="6.25" />
+      <circle cx="12" cy="12" r="1.45" fill="currentColor" stroke="none" />
+      <path d="M3.1 14.35c2.15 2.9 6.3 4.32 10.63 3.62 3.73-.6 6.4-2.46 6.5-4.46.08-1.55-1.36-2.7-3.46-3.12" />
+      <path d="M7.35 10.25c.78-1.15 1.98-1.92 3.38-2.17M7.35 13.75c.78 1.15 1.98 1.92 3.38 2.17" opacity=".72" />
+      <path d="M18.4 4.2v2.25m-1.13-1.12h2.26" strokeWidth="1.35" />
     </svg>
   );
 }

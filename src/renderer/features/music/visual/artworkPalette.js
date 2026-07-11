@@ -11,6 +11,20 @@ function hash(value) {
   return Math.abs(output);
 }
 
+export function neutralizeMusicHighlight(color) {
+  if (!color) return color;
+  const { r, g, b } = color;
+  const cyanDominant = g > r * 1.18 && b > r * 1.18 && Math.abs(g - b) < 105;
+  if (!cyanDominant) return color;
+  const luminance = Math.max(r, g, b) / 255;
+  return {
+    r: Math.round(126 + luminance * 42),
+    g: Math.round(104 + luminance * 26),
+    b: Math.round(190 + luminance * 52),
+    score: color.score,
+  };
+}
+
 export function deterministicPalette(seed) {
   const [base, primary, spectral] = FALLBACKS[hash(seed) % FALLBACKS.length];
   return { base, primary, spectral, foreground: "var(--on-media)", contrast: "dark", generated: true };
@@ -36,7 +50,8 @@ export async function extractArtworkPalette(url, seed) {
       colors.push({ r, g, b, score: (max - min) * (0.5 + max / 255) });
     }
     colors.sort((a, b) => b.score - a.score);
-    const first = colors[0], second = colors.find((color) => first && Math.abs(color.r - first.r) + Math.abs(color.g - first.g) + Math.abs(color.b - first.b) > 90) || colors[1];
+    const first = neutralizeMusicHighlight(colors[0]);
+    const second = neutralizeMusicHighlight(colors.find((color) => colors[0] && Math.abs(color.r - colors[0].r) + Math.abs(color.g - colors[0].g) + Math.abs(color.b - colors[0].b) > 90) || colors[1]);
     if (!first) return deterministicPalette(seed);
     const srgb = (color, scale = 1) => `color(srgb ${color.r / 255 * scale} ${color.g / 255 * scale} ${color.b / 255 * scale})`;
     return { base: srgb(first, .12), primary: srgb(first), spectral: srgb(second || first), foreground: "var(--on-media)", contrast: "dark", generated: false };

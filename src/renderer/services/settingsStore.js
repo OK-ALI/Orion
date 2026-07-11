@@ -64,6 +64,7 @@ export const STORAGE_KEYS = {
   INTERACTION_HOVER_PRESET: "interactionHoverPreset",
   INTERACTION_HOVER_COLOR: "interactionHoverColor",
   INTERACTION_GLOW_STRENGTH: "interactionGlowStrength",
+  CINEMA_GLOW_STRENGTH: "cinemaGlowStrength",
   // TMDB metadata lang (BCP-47 locale, e.g. "en-US")
   TMDB_LANG: "tmdbLang",
   // Intro skip (anime only, allmanga source)
@@ -98,6 +99,7 @@ export const STORAGE_KEYS = {
   MUSIC_ATMOSPHERE: "musicAtmosphere",
   MUSIC_VISUALIZER: "musicVisualizer",
   MUSIC_VISUAL_INTENSITY: "musicVisualIntensity",
+  MUSIC_GLOW_STRENGTH: "musicGlowStrength",
   MUSIC_ARTWORK_COLOR: "musicArtworkColor",
   MUSIC_PORTAL_SOUND: "musicPortalSound",
   MUSIC_PORTAL_VOLUME: "musicPortalVolume",
@@ -109,7 +111,14 @@ export const STORAGE_KEYS = {
   MUSIC_DISABLE_AUDIO_REACTIVE_BG: "musicDisableAudioReactiveBg",
   MUSIC_STATIC_BG: "musicStaticBg",
   MUSIC_PARTICLE_DENSITY: "musicParticleDensity",
+  MUSIC_SCENE_STYLE: "musicSceneStyle",
   MUSIC_BATTERY_SAVER: "musicBatterySaver",
+  MUSIC_DISPLAY_FONT: "musicDisplayFont",
+  MUSIC_DISPLAY_SCALE: "musicDisplayScale",
+  MUSIC_GLASS_DENSITY: "musicGlassDensity",
+  MUSIC_PLAYER_DOCK_MODE: "musicPlayerDockMode",
+  MUSIC_PLAYER_DOCK_GEOMETRY: "musicPlayerDockGeometry",
+  MUSIC_SEARCH_HISTORY: "musicSearchHistory",
   TOAST_POSITION: "toastPosition",
 };
 

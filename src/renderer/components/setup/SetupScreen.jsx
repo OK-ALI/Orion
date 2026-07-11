@@ -75,8 +75,8 @@ export default function SetupScreen({ onComplete, onSave, onSkip }) {
         <div className="setup-logo">
           <img src="./brand-mark.png" alt="" className="setup-logo-image" />
           <div>
-            <span className="setup-logo-text">Orion</span>
-            <span className="setup-subtitle">A Multiverse of Stories</span>
+            <span className="setup-logo-text">Orion X</span>
+            <span className="setup-subtitle">A universe made to be felt.</span>
           </div>
         </div>
 

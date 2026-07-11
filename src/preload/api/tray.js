@@ -44,6 +44,13 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
     return handler;
   },
   offBatteryAlert: (handler) => ipcRenderer.removeListener("battery:alert", handler),
+  onBatteryAlertCleared: (cb) => {
+    const handler = (_, value) => cb(value);
+    ipcRenderer.on("battery:alert-cleared", handler);
+    return handler;
+  },
+  offBatteryAlertCleared: (handler) =>
+    ipcRenderer.removeListener("battery:alert-cleared", handler),
   onBatteryResumeDownloads: (cb) => {
     const handler = (_, payload) => cb(payload);
     ipcRenderer.on("battery:resume-downloads", handler);

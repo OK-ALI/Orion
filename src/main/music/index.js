@@ -1,11 +1,11 @@
 const ipc = require("./ipc");
 const mediaProtocol = require("./playback/mediaProtocol");
+const loopbackServer = require("./playback/loopbackServer");
+const tokens = require("./playback/tokenRegistry");
 const registry = require("./providers/registry");
 const { createLocalProviders } = require("./providers/local");
-const { createMusicBrainzProvider } = require("./providers/musicbrainz");
-const { createListenBrainzProviders } = require("./providers/listenbrainz");
-const { createYtDlpStreamingProvider } = require("./providers/ytdlp");
-const { createSaavnProviders } = require("./providers/saavn");
+const { createYtMusicProviders } = require("./providers/ytmusic");
+const { createSpotifyChartsProvider } = require("./providers/spotifyCharts");
 const plugins = require("./plugins/manager");
 const { createLrcLibProvider } = require("./providers/lrclib");
 
@@ -15,28 +15,26 @@ function registerProviders() {
   if (registry.list().length) return;
   plugins.initialize({
     "orion-core": createLocalProviders,
-    "orion-omnisource": () => [],
-    "orion-musicbrainz": () => [createMusicBrainzProvider()],
-    "orion-youtube": () => [createYtDlpStreamingProvider()],
-    "orion-listenbrainz": createListenBrainzProviders,
-    "orion-saavn": createSaavnProviders,
+    "orion-ytmusic": createYtMusicProviders,
     "orion-lrclib": () => [createLrcLibProvider()],
-    "orion-deezer-dashboard": () => [],
-    "orion-subsonic": () => [],
-    "orion-soundcloud": () => [],
-    "orion-discogs": () => [],
-    "orion-youtube-playlists": () => [],
-    "orion-khinsider": () => [],
+    "orion-spotify-import": () => [createSpotifyChartsProvider()],
   });
 }
 
 async function register() {
   registerProviders();
-  ipc.register();
   mediaProtocol.register();
+  await loopbackServer.start();
+  tokens.setAudioUrlFactory((token) => loopbackServer.createUrl(token));
+  ipc.register();
   await ipc.start();
 }
 
-async function stop() { await ipc.stop(); }
+async function stop() {
+  await ipc.stop();
+  tokens.setAudioUrlFactory(null);
+  tokens.revokeAll();
+  await loopbackServer.stop();
+}
 
 module.exports = { register, registerScheme, stop };

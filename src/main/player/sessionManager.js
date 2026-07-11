@@ -33,7 +33,6 @@ const BLOCKED_HOSTS = [
   "*://b7510.com/*",
   "*://gt.unbrownunflat.com/*",
   "*://im.malocacomals.com/*",
-  "*://users.videasy.net/*",
   "*://nf.sixmossin.com/*",
   "*://realizationnewestfangs.com/*",
   "*://acscdn.com/*",
@@ -180,10 +179,27 @@ function setupSession(playerSession, trailerSession, getMainWindow) {
     { urls: ["*://*/*"] },
     handleBeforeSendHeaders,
   );
+
+  const TWO_EMBED_URLS = [
+    "*://*.2embed.cc/*",
+    "*://*.2embed.skin/*",
+    "*://*.2embed.org/*",
+  ];
+
   playerSession.webRequest.onBeforeRequest(
-    { urls: [...BLOCKED_HOSTS, ...MEDIA_URLS] },
+    { urls: [...BLOCKED_HOSTS, ...MEDIA_URLS, ...TWO_EMBED_URLS] },
     (details, callback) => {
       const { url } = details;
+
+      // Fix 2Embed redirect &amp; bug
+      if (url.includes("2embed") && url.includes("&amp;")) {
+        callback({ redirectURL: url.replace(/&amp;/g, "&") });
+        return;
+      }
+      if (url.includes("2embed")) {
+        callback({});
+        return;
+      }
       const isMedia = url.includes(".m3u8") || url.includes(".vtt");
       if (!isMedia) {
         blockStats.recordBlockedRequest(url);

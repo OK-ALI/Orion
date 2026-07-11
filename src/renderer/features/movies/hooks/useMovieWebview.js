@@ -22,6 +22,7 @@ import {
   NON_ANIME_DEFAULT_SOURCE,
   NEEDS_INTERCEPT,
   getNextNonAsyncSource,
+  getNextHealthyNonAsyncSource,
 } from "../../../services/tmdb";
 import {
   PlayIcon,
@@ -290,7 +291,7 @@ const applyVoiceBoost = useCallback(() => {
         : getSourceUrl(
             playerSource,
             "movie",
-            item.id,
+            { tmdbId: item.id, imdbId: d.imdb_id },
             null,
             null,
             {},
@@ -310,7 +311,7 @@ const applyVoiceBoost = useCallback(() => {
   }, [playing, pipOpen, playerSource, resolvedPlayerUrl, item.id, playerAccentColor, playerSubLang]);
 
   const handleFailoverNextSource = useCallback(() => {
-    const next = getNextNonAsyncSource(playerSource);
+    const next = getNextHealthyNonAsyncSource(playerSource);
     if (!next) return;
     clearFailoverSource(`movie_${item.id}_${dubMode}`);
     setPlayerSource(next);
@@ -387,11 +388,20 @@ const applyVoiceBoost = useCallback(() => {
         `);
       } catch {}
     };
+    const handleWillNavigate = (event) => {
+      const url = event.url;
+      if (url && (url.includes("/tv/") || url.includes("/movie/")) && url.includes("2embed")) {
+        console.log("[Orion] Cancelled 2Embed redirect will-navigate to:", url);
+        event.preventDefault();
+      }
+    };
     wv.addEventListener("did-finish-load", done);
     wv.addEventListener("did-fail-load", done);
+    wv.addEventListener("will-navigate", handleWillNavigate);
     return () => {
       wv.removeEventListener("did-finish-load", done);
       wv.removeEventListener("did-fail-load", done);
+      wv.removeEventListener("will-navigate", handleWillNavigate);
     };
   }, [playing, playerSource, item.id, progressKey]);
 
@@ -589,8 +599,8 @@ const applyVoiceBoost = useCallback(() => {
       
       const css = `
         video::cue {
-          background: rgba(0, 0, 0, 0.75) !important;
-          color: #ffffff !important;
+          background: color-mix(in srgb, black 75%, transparent) !important;
+          color: white !important;
           font-family: sans-serif !important;
         }
         .jw-captions, .jw-caption-text,

@@ -136,8 +136,8 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
         <div className="setup-logo" style={{ justifyContent: "center", marginBottom: 32 }}>
           <img src="./brand-mark.png" alt="" className="setup-logo-image" style={{ width: 44, height: 44 }} />
           <div style={{ textAlign: "left" }}>
-            <span className="setup-logo-text" style={{ fontSize: 24, letterSpacing: 0.5 }}>Orion</span>
-            <span className="setup-subtitle" style={{ fontSize: 11 }}>A Multiverse of Stories</span>
+            <span className="setup-logo-text" style={{ fontSize: 24, letterSpacing: 0.5 }}>Orion X</span>
+            <span className="setup-subtitle" style={{ fontSize: 11 }}>A universe made to be felt.</span>
           </div>
         </div>
 

@@ -148,8 +148,9 @@ function setState(key, value) {
 
 function listPlaylists() {
   const db = openDatabase();
-  return db.prepare("SELECT id,name,description,created_at,updated_at FROM music_playlists ORDER BY updated_at DESC").all()
+  return db.prepare("SELECT id,name,description,folder_id,artwork_json,created_at,updated_at FROM music_playlists ORDER BY updated_at DESC").all()
     .map((row) => ({ id: row.id, name: row.name, description: row.description || "",
+      folderId: row.folder_id || null, artwork: parse(row.artwork_json, null),
       createdAt: row.created_at, updatedAt: row.updated_at,
       items: db.prepare("SELECT track_json FROM music_playlist_items WHERE playlist_id=? ORDER BY position")
         .all(row.id).map((item) => parse(item.track_json, null)).filter(Boolean) }));
@@ -161,9 +162,11 @@ function savePlaylist(playlist) {
   const id = playlist.id || crypto.randomUUID();
   const existing = db.prepare("SELECT created_at FROM music_playlists WHERE id=?").get(id);
   const now = Date.now();
-  db.prepare(`INSERT OR REPLACE INTO music_playlists(id,name,description,created_at,updated_at)
-    VALUES(?,?,?,?,?)`).run(id, String(playlist.name || "Untitled playlist").slice(0, 160),
-    String(playlist.description || "").slice(0, 1000), existing?.created_at || now, now);
+  const folderId = playlist.folderId && db.prepare("SELECT 1 FROM music_playlist_folders WHERE id=?").get(String(playlist.folderId))
+    ? String(playlist.folderId) : null;
+  db.prepare(`INSERT OR REPLACE INTO music_playlists(id,name,description,folder_id,artwork_json,created_at,updated_at)
+    VALUES(?,?,?,?,?,?,?)`).run(id, String(playlist.name || "Untitled playlist").slice(0, 160),
+    String(playlist.description || "").slice(0, 1000), folderId, json(playlist.artwork, null), existing?.created_at || now, now);
   db.prepare("DELETE FROM music_playlist_items WHERE playlist_id=?").run(id);
   const insert = db.prepare("INSERT INTO music_playlist_items(playlist_id,position,track_json) VALUES(?,?,?)");
   (playlist.items || []).forEach((item, index) => insert.run(id, index, json(item, {})));
@@ -177,6 +180,34 @@ function saveImportedPlaylist(playlist) {
 
 function deletePlaylist(id) {
   return openDatabase().prepare("DELETE FROM music_playlists WHERE id=?").run(String(id || "")).changes > 0;
+}
+
+function listPlaylistFolders() {
+  return openDatabase().prepare(`SELECT id,parent_id,name,position,created_at,updated_at
+    FROM music_playlist_folders ORDER BY parent_id,position,name COLLATE NOCASE`).all().map((row) => ({
+    id: row.id, parentId: row.parent_id || null, name: row.name, position: row.position,
+    createdAt: row.created_at, updatedAt: row.updated_at,
+  }));
+}
+
+function savePlaylistFolder(folder = {}) {
+  const crypto = require("crypto");
+  const db = openDatabase();
+  const id = folder.id || crypto.randomUUID();
+  const existing = db.prepare("SELECT created_at FROM music_playlist_folders WHERE id=?").get(id);
+  const parentId = folder.parentId && folder.parentId !== id
+    && db.prepare("SELECT 1 FROM music_playlist_folders WHERE id=?").get(String(folder.parentId)) ? String(folder.parentId) : null;
+  const now = Date.now();
+  db.prepare(`INSERT OR REPLACE INTO music_playlist_folders(id,parent_id,name,position,created_at,updated_at)
+    VALUES(?,?,?,?,?,?)`).run(id, parentId, String(folder.name || "New folder").trim().slice(0, 120) || "New folder",
+    Math.max(0, Number(folder.position) || 0), existing?.created_at || now, now);
+  return listPlaylistFolders().find((item) => item.id === id);
+}
+
+function deletePlaylistFolder(id) {
+  const db = openDatabase();
+  db.prepare("UPDATE music_playlists SET folder_id=NULL WHERE folder_id=?").run(String(id || ""));
+  return db.prepare("DELETE FROM music_playlist_folders WHERE id=?").run(String(id || "")).changes > 0;
 }
 
 function listFavorites() {
@@ -210,7 +241,10 @@ function listHistory(limit = 24) {
     .map((row) => ({ track: parse(row.track_json, {}), playedAt: row.played_at, positionMs: row.position_ms }));
 }
 
-const PRIVATE_PORTABLE_KEYS = /^(?:file_?path|path|url|artworkUrl|profileImageUrl|coverArtUrl|playbackUrl|streamUrl|headers|cookies?|token|credentials?|password|expiresAt)$/i;
+// A portable backup preserves a user's organization, never a machine location,
+// temporary media grant, or provider secret. Keep this conservative because queue
+// entries can originate from any provider.
+const PRIVATE_PORTABLE_KEYS = /^(?:file_?path|localPath|absolutePath|path|fileUrl|url|artworkUrl|profileImageUrl|coverArtUrl|playbackUrl|streamUrl|headers|cookies?|token|credentials?|password|expiresAt)$/i;
 
 function portableValue(value, depth = 0) {
   if (depth > 8 || value === undefined || typeof value === "function") return undefined;
@@ -227,14 +261,30 @@ function portableValue(value, depth = 0) {
   return output;
 }
 
+function normalizePortableQueue(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const items = Array.isArray(source.items) ? source.items.slice(0, 10_000).filter((item) => item && typeof item === "object") : [];
+  const isValidIndex = (index) => Number.isInteger(index) && index >= 0 && index < items.length;
+  return {
+    items,
+    index: isValidIndex(source.index) ? source.index : items.length ? 0 : -1,
+    repeat: ["off", "one", "all"].includes(source.repeat) ? source.repeat : "off",
+    shuffle: source.shuffle === true,
+    history: Array.isArray(source.history) ? source.history.filter(isValidIndex).slice(-500) : [],
+    shuffleBag: Array.isArray(source.shuffleBag) ? source.shuffleBag.filter(isValidIndex).slice(0, items.length) : [],
+  };
+}
+
 function exportPortableState() {
   return portableValue({
-    version: 1,
+    version: 2,
+    playlistFolders: listPlaylistFolders(),
     playlists: listPlaylists(),
     favorites: listFavorites(),
     history: listHistory(2000),
     providerPreferences: getState("provider_preferences", {}),
     cacheLimitMb: getState("artwork_cache_limit_mb", 256),
+    queue: getState("queue", { items: [], index: -1, repeat: "off", shuffle: false }),
   });
 }
 
@@ -249,12 +299,22 @@ function uniquePlaylistName(name, existing) {
 }
 
 function importPortableState(value) {
-  if (!value || typeof value !== "object" || Number(value.version) !== 1) throw new Error("Unsupported Music backup format.");
+  if (!value || typeof value !== "object" || ![1, 2].includes(Number(value.version))) throw new Error("Unsupported Music backup format.");
   const clean = portableValue(value);
   const existingNames = new Set(listPlaylists().map((item) => item.name.toLowerCase()));
-  let playlists = 0; let favorites = 0; let history = 0;
+  let playlists = 0; let folders = 0; let favorites = 0; let history = 0; let queueItems = 0;
+  const folderIds = new Map();
+  for (const folder of (clean.playlistFolders || []).slice(0, 500)) {
+    const saved = savePlaylistFolder({ name: folder.name, position: folder.position });
+    folderIds.set(folder.id, saved.id); folders += 1;
+  }
+  for (const folder of (clean.playlistFolders || []).slice(0, 500)) {
+    const id = folderIds.get(folder.id); const parentId = folderIds.get(folder.parentId);
+    if (id && parentId) savePlaylistFolder({ id, name: folder.name, position: folder.position, parentId });
+  }
   for (const playlist of (clean.playlists || []).slice(0, 500)) {
     savePlaylist({ name: uniquePlaylistName(playlist.name, existingNames), description: playlist.description,
+      folderId: folderIds.get(playlist.folderId) || null, artwork: playlist.artwork,
       items: Array.isArray(playlist.items) ? playlist.items.slice(0, 10_000) : [] });
     playlists += 1;
   }
@@ -281,7 +341,12 @@ function importPortableState(value) {
   if (Number.isFinite(Number(clean.cacheLimitMb))) {
     setState("artwork_cache_limit_mb", Math.min(2048, Math.max(64, Number(clean.cacheLimitMb))));
   }
-  return { playlists, favorites, history };
+  if (clean.queue && typeof clean.queue === "object") {
+    const queue = normalizePortableQueue(clean.queue);
+    setState("queue", queue);
+    queueItems = queue.items.length;
+  }
+  return { playlists, folders, favorites, history, queueItems };
 }
 
 function closeDatabase() {
@@ -290,8 +355,8 @@ function closeDatabase() {
 }
 
 module.exports = {
-  addFolder, addHistory, closeDatabase, deletePlaylist, exportPortableState, findTrackByFingerprint, getPrivateTrack, getState,
+  addFolder, addHistory, closeDatabase, deletePlaylist, deletePlaylistFolder, exportPortableState, findTrackByFingerprint, getPrivateTrack, getState,
   getPrivateTrackByPath, importPortableState,
-  listFavorites, listFolders, listHistory, listPlaylists, listTracks, openDatabase, publicTrack,
-  portableValue, reconcileFolder, removeFolder, saveImportedPlaylist, savePlaylist, setState, toggleFavorite, touchFolder, upsertTrack,
+  listFavorites, listFolders, listHistory, listPlaylistFolders, listPlaylists, listTracks, openDatabase, publicTrack,
+  normalizePortableQueue, portableValue, reconcileFolder, removeFolder, saveImportedPlaylist, savePlaylist, savePlaylistFolder, setState, toggleFavorite, touchFolder, upsertTrack,
 };

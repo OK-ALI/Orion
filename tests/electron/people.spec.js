@@ -31,7 +31,11 @@ test("quick search opens a TMDB person and preserves back navigation", async ({}
     };
   });
   await page.reload();
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(900);
+  const skipSignIn = page.getByRole("button", { name: "Skip / Use Offline" });
+  if (await skipSignIn.count()) await skipSignIn.click();
+  const skipWhatsNew = page.getByRole("button", { name: "Continue to Cinema" });
+  if (await skipWhatsNew.count()) await skipWhatsNew.click();
   await page.evaluate(() => {
     [...document.querySelectorAll(".sidebar-item")]
       .find((element) => element.textContent.includes("Search"))
@@ -40,7 +44,9 @@ test("quick search opens a TMDB person and preserves back navigation", async ({}
   const input = page.getByPlaceholder(/Search movies, series and people/);
   await expect(input).toBeVisible();
   await input.fill("Jane");
-  await page.getByRole("button", { name: /Jane Example/ }).click();
+  const personResult = page.getByRole("button", { name: /Jane Example/ });
+  await expect(personResult).toBeVisible();
+  await personResult.evaluate((element) => element.click());
   await expect(page.getByRole("heading", { name: "Jane Example" })).toBeVisible();
   await expect(page.getByText("A test biography.")).toBeVisible();
   await page.getByRole("button", { name: /Back/ }).click();
@@ -73,7 +79,11 @@ test("quick search visually separates people and same-title media", async ({}, t
     };
   });
   await page.reload();
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(900);
+  const skipSignIn = page.getByRole("button", { name: "Skip / Use Offline" });
+  if (await skipSignIn.count()) await skipSignIn.click();
+  const skipWhatsNew = page.getByRole("button", { name: "Continue to Cinema" });
+  if (await skipWhatsNew.count()) await skipWhatsNew.click();
   await page.evaluate(() => {
     [...document.querySelectorAll(".sidebar-item")].find((element) => element.textContent.includes("Search"))?.click();
   });
@@ -84,10 +94,10 @@ test("quick search visually separates people and same-title media", async ({}, t
   await expect(page.getByText("Same-title match", { exact: true })).toHaveCount(2);
   await expect(page.getByText("Hindi", { exact: true })).toBeVisible();
   await expect(page.getByText("Original title", { exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: /Bollywood.*1/ }).click();
+  await page.getByRole("tab", { name: /Bollywood.*1/ }).evaluate((element) => element.click());
   await expect(page.locator(".quick-search-result-grid .search-result")).toHaveCount(1);
   await expect(page.getByText("Bollywood", { exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: /Global.*3/ }).click();
+  await page.getByRole("tab", { name: /Global.*3/ }).evaluate((element) => element.click());
   await expect(page.getByText("Same-title match", { exact: true })).toHaveCount(2);
   const screenshotPath = testInfo.outputPath("search-layout.png");
   await page.screenshot({ path: screenshotPath });

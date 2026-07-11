@@ -45,6 +45,8 @@ function listPlugins() {
 function install(id) {
   const plugin = getPlugin(id);
   if (!plugin) throw new Error("Plugin was not found in Orion's curated registry.");
+  if (plugin.status === "adapter-pending") throw new Error("This Music adapter is listed for a later checkpoint and is not ready yet.");
+  if (plugin.status === "disabled") throw new Error("This Music adapter is disabled because a newer provider replaced it.");
   if (!factories[id]) throw new Error("This provider adapter is listed for a later Music Planet checkpoint.");
   const state = normalizeState();
   state.installed[id] = { enabled: true, installedAt: Date.now(), version: plugin.version };
@@ -55,6 +57,8 @@ function setEnabled(id, enabled) {
   const plugin = getPlugin(id); const state = normalizeState();
   if (!plugin || !state.installed[id]) throw new Error("Plugin is not installed.");
   if (plugin.locked && !enabled) throw new Error("Orion Music Core cannot be disabled.");
+  if (enabled && plugin.status === "adapter-pending") throw new Error("This Music adapter is not ready yet.");
+  if (enabled && plugin.status === "disabled") throw new Error("This Music adapter is disabled because a newer provider replaced it.");
   state.installed[id] = { ...state.installed[id], enabled: !!enabled };
   writeState(state); reloadProviders(); return listPlugins().find((item) => item.id === id);
 }

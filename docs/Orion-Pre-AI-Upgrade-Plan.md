@@ -1,17 +1,17 @@
 # Orion pre-AI roadmap
 
-> **Authoritative roadmap:** This document supersedes the older post-v1.0.7 and AI concept roadmaps for release sequencing and milestone status.
+> **Historical roadmap:** The pre-v2 Cinema milestones in this document are complete. Orion X Music Planet v2.0.0 is now the shipped baseline; future sequencing belongs in a post-v2 roadmap.
 
-- **Latest stable release:** v1.0.10 — Performance, Windows Integration and Final Visual Polish
-- **Active development milestone:** v1.1.0 — Search, People and Cast
-- **Roadmap baseline:** v1.0.10
-- **Audit date:** July 2, 2026
+- **Latest stable release:** v2.0.0 — Orion X Music Planet
+- **Completed metadata milestone:** v1.1.x — Search, People, Cast and Constellation
+- **Current baseline:** v2.0.0
+- **Status updated:** July 11, 2026
 
 ## Product direction
 
 Orion will become a reliable, distinctive desktop media application before AI features become part of its identity. Streaming, downloader recovery, architecture refactoring, playback continuity, local playback, adaptive performance, Windows integration and the first visual-polish cycle are complete foundations. The next milestones deepen metadata, offline ownership, curation, playback capabilities, privacy and resilience without adding AI or DRM circumvention.
 
-The application package remains at v1.0.10 until v1.1.0 passes its release gates. Roadmap status does not change the shipped application version.
+The v1.1 metadata work and Music Planet program are incorporated into the v2.0.0 application package.
 
 ## Completed foundations
 

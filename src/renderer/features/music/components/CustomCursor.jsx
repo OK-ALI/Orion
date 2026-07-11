@@ -1,31 +1,50 @@
 import React, { useEffect, useRef } from 'react';
-import gsap from 'gsap';
 
-export default function CustomCursor() {
+export default function CustomCursor({ reducedMotion = false }) {
   const cursorRef = useRef(null);
 
   useEffect(() => {
     const cursor = cursorRef.current;
-    if (!cursor) return;
+    const finePointer = window.matchMedia?.("(pointer: fine)");
+    const systemReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!cursor || reducedMotion || !finePointer?.matches || systemReducedMotion?.matches) return undefined;
 
-    // Move cursor
+    document.documentElement.classList.add("music-custom-cursor-active");
+
+    let frame = 0;
+    let position = { x: 0, y: 0 };
+
     const onMouseMove = (e) => {
-      gsap.to(cursor, {
-        x: e.clientX,
-        y: e.clientY,
-        duration: 0.1,
-        ease: "power2.out"
+      position = { x: e.clientX, y: e.clientY };
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        cursor.style.transform = `translate3d(${position.x}px, ${position.y}px, 0) translate(-50%, -50%)`;
+        frame = 0;
       });
     };
 
     // Hover effects
+    const interactiveSelector = [
+      "button",
+      "a",
+      "input",
+      ".planet-card",
+      ".star-card",
+      ".constellation-card",
+      ".moon-track-item",
+      ".music-signal-card",
+      ".music-orbital-search",
+      ".glass-music-player",
+      ".music-track-list button",
+    ].join(", ");
+
     const onMouseOver = (e) => {
-      if (e.target.closest('button, a, input, .planet-card, .star-card, .constellation-card, .moon-track-item')) {
+      if (e.target.closest(interactiveSelector)) {
         cursor.classList.add('hovering');
       }
     };
     const onMouseOut = (e) => {
-      if (e.target.closest('button, a, input, .planet-card, .star-card, .constellation-card, .moon-track-item')) {
+      if (e.target.closest(interactiveSelector)) {
         cursor.classList.remove('hovering');
       }
     };
@@ -35,11 +54,13 @@ export default function CustomCursor() {
     window.addEventListener('mouseout', onMouseOut);
 
     return () => {
+      document.documentElement.classList.remove("music-custom-cursor-active");
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseover', onMouseOver);
       window.removeEventListener('mouseout', onMouseOut);
+      if (frame) window.cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [reducedMotion]);
 
   return <div ref={cursorRef} className="music-planet-cursor" />;
 }

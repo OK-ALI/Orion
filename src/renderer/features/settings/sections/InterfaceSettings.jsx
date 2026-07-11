@@ -4,6 +4,7 @@ import { clearTmdbCache } from "../../../services/tmdb";
 import { ACCENT_PRESETS, applyAccentColor, applyFontPreset, applyInteractionAppearance, THEME_PRESETS, applyTheme, DEFAULT_CUSTOM_VARS, FONT_PRESETS } from "../../../shared/utils/appearance";
 import { SUBTITLE_LANGUAGES } from "../../../shared/utils/subtitles";
 import { SettingsSelect, Toggle } from "../components/SettingsControls";
+import { SIDEBAR_MODE_OPTIONS, readSidebarMode, writeSidebarMode } from "../../../components/layout/sidebarState";
 
 export function AppearanceSection({ sectionRef = null }) {
   const [accent, setAccent] = useState(
@@ -45,6 +46,11 @@ export function AppearanceSection({ sectionRef = null }) {
   const [glowStrength, setGlowStrength] = useState(
     () => storage.get(STORAGE_KEYS.INTERACTION_GLOW_STRENGTH) ?? 50,
   );
+  const [cinemaGlowStrength, setCinemaGlowStrength] = useState(
+    () => storage.get(STORAGE_KEYS.CINEMA_GLOW_STRENGTH) ?? 50,
+  );
+  const [cinemaSidebarMode, setCinemaSidebarMode] = useState(() => readSidebarMode("cinema"));
+  const [musicSidebarMode, setMusicSidebarMode] = useState(() => readSidebarMode("music"));
   const [customVars, setCustomVars] = useState(
     () =>
       storage.get(STORAGE_KEYS.CUSTOM_THEME_VARS) || { ...DEFAULT_CUSTOM_VARS },
@@ -74,7 +80,7 @@ export function AppearanceSection({ sectionRef = null }) {
     return () => {
       if (!savedRef.current) {
         const { accent, fontPreset, theme, customVars, backgroundScene: committedBackground } = committedRef.current;
-        applyAccentColor(accent);
+        applyAccentColor(accent, cinemaGlowStrength);
         applyFontPreset(fontPreset);
         applyTheme(theme, theme === "custom" ? customVars : null);
         document.body.dataset.background = committedBackground;
@@ -118,11 +124,12 @@ export function AppearanceSection({ sectionRef = null }) {
       /^#[0-9a-f]{6}$/i.test(hoverColor) ? hoverColor : "",
     );
     storage.set(STORAGE_KEYS.INTERACTION_GLOW_STRENGTH, glowStrength);
+    storage.set(STORAGE_KEYS.CINEMA_GLOW_STRENGTH, cinemaGlowStrength);
     if (theme === "custom") {
       storage.set(STORAGE_KEYS.CUSTOM_THEME_VARS, customVars);
     }
     // Apply immediately
-    applyAccentColor(accent);
+    applyAccentColor(accent, cinemaGlowStrength);
     applyFontPreset(fontPreset);
     applyTheme(theme, theme === "custom" ? customVars : null);
     const zoomMap = { sm: 0.85, normal: 1, lg: 1.15 };
@@ -150,7 +157,7 @@ export function AppearanceSection({ sectionRef = null }) {
 
   useEffect(() => {
     handleSave();
-  }, [accent, accentInPlayer, ambientProfile, backgroundScene, compact, customVars, fontPreset, fontSize, glowStrength, hoverColor, hoverPreset, motionPreset, noAnim, theme]);
+  }, [accent, accentInPlayer, ambientProfile, backgroundScene, cinemaGlowStrength, compact, customVars, fontPreset, fontSize, glowStrength, hoverColor, hoverPreset, motionPreset, noAnim, theme]);
 
   const CUSTOM_VAR_LABELS = {
     "--bg": "Background",
@@ -403,7 +410,7 @@ export function AppearanceSection({ sectionRef = null }) {
               onClick={() => {
                 savedRef.current = false;
                 setAccent(p.id);
-                applyAccentColor(p.id);
+                applyAccentColor(p.id, cinemaGlowStrength);
               }}
               title={p.label}
               style={{
@@ -566,6 +573,25 @@ export function AppearanceSection({ sectionRef = null }) {
         </div>
       </div>
 
+      <div className="orion-appearance-grid" style={{ marginBottom: 24 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)", marginBottom: 8 }}>Cinema sidebar mode</div>
+          <SettingsSelect value={cinemaSidebarMode} onChange={(value) => {
+            setCinemaSidebarMode(value);
+            writeSidebarMode("cinema", value);
+          }} options={SIDEBAR_MODE_OPTIONS} />
+          <small style={{ display: "block", marginTop: 6, color: "var(--text3)" }}>Choose full navigation, icons only, or the vertical Orion Cinema rail.</small>
+        </div>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)", marginBottom: 8 }}>Music Planet sidebar mode</div>
+          <SettingsSelect value={musicSidebarMode} onChange={(value) => {
+            setMusicSidebarMode(value);
+            writeSidebarMode("music", value);
+          }} options={SIDEBAR_MODE_OPTIONS} />
+          <small style={{ display: "block", marginTop: 6, color: "var(--text3)" }}>Music remembers its navigation width independently from Cinema.</small>
+        </div>
+      </div>
+
       <div
         style={{
           display: "flex",
@@ -603,6 +629,14 @@ export function AppearanceSection({ sectionRef = null }) {
       </div>
 
       <div className="interaction-appearance" style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)", marginBottom: 10 }}>Cinema atmosphere</div>
+        <div className="interaction-appearance-controls" style={{ marginBottom: 18 }}>
+          <div>
+            <div className="settings-label">Cinema glow · {cinemaGlowStrength}%</div>
+            <input type="range" min="0" max="100" step="1" value={cinemaGlowStrength} onChange={(event) => setCinemaGlowStrength(Number(event.target.value))} aria-label="Cinema glow intensity" />
+            <small style={{ display: "block", marginTop: 6, color: "var(--text3)" }}>Controls Orion's cinematic accents, ambient backdrop and player glow.</small>
+          </div>
+        </div>
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)", marginBottom: 10 }}>Interaction appearance</div>
         <div className="interaction-appearance-controls">
           <div>

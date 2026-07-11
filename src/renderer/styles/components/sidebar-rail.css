@@ -1,0 +1,63 @@
+.sidebar-collapsed-rail {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: 58px 1fr;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-muted);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--text-primary) 3%, transparent), transparent 32%),
+    var(--bg-elevated);
+  cursor: pointer;
+  animation: sidebar-rail-reveal 190ms var(--ease-out) both;
+  transition: color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.sidebar-collapsed-rail > span:last-child {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg) translateX(0);
+  color: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .19em;
+  line-height: 1;
+  transition: transform var(--duration-fast) var(--ease-out), text-shadow var(--duration-fast) var(--ease-out);
+}
+
+.sidebar-rail-expand-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-translucent);
+  transform: rotate(180deg);
+}
+
+.sidebar-collapsed-rail:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elevated));
+  box-shadow: inset -1px 0 0 color-mix(in srgb, var(--accent) 35%, transparent), 6px 0 22px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.sidebar-collapsed-rail:hover > span:last-child {
+  transform: rotate(180deg) translateX(-3px);
+  text-shadow: 0 0 12px var(--accent-glow);
+}
+
+.sidebar-collapsed-rail:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -4px; }
+
+.music-world .sidebar-collapsed-rail:hover {
+  color: var(--music-highlight);
+  background: color-mix(in srgb, var(--music-highlight) 6%, var(--bg-elevated));
+  box-shadow: inset -1px 0 0 color-mix(in srgb, var(--music-highlight) 28%, transparent), 6px 0 22px color-mix(in srgb, var(--music-highlight) 9%, transparent);
+}
+
+@keyframes sidebar-rail-reveal {
+  from { opacity: 0; transform: translateX(-7px); }
+}

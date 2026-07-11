@@ -64,7 +64,7 @@ import {
 } from "../../../shared/utils/ageRating";
 
 export default function MoviePlayer({ model }) {
-  const { ambientColor, blockedSession, displayPct, dubMode, handleFailoverNextSource, isUnreleased, item, m3u8Url, menuPos, movieDownload, onBack, onGoToDownloads, onOpenMiniPlayer, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progressKey, progressLabel, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, revealPlayerControls, saveProgress, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, sourceRef, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
+  const { d, ambientColor, blockedSession, displayPct, dubMode, handleFailoverNextSource, isUnreleased, item, m3u8Url, menuPos, movieDownload, onBack, onGoToDownloads, onOpenMiniPlayer, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progressKey, progressLabel, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, revealPlayerControls, saveProgress, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, sourceRef, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
   return (
 <>
 {playing && !restricted && !isUnreleased && (
@@ -226,7 +226,7 @@ export default function MoviePlayer({ model }) {
                     : getSourceUrl(
                         playerSource,
                         "movie",
-                        item.id,
+                        { tmdbId: item.id, imdbId: d.imdb_id },
                         null,
                         null,
                         {},
@@ -236,6 +236,7 @@ export default function MoviePlayer({ model }) {
               }
               partition="persist:player"
               allowpopups="false"
+              preload={window.electron?.playerWebviewPreloadPath || undefined}
               sandbox="allow-scripts allow-same-origin allow-forms"
               style={{
                 position: "absolute",
@@ -344,7 +345,7 @@ export default function MoviePlayer({ model }) {
                       : getSourceUrl(
                           playerSource,
                           "movie",
-                          item.id,
+                          { tmdbId: item.id, imdbId: d.imdb_id },
                           null,
                           null,
                           {},
@@ -382,7 +383,7 @@ export default function MoviePlayer({ model }) {
                       : getSourceUrl(
                           playerSource,
                           "movie",
-                          item.id,
+                          { tmdbId: item.id, imdbId: d.imdb_id },
                           null,
                           null,
                           {},
@@ -440,7 +441,7 @@ export default function MoviePlayer({ model }) {
                         color:
                           movieDownload.status === "downloading"
                             ? "var(--red)"
-                            : "#4caf50",
+                            : "var(--success)",
                       }}
                     >
                       {movieDownload.status === "downloading" ? "↓" : "✓"}

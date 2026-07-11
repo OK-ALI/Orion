@@ -27,6 +27,7 @@ function createBatteryService({ getMainWindow, downloads, tray }) {
   let warnedLow = false;
   let warnedCritical = false;
   let autoPausedIds = [];
+  let activeNotification = null;
 
   const send = (channel, payload) => {
     const win = getMainWindow?.();
@@ -35,7 +36,19 @@ function createBatteryService({ getMainWindow, downloads, tray }) {
 
   const notify = (title, body) => {
     if (!preferences.alerts || !Notification.isSupported()) return;
-    try { new Notification({ title, body, silent: false }).show(); } catch {}
+    try {
+      activeNotification?.close?.();
+      const notification = new Notification({ title, body, silent: false });
+      activeNotification = notification;
+      notification.on?.("close", () => { if (activeNotification === notification) activeNotification = null; });
+      notification.show();
+    } catch {}
+  };
+
+  const clearAlert = () => {
+    try { activeNotification?.close?.(); } catch {}
+    activeNotification = null;
+    send("battery:alert-cleared", {});
   };
 
   const publish = () => {
@@ -45,6 +58,7 @@ function createBatteryService({ getMainWindow, downloads, tray }) {
 
   const applyPolicy = (previous = {}) => {
     if (!status.onBattery || status.charging) {
+      clearAlert();
       warnedLow = false;
       warnedCritical = false;
       if (autoPausedIds.length) {
@@ -114,6 +128,7 @@ function createBatteryService({ getMainWindow, downloads, tray }) {
   function destroy() {
     powerMonitor.removeListener("on-ac", powerChanged);
     powerMonitor.removeListener("on-battery", powerChanged);
+    try { activeNotification?.close?.(); } catch {}
   }
 
   return { register, destroy, getStatus: () => status, getPreferences: () => preferences };

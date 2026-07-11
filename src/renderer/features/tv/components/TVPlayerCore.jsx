@@ -447,7 +447,7 @@ export default function TVPlayerCore({ model }) {
                         : getSourceUrl(
                             playerSource,
                             "tv",
-                            item.id,
+                            { tmdbId: item.id, imdbId: item.external_ids?.imdb_id || item.imdb_id },
                             playerEp.season,
                             playerEp.episode,
                             {},
@@ -457,7 +457,7 @@ export default function TVPlayerCore({ model }) {
                   }
                   partition="persist:player"
                   allowpopups="false"
-                  
+                  preload={window.electron?.playerWebviewPreloadPath || undefined}
                   sandbox="allow-scripts allow-same-origin allow-forms"
                   style={{
                     position: "absolute",
@@ -568,7 +568,7 @@ export default function TVPlayerCore({ model }) {
                           : getSourceUrl(
                               playerSource,
                               "tv",
-                              item.id,
+                              { tmdbId: item.id, imdbId: item.external_ids?.imdb_id || item.imdb_id },
                               playerEp.season,
                               playerEp.episode,
                               {},
@@ -606,7 +606,7 @@ export default function TVPlayerCore({ model }) {
                           : getSourceUrl(
                               playerSource,
                               "tv",
-                              item.id,
+                              { tmdbId: item.id, imdbId: item.external_ids?.imdb_id || item.imdb_id },
                               playerEp.season,
                               playerEp.episode,
                               {},
@@ -663,7 +663,7 @@ export default function TVPlayerCore({ model }) {
                             color:
                               currentEpDownload.status === "downloading"
                                 ? "var(--red)"
-                                : "#4caf50",
+                                : "var(--success)",
                           }}
                         >
                           {currentEpDownload.status === "downloading" ? "↓" : "✓"}

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { measureNetworkStatus, NETWORK_PROBE_INTERVAL } from "../../services/networkStatus";
+import { useEffect, useRef, useState } from "react";
+import { measureNetworkStatus, medianLatency, NETWORK_PROBE_INTERVAL } from "../../services/networkStatus";
 
 const initialStatus = () => ({
   status: navigator.onLine === false ? "offline" : "checking",
@@ -10,6 +10,7 @@ const initialStatus = () => ({
 
 export default function useNetworkStatus() {
   const [network, setNetwork] = useState(initialStatus);
+  const samplesRef = useRef([]);
 
   useEffect(() => {
     let disposed = false;
@@ -20,17 +21,26 @@ export default function useNetworkStatus() {
     };
     const probe = async () => {
       if (navigator.onLine === false) {
+        samplesRef.current = [];
         if (!disposed) setNetwork({ status: "offline", latencyMs: null, tier: "unknown", checkedAt: Date.now() });
         schedule();
         return;
       }
       const result = await measureNetworkStatus();
-      if (!disposed) setNetwork(result);
+      if (result.status === "offline") samplesRef.current = [];
+      if (result.status === "online" && Number.isFinite(result.latencyMs)) {
+        samplesRef.current = [...samplesRef.current, result.latencyMs].slice(-5);
+      }
+      if (!disposed) setNetwork({ ...result, latencyMs: medianLatency(samplesRef.current) });
       schedule();
     };
-    const handleOnline = () => probe();
+    const handleOnline = () => {
+      samplesRef.current = [];
+      probe();
+    };
     const handleOffline = () => {
       clearTimeout(timer);
+      samplesRef.current = [];
       setNetwork({ status: "offline", latencyMs: null, tier: "unknown", checkedAt: Date.now() });
     };
     const handleVisibility = () => { if (document.visibilityState === "visible") probe(); };
@@ -41,6 +51,7 @@ export default function useNetworkStatus() {
     return () => {
       disposed = true;
       clearTimeout(timer);
+      samplesRef.current = [];
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
       document.removeEventListener("visibilitychange", handleVisibility);

@@ -19,6 +19,7 @@ function mediaPreferences() {
 
 export function useSystemIntegration({ playbackSession, onMediaCommand, setToast }) {
   const commandRef = useRef(onMediaCommand);
+  const batteryToastVisibleRef = useRef(false);
   const [mediaPrefs, setMediaPrefs] = useState(mediaPreferences);
   const [documentVisible, setDocumentVisible] = useState(() => document.visibilityState !== "hidden");
   commandRef.current = onMediaCommand;
@@ -65,11 +66,17 @@ export function useSystemIntegration({ playbackSession, onMediaCommand, setToast
     }
     const alertHandler = window.electron.onBatteryAlert?.((alert) => {
       const percent = Math.round(Number(alert?.level || 0) * 100);
+      batteryToastVisibleRef.current = true;
       setToast?.(alert?.severity === "critical"
         ? (alert?.optimized
           ? `Battery ${percent}% · downloads paused until AC power returns`
           : `Battery ${percent}% · connect power soon`)
         : `Battery ${percent}% · Orion reduced background activity`);
+    });
+    const alertClearedHandler = window.electron.onBatteryAlertCleared?.(() => {
+      if (!batteryToastVisibleRef.current) return;
+      batteryToastVisibleRef.current = false;
+      setToast?.(null);
     });
     const resumeHandler = window.electron.onBatteryResumeDownloads?.(({ ids = [] } = {}) => {
       for (const id of ids) window.electron.resumeDownload?.({ id }).catch(() => {});
@@ -87,6 +94,7 @@ export function useSystemIntegration({ playbackSession, onMediaCommand, setToast
         }
       }
       if (alertHandler) window.electron.offBatteryAlert?.(alertHandler);
+      if (alertClearedHandler) window.electron.offBatteryAlertCleared?.(alertClearedHandler);
       if (resumeHandler) window.electron.offBatteryResumeDownloads?.(resumeHandler);
       if (performanceResumeHandler) window.electron.offPerformanceResumeDownloads?.(performanceResumeHandler);
     };

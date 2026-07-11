@@ -1,9 +1,10 @@
 const initial = require("./001_initial");
 const artworkCache = require("./002_artwork_cache");
 const fileIdentity = require("./003_file_identity");
+const playlistFolders = require("./004_playlist_folders");
 const { MUSIC_SCHEMA_VERSION } = require("../../../shared/musicConstants.cjs");
 
-const migrations = [initial, artworkCache, fileIdentity].sort((a, b) => a.version - b.version);
+const migrations = [initial, artworkCache, fileIdentity, playlistFolders].sort((a, b) => a.version - b.version);
 
 function currentVersion(db) {
   const row = db.prepare("SELECT value FROM music_meta WHERE key='schema_version'").get();

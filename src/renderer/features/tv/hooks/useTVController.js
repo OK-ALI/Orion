@@ -29,6 +29,7 @@ import {
   NON_ANIME_DEFAULT_SOURCE,
   NEEDS_INTERCEPT,
   getNextNonAsyncSource,
+  getNextHealthyNonAsyncSource,
 } from "../../../services/tmdb";
 import {
   BookmarkIcon,
@@ -573,7 +574,7 @@ const [details, setDetails] = useState(null);
         } else {
           // AllManga doesn't have this episode → switch to the next source
           // automatically and remember the choice for next time.
-          const next = getNextNonAsyncSource(playerSource);
+          const next = getNextHealthyNonAsyncSource(playerSource);
           if (next) {
             setFailoverSource(epKey, next);
             setM3u8Url(null);
@@ -730,7 +731,7 @@ const [details, setDetails] = useState(null);
     const episode = selectedEp.episode_number;
     const url = isAsync
       ? resolvedPlayerUrl
-      : getSourceUrl(playerSource, "tv", item.id, selectedSeason, episode, {}, playerAccentColor, playerSubLang);
+      : getSourceUrl(playerSource, "tv", { tmdbId: item.id, imdbId: d?.external_ids?.imdb_id || d?.imdb_id }, selectedSeason, episode, {}, playerAccentColor, playerSubLang);
     if (!url) return;
     const progressKey = `tv_${item.id}_s${selectedSeason}e${episode}`;
     const playerRect = playerWrapRef.current?.getBoundingClientRect?.();

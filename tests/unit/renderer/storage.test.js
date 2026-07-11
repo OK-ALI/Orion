@@ -42,6 +42,10 @@ describe("v1.0.7 renderer storage compatibility", () => {
     storage.set(STORAGE_KEYS.INTERACTION_HOVER_PRESET, "vivid");
     storage.set(STORAGE_KEYS.INTERACTION_HOVER_COLOR, "#7c3aed");
     storage.set(STORAGE_KEYS.INTERACTION_GLOW_STRENGTH, 72);
+    storage.set(STORAGE_KEYS.MUSIC_DISPLAY_FONT, "space-grotesk");
+    storage.set(STORAGE_KEYS.MUSIC_DISPLAY_SCALE, "spacious");
+    storage.set(STORAGE_KEYS.MUSIC_GLASS_DENSITY, "deep");
+    storage.set(STORAGE_KEYS.MUSIC_PLAYER_DOCK_MODE, "float");
     storage.set(STORAGE_KEYS.SUBDL_API_KEY, "must-not-export");
 
     const backup = collectBackupData();
@@ -51,6 +55,10 @@ describe("v1.0.7 renderer storage compatibility", () => {
     expect(backup.interactionHoverPreset).toBe("vivid");
     expect(backup.interactionHoverColor).toBe("#7c3aed");
     expect(backup.interactionGlowStrength).toBe(72);
+    expect(backup.musicDisplayFont).toBe("space-grotesk");
+    expect(backup.musicDisplayScale).toBe("spacious");
+    expect(backup.musicGlassDensity).toBe("deep");
+    expect(backup.musicPlayerDockMode).toBe("float");
     expect(backup.subdlApiKey).toBeUndefined();
     expect(BACKUP_KEYS).not.toContain(STORAGE_KEYS.SUBDL_API_KEY);
     expect(BACKUP_KEYS).not.toContain(STORAGE_KEYS.WYZIE_API_KEY);
@@ -59,12 +67,18 @@ describe("v1.0.7 renderer storage compatibility", () => {
 
   it("includes portable SQLite Music state without placing credentials in renderer storage", async () => {
     window.electron = {
-      musicExportBackup: vi.fn().mockResolvedValue({ ok: true, state: { version: 1, playlists: [{ name: "Orbit" }] } }),
+      musicExportBackup: vi.fn().mockResolvedValue({ ok: true, state: { version: 1, playlists: [{ name: "Orbit" }],
+        queue: { items: [{ id: "signal", title: "Signal" }], index: 0, repeat: "all", shuffle: false } } }),
       musicImportBackup: vi.fn().mockResolvedValue({ ok: true }),
     };
+    const restored = vi.fn();
+    window.addEventListener("orion:music-backup-restored", restored);
     const backup = await collectCompleteBackupData();
     expect(backup.musicState.playlists[0].name).toBe("Orbit");
+    expect(backup.musicState.queue.items[0].id).toBe("signal");
     await restoreCompleteBackupData(backup);
     expect(window.electron.musicImportBackup).toHaveBeenCalledWith(backup.musicState);
+    expect(restored).toHaveBeenCalledTimes(1);
+    window.removeEventListener("orion:music-backup-restored", restored);
   });
 });

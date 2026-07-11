@@ -12,30 +12,51 @@ export default function AudioEngine({ controller }) {
   const analyserRef = useRef(null);
   const recoveryAttemptsRef = useRef(0);
   const transitionRef = useRef({ trackId: null, fadeOut: false });
+  const attachedStreamRef = useRef("");
   const { current, stream, playing, setPlaying, volume, muted, setProgress, setBuffered,
-    playbackStatus, setPlaybackStatus, playNext, playPrevious, retryStream, engineRef, visualBus, visualPreferences, artwork } = controller;
+    playbackStatus, setPlaybackStatus, playNext, playPrevious, retryStream, engineRef, visualBus,
+    visualPreferences, setAnalyserState = () => {}, setAnalyserDiagnostics = () => {}, artwork } = controller;
   const visualPreferencesRef = useRef(visualPreferences);
   const outputGain = replayGainMultiplier(current?.replayGain, visualPreferences.replayGain);
 
   visualPreferencesRef.current = visualPreferences;
-  useEffect(() => () => analyserRef.current?.destroy?.(), []);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || analyserRef.current) return undefined;
+    analyserRef.current = createMusicAnalyser(audio, visualBus,
+      () => visualPreferencesRef.current, (state, diagnostics) => {
+        setAnalyserState(state);
+        setAnalyserDiagnostics(diagnostics || { state });
+        document.documentElement.dataset.musicAnalyserState = state;
+        document.documentElement.dataset.musicAnalyserContextState = diagnostics?.contextState || "unavailable";
+        document.documentElement.dataset.musicAnalyserFrames = String(diagnostics?.frameCount || 0);
+        document.documentElement.dataset.musicAnalyserSignalFrames = String(diagnostics?.nonZeroFrameCount || 0);
+        document.documentElement.dataset.musicAnalyserSourceConnected = String(diagnostics?.sourceConnected === true);
+        window.dispatchEvent(new CustomEvent("orion:music-analyser-state", { detail: { state, diagnostics } }));
+      });
+    return () => {
+      analyserRef.current?.destroy?.();
+      analyserRef.current = null;
+    };
+  }, [setAnalyserDiagnostics, setAnalyserState, visualBus]);
   useEffect(() => { recoveryAttemptsRef.current = 0; }, [current?.id]);
   useEffect(() => {
     transitionRef.current = { trackId: current?.id || null, fadeOut: false };
+    analyserRef.current?.beginTrack?.();
     analyserRef.current?.setOutputGain?.(outputGain);
   }, [current?.id, outputGain]);
 
   useEffect(() => {
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-    const batteryPaused = visualPreferences.adaptPerformance && document.documentElement.dataset.performanceOnBattery === "true";
+    const batteryPaused = visualPreferences.batterySaver && document.documentElement.dataset.performanceOnBattery === "true";
     const shouldRun = playing && playbackStatus === "playing" && document.visibilityState === "visible" && !reduced && !batteryPaused;
     if (shouldRun) analyserRef.current?.start?.();
     else analyserRef.current?.pause?.();
-  }, [playing, playbackStatus, visualPreferences.adaptPerformance]);
+  }, [playing, playbackStatus, visualPreferences.adaptPerformance, visualPreferences.batterySaver]);
 
   useEffect(() => {
     const sync = () => {
-      const blocked = visualPreferencesRef.current.adaptPerformance && document.documentElement.dataset.performanceOnBattery === "true";
+      const blocked = visualPreferencesRef.current.batterySaver && document.documentElement.dataset.performanceOnBattery === "true";
       if (blocked) analyserRef.current?.pause?.();
       else if (playing && playbackStatus === "playing") analyserRef.current?.start?.();
     };
@@ -67,15 +88,32 @@ export default function AudioEngine({ controller }) {
         if (!audio) return;
         audio.pause(); audio.currentTime = 0;
       },
+      unlockAudio() {
+        document.documentElement.dataset.musicAnalyserUnlocks = String((Number(document.documentElement.dataset.musicAnalyserUnlocks) || 0) + 1);
+        return analyserRef.current?.unlock?.() || Promise.resolve(false);
+      },
+      getAnalyserDiagnostics() { return analyserRef.current?.getDiagnostics?.() || null; },
     };
     return () => { engineRef.current = null; };
   }, [engineRef]);
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !stream?.url) return;
+    if (!audio) return;
+    const nextUrl = stream?.url || "";
+    if (!nextUrl) {
+      if (!attachedStreamRef.current) return;
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      attachedStreamRef.current = "";
+      return;
+    }
+    if (attachedStreamRef.current === nextUrl) return;
+    audio.pause();
     audio.src = stream.url;
     audio.load();
+    attachedStreamRef.current = nextUrl;
   }, [stream?.url]);
 
   useEffect(() => {
@@ -146,14 +184,13 @@ export default function AudioEngine({ controller }) {
     }
   };
 
-  return <audio ref={audioRef} className="music-audio-engine"
+  return <audio ref={audioRef} className="music-audio-engine" crossOrigin="anonymous"
     onTimeUpdate={(event) => updateProgress(event.currentTarget)}
     onProgress={(event) => updateProgress(event.currentTarget)}
     onDurationChange={(event) => updateProgress(event.currentTarget)}
     onWaiting={() => setPlaybackStatus("buffering")}
     onStalled={() => setPlaybackStatus("buffering")}
     onPlaying={(event) => { claimPlayback("music"); setPlaying(true); setPlaybackStatus("playing");
-      analyserRef.current ||= createMusicAnalyser(event.currentTarget, visualBus, () => visualPreferencesRef.current);
       if (visualPreferences.crossfadeDuration > 0 && transitionRef.current.trackId === current?.id && event.currentTarget.currentTime < 1) {
         analyserRef.current?.setOutputGain?.(0);
         analyserRef.current?.setOutputGain?.(outputGain, Math.min(visualPreferences.crossfadeDuration, 8));

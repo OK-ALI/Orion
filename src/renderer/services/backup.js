@@ -62,6 +62,7 @@ export const BACKUP_KEYS = [
   "interactionHoverPreset",
   "interactionHoverColor",
   "interactionGlowStrength",
+  "cinemaGlowStrength",
   "episodeReleaseCache",
   "closeToTray",
   "sidebarExpanded",
@@ -72,8 +73,11 @@ export const BACKUP_KEYS = [
   "notInterested",
   "titleSignals",
   "musicAtmosphere",
+  "musicVolume",
+  "musicMuted",
   "musicVisualizer",
   "musicVisualIntensity",
+  "musicGlowStrength",
   "musicArtworkColor",
   "musicPortalSound",
   "musicPortalVolume",
@@ -81,6 +85,24 @@ export const BACKUP_KEYS = [
   "musicPerformanceAdapt",
   "musicReplayGain",
   "musicCrossfadeDuration",
+  "musicLowGpu",
+  "musicDisableAudioReactiveBg",
+  "musicStaticBg",
+  "musicParticleDensity",
+  "musicSceneStyle",
+  "musicBatterySaver",
+  "musicDisplayFont",
+  "musicDisplayScale",
+  "musicGlassDensity",
+  "musicPlayerDockMode",
+  "musicSearchHistory",
+];
+
+const DIRECT_BACKUP_KEYS = [
+  "orion.sidebar.cinema.mode",
+  "orion.sidebar.music.mode",
+  "orion.sidebar.cinema.openMode",
+  "orion.sidebar.music.openMode",
 ];
 
 export function collectBackupData() {
@@ -89,6 +111,12 @@ export function collectBackupData() {
     try {
       const raw = localStorage.getItem(PREFIX + key);
       if (raw !== null) data[key] = JSON.parse(raw);
+    } catch {}
+  }
+  for (const key of DIRECT_BACKUP_KEYS) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw !== null) data[key] = raw;
     } catch {}
   }
   return data;
@@ -100,6 +128,9 @@ export function restoreBackupData(data) {
     if (data[key] !== undefined && data[key] !== null) {
       localStorage.setItem(PREFIX + key, JSON.stringify(data[key]));
     }
+  }
+  for (const key of DIRECT_BACKUP_KEYS) {
+    if (typeof data[key] === "string") localStorage.setItem(key, data[key]);
   }
 }
 
@@ -117,5 +148,8 @@ export async function restoreCompleteBackupData(data) {
   if (!data?.musicState) return { ok: true };
   const result = await window.electron?.musicImportBackup?.(data.musicState);
   if (result?.ok === false) throw new Error(result.error || "Music data could not be restored.");
+  // Music stores live in the renderer. Notify them after the main-process import
+  // so a cloud restore is visible now, rather than only after an app relaunch.
+  window.dispatchEvent(new CustomEvent("orion:music-backup-restored"));
   return result || { ok: true };
 }
