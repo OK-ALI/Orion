@@ -85,9 +85,9 @@ export default function MusicSearch({ selected, onNavigate }) {
   return (
     <div className="music-page music-search-page">
       <header className="music-page-header compact">
-        <span className="music-eyebrow">YouTube Music + Local Library</span>
-        <h1>Find your next signal</h1>
-        <p>Search Echo-aligned catalog sources while playback stays protected behind Orion's main process.</p>
+        <span className="music-eyebrow">Search Music Planet</span>
+        <h1>Find your next favorite</h1>
+        <p>Explore songs, albums, artists and playlists from one place.</p>
       </header>
       <div className="music-search-deck">
         <div className="planet-search-box music-orbital-search">
@@ -102,7 +102,7 @@ export default function MusicSearch({ selected, onNavigate }) {
           ))}
         </div>
       </div>
-      {loading && <div className="music-loading-status" role="status"><span className="music-button-loader"><i aria-hidden="true" /></span><span>Searching for “{query}”…</span></div>}
+      {loading && <div className="music-loading-status" role="status"><span className="music-button-loader"><i aria-hidden="true" /></span><span>{query.trim().length >= 2 ? `Searching for “${query}”…` : "Mapping music to explore…"}</span></div>}
       {!!response.errors?.length && <div className="music-provider-warning">Some sources did not respond. Available results are shown.</div>}
       {!loading && resultCount > 0 && <div className="music-result-summary"><strong>{resultCount}</strong><span>{query.trim().length >= 2 ? "matches from active signals" : "signals ready to explore"}</span></div>}
       {scope === "all" && topResult && (

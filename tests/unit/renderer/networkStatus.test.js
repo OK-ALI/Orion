@@ -6,9 +6,9 @@ describe("network status measurement", () => {
     const now = vi.fn().mockReturnValueOnce(100).mockReturnValueOnce(142.6);
     const cancel = vi.fn().mockResolvedValue(undefined);
     const fetchImpl = vi.fn().mockResolvedValue({ status: 200, body: { cancel } });
-    const result = await measureNetworkStatus({ fetchImpl, now, token: "token" });
+    const result = await measureNetworkStatus({ fetchImpl, now });
     expect(result).toMatchObject({ status: "online", latencyMs: 43, tier: "fast" });
-    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining("/authentication"), expect.objectContaining({ cache: "no-store" }));
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining("generate_204"), expect.objectContaining({ cache: "no-store", mode: "no-cors" }));
     expect(cancel).toHaveBeenCalled();
   });
 
@@ -18,7 +18,7 @@ describe("network status measurement", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("distinguishes a reachable but degraded metadata service", async () => {
+  it("distinguishes a reachable but degraded connectivity probe", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ status: 503, ok: false, body: { cancel: vi.fn() } });
     expect(await measureNetworkStatus({ fetchImpl, now: vi.fn().mockReturnValueOnce(10).mockReturnValueOnce(40) })).toMatchObject({ status: "degraded", serviceStatus: 503 });
   });

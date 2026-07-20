@@ -434,7 +434,7 @@
 }
 
 .toggle-btn.active {
-    color: #fff;
+    color: var(--on-accent);
     background: var(--accent);
 }
 
@@ -448,10 +448,10 @@
     position: relative;
     min-height: 112px;
     overflow: hidden;
-    border-radius: 8px;
+    border-radius: 14px;
     padding: 18px;
     cursor: pointer;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid color-mix(in srgb, var(--on-media) 9%, transparent);
     transition: transform 0.18s ease, filter 0.18s ease;
 }
 
@@ -469,7 +469,7 @@
 .genre-card-name {
     position: relative;
     z-index: 1;
-    color: #fff;
+    color: var(--on-media);
     font-size: 19px;
     font-weight: 900;
 }
@@ -485,7 +485,7 @@
 .current-genre-label {
     padding: 8px 12px;
     border-radius: 7px;
-    color: #fff;
+    color: var(--on-media);
     font-weight: 800;
 }
 

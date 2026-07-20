@@ -71,12 +71,18 @@ import {
 } from "../../../shared/utils/ageRating";
 import { INJECT_SKIP_CONTROLS } from "../../player/webviewScripts/skipControls";
 import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
+import { normalizePlayerEventProgress } from "../../player/services/playerEventProgress";
+import { useCinemaPlaybackEvidence } from "../../player/hooks/useCinemaPlaybackEvidence";
 
 export function useTVWebview(context) {
   const { anilistData, autoMarkedRef, d, downloadsByEpisodeKey, dubMode, durationRef, failoverTimeoutRef, initialSeekDoneRef, introSkipMode, isAnime, isAsync, item, lastKnownTimeRef, localCountdownStartedRef, onHistory, onMarkWatchedRef, onPlay, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressViaFrames, resetAutoplayRef, resolvedPlayerUrlRef, resolvingUrlRef, saveProgressRef, seekBackCooldownRef, selectedEp, selectedSeason, setCountdownStartedRef, setInterceptedSubs, setM3u8Url, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSelectedEp, setShowFailoverPrompt, setShowResumePrompt, setSkipPrompt, setSkipTimings, setWebviewLoading, skipPrompt, skipTimings, switchingToMiniPlayerRef, triggerAutoplayRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef } = context;
-const currentProgressKey = selectedEp
+  const currentProgressKey = selectedEp
     ? `tv_${item.id}_s${selectedSeason}e${selectedEp.episode_number}`
     : null;
+  const { healthEvidenceRef, playerEventProgressRef, attemptedSourcesRef, reportSourceHealth } = useCinemaPlaybackEvidence({
+    playing, sourceId: playerSource, mediaType: isAnime ? "anime" : "tv", resetKey: currentProgressKey,
+    webviewRef, durationRef, lastKnownTimeRef, setWebviewLoading, setShowFailoverPrompt,
+  });
 
   // Check if currently-playing episode is already downloaded or downloading
   const currentEpDownload = selectedEp
@@ -110,21 +116,27 @@ const currentProgressKey = selectedEp
     failoverTimeoutRef.current = setTimeout(() => {
       if (lastKnownTimeRef.current === 0) {
         setShowFailoverPrompt(true);
+        reportSourceHealth("slow", "startup-timeout", "Playback has not advanced after 15 seconds.");
       }
     }, 15000);
 
     return () => clearTimeout(failoverTimeoutRef.current);
-  }, [playing, playerSource, selectedEp?.episode_number]);
+  }, [playing, playerSource, selectedEp?.episode_number, reportSourceHealth]);
 
   const handleFailoverNextSource = useCallback(() => {
-    const next = getNextHealthyNonAsyncSource(playerSource);
+    reportSourceHealth("degraded", "playback-stalled", "The user switched after playback stalled.");
+    attemptedSourcesRef.current = [...new Set([...attemptedSourcesRef.current, playerSource])];
+    const next = getNextHealthyNonAsyncSource(playerSource, {
+      mediaType: isAnime ? "anime" : "tv",
+      attempted: attemptedSourcesRef.current,
+    });
     if (next) {
       clearFailoverSource(`tv_${item.id}_s${selectedSeason}_e${selectedEp?.episode_number}_${dubMode}`);
       setPlayerSource(next);
       storage.set(STORAGE_KEYS.PLAYER_SOURCE, next);
       setShowFailoverPrompt(false);
     }
-  }, [playerSource, item.id, selectedSeason, selectedEp, dubMode]);
+  }, [playerSource, item.id, selectedSeason, selectedEp, dubMode, isAnime, reportSourceHealth]);
 
   // Show loader instantly when playback starts
   useEffect(() => {
@@ -326,6 +338,16 @@ const currentProgressKey = selectedEp
     const wv = webviewRef.current;
     if (!wv) return;
     const done = () => setWebviewLoading(false);
+    const failed = (event) => {
+      if (event?.isMainFrame === false) return;
+      setWebviewLoading(false);
+      setShowFailoverPrompt(true);
+      reportSourceHealth(
+        "failed",
+        "main-frame-failed",
+        event?.errorDescription || "The provider frame failed to load.",
+      );
+    };
 
     const handleWillNavigate = (event) => {
       const url = event.url;
@@ -336,7 +358,7 @@ const currentProgressKey = selectedEp
     };
 
     wv.addEventListener("did-finish-load", done);
-    wv.addEventListener("did-fail-load", done);
+    wv.addEventListener("did-fail-load", failed);
     wv.addEventListener("will-navigate", handleWillNavigate);
 
     // Poll up to 30s for video duration (metadata may load after buffering starts)
@@ -361,11 +383,11 @@ const currentProgressKey = selectedEp
 
     return () => {
       wv.removeEventListener("did-finish-load", done);
-      wv.removeEventListener("did-fail-load", done);
+      wv.removeEventListener("did-fail-load", failed);
       wv.removeEventListener("will-navigate", handleWillNavigate);
       clearInterval(pollDuration);
     };
-  }, [playing, playerSource, item.id, selectedEp?.episode_number]);
+  }, [playing, playerSource, item.id, selectedEp?.episode_number, reportSourceHealth]);
 
   // ── AniSkip: fetch timings when episode changes ───────────────────────────
   useEffect(() => {
@@ -442,21 +464,21 @@ const currentProgressKey = selectedEp
           const wv = webviewRef.current;
           if (!wv) return;
 
-          let result;
+          let result = normalizePlayerEventProgress(playerEventProgressRef.current);
           // When the pop-out window is open the main webview shows about:blank
           // -> query the pip window's webContents directly.
-          if (
+          if (!result &&
             pipWebContentsIdRef.current != null &&
             window.electron?.queryVideoProgress
           ) {
             result = await window.electron.queryVideoProgress(
               pipWebContentsIdRef.current,
             );
-          } else if (progressViaFrames && window.electron?.queryVideoProgress) {
+          } else if (!result && progressViaFrames && window.electron?.queryVideoProgress) {
             const webContentsId = getReadyWebContentsId(wv);
             if (!webContentsId) return;
             result = await window.electron.queryVideoProgress(webContentsId);
-          } else {
+          } else if (!result) {
             result = await wv.executeJavaScript(`
               (() => {
                 const v = document.querySelector('video')
@@ -515,6 +537,17 @@ const currentProgressKey = selectedEp
           if (result && result.duration > 0 && result.duration !== Infinity) {
             durationRef.current = result.duration;
             const ct = result.currentTime;
+            const evidence = healthEvidenceRef.current;
+            if (!evidence.ready) {
+              const current = Number(ct) || 0;
+              if (evidence.lastTime != null && current > evidence.lastTime + 0.2 && !result.paused) evidence.advances += 1;
+              else if (evidence.lastTime != null && current <= evidence.lastTime && !result.paused) evidence.advances = 0;
+              evidence.lastTime = current;
+              if (evidence.advances >= 2) {
+                evidence.ready = true;
+                reportSourceHealth("ready");
+              }
+            }
 
             // Clear failover prompt since video is playing
             setShowFailoverPrompt(false);
@@ -617,6 +650,7 @@ const currentProgressKey = selectedEp
     currentProgressKey,
     watchedThreshold,
     progressViaFrames,
+    reportSourceHealth,
   ]);
 
   // Skip backward/forward by N seconds via webview JS injection

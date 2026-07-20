@@ -6,6 +6,7 @@ const blockStats = require("../ipc/blockStatsIpc");
 const { addCandidate } = require("../downloader/streamCandidates");
 
 const BLOCKED_HOSTS = [
+  // ── Google analytics / ads ──
   "*://www.google-analytics.com/*",
   "*://analytics.google.com/*",
   "*://googletagmanager.com/*",
@@ -18,10 +19,17 @@ const BLOCKED_HOSTS = [
   "*://pagead2.googlesyndication.com/*",
   "*://stats.g.doubleclick.net/*",
   "*://yt3.ggpht.com/ytc/*",
+  // ── Google fonts / APIs (tracking vectors inside player embeds) ──
   "*://fonts.googleapis.com/*",
   "*://fonts.gstatic.com/*",
   "*://googleapis.com/*",
   "*://gstatic.com/*",
+  // ── Videasy user-tracking pixels ──
+  "*://users.videasy.net/*",
+  "*://users.videasy.to/*",
+  // ── VixSrc analytics ──
+  "*://analytics.vixcloud.co/*",
+  // ── Ad networks ──
   "*://cdn.adx1.com/*",
   "*://intelligenceadx.com/*",
   "*://adsco.re/*",
@@ -29,7 +37,6 @@ const BLOCKED_HOSTS = [
   "*://mc.yandex.ru/*",
   "*://bvtpk.com/*",
   "*://my.rtmark.net/*",
-  "*://bvtpk.com/*",
   "*://b7510.com/*",
   "*://gt.unbrownunflat.com/*",
   "*://im.malocacomals.com/*",
@@ -56,6 +63,11 @@ const BLOCKED_HOSTS = [
   "*://rzjzjnavztycv.online/*",
   "*://tmstr4.cloudnestra.com/*",
   "*://tmstr4.neonhorizonworkshops.com/*",
+  // ── VidSrc / VsEmbed ad domains ──
+  "*://qj.asokapygmoid.com/*",
+  "*://hfriendsof.net/*",
+  "*://howletoperation.com/*",
+  // ── Anti-devtools scripts ──
   "*://unpkg.com/disable-devtool*",
   "*://cdn.jsdelivr.net/npm/disable-devtool*",
 ];
@@ -72,6 +84,12 @@ function setupSession(playerSession, trailerSession, getMainWindow) {
     "*://*/*.vtt",
   ];
 
+  const headerValue = (headers, name) => {
+    const key = Object.keys(headers || {}).find((entry) => entry.toLowerCase() === name.toLowerCase());
+    const value = key ? headers[key] : null;
+    return Array.isArray(value) ? value[0] : value || "";
+  };
+
   const stripHeaders = (details, callback, captureMedia = false) => {
     const headers = { ...details.responseHeaders };
     for (const key of Object.keys(headers)) {
@@ -85,6 +103,7 @@ function setupSession(playerSession, trailerSession, getMainWindow) {
     }
     if (captureMedia) {
       const requestContext = requestContextsById.get(details.id) || {};
+      const contentType = String(headerValue(details.responseHeaders, "content-type")).toLowerCase();
       const candidate = addCandidate({
         ...requestContext,
         url: details.url,
@@ -94,6 +113,16 @@ function setupSession(playerSession, trailerSession, getMainWindow) {
       const mw = getMainWindow();
       if (candidate && mw && !mw.isDestroyed()) {
         mw.webContents.send("m3u8-found", candidate);
+      }
+      const isSubtitle = /(?:^|\/)(?:vtt|webvtt)(?:;|$)/i.test(contentType) || /\.vtt(?:$|[?#])/i.test(details.url);
+      if (isSubtitle && mw && !mw.isDestroyed()) {
+        const { extractSubtitleLang } = require("../subtitles/ipc");
+        mw.webContents.send("subtitle-found", {
+          url: details.url,
+          lang: extractSubtitleLang(details.url),
+          contentType,
+          webContentsId: details.webContentsId || requestContext.webContentsId || null,
+        });
       }
     }
     requestContextsById.delete(details.id);

@@ -48,8 +48,20 @@ export default function HomePage({
   const [recommendedItems, setRecommendedItems] = useState([]);
   const [topRatedItems, setTopRatedItems] = useState([]);
   const [kDramaItems, setKDramaItems] = useState([]);
+  const [loadingAge, setLoadingAge] = useState(0);
   const [layout] = useState(() => loadHomeLayout() || { order: ["continue", "recommended", "trendingMovies", "trendingTV", "kdramas", "topRated"], visible: { continue: true, recommended: true, trendingMovies: true, trendingTV: true, kdramas: true, topRated: true } });
   const { order: rowOrder, visible: rowVisible } = layout;
+
+  useEffect(() => {
+    if (!loading) {
+      setLoadingAge(0);
+      return undefined;
+    }
+    const startedAt = Date.now();
+    setLoadingAge(0);
+    const timer = setInterval(() => setLoadingAge(Date.now() - startedAt), 1000);
+    return () => clearInterval(timer);
+  }, [loading]);
 
   // Merge items for batch ratings fetch
   const allItems = useMemo(() => {
@@ -248,9 +260,9 @@ export default function HomePage({
   if (offline) {
     return (
       <div className="offline-placeholder">
-        <div className="offline-icon">📡</div>
-        <h2>No Internet Connection</h2>
-        <p>Trending and discovery require an internet connection. Your downloads and library still work offline.</p>
+        <span className="page-state-eyebrow">Cinema is offline</span>
+        <h2>Your saved stories are still here</h2>
+        <p>Trending and discovery need a connection. Downloads, local playback and your library remain available.</p>
         <button className="btn btn-primary" onClick={onRetry}>Retry</button>
       </div>
     );
@@ -258,8 +270,25 @@ export default function HomePage({
 
   if (loading) {
     return (
-      <div className="loader">
-        <div className="spinner" />
+      <div className="home-loading-shell" role="status" aria-live="polite">
+        <div className="home-loading-hero skeleton" />
+        <div className="home-loading-content">
+          {[0, 1].map((row) => (
+            <section className="home-loading-row" key={row}>
+              <div className="home-loading-heading skeleton" />
+              <div className="home-loading-cards">
+                {[0, 1, 2, 3, 4, 5].map((card) => <i className="skeleton" key={card} />)}
+              </div>
+            </section>
+          ))}
+          {loadingAge >= 5000 && (
+            <div className="home-loading-message">
+              <strong>{loadingAge >= 12000 ? "Cinema is taking longer than expected" : "Still preparing your stories…"}</strong>
+              <span>{loadingAge >= 12000 ? "Check the connection or retry without leaving this page." : "Orion is waiting for the first catalog response."}</span>
+              {loadingAge >= 12000 && <button className="btn btn-secondary" onClick={onRetry}>Retry</button>}
+            </div>
+          )}
+        </div>
       </div>
     );
   }

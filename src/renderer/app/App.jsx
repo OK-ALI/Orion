@@ -119,7 +119,7 @@ export default function App() {
 
   const continueCinemaFromWhatsNew = () => {
     dismissWhatsNew();
-    navigate("home");
+    if (String(page).startsWith("music-")) navigate("home");
   };
 
   const syncFromCloud = useCallback(async () => {
@@ -930,7 +930,7 @@ export default function App() {
         <main className="app-content">
           {/* ── API key status banner ── */}
           {/* Suspense boundary: lazy page chunks are fetched on first visit */}
-          {apiKeyStatus === "invalid_token" && (
+          {!String(page).startsWith("music-") && apiKeyStatus === "invalid_token" && (
             <div className="api-status-banner api-status-error">
               <span>
                 ⚠ Your TMDB token is invalid, not set or has been revoked.
@@ -941,7 +941,7 @@ export default function App() {
               </button>
             </div>
           )}
-          {apiKeyStatus === "unreachable" && (
+          {!String(page).startsWith("music-") && apiKeyStatus === "unreachable" && (
             <div className="api-status-banner api-status-warn">
               <span>
                 ⚠ Cannot reach TMDB, check your internet connection. Content may
@@ -957,8 +957,8 @@ export default function App() {
               </button>
             </div>
           )}
-          {network.status === "offline" && apiKeyStatus !== "unreachable" && <div className="api-status-banner api-status-warn"><span>Orion is offline. Local playback, downloads and your library remain available.</span></div>}
-          {network.status === "degraded" && <div className="api-status-banner api-status-warn"><span>Orion's metadata service is responding slowly or temporarily degraded. Existing content remains available.</span></div>}
+          {network.status === "offline" && !["home", "discover"].includes(page) && !String(page).startsWith("music-") && apiKeyStatus !== "unreachable" && <div className="api-status-banner api-status-warn"><span>Orion is offline. Local playback, downloads and your libraries remain available.</span></div>}
+          {network.status === "degraded" && !String(page).startsWith("music-") && <div className="api-status-banner api-status-warn"><span>Your connection check is responding slowly. Existing and local content remain available.</span></div>}
           <AppRoutes model={{
             addHistory, apiKey, apiKeySource, changeApiKey, clearHistory, dlSearchOpen,
           downloads, handleDeleteDownload, handleDownloadStarted, handleGoToDownloads,

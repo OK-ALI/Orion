@@ -15,6 +15,7 @@ import {
   sourceSupportsProgress,
   sourceProgressViaFrames,
   sourceIsAsync,
+  getSourceResumeParams,
   fetchAnilistData,
   cleanAnilistDescription,
   isAnimeContent,
@@ -63,9 +64,16 @@ import {
 } from "../../../shared/utils/ageRating";
 import { INJECT_SKIP_CONTROLS } from "../../player/webviewScripts/skipControls";
 import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
+import { normalizePlayerEventProgress } from "../../player/services/playerEventProgress";
+import { useCinemaPlaybackEvidence } from "../../player/hooks/useCinemaPlaybackEvidence";
 
 export function useMovieWebview(context) {
   const { autoMarkedRef, autoplayDoneRef, d, dubMode, failoverTimeoutRef, initialSeekDoneRef, isWatched, item, lastKnownTimeRef, loading, onHistory, onMarkWatchedRef, onPlay, pipOpen, pipUrlRef, pipWebContentsIdRef, playerAccentColor, playerSource, playerSubLang, playerWrapRef, playing, progressKey, progressViaFrames, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrlRef, saveProgress, saveProgressRef, seekBackCooldownRef, setInterceptedSubs, setM3u8Url, setPipOpen, setPlayerFullscreen, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setResumeTime, setShowFailoverPrompt, setShowResumePrompt, setWebviewLoading, switchingToMiniPlayerRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef } = context;
+  const { healthEvidenceRef, playerEventProgressRef, attemptedSourcesRef, reportSourceHealth } = useCinemaPlaybackEvidence({
+    playing, sourceId: playerSource, mediaType: "movie", resetKey: item.id, webviewRef,
+    lastKnownTimeRef, setWebviewLoading, setShowFailoverPrompt,
+  });
+
 const applyVoiceBoost = useCallback(() => {
     const wv = webviewRef.current;
     if (!wv) return;
@@ -260,6 +268,7 @@ const applyVoiceBoost = useCallback(() => {
 
     let lastTime = lastKnownTimeRef.current;
     let lastChecked = Date.now();
+    let slowReported = false;
 
     const interval = setInterval(() => {
       const currentTime = lastKnownTimeRef.current;
@@ -268,6 +277,10 @@ const applyVoiceBoost = useCallback(() => {
       if (webviewLoading || (currentTime === lastTime && playing)) {
         if (now - lastChecked >= 15000) {
           setShowFailoverPrompt(true);
+          if (!slowReported) {
+            slowReported = true;
+            reportSourceHealth("slow", "startup-timeout", "Playback has not advanced after 15 seconds.");
+          }
         }
       } else {
         setShowFailoverPrompt(false);
@@ -277,7 +290,7 @@ const applyVoiceBoost = useCallback(() => {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [playing, playerSource, item.id, webviewLoading]);
+  }, [playing, playerSource, item.id, webviewLoading, reportSourceHealth]);
 
   // Force manual navigation on source/URL change to prevent Electron webview from getting stuck
   useEffect(() => {
@@ -294,7 +307,7 @@ const applyVoiceBoost = useCallback(() => {
             { tmdbId: item.id, imdbId: d.imdb_id },
             null,
             null,
-            {},
+            getSourceResumeParams(playerSource, storage.get("dlTime_" + progressKey)),
             playerAccentColor,
             playerSubLang,
           );
@@ -308,10 +321,15 @@ const applyVoiceBoost = useCallback(() => {
         console.warn("Failed to manually navigate webview:", e);
       }
     }
-  }, [playing, pipOpen, playerSource, resolvedPlayerUrl, item.id, playerAccentColor, playerSubLang]);
+  }, [playing, pipOpen, playerSource, resolvedPlayerUrl, item.id, progressKey, playerAccentColor, playerSubLang]);
 
   const handleFailoverNextSource = useCallback(() => {
-    const next = getNextHealthyNonAsyncSource(playerSource);
+    reportSourceHealth("degraded", "playback-stalled", "The user switched after playback stalled.");
+    attemptedSourcesRef.current = [...new Set([...attemptedSourcesRef.current, playerSource])];
+    const next = getNextHealthyNonAsyncSource(playerSource, {
+      mediaType: "movie",
+      attempted: attemptedSourcesRef.current,
+    });
     if (!next) return;
     clearFailoverSource(`movie_${item.id}_${dubMode}`);
     setPlayerSource(next);
@@ -325,7 +343,7 @@ const applyVoiceBoost = useCallback(() => {
     setResolveError(null);
     setShowFailoverPrompt(false);
     setWebviewLoading(true);
-  }, [playerSource, item.id, dubMode]);
+  }, [playerSource, item.id, dubMode, reportSourceHealth]);
 
   // ── Webview memory cleanup ────────────────────────────────────────────────
   // useLayoutEffect fires synchronously BEFORE React mutates the DOM, so the
@@ -388,6 +406,16 @@ const applyVoiceBoost = useCallback(() => {
         `);
       } catch {}
     };
+    const failed = (event) => {
+      if (event?.isMainFrame === false) return;
+      setWebviewLoading(false);
+      setShowFailoverPrompt(true);
+      reportSourceHealth(
+        "failed",
+        "main-frame-failed",
+        event?.errorDescription || "The provider frame failed to load.",
+      );
+    };
     const handleWillNavigate = (event) => {
       const url = event.url;
       if (url && (url.includes("/tv/") || url.includes("/movie/")) && url.includes("2embed")) {
@@ -396,14 +424,14 @@ const applyVoiceBoost = useCallback(() => {
       }
     };
     wv.addEventListener("did-finish-load", done);
-    wv.addEventListener("did-fail-load", done);
+    wv.addEventListener("did-fail-load", failed);
     wv.addEventListener("will-navigate", handleWillNavigate);
     return () => {
       wv.removeEventListener("did-finish-load", done);
-      wv.removeEventListener("did-fail-load", done);
+      wv.removeEventListener("did-fail-load", failed);
       wv.removeEventListener("will-navigate", handleWillNavigate);
     };
-  }, [playing, playerSource, item.id, progressKey]);
+  }, [playing, playerSource, item.id, progressKey, reportSourceHealth]);
 
   // ── Auto-track progress + auto-watched every 5s ──────────────────────────
   useEffect(() => {
@@ -414,21 +442,21 @@ const applyVoiceBoost = useCallback(() => {
         try {
           const wv = webviewRef.current;
           if (!wv) return;
-          let result;
+          let result = normalizePlayerEventProgress(playerEventProgressRef.current);
           // When the pop-out window is open the main webview shows about:blank
           // -> query the pip window's webContents directly.
-          if (
+          if (!result &&
             pipWebContentsIdRef.current != null &&
             window.electron?.queryVideoProgress
           ) {
             result = await window.electron.queryVideoProgress(
               pipWebContentsIdRef.current,
             );
-          } else if (progressViaFrames && window.electron?.queryVideoProgress) {
+          } else if (!result && progressViaFrames && window.electron?.queryVideoProgress) {
             const webContentsId = getReadyWebContentsId(wv);
             if (!webContentsId) return;
             result = await window.electron.queryVideoProgress(webContentsId);
-          } else {
+          } else if (!result) {
             result = await wv.executeJavaScript(`
               (() => {
                 const v = document.querySelector('video')
@@ -453,6 +481,17 @@ const applyVoiceBoost = useCallback(() => {
           }
 
           if (result && result.duration > 0 && result.duration !== Infinity) {
+            const evidence = healthEvidenceRef.current;
+            if (!evidence.ready) {
+              const current = Number(result.currentTime) || 0;
+              if (evidence.lastTime != null && current > evidence.lastTime + 0.2 && !result.paused) evidence.advances += 1;
+              else if (evidence.lastTime != null && current <= evidence.lastTime && !result.paused) evidence.advances = 0;
+              evidence.lastTime = current;
+              if (evidence.advances >= 2) {
+                evidence.ready = true;
+                reportSourceHealth("ready");
+              }
+            }
             setShowFailoverPrompt(false);
             clearTimeout(failoverTimeoutRef.current);
             const ct = result.currentTime;
@@ -517,7 +556,7 @@ const applyVoiceBoost = useCallback(() => {
       clearTimeout(timer);
       clearInterval(interval);
     };
-  }, [playing, progressKey, watchedThreshold, playerSource, progressViaFrames]);
+  }, [playing, progressKey, watchedThreshold, playerSource, progressViaFrames, reportSourceHealth]);
 
   const startMoviePlayback = useCallback((time = 0) => {
     const safeTime = Math.max(0, Math.floor(Number(time) || 0));

@@ -268,37 +268,26 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false }) {
                   const available = type === "all"
                     ? Boolean(findProviderIds(providerCatalog.movie, hub).length || findProviderIds(providerCatalog.tv, hub).length)
                     : Boolean(findProviderIds(providerCatalog[type] || [], hub).length);
-                  return <button key={hub.id} className="discovery-hub-card" style={{ background: hub.gradient }} onClick={() => handleSelectHub(hub, "provider")} disabled={!available}>
-                    <span>{hub.name}</span><small>{available ? `Explore in ${watchRegion}` : `Unavailable in ${watchRegion}`}</small>
+                  return <button key={hub.id} className="discovery-hub-card" style={{ "--hub-gradient": hub.gradient }} onClick={() => handleSelectHub(hub, "provider")} disabled={!available}>
+                    <span>{hub.name}</span><small>{available ? `Explore in ${watchRegion}` : `Not listed in ${watchRegion}`}</small>
                   </button>;
                 })}
               </div>
               <div className="discovery-hub-label">Story worlds</div>
               <div className="discovery-hub-grid">
-                {WORLD_HUBS.map((hub) => <button key={hub.id} className="discovery-hub-card" style={{ background: hub.gradient }} onClick={() => handleSelectHub(hub, "world")}>
+                {WORLD_HUBS.map((hub) => <button key={hub.id} className="discovery-hub-card" style={{ "--hub-gradient": hub.gradient }} onClick={() => handleSelectHub(hub, "world")}>
                   <span>{hub.name}</span><small>{hub.filters.length} curated paths</small>
                 </button>)}
               </div>
               <p className="discovery-availability-note">Streaming availability is supplied by TMDB and can change. Orion does not guarantee that a title is currently included with a subscription.</p>
             </section>
 
-            <div className="region-filter-bar" style={{ display: "flex", gap: 10, marginBottom: region !== "all" ? 12 : 24, flexWrap: "wrap" }}>
+            <div className={`region-filter-bar${region !== "all" ? " has-subfilters" : ""}`}>
               {Object.entries(REGION_PRESETS).map(([id, preset]) => (
                 <button
                   key={id}
                   className={`toggle-btn ${region === id ? "active" : ""}`}
                   onClick={() => handleRegionChange(id)}
-                  style={{
-                    padding: "8px 18px",
-                    borderRadius: "999px",
-                    fontSize: "13px",
-                    fontWeight: 800,
-                    cursor: "pointer",
-                    border: "1px solid var(--border)",
-                    background: region === id ? "var(--accent)" : "var(--surface)",
-                    color: region === id ? "#fff" : "var(--text3)",
-                    transition: "all var(--duration-normal) var(--ease-out)"
-                  }}
                 >
                   {preset.name}
                 </button>
@@ -306,23 +295,12 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false }) {
             </div>
 
             {region !== "all" && SUBFILTER_PRESETS[region] && (
-              <div className="subfilter-bar" style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
+              <div className="subfilter-bar">
                 {SUBFILTER_PRESETS[region].map((sf) => (
                   <button
                     key={sf.id}
                     className={`toggle-btn ${subfilter === sf.id ? "active" : ""}`}
                     onClick={() => setSubfilter(sf.id)}
-                    style={{
-                      padding: "6px 14px",
-                      borderRadius: "999px",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      border: "1px solid var(--border)",
-                      background: subfilter === sf.id ? "var(--accent)" : "var(--surface2)",
-                      color: subfilter === sf.id ? "#fff" : "var(--text3)",
-                      transition: "all var(--duration-normal) var(--ease-out)"
-                    }}
                   >
                     {sf.name}
                   </button>

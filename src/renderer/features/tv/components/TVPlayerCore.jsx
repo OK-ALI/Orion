@@ -49,6 +49,7 @@ import {
 } from "../../../components/common/Icons";
 import { setupAmbientGlow } from "../../../shared/utils/playerAmbient";
 import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
+import { describeCinemaSourceHealth, useCinemaSourceHealth } from "../../player/hooks/useCinemaSourceHealth";
 import DownloadModal from "../../../components/DownloadModal";
 import TrailerModal from "../../../components/TrailerModal";
 import BlockedStatsModal from "../../../components/BlockedStatsModal";
@@ -72,7 +73,8 @@ import {
 import { ContextMenu, EpisodeDesc, PartialCircleIcon, VoiceBoostIcon } from "./EpisodeUi";
 
 export default function TVPlayerCore({ model }) {
-  const { autoplayCountdown, autoplayNextLayout, blockedSession, cancelAutoplay, currentEpDownload, currentEpWatched, currentProgressKey, dubMode, handleFailoverNextSource, handleManualSkip, isAsync, item, m3u8Url, menuPos, nextEp, onBack, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, prevEp, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, revealPlayerControls, selectedEp, selectedSeason, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, skipPrompt, sourceHealth, sourceRef, supportsProgress, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
+  const { autoplayCountdown, autoplayNextLayout, blockedSession, cancelAutoplay, currentEpDownload, currentEpWatched, currentProgressKey, dubMode, handleFailoverNextSource, handleManualSkip, isAnime, isAsync, item, m3u8Url, menuPos, nextEp, onBack, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, prevEp, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, revealPlayerControls, selectedEp, selectedSeason, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, skipPrompt, sourceHealth, sourceRef, supportsProgress, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
+  const sourceHealthRecords = useCinemaSourceHealth("tv", showSourceMenu || Boolean(selectedEp));
   return (
 <>
 <div
@@ -691,7 +693,9 @@ export default function TVPlayerCore({ model }) {
                     style={{ top: menuPos.top, left: menuPos.left }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {PLAYER_SOURCES.map((src) => (
+                    {PLAYER_SOURCES.filter((src) => src.media?.tv && (!src.animeOnly || isAnime)).map((src) => {
+                      const runtime = describeCinemaSourceHealth(sourceHealthRecords.get(src.id));
+                      return (
                       <button
                         key={src.id}
                         className={
@@ -700,6 +704,7 @@ export default function TVPlayerCore({ model }) {
                             ? " source-dropdown__item--active"
                             : "")
                         }
+                        title={runtime.detail}
                         onClick={() => {
                           setShowSourceMenu(false);
                           if (src.id === playerSource) return;
@@ -720,19 +725,13 @@ export default function TVPlayerCore({ model }) {
                           setResolveError(null);
                         }}
                       >
-                        <span>{src.label}</span>
-                        {src.tag && (
-                          <span className="source-dropdown__tag">
-                            {src.tag}
-                          </span>
-                        )}
-                        {src.note && (
-                          <span className="source-dropdown__note">
-                            {src.note}
-                          </span>
-                        )}
+                        <span className="source-dropdown__identity">
+                          <strong>{src.label}</strong>
+                          <small>{src.releaseStatus === "primary" ? "Standard" : src.releaseStatus === "candidate" ? "Candidate" : src.releaseStatus}</small>
+                        </span>
+                        <span className={`source-dropdown__health source-dropdown__health--${runtime.tone}`}>{runtime.label}</span>
                       </button>
-                    ))}
+                    );})}
                   </div>
                 )}
 

@@ -59,6 +59,7 @@ const { registerNotifications } = require("./app/notifications");
 const { createPopoutWindowController } = require("./player/popoutWindow");
 const localMedia = require("./player/localMedia");
 const ambientSampler = require("./player/ambientSampler");
+const cinemaSourceHealthIpc = require("./player/sources/ipc");
 const { createBatteryService } = require("./battery/service");
 const { createPerformanceCoordinator } = require("./performance/coordinator");
 const { createMediaControls } = require("./player/mediaControls");
@@ -490,6 +491,7 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+    cinemaSourceHealthIpc.register();
     batteryService.register();
     performanceCoordinator.register();
     mediaControls.register();

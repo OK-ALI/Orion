@@ -27,6 +27,14 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
     ipcRenderer.invoke("set-video-state", webContentsId, state),
   resumeVideo: (webContentsId) =>
     ipcRenderer.invoke("resume-video", webContentsId),
+  listCinemaSourceHealth: (mediaType) =>
+    ipcRenderer.invoke("cinema-sources:health:list", mediaType),
+  getCinemaSourceHealth: (sourceId, mediaType) =>
+    ipcRenderer.invoke("cinema-sources:health:get", { sourceId, mediaType }),
+  recordCinemaSourceHealth: (value) =>
+    ipcRenderer.invoke("cinema-sources:health:record", value),
+  clearCinemaSourceHealth: () =>
+    ipcRenderer.invoke("cinema-sources:health:clear"),
   openPipWindow: (url, title, state) =>
     ipcRenderer.invoke("open-pip-window", { url, title, state }),
   getPipWebContentsId: () => ipcRenderer.invoke("get-pip-webcontents-id"),

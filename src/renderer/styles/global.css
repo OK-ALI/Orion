@@ -508,7 +508,9 @@ ol {
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 8px);
   padding: 6px;
-  min-width: 180px;
+  min-width: 280px;
+  max-height: min(420px, calc(100vh - 32px));
+  overflow-y: auto;
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
@@ -531,6 +533,43 @@ ol {
   cursor: pointer;
   transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
+
+.source-dropdown__identity {
+  display: grid;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.source-dropdown__identity strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-dropdown__identity small {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: capitalize;
+}
+
+.source-dropdown__health {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.source-dropdown__health--ready { color: var(--success); border-color: color-mix(in srgb, var(--success) 42%, var(--border)); }
+.source-dropdown__health--checking { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 42%, var(--border)); }
+.source-dropdown__health--slow { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 42%, var(--border)); }
+.source-dropdown__health--failed { color: var(--danger, var(--red)); border-color: color-mix(in srgb, var(--danger, var(--red)) 42%, var(--border)); }
 
 .source-dropdown__item:hover {
   background: var(--bg-hover);

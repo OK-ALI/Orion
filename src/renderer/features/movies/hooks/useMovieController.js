@@ -15,6 +15,8 @@ import {
   sourceSupportsProgress,
   sourceProgressViaFrames,
   sourceIsAsync,
+  getSourceResumeParams,
+  normalizeSelectableSourceId,
   fetchAnilistData,
   cleanAnilistDescription,
   isAnimeContent,
@@ -99,7 +101,7 @@ const [details, setDetails] = useState(null);
   const [captureSessionId, setCaptureSessionId] = useState(null);
   const [interceptedSubs, setInterceptedSubs] = useState([]);
   const [playerSource, setPlayerSource] = useState(
-    () => storage.get("playerSource") || NON_ANIME_DEFAULT_SOURCE,
+    () => normalizeSelectableSourceId(storage.get("playerSource") || NON_ANIME_DEFAULT_SOURCE),
   );
   const [ambientColor, setAmbientColor] = useState("");
   const [ambientGlowEnabled, setAmbientGlowEnabled] = useState(
@@ -233,7 +235,7 @@ const [details, setDetails] = useState(null);
     if (!playing || pipOpen) return;
     const url = sourceIsAsync(playerSource)
       ? resolvedPlayerUrl
-      : getSourceUrl(playerSource, "movie", { tmdbId: item.id, imdbId: d.imdb_id }, null, null, {}, playerAccentColor, playerSubLang);
+      : getSourceUrl(playerSource, "movie", { tmdbId: item.id, imdbId: d.imdb_id }, null, null, getSourceResumeParams(playerSource, storage.get("dlTime_" + progressKey)), playerAccentColor, playerSubLang);
     if (!url) return;
     const playerRect = playerWrapRef.current?.getBoundingClientRect?.();
     onPlaybackSession?.({
@@ -580,9 +582,9 @@ const [details, setDetails] = useState(null);
 
   useEffect(() => {
     if (!window.electron) return;
-    const handler = window.electron.onSubtitleFound(({ url, lang }) => {
-      // Only keep VTT, deduplicate per language (latest wins)
-      if (!url || !url.toLowerCase().includes(".vtt")) return;
+    const handler = window.electron.onSubtitleFound(({ url, lang, contentType }) => {
+      // Main-process MIME classification also supports extensionless WebVTT.
+      if (!url || (!url.toLowerCase().includes(".vtt") && !String(contentType).toLowerCase().includes("vtt"))) return;
       setInterceptedSubs((prev) => {
         const filtered = prev.filter((s) => s.lang !== lang);
         return [...filtered, { url, lang: lang || "unknown" }];

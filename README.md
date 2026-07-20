@@ -4,23 +4,24 @@
 
 Orion X Music Planet is a Windows-first Electron application with two connected worlds: Cinema for discovering, streaming and downloading movies, series and anime; and Music Planet for finding, playing and organizing music.
 
-## v2.0.0 stable release
+## v2.0.1 release
+
+v2.0.1 is a stability and maintenance update for Orion Cinema. It migrates primary VidSrc and Videasy endpoints to updated provider mirrors (`vsembed.su` and `player.videasy.to`), expands ad-blocking across webview sessions with over 15 new tracking domain filters and DOM overlay cleaners, and repairs experimental sources (VsEmbed and 111Movies).
 
 Music Planet adds an audio-reactive Orb, YouTube Music catalog and discovery, YouTube Audio playback, Local Library, lyrics, playlists, favorites, queue and radio. Cinema retains protected-stream playback, local playback, subtitles, managed downloads, tray behavior, battery-aware behavior and Windows media controls.
 
 Google sign-in is bundled for every user through a central Desktop OAuth client using PKCE. Users sign in with their own Google account; they never need to create or paste Cloud Console credentials. Google Drive backup covers Cinema and Music preferences, playlists, favorites, queue and history, but excludes credentials, caches, signed URLs and machine-specific paths.
 
 See [Music Planet architecture](docs/architecture/music.md) and the [living-world implementation record](docs/Music-Planet-Living-World-Audit-2026-07-10.md).
-The v2.0 release scope is recorded in the [release notes](docs/releases/v2.0.0.md).
+The v2.0.1 release scope is recorded in the [v2.0.1 release notes](docs/releases/v2.0.1.md) (and [v2.0.0 notes](docs/releases/v2.0.0.md)).
 
-## v2.0 highlights
+## v2.0.1 highlights
 
-- Music Planet’s Neutral Eclipse visual system, orbital glass surfaces and audio-reactive scene.
-- Persistent Music dock with queue, lyrics, favorite, playlist, radio, seek, volume, next/previous and Windows/Bluetooth media controls.
-- YouTube Music catalog/discovery, YouTube Audio resolution, LRCLib lyrics, Spotify charts/import metadata and Local Library.
-- Cinema Search, People, Cast and Constellation alongside the proven downloader and local playback.
-- Smoothed Orion-service latency and battery alerts that clear as soon as AC power returns.
-- A three-state, world-aware sidebar with Expanded, Compact and Axiom-inspired Collapsed Rail modes remembered independently for Cinema and Music Planet.
+- VidSrc primary endpoint migrated to official updated mirror `vsembed.su` for reliable, ad-free streaming.
+- Videasy primary endpoint updated to `player.videasy.to` and tracking host removed from allowed origin manifest.
+- Over 15 tracking, font-vector, and ad-redirect domains added to Electron `sessionManager.js` ad-blocking system.
+- Webview preload DOM cleaner enhanced to strip `z-index` click-hijack overlays, full-screen popunders, and ad-detector frames.
+- VsEmbed and 111Movies experimental sources repaired and VidSrc CC quarantined.
 
 ## What's new in v1.0.10
 

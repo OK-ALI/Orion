@@ -49,6 +49,7 @@ import MediaCard from "../../../components/media/MediaCard";
 import VoiceBoostIcon from "../../../components/media/VoiceBoostIcon";
 import { setupAmbientGlow } from "../../../shared/utils/playerAmbient";
 import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
+import { describeCinemaSourceHealth, useCinemaSourceHealth } from "../../player/hooks/useCinemaSourceHealth";
 import {
   storage,
   STORAGE_KEYS,
@@ -65,6 +66,7 @@ import {
 
 export default function MoviePlayer({ model }) {
   const { d, ambientColor, blockedSession, displayPct, dubMode, handleFailoverNextSource, isUnreleased, item, m3u8Url, menuPos, movieDownload, onBack, onGoToDownloads, onOpenMiniPlayer, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progressKey, progressLabel, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, revealPlayerControls, saveProgress, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, sourceRef, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
+  const sourceHealthRecords = useCinemaSourceHealth("movie", showSourceMenu || playing);
   return (
 <>
 {playing && !restricted && !isUnreleased && (
@@ -469,7 +471,9 @@ export default function MoviePlayer({ model }) {
                 style={{ top: menuPos.top, left: menuPos.left }}
                 onClick={(e) => e.stopPropagation()}
               >
-                {PLAYER_SOURCES.map((src) => (
+                {PLAYER_SOURCES.filter((src) => src.media?.movie && !src.animeOnly).map((src) => {
+                  const runtime = describeCinemaSourceHealth(sourceHealthRecords.get(src.id));
+                  return (
                   <button
                     key={src.id}
                     className={
@@ -478,6 +482,7 @@ export default function MoviePlayer({ model }) {
                         ? " source-dropdown__item--active"
                         : "")
                     }
+                    title={runtime.detail}
                     onClick={() => {
                       setShowSourceMenu(false);
                       if (src.id === playerSource) return;
@@ -494,15 +499,13 @@ export default function MoviePlayer({ model }) {
                       setResolveError(null);
                     }}
                   >
-                    <span>{src.label}</span>
-                    {src.tag && (
-                      <span className="source-dropdown__tag">{src.tag}</span>
-                    )}
-                    {src.note && (
-                      <span className="source-dropdown__note">{src.note}</span>
-                    )}
+                    <span className="source-dropdown__identity">
+                      <strong>{src.label}</strong>
+                      <small>{src.releaseStatus === "primary" ? "Standard" : src.releaseStatus === "candidate" ? "Candidate" : src.releaseStatus}</small>
+                    </span>
+                    <span className={`source-dropdown__health source-dropdown__health--${runtime.tone}`}>{runtime.label}</span>
                   </button>
-                ))}
+                );})}
               </div>
             )}
           </div>

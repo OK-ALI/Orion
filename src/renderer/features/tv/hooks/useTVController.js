@@ -20,6 +20,8 @@ import {
   sourceSupportsProgress,
   sourceProgressViaFrames,
   sourceIsAsync,
+  getSourceResumeParams,
+  normalizeSelectableSourceId,
   fetchAnilistData,
   fetchEpisodeGroup,
   buildAnilistSeasons,
@@ -129,7 +131,7 @@ const [details, setDetails] = useState(null);
   const [captureSessionId, setCaptureSessionId] = useState(null);
   const [interceptedSubs, setInterceptedSubs] = useState([]);
   const [playerSource, setPlayerSource] = useState(
-    () => storage.get("playerSource") || NON_ANIME_DEFAULT_SOURCE,
+    () => normalizeSelectableSourceId(storage.get("playerSource") || NON_ANIME_DEFAULT_SOURCE),
   );
   useEffect(() => {
     let disposed = false;
@@ -636,8 +638,8 @@ const [details, setDetails] = useState(null);
 
   useEffect(() => {
     if (!window.electron) return;
-    const handler = window.electron.onSubtitleFound(({ url, lang }) => {
-      if (!url || !url.toLowerCase().includes(".vtt")) return;
+    const handler = window.electron.onSubtitleFound(({ url, lang, contentType }) => {
+      if (!url || (!url.toLowerCase().includes(".vtt") && !String(contentType).toLowerCase().includes("vtt"))) return;
       setInterceptedSubs((prev) => {
         const filtered = prev.filter((s) => s.lang !== lang);
         return [...filtered, { url, lang: lang || "unknown" }];
@@ -731,7 +733,7 @@ const [details, setDetails] = useState(null);
     const episode = selectedEp.episode_number;
     const url = isAsync
       ? resolvedPlayerUrl
-      : getSourceUrl(playerSource, "tv", { tmdbId: item.id, imdbId: d?.external_ids?.imdb_id || d?.imdb_id }, selectedSeason, episode, {}, playerAccentColor, playerSubLang);
+      : getSourceUrl(playerSource, "tv", { tmdbId: item.id, imdbId: d?.external_ids?.imdb_id || d?.imdb_id }, selectedSeason, episode, getSourceResumeParams(playerSource, storage.get(`dlTime_tv_${item.id}_s${selectedSeason}e${episode}`)), playerAccentColor, playerSubLang);
     if (!url) return;
     const progressKey = `tv_${item.id}_s${selectedSeason}e${episode}`;
     const playerRect = playerWrapRef.current?.getBoundingClientRect?.();
@@ -766,7 +768,7 @@ const [details, setDetails] = useState(null);
     ? !!watched?.[currentProgressKey]
     : false;
 
-    const viewModel = { ambientColor, autoplayCountdown, autoplayNextLayout, blockedAlltime, blockedSession, cancelAutoplay, currentEpDownload, currentEpWatched, currentProgressKey, currentSeasonEpisodes, d, displayEpisodeCount, displayGenres, displayOverview, displayScore, displaySeasonCount, downloaderFolder, downloadsByEpisodeKey, dubMode, durationRef, epMenu, episodeGroupCurrentEpisodes, getBlockedDomains, handleFailoverNextSource, handleManualSkip, handleSetDownloaderFolder, interceptedSubs, isAsync, isSaved, isSeasonWatched, item, loadingSeason, m3u8Context, m3u8Url, markSeasonUnwatched, markSeasonWatched, mediaName, menuPos, nextEp, onBack, onDownloadStarted, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave: handleLibrarySave, onSettings, pendingEpToPlay, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, prevEp, progress, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, seasonData, seasonMenu, seasonWatchedMap, seasons, selectedEp, selectedSeason, setDubMode, setEpMenu, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSeasonMenu, setSelectedSeason, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, skipPrompt, skipTimings, sourceHealth, sourceRef, startEpisodeDownload, startPlayingEp, startSeasonDownload, supportsProgress, switchingToMiniPlayerRef, title, trailerKey, voiceBoost, watched, webviewLoading, webviewRef };
+    const viewModel = { ambientColor, autoplayCountdown, autoplayNextLayout, blockedAlltime, blockedSession, cancelAutoplay, currentEpDownload, currentEpWatched, currentProgressKey, currentSeasonEpisodes, d, displayEpisodeCount, displayGenres, displayOverview, displayScore, displaySeasonCount, downloaderFolder, downloadsByEpisodeKey, dubMode, durationRef, epMenu, episodeGroupCurrentEpisodes, getBlockedDomains, handleFailoverNextSource, handleManualSkip, handleSetDownloaderFolder, interceptedSubs, isAnime, isAsync, isSaved, isSeasonWatched, item, loadingSeason, m3u8Context, m3u8Url, markSeasonUnwatched, markSeasonWatched, mediaName, menuPos, nextEp, onBack, onDownloadStarted, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave: handleLibrarySave, onSettings, pendingEpToPlay, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, prevEp, progress, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, seasonData, seasonMenu, seasonWatchedMap, seasons, selectedEp, selectedSeason, setDubMode, setEpMenu, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSeasonMenu, setSelectedSeason, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, skipPrompt, skipTimings, sourceHealth, sourceRef, startEpisodeDownload, startPlayingEp, startSeasonDownload, supportsProgress, switchingToMiniPlayerRef, title, trailerKey, voiceBoost, watched, webviewLoading, webviewRef };
     viewModel.cast = cast;
     viewModel.keyCrew = keyCrew;
     viewModel.creditsLoading = creditsLoading;
