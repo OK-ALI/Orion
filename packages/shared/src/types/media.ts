@@ -35,7 +35,8 @@ export type MobilePlayerHudState =
   | "buffering"
   | "error";
 
-export interface MobilePlaybackSession {
+/** @deprecated Compatibility shape retained for pre-v3 callers. */
+export interface MobilePlaybackSessionV1 {
   schemaVersion: 1;
   id: string;
   media: MediaIdentity;
@@ -46,6 +47,51 @@ export interface MobilePlaybackSession {
   paused: boolean;
   buffering: boolean;
   updatedAt: number;
+}
+
+export type MobilePlaybackState =
+  | "loading"
+  | "playing"
+  | "paused"
+  | "buffering"
+  | "seeking"
+  | "ended"
+  | "error"
+  | "unobservable";
+
+export type MobilePlaybackEvidence =
+  | "native-video-event"
+  | "provider-video-event"
+  | "provider-message"
+  | "manual-watched"
+  | "opened-only";
+
+export interface MobilePlaybackSessionV2 {
+  schemaVersion: 2;
+  id: string;
+  media: MediaIdentity;
+  sourceId: string;
+  surface: MobilePlayerSurface;
+  state: MobilePlaybackState;
+  verified: boolean;
+  lastVerifiedTime: number | null;
+  startedAt: number;
+  updatedAt: number;
+}
+
+export type MobilePlaybackSession = MobilePlaybackSessionV1 | MobilePlaybackSessionV2;
+
+export interface MobilePlaybackTelemetryV1 {
+  schemaVersion: 1;
+  sessionId: string;
+  sourceId: string;
+  sequence: number;
+  evidence: MobilePlaybackEvidence;
+  state: MobilePlaybackState;
+  currentTime: number | null;
+  duration: number | null;
+  bufferedPosition: number | null;
+  observedAt: number;
 }
 
 export type TrailerPlaybackState =

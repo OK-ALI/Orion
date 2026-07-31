@@ -15,6 +15,10 @@ export interface MobileDiagnosticsSnapshot {
   smartConnectProtocol: number;
   activeSourceId: string | null;
   sourceHealth: string | null;
+  playbackState: string | null;
+  playbackSurface: string | null;
+  playbackEvidence: string | null;
+  telemetryAgeMs: number | null;
   lastError: { area: string; code: string; message: string } | null;
   capturedAt: number;
 }
@@ -25,6 +29,10 @@ interface DiagnosticsMutableState {
   smartConnectState: string;
   activeSourceId: string | null;
   sourceHealth: string | null;
+  playbackState: string | null;
+  playbackSurface: string | null;
+  playbackEvidence: string | null;
+  lastTelemetryAt: number | null;
   lastError: MobileDiagnosticsSnapshot['lastError'];
 }
 
@@ -34,6 +42,10 @@ const state: DiagnosticsMutableState = {
   smartConnectState: 'disconnected',
   activeSourceId: null,
   sourceHealth: null,
+  playbackState: null,
+  playbackSurface: null,
+  playbackEvidence: null,
+  lastTelemetryAt: null,
   lastError: null,
 };
 
@@ -82,8 +94,13 @@ export function getMobileDiagnosticsSnapshot(): MobileDiagnosticsSnapshot {
     smartConnectProtocol: SMART_CONNECT_PROTOCOL_VERSION,
     activeSourceId: state.activeSourceId,
     sourceHealth: state.sourceHealth,
+    playbackState: state.playbackState,
+    playbackSurface: state.playbackSurface,
+    playbackEvidence: state.playbackEvidence,
+    telemetryAgeMs: state.lastTelemetryAt == null
+      ? null
+      : Math.max(0, Date.now() - state.lastTelemetryAt),
     lastError: state.lastError ? { ...state.lastError } : null,
     capturedAt: Date.now(),
   };
 }
-

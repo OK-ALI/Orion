@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { mmkvStorageAdapter } from '../services/storageAdapter';
-import { TmdbMediaItem } from '@orion/shared/types';
+import { TmdbMediaItem, type MobilePlaybackEvidence } from '@orion/shared/types';
 import { tmdbFetch } from '@orion/shared/api';
 
 function getLibraryMediaType(item: any = {}) {
@@ -61,6 +61,8 @@ interface LibraryContextType {
     sourceId?: string | null;
     season?: number | null;
     episode?: number | null;
+    evidence?: MobilePlaybackEvidence | null;
+    sessionId?: string | null;
   }) => void;
   getPlaybackProgress: (mediaType: 'movie' | 'tv', id: string | number, season?: number | null, episode?: number | null) => any;
 }
@@ -188,6 +190,8 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     sourceId = null,
     season = null,
     episode = null,
+    evidence = null,
+    sessionId = null,
   }: {
     item: any;
     mediaType: 'movie' | 'tv';
@@ -196,13 +200,15 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     sourceId?: string | null;
     season?: number | null;
     episode?: number | null;
+    evidence?: MobilePlaybackEvidence | null;
+    sessionId?: string | null;
   }) => {
     const id = item?.id;
     if (id == null) return;
     const safeCurrent = Math.max(0, Number(currentTime) || 0);
     const safeDuration = Math.max(0, Number(duration) || 0);
     const key = getProgressKey(mediaType, id, season, episode);
-    const percent = safeDuration > 0 ? Math.min(100, (safeCurrent / safeDuration) * 100) : 0;
+    const percent = safeDuration > 0 ? Math.min(100, (safeCurrent / safeDuration) * 100) : null;
     const updatedAt = Date.now();
     const progressRecord = {
       schemaVersion: 2,
@@ -218,7 +224,9 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       duration: safeDuration,
       percent,
       sourceId,
-      completed: percent >= 90,
+      evidence,
+      sessionId,
+      completed: percent != null && percent >= 90,
       updatedAt,
     };
     const nextProgress = { ...progressRef.current, [key]: progressRecord };
@@ -233,6 +241,8 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       currentTime: safeCurrent,
       duration: safeDuration,
       sourceId,
+      evidence,
+      sessionId,
       updatedAt,
     };
     const nextHistory = [
