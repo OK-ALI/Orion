@@ -12,7 +12,7 @@
 > **Last verified:** July 31, 2026  
 > **Release readiness:** Not ready  
 > **Current stage:** Phase 0 implementation complete; paused for checkpoint review
-> **Critical open blockers:** Playback truth, embedded History, Continue Watching, trailer embeds, player-surface laser, native provider shield, cross-platform profiles, and Mobile updates
+> **Critical open blockers:** Playback truth, embedded History, Continue Watching, trailer embeds, Smart Connect transport hardening, player-surface laser, native provider shield, cross-platform profiles, and Mobile updates
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -131,6 +131,14 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [ ] **V3-P4-010:** Add code regeneration, expiry recovery, reconnect, lockout, rename, and revoke UX.
 - [ ] **V3-P4-011:** Add automatic keyboard actions when Desktop focuses a text field.
 - [ ] **V3-P4-012:** Meet command acknowledgement and telemetry freshness targets.
+- [ ] **V3-P4-013:** Document and enforce the trusted-LAN threat model; warn when Desktop is on a public network and prevent accidental public-internet exposure.
+- [ ] **V3-P4-014:** Replace plaintext bearer transport with pinned WSS or an equivalently authenticated encrypted session; never place a reusable token in a URL or unencrypted request.
+- [ ] **V3-P4-015:** Add device-bound session keys, key rotation, token-version migration, and explicit re-pairing after trust material changes.
+- [ ] **V3-P4-016:** Enforce monotonic sequences, replay rejection, and command-ID deduplication so WebSocket timeout followed by HTTP fallback cannot apply one action twice.
+- [ ] **V3-P4-017:** Harden interface binding, firewall guidance, CORS/origin policy, request limits, and per-device/per-address rate limits.
+- [ ] **V3-P4-018:** Measure command round-trip time and playback-telemetry age separately from Orion's internet latency indicator; record median, p95, timeout, and reconnect evidence.
+- [ ] **V3-P4-019:** Prefer Android NSD/mDNS plus the saved trusted endpoint; retain bounded subnet probing only as an explicit fallback.
+- [ ] **V3-P4-020:** Pass hostile-LAN, captured-token, replay, duplicate-command, network-change, sleep/wake, and reconnect security tests.
 
 ### Phase 5 — Player-surface laser
 
@@ -239,6 +247,7 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-07-31 | V3-P9-001, V3-P9-002 | Confirmed Desktop cloud foundation and Mobile MMKV/SecureStore foundation | Code audit | 24% |
 | 2026-07-31 | V3-P0-004 | Created the Orion v3 rollback branch and preserved the monorepo/Mobile baseline | Branch `codex/orion-v3`; commit `66299bebc8e3e70bb7399c6c6f149ed7ed28827b` | 24% |
 | 2026-07-31 | V3-P0-005–V3-P0-010 | Completed storage failure safety, route decomposition, redacted diagnostics, strict size gates, critical-route smoke coverage, and Phase 0 regression tests | Checkpoint `a409055`; Mobile typecheck; 7/7 Node tests; 48-file size gate; Expo Doctor 20/20; web export; standalone APK with bundled `assets/index.android.bundle`; Desktop 52 Node + 135 renderer tests, IPC/binding/secret/theme/cycle gates, and production build | 29% |
+| 2026-07-31 | V3-P4-013–V3-P4-020 | Added the verified Smart Connect v2 transport limitations and v3 hardening requirements; no implementation credit awarded | Code audit of Desktop HTTP/WebSocket server, Mobile transport/fallback, shared protocol, pairing persistence, and status flow | 29% |
 | 2026-07-31 | Pre-Phase-1 brand checkpoint | Replaced Desktop and Mobile application icon families from one transparent Orion master; added reproducible Windows ICO/PNG and Android adaptive/monochrome generation | Desktop production build; Mobile typecheck and web export; Expo public-config resolution; ICO decode and alpha validation | 29% |
 
 Phase 0 implementation is complete. The generated standalone Android APK was
@@ -644,6 +653,45 @@ Policy:
 - Rate-limit failures and temporary lockout.
 - Name, inspect, and revoke paired devices.
 - Accurate connected, reconnecting, expired, and disconnected states.
+
+### Transport security and latency hardening
+
+The current Smart Connect v2 transport is authenticated but not encrypted. Desktop binds an HTTP/WebSocket server to the local network on port `8924`, and Mobile currently opens a URL shaped like:
+
+```text
+ws://desktop-ip:8924/api/socket?token=<pairing-token>
+```
+
+This is fast on a trusted home network, but it has release-blocking limitations:
+
+- HTTP and WebSocket traffic can be observed or modified by another party on a hostile LAN.
+- A reusable bearer token appears in the WebSocket URL and may be exposed to network tooling or logs.
+- Desktop listens on every network interface, while network trust and firewall scope are not communicated clearly to the user.
+- The HTTP server currently uses permissive CORS and does not provide a complete origin/device policy.
+- Commands contain IDs and sequences, but the server does not yet enforce a monotonic replay window or retain applied IDs for exactly-once behavior.
+- When a WebSocket acknowledgement is delayed, Mobile may retry through HTTP; without deduplication, a non-idempotent action could be applied twice.
+- Automatic `/24` subnet probing is a compatibility fallback rather than a durable discovery protocol and can be slow or noisy.
+- Orion's global Online latency badge measures internet reachability, not Smart Connect command latency.
+
+Required v3 security outcome:
+
+1. Establish an authenticated encrypted channel using certificate-pinned WSS or an equivalent audited session protocol.
+2. Bind the paired device identity to its session key and move reusable credentials out of URLs.
+3. Use the six-digit code only to confirm pairing, then rotate trust material and support revocation and migration.
+4. Enforce sequence windows and cache completed command IDs across WebSocket/HTTP fallback long enough to guarantee one logical application.
+5. Restrict exposure to appropriate local interfaces and give actionable Windows firewall/public-network guidance.
+6. Prefer Android NSD/mDNS discovery, then the saved verified endpoint, with bounded subnet scanning as an explicit fallback.
+
+Required performance observability:
+
+- Stamp command creation, Desktop receipt, renderer application, acknowledgement, and Mobile receipt.
+- Display Smart Connect latency separately from internet latency.
+- Track median and p95 round-trip time, acknowledgement timeouts, reconnect duration, telemetry age, and dropped pointer frames.
+- Keep pointer updates coalesced near 30 Hz rather than allowing stale movement to queue.
+- Keep playback telemetry pushed over the persistent socket and interpolate progress locally between authoritative snapshots.
+- Treat command application as immediate; HTTP polling remains recovery only and must not drive the normal remote experience.
+
+No diagnostics may expose pairing tokens, session keys, IP credentials, full URLs, media cookies, or provider secrets.
 
 ## 6. Smart Connect Laser on Player Surfaces
 
@@ -1160,6 +1208,14 @@ Set both packages to 3.0.0 only after the complete acceptance matrix passes.
 - Smooth locally interpolated progress.
 - Seek commit and reconciliation.
 - Automatic keyboard and playback actions.
+- Trusted and hostile LAN behavior.
+- Encrypted-channel establishment and certificate/session-key verification.
+- Token redaction and proof that no reusable credential appears in URLs or logs.
+- Replay, out-of-order sequence, and duplicate WebSocket-to-HTTP fallback rejection.
+- Network-interface change, Wi-Fi roam, sleep/wake, and Desktop restart recovery.
+- Per-device rate limiting, malformed-message limits, and public-network firewall guidance.
+- Separate command RTT and telemetry-age measurements with median and p95 evidence.
+- NSD/mDNS discovery, saved-endpoint recovery, and bounded explicit subnet fallback.
 
 ### Laser
 
@@ -1214,6 +1270,9 @@ Orion 3.0 is acceptable only when:
 - Embedded playback generates honest History and progress where verifiable.
 - Continue Watching exists and survives restart and profile synchronization.
 - Smart Connect HUD remains current within one second during playback.
+- Smart Connect uses an authenticated encrypted transport and never exposes reusable bearer credentials in plaintext URLs or logs.
+- Smart Connect rejects replayed and duplicate commands, including WebSocket-to-HTTP fallback races.
+- Smart Connect reports its own measured command latency separately from general internet latency.
 - Remote seeks use measured geometry and reconcile with Desktop.
 - The laser works on every player surface and every window mode.
 - Shield status is evidence-based.
