@@ -238,7 +238,7 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-07-31 | V3-P6-001 | Confirmed limited JavaScript/navigation shield and native interception gap | Code audit and provider test | 24% |
 | 2026-07-31 | V3-P9-001, V3-P9-002 | Confirmed Desktop cloud foundation and Mobile MMKV/SecureStore foundation | Code audit | 24% |
 | 2026-07-31 | V3-P0-004 | Created the Orion v3 rollback branch and preserved the monorepo/Mobile baseline | Branch `codex/orion-v3`; commit `66299bebc8e3e70bb7399c6c6f149ed7ed28827b` | 24% |
-| 2026-07-31 | V3-P0-005–V3-P0-010 | Completed storage failure safety, route decomposition, redacted diagnostics, strict size gates, critical-route smoke coverage, and Phase 0 regression tests | Mobile typecheck; 7/7 Node tests; 48-file size gate; Expo Doctor 20/20; web export; standalone APK with bundled `assets/index.android.bundle`; Desktop 52 Node + 135 renderer tests, IPC/binding/secret/theme/cycle gates, and production build | 29% |
+| 2026-07-31 | V3-P0-005–V3-P0-010 | Completed storage failure safety, route decomposition, redacted diagnostics, strict size gates, critical-route smoke coverage, and Phase 0 regression tests | Checkpoint `a409055`; Mobile typecheck; 7/7 Node tests; 48-file size gate; Expo Doctor 20/20; web export; standalone APK with bundled `assets/index.android.bundle`; Desktop 52 Node + 135 renderer tests, IPC/binding/secret/theme/cycle gates, and production build | 29% |
 
 Phase 0 implementation is complete. The generated standalone Android APK was
 inspected and contains its JavaScript bundle, so it does not depend on Metro.
