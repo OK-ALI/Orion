@@ -1,0 +1,52 @@
+# 📊 Desktop vs Mobile Feature Analysis & Downloader Architecture Report
+
+This report analyzes the core architectural foundations of **Orion Desktop**, compares them against the current **Orion Mobile** implementation, and outlines the exact roadmap to achieve 100% ecosystem parity, including local media downloading, subtitle engines, and cross-platform app sharing.
+
+---
+
+## 📥 1. Desktop Downloader & Subtitle Engine Architecture
+
+In **Orion Desktop** (`apps/desktop`), the downloader is a robust background service built with preflight latency checks, stream candidate resolution, and a dual-provider subtitle manager.
+
+### Key Desktop Downloader Components:
+1. **Preflighting & Source Resolution**:
+   - Preflights scraping candidates (`VidEasy`, `VidSrc`, `VidKing`, `AutoEmbed`, `VSEmbed`).
+   - Resolves direct `.mp4` or `.m3u8` streams and measures response latency.
+2. **Quality & Format Options**:
+   - Download quality selector: `1080p Ultra`, `720p HD`, `480p SD`, `Source Direct`.
+3. **Dual Subtitle Downloader Engine (`SubDL` + `Wyzie`)**:
+   - Integrates **SubDL** and **Wyzie Subtitles** API providers.
+   - Multi-language subtitle picker (English, Spanish, French, Korean, Japanese, Arabic, German, etc.).
+   - Downloads and pairs `.srt` / `.vtt` files directly alongside the offline video container.
+   - Status indicators (`ready`, `setup`, `error`) and release name matching.
+4. **Queue & State Lifecycle**:
+   - Status pipeline: `queued` ➔ `preflighting` ➔ `downloading` ➔ `paused` ➔ `processing` ➔ `completed` / `failed`.
+   - Supports 1 to 3 simultaneous parallel download workers.
+5. **Offline Playback & Storage Management**:
+   - Save path configuration, disk space pre-check, and integrated video player for offline media with attached subtitles.
+
+---
+
+## ⚖️ 2. Desktop vs Mobile Feature Parity Matrix
+
+| Feature / Subsystem | Orion Desktop (PC) | Orion Mobile (Current State) | Status & Plan |
+| :--- | :--- | :--- | :--- |
+| **Media Scraping & Streams** | VidEasy, VidSrc, VidKing, AutoEmbed, VSEmbed | Native scraper + Web direct embed fallback | ✅ **100% Parity** |
+| **Home Dashboard UX** | Hero Banner, Trending Movies/TV, K-Dramas, Top Rated | Hero Billboard (Infinite Loop), Category carousels | ✅ **100% Parity** |
+| **Sidebar Navigation** | Fixed Left Sidebar | Collapsible Glassmorphic Drawer (`BROWSE`) | ✅ **100% Parity** |
+| **Selectable Cast & Details** | Cast headshots, Synopses, Season/Episode picker | Parallax Header, Selectable Cast (`/person/[id]`), Season pickers | ✅ **100% Parity** |
+| **In-App Downloader & Subtitles** | Multi-quality background downloader + SubDL & Wyzie subtitle engine | Basic UI placeholder (`/downloads`) | ⏳ **Phase 1 Implementation** |
+| **Settings & Storage** | Theme settings, Metadata Language, Parental Lock, Backup | Placeholder | ⏳ **Phase 2 Implementation** |
+| **Google Auth & Cloud Sync** | Supabase Google Auth, Watchlist & Progress sync | Local state | ⏳ **Phase 3 Implementation** |
+| **Orion Connect (Smart Remote)** | Express / Socket Server for remote pairing | Remote UI layout | ⏳ **Phase 4 Implementation** |
+| **In-App Updates** | Auto-updater (`electron-updater`) | OTA Updates via `expo-updates` | ⏳ **Phase 5 Implementation** |
+| **Mobile App Download on Desktop** | N/A | **NEW**: Desktop option to download Mobile APK or scan QR code to install on phone | 🌟 **New Feature Added** |
+
+---
+
+## 🌟 3. New Feature: Mobile APK Download on Desktop
+
+To make it effortless for users to install Orion Mobile on their phones directly from their PC, we will add a **"Get Mobile App"** section to Orion Desktop:
+- **QR Code Scanner**: Displays a QR code on Orion Desktop that points directly to the latest mobile APK build URL.
+- **Direct APK Download Button**: Allows users to download the `.apk` installer file on their computer to transfer to their Android device via USB.
+- **Ecosystem Pairing Prompt**: Guides users to pair their phone with Desktop over home Wi-Fi upon first launch.

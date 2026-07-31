@@ -1,0 +1,1256 @@
+# Orion v3 Mobile and Desktop Readiness Audit
+
+**Audit date:** July 31, 2026  
+**Current application baseline:** Orion Desktop 2.0.1 and Orion Mobile 2.0.1  
+**Proposed release:** Orion 3.0 with Mobile Companion support  
+**Status:** Reference audit and implementation roadmap; not a completed-release claim
+
+## Living Roadmap Status
+
+> **Overall Orion v3 implementation completion: 24%**
+>
+> **Last verified:** July 31, 2026  
+> **Release readiness:** Not ready  
+> **Current stage:** Audit complete; stabilization foundations partially implemented  
+> **Critical open blockers:** Playback truth, embedded History, Continue Watching, trailer embeds, player-surface laser, native provider shield, cross-platform profiles, and Mobile updates
+
+The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
+
+### Status legend
+
+| Status | Meaning |
+|---|---|
+| Complete | Implemented, tested, and accepted |
+| In progress | Meaningful implementation exists, but acceptance is incomplete |
+| Foundation only | Reusable groundwork exists, but the v3 outcome is not delivered |
+| Not started | No release-usable implementation exists |
+| Blocked | Cannot proceed until a named dependency is resolved |
+
+### Weighted phase tracker
+
+| Phase | Weight | Phase completion | Weighted contribution | Status |
+|---|---:|---:|---:|---|
+| 0. Safety and observability | 8% | 40% | 3.2% | In progress |
+| 1. Playback truth | 12% | 20% | 2.4% | Foundation only |
+| 2. History and Continue Watching | 10% | 15% | 1.5% | Foundation only |
+| 3. Trailer reliability | 8% | 35% | 2.8% | In progress |
+| 4. Smart Connect experience | 12% | 45% | 5.4% | In progress |
+| 5. Player-surface laser | 8% | 15% | 1.2% | Foundation only |
+| 6. Native provider shield | 10% | 15% | 1.5% | Foundation only |
+| 7. Adaptive Mobile UI | 10% | 30% | 3.0% | In progress |
+| 8. Desktop Orion 3.0 integration | 7% | 20% | 1.4% | Foundation only |
+| 9. Portable profile and Google authentication | 7% | 10% | 0.7% | Foundation only |
+| 10. Mobile updates | 4% | 5% | 0.2% | Not started |
+| 11. Release validation | 4% | 15% | 0.6% | Foundation only |
+| **Total** | **100%** |  | **23.9%, rounded to 24%** | **Not release-ready** |
+
+### How to update the percentage
+
+For every phase:
+
+```text
+weighted contribution = phase weight × phase completion
+overall completion = sum of all weighted contributions
+```
+
+Phase completion may increase only when:
+
+1. The implementation exists in the active workspace.
+2. Relevant automated checks pass.
+3. Required real-device or live-provider validation is recorded.
+4. No known P0 regression remains inside that phase.
+5. The checklist item includes evidence in the Progress Log.
+
+A feature that works only in Expo Web, only on one provider, or only on one machine remains partial.
+
+## Master Implementation Checklist
+
+### Phase 0 — Safety and observability
+
+- [x] **V3-P0-001:** Mobile strict TypeScript compilation passes.
+- [x] **V3-P0-002:** Desktop IPC contract check passes.
+- [x] **V3-P0-003:** Desktop renderer-binding check passes.
+- [ ] **V3-P0-004:** Preserve an atomic pre-v3 rollback checkpoint.
+- [ ] **V3-P0-005:** Replace MMKV's silent in-memory fallback with persistent fallback or a blocking recovery state.
+- [ ] **V3-P0-006:** Split the oversized Connect screen into transport, controller, and presentation modules.
+- [ ] **V3-P0-007:** Split Discover into data, filters, responsive layout, and presentation modules.
+- [ ] **V3-P0-008:** Split Media Detail into metadata, episodes, trailers, actions, and adaptive layout modules.
+- [ ] **V3-P0-009:** Add redacted Mobile diagnostics and export.
+- [ ] **V3-P0-010:** Expand automated tests beyond the current narrow Smart Connect coverage.
+
+### Phase 1 — Playback truth
+
+- [x] **V3-P1-001:** Native direct playback can report time and duration.
+- [x] **V3-P1-002:** Mobile has local progress-record storage.
+- [ ] **V3-P1-003:** Add versioned `MobilePlaybackSession`.
+- [ ] **V3-P1-004:** Add versioned `MobilePlaybackTelemetry`.
+- [ ] **V3-P1-005:** Add evidence classification for native, provider, message, manual, and opened-only records.
+- [ ] **V3-P1-006:** Add provider `<video>` telemetry where frame access permits it.
+- [ ] **V3-P1-007:** Add provider `postMessage` telemetry adapters.
+- [ ] **V3-P1-008:** Save on start, interval, pause, seek, source change, background, exit, and completion.
+- [ ] **V3-P1-009:** Preserve verified position during healthy source failover.
+- [ ] **V3-P1-010:** Prove that no provider creates fabricated duration or percentage data.
+
+### Phase 2 — History and Continue Watching
+
+- [x] **V3-P2-001:** MMKV namespaces exist for `history`, `progress`, and `watched`.
+- [ ] **V3-P2-002:** Repair Library History to render actual History instead of Watched records.
+- [ ] **V3-P2-003:** Introduce `PlaybackProgressV3` migration.
+- [ ] **V3-P2-004:** Keep History, Progress, Watched, and My List independent.
+- [ ] **V3-P2-005:** Add Mobile Home Continue Watching rail.
+- [ ] **V3-P2-006:** Add Library Continue tab.
+- [ ] **V3-P2-007:** Show one latest episode per series.
+- [ ] **V3-P2-008:** Add Resume, Remove Progress, Mark Watched, and View All.
+- [ ] **V3-P2-009:** Ensure Clear History does not erase progress, watched state, or My List.
+- [ ] **V3-P2-010:** Verify persistence across application restart and device reboot.
+
+### Phase 3 — Trailer reliability
+
+- [x] **V3-P3-001:** Trailer modal no longer renders only a blank WebView.
+- [x] **V3-P3-002:** Retry and external YouTube fallback exist.
+- [ ] **V3-P3-003:** Preserve every viable TMDB trailer candidate.
+- [ ] **V3-P3-004:** Rank official, language-compatible, recent trailers ahead of teasers.
+- [ ] **V3-P3-005:** Preserve and classify actual YouTube IFrame error codes.
+- [ ] **V3-P3-006:** Rotate automatically after owner-disabled or unavailable candidates.
+- [ ] **V3-P3-007:** Repair Orion player origin, referrer, and Android client identity.
+- [ ] **V3-P3-008:** Add Vimeo support when TMDB supplies Vimeo.
+- [ ] **V3-P3-009:** Recompose the sheet around a stable 16:9 player and persistent actions.
+- [ ] **V3-P3-010:** Validate on physical Android devices, not Expo Web alone.
+
+### Phase 4 — Smart Connect experience
+
+- [x] **V3-P4-001:** Versioned command envelopes exist.
+- [x] **V3-P4-002:** Authenticated WebSocket transport and acknowledgements exist.
+- [x] **V3-P4-003:** QR and manual-IP pairing paths exist.
+- [x] **V3-P4-004:** Ordinary-page touchpad and laser movement work.
+- [ ] **V3-P4-005:** Replace manual Touchpad/D-pad/HUD/Keyboard modes with one Unified Control Surface.
+- [ ] **V3-P4-006:** Add Desktop `RemoteUiContext`.
+- [ ] **V3-P4-007:** Add live playback telemetry while an authenticated remote is connected.
+- [ ] **V3-P4-008:** Interpolate Mobile progress locally and reconcile with authoritative snapshots.
+- [ ] **V3-P4-009:** Replace the hard-coded seek width with measured geometry.
+- [ ] **V3-P4-010:** Add code regeneration, expiry recovery, reconnect, lockout, rename, and revoke UX.
+- [ ] **V3-P4-011:** Add automatic keyboard actions when Desktop focuses a text field.
+- [ ] **V3-P4-012:** Meet command acknowledgement and telemetry freshness targets.
+
+### Phase 5 — Player-surface laser
+
+- [x] **V3-P5-001:** Main-renderer `.orion-virtual-cursor` exists.
+- [ ] **V3-P5-002:** Add main-process `RemotePointerSurfaceManager`.
+- [ ] **V3-P5-003:** Register main, embedded, fullscreen, mini, pop-out, and local-player surfaces.
+- [ ] **V3-P5-004:** Add transparent, click-through pointer overlay ownership.
+- [ ] **V3-P5-005:** Map normalized coordinates to active surface bounds.
+- [ ] **V3-P5-006:** Route click input to the correct `webContents`.
+- [ ] **V3-P5-007:** Transfer laser ownership during player handoffs.
+- [ ] **V3-P5-008:** Follow window movement, resize, maximize, and fullscreen.
+- [ ] **V3-P5-009:** Hide on disconnect, inactivity, or surface destruction.
+- [ ] **V3-P5-010:** Pass the complete laser acceptance matrix.
+
+### Phase 6 — Native provider shield
+
+- [x] **V3-P6-001:** Mobile has limited JavaScript and navigation filtering.
+- [ ] **V3-P6-002:** Build Android `shouldInterceptRequest` boundary.
+- [ ] **V3-P6-003:** Add provider-specific block and dependency profiles.
+- [ ] **V3-P6-004:** Add required manifest, media, CDN, image, and subtitle allowlists.
+- [ ] **V3-P6-005:** Block provider popup and unsafe external navigation.
+- [ ] **V3-P6-006:** Report redacted blocked and allowed counts.
+- [ ] **V3-P6-007:** Expose Verified, Limited, Disabled, Dependency Allowed, and Rule Failure states.
+- [ ] **V3-P6-008:** Prove that Verified is never shown without native evidence.
+- [ ] **V3-P6-009:** Validate VidSrc and every supported provider.
+- [ ] **V3-P6-010:** Verify shield rules do not break playback or subtitles.
+
+### Phase 7 — Adaptive Mobile UI
+
+- [x] **V3-P7-001:** Six-theme Mobile foundation exists.
+- [x] **V3-P7-002:** Basic phone navigation and safe-area support exist.
+- [ ] **V3-P7-003:** Add shared compact-phone, phone, tablet, and large-tablet breakpoints.
+- [ ] **V3-P7-004:** Replace fixed module-level dimensions with live responsive layout.
+- [ ] **V3-P7-005:** Recompose Discover filters and genre density.
+- [ ] **V3-P7-006:** Recompose Library grids, tabs, search, and sorting.
+- [ ] **V3-P7-007:** Recompose Projector Silver theme selection.
+- [ ] **V3-P7-008:** Repair episode metadata/action overflow.
+- [ ] **V3-P7-009:** Recompose Media Detail hero and actions.
+- [ ] **V3-P7-010:** Validate portrait, landscape, cutouts, 200% text, and Reduced Motion.
+- [ ] **V3-P7-011:** Validate all six themes on the complete device matrix.
+
+### Phase 8 — Desktop Orion 3.0 integration
+
+- [x] **V3-P8-001:** Desktop Smart Connect pairing modal exists.
+- [ ] **V3-P8-002:** Build Mobile Companion Center.
+- [ ] **V3-P8-003:** Add separate Mobile-installation QR.
+- [ ] **V3-P8-004:** Preserve separate short-lived pairing QR.
+- [ ] **V3-P8-005:** Add connected-device management and last-seen status.
+- [ ] **V3-P8-006:** Add protocol compatibility and upgrade guidance.
+- [ ] **V3-P8-007:** Add profile synchronization and conflict status.
+- [ ] **V3-P8-008:** Preserve Smart Connect v2 compatibility during migration.
+
+### Phase 9 — Portable profile and Google authentication
+
+- [x] **V3-P9-001:** Desktop Google authentication and Drive backup foundations exist.
+- [x] **V3-P9-002:** Mobile uses MMKV for local data and SecureStore for selected secrets.
+- [ ] **V3-P9-003:** Replace silent in-memory MMKV fallback.
+- [ ] **V3-P9-004:** Add account-namespaced Mobile profiles.
+- [ ] **V3-P9-005:** Define shared `PortableProfileV3`.
+- [ ] **V3-P9-006:** Add separate Android and Desktop OAuth clients under Orion's Google project.
+- [ ] **V3-P9-007:** Keep OAuth tokens exclusively in platform secure storage.
+- [ ] **V3-P9-008:** Add non-destructive anonymous-profile import on first sign-in.
+- [ ] **V3-P9-009:** Add record-level merge, revisions, and deletion tombstones.
+- [ ] **V3-P9-010:** Preserve unknown namespaces such as Desktop Music data on Mobile.
+- [ ] **V3-P9-011:** Exclude credentials, device state, paths, downloads, and caches.
+- [ ] **V3-P9-012:** Test account switching, offline edits, conflicts, interruption, and rollback.
+
+### Phase 10 — Mobile updates
+
+- [ ] **V3-P10-001:** Add `expo-updates`.
+- [ ] **V3-P10-002:** Define runtime version and preview/production channels.
+- [ ] **V3-P10-003:** Add staged OTA rollout and rollback.
+- [ ] **V3-P10-004:** Detect Play versus side-loaded installation source.
+- [ ] **V3-P10-005:** Add Play Core flexible updates.
+- [ ] **V3-P10-006:** Add signed GitHub APK manifest and SHA-256 validation.
+- [ ] **V3-P10-007:** Require matching Android signing identity.
+- [ ] **V3-P10-008:** Add release notes, progress, failure, retry, and restart UX.
+
+### Phase 11 — Release validation
+
+- [x] **V3-P11-001:** Basic Mobile type and Smart Connect protocol checks exist.
+- [ ] **V3-P11-002:** Pass native and embedded playback tests.
+- [ ] **V3-P11-003:** Pass History and Continue Watching tests.
+- [ ] **V3-P11-004:** Pass trailer candidate and fallback tests.
+- [ ] **V3-P11-005:** Pass Smart Connect and laser surface matrix.
+- [ ] **V3-P11-006:** Pass native shield provider matrix.
+- [ ] **V3-P11-007:** Pass responsive, accessibility, and six-theme matrix.
+- [ ] **V3-P11-008:** Pass cross-device profile migration and merge tests.
+- [ ] **V3-P11-009:** Pass OTA/native update tests.
+- [ ] **V3-P11-010:** Install signed Desktop and Android builds on clean devices.
+- [ ] **V3-P11-011:** Upgrade copied 2.0.1 profiles without data loss.
+- [ ] **V3-P11-012:** Confirm no Desktop Cinema or Music regressions.
+
+## Progress Log
+
+Every roadmap update should add one row. Do not delete older entries.
+
+| Date | Checklist IDs | Change | Evidence | Overall completion |
+|---|---|---|---|---:|
+| 2026-07-31 | V3-P0-001, V3-P0-002, V3-P0-003 | Verified current type, IPC, and binding baseline | Local repository checks | 24% |
+| 2026-07-31 | V3-P1-001, V3-P1-002, V3-P2-001 | Confirmed native progress and MMKV storage foundations; embedded telemetry remains missing | Code audit | 24% |
+| 2026-07-31 | V3-P3-001, V3-P3-002 | Confirmed non-blank trailer surface and external fallback; in-Orion reliability remains partial | Physical-device screenshots and code audit | 24% |
+| 2026-07-31 | V3-P4-001–V3-P4-004 | Confirmed WebSocket/acknowledgement/pairing and ordinary-page pointer foundation | Code audit and user device test | 24% |
+| 2026-07-31 | V3-P5-001 | Confirmed main-renderer cursor; documented failure across every player surface | Code audit and user device test | 24% |
+| 2026-07-31 | V3-P6-001 | Confirmed limited JavaScript/navigation shield and native interception gap | Code audit and provider test | 24% |
+| 2026-07-31 | V3-P9-001, V3-P9-002 | Confirmed Desktop cloud foundation and Mobile MMKV/SecureStore foundation | Code audit | 24% |
+
+### Roadmap maintenance rules
+
+- Update `Last verified` whenever the tracker changes.
+- Update a phase percentage and weighted contribution together.
+- Add test or device evidence to the Progress Log.
+- Never mark a checklist item complete based only on a screenshot or a build succeeding.
+- Never reduce the list of known blockers to increase the percentage.
+- Reopen a checked item if a regression invalidates its acceptance.
+- Keep package versions unchanged until Phase 11 passes.
+- Preserve this document as the authoritative Orion v3 execution tracker.
+
+## Executive Summary
+
+Orion Mobile is a promising Android-first companion with working metadata browsing, media details, provider playback, themes, local state, and a substantially improved Smart Connect transport. It is not ready for an Orion 3.0 release yet.
+
+The most important remaining weakness is the absence of a single authoritative playback-truth pipeline. Native playback can report time and duration, but most embedded providers do not currently feed verified playback telemetry into Orion. This one missing boundary causes several visible failures:
+
+- Mobile History does not reliably update.
+- Continue Watching is absent and cannot be populated reliably.
+- Smart Connect's Now Playing HUD and progress pointer become stale.
+- Embedded-player buffering and playback states can be misleading.
+- Source changes cannot always preserve an exact resume position.
+
+The next implementation should establish verified playback telemetry first. History, progress, Continue Watching, Smart Connect HUD, source failover, and cross-device synchronization should all consume that shared contract.
+
+Other release blockers are:
+
+- Trailer playback frequently falls back instead of succeeding inside Orion.
+- Mobile ad blocking cannot inspect all Android WebView subrequests.
+- The Smart Connect laser exists only in the main renderer and disappears over every player surface.
+- Smart Connect still requires inconvenient manual switching between control modes.
+- Mobile updates and cross-platform Google profile restoration are not implemented.
+- Several phone layouts are oversized, clipped, or insufficiently adaptive.
+- Automated coverage is too narrow for the current feature surface.
+
+## Code-Verified Baseline
+
+At the time of this audit:
+
+- Mobile strict TypeScript compilation passes.
+- Existing Mobile tests pass, but they cover only a small part of Smart Connect protocol behavior.
+- Desktop IPC contract validation passes.
+- Desktop renderer-binding validation passes.
+- Mobile and Desktop package versions are both 2.0.1.
+- Mobile does not currently include a complete `expo-updates` configuration.
+- Several large Mobile files remain temporarily allowlisted:
+  - `apps/mobile/app/(tabs)/connect.tsx`
+  - `apps/mobile/app/(tabs)/discover.tsx`
+  - `apps/mobile/app/media/[id].tsx`
+
+These results confirm that the repository is buildable, but they do not establish release-level behavioral confidence.
+
+## Priority Audit
+
+| Priority | Area | Current condition | Required outcome |
+|---|---|---|---|
+| P0 | Embedded playback telemetry | Provider WebViews do not consistently report verified position, duration, pause, buffering, or completion | One source-aware `MobilePlaybackTelemetry` stream |
+| P0 | History | Playback records exist, but embedded playback does not write them; Library reads watched records instead of history | Chronological, evidence-backed History |
+| P0 | Continue Watching | Missing from Mobile Home and Library | Resumable Home rail and Library Continue tab |
+| P0 | Trailers | WebView is no longer blank, but many YouTube embeds still fail inside Orion | Candidate rotation, precise errors, valid player identity, and fallback |
+| P0 | Smart Connect laser | Works on ordinary pages but disappears over default, fullscreen, mini, and pop-out players | Player-surface-aware pointer compositor |
+| P0 | Mobile provider shield | JavaScript and navigation filtering cannot intercept every iframe/subresource request | Native Android request interception with provider profiles |
+| P0 | Smart Connect HUD | Desktop publishes occasional snapshots instead of continuous telemetry | Authoritative live status plus locally interpolated progress |
+| P1 | Smart Connect UX | Users manually switch Touchpad, D-pad, HUD, and Keyboard modes | One context-aware Control Surface |
+| P1 | Player HUD | Embedded controls can become difficult to reveal and use | Reachable, explicit HUD state machine |
+| P1 | Responsive UI | Fixed dimensions and oversized controls create clipping and wasted space | Phone, tablet, foldable, landscape, and large-text layouts |
+| P1 | Mobile updates | No production OTA/native update flow | Runtime-safe OTA plus signed native updates |
+| P1 | Cross-device profile | Mobile has no compatible Google authentication or profile restoration | Portable Profile v3 with record-level merging |
+| P1 | Desktop integration | Smart Connect is a modal rather than a complete companion system | Orion 3.0 Mobile Companion Center |
+| P2 | Architecture | Large screen files combine transport, state, layout, and presentation | Focused controllers, hooks, services, and components |
+| Deferred | TV casting | Remote control foundations exist, but casting is a different protocol category | Separate post-v3 casting milestone |
+
+## 1. Playback Truth, History, and Continue Watching
+
+### Confirmed cause
+
+The native player calls `recordPlayback()` in:
+
+- `apps/mobile/app/player/[id].tsx`
+
+The Library context already stores progress and history in:
+
+- `apps/mobile/src/context/LibraryContext.tsx`
+
+However:
+
+- Embedded providers do not call `recordPlayback()`.
+- Cross-origin provider frames do not automatically expose current time or duration.
+- Most real Mobile streaming therefore produces no reliable progress record.
+- `apps/mobile/app/(tabs)/library.tsx` obtains `history` from `useLibrary()` indirectly but renders values from the `watched` map as its History list.
+- Mobile Home has no proper Continue Watching section.
+
+### Required data separation
+
+Orion must preserve four independent concepts:
+
+1. **History**
+   - Chronological playback activity.
+   - Ordered by `lastPlayedAt`.
+   - Records content that genuinely began playback.
+
+2. **Progress**
+   - Current position and duration.
+   - Used for resume and Continue Watching.
+
+3. **Watched**
+   - Completion state or an explicit manual action.
+   - Must not be used as a substitute for History.
+
+4. **Continue Watching**
+   - A derived presentation of incomplete, resumable progress.
+   - One latest episode per series.
+
+### Proposed contract
+
+```js
+/**
+ * @typedef {Object} PlaybackProgressV3
+ * @property {3} schemaVersion
+ * @property {string} key
+ * @property {MediaIdentity} mediaIdentity
+ * @property {number|null} season
+ * @property {number|null} episode
+ * @property {number} currentTime
+ * @property {number} duration
+ * @property {number|null} percent
+ * @property {string|null} sourceId
+ * @property {number} startedAt
+ * @property {number} lastPlayedAt
+ * @property {boolean} completed
+ * @property {"native-video-event"|"provider-video-event"|"provider-message"|"manual-watched"|"opened-only"} evidence
+ */
+```
+
+### Provider telemetry strategies
+
+Provider adapters should report evidence through the strongest available method:
+
+- Native video events for direct HLS, DASH, MP4, and local media.
+- Injected polling of an accessible `<video>` element when the provider surface permits it.
+- Known provider `postMessage` events.
+- Provider-specific player events.
+- An `opened-only` history event when no trustworthy timing signal exists.
+
+Orion must not fabricate a percentage when the provider exposes no trustworthy position or duration.
+
+### Persistence rules
+
+Save verified progress:
+
+- Once actual playback begins.
+- Every five to ten seconds while advancing.
+- After seeking.
+- On pause.
+- Before a source switch.
+- When the application backgrounds.
+- On navigation or player teardown.
+- At verified completion.
+
+### Continue Watching experience
+
+Add a Home rail containing:
+
+- One latest entry per TV series.
+- Landscape artwork.
+- Season and episode context.
+- Percentage and remaining time when duration is known.
+- Resume.
+- Remove Progress.
+- Mark Watched.
+- View All to Library → Continue.
+
+Recommended inclusion rules:
+
+- Playback has advanced beyond a small threshold, such as 30 seconds.
+- The record is not completed.
+- Percentage is below the completion threshold, normally 90–95%.
+- The media is still resolvable.
+
+Library should expose:
+
+- My List.
+- Continue.
+- History.
+
+Clearing History must not delete My List, watched state, or progress unless the user explicitly chooses those operations.
+
+## 2. Trailer Playback
+
+### Confirmed condition
+
+The Mobile trailer component uses a custom HTML wrapper around the YouTube IFrame API. It currently:
+
+- Tries a selected YouTube trailer.
+- Alternates between regular and privacy-enhanced YouTube hosts.
+- Collapses several distinct playback errors into one generic embed failure.
+- Can repeatedly retry the same unusable trailer.
+- Uses an origin/base URL configuration that may not correctly represent Orion's application identity.
+
+### Constraints
+
+Some trailers cannot legally or technically play inside Orion because:
+
+- The owner disabled embedding.
+- The video is restricted or unavailable.
+- The Android WebView cannot provide a valid referrer/client identity.
+- A regional upload is blocked.
+
+Orion cannot bypass an owner-disabled embed. External YouTube fallback must remain.
+
+### Correct solution
+
+1. Preserve all viable TMDB trailer candidates.
+2. Rank:
+   - Official trailers.
+   - Preferred language.
+   - Recent uploads.
+   - Teasers after trailers.
+3. Preserve and classify actual IFrame error codes.
+4. Automatically advance to the next candidate after owner-disabled or unavailable errors.
+5. Treat missing-client-identity errors as Orion player-boundary failures.
+6. Use a properly identified first-party HTTPS wrapper with a matching origin and referrer, if a wrapper is retained.
+7. Support Vimeo when TMDB supplies a Vimeo trailer.
+8. Keep:
+   - Retry in Orion.
+   - Open in YouTube.
+   - Open in browser.
+
+### Trailer UI
+
+- Reserve a fixed 16:9 playback region.
+- Keep error information inside that region.
+- Make trailer candidate tabs scroll without clipping.
+- Keep fallback actions visible above the safe-area inset.
+- Preserve modal state across temporary orientation and application interruptions.
+
+Official references:
+
+- [YouTube IFrame Player API](https://developers.google.com/youtube/iframe_api_reference)
+- [YouTube Videos API](https://developers.google.com/youtube/v3/docs/videos)
+
+## 3. Unified Mobile Player HUD
+
+Introduce explicit HUD states:
+
+- `visible`
+- `hidden`
+- `pinned`
+- `sheet-open`
+- `buffering`
+- `error`
+
+Rules:
+
+- Controls appear on entry.
+- Controls hide only while verified playback is advancing.
+- Controls remain visible while paused, buffering, seeking, selecting a source, or displaying an error.
+- A persistent reveal handle remains reachable even when taps inside a cross-origin frame cannot be detected.
+- Opening Sources, Subtitles, Shield, or Diagnostics pins the HUD.
+- Meaningful interaction resets the hide timer.
+- Portrait and landscape layouts must not overlap title, source, shield, or system insets.
+
+The same `MobilePlaybackTelemetry` contract should feed:
+
+- Mobile HUD.
+- History.
+- Progress.
+- Continue Watching.
+- Smart Connect.
+- Source health.
+
+## 4. Mobile Provider Shield and Subtitles
+
+### Confirmed limitation
+
+The current player uses injected JavaScript and `onShouldStartLoadWithRequest`. This can:
+
+- Remove visible DOM overlays.
+- Block some navigation.
+- Block some known advertising URLs.
+
+It cannot reliably inspect every request made inside cross-origin iframes on Android. This explains why VidSrc and similar providers can still display advertisements.
+
+### Required Android boundary
+
+Build a custom native WebView module or prebuilt Android boundary using `WebViewClient.shouldInterceptRequest`.
+
+It should:
+
+- Load provider-specific rule profiles.
+- Allow required media, manifest, subtitle, image, and CDN domains.
+- Block known advertising and tracking hosts.
+- Block unwanted popups, new windows, and unsafe top-level navigation.
+- Report redacted allowed/blocked counts.
+- Distinguish required playback dependencies from advertising exceptions.
+
+Shield states:
+
+- Verified.
+- Limited.
+- Disabled.
+- Playback dependency allowed.
+- Rule failure.
+
+The UI must never claim verified protection merely because JavaScript rules were injected.
+
+Subtitle handling should support:
+
+- Provider language parameters.
+- Embedded text-track detection.
+- Captured VTT tracks.
+- Orion external subtitle fallback.
+- Provider-required subtitle hosts in the allowlist.
+
+## 5. Smart Connect Architecture
+
+### Preserve
+
+The current working foundations should remain:
+
+- Versioned command envelopes.
+- WebSocket transport.
+- Pairing sessions.
+- Acknowledgements.
+- Secure token persistence.
+- Accurate basic laser movement on ordinary Desktop pages.
+
+### Unified Control Surface
+
+Replace separate Touchpad, D-pad, HUD, and Keyboard modes with one adaptive screen:
+
+- Top: live Now Playing and scrubber.
+- Center: persistent touchpad.
+- Bottom: context-aware action rail.
+- One finger: pointer movement.
+- Tap: selection.
+- Two fingers: scrolling.
+- Optional D-pad: accessibility overlay.
+- Keyboard action appears when Desktop reports a text field.
+- Playback controls appear when Desktop reports an active player.
+- Rare actions move into a More sheet.
+
+Introduce a Desktop context contract:
+
+```js
+{
+  route,
+  focusedRole,
+  playerActive,
+  canSeek,
+  canType,
+  fullscreen,
+  surfaceId
+}
+```
+
+### Live playback telemetry
+
+Desktop should publish:
+
+```js
+{
+  sessionId,
+  sequence,
+  currentTime,
+  duration,
+  buffered,
+  paused,
+  volume,
+  muted,
+  title,
+  mediaIdentity,
+  canSeek,
+  updatedAt
+}
+```
+
+Policy:
+
+- Send immediately after play, pause, seek, source change, and media change.
+- Send approximately twice per second while an authenticated remote is connected.
+- Stop high-frequency updates when no remote is connected.
+- Mobile interpolates the progress pointer locally with monotonic time.
+- Reconcile after each authoritative snapshot.
+- Measure the actual scrubber width; do not use a hard-coded width.
+- Commit a seek on release and reconcile after acknowledgement.
+
+### Pairing
+
+- Six-digit, single-use code.
+- Five-minute expiry.
+- Visible Regenerate action.
+- QR and manual-IP fallback.
+- Local discovery when available.
+- Rate-limit failures and temporary lockout.
+- Name, inspect, and revoke paired devices.
+- Accurate connected, reconnecting, expired, and disconnected states.
+
+## 6. Smart Connect Laser on Player Surfaces
+
+### Confirmed root cause
+
+The Desktop renderer creates `.orion-virtual-cursor` inside the main document in:
+
+- `apps/desktop/src/renderer/app/App.jsx`
+
+It then uses `document.elementFromPoint()` in that document.
+
+This works on normal Desktop pages, but player modes can use different rendering or window surfaces:
+
+- Default embedded player: guest `webContents`.
+- Fullscreen player: fullscreen or composited guest surface.
+- Mini-player: video/webview surface over the main document.
+- Pop-out player: separate `BrowserWindow`.
+- Maximized pop-out: separate window and coordinate space.
+
+CSS `z-index` cannot solve a cross-window or cross-`webContents` ownership problem.
+
+### Required solution
+
+Create a main-process `RemotePointerSurfaceManager`.
+
+It maintains a registry of:
+
+- Main application.
+- Embedded player.
+- Mini-player.
+- Pop-out player.
+- Fullscreen player.
+- Local-media player.
+
+Responsibilities:
+
+- Determine the active pointer target.
+- Map normalized mobile coordinates into that target's content bounds.
+- Display the laser through a transparent, click-through overlay above the target surface.
+- Follow movement, resizing, maximization, fullscreen transitions, and handoffs.
+- Transfer ownership automatically during embedded → mini → pop-out transitions.
+- Route click input to the correct `webContents`.
+- Hide on disconnect, inactivity, player destruction, or window closure.
+- Return the applied `surfaceId`, normalized coordinates, and acknowledgement.
+
+Suggested pointer acknowledgement:
+
+```js
+{
+  commandId,
+  sequence,
+  surfaceId,
+  x,
+  y,
+  applied: true,
+  appliedAt
+}
+```
+
+### Laser acceptance matrix
+
+The laser must remain visible, accurately mapped, and clickable in:
+
+- Ordinary Orion pages.
+- Default embedded playback.
+- Default fullscreen playback.
+- Mini-player.
+- Pop-out player.
+- Maximized pop-out.
+- Local video playback.
+- Source changes.
+- Player handoffs.
+- Window movement and resizing.
+
+## 7. Responsive UI and UX Audit
+
+### Discover
+
+Observed:
+
+- Oversized menu trigger.
+- Oversized search and segmented filters.
+- Horizontal filters clip.
+- Genre cards create excessive vertical card traffic.
+- Fixed column calculations do not adapt sufficiently.
+
+Recommended:
+
+- 48–52 dp menu control.
+- Compact page title and search hierarchy.
+- Horizontally scrollable filter rails with edge fades.
+- 104–128 dp genre tiles.
+- Two columns on phones and three or four on tablets.
+- Consistent safe gutters.
+
+### Library
+
+Observed:
+
+- Fixed dimensions calculated outside render.
+- Three-column phone grid is too narrow.
+- History tab appears visually disabled.
+- No Continue tab.
+- No search, sort, or useful counts.
+
+Recommended:
+
+- `useWindowDimensions()`.
+- Adaptive minimum card width.
+- Two phone columns and four or more tablet columns.
+- My List, Continue, and History tabs.
+- Search and visible sort.
+- Actionable empty states.
+
+### Projector Silver Settings
+
+Observed:
+
+- Large black theme buttons conflict with the light-theme surface.
+- Excessive vertical scrolling.
+- Selected state is visually heavy.
+
+Recommended:
+
+- Two-column phone theme previews.
+- Three-column tablet preview grid.
+- Miniature surface/accent/text previews.
+- Semantic theme colors rather than dark hard-coded cards.
+
+### Episode list
+
+Observed:
+
+- Metadata and buttons overflow compact cards.
+- Recommended tab clips.
+- Offline information repeats for every episode.
+- Description and action rows compete horizontally.
+
+Recommended:
+
+- Stack thumbnail and metadata on compact phones.
+- One primary Play action.
+- Compact Watched action.
+- Overflow menu for secondary actions.
+- One section-level Downloads Locked explanation.
+- Horizontal or wrapped tabs with correct safe padding.
+
+### Media detail
+
+Observed:
+
+- Hero, poster, title, and actions are too large simultaneously.
+- Genre text truncates.
+- Watch and secondary actions are visually unbalanced.
+
+Recommended:
+
+- Shorter phone hero.
+- Adaptive poster/title composition.
+- Full-width Watch action.
+- Compact secondary action rail.
+- Wrapping or scrolling genre chips.
+- Multi-column tablet layout.
+
+### Trailer sheet
+
+Observed:
+
+- Sheet is too tall and narrow.
+- Trailer selector clips.
+- Fallback actions can leave the visible viewport.
+
+Recommended:
+
+- Stable 16:9 player.
+- Safe-area-aware sheet height.
+- Scrollable candidates.
+- Persistent action footer.
+
+### Responsive breakpoints
+
+- Compact phone: below 360 dp.
+- Standard phone: 360–599 dp.
+- Tablet: 600–899 dp.
+- Large tablet/foldable: 900 dp and above.
+
+Validate:
+
+- Portrait.
+- Landscape.
+- Cutouts and safe areas.
+- 200% font scaling.
+- Reduced Motion.
+- Hardware keyboard and focus.
+- All six Orion themes.
+
+## 8. Mobile Updates
+
+Orion Mobile requires two independent update paths.
+
+### JavaScript and asset updates
+
+Use `expo-updates` with:
+
+- Explicit runtime version.
+- Preview and production channels.
+- Staged rollout.
+- Rollback.
+- Clear update status and release notes.
+
+OTA updates cannot add or replace incompatible native modules.
+
+### Native application updates
+
+For Play installations:
+
+- Google Play Core flexible updates by default.
+- Immediate updates only for critical security or incompatibility cases.
+
+For signed side-loaded builds:
+
+- Stable HTTPS release manifest.
+- Version and minimum-supported version.
+- SHA-256 checksum.
+- Same Android signing certificate.
+- Android-controlled installation confirmation.
+
+Detect the installation source and choose the correct update flow.
+
+Official references:
+
+- [Expo Updates](https://docs.expo.dev/versions/latest/sdk/updates/)
+- [Expo runtime versions](https://docs.expo.dev/eas-update/runtime-versions/)
+- [Android in-app updates](https://developer.android.com/guide/playcore/in-app-updates)
+
+## 9. Desktop Orion 3.0 Mobile Companion Center
+
+Desktop should not receive a version-only bump. Orion 3.0 should introduce a complete Mobile Companion Center:
+
+- Get Orion Mobile QR.
+- Pair this device QR and code.
+- Connected devices.
+- Device name and last seen.
+- Revoke and disconnect.
+- Protocol compatibility.
+- Mobile/desktop upgrade guidance.
+- Cross-device profile synchronization status.
+- Source and shield diagnostics.
+
+Use separate QR purposes:
+
+1. **Installation QR**
+   - Stable Orion HTTPS landing page.
+   - Current compatible APK/store destination.
+   - Checksum and release notes.
+
+2. **Pairing QR**
+   - Local Smart Connect endpoint.
+   - Short-lived pairing session.
+   - No permanent credentials.
+
+Maintain Smart Connect v2 compatibility during the protocol migration.
+
+## 10. Google Authentication and Portable Profiles
+
+Users should not need to create Google Cloud credentials.
+
+Orion should ship application-owned OAuth client IDs:
+
+- Android OAuth client.
+- Desktop installed-application OAuth client.
+- Same verified Google Cloud project.
+
+Installed applications cannot safely protect a confidential client secret. Use:
+
+- Android Credential Manager or system authorization.
+- Desktop system-browser OAuth.
+- PKCE where supported.
+- Android Keystore/SecureStore.
+- Electron `safeStorage`.
+
+Official references:
+
+- [Google OAuth for installed applications](https://developers.google.com/identity/protocols/oauth2/native-app)
+- [Google OAuth overview](https://developers.google.com/identity/protocols/oauth2)
+- [Android Sign in with Google through Credential Manager](https://developer.android.com/identity/sign-in/credential-manager-siwg-implementation)
+
+### Portable Profile v3
+
+Use a sharded, versioned profile rather than one last-write-wins blob:
+
+- Manifest.
+- Cinema My List.
+- Cinema History.
+- Playback Progress.
+- Watched status.
+- Music playlists and folders.
+- Music favorites and history.
+- Portable appearance and accessibility preferences.
+- Tombstones.
+- Per-device revision and timestamp.
+
+Preserve unknown namespaces so an older client does not erase newer feature data.
+
+Exclude:
+
+- OAuth tokens.
+- Provider cookies and credentials.
+- Signed stream URLs.
+- Smart Connect pairing secrets.
+- Downloads.
+- Local filesystem paths.
+- Managed tools and caches.
+
+Use Google Drive's hidden application-data boundary:
+
+- [Drive `appDataFolder`](https://developers.google.com/workspace/drive/api/guides/appdata)
+
+Merge records individually. Google sign-in or network failure must not block local browsing and playback.
+
+## 11. Architecture and Structure
+
+Split oversized Mobile modules into focused boundaries.
+
+Suggested structure:
+
+```text
+apps/mobile/
+├── app/
+│   ├── media/[id].tsx
+│   ├── player/[id].tsx
+│   └── (tabs)/
+│       ├── connect.tsx
+│       ├── discover.tsx
+│       └── library.tsx
+│
+└── src/
+    ├── playback/
+    │   ├── contracts.ts
+    │   ├── sessionStore.ts
+    │   ├── telemetry.ts
+    │   ├── progressStore.ts
+    │   ├── continueWatching.ts
+    │   └── providers/
+    │       ├── native.ts
+    │       ├── frameVideo.ts
+    │       └── providerMessages.ts
+    │
+    ├── trailers/
+    │   ├── candidateRanking.ts
+    │   ├── TrailerPlayer.tsx
+    │   └── trailerErrors.ts
+    │
+    ├── player/
+    │   ├── PlayerHud.tsx
+    │   ├── PlayerRevealHandle.tsx
+    │   ├── SourceSheet.tsx
+    │   └── ShieldStatus.tsx
+    │
+    ├── smart-connect/
+    │   ├── useSmartConnectSession.ts
+    │   ├── useRemoteTelemetry.ts
+    │   ├── UnifiedControlSurface.tsx
+    │   ├── TouchpadSurface.tsx
+    │   ├── ContextActionRail.tsx
+    │   ├── NowPlayingRemote.tsx
+    │   └── PairingSheet.tsx
+    │
+    ├── library/
+    │   ├── LibraryTabs.tsx
+    │   ├── ContinueWatchingRail.tsx
+    │   └── HistoryList.tsx
+    │
+    └── responsive/
+        ├── breakpoints.ts
+        └── useResponsiveLayout.ts
+```
+
+Desktop additions:
+
+```text
+apps/desktop/src/main/smart-connect/
+├── server.js
+├── sessionStore.js
+├── playbackTelemetry.js
+├── remotePointerSurfaceManager.js
+└── protocolCompatibility.js
+```
+
+## 12. Implementation Phases
+
+### Phase 0: Safety and observability
+
+- Preserve the current monorepo state with an atomic checkpoint.
+- Split high-risk monoliths without behavior changes.
+- Expand logging with redaction.
+- Add baseline Android device tests.
+
+### Phase 1: Playback truth
+
+- Add `MobilePlaybackSession`.
+- Add source-aware telemetry adapters.
+- Add evidence classification.
+- Persist verified playback events.
+
+### Phase 2: History and Continue Watching
+
+- Repair Library History to consume actual history.
+- Separate watched, progress, and history.
+- Add migrations.
+- Add Home Continue Watching.
+- Add Library Continue tab.
+
+### Phase 3: Trailer reliability
+
+- Preserve multiple candidates.
+- Add candidate ranking and rotation.
+- Preserve exact error codes.
+- Repair player origin/client identity.
+- Keep reliable external fallback.
+
+### Phase 4: Smart Connect experience
+
+- Add live telemetry.
+- Replace manual control modes with Unified Control Surface.
+- Repair real-width seeking.
+- Add pairing regeneration and connection states.
+
+### Phase 5: Player-surface laser
+
+- Add `RemotePointerSurfaceManager`.
+- Register every player surface.
+- Add transparent click-through pointer overlays.
+- Route clicks to the active `webContents`.
+- Verify every handoff and fullscreen transition.
+
+### Phase 6: Native shield
+
+- Add Android request interceptor.
+- Add provider-specific rules.
+- Add shield evidence and diagnostics.
+- Validate playback and subtitles for each source.
+
+### Phase 7: Adaptive UI
+
+- Recompose Discover, Library, Settings, Episodes, Media Detail, Trailer, Player, and Connect.
+- Validate all breakpoints, themes, orientations, and accessibility modes.
+
+### Phase 8: Desktop Orion 3.0 integration
+
+- Add Mobile Companion Center.
+- Separate install and pairing QR flows.
+- Add protocol compatibility and device management.
+
+### Phase 9: Portable profile and Google authentication
+
+- Add application-owned OAuth clients.
+- Add Portable Profile v3.
+- Add record-level merging, tombstones, and migrations.
+- Preserve offline-first behavior.
+
+### Phase 10: Mobile updates
+
+- Add runtime-safe OTA updates.
+- Add Play/GitHub native update paths.
+- Add signing and checksum verification.
+
+### Phase 11: Release validation
+
+- Clean-device installation.
+- Existing-profile upgrade.
+- Network interruption and offline tests.
+- Source/shield live tests.
+- Desktop/Mobile compatibility matrix.
+- Signed Android production build.
+
+Set both packages to 3.0.0 only after the complete acceptance matrix passes.
+
+## 13. Test and Acceptance Matrix
+
+### Playback
+
+- Native direct media.
+- Embedded movie and TV playback.
+- Source failover.
+- Pause, seek, resume, completion, and backgrounding.
+- No fake progress for unobservable providers.
+
+### History and Continue Watching
+
+- Started items enter History.
+- Manual watched state remains independent.
+- Progress survives restart.
+- One latest episode appears per series.
+- Resume uses the stored source and position where still healthy.
+- Removing Continue Watching does not erase History.
+- Clearing History does not erase My List or progress.
+
+### Trailers
+
+- First candidate succeeds.
+- First candidate fails and second succeeds.
+- Owner-disabled embed.
+- Missing/removed video.
+- Offline state.
+- YouTube app and browser fallback.
+
+### Smart Connect
+
+- Pair, expire, regenerate, reconnect, revoke.
+- Acknowledgement timeout.
+- Touchpad and two-finger scroll.
+- Live Now Playing.
+- Smooth locally interpolated progress.
+- Seek commit and reconciliation.
+- Automatic keyboard and playback actions.
+
+### Laser
+
+- Main pages.
+- Default player.
+- Fullscreen player.
+- Mini-player.
+- Pop-out.
+- Maximized pop-out.
+- Local player.
+- Window move/resize.
+- Player handoff and source change.
+
+### Shield
+
+- VidSrc and every supported provider.
+- Known advertisements.
+- Required media/CDN dependencies.
+- Provider subtitles.
+- Popups and unsafe navigation.
+- Honest Verified/Limited/Failed states.
+
+### Responsive and accessibility
+
+- Compact phone.
+- Standard 1080p phone.
+- Tall/notched phone.
+- Small tablet.
+- Large tablet/foldable.
+- Landscape playback.
+- 200% font scaling.
+- Reduced Motion.
+- Screen reader.
+- All six themes.
+
+### Sync and updates
+
+- First sign-in.
+- Multi-device merge.
+- Conflicting edits.
+- Deletion tombstones.
+- Offline edits followed by sync.
+- OTA runtime compatibility.
+- Native APK/store update.
+- Interrupted and checksum-failed update.
+
+## 14. Orion 3.0 Release Gates
+
+Orion 3.0 is acceptable only when:
+
+- Trailers either play inside Orion or provide an accurate, actionable fallback.
+- Embedded playback generates honest History and progress where verifiable.
+- Continue Watching exists and survives restart and profile synchronization.
+- Smart Connect HUD remains current within one second during playback.
+- Remote seeks use measured geometry and reconcile with Desktop.
+- The laser works on every player surface and every window mode.
+- Shield status is evidence-based.
+- VidSrc and other supported-provider advertising behavior is validated.
+- Mobile layouts pass the full phone/tablet matrix.
+- Google profile restoration preserves Cinema and Music data without exposing credentials.
+- OTA updates cannot cross an incompatible native runtime.
+- Native updates verify signatures/checksums.
+- Desktop and Mobile upgrade safely from 2.0.1 profiles.
+- Existing Desktop Cinema and Music behavior remains regression-free.
+
+## 15. Deferred TV Casting
+
+TV casting remains a separate milestone.
+
+Smart Connect v3 may reserve:
+
+- Device capability negotiation.
+- Receiver type.
+- Supported media formats.
+- Handoff capability.
+
+It should not yet claim casting support. Casting requires separate strategies for:
+
+- Google Cast/Chromecast.
+- DLNA/UPnP.
+- AirPlay where feasible.
+- Provider and stream compatibility.
+- Subtitle and DRM restrictions.
+
+Remote control and casting must remain distinct architectural capabilities.
+
+## Final Verdict
+
+Orion Mobile should not be rebuilt from scratch. Its functioning metadata, provider navigation, theme foundation, Smart Connect transport, command acknowledgements, and ordinary-page laser are valuable.
+
+The correct v3 strategy is to preserve those foundations while replacing the unreliable boundaries:
+
+1. Playback truth.
+2. History and Continue Watching.
+3. Trailer identity and candidate handling.
+4. Live Smart Connect UX.
+5. Player-surface pointer routing.
+6. Native provider shielding.
+7. Adaptive Mobile composition.
+8. Portable cross-device profiles.
+9. Runtime-safe updates.
+
+This order prevents Orion from displaying invented progress, stale remote state, false shield confidence, or unreliable synchronization. It also creates the contracts needed for a later TV-casting milestone without prematurely coupling casting to Smart Connect.

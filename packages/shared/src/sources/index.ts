@@ -1,0 +1,33 @@
+export {
+  type CinemaSourceDescriptor,
+  type LegacyCompatibleSource,
+  type ReleaseStatus,
+  type IdPolicy,
+  type ProgressStrategy,
+  type SubtitleStrategy,
+  validateSourceDescriptor,
+  assertSourceRegistry,
+} from "./contracts";
+
+export {
+  ALL_CINEMA_SOURCES,
+  PLAYER_SOURCES,
+  DEFAULT_CINEMA_SOURCE_ID,
+  NEEDS_INTERCEPT,
+  getRegisteredSource,
+  getSource,
+  getSourceUrl,
+  getSourceResumeParams,
+  getNextNonAsyncSource,
+  getNextHealthyNonAsyncSource,
+  normalizeSelectableSourceId,
+  resolveSourceMediaId,
+  sourceHealth,
+  sourceSubtitleMode,
+  sourceIsExperimental,
+  sourceSupportsProgress,
+  sourceProgressViaFrames,
+  sourceIsAsync,
+  updateCinemaSourceHealth,
+  getCinemaSourceRuntimeHealth,
+} from "./registry";

@@ -1,0 +1,347 @@
+Orion Mobile audit verdict
+Orion Mobile is currently a promising internal alpha / functional prototype, not a release-ready mobile application.
+The catalog and navigation experience is reasonably developed, and Smart Remote has real desktop integration. However, playback reliability, offline downloads, authentication/sync, accessibility, source health, testing, and repository reproducibility remain incomplete.
+The most urgent issue is structural: almost the entire mobile/shared monorepo migration is currently untracked. A clean clone would not reproduce this mobile app.
+Verification results
+Check	Result
+TypeScript strict check	Failed with 1 active player HUD error
+Expo Doctor	17/20 passed; 3 failed
+Production web export	Passed
+Export size	13.59 MiB, 74 files
+Main web bundle	2.9 MiB
+Mobile automated tests	None
+Accessibility audit	117 pressable controls, 0 accessibility labels
+Git reproducibility	Failed; only apps/mobile/eas.json is tracked under mobile
+Version consistency	Failed: root 2.0.1, Expo 2.0.0, mobile package 1.0.0
+
+The compiler error is caused by a missing bottomBarLandscape style referenced in [PlayerHUD.tsx (line 215)](C:/Projects/Orion - A Multiverse of Stories/apps/mobile/src/components/player/PlayerHUD.tsx:215).
+Feature status
+Implemented and materially connected
+Expo Router navigation.
+Home catalog with:Trending movies.
+Trending TV.
+K-drama discovery.
+Top-rated titles.
+Swipeable hero content.
+
+Search across movies, series and people.
+Movie, TV, Anime and Constellation filters.
+Region, language, genre, year, rating and sorting controls.
+Discover pagination with Load More.
+Movie and TV detail pages.
+TV seasons and episode listings.
+Cast navigation into Person pages.
+Recommendations.
+Trailer playback.
+My List persistence through MMKV on native builds.
+Manual movie/episode watched state.
+Person profiles and combined filmography.
+Embedded WebView streaming.
+Manual source selection.
+Landscape player orientation.
+Basic injected ad/pop-up suppression.
+Player source timeout warning UI.
+Smart Remote:PIN pairing.
+QR pairing.
+Secure token storage.
+Touchpad/cursor mode.
+D-pad navigation.
+Playback commands.
+Search input.
+Volume and mute.
+Fullscreen and mini-player commands.
+Desktop playback status display.
+
+Shared TMDB/AniList clients and Cinema source registry.
+EAS project/build profiles.
+Production web bundle generation.
+These are real foundations, particularly Discover, media details, and Smart Remote.
+Partial or misleading features
+Streaming player
+The existing player is almost entirely an embedded WebView player. A native expo-video implementation exists, but it is never selected by the route.
+The route always returns EmbedVideoPlayer in [player/[id\].tsx (line 388)](C:/Projects/Orion - A Multiverse of Stories/apps/mobile/app/player/[id].tsx:388). These items are therefore dormant:
+NativeVideoPlayer.
+StreamExtractor.
+extractedUrl.
+useEmbedFallback.
+Native seeking and progress tracking.
+Reliable direct HLS/MP4 playback.
+Native offline playback.
+The existing player scrubber is also static. It shows fixed 00:00, --:--, and 30% progress rather than actual playback data.
+Watchdog and failover
+The embedded player does not obtain true playback/buffering state. It simply clears buffering after four seconds in [player/[id\].tsx (line 133)](C:/Projects/Orion - A Multiverse of Stories/apps/mobile/app/player/[id].tsx:133).
+Consequences:
+A broken player iframe may be classified as loaded.
+A video that loads its page but not its media will not trigger reliable recovery.
+The 15-second watchdog is driven by page-loading state, not video state.
+Failover uses getNextNonAsyncSource, not the existing health-aware selector.
+Experimental sources can be selected without runtime validation.
+The shared package already has getNextHealthyNonAsyncSource, but mobile does not use it.
+Source ID routing
+The player passes only { tmdbId: id } into every source in [player/[id\].tsx (line 380)](C:/Projects/Orion - A Multiverse of Stories/apps/mobile/app/player/[id].tsx:380).
+Sources marked imdb-preferred therefore receive TMDB IDs when no IMDb lookup has occurred. Depending on provider behavior, that can produce empty or incorrect streams.
+The Sources sheet also hard-codes claims such as “HIGH SPEED” and “STABLE” in [SourcesSheet.tsx (line 17)](C:/Projects/Orion - A Multiverse of Stories/apps/mobile/src/components/player/SourcesSheet.tsx:17) without measuring source startup, success, subtitle health or failure rate.
+Ad blocking
+Current blocking is a short hostname/DOM-selector list injected into each WebView.
+It does not provide:
+Provider-specific allow/block rules.
+Redirect-chain classification.
+Navigation-domain validation.
+New-window handling.
+Request diagnostics.
+Protection against first-party ad scripts.
+Provider subtitle-domain exceptions.
+Regularly maintained filter data.
+This will inevitably work for some sources and fail on others.
+Smart Remote
+The remote command bridge is genuine and most mobile commands have corresponding desktop handlers. Its security and lifecycle remain incomplete.
+Confirmed problems:
+Desktop initially uses a fixed PIN, 3566, in [smartConnectIpc.js (line 12)](C:/Projects/Orion - A Multiverse of Stories/apps/desktop/src/main/ipc/smartConnectIpc.js:12).
+No PIN expiry, attempt throttling or temporary lockout.
+Server binds to every interface at 0.0.0.0.
+Cleartext HTTP is enabled.
+Wildcard CORS is allowed in [smartConnectIpc.js (line 70)](C:/Projects/Orion - A Multiverse of Stories/apps/desktop/src/main/ipc/smartConnectIpc.js:70).
+Unauthenticated /api/status exposes paired-device and current-playback information.
+Tokens are memory-only and are lost after desktop restart.
+Mobile polls every 1.5 seconds, even when the Connect screen is inactive.
+Status sets isConnected from the desktop’s global paired flag, not from proof that this phone’s token is valid.
+IP and pair-state persistence still use localStorage in [connect.tsx (line 162)](C:/Projects/Orion - A Multiverse of Stories/apps/mobile/app/(tabs\)/connect.tsx:162), which is unsuitable for reliable React Native persistence.
+There is no mDNS/Zeroconf discovery; pairing is manual IP/QR probing.
+Default phone target 127.0.0.1 points back to the phone, not the desktop.
+Smart Remote is usable for controlled local testing, but not ready to be advertised as hardened pairing.
+Dead or disconnected features
+Mobile downloader
+The Downloads page explicitly says “Downloader Locked” in [downloads.tsx (line 39)](C:/Projects/Orion - A Multiverse of Stories/apps/mobile/app/(tabs\)/downloads.tsx:39), and the modal says “Downloader Coming Soon” in [DownloadModal.tsx (line 42)](C:/Projects/Orion - A Multiverse of Stories/apps/mobile/src/components/DownloadModal.tsx:42).
+A separate downloader service exists, but it must not be enabled in its current form:
+Fabricates progress using a timer.
+Uses browser localStorage.
+Downloads entire responses into Blob memory.
+Does not support background downloading.
+Does not support native file storage.
+Does not handle HLS manifests/fragments correctly.
+Blob URLs disappear after restart.
+On error, it records the job as completed in [downloadManager.ts (line 141)](C:/Projects/Orion - A Multiverse of Stories/apps/mobile/src/services/downloadManager.ts:141).
+“Offline” media may only retain the original remote URL.
+This is dead experimental code and should either be removed from production paths or replaced with a native background download architecture.
+Offline playback
+offlineUri is passed into the same embed player rather than the native video component. Even a valid local file would therefore be treated as a WebView page.
+Offline playback is not functional.
+Subtitle service
+A SubDL/Wyzie helper exists, but no UI or player imports it. Therefore:
+Subtitle search is disconnected.
+Language selection is absent.
+Provider subtitles are not captured.
+External subtitles are not injected into the player.
+Sidecar subtitle playback is absent.
+More seriously, fallback provider credentials are hard-coded into renderer/mobile source at [subtitles.ts (line 13)](C:/Projects/Orion - A Multiverse of Stories/apps/mobile/src/services/subtitles.ts:13). Expo public variables are bundled and extractable, so this is not credential protection.
+The declared Wyzie key is not used by the actual request.
+History and Continue Watching
+The context loads history and progress, but there are no public setters and no player writes either value.
+The Library says watched items will “automatically appear,” but only explicit manual markWatched actions create entries.
+Additional defect: clearHistory clears the watched map, not the separately loaded history record, in [LibraryContext.tsx (line 153)](C:/Projects/Orion - A Multiverse of Stories/apps/mobile/src/context/LibraryContext.tsx:153).
+Missing:
+Actual playback progress.
+Continue Watching.
+Resume timestamp.
+Automatic history.
+Episode progress.
+Watched threshold.
+Cross-device progress.
+Google authentication, cloud sync and backup
+There is no mobile Google login, OAuth flow, Google Drive integration, Supabase client, cloud account state, backup or restore implementation.
+The mobile specification claims these exist, but the source contains none of them.
+Current mobile data is local-only:
+My List.
+Watched markers.
+TMDB/AniList caches.
+Smart Connect token.
+Mobile is not connected to the desktop Google account or Orion backup system.
+Ecosystem features described only in documentation
+These are not implemented:
+Supabase authentication/sync.
+Realtime WebSocket synchronization.
+Continue-on-Mobile handoff.
+Desktop-to-phone local file streaming.
+Range-request LAN media server.
+mDNS/Zeroconf discovery.
+Connected-device radar.
+Chromecast.
+AirPlay.
+Bluetooth route picker.
+Haptic feedback.
+Android TV/tvOS targets.
+Tizen client.
+Push notifications.
+Battery integration.
+Background download service.
+Mobile settings and account management.
+The current roadmap incorrectly presents many of these as implemented in [orion_mobile_specs.md (line 15)](C:/Projects/Orion - A Multiverse of Stories/docs/orion_mobile_specs.md:15).
+Library and data concerns
+My List persistence works on native when MMKV initializes.
+If MMKV fails, storage silently becomes memory-only and all data disappears after restart.
+Web also uses memory-only storage, despite being exportable.
+No schema version or migration strategy.
+No data validation for corrupt stored records.
+No metadata repair/refetch.
+Saved sorting and manual reordering are absent.
+History and progress storage are structurally present but inactive.
+No backup integration.
+No account-scoped data separation.
+No cache size controls.
+No logout/data deletion lifecycle.
+UI and UX audit
+Strengths
+Strong visual direction.
+Consistent cinematic dark atmosphere.
+Good hero and poster presentation.
+Discover filters are ambitious for a mobile interface.
+Detail screens have sensible information architecture.
+Source sheet, remote controls and pairing screens have useful visual hierarchy.
+Fonts and shared tokens establish an initial design system.
+Problems
+Dark theme only.
+264 hard-coded color literals undermine shared tokens.
+No user appearance settings.
+No font-size or motion preferences.
+No Reduced Motion handling.
+No high-contrast mode.
+117 pressable controls and zero accessibility labels/roles/hints.
+Icon-only actions have no screen-reader descriptions.
+Focus order and external keyboard navigation are untested.
+Touch targets are not systematically validated.
+Font scaling can break fixed layouts.
+Several screens use dimensions captured once at module load, so rotation and split-screen resizing may not recalculate.
+Library always uses three columns on native, including narrow phones and tablets.
+Error handling often ends in an empty page after logging to console.
+Home has no retry/offline/error state.
+Media/Person errors have little or no recovery action.
+No pull-to-refresh.
+No global network/offline layer.
+Sidebar shows a fabricated 28ms value if the real measurement is unavailable.
+Mojibake remains throughout comments and documentation.
+Downloads remains in primary navigation despite being locked.
+Music Planet is absent—which is acceptable if explicitly outside the mobile milestone.
+Architecture and maintainability
+The shared package is the correct direction, but boundaries are not mature.
+Largest files:
+connect.tsx: 1,975 lines.
+discover.tsx: 1,201 lines.
+media/[id].tsx: 998 lines.
+player/[id].tsx: 488 lines.
+connect.tsx combines:
+Pairing.
+Polling.
+Camera scanning.
+Secure storage.
+Touchpad gestures.
+Remote state.
+Playback controls.
+Search.
+Modals.
+Nearly 800 lines of styling.
+discover.tsx combines search, regional discovery, genres, filtering, pagination, modals, grid rendering and styling.
+These files should be divided into feature controllers, hooks, service boundaries and focused presentation components before further additions.
+There are no mobile:
+Unit tests.
+Component tests.
+Integration tests.
+Device/E2E tests.
+Lint script.
+Typecheck script.
+CI build gate.
+Accessibility check.
+Bundle-size budget.
+Build and repository concerns
+Dependency health
+Expo Doctor failures:
+Duplicate React 19.2.3 and React 18.3.1.
+Duplicate React DOM versions.
+13 Expo/React Native packages do not match SDK 57’s expected patch versions.
+React Native Directory validation failed due to its server response.
+@expo/ui appears unused and brings web/Radix dependencies that contribute to React-version duplication.
+Bundle performance
+The web export succeeds, but:
+Entry JavaScript is 2.9 MiB.
+Total export is 13.59 MiB.
+All Inter, Outfit and Space Grotesk weights appear in the output, including weights not explicitly used.
+Large icon font families are bundled.
+No route-level bundle budget is enforced.
+Versioning
+Three conflicting versions exist:
+Root: 2.0.1.
+Expo config: 2.0.0.
+Mobile package: 1.0.0.
+The sidebar also hard-codes “Orion v2.0”.
+Git/reproducibility
+The monorepo relocation is not committed:
+Old root desktop files appear deleted.
+apps/desktop is untracked.
+packages/shared is untracked.
+Almost every mobile file is untracked.
+Only apps/mobile/eas.json is currently tracked inside the mobile directory.
+A clean checkout cannot build the current app. This should be the first recovery action before code refactoring.
+Android and iOS
+The generated Android folder is intentionally ignored, which is normal for Expo prebuild, but the local generated project still shows:
+Release builds signed with the debug keystore.
+versionCode 1.
+versionName 2.0.0.
+Cleartext traffic enabled.
+Broad permissions including recording audio, overlay, external storage and settings modification.
+Portrait application/activity configuration despite player landscape locking.
+Because Android is ignored, these settings must be represented correctly through Expo config/plugins or they disappear on a clean prebuild.
+iOS has no bundle identifier or release configuration beyond tablet support. No iOS build has been proven.
+Security and privacy concerns
+Highest priority concerns:
+Hard-coded subtitle provider credentials.
+Publicly bundled TMDB token—acceptable only if treated as a public application identifier with suitable restrictions, never as a secret.
+Cleartext Smart Connect traffic on the LAN.
+Fixed four-digit initial PIN.
+No brute-force rate limiting or PIN expiry.
+Unauthenticated playback/device metadata from /api/status.
+Wildcard CORS on the desktop LAN server.
+Pair tokens lost on desktop restart.
+No privacy screen, account/data deletion or backup consent.
+Third-party embeds can execute arbitrary provider JavaScript inside WebView.
+Ad blocking does not create a security boundary.
+Mobile store policy risk from unverified third-party streaming embeds and downloading claims.
+Recommended classification
+Area	Stage
+Catalog browsing	Functional alpha
+Search/Discover	Functional alpha, needs decomposition and error states
+Movie/TV details	Functional alpha
+Person pages	Functional alpha
+My List	Functional locally
+Watch history	Mislabelled/manual only
+Playback	Experimental WebView playback
+Native player	Dead/unwired
+Source health/failover	Partial
+Subtitles	Dead/unwired
+Downloads	Locked; unsafe dormant prototype
+Offline playback	Dead
+Smart Remote	Functional prototype with security gaps
+Desktop media streaming	Absent
+Handoff	Absent
+Google authentication	Absent
+Cloud sync/backup	Absent
+Settings	Absent
+Accessibility	Not implemented
+Android release	Not ready
+iOS release	Not established
+Testing/CI	Absent
+Documentation	Materially inaccurate
+Git reproducibility	Broken
+
+Priority order for the coming plan
+Preserve and commit the monorepo migration safely.
+Make TypeScript and Expo Doctor clean.
+Decide the real first mobile release boundary.
+Repair playback around one native/embed strategy with genuine media state.
+Remove or quarantine fake downloader/offline code.
+Secure Smart Connect and repair native persistence.
+Implement real history/progress.
+Connect subtitles or remove their public controls.
+Add mobile authentication, unified backup and cloud sync only after data contracts are defined.
+Add error/offline handling, accessibility and responsive UI.
+Add tests and clean Android/iOS release configuration.
+Rewrite the mobile specification to distinguish current, planned and deferred features.
+The biggest practical conclusion is that Orion Mobile already has enough UI to become a good app, but its next phase should be stabilization and truthfulness, not more feature expansion. You can now highlight any live-device issue I missed, and we can incorporate it into the implementation plan.

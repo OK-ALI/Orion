@@ -18,6 +18,17 @@ Supabase (free tier) is adopted as the primary synchronization backend:
 *   **PostgreSQL Database**: Real-time synchronization of watchlists, Continue Watching sessions, user settings, custom playlists, and profile metadata.
 *   **Realtime Channels**: WebSockets-driven channel subscription to broadcast instantaneous state changes (e.g., coordinate playheads during handoffs).
 
+### Dual Operational & Streaming Modes
+Orion Mobile supports two distinct operational modes:
+*   **Standalone Mobile Streaming (Independent)**:
+    *   Executes web stream parsers (`Vidking`, `Videasy`, `VidSrc`, etc.) directly on the device using shared modules from `packages/shared`.
+    *   Allows full playback of online movies and TV shows anywhere (over 5G/Wi-Fi) without requiring an active Orion Desktop computer.
+    *   Uses Supabase Cloud for background synchronization of watchlists, watch progress, and user settings.
+*   **Ecosystem / Orion Connect Mode (Paired)**:
+    *   Discovers local Orion Desktop nodes on home Wi-Fi via mDNS / Zeroconf.
+    *   Streams local PC video downloads via HTTP byte-range video headers (`Range: bytes=X-Y`).
+    *   Enables Smart TV remote trackpad controls and one-tap playback handoffs between PC and phone.
+
 ---
 
 ## 🎨 2. UI & Design System (Vast Specifications)

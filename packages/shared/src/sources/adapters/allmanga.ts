@@ -1,0 +1,28 @@
+/**
+ * AllManga (Anime) Source
+ *
+ * Ported from desktop's adapters/allmanga.js
+ */
+
+import type { CinemaSourceDescriptor } from "../contracts";
+
+export const allMangaSource: CinemaSourceDescriptor = {
+  id: "allmanga",
+  label: "AllManga",
+  releaseStatus: "primary",
+  media: { movie: true, tv: true, anime: true },
+  idPolicy: { movie: "async", tv: "async" },
+  buildMovieUrl: () => "https://allmanga.to",
+  buildEpisodeUrl: () => "https://allmanga.to",
+  expectedOrigins: ["https://allmanga.to"],
+  allowedNavigationOrigins: ["https://allmanga.to"],
+  requiredRequestOrigins: ["https://allmanga.to"],
+  progressStrategy: "native",
+  subtitleStrategy: "provider",
+  supportsResume: true,
+  supportsExternalSubtitles: false,
+  supportsDownloads: true,
+  async: true,
+  animeOnly: true,
+  params: {},
+};
