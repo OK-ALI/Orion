@@ -1,5 +1,8 @@
 node_modules/
 dist/
+build/
+*.apk
+*.aab
 *.log
 .DS_Store
 Thumbs.db
@@ -14,3 +17,5 @@ playwright-report/
 .publish-*/
 .tmp-electron-debug*/
 .turbo/
+tools/
+managed-tools/

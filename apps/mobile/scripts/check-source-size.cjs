@@ -5,13 +5,7 @@ const path = require("node:path");
 
 const ROOT = path.resolve(__dirname, "..");
 const SOURCE_ROOTS = ["app", "src"];
-const HARD_LIMIT = 2200;
 const TARGET_LIMIT = 800;
-const OVERSIZED_ALLOWLIST = new Set([
-  "app/(tabs)/connect.tsx",
-  "app/(tabs)/discover.tsx",
-  "app/media/[id].tsx",
-]);
 
 const files = [];
 function walk(directory) {
@@ -29,14 +23,9 @@ const warnings = [];
 for (const file of files) {
   const relative = path.relative(ROOT, file).replaceAll("\\", "/");
   const lines = fs.readFileSync(file, "utf8").split(/\r?\n/).length;
-  if (lines > HARD_LIMIT) {
-    console.error(`${relative}: ${lines} lines exceeds hard mobile ceiling ${HARD_LIMIT}`);
+  if (lines > TARGET_LIMIT) {
+    console.error(`${relative}: ${lines} lines exceeds mobile ceiling ${TARGET_LIMIT}`);
     failed = true;
-  } else if (lines > TARGET_LIMIT && !OVERSIZED_ALLOWLIST.has(relative)) {
-    console.error(`${relative}: ${lines} lines exceeds target ${TARGET_LIMIT} without an allowlist entry`);
-    failed = true;
-  } else if (lines > TARGET_LIMIT) {
-    warnings.push(`${relative}: ${lines} lines remains on the temporary refactor allowlist`);
   }
 }
 

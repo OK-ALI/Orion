@@ -4,7 +4,7 @@ import { View, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { backgrounds } from '@orion/shared/tokens';
 import { initTmdbClient, initAnilistClient } from '@orion/shared/api';
-import { mmkvStorageAdapter } from '../src/services/storageAdapter';
+import { getMobileStorageHealth, mmkvStorageAdapter } from '../src/services/storageAdapter';
 import { useFonts } from 'expo-font';
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { SpaceGrotesk_400Regular, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
@@ -16,6 +16,8 @@ import { LibraryProvider } from '../src/context/LibraryContext';
 import { ThemeProvider, useOrionTheme } from '../src/context/ThemeContext';
 import { NetworkProvider } from '../src/context/NetworkContext';
 import { OfflineBanner } from '../src/components/OfflineBanner';
+import { StorageUnavailableScreen } from '../src/components/StorageUnavailableScreen';
+import { MobileDiagnosticsBridge } from '../src/components/MobileDiagnosticsBridge';
 
 
 // Keep the splash screen visible while we fetch resources
@@ -79,10 +81,17 @@ export default function RootLayout() {
 
 function ThemedApplication() {
   const { theme } = useOrionTheme();
+  const storageHealth = getMobileStorageHealth();
+
+  if (storageHealth.state === 'unavailable') {
+    return <StorageUnavailableScreen errorCode={storageHealth.errorCode} />;
+  }
+
   return (
       <LibraryProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <MobileDiagnosticsBridge />
         {/* Background is now handled at the screen level for better compatibility */}
         
         <StatusBar style={theme.dark ? "light" : "dark"} />

@@ -4,6 +4,10 @@ import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { accent, fontSizes, radii, spacing, text } from '@orion/shared/tokens';
 import type { TrailerPlaybackState } from '@orion/shared/types';
+import {
+  clearMobileDiagnosticError,
+  reportMobileDiagnosticError,
+} from '../services/mobileDiagnostics';
 
 export interface TrailerItem {
   key: string;
@@ -140,6 +144,20 @@ export function TrailerModal({ visible, onClose, trailerKey: propTrailerKey, tit
     setPlaybackState('loading');
     setAttempt((value) => value + 1);
   };
+
+  useEffect(() => {
+    if (playbackState === 'ready') {
+      clearMobileDiagnosticError('trailer');
+      return;
+    }
+    if (['embed-rejected', 'network-error', 'playback-error'].includes(playbackState)) {
+      reportMobileDiagnosticError({
+        area: 'trailer',
+        code: playbackState.toUpperCase().replaceAll('-', '_'),
+        message: `Trailer playback entered ${playbackState}.`,
+      });
+    }
+  }, [playbackState]);
 
   const openExternal = async () => {
     if (!activeKey) return;

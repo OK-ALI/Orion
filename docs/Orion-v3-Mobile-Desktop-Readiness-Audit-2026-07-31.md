@@ -7,11 +7,11 @@
 
 ## Living Roadmap Status
 
-> **Overall Orion v3 implementation completion: 24%**
+> **Overall Orion v3 implementation completion: 29%**
 >
 > **Last verified:** July 31, 2026  
 > **Release readiness:** Not ready  
-> **Current stage:** Audit complete; stabilization foundations partially implemented  
+> **Current stage:** Phase 0 implementation complete; paused for checkpoint review
 > **Critical open blockers:** Playback truth, embedded History, Continue Watching, trailer embeds, player-surface laser, native provider shield, cross-platform profiles, and Mobile updates
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
@@ -30,7 +30,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 
 | Phase | Weight | Phase completion | Weighted contribution | Status |
 |---|---:|---:|---:|---|
-| 0. Safety and observability | 8% | 40% | 3.2% | In progress |
+| 0. Safety and observability | 8% | 100% | 8.0% | Complete |
 | 1. Playback truth | 12% | 20% | 2.4% | Foundation only |
 | 2. History and Continue Watching | 10% | 15% | 1.5% | Foundation only |
 | 3. Trailer reliability | 8% | 35% | 2.8% | In progress |
@@ -42,7 +42,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 9. Portable profile and Google authentication | 7% | 10% | 0.7% | Foundation only |
 | 10. Mobile updates | 4% | 5% | 0.2% | Not started |
 | 11. Release validation | 4% | 15% | 0.6% | Foundation only |
-| **Total** | **100%** |  | **23.9%, rounded to 24%** | **Not release-ready** |
+| **Total** | **100%** |  | **28.7%, rounded to 29%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -70,13 +70,13 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [x] **V3-P0-001:** Mobile strict TypeScript compilation passes.
 - [x] **V3-P0-002:** Desktop IPC contract check passes.
 - [x] **V3-P0-003:** Desktop renderer-binding check passes.
-- [ ] **V3-P0-004:** Preserve an atomic pre-v3 rollback checkpoint.
-- [ ] **V3-P0-005:** Replace MMKV's silent in-memory fallback with persistent fallback or a blocking recovery state.
-- [ ] **V3-P0-006:** Split the oversized Connect screen into transport, controller, and presentation modules.
-- [ ] **V3-P0-007:** Split Discover into data, filters, responsive layout, and presentation modules.
-- [ ] **V3-P0-008:** Split Media Detail into metadata, episodes, trailers, actions, and adaptive layout modules.
-- [ ] **V3-P0-009:** Add redacted Mobile diagnostics and export.
-- [ ] **V3-P0-010:** Expand automated tests beyond the current narrow Smart Connect coverage.
+- [x] **V3-P0-004:** Preserve an atomic pre-v3 rollback checkpoint.
+- [x] **V3-P0-005:** Replace MMKV's silent in-memory fallback with persistent fallback or a blocking recovery state.
+- [x] **V3-P0-006:** Split the oversized Connect screen into transport, controller, and presentation modules.
+- [x] **V3-P0-007:** Split Discover into data, filters, responsive layout, and presentation modules.
+- [x] **V3-P0-008:** Split Media Detail into metadata, episodes, trailers, actions, and adaptive layout modules.
+- [x] **V3-P0-009:** Add redacted Mobile diagnostics and export.
+- [x] **V3-P0-010:** Expand automated tests beyond the current narrow Smart Connect coverage.
 
 ### Phase 1 — Playback truth
 
@@ -237,6 +237,14 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-07-31 | V3-P5-001 | Confirmed main-renderer cursor; documented failure across every player surface | Code audit and user device test | 24% |
 | 2026-07-31 | V3-P6-001 | Confirmed limited JavaScript/navigation shield and native interception gap | Code audit and provider test | 24% |
 | 2026-07-31 | V3-P9-001, V3-P9-002 | Confirmed Desktop cloud foundation and Mobile MMKV/SecureStore foundation | Code audit | 24% |
+| 2026-07-31 | V3-P0-004 | Created the Orion v3 rollback branch and preserved the monorepo/Mobile baseline | Branch `codex/orion-v3`; commit `66299bebc8e3e70bb7399c6c6f149ed7ed28827b` | 24% |
+| 2026-07-31 | V3-P0-005–V3-P0-010 | Completed storage failure safety, route decomposition, redacted diagnostics, strict size gates, critical-route smoke coverage, and Phase 0 regression tests | Mobile typecheck; 7/7 Node tests; 48-file size gate; Expo Doctor 20/20; web export; standalone APK with bundled `assets/index.android.bundle`; Desktop 52 Node + 135 renderer tests, IPC/binding/secret/theme/cycle gates, and production build | 29% |
+
+Phase 0 implementation is complete. The generated standalone Android APK was
+inspected and contains its JavaScript bundle, so it does not depend on Metro.
+Installation and launch on a separate clean physical device remain an external
+release-verification action tracked by **V3-P11-010**, not evidence fabricated
+by this checkpoint.
 
 ### Roadmap maintenance rules
 

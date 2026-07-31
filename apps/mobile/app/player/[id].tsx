@@ -14,8 +14,13 @@ import { PlayerHUD } from '../../src/components/player/PlayerHUD';
 import { SourcesSheet } from '../../src/components/player/SourcesSheet';
 import { WatchdogWarning } from '../../src/components/player/WatchdogWarning';
 import { accent, fontSizes, radii } from '@orion/shared/tokens';
-import { hydrateMobileSourceHealth, markMobileSourceFailure, updateMobileSourceHealth } from '../../src/services/sourceHealth';
+import { getMobileSourceHealth, hydrateMobileSourceHealth, markMobileSourceFailure, updateMobileSourceHealth } from '../../src/services/sourceHealth';
 import { useLibrary } from '../../src/context/LibraryContext';
+import {
+  clearMobileDiagnosticError,
+  reportMobileDiagnosticError,
+  updateMobileDiagnostics,
+} from '../../src/services/mobileDiagnostics';
 
 // ── Native HLS/MP4 Video Player Component ──────────────────────────────────
 function NativeVideoPlayer({ streamUrl, title, sourceId, setSourceId, id, type, season, episode }: any) {
@@ -296,7 +301,7 @@ function EmbedVideoPlayer({ embedUrl, title, sourceId, setSourceId, id, type, se
     const startupMs = Date.now() - loadStartedAt.current;
     setIsBuffering(false);
     setHudState('visible');
-    updateMobileSourceHealth(sourceId, type, {
+    const health = updateMobileSourceHealth(sourceId, type, {
       state: startupMs > 12_000 ? 'slow' : 'ready',
       startupMs,
       failureCount: 0,
@@ -305,6 +310,8 @@ function EmbedVideoPlayer({ embedUrl, title, sourceId, setSourceId, id, type, se
       allowedDependencies,
       lastError: null,
     });
+    updateMobileDiagnostics({ activeSourceId: sourceId, sourceHealth: health.state });
+    clearMobileDiagnosticError('playback');
     resetHideTimer();
   };
 
@@ -313,7 +320,9 @@ function EmbedVideoPlayer({ embedUrl, title, sourceId, setSourceId, id, type, se
     setHudState('error');
     setShowControls(true);
     setShieldState('failed');
-    markMobileSourceFailure(sourceId, type, message);
+    const health = markMobileSourceFailure(sourceId, type, message);
+    updateMobileDiagnostics({ activeSourceId: sourceId, sourceHealth: health.state });
+    reportMobileDiagnosticError({ area: 'playback', code: 'SOURCE_FAILED', message });
   };
 
   return (
@@ -473,6 +482,14 @@ export default function PlayerScreen() {
   useEffect(() => {
     hydrateMobileSourceHealth();
   }, []);
+
+  useEffect(() => {
+    const health = getMobileSourceHealth(sourceId, type);
+    updateMobileDiagnostics({
+      activeSourceId: isOffline === 'true' ? 'local' : sourceId,
+      sourceHealth: isOffline === 'true' ? 'ready' : (health?.state ?? 'unknown'),
+    });
+  }, [isOffline, sourceId, type]);
 
   // If offline mode is requested, use local file URI directly
   const activeStreamUrl = isOffline === 'true' && offlineUri
