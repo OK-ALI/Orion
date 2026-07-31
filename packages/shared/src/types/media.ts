@@ -114,7 +114,7 @@ export interface PlaybackProgressV2 {
   media: MediaIdentity;
   currentTime: number;
   duration: number;
-  percent: number;
+  percent: number | null;
   sourceId: string | null;
   completed: boolean;
   updatedAt: number;

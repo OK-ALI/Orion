@@ -24,6 +24,7 @@ test("large mobile routes are thin shims and have no source-size exceptions", ()
     "app/(tabs)/connect.tsx",
     "app/(tabs)/discover.tsx",
     "app/media/[id].tsx",
+    "app/player/[id].tsx",
   ]) {
     const source = read(route);
     assert.match(source, /^export \{ default \} from /);
@@ -66,4 +67,13 @@ test("mobile diagnostics contract excludes private transport material", () => {
   }
   assert.match(diagnostics, /redacted-url/);
   assert.match(diagnostics, /redacted-address/);
+});
+
+test("embedded page load cannot write playback history or claim source readiness", () => {
+  const surface = read("src/features/playback/EmbedPlayerSurface.tsx");
+  const loadedBody = surface.match(/const markSurfaceLoaded = \(\) => \{([\s\S]*?)\n  \};/);
+  assert.ok(loadedBody, "Expected a dedicated WebView load handler");
+  assert.doesNotMatch(loadedBody[1], /recordPlayback|updateMobileSourceHealth/);
+  assert.match(loadedBody[1], /markOpenedOnly/);
+  assert.match(surface, /decision\.state\.session\.verified/);
 });

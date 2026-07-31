@@ -7,7 +7,11 @@ import type {
   MobilePlaybackTelemetryV1,
   MobilePlayerSurface,
 } from '@orion/shared/types';
-import { updateMobileDiagnostics } from '../../services/mobileDiagnostics';
+import {
+  clearMobileDiagnosticError,
+  reportMobileDiagnosticError,
+  updateMobileDiagnostics,
+} from '../../services/mobileDiagnostics';
 import { recordRecentOpen, removeRecentOpen } from './playbackRepository';
 import {
   createPlaybackTelemetryState,
@@ -115,7 +119,16 @@ export function usePlaybackTelemetryController({
       observedAt: input.observedAt || Date.now(),
     };
     const decision = reducePlaybackTelemetry(stateRef.current, event);
-    if (!decision.accepted) return decision;
+    if (!decision.accepted) {
+      if (!['stale-sequence', 'stale-observation-time'].includes(decision.reason)) {
+        reportMobileDiagnosticError({
+          area: 'playback-telemetry',
+          code: decision.reason.toUpperCase().replace(/-/g, '_'),
+          message: `Playback telemetry rejected: ${decision.reason}`,
+        });
+      }
+      return decision;
+    }
     const wasVerified = stateRef.current.session.verified;
     stateRef.current = decision.state;
     updateMobileDiagnostics({
@@ -126,6 +139,7 @@ export function usePlaybackTelemetryController({
     });
     if (!wasVerified && decision.state.session.verified) {
       removeRecentOpen(decision.state.session.id);
+      clearMobileDiagnosticError('playback-telemetry');
     }
     const terminal = ['paused', 'seeking', 'ended', 'error'].includes(input.state);
     if (decision.shouldPersist

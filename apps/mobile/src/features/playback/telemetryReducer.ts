@@ -63,6 +63,9 @@ export function reducePlaybackTelemetry(
   if (!Number.isFinite(event.observedAt) || event.observedAt <= 0) {
     return { accepted: false, state: previous, reason: 'invalid-observation-time' };
   }
+  if (event.observedAt < previous.session.updatedAt) {
+    return { accepted: false, state: previous, reason: 'stale-observation-time' };
+  }
   for (const [name, value] of [
     ['current-time', event.currentTime],
     ['duration', event.duration],
@@ -77,6 +80,13 @@ export function reducePlaybackTelemetry(
     && event.duration > 0
     && event.currentTime > event.duration + 5) {
     return { accepted: false, state: previous, reason: 'position-after-duration' };
+  }
+  if (finiteNonNegative(event.duration)
+    && event.duration > 0
+    && finiteNonNegative(previous.duration)
+    && previous.duration > 0
+    && Math.abs(event.duration - previous.duration) > Math.max(5, previous.duration * 0.05)) {
+    return { accepted: false, state: previous, reason: 'impossible-duration-change' };
   }
 
   const regressed = finiteNonNegative(event.currentTime)

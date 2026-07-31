@@ -7,6 +7,13 @@ const {
   playbackPercent,
   reducePlaybackTelemetry,
 } = require("../src/features/playback/telemetryReducer.ts");
+const {
+  createEmbeddedTelemetryScript,
+  parseEmbeddedTelemetryMessage,
+} = require("../src/features/playback/embeddedTelemetry.ts");
+const {
+  verifiedResumeSeconds,
+} = require("../src/features/playback/playbackResume.ts");
 
 const session = (overrides = {}) => ({
   schemaVersion: 2,
@@ -81,4 +88,72 @@ test("time beyond a known duration is rejected", () => {
   const result = reducePlaybackTelemetry(state, event(1, 120, { duration: 100 }));
   assert.equal(result.accepted, false);
   assert.equal(result.reason, "position-after-duration");
+});
+
+test("stale observations and impossible duration changes are rejected", () => {
+  let state = createPlaybackTelemetryState(session());
+  state = reducePlaybackTelemetry(state, event(1, 10)).state;
+  assert.equal(
+    reducePlaybackTelemetry(state, event(2, 11, { observedAt: 1000 })).reason,
+    "stale-observation-time",
+  );
+  assert.equal(
+    reducePlaybackTelemetry(state, event(2, 11, { duration: 180 })).reason,
+    "impossible-duration-change",
+  );
+});
+
+test("source handoff carries only a verified finite position", () => {
+  assert.equal(verifiedResumeSeconds(null), 0);
+  assert.equal(verifiedResumeSeconds({
+    currentTime: Number.NaN,
+    duration: 100,
+    evidence: "provider-video-event",
+    observedAt: Date.now(),
+  }), 0);
+  assert.equal(verifiedResumeSeconds({
+    currentTime: 42.5,
+    duration: 100,
+    evidence: "provider-video-event",
+    observedAt: Date.now(),
+  }), 42.5);
+});
+
+test("embedded telemetry requires the active session, source, origin and sequence", () => {
+  const now = Date.now();
+  const raw = {
+    type: "ORION_PLAYBACK_TELEMETRY",
+    sessionId: "session-1",
+    sourceId: "videasy",
+    sequence: 2,
+    origin: "https://player.videasy.to",
+    evidence: "provider-video-event",
+    state: "playing",
+    currentTime: 15,
+    duration: 120,
+    bufferedPosition: 30,
+    observedAt: now,
+  };
+  const context = {
+    sessionId: "session-1",
+    sourceId: "videasy",
+    expectedOrigins: ["https://player.videasy.to"],
+    lastSequence: 1,
+  };
+  assert.equal(parseEmbeddedTelemetryMessage(raw, context).input.currentTime, 15);
+  assert.equal(parseEmbeddedTelemetryMessage({ ...raw, sequence: 1 }, context), null);
+  assert.equal(parseEmbeddedTelemetryMessage({ ...raw, origin: "https://evil.invalid" }, context), null);
+  assert.equal(parseEmbeddedTelemetryMessage({ ...raw, sessionId: "old" }, context), null);
+});
+
+test("embedded observer is read-only and does not monkey-patch playback", () => {
+  const script = createEmbeddedTelemetryScript({
+    sessionId: "session-1",
+    sourceId: "videasy",
+    strategy: "frame-video",
+    expectedOrigins: ["https://player.videasy.to"],
+  });
+  assert.match(script, /querySelectorAll\('video'\)/);
+  assert.match(script, /ORION_PLAYBACK_TELEMETRY/);
+  assert.doesNotMatch(script, /prototype\.play|prototype\.pause|HTMLMediaElement\.prototype/);
 });
