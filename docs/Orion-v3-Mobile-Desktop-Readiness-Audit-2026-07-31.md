@@ -7,12 +7,12 @@
 
 ## Living Roadmap Status
 
-> **Overall Orion v3 implementation completion: 29%**
+> **Overall Orion v3 implementation completion: 36%**
 >
 > **Last verified:** July 31, 2026  
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 0 implementation complete; paused for checkpoint review
-> **Critical open blockers:** Playback truth, embedded History, Continue Watching, trailer embeds, Smart Connect transport hardening, player-surface laser, native provider shield, cross-platform profiles, and Mobile updates
+> **Current stage:** Phase 1 implementation complete; physical-provider acceptance pending
+> **Critical open blockers:** Physical Android evidence for embedded playback telemetry, History and Continue Watching, trailer embeds, Smart Connect transport hardening, player-surface laser, native provider shield, cross-platform profiles, and Mobile updates
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -31,7 +31,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | Phase | Weight | Phase completion | Weighted contribution | Status |
 |---|---:|---:|---:|---|
 | 0. Safety and observability | 8% | 100% | 8.0% | Complete |
-| 1. Playback truth | 12% | 20% | 2.4% | Foundation only |
+| 1. Playback truth | 12% | 80% | 9.6% | In progress |
 | 2. History and Continue Watching | 10% | 15% | 1.5% | Foundation only |
 | 3. Trailer reliability | 8% | 35% | 2.8% | In progress |
 | 4. Smart Connect experience | 12% | 45% | 5.4% | In progress |
@@ -39,10 +39,10 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 6. Native provider shield | 10% | 15% | 1.5% | Foundation only |
 | 7. Adaptive Mobile UI | 10% | 30% | 3.0% | In progress |
 | 8. Desktop Orion 3.0 integration | 7% | 20% | 1.4% | Foundation only |
-| 9. Portable profile and Google authentication | 7% | 10% | 0.7% | Foundation only |
+| 9. Portable profile and Google authentication | 7% | 15% | 1.1% | Foundation only |
 | 10. Mobile updates | 4% | 5% | 0.2% | Not started |
 | 11. Release validation | 4% | 15% | 0.6% | Foundation only |
-| **Total** | **100%** |  | **28.7%, rounded to 29%** | **Not release-ready** |
+| **Total** | **100%** |  | **36.3%, rounded to 36%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -82,14 +82,14 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 
 - [x] **V3-P1-001:** Native direct playback can report time and duration.
 - [x] **V3-P1-002:** Mobile has local progress-record storage.
-- [ ] **V3-P1-003:** Add versioned `MobilePlaybackSession`.
-- [ ] **V3-P1-004:** Add versioned `MobilePlaybackTelemetry`.
-- [ ] **V3-P1-005:** Add evidence classification for native, provider, message, manual, and opened-only records.
-- [ ] **V3-P1-006:** Add provider `<video>` telemetry where frame access permits it.
-- [ ] **V3-P1-007:** Add provider `postMessage` telemetry adapters.
-- [ ] **V3-P1-008:** Save on start, interval, pause, seek, source change, background, exit, and completion.
-- [ ] **V3-P1-009:** Preserve verified position during healthy source failover.
-- [ ] **V3-P1-010:** Prove that no provider creates fabricated duration or percentage data.
+- [x] **V3-P1-003:** Add versioned `MobilePlaybackSession`.
+- [x] **V3-P1-004:** Add versioned `MobilePlaybackTelemetry`.
+- [x] **V3-P1-005:** Add evidence classification for native, provider, message, manual, and opened-only records.
+- [ ] **V3-P1-006:** Add provider `<video>` telemetry where frame access permits it. Implementation is complete; physical VidSrc/Videasy evidence is pending.
+- [ ] **V3-P1-007:** Add provider `postMessage` telemetry adapters. Implementation is complete; physical VidKing evidence is pending.
+- [x] **V3-P1-008:** Save on start, interval, pause, seek, source change, background, exit, and completion.
+- [x] **V3-P1-009:** Preserve verified position during healthy source failover.
+- [x] **V3-P1-010:** Prove that no provider creates fabricated duration or percentage data.
 
 ### Phase 2 — History and Continue Watching
 
@@ -195,7 +195,7 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 
 - [x] **V3-P9-001:** Desktop Google authentication and Drive backup foundations exist.
 - [x] **V3-P9-002:** Mobile uses MMKV for local data and SecureStore for selected secrets.
-- [ ] **V3-P9-003:** Replace silent in-memory MMKV fallback.
+- [x] **V3-P9-003:** Replace silent in-memory MMKV fallback.
 - [ ] **V3-P9-004:** Add account-namespaced Mobile profiles.
 - [ ] **V3-P9-005:** Define shared `PortableProfileV3`.
 - [ ] **V3-P9-006:** Add separate Android and Desktop OAuth clients under Orion's Google project.
@@ -249,6 +249,17 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-07-31 | V3-P0-005–V3-P0-010 | Completed storage failure safety, route decomposition, redacted diagnostics, strict size gates, critical-route smoke coverage, and Phase 0 regression tests | Checkpoint `a409055`; Mobile typecheck; 7/7 Node tests; 48-file size gate; Expo Doctor 20/20; web export; standalone APK with bundled `assets/index.android.bundle`; Desktop 52 Node + 135 renderer tests, IPC/binding/secret/theme/cycle gates, and production build | 29% |
 | 2026-07-31 | V3-P4-013–V3-P4-020 | Added the verified Smart Connect v2 transport limitations and v3 hardening requirements; no implementation credit awarded | Code audit of Desktop HTTP/WebSocket server, Mobile transport/fallback, shared protocol, pairing persistence, and status flow | 29% |
 | 2026-07-31 | Pre-Phase-1 brand checkpoint | Replaced Desktop and Mobile application icon families from one transparent Orion master; added reproducible Windows ICO/PNG and Android adaptive/monochrome generation | Desktop production build; Mobile typecheck and web export; Expo public-config resolution; ICO decode and alpha validation | 29% |
+| 2026-07-31 | V3-P1-003–V3-P1-005 | Added versioned playback-session and telemetry contracts, strict evidence classification, and a reducer that rejects stale, malformed, impossible, and unexplained-regression events | Commits `c0706f2`, `690fb71`; reducer and persistence unit coverage | 34% |
+| 2026-07-31 | V3-P1-008–V3-P1-010, V3-P9-003 | Wired verified native/embedded telemetry, isolated unobservable opens in `recentOpensV1`, preserved verified failover position, enforced verified-only History/progress writes, and retained the Phase 0 persistent-storage recovery boundary | Commit `6a1e065`; Mobile typecheck; 18/18 Node tests; 60-file size gate; Expo Doctor 20/20; web export; standalone Android APK containing `index.android.bundle`; Desktop 52 Node + 135 renderer tests and all repository gates | 36% |
+
+Phase 1 implementation is complete, but acceptance remains at 80% because no
+physical Android device was attached during this checkpoint. `V3-P1-006` and
+`V3-P1-007` remain open until VidSrc and Videasy demonstrate frame-video
+telemetry, VidKing demonstrates documented player-message telemetry, and an
+unobservable provider plus source failover are recorded on a physical device.
+The implementation deliberately places those unobservable opens only in the
+bounded `recentOpensV1` journal; they cannot create History, progress,
+percentages, completion, or watched records.
 
 Phase 0 implementation is complete. The generated standalone Android APK was
 inspected and contains its JavaScript bundle, so it does not depend on Metro.
@@ -271,7 +282,7 @@ by this checkpoint.
 
 Orion Mobile is a promising Android-first companion with working metadata browsing, media details, provider playback, themes, local state, and a substantially improved Smart Connect transport. It is not ready for an Orion 3.0 release yet.
 
-The most important remaining weakness is the absence of a single authoritative playback-truth pipeline. Native playback can report time and duration, but most embedded providers do not currently feed verified playback telemetry into Orion. This one missing boundary causes several visible failures:
+The authoritative playback-truth pipeline now exists for native and embedded surfaces. It accepts only active-session telemetry, requires a real playing event plus advancing time before verification, and isolates unobservable embedded sessions in a bounded Recent Opens journal. Physical Android validation of the source-specific adapters remains the acceptance blocker. Until that evidence is recorded, these user-facing outcomes remain intentionally deferred or incomplete:
 
 - Mobile History does not reliably update.
 - Continue Watching is absent and cannot be populated reliably.
