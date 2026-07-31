@@ -14,6 +14,9 @@ const {
 const {
   verifiedResumeSeconds,
 } = require("../src/features/playback/playbackResume.ts");
+const {
+  canPersistVerifiedPlayback,
+} = require("../src/features/playback/playbackEvidence.ts");
 
 const session = (overrides = {}) => ({
   schemaVersion: 2,
@@ -119,6 +122,15 @@ test("source handoff carries only a verified finite position", () => {
   }), 42.5);
 });
 
+test("only verified telemetry evidence may reach progress and history", () => {
+  assert.equal(canPersistVerifiedPlayback("native-video-event", "session-1"), true);
+  assert.equal(canPersistVerifiedPlayback("provider-video-event", "session-1"), true);
+  assert.equal(canPersistVerifiedPlayback("provider-message", "session-1"), true);
+  assert.equal(canPersistVerifiedPlayback("opened-only", "session-1"), false);
+  assert.equal(canPersistVerifiedPlayback("manual-watched", "session-1"), false);
+  assert.equal(canPersistVerifiedPlayback("provider-message", ""), false);
+});
+
 test("embedded telemetry requires the active session, source, origin and sequence", () => {
   const now = Date.now();
   const raw = {
@@ -144,6 +156,8 @@ test("embedded telemetry requires the active session, source, origin and sequenc
   assert.equal(parseEmbeddedTelemetryMessage({ ...raw, sequence: 1 }, context), null);
   assert.equal(parseEmbeddedTelemetryMessage({ ...raw, origin: "https://evil.invalid" }, context), null);
   assert.equal(parseEmbeddedTelemetryMessage({ ...raw, sessionId: "old" }, context), null);
+  assert.equal(parseEmbeddedTelemetryMessage({ ...raw, currentTime: -1 }, context), null);
+  assert.equal(parseEmbeddedTelemetryMessage({ ...raw, evidence: "opened-only" }, context), null);
 });
 
 test("embedded observer is read-only and does not monkey-patch playback", () => {

@@ -54,6 +54,10 @@ export function parseEmbeddedTelemetryMessage(
   if (typeof data.origin !== 'string' || !context.expectedOrigins.includes(data.origin)) return null;
   const state = normalizeState(data.state);
   if (!state) return null;
+  if (!['provider-message', 'provider-video-event'].includes(data.evidence)) return null;
+  for (const value of [data.currentTime, data.duration, data.bufferedPosition]) {
+    if (value != null && (!Number.isFinite(Number(value)) || Number(value) < 0)) return null;
+  }
   const evidence: MobilePlaybackEvidence = data.evidence === 'provider-message'
     ? 'provider-message'
     : 'provider-video-event';
@@ -152,7 +156,7 @@ export function createEmbeddedTelemetryScript({
           ? value.data
           : value.type === 'PLAYER_EVENT' ? value : null;
         if (!payload) return;
-        var eventName = String(payload.event || payload.action || '').toLowerCase();
+        var eventName = String(payload.event || payload.action || payload.type || '').toLowerCase();
         var state = payload.buffering || eventName === 'waiting' || eventName === 'buffering'
           ? 'buffering'
           : payload.paused === true || eventName === 'pause'

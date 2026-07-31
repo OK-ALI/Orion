@@ -77,11 +77,11 @@ export function NativePlayerSurface({
 
   useEffect(() => {
     const currentTime = Number(timeEvent.currentTime) || 0;
-    const regressed = currentTime < priorTimeRef.current - 2;
+    const jumped = Math.abs(currentTime - priorTimeRef.current) > 2;
     priorTimeRef.current = currentTime;
     telemetry.emitTelemetry({
       evidence: 'native-video-event',
-      state: regressed ? 'seeking' : playingEvent.isPlaying ? 'playing' : 'paused',
+      state: jumped ? 'seeking' : playingEvent.isPlaying ? 'playing' : 'paused',
       currentTime,
       duration: Number(player.duration) || null,
       bufferedPosition: Number(timeEvent.bufferedPosition) || null,

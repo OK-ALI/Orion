@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { mmkvStorageAdapter } from '../services/storageAdapter';
 import { TmdbMediaItem, type MobilePlaybackEvidence } from '@orion/shared/types';
 import { tmdbFetch } from '@orion/shared/api';
+import { canPersistVerifiedPlayback } from '../features/playback/playbackEvidence';
 
 function getLibraryMediaType(item: any = {}) {
   return item.media_type || (item.first_air_date || item.name ? "tv" : "movie");
@@ -204,7 +205,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     sessionId?: string | null;
   }) => {
     const id = item?.id;
-    if (id == null) return;
+    if (id == null || !canPersistVerifiedPlayback(evidence, sessionId)) return;
     const safeCurrent = Math.max(0, Number(currentTime) || 0);
     const safeDuration = Math.max(0, Number(duration) || 0);
     const key = getProgressKey(mediaType, id, season, episode);
