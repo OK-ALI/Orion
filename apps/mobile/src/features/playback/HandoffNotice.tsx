@@ -16,6 +16,7 @@ export function HandoffNotice({
 }) {
   const { theme } = useOrionTheme();
   const pending = ['preparing', 'loading', 'seeking'].includes(handoff.status);
+  const continueRestarts = !pending && handoff.strategy === 'url-param' && Number(handoff.requestedTime) > 0;
   const title = pending
     ? 'Carrying playback position'
     : recoveredPrevious
@@ -25,7 +26,9 @@ export function HandoffNotice({
     ? 'Orion is waiting for the new source to confirm its playback time.'
     : recoveredPrevious
       ? 'Orion returned to the last usable source at your verified position.'
-      : 'You can continue here or return to the previous source.';
+      : continueRestarts
+        ? 'Continue Here restarts this source without the carried position, or you can return to the previous source.'
+        : 'You can continue here or return to the previous source.';
 
   return (
     <View

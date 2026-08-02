@@ -8,6 +8,7 @@ import type { VerifiedPlaybackSnapshot } from './playerTypes';
 export const HANDOFF_SNAPSHOT_MAX_AGE_MS = 5_000;
 export const HANDOFF_CONFIRMATION_TIMEOUT_MS = 12_000;
 export const HANDOFF_POSITION_TOLERANCE_SECONDS = 5;
+export const HANDOFF_TARGET_SETTLE_MS = 4_000;
 
 const finiteNonNegative = (value: unknown): value is number =>
   Number.isFinite(value) && Number(value) >= 0;
@@ -89,6 +90,33 @@ export function confirmPlaybackHandoff(
     updatedAt: now,
     failureCode: null,
   };
+}
+
+export function handoffTargetMissedPosition(
+  handoff: PlaybackHandoffV1,
+  snapshot: VerifiedPlaybackSnapshot | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (!handoffIsPending(handoff) || !snapshot) return false;
+  if (!finiteNonNegative(handoff.requestedTime)) return false;
+  if (snapshot.sourceId !== handoff.targetSourceId) return false;
+  if (!finiteNonNegative(snapshot.currentTime)) return false;
+  if (!Number.isFinite(snapshot.observedAt) || snapshot.observedAt < handoff.startedAt) return false;
+  if (now - handoff.startedAt < HANDOFF_TARGET_SETTLE_MS) return false;
+  return Math.abs(snapshot.currentTime - handoff.requestedTime) > HANDOFF_POSITION_TOLERANCE_SECONDS;
+}
+
+export function handoffContinueRequiresCleanRestart(
+  handoff: PlaybackHandoffV1 | null | undefined,
+  activeSourceId: string,
+): boolean {
+  return Boolean(
+    handoff
+      && handoff.status === 'unconfirmed'
+      && handoff.strategy === 'url-param'
+      && handoff.targetSourceId === activeSourceId
+      && Number(handoff.requestedTime) > 0,
+  );
 }
 
 export const handoffIsPending = (handoff: PlaybackHandoffV1 | null | undefined) =>

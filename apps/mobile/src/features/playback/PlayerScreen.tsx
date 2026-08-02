@@ -25,7 +25,9 @@ import {
   createPlaybackHandoff,
   getFreshVerifiedPosition,
   handoffCanCarryPosition,
+  handoffContinueRequiresCleanRestart,
   handoffIsPending,
+  handoffTargetMissedPosition,
   updateHandoffStatus,
 } from './handoffPolicy';
 import { getNextMobileContinuitySource } from './mobileSources';
@@ -175,14 +177,6 @@ export default function PlayerScreen() {
     });
   }, [launchHandoff, sourceId, type]);
 
-  const handlePlaybackSnapshot = useCallback((snapshot: VerifiedPlaybackSnapshot) => {
-    const active = handoffRef.current;
-    if (!active || active.targetSourceId !== sourceId) return;
-    const confirmed = confirmPlaybackHandoff(active, snapshot);
-    if (!confirmed) return;
-    publishHandoff(confirmed);
-  }, [publishHandoff, sourceId]);
-
   const retryAutomaticHandoff = useCallback((expired: PlaybackHandoffV1) => {
     markMobileSourceFailure(
       expired.targetSourceId,
@@ -209,6 +203,20 @@ export default function PlayerScreen() {
       attemptedSourceIds: expired.attemptedSourceIds,
     });
   }, [launchHandoff, publishHandoff, type]);
+
+  const handlePlaybackSnapshot = useCallback((snapshot: VerifiedPlaybackSnapshot) => {
+    const active = handoffRef.current;
+    if (!active || active.targetSourceId !== sourceId) return;
+    const confirmed = confirmPlaybackHandoff(active, snapshot);
+    if (confirmed) {
+      publishHandoff(confirmed);
+      return;
+    }
+    if (!handoffTargetMissedPosition(active, snapshot)) return;
+    const missed = updateHandoffStatus(active, 'unconfirmed', 'POSITION_NOT_RESTORED');
+    if (active.reason === 'automatic') retryAutomaticHandoff(missed);
+    else publishHandoff(missed);
+  }, [publishHandoff, retryAutomaticHandoff, sourceId]);
 
   useEffect(() => {
     if (!handoff || !handoffIsPending(handoff)) return undefined;
@@ -258,6 +266,14 @@ export default function PlayerScreen() {
     });
   }, [launchHandoff, publishHandoff, sourceId]);
 
+  const continueAtTargetSource = useCallback(() => {
+    const active = handoffRef.current;
+    if (!active) return;
+    const restartWithoutResume = handoffContinueRequiresCleanRestart(active, sourceId);
+    publishHandoff(null);
+    if (restartWithoutResume) setResumeTime(0);
+  }, [publishHandoff, sourceId]);
+
   const commonProps = {
     title,
     sourceId,
@@ -289,7 +305,7 @@ export default function PlayerScreen() {
       {handoff && handoff.status !== 'confirmed' && handoff.fromSourceId !== handoff.targetSourceId && (
         <HandoffNotice
           handoff={handoff}
-          onContinue={() => publishHandoff(null)}
+          onContinue={continueAtTargetSource}
           onReturn={returnToPreviousSource}
           recoveredPrevious={handoff.reason === 'automatic' && sourceId === handoff.fromSourceId}
         />

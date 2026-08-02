@@ -23,6 +23,8 @@ const {
   createPlaybackHandoff,
   getFreshVerifiedPosition,
   handoffCanCarryPosition,
+  handoffContinueRequiresCleanRestart,
+  handoffTargetMissedPosition,
   updateHandoffStatus,
 } = require("../src/features/playback/handoffPolicy.ts");
 const {
@@ -220,6 +222,46 @@ test("handoff confirms only matching target telemetry within tolerance", () => {
   assert.equal(confirmPlaybackHandoff(handoff, { ...target, sourceId: "vixsrc" }), null);
   assert.equal(confirmPlaybackHandoff(handoff, { ...target, currentTime: 65.1 }), null);
   assert.equal(confirmPlaybackHandoff(handoff, { ...target, observedAt: 9_999 }), null);
+});
+
+test("handoff identifies an advancing target that missed the carried position after settling", () => {
+  const handoff = createPlaybackHandoff({
+    reason: "manual",
+    fromSessionId: "old-session",
+    fromSourceId: "vidsrc",
+    targetSourceId: "vidking",
+    requestedTime: 120,
+    strategy: "url-param",
+    now: 10_000,
+  });
+  const target = {
+    sessionId: "new-session",
+    sourceId: "vidking",
+    currentTime: 4,
+    duration: 3600,
+    evidence: "provider-message",
+    observedAt: 14_100,
+  };
+  assert.equal(handoffTargetMissedPosition(handoff, target, 13_900), false);
+  assert.equal(handoffTargetMissedPosition(handoff, target, 14_100), true);
+  assert.equal(handoffTargetMissedPosition(handoff, { ...target, currentTime: 117 }, 14_100), false);
+  assert.equal(handoffTargetMissedPosition(handoff, { ...target, sourceId: "vixsrc" }, 14_100), false);
+});
+
+test("an unconfirmed URL resume can restart the selected target without the resume parameter", () => {
+  const handoff = updateHandoffStatus(createPlaybackHandoff({
+    reason: "manual",
+    fromSessionId: "old-session",
+    fromSourceId: "vidsrc",
+    targetSourceId: "vidking",
+    requestedTime: 120,
+    strategy: "url-param",
+    now: 10_000,
+  }), "unconfirmed", "TARGET_NOT_CONFIRMED", 22_000);
+  assert.equal(handoffContinueRequiresCleanRestart(handoff, "vidking"), true);
+  assert.equal(handoffContinueRequiresCleanRestart(handoff, "vidsrc"), false);
+  assert.equal(handoffContinueRequiresCleanRestart({ ...handoff, status: "confirmed" }, "vidking"), false);
+  assert.equal(handoffContinueRequiresCleanRestart({ ...handoff, strategy: "verified-seek" }, "vidking"), false);
 });
 
 test("handoff capability and timeout states remain explicit", () => {
