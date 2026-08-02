@@ -29,6 +29,8 @@ import {
 import { createVerifiedResumeScript, mobileAdBlockerScript } from './mobileAdBlocker';
 import { playerStyles as styles } from './playerStyles';
 import type { PlaybackSurfaceProps } from './playerTypes';
+import { ResumePlaybackPrompt } from './ResumePlaybackPrompt';
+import { resolveResumeChoiceTime, type ResumePlaybackChoice } from './resumeChoice';
 import { usePlaybackTelemetryController } from './usePlaybackTelemetryController';
 
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
@@ -74,6 +76,11 @@ export function EmbedPlayerSurface({
   const [watchdogDismissed, setWatchdogDismissed] = useState(false);
   const [isLandscape, setIsLandscape] = useState(true);
   const [surfaceReleased, setSurfaceReleased] = useState(false);
+  const [pendingManualSource, setPendingManualSource] = useState<{
+    id: string;
+    label: string;
+    savedTime: number;
+  } | null>(null);
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const observationTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadStartedAt = useRef(Date.now());
@@ -201,7 +208,33 @@ export function EmbedPlayerSurface({
 
   const selectSource = (nextSourceId: string) => {
     if (nextSourceId === sourceId) return;
-    releaseSurfaceThen((snapshot) => onSourceChange(nextSourceId, snapshot, 'manual'));
+    setShowSources(false);
+    telemetry.flush();
+    const snapshot = telemetry.getVerifiedSnapshot();
+    const savedTime = Math.max(0, Number(snapshot?.currentTime) || 0);
+    if (savedTime > 30) {
+      const target = ALL_CINEMA_SOURCES.find((entry) => entry.id === nextSourceId);
+      setPendingManualSource({
+        id: nextSourceId,
+        label: target?.label || nextSourceId,
+        savedTime,
+      });
+      setHudState('sheet-open');
+      setShowControls(true);
+      return;
+    }
+    releaseSurfaceThen((latestSnapshot) => (
+      onSourceChange(nextSourceId, latestSnapshot, 'manual')
+    ));
+  };
+  const completeManualSourceChoice = (choice: ResumePlaybackChoice) => {
+    const pending = pendingManualSource;
+    if (!pending) return;
+    const requestedTime = resolveResumeChoiceTime(choice, pending.savedTime);
+    setPendingManualSource(null);
+    releaseSurfaceThen((snapshot) => (
+      onSourceChange(pending.id, snapshot, 'manual', requestedTime)
+    ));
   };
   const handleFailover = () => {
     releaseSurfaceThen(onAutomaticFailover);
@@ -433,6 +466,20 @@ export function EmbedPlayerSurface({
           mediaType={type}
           onClose={() => {
             setShowSources(false);
+            setHudState('visible');
+            resetHideTimer();
+          }}
+        />
+      )}
+      {pendingManualSource && (
+        <ResumePlaybackPrompt
+          title={title || 'this title'}
+          savedTime={pendingManualSource.savedTime}
+          targetSourceLabel={pendingManualSource.label}
+          opensPaused={pendingManualSource.id === 'vidking'}
+          onChoose={completeManualSourceChoice}
+          onCancel={() => {
+            setPendingManualSource(null);
             setHudState('visible');
             resetHideTimer();
           }}

@@ -3,6 +3,7 @@ import { AppState, View } from 'react-native';
 import { useEvent, useEventListener } from 'expo';
 import { useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { ALL_CINEMA_SOURCES } from '@orion/shared/sources';
 import { PlayerHUD } from '../../components/player/PlayerHUD';
 import { SourcesSheet } from '../../components/player/SourcesSheet';
 import { WatchdogWarning } from '../../components/player/WatchdogWarning';
@@ -10,6 +11,8 @@ import { useLibrary } from '../../context/LibraryContext';
 import { usePlaybackTelemetryController } from './usePlaybackTelemetryController';
 import { playerStyles as styles } from './playerStyles';
 import type { PlaybackSurfaceProps } from './playerTypes';
+import { ResumePlaybackPrompt } from './ResumePlaybackPrompt';
+import { resolveResumeChoiceTime, type ResumePlaybackChoice } from './resumeChoice';
 
 interface NativePlayerSurfaceProps extends PlaybackSurfaceProps {
   streamUrl: string;
@@ -32,7 +35,13 @@ export function NativePlayerSurface({
   const { recordPlayback } = useLibrary();
   const [showSources, setShowSources] = useState(false);
   const [watchdogDismissed, setWatchdogDismissed] = useState(false);
+  const [pendingManualSource, setPendingManualSource] = useState<{
+    id: string;
+    label: string;
+    savedTime: number;
+  } | null>(null);
   const priorTimeRef = useRef(initialResumeTime);
+  const resumeAfterPromptRef = useRef(false);
   const media = useMemo(() => ({
     id,
     mediaType: type,
@@ -115,7 +124,29 @@ export function NativePlayerSurface({
 
   const selectSource = (nextSourceId: string) => {
     telemetry.flush();
-    onSourceChange(nextSourceId, telemetry.getVerifiedSnapshot(), 'manual');
+    const snapshot = telemetry.getVerifiedSnapshot();
+    const savedTime = Math.max(0, Number(snapshot?.currentTime) || 0);
+    setShowSources(false);
+    if (savedTime > 30) {
+      resumeAfterPromptRef.current = player.playing;
+      player.pause();
+      const target = ALL_CINEMA_SOURCES.find((entry) => entry.id === nextSourceId);
+      setPendingManualSource({
+        id: nextSourceId,
+        label: target?.label || nextSourceId,
+        savedTime,
+      });
+      return;
+    }
+    onSourceChange(nextSourceId, snapshot, 'manual');
+  };
+  const completeManualSourceChoice = (choice: ResumePlaybackChoice) => {
+    const pending = pendingManualSource;
+    if (!pending) return;
+    const snapshot = telemetry.getVerifiedSnapshot();
+    const requestedTime = resolveResumeChoiceTime(choice, pending.savedTime);
+    setPendingManualSource(null);
+    onSourceChange(pending.id, snapshot, 'manual', requestedTime);
   };
   const handleFailover = () => {
     telemetry.flush();
@@ -145,6 +176,20 @@ export function NativePlayerSurface({
           onFailover={handleFailover}
           onSelectSource={() => setShowSources(true)}
           onDismiss={() => setWatchdogDismissed(true)}
+        />
+      )}
+      {pendingManualSource && (
+        <ResumePlaybackPrompt
+          title={title || 'this title'}
+          savedTime={pendingManualSource.savedTime}
+          targetSourceLabel={pendingManualSource.label}
+          opensPaused={pendingManualSource.id === 'vidking'}
+          onChoose={completeManualSourceChoice}
+          onCancel={() => {
+            setPendingManualSource(null);
+            if (resumeAfterPromptRef.current) player.play();
+            resumeAfterPromptRef.current = false;
+          }}
         />
       )}
     </View>

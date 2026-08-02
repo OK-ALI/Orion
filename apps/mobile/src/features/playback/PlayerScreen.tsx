@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   DEFAULT_CINEMA_SOURCE_ID,
   getSourceResumeParams,
@@ -19,6 +19,12 @@ import { reportMobileDiagnosticError, updateMobileDiagnostics } from '../../serv
 import { EmbedPlayerSurface } from './EmbedPlayerSurface';
 import { NativePlayerSurface } from './NativePlayerSurface';
 import { HandoffNotice } from './HandoffNotice';
+import { ResumePlaybackPrompt } from './ResumePlaybackPrompt';
+import {
+  applyMobileResumePlaybackPolicy,
+  resolveResumeChoiceTime,
+  type ResumePlaybackChoice,
+} from './resumeChoice';
 import {
   HANDOFF_CONFIRMATION_TIMEOUT_MS,
   confirmPlaybackHandoff,
@@ -44,6 +50,7 @@ type PlayerRouteParams = {
 };
 
 export default function PlayerScreen() {
+  const router = useRouter();
   const { id, type, title, season, episode, offlineUri, isOffline } =
     useLocalSearchParams<PlayerRouteParams>();
   const { getPlaybackProgress } = useLibrary();
@@ -52,9 +59,12 @@ export default function PlayerScreen() {
   const [handoff, setHandoffState] = useState<PlaybackHandoffV1 | null>(null);
   const handoffRef = useRef<PlaybackHandoffV1 | null>(null);
   const existingProgress = getPlaybackProgress(type, id, Number(season) || null, Number(episode) || null);
-  const [resumeTime, setResumeTime] = useState(() => (
-    existingProgress?.completed ? 0 : Math.max(0, Number(existingProgress?.currentTime) || 0)
-  ));
+  const initialSavedTime = existingProgress?.completed
+    ? 0
+    : Math.max(0, Number(existingProgress?.currentTime) || 0);
+  const [initialChoicePending, setInitialChoicePending] = useState(initialSavedTime > 30);
+  const [resumeTime, setResumeTime] = useState(initialSavedTime > 30 ? 0 : initialSavedTime);
+  const [suppressProviderAutoplay, setSuppressProviderAutoplay] = useState(false);
 
   const publishHandoff = useCallback((next: PlaybackHandoffV1 | null) => {
     handoffRef.current = next;
@@ -91,15 +101,24 @@ export default function PlayerScreen() {
 
   const activeStreamUrl = useMemo(() => {
     if (isOffline === 'true' && offlineUri) return offlineUri;
+    const baseResumeParams: Record<string, string | number> = {
+      ...getSourceResumeParams(sourceId, resumeTime),
+    };
+    const resumeParams = applyMobileResumePlaybackPolicy(
+      sourceId,
+      resumeTime,
+      baseResumeParams,
+      suppressProviderAutoplay,
+    );
     return getSourceUrl(
       sourceId,
       type,
       { tmdbId: id, imdbId: imdbId || undefined },
       Number(season) || 1,
       Number(episode) || 1,
-      getSourceResumeParams(sourceId, resumeTime),
+      resumeParams,
     );
-  }, [episode, id, imdbId, isOffline, offlineUri, resumeTime, season, sourceId, type]);
+  }, [episode, id, imdbId, isOffline, offlineUri, resumeTime, season, sourceId, suppressProviderAutoplay, type]);
 
   const launchHandoff = useCallback(({
     targetSourceId,
@@ -138,6 +157,9 @@ export default function PlayerScreen() {
       return false;
     }
     publishHandoff(next);
+    setSuppressProviderAutoplay(
+      targetSourceId === 'vidking' && reason !== 'automatic' && Number(requestedTime) > 0,
+    );
     setResumeTime(requestedTime || 0);
     setSourceId(targetSourceId);
     return true;
@@ -147,9 +169,12 @@ export default function PlayerScreen() {
     nextSourceId: string,
     snapshot: VerifiedPlaybackSnapshot | null,
     reason: 'manual' | 'automatic',
+    requestedTimeOverride?: number | null,
   ) => {
     if ((reason === 'manual' && nextSourceId === sourceId) || handoffIsPending(handoffRef.current)) return false;
-    const requestedTime = getFreshVerifiedPosition(snapshot);
+    const requestedTime = requestedTimeOverride !== undefined
+      ? requestedTimeOverride
+      : getFreshVerifiedPosition(snapshot);
     if (reason === 'automatic') {
       if (requestedTime == null) {
         reportMobileDiagnosticError({
@@ -169,6 +194,13 @@ export default function PlayerScreen() {
         fromSessionId: snapshot?.sessionId ?? null,
       });
     }
+    if (requestedTime === 0) {
+      publishHandoff(null);
+      setSuppressProviderAutoplay(false);
+      setResumeTime(0);
+      setSourceId(nextSourceId);
+      return true;
+    }
     return launchHandoff({
       targetSourceId: nextSourceId,
       requestedTime,
@@ -176,7 +208,7 @@ export default function PlayerScreen() {
       fromSourceId: sourceId,
       fromSessionId: snapshot?.sessionId ?? null,
     });
-  }, [launchHandoff, sourceId, type]);
+  }, [launchHandoff, publishHandoff, sourceId, type]);
 
   const retryAutomaticHandoff = useCallback((expired: PlaybackHandoffV1) => {
     markMobileSourceFailure(
@@ -272,8 +304,18 @@ export default function PlayerScreen() {
     if (!active) return;
     const restartWithoutResume = handoffContinueRequiresCleanRestart(active, sourceId);
     publishHandoff(null);
-    if (restartWithoutResume) setResumeTime(0);
+    if (restartWithoutResume) {
+      setSuppressProviderAutoplay(false);
+      setResumeTime(0);
+    }
   }, [publishHandoff, sourceId]);
+
+  const chooseInitialPosition = useCallback((choice: ResumePlaybackChoice) => {
+    const chosenTime = resolveResumeChoiceTime(choice, initialSavedTime);
+    setSuppressProviderAutoplay(sourceId === 'vidking' && chosenTime > 0);
+    setResumeTime(chosenTime);
+    setInitialChoicePending(false);
+  }, [initialSavedTime, sourceId]);
 
   const commonProps = {
     title,
@@ -289,7 +331,7 @@ export default function PlayerScreen() {
     initialResumeTime: resumeTime,
   };
 
-  const surface = isOffline === 'true' && offlineUri ? (
+  const surface = initialChoicePending ? null : isOffline === 'true' && offlineUri ? (
     <NativePlayerSurface key={`local-${offlineUri}`} streamUrl={offlineUri} {...commonProps} sourceId="local" />
   ) : (
     <EmbedPlayerSurface
@@ -303,6 +345,15 @@ export default function PlayerScreen() {
   return (
     <View style={{ flex: 1 }}>
       {surface}
+      {initialChoicePending && (
+        <ResumePlaybackPrompt
+          title={title || 'this title'}
+          savedTime={initialSavedTime}
+          opensPaused={sourceId === 'vidking'}
+          onChoose={chooseInitialPosition}
+          onCancel={() => router.back()}
+        />
+      )}
       {handoff && handoff.status !== 'confirmed' && handoff.fromSourceId !== handoff.targetSourceId && (
         <HandoffNotice
           handoff={handoff}

@@ -30,6 +30,11 @@ const {
 const {
   createVerifiedResumeScript,
 } = require("../src/features/playback/mobileAdBlocker.ts");
+const {
+  applyMobileResumePlaybackPolicy,
+  formatPlaybackTime,
+  resolveResumeChoiceTime,
+} = require("../src/features/playback/resumeChoice.ts");
 
 const session = (overrides = {}) => ({
   schemaVersion: 2,
@@ -291,6 +296,28 @@ test("bounded verified seek is idempotent and reports its result", () => {
   assert.match(script, /ORION_RESUME_RESULT/);
   assert.match(script, /Math\.abs\(Number\(video\.currentTime\) - 42\) <= 5/);
   assert.doesNotMatch(script, /prototype\.|set currentTime/);
+});
+
+test("resume prompt choices resolve to explicit playback positions", () => {
+  assert.equal(resolveResumeChoiceTime("resume", 125.8), 125.8);
+  assert.equal(resolveResumeChoiceTime("replay-30", 125.8), 95.8);
+  assert.equal(resolveResumeChoiceTime("replay-30", 12), 0);
+  assert.equal(resolveResumeChoiceTime("start-over", 125.8), 0);
+  assert.equal(resolveResumeChoiceTime("resume", Number.NaN), 0);
+  assert.equal(formatPlaybackTime(125.8), "2:05");
+  assert.equal(formatPlaybackTime(3_725), "1:02:05");
+  assert.deepEqual(
+    applyMobileResumePlaybackPolicy("vidking", 125, { progress: 125 }, true),
+    { progress: 125, autoPlay: "false" },
+  );
+  assert.deepEqual(
+    applyMobileResumePlaybackPolicy("vidking", 0, {}, true),
+    {},
+  );
+  assert.deepEqual(
+    applyMobileResumePlaybackPolicy("videasy", 125, { progress: 125 }, true),
+    { progress: 125 },
+  );
 });
 
 test("player-event observer is restricted to documented mobile providers and shapes", () => {

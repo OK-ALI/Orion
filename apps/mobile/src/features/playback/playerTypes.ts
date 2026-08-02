@@ -21,6 +21,7 @@ export interface PlaybackSurfaceProps {
     sourceId: string,
     verifiedSnapshot: VerifiedPlaybackSnapshot | null,
     reason: 'manual' | 'automatic',
+    requestedTimeOverride?: number | null,
   ) => boolean;
   onAutomaticFailover: (verifiedSnapshot: VerifiedPlaybackSnapshot | null) => boolean;
   onPlaybackSnapshot?: (snapshot: VerifiedPlaybackSnapshot) => void;
