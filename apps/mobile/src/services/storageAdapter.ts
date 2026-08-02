@@ -27,12 +27,18 @@ const memoryStorageIsAllowed =
 
 if (Platform.OS !== 'web') {
   try {
-    const { MMKV } = require('react-native-mmkv');
-    const mmkv = new MMKV();
+    const { createMMKV } = require('react-native-mmkv') as typeof import('react-native-mmkv');
+    if (typeof createMMKV !== 'function') {
+      throw new Error('MMKV_API_UNAVAILABLE');
+    }
+
+    // MMKV v4 uses the Nitro-backed factory API. Its files live in Orion's
+    // private application directory and do not require Android storage access.
+    const mmkv = createMMKV({ id: 'orion.mobile' });
     adapter = {
       get: (key: string) => mmkv.getString(key) || null,
       set: (key: string, value: string) => mmkv.set(key, value),
-      remove: (key: string) => mmkv.delete(key),
+      remove: (key: string) => mmkv.remove(key),
     };
     storageHealth = { state: 'ready', backend: 'mmkv' };
   } catch {

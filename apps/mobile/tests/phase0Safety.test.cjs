@@ -11,6 +11,10 @@ const read = (relative) => fs.readFileSync(path.join(mobileRoot, relative), "utf
 test("native storage failure is surfaced instead of silently becoming volatile", () => {
   const storage = read("src/services/storageAdapter.ts");
   assert.match(storage, /MMKV_INIT_FAILED/);
+  assert.match(storage, /createMMKV\(\{ id: 'orion\.mobile' \}\)/);
+  assert.match(storage, /mmkv\.remove\(key\)/);
+  assert.doesNotMatch(storage, /new MMKV\(/);
+  assert.doesNotMatch(storage, /mmkv\.delete\(/);
   assert.match(storage, /state:\s*'unavailable'/);
   assert.match(storage, /EXPO_PUBLIC_ALLOW_MEMORY_STORAGE/);
   assert.doesNotMatch(
