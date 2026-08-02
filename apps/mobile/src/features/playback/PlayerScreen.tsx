@@ -33,7 +33,7 @@ import {
   handoffTargetMissedPosition,
   updateHandoffStatus,
 } from './handoffPolicy';
-import { getNextMobileContinuitySource } from './mobileSources';
+import { getNextMobileContinuitySource, getPreferredMobileResumeSource } from './mobileSources';
 import type { VerifiedPlaybackSnapshot } from './playerTypes';
 
 type PlayerRouteParams = {
@@ -42,20 +42,31 @@ type PlayerRouteParams = {
   title: string;
   season?: string;
   episode?: string;
+  year?: string;
+  seriesTitle?: string;
+  posterPath?: string;
+  backdropPath?: string;
+  episodeTitle?: string;
   offlineUri?: string;
   isOffline?: string;
 };
 
 export default function PlayerScreen() {
   const router = useRouter();
-  const { id, type, title, season, episode, offlineUri, isOffline } =
+  const {
+    id, type, title, season, episode, year, seriesTitle,
+    posterPath, backdropPath, episodeTitle, offlineUri, isOffline,
+  } =
     useLocalSearchParams<PlayerRouteParams>();
   const { getPlaybackProgress } = useLibrary();
-  const [sourceId, setSourceId] = useState(DEFAULT_CINEMA_SOURCE_ID);
+  const existingProgress = getPlaybackProgress(type, id, Number(season) || null, Number(episode) || null);
+  const [sourceId, setSourceId] = useState(() => getPreferredMobileResumeSource(
+    existingProgress?.sourceId || DEFAULT_CINEMA_SOURCE_ID,
+    type,
+  ));
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [handoff, setHandoffState] = useState<PlaybackHandoffV1 | null>(null);
   const handoffRef = useRef<PlaybackHandoffV1 | null>(null);
-  const existingProgress = getPlaybackProgress(type, id, Number(season) || null, Number(episode) || null);
   const initialSavedTime = existingProgress?.completed
     ? 0
     : Math.max(0, Number(existingProgress?.currentTime) || 0);
@@ -279,6 +290,11 @@ export default function PlayerScreen() {
 
   const commonProps = {
     title,
+    seriesTitle,
+    year,
+    posterPath,
+    backdropPath,
+    episodeTitle,
     sourceId,
     onSourceChange: changeSource,
     onAutomaticFailover: (snapshot: VerifiedPlaybackSnapshot | null) => changeSource(sourceId, snapshot, 'automatic'),

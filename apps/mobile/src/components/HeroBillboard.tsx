@@ -1,12 +1,13 @@
 import { View, Text, StyleSheet, ImageBackground, Pressable, Platform, FlatList, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { backgrounds, spacing, fontSizes, fontFamilies, accent } from '@orion/shared/tokens';
+import { spacing, fontFamilies, semantic } from '@orion/shared/tokens';
 import { imgUrl } from '@orion/shared/api';
 import { TmdbMediaItem } from '@orion/shared/types';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useLibrary } from '../context/LibraryContext';
+import { useOrionTheme } from '../context/ThemeContext';
 
 interface HeroBillboardProps {
   items: TmdbMediaItem[];
@@ -26,6 +27,7 @@ function HeroSlide({ item, onPlay, onInfo, onPress, width }: {
   width: number;
 }) {
   const { isSaved, toggleSave } = useLibrary();
+  const { theme } = useOrionTheme();
   const isMovie = item.media_type === 'movie' || !item.name;
   const title = isMovie ? item.title : item.name;
   const backdrop = imgUrl(item.backdrop_path, 'original');
@@ -41,13 +43,13 @@ function HeroSlide({ item, onPlay, onInfo, onPress, width }: {
         >
           {/* Top-to-Bottom dark gradient */}
           <LinearGradient
-            colors={['rgba(10, 10, 15, 0.5)', 'transparent']}
+            colors={[theme.mediaScrim, 'transparent']}
             style={StyleSheet.absoluteFill}
           />
           
           {/* Left-to-Right vignette */}
           <LinearGradient
-            colors={['rgba(5, 5, 10, 0.95)', 'rgba(5, 5, 10, 0.5)', 'transparent']}
+            colors={[theme.mediaScrim, 'rgba(5, 5, 10, 0.45)', 'transparent']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={StyleSheet.absoluteFill}
@@ -58,56 +60,56 @@ function HeroSlide({ item, onPlay, onInfo, onPress, width }: {
 
           {/* Bottom-to-Top heavy fade */}
           <LinearGradient
-            colors={['rgba(5, 5, 10, 0.1)', 'rgba(5, 5, 10, 0.5)', 'rgba(5, 5, 10, 0.85)', backgrounds.base]}
+            colors={['rgba(5, 5, 10, 0.1)', 'rgba(5, 5, 10, 0.5)', theme.mediaScrim, theme.background]}
             locations={[0, 0.35, 0.7, 1]}
             style={styles.bottomGradient}
           />
 
           <View style={styles.content}>
-            <Text style={styles.tag}>
+            <Text style={[styles.tag, { color: theme.accent }]}>
               SPOTLIGHT · {isMovie ? 'MOVIE' : 'SERIES'}
             </Text>
             
-            <Text style={styles.title} numberOfLines={1}>
+            <Text style={[styles.title, { color: theme.onAccent }]} numberOfLines={1}>
               {title}
             </Text>
             
             <View style={styles.metaRow}>
               {!!item.vote_average && (
                 <View style={styles.ratingBadge}>
-                  <Ionicons name="star" size={12} color="#fbbf24" />
-                  <Text style={styles.metaText}>{item.vote_average.toFixed(1)}</Text>
+                  <Ionicons name="star" size={12} color={semantic.warning} />
+                  <Text style={[styles.metaText, { color: theme.onAccent }]}>{item.vote_average.toFixed(1)}</Text>
                 </View>
               )}
-              <Text style={styles.metaText}>
+              <Text style={[styles.metaText, { color: theme.onAccent }]}>
                 {item.release_date ? item.release_date.slice(0, 4) : item.first_air_date?.slice(0, 4)}
               </Text>
             </View>
 
-            <Text style={styles.overview} numberOfLines={2}>
+            <Text style={[styles.overview, { color: theme.onAccent }]} numberOfLines={2}>
               {item.overview}
             </Text>
 
             <View style={styles.buttonRow}>
               <Pressable onPress={onPlay} style={({ pressed }) => [styles.playWrapper, pressed && styles.pressed]}>
-                <View style={styles.playButtonGlow} />
-                <View style={styles.playButton}>
-                  <Ionicons name="play" size={15} color="#fff" />
-                  <Text style={styles.playText}>Play</Text>
+                <View style={[styles.playButtonGlow, { backgroundColor: theme.accent }]} />
+                <View style={[styles.playButton, { backgroundColor: theme.accent }]}>
+                  <Ionicons name="play" size={15} color={theme.onAccent} />
+                  <Text style={[styles.playText, { color: theme.onAccent }]}>Play</Text>
                 </View>
               </Pressable>
               
               <Pressable style={({ pressed }) => [styles.infoButton, pressed && styles.pressed]} onPress={(e) => { e.stopPropagation(); toggleSave(item); }}>
-                <BlurView intensity={80} tint="light" style={styles.blurButton}>
-                  <Ionicons name={saved ? "checkmark" : "add"} size={18} color="#fff" />
-                  <Text style={styles.infoText}>{saved ? "In My List" : "My List"}</Text>
+                <BlurView intensity={80} tint="dark" style={[styles.blurButton, { backgroundColor: theme.mediaScrim }]}>
+                  <Ionicons name={saved ? "checkmark" : "add"} size={18} color={theme.onAccent} />
+                  <Text style={[styles.infoText, { color: theme.onAccent }]}>{saved ? "In My List" : "My List"}</Text>
                 </BlurView>
               </Pressable>
               
               <Pressable style={({ pressed }) => [styles.infoButton, pressed && styles.pressed]} onPress={(e) => { e.stopPropagation(); onInfo?.(); }}>
-                <BlurView intensity={80} tint="light" style={styles.blurButton}>
-                  <Ionicons name="information-circle-outline" size={18} color="#fff" />
-                  <Text style={styles.infoText}>More Info</Text>
+                <BlurView intensity={80} tint="dark" style={[styles.blurButton, { backgroundColor: theme.mediaScrim }]}>
+                  <Ionicons name="information-circle-outline" size={18} color={theme.onAccent} />
+                  <Text style={[styles.infoText, { color: theme.onAccent }]}>More Info</Text>
                 </BlurView>
               </Pressable>
             </View>
@@ -119,6 +121,7 @@ function HeroSlide({ item, onPlay, onInfo, onPress, width }: {
 }
 
 export function HeroBillboard({ items, onPlay, onInfo, onPress }: HeroBillboardProps) {
+  const { theme, preferences } = useOrionTheme();
   const spotlightItems = useMemo(() => items.slice(0, 5), [items]);
   const baseCount = spotlightItems.length;
 
@@ -143,7 +146,7 @@ export function HeroBillboard({ items, onPlay, onInfo, onPress }: HeroBillboardP
   // Smooth continuous forward auto-rotation
   const startTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
-    if (baseCount <= 1 || loopItems.length === 0) return;
+    if (baseCount <= 1 || loopItems.length === 0 || preferences.reducedMotion) return;
 
     timerRef.current = setInterval(() => {
       let nextIndex = flatIndexRef.current + 1;
@@ -161,7 +164,7 @@ export function HeroBillboard({ items, onPlay, onInfo, onPress }: HeroBillboardP
       flatIndexRef.current = nextIndex;
       setActiveDotIndex(nextIndex % baseCount);
     }, AUTO_ROTATE_INTERVAL);
-  }, [baseCount, loopItems.length]);
+  }, [baseCount, loopItems.length, preferences.reducedMotion]);
 
   useEffect(() => {
     startTimer();
@@ -234,7 +237,8 @@ export function HeroBillboard({ items, onPlay, onInfo, onPress }: HeroBillboardP
               key={i}
               style={[
                 styles.dot,
-                i === activeDotIndex && styles.dotActive,
+                { backgroundColor: theme.border },
+                i === activeDotIndex && [styles.dotActive, { backgroundColor: theme.accent, shadowColor: theme.accent }],
               ]}
             />
           ))}
@@ -269,14 +273,12 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   tag: {
-    color: accent.primary,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.2,
     marginBottom: 4,
   },
   title: {
-    color: '#ffffff',
     fontSize: 28,
     fontFamily: fontFamilies.display,
     fontWeight: '900',
@@ -302,13 +304,12 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   metaText: {
-    color: 'rgba(255, 255, 255, 0.85)',
     fontSize: 11,
     fontFamily: fontFamilies.heading,
     fontWeight: '700',
   },
   overview: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    opacity: 0.78,
     fontSize: 12,
     lineHeight: 16,
     marginBottom: 14,
@@ -328,7 +329,6 @@ const styles = StyleSheet.create({
     left: 4,
     right: 4,
     bottom: 0,
-    backgroundColor: accent.primary,
     borderRadius: 8,
     opacity: 0.6,
   },
@@ -336,13 +336,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: accent.primary,
     paddingHorizontal: 16,
     paddingVertical: 9,
     borderRadius: 8,
   },
   playText: {
-    color: '#ffffff',
     fontSize: 12,
     fontFamily: fontFamilies.heading,
     fontWeight: '800',
@@ -355,12 +353,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     paddingHorizontal: 16,
     paddingVertical: 9,
   },
   infoText: {
-    color: '#ffffff',
     fontSize: 12,
     fontFamily: fontFamilies.heading,
     fontWeight: '700',
@@ -389,12 +385,9 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.35)',
   },
   dotActive: {
     width: 18,
-    backgroundColor: accent.primary,
-    shadowColor: accent.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 6,

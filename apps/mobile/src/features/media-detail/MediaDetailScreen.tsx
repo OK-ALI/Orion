@@ -218,7 +218,12 @@ export default function MediaDetailScreen() {
                 style={({ pressed }) => [styles.playWrapper, styles.primaryWatchAction, pressed && styles.pressed]}
                 onPress={() => router.push({
                   pathname: '/player/[id]',
-                  params: { id, type, title, year }
+                  params: {
+                    id, type, title, year,
+                    seriesTitle: type === 'tv' ? title : undefined,
+                    posterPath: data.poster_path || undefined,
+                    backdropPath: data.backdrop_path || undefined,
+                  }
                 })}
               >
                 <View style={styles.playButtonGlow} />
@@ -375,7 +380,15 @@ export default function MediaDetailScreen() {
                       style={({ pressed }) => [styles.episodeCard, pressed && { opacity: 0.85 }]}
                       onPress={() => router.push({
                         pathname: '/player/[id]',
-                        params: { id, type, title: ep.name, year, season: selectedSeason, episode: ep.episode_number }
+                        params: {
+                          id, type, title: ep.name, year,
+                          seriesTitle: title,
+                          season: selectedSeason,
+                          episode: ep.episode_number,
+                          episodeTitle: ep.name,
+                          posterPath: data.poster_path || undefined,
+                          backdropPath: ep.still_path || data.backdrop_path || undefined,
+                        }
                       })}
                     >
                       <View style={styles.epThumbWrapper}>

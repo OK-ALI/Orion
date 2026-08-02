@@ -11,6 +11,11 @@ export interface VerifiedPlaybackSnapshot {
 
 export interface PlaybackSurfaceProps {
   title?: string;
+  seriesTitle?: string;
+  year?: string;
+  posterPath?: string;
+  backdropPath?: string;
+  episodeTitle?: string;
   sourceId: string;
   id: string;
   type: MobileMediaType;

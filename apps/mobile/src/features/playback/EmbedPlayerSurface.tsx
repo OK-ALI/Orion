@@ -51,6 +51,11 @@ const QUIET_CURRENT_SURFACE_SCRIPT = `
 export function EmbedPlayerSurface({
   embedUrl,
   title,
+  seriesTitle,
+  year,
+  posterPath,
+  backdropPath,
+  episodeTitle,
   sourceId,
   id,
   type,
@@ -95,13 +100,24 @@ export function EmbedPlayerSurface({
   const media = useMemo(() => ({
     id,
     mediaType: type,
-    title: title || 'Orion Stream',
+    title: seriesTitle || title || 'Orion Stream',
+    year: Number(year) || null,
     season: Number(season) || null,
     episode: Number(episode) || null,
-  } as const), [episode, id, season, title, type]);
+  } as const), [episode, id, season, seriesTitle, title, type, year]);
   const item = useMemo(
-    () => ({ id, title: media.title, media_type: type }),
-    [id, media.title, type],
+    () => ({
+      id,
+      title: media.title,
+      name: type === 'tv' ? media.title : undefined,
+      media_type: type,
+      year,
+      poster_path: posterPath || null,
+      backdrop_path: backdropPath || null,
+      series_title: seriesTitle || null,
+      episode_title: episodeTitle || (type === 'tv' ? title : null),
+    }),
+    [backdropPath, episodeTitle, id, media.title, posterPath, seriesTitle, title, type, year],
   );
   const telemetry = usePlaybackTelemetryController({
     item,

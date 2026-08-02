@@ -94,6 +94,35 @@ export interface MobilePlaybackTelemetryV1 {
   observedAt: number;
 }
 
+export interface PlaybackPresentationMetadata {
+  posterPath: string | null;
+  backdropPath: string | null;
+  seriesTitle: string | null;
+  episodeTitle: string | null;
+}
+
+export interface PlaybackProgressV3 {
+  schemaVersion: 3;
+  key: string;
+  mediaIdentity: MediaIdentity;
+  presentation: PlaybackPresentationMetadata;
+  currentTime: number;
+  duration: number;
+  percent: number | null;
+  sourceId: string | null;
+  evidence: MobilePlaybackEvidence | null;
+  sessionId: string | null;
+  startedAt: number;
+  lastPlayedAt: number;
+  completed: boolean;
+}
+
+export interface ContinueWatchingEntry {
+  key: string;
+  progress: PlaybackProgressV3;
+  displayProgress: "percentage" | "elapsed";
+}
+
 export type MobileResumeStrategy = "url-param" | "verified-seek" | "native" | "none";
 
 export type PlaybackHandoffStatus =

@@ -21,6 +21,11 @@ interface NativePlayerSurfaceProps extends PlaybackSurfaceProps {
 export function NativePlayerSurface({
   streamUrl,
   title,
+  seriesTitle,
+  year,
+  posterPath,
+  backdropPath,
+  episodeTitle,
   sourceId,
   id,
   type,
@@ -45,13 +50,24 @@ export function NativePlayerSurface({
   const media = useMemo(() => ({
     id,
     mediaType: type,
-    title: title || 'Playing Video',
+    title: seriesTitle || title || 'Playing Video',
+    year: Number(year) || null,
     season: Number(season) || null,
     episode: Number(episode) || null,
-  } as const), [episode, id, season, title, type]);
+  } as const), [episode, id, season, seriesTitle, title, type, year]);
   const item = useMemo(
-    () => ({ id, title: media.title, media_type: type }),
-    [id, media.title, type],
+    () => ({
+      id,
+      title: media.title,
+      name: type === 'tv' ? media.title : undefined,
+      media_type: type,
+      year,
+      poster_path: posterPath || null,
+      backdrop_path: backdropPath || null,
+      series_title: seriesTitle || null,
+      episode_title: episodeTitle || (type === 'tv' ? title : null),
+    }),
+    [backdropPath, episodeTitle, id, media.title, posterPath, seriesTitle, title, type, year],
   );
   const telemetry = usePlaybackTelemetryController({
     item,

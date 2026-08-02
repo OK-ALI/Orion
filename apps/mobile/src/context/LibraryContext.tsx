@@ -1,9 +1,23 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { mmkvStorageAdapter } from '../services/storageAdapter';
-import { TmdbMediaItem, type MobilePlaybackEvidence } from '@orion/shared/types';
+import {
+  TmdbMediaItem,
+  type ContinueWatchingEntry,
+  type MobilePlaybackEvidence,
+  type PlaybackProgressV3,
+} from '@orion/shared/types';
 import { tmdbFetch } from '@orion/shared/api';
 import { canPersistVerifiedPlayback } from '../features/playback/playbackEvidence';
 import { updateMobileDiagnostics } from '../services/mobileDiagnostics';
+import {
+  historyEntryKey,
+  markProgressRecordWatched,
+  normalizePlaybackProgress,
+  playbackProgressKey,
+  selectContinueWatching,
+  withoutHistoryEntry,
+  withoutProgressRecord,
+} from '../features/library/playbackLibrary';
 
 function getLibraryMediaType(item: any = {}) {
   return item.media_type || (item.first_air_date || item.name ? "tv" : "movie");
@@ -55,6 +69,11 @@ interface LibraryContextType {
   markUnwatched: (item: TmdbMediaItem, options?: { isEpisode?: boolean, seriesId?: number | string }) => void;
   isWatched: (item: TmdbMediaItem, options?: { isEpisode?: boolean, seriesId?: number | string }) => boolean;
   clearHistory: () => void;
+  removeHistoryEntry: (key: string) => void;
+  removeProgress: (key: string) => void;
+  markProgressWatched: (key: string) => void;
+  getContinueWatching: () => ContinueWatchingEntry[];
+  enrichPlaybackMetadata: (key: string) => Promise<void>;
   recordPlayback: (record: {
     item: any;
     mediaType: 'movie' | 'tv';
@@ -66,7 +85,7 @@ interface LibraryContextType {
     evidence?: MobilePlaybackEvidence | null;
     sessionId?: string | null;
   }) => void;
-  getPlaybackProgress: (mediaType: 'movie' | 'tv', id: string | number, season?: number | null, episode?: number | null) => any;
+  getPlaybackProgress: (mediaType: 'movie' | 'tv', id: string | number, season?: number | null, episode?: number | null) => PlaybackProgressV3 | null;
 }
 
 const LibraryContext = createContext<LibraryContextType | null>(null);
@@ -87,6 +106,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const watchedRef = useRef(watched);
   const historyRef = useRef(history);
   const progressRef = useRef(progress);
+  const metadataRequestsRef = useRef(new Map<string, Promise<void>>());
 
   useEffect(() => { savedRef.current = saved; }, [saved]);
   useEffect(() => { watchedRef.current = watched; }, [watched]);
@@ -174,15 +194,45 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     mmkvStorageAdapter.set(STORAGE_KEYS.HISTORY, JSON.stringify([]));
   }, []);
 
+  const removeHistoryEntry = useCallback((key: string) => {
+    const next = withoutHistoryEntry(historyRef.current, key);
+    historyRef.current = next;
+    setHistory(next);
+    mmkvStorageAdapter.set(STORAGE_KEYS.HISTORY, JSON.stringify(next));
+  }, []);
+
   const getProgressKey = useCallback((
     mediaType: 'movie' | 'tv',
     id: string | number,
     season?: number | null,
     episode?: number | null,
   ) => {
-    if (mediaType === 'tv' && season && episode) return `tv_${id}_s${season}_e${episode}`;
-    return `${mediaType}_${id}`;
+    return playbackProgressKey(mediaType, id, season, episode);
   }, []);
+
+  const removeProgress = useCallback((key: string) => {
+    const next = withoutProgressRecord(progressRef.current, key);
+    if (next === progressRef.current) return;
+    progressRef.current = next;
+    setProgress(next);
+    mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(next));
+  }, []);
+
+  const markProgressWatched = useCallback((key: string) => {
+    const next = markProgressRecordWatched(progressRef.current, watchedRef.current, key);
+    if (!next) return;
+    watchedRef.current = next.watched;
+    progressRef.current = next.progress;
+    setWatched(next.watched);
+    setProgress(next.progress);
+    mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(next.watched));
+    mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(next.progress));
+  }, []);
+
+  const getContinueWatching = useCallback(
+    () => selectContinueWatching(progressRef.current, watchedRef.current),
+    [],
+  );
 
   const recordPlayback = useCallback(({
     item,
@@ -212,15 +262,23 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     const key = getProgressKey(mediaType, id, season, episode);
     const percent = safeDuration > 0 ? Math.min(100, (safeCurrent / safeDuration) * 100) : null;
     const updatedAt = Date.now();
-    const progressRecord = {
-      schemaVersion: 2,
-      media: {
+    const existing = normalizePlaybackProgress(key, progressRef.current[key]);
+    const progressRecord: PlaybackProgressV3 = {
+      schemaVersion: 3,
+      key,
+      mediaIdentity: {
         id,
         mediaType,
         title: getLibraryTitle(item),
         year: Number(getLibraryYear(item)) || null,
         season,
         episode,
+      },
+      presentation: {
+        posterPath: item.poster_path || item.posterPath || existing?.presentation.posterPath || null,
+        backdropPath: item.backdrop_path || item.backdropPath || existing?.presentation.backdropPath || null,
+        seriesTitle: item.series_title || item.seriesTitle || existing?.presentation.seriesTitle || null,
+        episodeTitle: item.episode_title || item.episodeTitle || existing?.presentation.episodeTitle || null,
       },
       currentTime: safeCurrent,
       duration: safeDuration,
@@ -229,7 +287,8 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       evidence,
       sessionId,
       completed: percent != null && percent >= 90,
-      updatedAt,
+      startedAt: existing?.startedAt || updatedAt,
+      lastPlayedAt: updatedAt,
     };
     const nextProgress = { ...progressRef.current, [key]: progressRecord };
     progressRef.current = nextProgress;
@@ -246,6 +305,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       sourceId,
       evidence,
       sessionId,
+      lastPlayedAt: updatedAt,
       updatedAt,
     };
     const nextHistory = [
@@ -268,7 +328,78 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     id: string | number,
     season?: number | null,
     episode?: number | null,
-  ) => progressRef.current[getProgressKey(mediaType, id, season, episode)] || null, [getProgressKey]);
+  ) => {
+    const key = getProgressKey(mediaType, id, season, episode);
+    return normalizePlaybackProgress(key, progressRef.current[key]);
+  }, [getProgressKey]);
+
+  const enrichPlaybackMetadata = useCallback((key: string): Promise<void> => {
+    const existingRequest = metadataRequestsRef.current.get(key);
+    if (existingRequest) return existingRequest;
+    const task = (async () => {
+      const progressEntry = normalizePlaybackProgress(key, progressRef.current[key]);
+      if (!progressEntry) return;
+      const { mediaIdentity, presentation } = progressEntry;
+      const needsSeries = !presentation.posterPath
+        || !presentation.backdropPath
+        || (mediaIdentity.mediaType === 'tv' && !presentation.seriesTitle);
+      const needsEpisode = mediaIdentity.mediaType === 'tv'
+        && mediaIdentity.season != null
+        && mediaIdentity.episode != null
+        && !presentation.episodeTitle;
+      if (!needsSeries && !needsEpisode) return;
+
+      const details = needsSeries
+        ? await tmdbFetch<any>(`/${mediaIdentity.mediaType}/${mediaIdentity.id}`).catch(() => null)
+        : null;
+      const episodeDetails = needsEpisode
+        ? await tmdbFetch<any>(`/tv/${mediaIdentity.id}/season/${mediaIdentity.season}/episode/${mediaIdentity.episode}`).catch(() => null)
+        : null;
+      if (!details && !episodeDetails) return;
+
+      const latest = normalizePlaybackProgress(key, progressRef.current[key]);
+      if (!latest) return;
+      const seriesTitle = mediaIdentity.mediaType === 'tv'
+        ? details?.name || latest.presentation.seriesTitle || latest.mediaIdentity.title
+        : null;
+      const nextEntry: PlaybackProgressV3 = {
+        ...latest,
+        mediaIdentity: {
+          ...latest.mediaIdentity,
+          title: mediaIdentity.mediaType === 'tv'
+            ? seriesTitle || latest.mediaIdentity.title
+            : details?.title || latest.mediaIdentity.title,
+          year: latest.mediaIdentity.year
+            || Number(String(details?.release_date || details?.first_air_date || '').slice(0, 4))
+            || null,
+        },
+        presentation: {
+          posterPath: details?.poster_path || latest.presentation.posterPath,
+          backdropPath: episodeDetails?.still_path || details?.backdrop_path || latest.presentation.backdropPath,
+          seriesTitle,
+          episodeTitle: episodeDetails?.name || latest.presentation.episodeTitle,
+        },
+      };
+      const nextProgress = { ...progressRef.current, [key]: nextEntry };
+      progressRef.current = nextProgress;
+      setProgress(nextProgress);
+      mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(nextProgress));
+
+      const nextHistory = historyRef.current.map((entry) => historyEntryKey(entry) === key ? {
+        ...entry,
+        title: nextEntry.mediaIdentity.title,
+        name: nextEntry.presentation.seriesTitle || entry.name,
+        poster_path: nextEntry.presentation.posterPath,
+        backdrop_path: nextEntry.presentation.backdropPath,
+        episode_title: nextEntry.presentation.episodeTitle,
+      } : entry);
+      historyRef.current = nextHistory;
+      setHistory(nextHistory);
+      mmkvStorageAdapter.set(STORAGE_KEYS.HISTORY, JSON.stringify(nextHistory));
+    })().finally(() => metadataRequestsRef.current.delete(key));
+    metadataRequestsRef.current.set(key, task);
+    return task;
+  }, []);
 
   const value = {
     saved,
@@ -282,6 +413,11 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     markUnwatched,
     isWatched,
     clearHistory,
+    removeHistoryEntry,
+    removeProgress,
+    markProgressWatched,
+    getContinueWatching,
+    enrichPlaybackMetadata,
     recordPlayback,
     getPlaybackProgress,
   };

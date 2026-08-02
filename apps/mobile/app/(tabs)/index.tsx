@@ -1,19 +1,22 @@
 import { View, ScrollView, StyleSheet, ActivityIndicator, FlatList, Text } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import { accent, spacing, backgrounds, text as textTokens, fontFamilies, fontSizes } from '@orion/shared/tokens';
+import { spacing, fontFamilies } from '@orion/shared/tokens';
 import { LinearGradient } from 'expo-linear-gradient';
 import { tmdbFetch } from '@orion/shared/api';
 import { TmdbMediaItem, TmdbPaginatedResponse } from '@orion/shared/types';
 import { HeroBillboard } from '../../src/components/HeroBillboard';
 import { MediaCard } from '../../src/components/MediaCard';
+import { HomeContinueWatching } from '../../src/features/library/HomeContinueWatching';
+import { useOrionTheme } from '../../src/context/ThemeContext';
 
 // ── Desktop Replica Section Header ─────────────────────────────────────────
 function SectionTitle({ title, highlight }: { title: string; highlight: string }) {
+  const { theme } = useOrionTheme();
   return (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>
-        {title} <Text style={styles.sectionHighlight}>{highlight}</Text>
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>
+        {title} <Text style={{ color: theme.accent }}>{highlight}</Text>
       </Text>
     </View>
   );
@@ -42,6 +45,7 @@ function MediaRow({ items, onPress }: { items: TmdbMediaItem[]; onPress: (item: 
 
 // ── Main Home Screen ───────────────────────────────────────────────────────
 export default function HomeScreen() {
+  const { theme } = useOrionTheme();
   const [trendingMovies, setTrendingMovies] = useState<TmdbMediaItem[]>([]);
   const [trendingTV, setTrendingTV] = useState<TmdbMediaItem[]>([]);
   const [kDramas, setKDramas] = useState<TmdbMediaItem[]>([]);
@@ -100,14 +104,19 @@ export default function HomeScreen() {
     const year = type === 'movie' ? item.release_date?.slice(0, 4) : item.first_air_date?.slice(0, 4);
     router.push({
       pathname: '/player/[id]',
-      params: { id: item.id, type, title, year },
+      params: {
+        id: item.id, type, title, year,
+        seriesTitle: type === 'tv' ? title : undefined,
+        posterPath: item.poster_path || undefined,
+        backdropPath: item.backdrop_path || undefined,
+      },
     });
   };
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={accent.primary} />
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
   }
@@ -121,15 +130,15 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Cinema Starlight Background */}
       <LinearGradient
         colors={[
-          '#1e0a1a',
-          backgrounds.base,
-          backgrounds.base,
-          backgrounds.base,
-          '#2a2110',
+          theme.accentSoft,
+          theme.background,
+          theme.background,
+          theme.background,
+          theme.surface,
         ]}
         locations={[0, 0.3, 0.5, 0.8, 1]}
         start={{ x: 0, y: 1 }}
@@ -147,6 +156,8 @@ export default function HomeScreen() {
             onPlay={(item) => navigateToPlayer(item)}
           />
         )}
+
+        <HomeContinueWatching />
         
         {/* ── Trending Movies Row ── */}
         {trendingMovies.length > 0 && (
@@ -190,7 +201,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: backgrounds.base,
   },
   scrollView: {
     flex: 1,
@@ -208,14 +218,10 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[2],
   },
   sectionTitle: {
-    color: textTokens.primary,
     fontSize: 20,
     fontFamily: fontFamilies.display,
     fontWeight: '900',
     letterSpacing: -0.5,
-  },
-  sectionHighlight: {
-    color: accent.primary,
   },
   rowContent: {
     paddingHorizontal: spacing[5],

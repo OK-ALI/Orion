@@ -1,8 +1,10 @@
 import {
+  DEFAULT_CINEMA_SOURCE_ID,
   PLAYER_SOURCES,
   getNextHealthyNonAsyncSource,
   getSource,
 } from '@orion/shared/sources';
+import { getMobileSourceHealth } from '../../services/sourceHealth';
 
 export const MOBILE_PLAYER_SOURCES = PLAYER_SOURCES.filter(
   (source) => !source.async && !source.animeOnly,
@@ -19,6 +21,19 @@ export const MOBILE_CONTINUITY_DEFERRED_SOURCE_IDS = new Set(['vidking']);
 export function mobileSourceSupportsContinuity(sourceId: string): boolean {
   if (MOBILE_CONTINUITY_DEFERRED_SOURCE_IDS.has(sourceId)) return false;
   return getSource(sourceId).resumeStrategy !== 'none';
+}
+
+export function getPreferredMobileResumeSource(
+  sourceId: string | null | undefined,
+  mediaType: 'movie' | 'tv',
+): string {
+  if (!sourceId || !mobileSourceSupportsContinuity(sourceId)) return DEFAULT_CINEMA_SOURCE_ID;
+  const source = MOBILE_PLAYER_SOURCES.find((entry) => entry.id === sourceId);
+  const supportsMedia = mediaType === 'movie' ? source?.media.movie : source?.media.tv;
+  if (!source || !supportsMedia) return DEFAULT_CINEMA_SOURCE_ID;
+  const health = getMobileSourceHealth(sourceId, mediaType);
+  if (health?.state === 'failed' && health.cooldownUntil > Date.now()) return DEFAULT_CINEMA_SOURCE_ID;
+  return sourceId;
 }
 
 export function getNextMobileContinuitySource(
