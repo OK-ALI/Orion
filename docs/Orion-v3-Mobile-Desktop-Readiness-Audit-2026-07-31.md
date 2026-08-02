@@ -7,12 +7,12 @@
 
 ## Living Roadmap Status
 
-> **Overall Orion v3 implementation completion: 39%**
+> **Overall Orion v3 implementation completion: 46%**
 >
 > **Last verified:** August 3, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 1 complete; paused for checkpoint review before Phase 2
-> **Critical open blockers:** Source-aware video fitting, reliable player-overlay touch ownership, History and Continue Watching, trailer embeds, Smart Connect transport hardening, player-surface laser, native provider shield, cross-platform profiles, Mobile updates, and deferred VidKing carried-position compatibility
+> **Current stage:** Phase 2 implementation candidate; physical-device visual and reboot persistence acceptance pending
+> **Critical open blockers:** Phase 2 physical-device visual/persistence acceptance, source-aware video fitting, reliable player-overlay touch ownership, trailer embeds, Smart Connect transport hardening, player-surface laser, native provider shield, cross-platform profiles, Mobile updates, and deferred VidKing carried-position compatibility
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -32,7 +32,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 |---|---:|---:|---:|---|
 | 0. Safety and observability | 8% | 100% | 8.0% | Complete |
 | 1. Playback truth | 12% | 100% | 12.0% | Complete |
-| 2. History and Continue Watching | 10% | 15% | 1.5% | Foundation only |
+| 2. History and Continue Watching | 10% | 85% | 8.5% | In progress |
 | 3. Trailer reliability | 8% | 35% | 2.8% | In progress |
 | 4. Smart Connect experience | 12% | 45% | 5.4% | In progress |
 | 5. Player-surface laser | 8% | 15% | 1.2% | Foundation only |
@@ -42,7 +42,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 9. Portable profile and Google authentication | 7% | 15% | 1.1% | Foundation only |
 | 10. Mobile updates | 4% | 5% | 0.2% | Not started |
 | 11. Release validation | 4% | 15% | 0.6% | Foundation only |
-| **Total** | **100%** |  | **38.7%, rounded to 39%** | **Not release-ready** |
+| **Total** | **100%** |  | **45.7%, rounded to 46%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -96,15 +96,17 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 ### Phase 2 — History and Continue Watching
 
 - [x] **V3-P2-001:** MMKV namespaces exist for `history`, `progress`, and `watched`.
-- [ ] **V3-P2-002:** Repair Library History to render actual History instead of Watched records.
-- [ ] **V3-P2-003:** Introduce `PlaybackProgressV3` migration.
-- [ ] **V3-P2-004:** Keep History, Progress, Watched, and My List independent.
-- [ ] **V3-P2-005:** Add Mobile Home Continue Watching rail.
-- [ ] **V3-P2-006:** Add Library Continue tab.
-- [ ] **V3-P2-007:** Show one latest episode per series.
-- [ ] **V3-P2-008:** Add Resume, Remove Progress, Mark Watched, and View All.
-- [ ] **V3-P2-009:** Ensure Clear History does not erase progress, watched state, or My List.
+- [x] **V3-P2-002:** Repair Library History to render actual History instead of Watched records.
+- [x] **V3-P2-003:** Introduce non-destructive `PlaybackProgressV3` normalization while retaining readable V2 records.
+- [x] **V3-P2-004:** Keep History, Progress, Watched, and My List independent.
+- [x] **V3-P2-005:** Add Mobile Home Continue Watching rail.
+- [x] **V3-P2-006:** Add Library Continue tab.
+- [x] **V3-P2-007:** Show one latest incomplete episode per series.
+- [x] **V3-P2-008:** Add Resume, Remove Progress, Mark Watched, Remove History, and View All.
+- [x] **V3-P2-009:** Ensure Clear History does not erase progress, watched state, or My List.
 - [ ] **V3-P2-010:** Verify persistence across application restart and device reboot.
+- [x] **V3-P2-011:** Synchronize Home, Hero, media cards, Continue Watching, Library tabs, actions, and empty states with the active Orion theme through semantic tokens.
+- [ ] **V3-P2-012:** Physically validate compact phone, standard phone, tablet/landscape, 200% font scaling, Reduced Motion, and the six-theme visual matrix without clipping or inaccessible actions.
 
 ### Phase 3 — Trailer reliability
 
@@ -265,7 +267,18 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-08-02 | V3-P1-009 | Physical testing found VidKing could remain stuck after a carried-position switch. Added early wrong-position classification after a four-second settling window and made manual Continue Here restart an unconfirmed URL-resume target without the stale resume parameter while retaining Return to Previous Source. | 27/27 Mobile tests; Mobile typecheck; 63-file source-size gate; Mobile web export; standalone arm64 APK with bundled `assets/index.android.bundle` (SHA-256 `3C181A0A96047884DB6CA49168A6D69992DB6B7ECA9E7AF268595B5AF93F5659`). Physical VidKing retest remains required; Phase 1 stays at 70%. | 35% |
 | 2026-08-03 | V3-P1-009 | Follow-up physical testing confirmed general source continuation works, but switching into VidKing can briefly expose overlapping or pre-resume audio. Added an Android WebView audio-release boundary before mounting the next provider and prevented Desktop mini-player WebViews from mounting until the embedded owner has been released. | Commit `5fa9d1a`; Mobile typecheck; 28/28 Mobile tests; 63-file source-size gate; Mobile web export; standalone arm64 APK with bundled `assets/index.android.bundle` (SHA-256 `854CA3083345866327BB1D13A8EC3999F28A68A6AF43B51442BB36137AB09409`); Desktop mini-player ownership regression test (3/3), 136/136 renderer tests, source/binding/IPC/secret/cycle gates, and production build. Physical VidKing switch and Desktop mini-player retests remain required; Phase 1 stays at 70%. | 35% |
 | 2026-08-03 | V3-P1-009 | Physical retesting showed the audio-release boundary did not remove VidKing's brief pre-resume audio, identifying the remaining behavior as provider startup ordering rather than two Orion playback owners. Added the Desktop-style pre-playback decision to Mobile initial playback and every verified manual source switch: Resume, Replay Last 30 Seconds, Start Over, or Cancel. A carried VidKing choice now overrides its default autoplay and opens paused at the selected position so its player cannot audibly start before applying `progress`. | Commit `588fa90`; Mobile typecheck; 29/29 Mobile tests; 65-file source-size gate; Mobile web export; standalone arm64 APK with bundled JavaScript (SHA-256 `EC70F1CF8800DFF85887DA88EA8F489389A9B9418DA0A3DFB85B1AC50D017F8F`). Physical VidKing retest remains required and the related Desktop mini/pop-out concern remains open; Phase 1 stays at 70%. | 35% |
-| 2026-08-03 | V3-P1-006â€“V3-P1-011 | Physical testing accepted the new Resume dialog and cross-source continuation for the other working providers, while confirming VidKing still produces a provider-internal startup audio/time glitch. Phase 1 closes by making the capability boundary truthful: VidKing remains normally playable, but carried-position choices are replaced with Start Over/Cancel and automatic continuity skips it. The obsolete bottom handoff notice was removed and the dialog was made scroll-safe and compact in landscape. | Commit `562af47`; user physical-device report; Mobile typecheck; 30/30 Mobile tests; 64-file source-size gate; Mobile web export; standalone arm64 APK with bundled JavaScript (SHA-256 `8E4753DACF3B170821778D809B38531FA518845DDBFEA1806F0074AC0E813789`). VidKing startup/resume compatibility is deferred to `V3-P7-016` and is not represented as working. | 39% |
+| 2026-08-03 | V3-P1-006–V3-P1-011 | Physical testing accepted the new Resume dialog and cross-source continuation for the other working providers, while confirming VidKing still produces a provider-internal startup audio/time glitch. Phase 1 closes by making the capability boundary truthful: VidKing remains normally playable, but carried-position choices are replaced with Start Over/Cancel and automatic continuity skips it. The obsolete bottom handoff notice was removed and the dialog was made scroll-safe and compact in landscape. | Commit `562af47`; user physical-device report; Mobile typecheck; 30/30 Mobile tests; 64-file source-size gate; Mobile web export; standalone arm64 APK with bundled JavaScript (SHA-256 `8E4753DACF3B170821778D809B38531FA518845DDBFEA1806F0074AC0E813789`). VidKing startup/resume compatibility is deferred to `V3-P7-016` and is not represented as working. | 39% |
+| 2026-08-03 | V3-P2-002 through V3-P2-009, V3-P2-011 | Repaired Library History, added verified Continue Watching to Home and Library, introduced lazy V3 progress normalization, kept History/Progress/Watched/My List mutations independent, carried artwork and episode context through playback, preferred the last healthy resume source, and synchronized the touched Home/Library presentation with live semantic theme tokens. | Commit `cca72a6`; Mobile typecheck; 37/37 Mobile tests including V2 compatibility, verified-evidence filtering, latest-episode selection, independent mutations, and theme-binding checks; 70-file source-size gate; Expo Doctor 20/20; production web export; standalone arm64 APK with bundled JavaScript (SHA-256 `2F7BFEC809A1A64F9A9F27C6BB40C7F750E64C199A5C4B59D3F29A281BC543D6`); Desktop full gate with 52 Node and 136 renderer tests plus source/binding/IPC/secret/theme/cycle/build checks. Physical restart/reboot and responsive six-theme visual acceptance remain open, so Phase 2 is 85%, not complete. | 46% |
+
+Phase 2 implementation is complete for automated validation. History now reads
+the persisted History collection, Continue Watching derives only from verified
+playback, and V2 progress is normalized lazily into V3 presentation records.
+Home, Hero, cards, Library tabs, actions, loading/empty states, and the new
+Continue surfaces consume the active semantic Mobile theme. Phase 2 remains at
+85% until the standalone APK passes physical restart/reboot persistence and the
+compact/standard/tablet/landscape, 200% text, Reduced Motion, and six-theme
+visual matrix. No screenshot-only or web-only result is counted as that device
+acceptance.
 
 Phase 1 is complete at its verified-capability boundary. Reopening media at a
 saved position works, and physical testing accepted the new user-selected
