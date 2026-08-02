@@ -17,6 +17,17 @@ const {
 const {
   canPersistVerifiedPlayback,
 } = require("../src/features/playback/playbackEvidence.ts");
+const {
+  HANDOFF_CONFIRMATION_TIMEOUT_MS,
+  confirmPlaybackHandoff,
+  createPlaybackHandoff,
+  getFreshVerifiedPosition,
+  handoffCanCarryPosition,
+  updateHandoffStatus,
+} = require("../src/features/playback/handoffPolicy.ts");
+const {
+  createVerifiedResumeScript,
+} = require("../src/features/playback/mobileAdBlocker.ts");
 
 const session = (overrides = {}) => ({
   schemaVersion: 2,
@@ -170,4 +181,85 @@ test("embedded observer is read-only and does not monkey-patch playback", () => 
   assert.match(script, /querySelectorAll\('video'\)/);
   assert.match(script, /ORION_PLAYBACK_TELEMETRY/);
   assert.doesNotMatch(script, /prototype\.play|prototype\.pause|HTMLMediaElement\.prototype/);
+});
+
+test("handoff accepts only fresh finite verified snapshots", () => {
+  const now = 20_000;
+  const fresh = {
+    sessionId: "source-session",
+    sourceId: "videasy",
+    currentTime: 61.25,
+    duration: 120,
+    evidence: "provider-video-event",
+    observedAt: now - 4_999,
+  };
+  assert.equal(getFreshVerifiedPosition(fresh, now), 61.25);
+  assert.equal(getFreshVerifiedPosition({ ...fresh, observedAt: now - 5_001 }, now), null);
+  assert.equal(getFreshVerifiedPosition({ ...fresh, currentTime: Number.NaN }, now), null);
+});
+
+test("handoff confirms only matching target telemetry within tolerance", () => {
+  const handoff = createPlaybackHandoff({
+    reason: "manual",
+    fromSessionId: "old-session",
+    fromSourceId: "videasy",
+    targetSourceId: "vidking",
+    requestedTime: 60,
+    strategy: "url-param",
+    now: 10_000,
+  });
+  const target = {
+    sessionId: "new-session",
+    sourceId: "vidking",
+    currentTime: 64.9,
+    duration: 120,
+    evidence: "provider-message",
+    observedAt: 10_500,
+  };
+  assert.equal(confirmPlaybackHandoff(handoff, target, 10_600)?.status, "confirmed");
+  assert.equal(confirmPlaybackHandoff(handoff, { ...target, sourceId: "vixsrc" }), null);
+  assert.equal(confirmPlaybackHandoff(handoff, { ...target, currentTime: 65.1 }), null);
+  assert.equal(confirmPlaybackHandoff(handoff, { ...target, observedAt: 9_999 }), null);
+});
+
+test("handoff capability and timeout states remain explicit", () => {
+  assert.equal(handoffCanCarryPosition("url-param", 30), true);
+  assert.equal(handoffCanCarryPosition("verified-seek", 30), true);
+  assert.equal(handoffCanCarryPosition("none", 30), false);
+  assert.equal(handoffCanCarryPosition("native", null), false);
+  assert.equal(HANDOFF_CONFIRMATION_TIMEOUT_MS, 12_000);
+  const handoff = createPlaybackHandoff({
+    reason: "automatic",
+    fromSessionId: "old-session",
+    fromSourceId: "videasy",
+    targetSourceId: "vidking",
+    requestedTime: 30,
+    strategy: "url-param",
+    now: 1,
+  });
+  const failed = updateHandoffStatus(handoff, "failed", "TARGET_NOT_CONFIRMED", 13_000);
+  assert.equal(failed.failureCode, "TARGET_NOT_CONFIRMED");
+  assert.equal(failed.status, "failed");
+});
+
+test("bounded verified seek is idempotent and reports its result", () => {
+  const script = createVerifiedResumeScript(42.9, "handoff-1");
+  assert.match(script, /__orionResumeHandoffId/);
+  assert.match(script, /attempts >= 32/);
+  assert.match(script, /ORION_RESUME_RESULT/);
+  assert.match(script, /Math\.abs\(Number\(video\.currentTime\) - 42\) <= 5/);
+  assert.doesNotMatch(script, /prototype\.|set currentTime/);
+});
+
+test("player-event observer is restricted to documented mobile providers and shapes", () => {
+  const script = createEmbeddedTelemetryScript({
+    sessionId: "session-1",
+    sourceId: "vidking",
+    strategy: "player-event",
+    expectedOrigins: ["https://www.vidking.net"],
+  });
+  assert.match(script, /vidking: true, vidlink: true, vixsrc: true/);
+  assert.match(script, /value\.type === 'PLAYER_EVENT'/);
+  assert.match(script, /allowedOrigins\.has\(event\.origin\)/);
+  assert.doesNotMatch(script, /data\.currentTime\s*\|\|/);
 });

@@ -81,3 +81,25 @@ test("embedded page load cannot write playback history or claim source readiness
   assert.match(loadedBody[1], /markOpenedOnly/);
   assert.match(surface, /decision\.state\.session\.verified/);
 });
+
+test("mobile source selection quarantines async and anime-only resolvers", () => {
+  const mobileSources = read("src/features/playback/mobileSources.ts");
+  const sourceSheet = read("src/components/player/SourcesSheet.tsx");
+  assert.match(mobileSources, /!source\.async && !source\.animeOnly/);
+  assert.match(sourceSheet, /MOBILE_PLAYER_SOURCES\.map/);
+  assert.doesNotMatch(sourceSheet, /\{\s*PLAYER_SOURCES\s*\}\s+from/);
+});
+
+test("source continuity is capability-driven rather than supportsResume alone", () => {
+  const sharedRoot = path.resolve(mobileRoot, "..", "..", "packages", "shared", "src", "sources");
+  const contracts = fs.readFileSync(path.join(sharedRoot, "contracts.ts"), "utf8");
+  const primary = fs.readFileSync(path.join(sharedRoot, "adapters", "primary.ts"), "utf8");
+  const candidates = fs.readFileSync(path.join(sharedRoot, "adapters", "candidates.ts"), "utf8");
+  const experimental = fs.readFileSync(path.join(sharedRoot, "adapters", "experimental.ts"), "utf8");
+  assert.match(contracts, /resumeStrategy: ResumeStrategy/);
+  assert.match(contracts, /url-param resumeStrategy requires resumeParam/);
+  assert.match(primary, /resumeStrategy: "verified-seek"/);
+  assert.match(primary, /resumeStrategy: "url-param"/);
+  assert.match(candidates, /resumeStrategy: "url-param"/);
+  assert.match(experimental, /resumeStrategy: "none"/);
+});
