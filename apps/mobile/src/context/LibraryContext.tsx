@@ -3,6 +3,7 @@ import { mmkvStorageAdapter } from '../services/storageAdapter';
 import { TmdbMediaItem, type MobilePlaybackEvidence } from '@orion/shared/types';
 import { tmdbFetch } from '@orion/shared/api';
 import { canPersistVerifiedPlayback } from '../features/playback/playbackEvidence';
+import { updateMobileDiagnostics } from '../services/mobileDiagnostics';
 
 function getLibraryMediaType(item: any = {}) {
   return item.media_type || (item.first_air_date || item.name ? "tv" : "movie");
@@ -234,6 +235,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     progressRef.current = nextProgress;
     setProgress(nextProgress);
     mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(nextProgress));
+    updateMobileDiagnostics({ lastProgressPersistedAt: updatedAt });
 
     const historyRecord = {
       ...toLibraryRecord(item, mediaType),
@@ -258,6 +260,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     historyRef.current = nextHistory;
     setHistory(nextHistory);
     mmkvStorageAdapter.set(STORAGE_KEYS.HISTORY, JSON.stringify(nextHistory));
+    updateMobileDiagnostics({ lastHistoryPersistedAt: updatedAt });
   }, [getProgressKey]);
 
   const getPlaybackProgress = useCallback((

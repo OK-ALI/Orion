@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Platform, ScrollView, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { PLAYER_SOURCES } from '@orion/shared/sources';
 import { accent, fontSizes, radii, spacing } from '@orion/shared/tokens';
 import { getMobileSourceHealth } from '../../services/sourceHealth';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { MOBILE_PLAYER_SOURCES } from '../../features/playback/mobileSources';
 
 interface SourcesSheetProps {
   currentSourceId: string;
@@ -52,7 +52,7 @@ export function SourcesSheet({ currentSourceId, onSelect, onClose, mediaType = '
 
         {/* Compact Sources List */}
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
-          {PLAYER_SOURCES.map((source) => {
+          {MOBILE_PLAYER_SOURCES.map((source) => {
             const isActive = source.id === currentSourceId;
             const runtimeHealth = getMobileSourceHealth(source.id, mediaType);
             const isCoolingDown = Boolean(runtimeHealth?.cooldownUntil && runtimeHealth.cooldownUntil > Date.now());

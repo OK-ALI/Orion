@@ -1,6 +1,8 @@
 export type MobileMediaType = 'movie' | 'tv';
 
 export interface VerifiedPlaybackSnapshot {
+  sessionId: string;
+  sourceId: string;
   currentTime: number;
   duration: number | null;
   evidence: string | null;
@@ -18,5 +20,9 @@ export interface PlaybackSurfaceProps {
   onSourceChange: (
     sourceId: string,
     verifiedSnapshot: VerifiedPlaybackSnapshot | null,
+    reason: 'manual' | 'automatic',
   ) => void;
+  onAutomaticFailover: (verifiedSnapshot: VerifiedPlaybackSnapshot | null) => void;
+  onPlaybackSnapshot?: (snapshot: VerifiedPlaybackSnapshot) => void;
+  activeHandoffId?: string | null;
 }

@@ -9,7 +9,6 @@ import type { WebView as WebViewType } from 'react-native-webview';
 import type { MobilePlayerHudState, ShieldVerificationState } from '@orion/shared/types';
 import {
   ALL_CINEMA_SOURCES,
-  getNextHealthyNonAsyncSource,
 } from '@orion/shared/sources';
 import { SourcesSheet } from '../../components/player/SourcesSheet';
 import { WatchdogWarning } from '../../components/player/WatchdogWarning';
@@ -34,6 +33,7 @@ import { usePlaybackTelemetryController } from './usePlaybackTelemetryController
 
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
   embedUrl: string;
+  onResumeAttempt: (handoffId: string, status: 'applied' | 'unavailable') => void;
 }
 
 export function EmbedPlayerSurface({
@@ -46,6 +46,10 @@ export function EmbedPlayerSurface({
   episode,
   initialResumeTime = 0,
   onSourceChange,
+  onAutomaticFailover,
+  onPlaybackSnapshot,
+  activeHandoffId,
+  onResumeAttempt,
 }: EmbedPlayerSurfaceProps) {
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
@@ -164,14 +168,11 @@ export function EmbedPlayerSurface({
 
   const selectSource = (nextSourceId: string) => {
     telemetry.flush();
-    onSourceChange(nextSourceId, telemetry.getVerifiedSnapshot());
+    onSourceChange(nextSourceId, telemetry.getVerifiedSnapshot(), 'manual');
   };
   const handleFailover = () => {
-    const nextSource = getNextHealthyNonAsyncSource(sourceId, {
-      mediaType: type,
-      includeExperimental: true,
-    });
-    if (nextSource) selectSource(nextSource);
+    telemetry.flush();
+    onAutomaticFailover(telemetry.getVerifiedSnapshot());
   };
 
   const requiredOrigins = new Set([
@@ -231,6 +232,13 @@ export function EmbedPlayerSurface({
       handleScreenTap();
       return;
     }
+    if (envelope?.type === 'ORION_RESUME_RESULT') {
+      if (envelope.handoffId === activeHandoffId
+        && ['applied', 'unavailable'].includes(envelope.status)) {
+        onResumeAttempt(envelope.handoffId, envelope.status);
+      }
+      return;
+    }
     const parsed = parseEmbeddedTelemetryMessage(raw, {
       sessionId: telemetry.getSession().id,
       sourceId,
@@ -267,9 +275,16 @@ export function EmbedPlayerSurface({
       updateMobileDiagnostics({ activeSourceId: sourceId, sourceHealth: health.state });
       clearMobileDiagnosticError('playback');
       clearMobileDiagnosticError('playback-telemetry');
-      if (!source?.resumeParam && initialResumeTime > 0 && !resumeRequested.current) {
+      const snapshot = telemetry.getVerifiedSnapshot();
+      if (snapshot) onPlaybackSnapshot?.(snapshot);
+      if (source?.resumeStrategy === 'verified-seek'
+        && initialResumeTime > 0
+        && !resumeRequested.current) {
         resumeRequested.current = true;
-        webViewRef.current?.injectJavaScript(createVerifiedResumeScript(initialResumeTime));
+        webViewRef.current?.injectJavaScript(createVerifiedResumeScript(
+          initialResumeTime,
+          activeHandoffId || `initial-${telemetry.getSession().id}`,
+        ));
       }
     }
   };

@@ -3,7 +3,6 @@ import { AppState, View } from 'react-native';
 import { useEvent, useEventListener } from 'expo';
 import { useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { getNextHealthyNonAsyncSource } from '@orion/shared/sources';
 import { PlayerHUD } from '../../components/player/PlayerHUD';
 import { SourcesSheet } from '../../components/player/SourcesSheet';
 import { WatchdogWarning } from '../../components/player/WatchdogWarning';
@@ -26,6 +25,8 @@ export function NativePlayerSurface({
   episode,
   initialResumeTime = 0,
   onSourceChange,
+  onAutomaticFailover,
+  onPlaybackSnapshot,
 }: NativePlayerSurfaceProps) {
   const router = useRouter();
   const { recordPlayback } = useLibrary();
@@ -79,13 +80,17 @@ export function NativePlayerSurface({
     const currentTime = Number(timeEvent.currentTime) || 0;
     const jumped = Math.abs(currentTime - priorTimeRef.current) > 2;
     priorTimeRef.current = currentTime;
-    telemetry.emitTelemetry({
+    const decision = telemetry.emitTelemetry({
       evidence: 'native-video-event',
       state: jumped ? 'seeking' : playingEvent.isPlaying ? 'playing' : 'paused',
       currentTime,
       duration: Number(player.duration) || null,
       bufferedPosition: Number(timeEvent.bufferedPosition) || null,
     });
+    if (decision.accepted && decision.state.session.verified) {
+      const snapshot = telemetry.getVerifiedSnapshot();
+      if (snapshot) onPlaybackSnapshot?.(snapshot);
+    }
   }, [timeEvent.currentTime, timeEvent.bufferedPosition, playingEvent.isPlaying, player.duration]);
 
   useEffect(() => {
@@ -110,14 +115,11 @@ export function NativePlayerSurface({
 
   const selectSource = (nextSourceId: string) => {
     telemetry.flush();
-    onSourceChange(nextSourceId, telemetry.getVerifiedSnapshot());
+    onSourceChange(nextSourceId, telemetry.getVerifiedSnapshot(), 'manual');
   };
   const handleFailover = () => {
-    const nextSource = getNextHealthyNonAsyncSource(sourceId, {
-      mediaType: type,
-      includeExperimental: true,
-    });
-    if (nextSource) selectSource(nextSource);
+    telemetry.flush();
+    onAutomaticFailover(telemetry.getVerifiedSnapshot());
   };
 
   return (

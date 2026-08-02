@@ -147,6 +147,8 @@ export function createEmbeddedTelemetryScript({
       }
       function normalizeProviderMessage(event) {
         if (config.strategy !== 'player-event' || !allowedOrigins.has(event.origin)) return;
+        var supportedSources = { vidking: true, vidlink: true, vixsrc: true };
+        if (!supportedSources[config.sourceId]) return;
         var value = event.data;
         if (typeof value === 'string' && value.length <= 4096) {
           try { value = JSON.parse(value); } catch (_) { return; }
@@ -154,15 +156,16 @@ export function createEmbeddedTelemetryScript({
         if (!value || typeof value !== 'object') return;
         var payload = value.type === 'PLAYER_EVENT' && value.data && typeof value.data === 'object'
           ? value.data
-          : value.type === 'PLAYER_EVENT' ? value : null;
+          : null;
         if (!payload) return;
         var eventName = String(payload.event || payload.action || payload.type || '').toLowerCase();
-        var state = payload.buffering || eventName === 'waiting' || eventName === 'buffering'
+        if (!['play', 'pause', 'seeked', 'ended', 'timeupdate', 'waiting', 'buffering'].includes(eventName)) return;
+        var state = eventName === 'waiting' || eventName === 'buffering'
           ? 'buffering'
-          : payload.paused === true || eventName === 'pause'
+          : eventName === 'pause'
             ? 'paused'
             : eventName === 'ended' ? 'ended'
-              : eventName === 'seeking' ? 'seeking'
+              : eventName === 'seeked' ? 'seeking'
                 : 'playing';
         send(state, 'provider-message', {
           currentTime: payload.currentTime != null ? payload.currentTime : payload.time != null ? payload.time : payload.position,

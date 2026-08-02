@@ -167,6 +167,8 @@ export function usePlaybackTelemetryController({
     const state = stateRef.current;
     return state.session.verified && state.session.lastVerifiedTime != null
       ? {
+          sessionId: state.session.id,
+          sourceId: state.session.sourceId,
           currentTime: state.session.lastVerifiedTime,
           duration: state.duration,
           evidence: state.evidence,

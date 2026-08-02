@@ -44,13 +44,45 @@ export const mobileAdBlockerScript = `
   true;
 `;
 
-export function createVerifiedResumeScript(seconds: number): string {
+export function createVerifiedResumeScript(seconds: number, handoffId: string): string {
   const safeTime = Math.max(0, Math.floor(Number(seconds) || 0));
+  const safeHandoffId = JSON.stringify(String(handoffId || 'resume'));
   return `
     (function() {
-      var video = document.querySelector('video');
-      if (!video || !Number.isFinite(video.duration) || ${safeTime} <= 0) return false;
-      video.currentTime = Math.min(video.duration, ${safeTime});
+      var handoffId = ${safeHandoffId};
+      if (window.__orionResumeHandoffId === handoffId) return true;
+      window.__orionResumeHandoffId = handoffId;
+      var attempts = 0;
+      var done = false;
+      function report(status, actualTime) {
+        if (done) return;
+        done = true;
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'ORION_RESUME_RESULT',
+            handoffId: handoffId,
+            status: status,
+            actualTime: Number.isFinite(actualTime) ? actualTime : null
+          }));
+        }
+      }
+      function attempt() {
+        if (done || window.__orionResumeHandoffId !== handoffId) return;
+        attempts += 1;
+        var video = document.querySelector('video');
+        if (video && Number.isFinite(video.duration) && video.duration > 0 && ${safeTime} > 0) {
+          video.currentTime = Math.min(video.duration, ${safeTime});
+          setTimeout(function() {
+            if (Math.abs(Number(video.currentTime) - ${safeTime}) <= 5) report('applied', Number(video.currentTime));
+            else if (attempts >= 32) report('unavailable', Number(video.currentTime));
+            else setTimeout(attempt, 250);
+          }, 100);
+          return;
+        }
+        if (attempts >= 32) report('unavailable', null);
+        else setTimeout(attempt, 250);
+      }
+      attempt();
       return true;
     })();
     true;

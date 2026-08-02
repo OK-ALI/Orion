@@ -19,6 +19,13 @@ export interface MobileDiagnosticsSnapshot {
   playbackSurface: string | null;
   playbackEvidence: string | null;
   telemetryAgeMs: number | null;
+  handoffState: string | null;
+  handoffStrategy: string | null;
+  handoffRequestedTime: number | null;
+  handoffConfirmedTime: number | null;
+  handoffFailureCode: string | null;
+  lastProgressPersistedAt: number | null;
+  lastHistoryPersistedAt: number | null;
   lastError: { area: string; code: string; message: string } | null;
   capturedAt: number;
 }
@@ -33,6 +40,13 @@ interface DiagnosticsMutableState {
   playbackSurface: string | null;
   playbackEvidence: string | null;
   lastTelemetryAt: number | null;
+  handoffState: string | null;
+  handoffStrategy: string | null;
+  handoffRequestedTime: number | null;
+  handoffConfirmedTime: number | null;
+  handoffFailureCode: string | null;
+  lastProgressPersistedAt: number | null;
+  lastHistoryPersistedAt: number | null;
   lastError: MobileDiagnosticsSnapshot['lastError'];
 }
 
@@ -46,6 +60,13 @@ const state: DiagnosticsMutableState = {
   playbackSurface: null,
   playbackEvidence: null,
   lastTelemetryAt: null,
+  handoffState: null,
+  handoffStrategy: null,
+  handoffRequestedTime: null,
+  handoffConfirmedTime: null,
+  handoffFailureCode: null,
+  lastProgressPersistedAt: null,
+  lastHistoryPersistedAt: null,
   lastError: null,
 };
 
@@ -100,6 +121,13 @@ export function getMobileDiagnosticsSnapshot(): MobileDiagnosticsSnapshot {
     telemetryAgeMs: state.lastTelemetryAt == null
       ? null
       : Math.max(0, Date.now() - state.lastTelemetryAt),
+    handoffState: state.handoffState,
+    handoffStrategy: state.handoffStrategy,
+    handoffRequestedTime: state.handoffRequestedTime,
+    handoffConfirmedTime: state.handoffConfirmedTime,
+    handoffFailureCode: state.handoffFailureCode,
+    lastProgressPersistedAt: state.lastProgressPersistedAt,
+    lastHistoryPersistedAt: state.lastHistoryPersistedAt,
     lastError: state.lastError ? { ...state.lastError } : null,
     capturedAt: Date.now(),
   };
