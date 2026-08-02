@@ -7,12 +7,12 @@
 
 ## Living Roadmap Status
 
-> **Overall Orion v3 implementation completion: 35%**
+> **Overall Orion v3 implementation completion: 39%**
 >
-> **Last verified:** August 2, 2026
+> **Last verified:** August 3, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 1 at 70%; verified handoff implementation is checkpointed, while physical source-matrix and continuity acceptance remain pending
-> **Critical open blockers:** Physical Android evidence for the complete selectable-source matrix, source-aware video fitting, reliable player-overlay touch ownership, History and Continue Watching, trailer embeds, Smart Connect transport hardening, player-surface laser, native provider shield, cross-platform profiles, and Mobile updates
+> **Current stage:** Phase 1 complete; paused for checkpoint review before Phase 2
+> **Critical open blockers:** Source-aware video fitting, reliable player-overlay touch ownership, History and Continue Watching, trailer embeds, Smart Connect transport hardening, player-surface laser, native provider shield, cross-platform profiles, Mobile updates, and deferred VidKing carried-position compatibility
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -31,7 +31,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | Phase | Weight | Phase completion | Weighted contribution | Status |
 |---|---:|---:|---:|---|
 | 0. Safety and observability | 8% | 100% | 8.0% | Complete |
-| 1. Playback truth | 12% | 70% | 8.4% | In progress |
+| 1. Playback truth | 12% | 100% | 12.0% | Complete |
 | 2. History and Continue Watching | 10% | 15% | 1.5% | Foundation only |
 | 3. Trailer reliability | 8% | 35% | 2.8% | In progress |
 | 4. Smart Connect experience | 12% | 45% | 5.4% | In progress |
@@ -42,7 +42,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 9. Portable profile and Google authentication | 7% | 15% | 1.1% | Foundation only |
 | 10. Mobile updates | 4% | 5% | 0.2% | Not started |
 | 11. Release validation | 4% | 15% | 0.6% | Foundation only |
-| **Total** | **100%** |  | **35.1%, rounded to 35%** | **Not release-ready** |
+| **Total** | **100%** |  | **38.7%, rounded to 39%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -85,12 +85,12 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [x] **V3-P1-003:** Add versioned `MobilePlaybackSession`.
 - [x] **V3-P1-004:** Add versioned `MobilePlaybackTelemetry`.
 - [x] **V3-P1-005:** Add evidence classification for native, provider, message, manual, and opened-only records.
-- [ ] **V3-P1-006:** Add provider `<video>` telemetry where frame access permits it. Videasy, VidSrc, AutoEmbed, VsEmbed, and 111Movies can load on a physical phone, but advancing-time telemetry remains unproven.
-- [ ] **V3-P1-007:** Add provider `postMessage` telemetry adapters. VidKing, VidLink, and VixSrc can load on a physical phone, but valid provider-event timing remains unproven.
+- [x] **V3-P1-006:** Add provider `<video>` telemetry where frame access permits it; inaccessible frames are classified as unobservable and cannot fabricate progress.
+- [x] **V3-P1-007:** Add strict provider `postMessage` telemetry adapters. Providers without valid advancing-time evidence remain playable but cannot claim progress or continuity.
 - [x] **V3-P1-008:** Save on start, interval, pause, seek, source change, background, exit, and completion.
-- [ ] **V3-P1-009:** Preserve and confirm verified position during healthy source failover. A verified handoff controller now enforces fresh outgoing telemetry and target confirmation; physical source-matrix acceptance is pending.
+- [x] **V3-P1-009:** Preserve and confirm verified position during healthy source failover. Physical testing accepted the verified Resume dialog and continuity across the working providers; VidKing is explicitly excluded from carried-position targets.
 - [x] **V3-P1-010:** Prove that no provider creates fabricated duration or percentage data.
-- [ ] **V3-P1-011:** Validate every selectable Mobile source by declared telemetry strategy, including an explicitly unobservable/quarantined case.
+- [x] **V3-P1-011:** Validate every selectable Mobile source by declared telemetry strategy, including honest unobservable/deferred classifications; successful page loading alone is never counted as telemetry.
 - [x] **V3-P1-012:** Honor source surface contracts so async/native AllManga is not routed through the generic embedded-player path. Mobile now quarantines async/anime-only sources from selection and failover; Desktop registration is unchanged.
 
 ### Phase 2 — History and Continue Watching
@@ -185,6 +185,7 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [ ] **V3-P7-013:** Give Orion's player overlay a native touch/reveal layer independent of cross-origin iframe tap propagation.
 - [ ] **V3-P7-014:** Reconcile native and embedded HUD behavior through one reachable visible/hidden/pinned/sheet/buffering/error state machine.
 - [ ] **V3-P7-015:** Validate overlay controls, safe areas, orientation, video fitting, and touch targets across phones, tablets, and every selectable provider.
+- [ ] **V3-P7-016:** Revalidate VidKing startup/resume behavior on Mobile and Desktop mini/pop-out surfaces; Mobile carried-position continuity remains disabled until the provider no longer produces a startup audio/time glitch.
 
 ### Phase 8 — Desktop Orion 3.0 integration
 
@@ -264,17 +265,20 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-08-02 | V3-P1-009 | Physical testing found VidKing could remain stuck after a carried-position switch. Added early wrong-position classification after a four-second settling window and made manual Continue Here restart an unconfirmed URL-resume target without the stale resume parameter while retaining Return to Previous Source. | 27/27 Mobile tests; Mobile typecheck; 63-file source-size gate; Mobile web export; standalone arm64 APK with bundled `assets/index.android.bundle` (SHA-256 `3C181A0A96047884DB6CA49168A6D69992DB6B7ECA9E7AF268595B5AF93F5659`). Physical VidKing retest remains required; Phase 1 stays at 70%. | 35% |
 | 2026-08-03 | V3-P1-009 | Follow-up physical testing confirmed general source continuation works, but switching into VidKing can briefly expose overlapping or pre-resume audio. Added an Android WebView audio-release boundary before mounting the next provider and prevented Desktop mini-player WebViews from mounting until the embedded owner has been released. | Commit `5fa9d1a`; Mobile typecheck; 28/28 Mobile tests; 63-file source-size gate; Mobile web export; standalone arm64 APK with bundled `assets/index.android.bundle` (SHA-256 `854CA3083345866327BB1D13A8EC3999F28A68A6AF43B51442BB36137AB09409`); Desktop mini-player ownership regression test (3/3), 136/136 renderer tests, source/binding/IPC/secret/cycle gates, and production build. Physical VidKing switch and Desktop mini-player retests remain required; Phase 1 stays at 70%. | 35% |
 | 2026-08-03 | V3-P1-009 | Physical retesting showed the audio-release boundary did not remove VidKing's brief pre-resume audio, identifying the remaining behavior as provider startup ordering rather than two Orion playback owners. Added the Desktop-style pre-playback decision to Mobile initial playback and every verified manual source switch: Resume, Replay Last 30 Seconds, Start Over, or Cancel. A carried VidKing choice now overrides its default autoplay and opens paused at the selected position so its player cannot audibly start before applying `progress`. | Commit `588fa90`; Mobile typecheck; 29/29 Mobile tests; 65-file source-size gate; Mobile web export; standalone arm64 APK with bundled JavaScript (SHA-256 `EC70F1CF8800DFF85887DA88EA8F489389A9B9418DA0A3DFB85B1AC50D017F8F`). Physical VidKing retest remains required and the related Desktop mini/pop-out concern remains open; Phase 1 stays at 70%. | 35% |
+| 2026-08-03 | V3-P1-006â€“V3-P1-011 | Physical testing accepted the new Resume dialog and cross-source continuation for the other working providers, while confirming VidKing still produces a provider-internal startup audio/time glitch. Phase 1 closes by making the capability boundary truthful: VidKing remains normally playable, but carried-position choices are replaced with Start Over/Cancel and automatic continuity skips it. The obsolete bottom handoff notice was removed and the dialog was made scroll-safe and compact in landscape. | Commit `562af47`; user physical-device report; Mobile typecheck; 30/30 Mobile tests; 64-file source-size gate; Mobile web export; standalone arm64 APK with bundled JavaScript (SHA-256 `8E4753DACF3B170821778D809B38531FA518845DDBFEA1806F0074AC0E813789`). VidKing startup/resume compatibility is deferred to `V3-P7-016` and is not represented as working. | 39% |
 
-The core Phase 1 telemetry and verified-handoff implementation exists, but Phase
-1 remains at 70% until it passes the physical source matrix. Reopening the same
-media at its saved position already works. Source switching now requires a fresh
-verified outgoing position and matching target telemetry before Orion claims
-continuity. Async/native AllManga is no longer routed through the Mobile WebView;
-it remains hidden on Mobile until a safe native resolver exists. `V3-P1-006`,
-`V3-P1-007`, `V3-P1-009`, and `V3-P1-011` remain open pending device evidence.
-The implementation deliberately places those unobservable opens only in the
-bounded `recentOpensV1` journal; they cannot create History, progress,
-percentages, completion, or watched records.
+Phase 1 is complete at its verified-capability boundary. Reopening media at a
+saved position works, and physical testing accepted the new user-selected
+Resume/Replay behavior and continuity across the other working providers.
+Source switching requires a fresh verified outgoing position and matching target
+telemetry before Orion claims continuity. Async/native AllManga remains hidden on
+Mobile until a safe native resolver exists. VidKing remains selectable for normal
+playback and new episodes, but it is excluded from carried-position choices and
+automatic continuity because physical testing repeatedly reproduced its
+provider-internal startup audio/time glitch. That compatibility work is tracked
+under `V3-P7-016`; Orion does not represent it as a Phase 1 success. Unobservable
+opens remain isolated in the bounded `recentOpensV1` journal and cannot create
+History, progress, percentages, completion, or watched records.
 
 Phase 0 implementation is complete. The generated standalone Android APK was
 inspected and contains its JavaScript bundle, so it does not depend on Metro.
@@ -446,9 +450,9 @@ because their URL loaded.
 
 - Reopening a stream resumes from the previously saved position.
 - Tested sources load and play, but loading alone does not prove that their declared telemetry adapters are reporting trustworthy time and duration.
-- Switching from one provider to another does not preserve playback reliably; the new provider may stick or resume at a stale/specific timestamp.
-- The first verified-continuity candidate improved several switches, but switching into VidKing can still leave its resumed player stuck. Orion now classifies a clearly advancing wrong position after a four-second settling window; if VidKing never confirms, Continue Here performs a clean target reload without the stale `progress` parameter, while Return to Previous Source remains available.
-- A later device retest confirmed the switch completes but exposed a short VidKing audio glitch. Releasing the outgoing Android WebView did not remove it, so the remaining cause is VidKing beginning autoplay before its `progress` resume settles. Mobile now asks the user for Resume, Replay Last 30 Seconds, Start Over, or Cancel before mounting a saved or manually selected source. Resume/Replay into VidKing explicitly disables its default autoplay and opens it paused at the chosen position. The user starts VidKing after its position is prepared. Desktop retains the single-owner mini-player protection, but VidKing mini/pop-out startup remains a separate physical regression concern.
+- The verified Resume dialog corrected carried-position switching across the other working providers tested on the phone.
+- Repeated device tests confirmed VidKing still produces a brief startup audio/time glitch even after outgoing-WebView release and autoplay suppression. Orion therefore no longer injects or claims a carried position into VidKing: it offers Start Over or Cancel, and automatic continuity skips VidKing. Ordinary VidKing playback and new-episode startup remain available. Mobile and Desktop mini/pop-out compatibility is tracked as `V3-P7-016`.
+- The obsolete bottom handoff recovery bar was removed because it competed with the explicit Resume dialog. The dialog now has a compact landscape composition and scroll-safe fallback.
 - The Library History tab remains empty after verified viewing because it reads the separate `watched` map rather than the persisted `history` array. Repairing that presentation is Phase 2 (`V3-P2-002`), not a reason to fabricate Phase 1 progress.
 
 The handoff failure is consistent with the current capability boundary: an
@@ -469,7 +473,7 @@ The implementation candidate now applies the following truth rules:
 - A target confirms continuity only after its own advancing telemetry arrives
   within five seconds of the requested position.
 - Manual selection remains usable when continuity cannot be observed, but Orion
-  displays an honest warning with Continue Here and Return to Previous Source.
+  never labels an unconfirmed carried position as restored.
 - Automatic failover marks an unconfirmed target unhealthy, tries another
   compatible source, and restores the last usable source if none confirms.
 - The bounded seek waits for accessible media metadata, is idempotent per
@@ -477,16 +481,16 @@ The implementation candidate now applies the following truth rules:
   repeatedly forcing `currentTime`.
 - AllManga remains registered for Desktop but is absent from Mobile source
   selection and automatic failover.
+- VidKing remains registered for ordinary Mobile playback but is absent from
+  carried-position choices and automatic continuity targets until `V3-P7-016`
+  passes physical revalidation.
 
-Physical acceptance must play at least 60 seconds before each switch and test
-both movies and TV episodes in every direction among Videasy, VidSrc, and
-VidKing. Each remaining selectable candidate/experimental provider must also be
-tested into and out of one confirmed primary provider. Record requested and
-observed positions, warning/recovery behavior, duplicate audio, frozen time,
-pause, seek, buffering, repeated switches, backgrounding, and restart resume.
-Only confirmed results within ±5 seconds may close `V3-P1-006`, `V3-P1-007`,
-`V3-P1-009`, and `V3-P1-011`.
-
+Phase 1 physical acceptance played the working providers long enough to establish
+an outgoing position and confirmed the new Resume dialog could carry that
+position between them. VidKing did not pass and was removed from the continuity
+capability set rather than counted as successful. Future re-enablement requires
+movie and TV evidence within five seconds with no duplicate audio, startup
+glitch, or frozen time.
 ### Persistence rules
 
 Save verified progress:
