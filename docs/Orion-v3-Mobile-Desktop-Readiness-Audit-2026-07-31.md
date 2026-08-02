@@ -7,11 +7,11 @@
 
 ## Living Roadmap Status
 
-> **Overall Orion v3 implementation completion: 36%**
+> **Overall Orion v3 implementation completion: 35%**
 >
 > **Last verified:** August 2, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 1 at 80%; complete source routing and physical-provider acceptance are pending
+> **Current stage:** Phase 1 at 70%; verified source handoff, complete source routing, and provider acceptance are pending
 > **Critical open blockers:** Physical Android evidence for the complete selectable-source matrix, source-aware video fitting, reliable player-overlay touch ownership, History and Continue Watching, trailer embeds, Smart Connect transport hardening, player-surface laser, native provider shield, cross-platform profiles, and Mobile updates
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
@@ -31,7 +31,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | Phase | Weight | Phase completion | Weighted contribution | Status |
 |---|---:|---:|---:|---|
 | 0. Safety and observability | 8% | 100% | 8.0% | Complete |
-| 1. Playback truth | 12% | 80% | 9.6% | In progress |
+| 1. Playback truth | 12% | 70% | 8.4% | In progress |
 | 2. History and Continue Watching | 10% | 15% | 1.5% | Foundation only |
 | 3. Trailer reliability | 8% | 35% | 2.8% | In progress |
 | 4. Smart Connect experience | 12% | 45% | 5.4% | In progress |
@@ -42,7 +42,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 9. Portable profile and Google authentication | 7% | 15% | 1.1% | Foundation only |
 | 10. Mobile updates | 4% | 5% | 0.2% | Not started |
 | 11. Release validation | 4% | 15% | 0.6% | Foundation only |
-| **Total** | **100%** |  | **36.3%, rounded to 36%** | **Not release-ready** |
+| **Total** | **100%** |  | **35.1%, rounded to 35%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -85,10 +85,10 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [x] **V3-P1-003:** Add versioned `MobilePlaybackSession`.
 - [x] **V3-P1-004:** Add versioned `MobilePlaybackTelemetry`.
 - [x] **V3-P1-005:** Add evidence classification for native, provider, message, manual, and opened-only records.
-- [ ] **V3-P1-006:** Add provider `<video>` telemetry where frame access permits it. Implementation is complete; physical Videasy, VidSrc, AutoEmbed, VsEmbed, and 111Movies evidence is pending.
-- [ ] **V3-P1-007:** Add provider `postMessage` telemetry adapters. Implementation is complete; physical VidKing, VidLink, and VixSrc evidence is pending.
+- [ ] **V3-P1-006:** Add provider `<video>` telemetry where frame access permits it. Videasy, VidSrc, AutoEmbed, VsEmbed, and 111Movies can load on a physical phone, but advancing-time telemetry remains unproven.
+- [ ] **V3-P1-007:** Add provider `postMessage` telemetry adapters. VidKing, VidLink, and VixSrc can load on a physical phone, but valid provider-event timing remains unproven.
 - [x] **V3-P1-008:** Save on start, interval, pause, seek, source change, background, exit, and completion.
-- [x] **V3-P1-009:** Preserve verified position during healthy source failover.
+- [ ] **V3-P1-009:** Preserve and confirm verified position during healthy source failover. Physical testing found source changes sticking or resuming at the wrong timestamp.
 - [x] **V3-P1-010:** Prove that no provider creates fabricated duration or percentage data.
 - [ ] **V3-P1-011:** Validate every selectable Mobile source by declared telemetry strategy, including an explicitly unobservable/quarantined case.
 - [ ] **V3-P1-012:** Honor source surface contracts so async/native AllManga is not routed through the generic embedded-player path.
@@ -259,11 +259,14 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-07-31 | V3-P1-008–V3-P1-010, V3-P9-003 | Wired verified native/embedded telemetry, isolated unobservable opens in `recentOpensV1`, preserved verified failover position, enforced verified-only History/progress writes, and retained the Phase 0 persistent-storage recovery boundary | Commit `6a1e065`; Mobile typecheck; 18/18 Node tests; 60-file size gate; Expo Doctor 20/20; web export; standalone Android APK containing `index.android.bundle`; Desktop 52 Node + 135 renderer tests and all repository gates | 36% |
 | 2026-08-02 | V3-P0-005, V3-P9-003 | Corrected the native storage adapter for the installed `react-native-mmkv` v4 factory/removal API after physical launch exposed `MMKV_INIT_FAILED`; clarified that app-private MMKV does not require Android file permission | Mobile typecheck; 18/18 Node tests; 60-file size gate; standalone arm64 APK rebuilt with bundled JavaScript and Nitro MMKV native libraries | 36% |
 | 2026-08-02 | V3-P1-006, V3-P1-007, V3-P1-011, V3-P1-012, V3-P7-012–V3-P7-015 | Expanded acceptance from three representative sources to the complete selectable source matrix; recorded incorrect AllManga surface routing, missing source-aware fit modes, and unreliable cross-origin HUD tap propagation | Code audit of the shared source registry, Mobile source sheet, `PlayerScreen`, native HUD, and embedded surface; roadmap-only update with no completion credit | 36% |
+| 2026-08-02 | V3-P1-006, V3-P1-007, V3-P1-009, V3-P2-002 | Physical-phone testing confirmed reopen/resume and successful stream loading across the tested source set, but source-to-source continuation stuck or resumed at an incorrect timestamp; Library History remained empty because its UI still renders `watched` instead of the persisted `history` collection | User physical-device report plus code trace of `LibraryContext`, Library route, `PlayerScreen`, embedded telemetry, and resume injection; `V3-P1-009` reopened and no runtime change made | 35% |
 
-The core Phase 1 telemetry implementation is complete, but the phase remains at
-80%. Physical Android evidence is still required for every selectable source,
-and the async/native AllManga route must be corrected before Phase 1 can be
-accepted. `V3-P1-006`, `V3-P1-007`, `V3-P1-011`, and `V3-P1-012` remain open.
+The core Phase 1 telemetry implementation exists, but physical testing reduced
+acceptance to 70%. Reopening the same media at its saved position works, while
+switching providers can stick or resume at the wrong timestamp. Physical timing
+evidence is still required for every selectable source, and the async/native
+AllManga route must be corrected. `V3-P1-006`, `V3-P1-007`, `V3-P1-009`,
+`V3-P1-011`, and `V3-P1-012` remain open.
 The implementation deliberately places those unobservable opens only in the
 bounded `recentOpensV1` journal; they cannot create History, progress,
 percentages, completion, or watched records.
@@ -328,7 +331,8 @@ These results confirm that the repository is buildable, but they do not establis
 | Priority | Area | Current condition | Required outcome |
 |---|---|---|---|
 | P0 | Embedded playback telemetry | Provider WebViews do not consistently report verified position, duration, pause, buffering, or completion | One source-aware `MobilePlaybackTelemetry` stream |
-| P0 | History | Playback records exist, but embedded playback does not write them; Library reads watched records instead of history | Chronological, evidence-backed History |
+| P0 | History | Verified progress and History are written together, but Library renders the separate `watched` map instead of `history` | Chronological, evidence-backed History backed by the actual History collection |
+| P0 | Source handoff | Reopening saved playback works, but physical source switching can stick or resume at an incorrect timestamp because verified snapshots and target seek capabilities are inconsistent | Persist outgoing verified time, negotiate target resume capability, and confirm the applied position from new-source telemetry |
 | P0 | Continue Watching | Missing from Mobile Home and Library | Resumable Home rail and Library Continue tab |
 | P0 | Trailers | WebView is no longer blank, but many YouTube embeds still fail inside Orion | Candidate rotation, precise errors, valid player identity, and fallback |
 | P0 | Smart Connect laser | Works on ordinary pages but disappears over default, fullscreen, mini, and pop-out players | Player-surface-aware pointer compositor |
@@ -432,6 +436,20 @@ SuperEmbed remains quarantined. VidFast, Vidify, 2Embed, and VidSrc CC remain
 disabled and are not release-selectable until their contracts are separately
 validated. Disabled or quarantined sources must never be counted as working
 because their URL loaded.
+
+### Physical Phase 1 result — August 2, 2026
+
+- Reopening a stream resumes from the previously saved position.
+- Tested sources load and play, but loading alone does not prove that their declared telemetry adapters are reporting trustworthy time and duration.
+- Switching from one provider to another does not preserve playback reliably; the new provider may stick or resume at a stale/specific timestamp.
+- The Library History tab remains empty after verified viewing because it reads the separate `watched` map rather than the persisted `history` array. Repairing that presentation is Phase 2 (`V3-P2-002`), not a reason to fabricate Phase 1 progress.
+
+The handoff failure is consistent with the current capability boundary: an
+outgoing source must provide a fresh verified snapshot, while the target must
+either accept its declared resume URL parameter or expose a reachable video
+element for a confirmed seek. Nested cross-origin players can prevent the
+fallback seek script from reaching their media element. Orion must confirm the
+new position from target telemetry before reporting handoff success.
 
 ### Persistence rules
 
