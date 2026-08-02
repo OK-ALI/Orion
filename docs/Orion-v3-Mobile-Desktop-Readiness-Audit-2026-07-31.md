@@ -11,7 +11,7 @@
 >
 > **Last verified:** August 2, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 1 at 70%; verified source handoff, complete source routing, and provider acceptance are pending
+> **Current stage:** Phase 1 at 70%; verified handoff implementation is checkpointed, while physical source-matrix and continuity acceptance remain pending
 > **Critical open blockers:** Physical Android evidence for the complete selectable-source matrix, source-aware video fitting, reliable player-overlay touch ownership, History and Continue Watching, trailer embeds, Smart Connect transport hardening, player-surface laser, native provider shield, cross-platform profiles, and Mobile updates
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
@@ -88,10 +88,10 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [ ] **V3-P1-006:** Add provider `<video>` telemetry where frame access permits it. Videasy, VidSrc, AutoEmbed, VsEmbed, and 111Movies can load on a physical phone, but advancing-time telemetry remains unproven.
 - [ ] **V3-P1-007:** Add provider `postMessage` telemetry adapters. VidKing, VidLink, and VixSrc can load on a physical phone, but valid provider-event timing remains unproven.
 - [x] **V3-P1-008:** Save on start, interval, pause, seek, source change, background, exit, and completion.
-- [ ] **V3-P1-009:** Preserve and confirm verified position during healthy source failover. Physical testing found source changes sticking or resuming at the wrong timestamp.
+- [ ] **V3-P1-009:** Preserve and confirm verified position during healthy source failover. A verified handoff controller now enforces fresh outgoing telemetry and target confirmation; physical source-matrix acceptance is pending.
 - [x] **V3-P1-010:** Prove that no provider creates fabricated duration or percentage data.
 - [ ] **V3-P1-011:** Validate every selectable Mobile source by declared telemetry strategy, including an explicitly unobservable/quarantined case.
-- [ ] **V3-P1-012:** Honor source surface contracts so async/native AllManga is not routed through the generic embedded-player path.
+- [x] **V3-P1-012:** Honor source surface contracts so async/native AllManga is not routed through the generic embedded-player path. Mobile now quarantines async/anime-only sources from selection and failover; Desktop registration is unchanged.
 
 ### Phase 2 — History and Continue Watching
 
@@ -260,13 +260,15 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-08-02 | V3-P0-005, V3-P9-003 | Corrected the native storage adapter for the installed `react-native-mmkv` v4 factory/removal API after physical launch exposed `MMKV_INIT_FAILED`; clarified that app-private MMKV does not require Android file permission | Mobile typecheck; 18/18 Node tests; 60-file size gate; standalone arm64 APK rebuilt with bundled JavaScript and Nitro MMKV native libraries | 36% |
 | 2026-08-02 | V3-P1-006, V3-P1-007, V3-P1-011, V3-P1-012, V3-P7-012–V3-P7-015 | Expanded acceptance from three representative sources to the complete selectable source matrix; recorded incorrect AllManga surface routing, missing source-aware fit modes, and unreliable cross-origin HUD tap propagation | Code audit of the shared source registry, Mobile source sheet, `PlayerScreen`, native HUD, and embedded surface; roadmap-only update with no completion credit | 36% |
 | 2026-08-02 | V3-P1-006, V3-P1-007, V3-P1-009, V3-P2-002 | Physical-phone testing confirmed reopen/resume and successful stream loading across the tested source set, but source-to-source continuation stuck or resumed at an incorrect timestamp; Library History remained empty because its UI still renders `watched` instead of the persisted `history` collection | User physical-device report plus code trace of `LibraryContext`, Library route, `PlayerScreen`, embedded telemetry, and resume injection; `V3-P1-009` reopened and no runtime change made | 35% |
+| 2026-08-02 | V3-P1-009, V3-P1-012 | Implemented capability-driven verified handoffs, fresh outgoing snapshot enforcement, bounded idempotent seeks, target-side ±5-second confirmation, 12-second timeout, hybrid manual recovery, health-aware automatic retries, strict VidKing/VidLink/VixSrc message adapters, Mobile-only AllManga quarantine, and redacted handoff diagnostics | Commits `c3d52be`, `fa73b2f`, `3edbbe4`; Mobile/shared typechecks; 25/25 Mobile tests; 63-file source-size gate; Mobile web export; standalone arm64 APK with `assets/index.android.bundle` (SHA-256 `1732D04F634BE9CDAF02CAB1239D7201257D718F69FFEF4C08983CD213FBE7EB`); Desktop 52 Node + 135 renderer tests and all source/binding/IPC/secret/theme/cycle/build gates. Expo Doctor passed 18 local checks; its two online metadata checks were unavailable under the validation network policy. No completion credit added before physical acceptance. | 35% |
 
-The core Phase 1 telemetry implementation exists, but physical testing reduced
-acceptance to 70%. Reopening the same media at its saved position works, while
-switching providers can stick or resume at the wrong timestamp. Physical timing
-evidence is still required for every selectable source, and the async/native
-AllManga route must be corrected. `V3-P1-006`, `V3-P1-007`, `V3-P1-009`,
-`V3-P1-011`, and `V3-P1-012` remain open.
+The core Phase 1 telemetry and verified-handoff implementation exists, but Phase
+1 remains at 70% until it passes the physical source matrix. Reopening the same
+media at its saved position already works. Source switching now requires a fresh
+verified outgoing position and matching target telemetry before Orion claims
+continuity. Async/native AllManga is no longer routed through the Mobile WebView;
+it remains hidden on Mobile until a safe native resolver exists. `V3-P1-006`,
+`V3-P1-007`, `V3-P1-009`, and `V3-P1-011` remain open pending device evidence.
 The implementation deliberately places those unobservable opens only in the
 bounded `recentOpensV1` journal; they cannot create History, progress,
 percentages, completion, or watched records.
@@ -450,6 +452,35 @@ either accept its declared resume URL parameter or expose a reachable video
 element for a confirmed seek. Nested cross-origin players can prevent the
 fallback seek script from reaching their media element. Orion must confirm the
 new position from target telemetry before reporting handoff success.
+
+### Phase 1 continuity candidate — August 2, 2026
+
+The implementation candidate now applies the following truth rules:
+
+- Outgoing telemetry must be finite, verified, and no older than five seconds.
+- The outgoing record is synchronously persisted before the source changes.
+- `url-param`, `verified-seek`, `native`, and `none` are explicit capabilities;
+  the former `supportsResume` boolean no longer determines handoff behavior.
+- A target confirms continuity only after its own advancing telemetry arrives
+  within five seconds of the requested position.
+- Manual selection remains usable when continuity cannot be observed, but Orion
+  displays an honest warning with Continue Here and Return to Previous Source.
+- Automatic failover marks an unconfirmed target unhealthy, tries another
+  compatible source, and restores the last usable source if none confirms.
+- The bounded seek waits for accessible media metadata, is idempotent per
+  handoff, stops after 32 attempts, and reports applied/unavailable instead of
+  repeatedly forcing `currentTime`.
+- AllManga remains registered for Desktop but is absent from Mobile source
+  selection and automatic failover.
+
+Physical acceptance must play at least 60 seconds before each switch and test
+both movies and TV episodes in every direction among Videasy, VidSrc, and
+VidKing. Each remaining selectable candidate/experimental provider must also be
+tested into and out of one confirmed primary provider. Record requested and
+observed positions, warning/recovery behavior, duplicate audio, frozen time,
+pause, seek, buffering, repeated switches, backgrounding, and restart resume.
+Only confirmed results within ±5 seconds may close `V3-P1-006`, `V3-P1-007`,
+`V3-P1-009`, and `V3-P1-011`.
 
 ### Persistence rules
 
