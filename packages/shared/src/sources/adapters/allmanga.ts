@@ -18,6 +18,7 @@ export const allMangaSource: CinemaSourceDescriptor = {
   allowedNavigationOrigins: ["https://allmanga.to"],
   requiredRequestOrigins: ["https://allmanga.to"],
   progressStrategy: "native",
+  resumeStrategy: "native",
   subtitleStrategy: "provider",
   supportsResume: true,
   supportsExternalSubtitles: false,

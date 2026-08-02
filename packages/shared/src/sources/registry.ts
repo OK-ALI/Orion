@@ -129,6 +129,9 @@ export const sourceProgressViaFrames = (sourceId: string): boolean =>
 export const sourceIsAsync = (sourceId: string): boolean =>
   getSource(sourceId)?.async ?? false;
 
+export const sourceResumeStrategy = (sourceId: string) =>
+  getSource(sourceId)?.resumeStrategy ?? "none";
+
 // ── Resume params ───────────────────────────────────────────────────────────
 export function getSourceResumeParams(
   sourceId: string,

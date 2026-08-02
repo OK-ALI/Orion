@@ -4,6 +4,7 @@ export {
   type ReleaseStatus,
   type IdPolicy,
   type ProgressStrategy,
+  type ResumeStrategy,
   type SubtitleStrategy,
   validateSourceDescriptor,
   assertSourceRegistry,
@@ -28,6 +29,7 @@ export {
   sourceSupportsProgress,
   sourceProgressViaFrames,
   sourceIsAsync,
+  sourceResumeStrategy,
   updateCinemaSourceHealth,
   getCinemaSourceRuntimeHealth,
 } from "./registry";

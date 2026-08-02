@@ -16,7 +16,7 @@ export const experimentalSources: CinemaSourceDescriptor[] = [
     buildMovieUrl: (id) => `https://autoembed.co/movie/${String(id).startsWith("tt") ? "imdb" : "tmdb"}/${id}`,
     buildEpisodeUrl: (id, season, episode) => `https://autoembed.co/tv/${String(id).startsWith("tt") ? "imdb" : "tmdb"}/${id}-${season}-${episode}`,
     expectedOrigins: ["https://autoembed.co"], allowedNavigationOrigins: ["https://autoembed.co"], requiredRequestOrigins: ["https://autoembed.co"],
-    progressStrategy: "frame-video", subtitleStrategy: "request-capture", supportsResume: true, supportsExternalSubtitles: false, supportsDownloads: true, params: {},
+    progressStrategy: "frame-video", resumeStrategy: "verified-seek", subtitleStrategy: "request-capture", supportsResume: true, supportsExternalSubtitles: false, supportsDownloads: true, params: {},
   },
   {
     id: "vsembed", label: "VsEmbed", releaseStatus: "experimental", media,
@@ -24,7 +24,7 @@ export const experimentalSources: CinemaSourceDescriptor[] = [
     buildMovieUrl: (id) => `https://vsembed.su/embed/movie/${id}`,
     buildEpisodeUrl: (id, season, episode) => `https://vsembed.su/embed/tv/${id}/${season}/${episode}`,
     expectedOrigins: ["https://vsembed.su"], allowedNavigationOrigins: ["https://vsembed.su"], requiredRequestOrigins: ["https://vsembed.su"],
-    progressStrategy: "frame-video", subtitleStrategy: "url-param", supportsResume: true, supportsExternalSubtitles: true, supportsDownloads: true,
+    progressStrategy: "frame-video", resumeStrategy: "verified-seek", subtitleStrategy: "url-param", supportsResume: true, supportsExternalSubtitles: true, supportsDownloads: true,
     langParam: "ds_lang", externalSubtitleParam: "sub_url", params: {},
   },
   {
@@ -33,7 +33,7 @@ export const experimentalSources: CinemaSourceDescriptor[] = [
     buildMovieUrl: (id) => `https://111movies.net/movie/${id}`,
     buildEpisodeUrl: (id, season, episode) => `https://111movies.net/tv/${id}/${season}/${episode}`,
     expectedOrigins: ["https://111movies.net"], allowedNavigationOrigins: ["https://111movies.net"], requiredRequestOrigins: ["https://111movies.net"],
-    progressStrategy: "frame-video", subtitleStrategy: "request-capture", supportsResume: true, supportsExternalSubtitles: false, supportsDownloads: true, params: {},
+    progressStrategy: "frame-video", resumeStrategy: "verified-seek", subtitleStrategy: "request-capture", supportsResume: true, supportsExternalSubtitles: false, supportsDownloads: true, params: {},
   },
   {
     id: "vixsrc", label: "VixSrc", releaseStatus: "experimental", media,
@@ -41,7 +41,7 @@ export const experimentalSources: CinemaSourceDescriptor[] = [
     buildMovieUrl: (id) => `https://vixsrc.to/movie/${id}`,
     buildEpisodeUrl: (id, season, episode) => `https://vixsrc.to/tv/${id}/${season}/${episode}`,
     expectedOrigins: ["https://vixsrc.to"], allowedNavigationOrigins: ["https://vixsrc.to"], requiredRequestOrigins: ["https://vixsrc.to"],
-    progressStrategy: "player-event", subtitleStrategy: "request-capture", supportsResume: true, supportsExternalSubtitles: false, supportsDownloads: true,
+    progressStrategy: "player-event", resumeStrategy: "url-param", subtitleStrategy: "request-capture", supportsResume: true, supportsExternalSubtitles: false, supportsDownloads: true,
     colorParam: "primaryColor", langParam: "lang", resumeParam: "startAt", params: { autoplay: "true" },
   },
   {
@@ -49,7 +49,7 @@ export const experimentalSources: CinemaSourceDescriptor[] = [
     buildMovieUrl: (id) => `https://multiembed.mov/?video_id=${id}`,
     buildEpisodeUrl: (id, season, episode) => `https://multiembed.mov/?video_id=${id}&s=${season}&e=${episode}`,
     expectedOrigins: ["https://multiembed.mov"], allowedNavigationOrigins: ["https://multiembed.mov"], requiredRequestOrigins: ["https://multiembed.mov"],
-    progressStrategy: "frame-video", subtitleStrategy: "request-capture", supportsResume: true, supportsExternalSubtitles: false, supportsDownloads: true,
+    progressStrategy: "frame-video", resumeStrategy: "verified-seek", subtitleStrategy: "request-capture", supportsResume: true, supportsExternalSubtitles: false, supportsDownloads: true,
     quarantined: true, params: { tmdb: "1" },
   },
 ];
@@ -73,6 +73,7 @@ export const disabledSources: CinemaSourceDescriptor[] = (
   allowedNavigationOrigins: [origin],
   requiredRequestOrigins: [origin],
   progressStrategy: "none" as const,
+  resumeStrategy: "none" as const,
   subtitleStrategy: "request-capture" as const,
   supportsResume: false,
   supportsExternalSubtitles: false,

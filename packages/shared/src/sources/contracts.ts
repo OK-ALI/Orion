@@ -25,6 +25,13 @@ export const SOURCE_PROGRESS_STRATEGIES = [
   "none",
 ] as const;
 
+export const SOURCE_RESUME_STRATEGIES = [
+  "url-param",
+  "verified-seek",
+  "native",
+  "none",
+] as const;
+
 export const SOURCE_SUBTITLE_STRATEGIES = [
   "url-param",
   "request-capture",
@@ -36,6 +43,7 @@ export const SOURCE_SUBTITLE_STRATEGIES = [
 export type ReleaseStatus = (typeof SOURCE_RELEASE_STATUSES)[number];
 export type IdPolicy = (typeof SOURCE_ID_POLICIES)[number];
 export type ProgressStrategy = (typeof SOURCE_PROGRESS_STRATEGIES)[number];
+export type ResumeStrategy = (typeof SOURCE_RESUME_STRATEGIES)[number];
 export type SubtitleStrategy = (typeof SOURCE_SUBTITLE_STRATEGIES)[number];
 
 export interface CinemaSourceDescriptor {
@@ -50,6 +58,7 @@ export interface CinemaSourceDescriptor {
   allowedNavigationOrigins: string[];
   requiredRequestOrigins: string[];
   progressStrategy: ProgressStrategy;
+  resumeStrategy: ResumeStrategy;
   subtitleStrategy: SubtitleStrategy;
   supportsResume: boolean;
   supportsExternalSubtitles: boolean;
@@ -115,10 +124,13 @@ export function validateSourceDescriptor(source: CinemaSourceDescriptor): string
     }
   }
   if (!(SOURCE_PROGRESS_STRATEGIES as readonly string[]).includes(source.progressStrategy)) errors.push("progressStrategy is invalid.");
+  if (!(SOURCE_RESUME_STRATEGIES as readonly string[]).includes(source.resumeStrategy)) errors.push("resumeStrategy is invalid.");
   if (!(SOURCE_SUBTITLE_STRATEGIES as readonly string[]).includes(source.subtitleStrategy)) errors.push("subtitleStrategy is invalid.");
   for (const field of ["supportsResume", "supportsExternalSubtitles", "supportsDownloads"] as const) {
     if (typeof source[field] !== "boolean") errors.push(`${field} must be boolean.`);
   }
+  if (source.resumeStrategy === "url-param" && !source.resumeParam) errors.push("url-param resumeStrategy requires resumeParam.");
+  if (!source.supportsResume && source.resumeStrategy !== "none") errors.push("non-resumable sources must use resumeStrategy none.");
   return errors;
 }
 

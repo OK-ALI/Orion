@@ -94,6 +94,34 @@ export interface MobilePlaybackTelemetryV1 {
   observedAt: number;
 }
 
+export type MobileResumeStrategy = "url-param" | "verified-seek" | "native" | "none";
+
+export type PlaybackHandoffStatus =
+  | "preparing"
+  | "loading"
+  | "seeking"
+  | "confirmed"
+  | "unconfirmed"
+  | "failed"
+  | "cancelled";
+
+export interface PlaybackHandoffV1 {
+  schemaVersion: 1;
+  id: string;
+  reason: "manual" | "automatic" | "return";
+  fromSessionId: string | null;
+  fromSourceId: string;
+  targetSourceId: string;
+  requestedTime: number | null;
+  confirmedTime: number | null;
+  strategy: MobileResumeStrategy;
+  status: PlaybackHandoffStatus;
+  attemptedSourceIds: string[];
+  startedAt: number;
+  updatedAt: number;
+  failureCode: string | null;
+}
+
 export type TrailerPlaybackState =
   | "idle"
   | "loading"

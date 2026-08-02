@@ -21,6 +21,7 @@ export const candidateSources: CinemaSourceDescriptor[] = [
     allowedNavigationOrigins: ["https://vidlink.pro"],
     requiredRequestOrigins: ["https://vidlink.pro"],
     progressStrategy: "player-event",
+    resumeStrategy: "url-param",
     subtitleStrategy: "url-param",
     supportsResume: true,
     supportsExternalSubtitles: true,
