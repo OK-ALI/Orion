@@ -4,6 +4,35 @@ import { describe, expect, it, vi } from "vitest";
 import MiniPlayer from "../../../src/renderer/components/MiniPlayer";
 
 describe("MiniPlayer", () => {
+  it("does not create a second playback surface while a handoff is pending", () => {
+    window.matchMedia = vi.fn(() => ({ matches: false }));
+    window.electron = {};
+
+    const { container, rerender } = render(
+      <MiniPlayer
+        url="https://player.test/embed"
+        title="Test title"
+        active={false}
+        onClose={() => {}}
+        onExpand={() => {}}
+      />,
+    );
+
+    expect(container.querySelector("webview")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Transferring playback to mini-player")).toBeInTheDocument();
+
+    rerender(
+      <MiniPlayer
+        url="https://player.test/embed"
+        title="Test title"
+        active
+        onClose={() => {}}
+        onExpand={() => {}}
+      />,
+    );
+    expect(container.querySelectorAll("webview")).toHaveLength(1);
+  });
+
   it("leaves the loading state after dom-ready and ignores late subframe loading", async () => {
     window.matchMedia = vi.fn(() => ({ matches: false }));
     window.electron = {

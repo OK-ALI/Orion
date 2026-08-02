@@ -102,7 +102,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
 
   // Inject CSS to scale down subtitles for the mini-player
   useEffect(() => {
-    if (isLocal) return undefined;
+    if (isLocal || !active) return undefined;
     const wv = webviewRef.current;
     if (!wv) return;
     const injectStyles = () => {
@@ -170,10 +170,10 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       ambientCleanupRef.current?.();
       window.clearTimeout(readyTimeoutRef.current);
     };
-  }, [initialState, isLocal, position.x, position.y, size.width, size.height]);
+  }, [active, initialState, isLocal, position.x, position.y, size.width, size.height]);
 
   useEffect(() => {
-    if (!isLocal) return;
+    if (!isLocal || !active) return;
     const video = nativeVideoRef.current;
     if (!video) return;
     const restore = () => {
@@ -195,10 +195,11 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       video.removeEventListener("canplay", ready);
       video.removeEventListener("error", failed);
     };
-  }, [isLocal, initialState, url]);
+  }, [active, isLocal, initialState, url]);
 
   useEffect(() => {
     const updatePlaybackState = async () => {
+      if (!active) return;
       if (isLocal) {
         const video = nativeVideoRef.current;
         if (!video) return;
@@ -225,7 +226,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
     };
     const timer = window.setInterval(updatePlaybackState, 1000);
     return () => window.clearInterval(timer);
-  }, [url, isLocal, onProgress]);
+  }, [active, url, isLocal, onProgress]);
 
   const snapshot = async () => {
     if (isLocal && nativeVideoRef.current) {
@@ -482,7 +483,9 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
 
         {/* Webview Content */}
         <div className="orion-mini-player-content">
-          {isLocal ? (
+          {!active ? (
+            <div className="orion-mini-player-webview" aria-label="Transferring playback to mini-player" />
+          ) : isLocal ? (
             <video ref={nativeVideoRef} className="orion-mini-player-webview" src={url} playsInline controls>
               {subtitles.map((subtitle, index) => <track key={subtitle.url} kind="subtitles" src={subtitle.url} srcLang={subtitle.lang || "en"} label={subtitle.lang || `Subtitle ${index + 1}`} default={index === 0} />)}
             </video>

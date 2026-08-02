@@ -133,12 +133,14 @@ export default function PlayerScreen() {
       if (reason !== 'automatic') {
         setResumeTime(0);
         setSourceId(targetSourceId);
+        return true;
       }
-      return;
+      return false;
     }
     publishHandoff(next);
     setResumeTime(requestedTime || 0);
     setSourceId(targetSourceId);
+    return true;
   }, [publishHandoff]);
 
   const changeSource = useCallback((
@@ -146,7 +148,7 @@ export default function PlayerScreen() {
     snapshot: VerifiedPlaybackSnapshot | null,
     reason: 'manual' | 'automatic',
   ) => {
-    if ((reason === 'manual' && nextSourceId === sourceId) || handoffIsPending(handoffRef.current)) return;
+    if ((reason === 'manual' && nextSourceId === sourceId) || handoffIsPending(handoffRef.current)) return false;
     const requestedTime = getFreshVerifiedPosition(snapshot);
     if (reason === 'automatic') {
       if (requestedTime == null) {
@@ -155,20 +157,19 @@ export default function PlayerScreen() {
           code: 'NO_FRESH_POSITION',
           message: 'Automatic source failover was stopped because playback position was not verified.',
         });
-        return;
+        return false;
       }
       const target = getNextMobileContinuitySource(sourceId, type, []);
-      if (!target) return;
-      launchHandoff({
+      if (!target) return false;
+      return launchHandoff({
         targetSourceId: target,
         requestedTime,
         reason,
         fromSourceId: sourceId,
         fromSessionId: snapshot?.sessionId ?? null,
       });
-      return;
     }
-    launchHandoff({
+    return launchHandoff({
       targetSourceId: nextSourceId,
       requestedTime,
       reason,

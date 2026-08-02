@@ -103,3 +103,13 @@ test("source continuity is capability-driven rather than supportsResume alone", 
   assert.match(candidates, /resumeStrategy: "url-param"/);
   assert.match(experimental, /resumeStrategy: "none"/);
 });
+
+test("embedded source switches release the previous audio owner before mounting the target", () => {
+  const surface = read("src/features/playback/EmbedPlayerSurface.tsx");
+  const playerTypes = read("src/features/playback/playerTypes.ts");
+  assert.match(surface, /WEBVIEW_AUDIO_RELEASE_MS/);
+  assert.match(surface, /media\.muted = true; media\.pause\(\)/);
+  assert.match(surface, /setSurfaceReleased\(true\)/);
+  assert.match(surface, /surfaceReleased \? \(/);
+  assert.match(playerTypes, /\) => boolean;/);
+});

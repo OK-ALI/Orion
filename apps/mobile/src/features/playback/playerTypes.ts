@@ -21,8 +21,8 @@ export interface PlaybackSurfaceProps {
     sourceId: string,
     verifiedSnapshot: VerifiedPlaybackSnapshot | null,
     reason: 'manual' | 'automatic',
-  ) => void;
-  onAutomaticFailover: (verifiedSnapshot: VerifiedPlaybackSnapshot | null) => void;
+  ) => boolean;
+  onAutomaticFailover: (verifiedSnapshot: VerifiedPlaybackSnapshot | null) => boolean;
   onPlaybackSnapshot?: (snapshot: VerifiedPlaybackSnapshot) => void;
   activeHandoffId?: string | null;
 }

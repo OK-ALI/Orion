@@ -36,6 +36,16 @@ interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
   onResumeAttempt: (handoffId: string, status: 'applied' | 'unavailable') => void;
 }
 
+const WEBVIEW_AUDIO_RELEASE_MS = Platform.OS === 'android' ? 240 : 80;
+const QUIET_CURRENT_SURFACE_SCRIPT = `
+  (() => {
+    document.querySelectorAll('video, audio').forEach((media) => {
+      try { media.muted = true; media.pause(); } catch (_) {}
+    });
+    true;
+  })();
+`;
+
 export function EmbedPlayerSurface({
   embedUrl,
   title,
@@ -63,11 +73,14 @@ export function EmbedPlayerSurface({
   const [allowedDependencies, setAllowedDependencies] = useState(0);
   const [watchdogDismissed, setWatchdogDismissed] = useState(false);
   const [isLandscape, setIsLandscape] = useState(true);
+  const [surfaceReleased, setSurfaceReleased] = useState(false);
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const observationTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadStartedAt = useRef(Date.now());
   const bridgeSequence = useRef(0);
   const resumeRequested = useRef(false);
+  const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sourceTransitionPending = useRef(false);
   const webViewRef = useRef<WebViewType>(null);
   const source = ALL_CINEMA_SOURCES.find((entry) => entry.id === sourceId);
   const sourceLabel = source?.label || 'VidEasy Direct';
@@ -122,6 +135,7 @@ export function EmbedPlayerSurface({
     setWatchdogDismissed(false);
     return () => {
       if (observationTimeout.current) clearTimeout(observationTimeout.current);
+      if (releaseTimer.current) clearTimeout(releaseTimer.current);
       telemetry.flush();
     };
   }, [embedUrl, sourceId]);
@@ -166,13 +180,31 @@ export function EmbedPlayerSurface({
     }
   };
 
-  const selectSource = (nextSourceId: string) => {
+  const releaseSurfaceThen = (
+    switchSource: (snapshot: ReturnType<typeof telemetry.getVerifiedSnapshot>) => boolean,
+  ) => {
+    if (sourceTransitionPending.current || activeHandoffId) return;
     telemetry.flush();
-    onSourceChange(nextSourceId, telemetry.getVerifiedSnapshot(), 'manual');
+    const snapshot = telemetry.getVerifiedSnapshot();
+    sourceTransitionPending.current = true;
+    webViewRef.current?.injectJavaScript(QUIET_CURRENT_SURFACE_SCRIPT);
+    setSurfaceReleased(true);
+    releaseTimer.current = setTimeout(() => {
+      releaseTimer.current = null;
+      const accepted = switchSource(snapshot);
+      if (!accepted) {
+        sourceTransitionPending.current = false;
+        setSurfaceReleased(false);
+      }
+    }, WEBVIEW_AUDIO_RELEASE_MS);
+  };
+
+  const selectSource = (nextSourceId: string) => {
+    if (nextSourceId === sourceId) return;
+    releaseSurfaceThen((snapshot) => onSourceChange(nextSourceId, snapshot, 'manual'));
   };
   const handleFailover = () => {
-    telemetry.flush();
-    onAutomaticFailover(telemetry.getVerifiedSnapshot());
+    releaseSurfaceThen(onAutomaticFailover);
   };
 
   const requiredOrigins = new Set([
@@ -293,7 +325,9 @@ export function EmbedPlayerSurface({
   return (
     <View style={styles.container}>
       <View style={styles.videoBoxWrapper}>
-        {Platform.OS === 'web' ? (
+        {surfaceReleased ? (
+          <View style={styles.webVideo} accessibilityLabel="Releasing previous playback source" />
+        ) : Platform.OS === 'web' ? (
           <iframe
             src={embedUrl}
             style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#000' }}
