@@ -31,7 +31,6 @@ const {
   createVerifiedResumeScript,
 } = require("../src/features/playback/mobileAdBlocker.ts");
 const {
-  applyMobileResumePlaybackPolicy,
   formatPlaybackTime,
   resolveResumeChoiceTime,
 } = require("../src/features/playback/resumeChoice.ts");
@@ -306,18 +305,6 @@ test("resume prompt choices resolve to explicit playback positions", () => {
   assert.equal(resolveResumeChoiceTime("resume", Number.NaN), 0);
   assert.equal(formatPlaybackTime(125.8), "2:05");
   assert.equal(formatPlaybackTime(3_725), "1:02:05");
-  assert.deepEqual(
-    applyMobileResumePlaybackPolicy("vidking", 125, { progress: 125 }, true),
-    { progress: 125, autoPlay: "false" },
-  );
-  assert.deepEqual(
-    applyMobileResumePlaybackPolicy("vidking", 0, {}, true),
-    {},
-  );
-  assert.deepEqual(
-    applyMobileResumePlaybackPolicy("videasy", 125, { progress: 125 }, true),
-    { progress: 125 },
-  );
 });
 
 test("player-event observer is restricted to documented mobile providers and shapes", () => {

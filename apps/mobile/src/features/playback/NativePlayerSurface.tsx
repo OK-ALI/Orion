@@ -183,7 +183,7 @@ export function NativePlayerSurface({
           title={title || 'this title'}
           savedTime={pendingManualSource.savedTime}
           targetSourceLabel={pendingManualSource.label}
-          opensPaused={pendingManualSource.id === 'vidking'}
+          resumeRestricted={pendingManualSource.id === 'vidking'}
           onChoose={completeManualSourceChoice}
           onCancel={() => {
             setPendingManualSource(null);

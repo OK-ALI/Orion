@@ -18,10 +18,8 @@ import {
 import { reportMobileDiagnosticError, updateMobileDiagnostics } from '../../services/mobileDiagnostics';
 import { EmbedPlayerSurface } from './EmbedPlayerSurface';
 import { NativePlayerSurface } from './NativePlayerSurface';
-import { HandoffNotice } from './HandoffNotice';
 import { ResumePlaybackPrompt } from './ResumePlaybackPrompt';
 import {
-  applyMobileResumePlaybackPolicy,
   resolveResumeChoiceTime,
   type ResumePlaybackChoice,
 } from './resumeChoice';
@@ -31,7 +29,6 @@ import {
   createPlaybackHandoff,
   getFreshVerifiedPosition,
   handoffCanCarryPosition,
-  handoffContinueRequiresCleanRestart,
   handoffIsPending,
   handoffTargetMissedPosition,
   updateHandoffStatus,
@@ -64,7 +61,6 @@ export default function PlayerScreen() {
     : Math.max(0, Number(existingProgress?.currentTime) || 0);
   const [initialChoicePending, setInitialChoicePending] = useState(initialSavedTime > 30);
   const [resumeTime, setResumeTime] = useState(initialSavedTime > 30 ? 0 : initialSavedTime);
-  const [suppressProviderAutoplay, setSuppressProviderAutoplay] = useState(false);
 
   const publishHandoff = useCallback((next: PlaybackHandoffV1 | null) => {
     handoffRef.current = next;
@@ -101,15 +97,9 @@ export default function PlayerScreen() {
 
   const activeStreamUrl = useMemo(() => {
     if (isOffline === 'true' && offlineUri) return offlineUri;
-    const baseResumeParams: Record<string, string | number> = {
+    const resumeParams: Record<string, string | number> = {
       ...getSourceResumeParams(sourceId, resumeTime),
     };
-    const resumeParams = applyMobileResumePlaybackPolicy(
-      sourceId,
-      resumeTime,
-      baseResumeParams,
-      suppressProviderAutoplay,
-    );
     return getSourceUrl(
       sourceId,
       type,
@@ -118,7 +108,7 @@ export default function PlayerScreen() {
       Number(episode) || 1,
       resumeParams,
     );
-  }, [episode, id, imdbId, isOffline, offlineUri, resumeTime, season, sourceId, suppressProviderAutoplay, type]);
+  }, [episode, id, imdbId, isOffline, offlineUri, resumeTime, season, sourceId, type]);
 
   const launchHandoff = useCallback(({
     targetSourceId,
@@ -157,9 +147,6 @@ export default function PlayerScreen() {
       return false;
     }
     publishHandoff(next);
-    setSuppressProviderAutoplay(
-      targetSourceId === 'vidking' && reason !== 'automatic' && Number(requestedTime) > 0,
-    );
     setResumeTime(requestedTime || 0);
     setSourceId(targetSourceId);
     return true;
@@ -196,7 +183,6 @@ export default function PlayerScreen() {
     }
     if (requestedTime === 0) {
       publishHandoff(null);
-      setSuppressProviderAutoplay(false);
       setResumeTime(0);
       setSourceId(nextSourceId);
       return true;
@@ -283,36 +269,10 @@ export default function PlayerScreen() {
     }
   }, [publishHandoff, retryAutomaticHandoff]);
 
-  const returnToPreviousSource = useCallback(() => {
-    const active = handoffRef.current;
-    if (!active || active.fromSourceId === sourceId) {
-      publishHandoff(null);
-      return;
-    }
-    launchHandoff({
-      targetSourceId: active.fromSourceId,
-      requestedTime: active.requestedTime,
-      reason: 'return',
-      fromSourceId: sourceId,
-      fromSessionId: null,
-      attemptedSourceIds: active.attemptedSourceIds,
-    });
-  }, [launchHandoff, publishHandoff, sourceId]);
-
-  const continueAtTargetSource = useCallback(() => {
-    const active = handoffRef.current;
-    if (!active) return;
-    const restartWithoutResume = handoffContinueRequiresCleanRestart(active, sourceId);
-    publishHandoff(null);
-    if (restartWithoutResume) {
-      setSuppressProviderAutoplay(false);
-      setResumeTime(0);
-    }
-  }, [publishHandoff, sourceId]);
-
   const chooseInitialPosition = useCallback((choice: ResumePlaybackChoice) => {
-    const chosenTime = resolveResumeChoiceTime(choice, initialSavedTime);
-    setSuppressProviderAutoplay(sourceId === 'vidking' && chosenTime > 0);
+    const chosenTime = sourceId === 'vidking'
+      ? 0
+      : resolveResumeChoiceTime(choice, initialSavedTime);
     setResumeTime(chosenTime);
     setInitialChoicePending(false);
   }, [initialSavedTime, sourceId]);
@@ -349,17 +309,9 @@ export default function PlayerScreen() {
         <ResumePlaybackPrompt
           title={title || 'this title'}
           savedTime={initialSavedTime}
-          opensPaused={sourceId === 'vidking'}
+          resumeRestricted={sourceId === 'vidking'}
           onChoose={chooseInitialPosition}
           onCancel={() => router.back()}
-        />
-      )}
-      {handoff && handoff.status !== 'confirmed' && handoff.fromSourceId !== handoff.targetSourceId && (
-        <HandoffNotice
-          handoff={handoff}
-          onContinue={continueAtTargetSource}
-          onReturn={returnToPreviousSource}
-          recoveredPrevious={handoff.reason === 'automatic' && sourceId === handoff.fromSourceId}
         />
       )}
     </View>

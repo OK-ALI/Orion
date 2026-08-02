@@ -19,13 +19,3 @@ export function formatPlaybackTime(seconds: number): string {
     ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
     : `${minutes}:${String(remainder).padStart(2, '0')}`;
 }
-
-export function applyMobileResumePlaybackPolicy(
-  sourceId: string,
-  seconds: number,
-  params: Record<string, string | number>,
-  suppressProviderAutoplay: boolean,
-): Record<string, string | number> {
-  if (sourceId !== 'vidking' || !suppressProviderAutoplay || seconds <= 0) return params;
-  return { ...params, autoPlay: 'false' };
-}
