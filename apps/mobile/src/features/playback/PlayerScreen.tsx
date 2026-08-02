@@ -192,7 +192,7 @@ export default function PlayerScreen() {
     const nextTarget = getNextMobileContinuitySource(
       expired.targetSourceId,
       type,
-      expired.attemptedSourceIds,
+      [...expired.attemptedSourceIds, expired.fromSourceId],
     );
     if (!nextTarget) {
       setResumeTime(expired.requestedTime || 0);

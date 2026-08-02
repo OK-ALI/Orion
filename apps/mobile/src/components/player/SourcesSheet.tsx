@@ -66,13 +66,13 @@ export function SourcesSheet({ currentSourceId, onSelect, onClose, mediaType = '
             return (
               <Pressable
                 key={source.id}
-                disabled={!supportsMedia || isCoolingDown}
+                disabled={!supportsMedia}
                 style={({ pressed }) => [
                   styles.sourceRow,
                   { backgroundColor: theme.surface, borderColor: theme.border },
                   isActive && styles.activeRow,
                   isActive && { backgroundColor: theme.accentSoft, borderColor: theme.accent },
-                  (!supportsMedia || isCoolingDown) && styles.disabledRow,
+                  !supportsMedia && styles.disabledRow,
                   pressed && { opacity: 0.85 },
                 ]}
                 onPress={() => {
