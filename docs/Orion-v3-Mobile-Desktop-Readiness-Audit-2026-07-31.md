@@ -9,10 +9,10 @@
 
 > **Overall Orion v3 implementation completion: 36%**
 >
-> **Last verified:** July 31, 2026  
+> **Last verified:** August 2, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 1 implementation complete; physical-provider acceptance pending
-> **Critical open blockers:** Physical Android evidence for embedded playback telemetry, History and Continue Watching, trailer embeds, Smart Connect transport hardening, player-surface laser, native provider shield, cross-platform profiles, and Mobile updates
+> **Current stage:** Phase 1 at 80%; complete source routing and physical-provider acceptance are pending
+> **Critical open blockers:** Physical Android evidence for the complete selectable-source matrix, source-aware video fitting, reliable player-overlay touch ownership, History and Continue Watching, trailer embeds, Smart Connect transport hardening, player-surface laser, native provider shield, cross-platform profiles, and Mobile updates
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -85,11 +85,13 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [x] **V3-P1-003:** Add versioned `MobilePlaybackSession`.
 - [x] **V3-P1-004:** Add versioned `MobilePlaybackTelemetry`.
 - [x] **V3-P1-005:** Add evidence classification for native, provider, message, manual, and opened-only records.
-- [ ] **V3-P1-006:** Add provider `<video>` telemetry where frame access permits it. Implementation is complete; physical VidSrc/Videasy evidence is pending.
-- [ ] **V3-P1-007:** Add provider `postMessage` telemetry adapters. Implementation is complete; physical VidKing evidence is pending.
+- [ ] **V3-P1-006:** Add provider `<video>` telemetry where frame access permits it. Implementation is complete; physical Videasy, VidSrc, AutoEmbed, VsEmbed, and 111Movies evidence is pending.
+- [ ] **V3-P1-007:** Add provider `postMessage` telemetry adapters. Implementation is complete; physical VidKing, VidLink, and VixSrc evidence is pending.
 - [x] **V3-P1-008:** Save on start, interval, pause, seek, source change, background, exit, and completion.
 - [x] **V3-P1-009:** Preserve verified position during healthy source failover.
 - [x] **V3-P1-010:** Prove that no provider creates fabricated duration or percentage data.
+- [ ] **V3-P1-011:** Validate every selectable Mobile source by declared telemetry strategy, including an explicitly unobservable/quarantined case.
+- [ ] **V3-P1-012:** Honor source surface contracts so async/native AllManga is not routed through the generic embedded-player path.
 
 ### Phase 2 — History and Continue Watching
 
@@ -179,6 +181,10 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [ ] **V3-P7-009:** Recompose Media Detail hero and actions.
 - [ ] **V3-P7-010:** Validate portrait, landscape, cutouts, 200% text, and Reduced Motion.
 - [ ] **V3-P7-011:** Validate all six themes on the complete device matrix.
+- [ ] **V3-P7-012:** Add source-aware video presentation modes—Fit, Fill, Stretch, and provider/original—without distorting unsupported embedded players.
+- [ ] **V3-P7-013:** Give Orion's player overlay a native touch/reveal layer independent of cross-origin iframe tap propagation.
+- [ ] **V3-P7-014:** Reconcile native and embedded HUD behavior through one reachable visible/hidden/pinned/sheet/buffering/error state machine.
+- [ ] **V3-P7-015:** Validate overlay controls, safe areas, orientation, video fitting, and touch targets across phones, tablets, and every selectable provider.
 
 ### Phase 8 — Desktop Orion 3.0 integration
 
@@ -252,12 +258,12 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-07-31 | V3-P1-003–V3-P1-005 | Added versioned playback-session and telemetry contracts, strict evidence classification, and a reducer that rejects stale, malformed, impossible, and unexplained-regression events | Commits `c0706f2`, `690fb71`; reducer and persistence unit coverage | 34% |
 | 2026-07-31 | V3-P1-008–V3-P1-010, V3-P9-003 | Wired verified native/embedded telemetry, isolated unobservable opens in `recentOpensV1`, preserved verified failover position, enforced verified-only History/progress writes, and retained the Phase 0 persistent-storage recovery boundary | Commit `6a1e065`; Mobile typecheck; 18/18 Node tests; 60-file size gate; Expo Doctor 20/20; web export; standalone Android APK containing `index.android.bundle`; Desktop 52 Node + 135 renderer tests and all repository gates | 36% |
 | 2026-08-02 | V3-P0-005, V3-P9-003 | Corrected the native storage adapter for the installed `react-native-mmkv` v4 factory/removal API after physical launch exposed `MMKV_INIT_FAILED`; clarified that app-private MMKV does not require Android file permission | Mobile typecheck; 18/18 Node tests; 60-file size gate; standalone arm64 APK rebuilt with bundled JavaScript and Nitro MMKV native libraries | 36% |
+| 2026-08-02 | V3-P1-006, V3-P1-007, V3-P1-011, V3-P1-012, V3-P7-012–V3-P7-015 | Expanded acceptance from three representative sources to the complete selectable source matrix; recorded incorrect AllManga surface routing, missing source-aware fit modes, and unreliable cross-origin HUD tap propagation | Code audit of the shared source registry, Mobile source sheet, `PlayerScreen`, native HUD, and embedded surface; roadmap-only update with no completion credit | 36% |
 
-Phase 1 implementation is complete, but acceptance remains at 80% because no
-physical Android device was attached during this checkpoint. `V3-P1-006` and
-`V3-P1-007` remain open until VidSrc and Videasy demonstrate frame-video
-telemetry, VidKing demonstrates documented player-message telemetry, and an
-unobservable provider plus source failover are recorded on a physical device.
+The core Phase 1 telemetry implementation is complete, but the phase remains at
+80%. Physical Android evidence is still required for every selectable source,
+and the async/native AllManga route must be corrected before Phase 1 can be
+accepted. `V3-P1-006`, `V3-P1-007`, `V3-P1-011`, and `V3-P1-012` remain open.
 The implementation deliberately places those unobservable opens only in the
 bounded `recentOpensV1` journal; they cannot create History, progress,
 percentages, completion, or watched records.
@@ -308,15 +314,12 @@ Other release blockers are:
 At the time of this audit:
 
 - Mobile strict TypeScript compilation passes.
-- Existing Mobile tests pass, but they cover only a small part of Smart Connect protocol behavior.
+- Eighteen Mobile unit/safety tests pass, including playback-truth rejection and persistence guards; physical provider behavior remains unverified.
 - Desktop IPC contract validation passes.
 - Desktop renderer-binding validation passes.
 - Mobile and Desktop package versions are both 2.0.1.
 - Mobile does not currently include a complete `expo-updates` configuration.
-- Several large Mobile files remain temporarily allowlisted:
-  - `apps/mobile/app/(tabs)/connect.tsx`
-  - `apps/mobile/app/(tabs)/discover.tsx`
-  - `apps/mobile/app/media/[id].tsx`
+- Connect, Discover, Media Detail, and Player routes are thin shims, and the Mobile source-size gate has no oversized allowlist.
 
 These results confirm that the repository is buildable, but they do not establish release-level behavioral confidence.
 
@@ -333,6 +336,9 @@ These results confirm that the repository is buildable, but they do not establis
 | P0 | Smart Connect HUD | Desktop publishes occasional snapshots instead of continuous telemetry | Authoritative live status plus locally interpolated progress |
 | P1 | Smart Connect UX | Users manually switch Touchpad, D-pad, HUD, and Keyboard modes | One context-aware Control Surface |
 | P1 | Player HUD | Embedded controls can become difficult to reveal and use | Reachable, explicit HUD state machine |
+| P1 | Player touch ownership | Embedded HUD reveal partly depends on page-level injected taps that nested cross-origin frames do not reliably propagate | Native Orion-owned gesture/reveal layer above the provider surface |
+| P1 | Video presentation | The outer player fills the display, but inner provider video may remain cropped, letterboxed, or incorrectly sized with no user fit choice | Capability-aware Fit, Fill, Stretch, and Provider/Original modes |
+| P1 | Source matrix | Nine sources are selectable, but only three representative telemetry paths were initially named; AllManga's async/native contract is not honored by Mobile routing | Per-source routing, health, telemetry, subtitle, shield, and UI acceptance matrix |
 | P1 | Responsive UI | Fixed dimensions and oversized controls create clipping and wasted space | Phone, tablet, foldable, landscape, and large-text layouts |
 | P1 | Mobile updates | No production OTA/native update flow | Runtime-safe OTA plus signed native updates |
 | P1 | Cross-device profile | Mobile has no compatible Google authentication or profile restoration | Portable Profile v3 with record-level merging |
@@ -342,23 +348,19 @@ These results confirm that the repository is buildable, but they do not establis
 
 ## 1. Playback Truth, History, and Continue Watching
 
-### Confirmed cause
+### Confirmed condition
 
-The native player calls `recordPlayback()` in:
+Phase 1 now routes native and embedded observations through the versioned
+telemetry reducer under `apps/mobile/src/features/playback`. Only verified,
+advancing playback can reach `recordPlayback()` in the Library context.
 
-- `apps/mobile/app/player/[id].tsx`
+Remaining conditions:
 
-The Library context already stores progress and history in:
-
-- `apps/mobile/src/context/LibraryContext.tsx`
-
-However:
-
-- Embedded providers do not call `recordPlayback()`.
-- Cross-origin provider frames do not automatically expose current time or duration.
-- Most real Mobile streaming therefore produces no reliable progress record.
+- Cross-origin provider frames do not automatically expose current time or duration, so every declared adapter still requires physical-device evidence.
+- Unobservable providers are recorded only in `recentOpensV1`; they cannot create History, progress, watched state, completion, or percentages.
 - `apps/mobile/app/(tabs)/library.tsx` obtains `history` from `useLibrary()` indirectly but renders values from the `watched` map as its History list.
 - Mobile Home has no proper Continue Watching section.
+- Online sources are still routed through `EmbedPlayerSurface`; this conflicts with AllManga's declared async/native strategy.
 
 ### Required data separation
 
@@ -410,9 +412,26 @@ Provider adapters should report evidence through the strongest available method:
 - Injected polling of an accessible `<video>` element when the provider surface permits it.
 - Known provider `postMessage` events.
 - Provider-specific player events.
-- An `opened-only` history event when no trustworthy timing signal exists.
+- An `opened-only` Recent Opens journal entry—not History—when no trustworthy timing signal exists.
 
 Orion must not fabricate a percentage when the provider exposes no trustworthy position or duration.
+
+### Complete selectable-source matrix
+
+The three initially named sources are representative adapters, not the full
+Mobile catalog. Physical acceptance must cover every source the UI lets a user
+select:
+
+| Strategy | Selectable sources | Required evidence |
+|---|---|---|
+| `frame-video` | Videasy, VidSrc, AutoEmbed, VsEmbed, 111Movies | Accessible video events, advancing time, pause/seek/buffer behavior, or an honest `unobservable` result |
+| `player-event` | VidKing, VidLink, VixSrc | Documented provider messages with valid origin, session, source, sequence, time, and duration |
+| async/native | AllManga | Correct async resolution into a native/direct surface before native telemetry can be accepted |
+
+SuperEmbed remains quarantined. VidFast, Vidify, 2Embed, and VidSrc CC remain
+disabled and are not release-selectable until their contracts are separately
+validated. Disabled or quarantined sources must never be counted as working
+because their URL loaded.
 
 ### Persistence rules
 
@@ -538,6 +557,24 @@ The same `MobilePlaybackTelemetry` contract should feed:
 - Continue Watching.
 - Smart Connect.
 - Source health.
+
+### Confirmed player-presentation and touch defects
+
+- `NativePlayerSurface` currently fixes video to `contentFit="contain"` and exposes no user presentation choice.
+- `EmbedPlayerSurface` sizes the outer WebView to the screen, but the nested provider iframe/video controls its own crop and aspect ratio.
+- Orion cannot assume that resizing the WebView also fits the provider's video.
+- Embedded HUD reveal partly depends on an injected page-level `TAP` message. Taps inside nested cross-origin frames do not reliably bubble to that listener.
+- Native and embedded surfaces use separate overlay implementations, timers, gesture ownership, and control sets, so behavior diverges.
+- Fullscreen and orientation changes are not yet validated against cutouts, system bars, source sheets, shield state, and reveal controls.
+
+### Deferred corrective design
+
+- Keep playback itself unchanged until the dedicated Adaptive Mobile UI phase.
+- Add Orion-owned touch capture and a persistent reveal affordance above the provider surface; provider DOM taps cannot be the only recovery path.
+- Expose Fit, Fill, Stretch, and Provider/Original modes through a source-capability contract.
+- Use `contentFit` directly for native media. For embedded media, resize only the Orion viewport by default and apply provider-specific safe fitting only where verified; never inject destructive CSS blindly into unknown players.
+- Persist the user's preferred mode per surface/source while falling back safely when a provider cannot support it.
+- Drive both native and embedded overlays from the same explicit HUD reducer and verified telemetry state.
 
 ## 4. Mobile Provider Shield and Subtitles
 
@@ -1187,10 +1224,18 @@ Set both packages to 3.0.0 only after the complete acceptance matrix passes.
 ### Playback
 
 - Native direct media.
-- Embedded movie and TV playback.
+- Embedded movie and TV playback across the complete selectable source matrix.
+- `frame-video` acceptance for Videasy, VidSrc, AutoEmbed, VsEmbed, and 111Movies.
+- `player-event` acceptance for VidKing, VidLink, and VixSrc.
+- Async/native AllManga resolution through its declared surface rather than the generic embedded route.
+- Honest `unobservable` classification when a provider exposes no trustworthy timing evidence.
 - Source failover.
 - Pause, seek, resume, completion, and backgrounding.
 - No fake progress for unobservable providers.
+- Native Fit, Fill, Stretch, and Original presentation modes.
+- Embedded Provider/Original fallback plus only provider-specific fitting that has been safely verified.
+- Reliable HUD reveal when touches occur over a nested cross-origin provider frame.
+- Overlay controls, source sheets, shield state, safe areas, and orientation changes without collisions.
 
 ### History and Continue Watching
 
