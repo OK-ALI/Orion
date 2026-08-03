@@ -9,18 +9,15 @@ $repo = Split-Path -Parent $PSScriptRoot
 $desktopPublic = Join-Path $repo "apps/desktop/public"
 $mobileAssets = Join-Path $repo "apps/mobile/assets"
 $androidRes = Join-Path $repo "apps/mobile/android/app/src/main/res"
+$defaultSource = Join-Path $repo "assets/branding/orion-pop-master.png"
+$sourcePath = if ($Source) { (Resolve-Path -LiteralPath $Source).Path } else { $defaultSource }
 
-if ($Source) {
-  Write-Warning "-Source is retained for compatibility but ignored. Orion icons now use deterministic Portal Star geometry."
+if (-not (Test-Path -LiteralPath $sourcePath)) {
+  throw "Orion Pop master is missing: $sourcePath"
 }
 
 $colors = @{
   Obsidian = [System.Drawing.Color]::FromArgb(255, 7, 7, 12)
-  ObsidianWarm = [System.Drawing.Color]::FromArgb(255, 20, 8, 14)
-  Border = [System.Drawing.Color]::FromArgb(255, 49, 28, 37)
-  Portal = [System.Drawing.Color]::FromArgb(255, 242, 5, 31)
-  PortalHighlight = [System.Drawing.Color]::FromArgb(255, 255, 79, 94)
-  Pearl = [System.Drawing.Color]::FromArgb(255, 255, 244, 236)
   White = [System.Drawing.Color]::FromArgb(255, 255, 255, 255)
 }
 
@@ -48,13 +45,15 @@ function New-RoundedRectanglePath(
 
 function Set-HighQualityGraphics([System.Drawing.Graphics]$graphics) {
   $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+  $graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceOver
   $graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
   $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
   $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
 }
 
-function Draw-ObsidianTile(
+function Draw-MasterTile(
   [System.Drawing.Graphics]$graphics,
+  [System.Drawing.Bitmap]$master,
   [int]$size,
   [double]$marginRatio,
   [ValidateSet("rounded", "circle", "square")]
@@ -63,137 +62,91 @@ function Draw-ObsidianTile(
   $margin = [single]($size * $marginRatio)
   $side = [single]($size - (2 * $margin))
   $rect = [System.Drawing.RectangleF]::new($margin, $margin, $side, $side)
-  $brush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-    $rect,
-    $colors.Obsidian,
-    $colors.ObsidianWarm,
-    45
-  )
+  $state = $graphics.Save()
   try {
     if ($shape -eq "circle") {
-      $graphics.FillEllipse($brush, $rect)
-      $border = [System.Drawing.Pen]::new($colors.Border, [single][Math]::Max(1, $size * 0.012))
-      try { $graphics.DrawEllipse($border, $rect) } finally { $border.Dispose() }
-      return
-    }
-    if ($shape -eq "square") {
-      $graphics.FillRectangle($brush, $rect)
-      return
-    }
-    $path = New-RoundedRectanglePath $rect ([single]($side * 0.22))
-    try {
-      $graphics.FillPath($brush, $path)
-      $border = [System.Drawing.Pen]::new($colors.Border, [single][Math]::Max(1, $size * 0.012))
-      try { $graphics.DrawPath($border, $path) } finally { $border.Dispose() }
-    } finally {
-      $path.Dispose()
-    }
-  } finally {
-    $brush.Dispose()
-  }
-}
-
-function New-PortalStarPath(
-  [single]$centerX,
-  [single]$centerY,
-  [single]$longRadius,
-  [single]$innerRadius
-) {
-  $points = [System.Drawing.PointF[]]@(
-    [System.Drawing.PointF]::new($centerX, $centerY - $longRadius),
-    [System.Drawing.PointF]::new($centerX + $innerRadius, $centerY - $innerRadius),
-    [System.Drawing.PointF]::new($centerX + $longRadius, $centerY),
-    [System.Drawing.PointF]::new($centerX + $innerRadius, $centerY + $innerRadius),
-    [System.Drawing.PointF]::new($centerX, $centerY + $longRadius),
-    [System.Drawing.PointF]::new($centerX - $innerRadius, $centerY + $innerRadius),
-    [System.Drawing.PointF]::new($centerX - $longRadius, $centerY),
-    [System.Drawing.PointF]::new($centerX - $innerRadius, $centerY - $innerRadius)
-  )
-  $path = [System.Drawing.Drawing2D.GraphicsPath]::new()
-  $path.AddPolygon($points)
-  return $path
-}
-
-function Draw-PortalStar(
-  [System.Drawing.Graphics]$graphics,
-  [int]$size,
-  [double]$scale = 1.0,
-  [bool]$monochrome = $false,
-  [bool]$allowGlow = $false
-) {
-  $center = [single]($size / 2)
-  $diameter = [single]($size * 0.57 * $scale)
-  $strokeWidth = [single][Math]::Max(1.5, $size * 0.085 * $scale)
-  $ringRect = [System.Drawing.RectangleF]::new(
-    $center - ($diameter / 2),
-    $center - ($diameter / 2),
-    $diameter,
-    $diameter
-  )
-  $portalColor = if ($monochrome) { $colors.White } else { $colors.Portal }
-
-  if ($allowGlow -and -not $monochrome -and $size -ge 48) {
-    $glow = [System.Drawing.Pen]::new(
-      [System.Drawing.Color]::FromArgb(54, 242, 5, 31),
-      [single]($strokeWidth * 1.65)
-    )
-    $glow.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $glow.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-    try { $graphics.DrawArc($glow, $ringRect, 50, 310) } finally { $glow.Dispose() }
-  }
-
-  $portal = [System.Drawing.Pen]::new($portalColor, $strokeWidth)
-  $portal.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-  $portal.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-  try { $graphics.DrawArc($portal, $ringRect, 50, 310) } finally { $portal.Dispose() }
-
-  if (-not $monochrome -and $size -ge 48) {
-    $highlight = [System.Drawing.Pen]::new(
-      $colors.PortalHighlight,
-      [single][Math]::Max(1, $strokeWidth * 0.18)
-    )
-    $highlight.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $highlight.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $innerRect = [System.Drawing.RectangleF]::new(
-      $ringRect.X + ($strokeWidth * 0.18),
-      $ringRect.Y + ($strokeWidth * 0.18),
-      $ringRect.Width - ($strokeWidth * 0.36),
-      $ringRect.Height - ($strokeWidth * 0.36)
-    )
-    try { $graphics.DrawArc($highlight, $innerRect, 50, 310) } finally { $highlight.Dispose() }
-  }
-
-  $starLong = [single]($size * 0.165 * $scale)
-  $starInner = [single]($size * 0.034 * $scale)
-  $starPath = New-PortalStarPath $center $center $starLong $starInner
-  try {
-    if ($allowGlow -and -not $monochrome -and $size -ge 48) {
-      $glowPath = New-PortalStarPath $center $center ([single]($starLong * 1.12)) ([single]($starInner * 1.35))
-      $glowBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(48, 255, 40, 58))
-      try { $graphics.FillPath($glowBrush, $glowPath) } finally { $glowBrush.Dispose(); $glowPath.Dispose() }
-    }
-    $starBrush = [System.Drawing.SolidBrush]::new($(if ($monochrome) { $colors.White } else { $colors.PortalHighlight }))
-    try { $graphics.FillPath($starBrush, $starPath) } finally { $starBrush.Dispose() }
-
-    if (-not $monochrome -and $size -ge 32) {
-      $pearlRadius = [single][Math]::Max(1.5, $size * 0.022 * $scale)
-      $pearlBrush = [System.Drawing.SolidBrush]::new($colors.Pearl)
+      $clip = [System.Drawing.Drawing2D.GraphicsPath]::new()
       try {
-        $graphics.FillEllipse(
-          $pearlBrush,
-          $center - $pearlRadius,
-          $center - $pearlRadius,
-          $pearlRadius * 2,
-          $pearlRadius * 2
-        )
-      } finally { $pearlBrush.Dispose() }
+        $clip.AddEllipse($rect)
+        $graphics.SetClip($clip)
+        $graphics.DrawImage($master, $rect)
+      } finally { $clip.Dispose() }
+      return
     }
+
+    if ($shape -eq "rounded") {
+      $clip = New-RoundedRectanglePath $rect ([single]($side * 0.205))
+      try {
+        $graphics.SetClip($clip)
+        $graphics.DrawImage($master, $rect)
+      } finally { $clip.Dispose() }
+      return
+    }
+
+    $graphics.DrawImage($master, $rect)
   } finally {
-    $starPath.Dispose()
+    $graphics.Restore($state)
+  }
+}
+
+function Draw-PopcornGlyph(
+  [System.Drawing.Graphics]$graphics,
+  [System.Drawing.Bitmap]$master,
+  [int]$size,
+  [double]$heightRatio
+) {
+  # The crop deliberately excludes the master tile's outer red hairline. It keeps
+  # the central O and popcorn at their original proportions for adaptive masks,
+  # splash screens and compact in-app brand marks.
+  $sourceX = [int][Math]::Round($master.Width * 0.125)
+  $sourceY = [int][Math]::Round($master.Height * 0.095)
+  $sourceWidth = [int][Math]::Round($master.Width * 0.75)
+  $sourceHeight = [int][Math]::Round($master.Height * 0.815)
+  $destinationHeight = [single]($size * $heightRatio)
+  $destinationWidth = [single]($destinationHeight * ($sourceWidth / $sourceHeight))
+  $destination = [System.Drawing.Rectangle]::new(
+    [int][Math]::Round(($size - $destinationWidth) / 2),
+    [int][Math]::Round(($size - $destinationHeight) / 2),
+    [int][Math]::Round($destinationWidth),
+    [int][Math]::Round($destinationHeight)
+  )
+
+  $attributes = [System.Drawing.Imaging.ImageAttributes]::new()
+  try {
+    # Remove only the near-black field. Red portal, cream popcorn and bucket
+    # shading remain lossless and retain the source artwork's anti-aliasing.
+    $attributes.SetColorKey(
+      [System.Drawing.Color]::FromArgb(0, 0, 0),
+      [System.Drawing.Color]::FromArgb(48, 48, 56)
+    )
+    $graphics.DrawImage(
+      $master,
+      $destination,
+      $sourceX,
+      $sourceY,
+      $sourceWidth,
+      $sourceHeight,
+      [System.Drawing.GraphicsUnit]::Pixel,
+      $attributes
+    )
+  } finally { $attributes.Dispose() }
+
+}
+
+function Convert-ToMonochrome([System.Drawing.Bitmap]$bitmap) {
+  for ($y = 0; $y -lt $bitmap.Height; $y++) {
+    for ($x = 0; $x -lt $bitmap.Width; $x++) {
+      $pixel = $bitmap.GetPixel($x, $y)
+      if ($pixel.A -eq 0) { continue }
+      $brightness = [Math]::Max($pixel.R, [Math]::Max($pixel.G, $pixel.B))
+      $alpha = [Math]::Min(255, [Math]::Max($pixel.A, $brightness))
+      $bitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($alpha, 255, 255, 255))
+    }
   }
 }
 
 function New-OrionIcon(
+  [System.Drawing.Bitmap]$master,
   [int]$size,
   [ValidateSet("desktop", "mobile", "round", "adaptive", "monochrome", "splash", "brand", "favicon", "background")]
   [string]$mode
@@ -204,39 +157,40 @@ function New-OrionIcon(
   try {
     $graphics.Clear([System.Drawing.Color]::Transparent)
     switch ($mode) {
-      "desktop" {
-        Draw-ObsidianTile $graphics $size 0.06 "rounded"
-        Draw-PortalStar $graphics $size 0.92 $false $true
-      }
+      "desktop" { Draw-MasterTile $graphics $master $size 0.035 "rounded" }
       "mobile" {
         $graphics.Clear($colors.Obsidian)
-        Draw-ObsidianTile $graphics $size 0.025 "rounded"
-        Draw-PortalStar $graphics $size 0.92 $false $true
+        Draw-MasterTile $graphics $master $size 0.0 "square"
       }
       "round" {
-        Draw-ObsidianTile $graphics $size 0.02 "circle"
-        Draw-PortalStar $graphics $size 0.87 $false $true
+        $graphics.Clear($colors.Obsidian)
+        Draw-PopcornGlyph $graphics $master $size 0.69
       }
-      "adaptive" { Draw-PortalStar $graphics $size 1.0 $false $false }
-      "monochrome" { Draw-PortalStar $graphics $size 1.0 $true $false }
-      "splash" { Draw-PortalStar $graphics $size 0.74 $false $false }
-      "brand" { Draw-PortalStar $graphics $size 1.05 $false $true }
+      "adaptive" { Draw-PopcornGlyph $graphics $master $size 0.66 }
+      "monochrome" { Draw-PopcornGlyph $graphics $master $size 0.66 }
+      "splash" { Draw-PopcornGlyph $graphics $master $size 0.56 }
+      "brand" { Draw-PopcornGlyph $graphics $master $size 0.82 }
       "favicon" {
         $graphics.Clear($colors.Obsidian)
-        Draw-PortalStar $graphics $size 0.82 $false $false
+        Draw-MasterTile $graphics $master $size 0.02 "rounded"
       }
       "background" { $graphics.Clear($colors.Obsidian) }
     }
-  } finally {
-    $graphics.Dispose()
-  }
+  } finally { $graphics.Dispose() }
+
+  if ($mode -eq "monochrome") { Convert-ToMonochrome $bitmap }
   return $bitmap
 }
 
-function Save-OrionPng([int]$size, [string]$mode, [string]$path) {
+function Save-OrionPng(
+  [System.Drawing.Bitmap]$master,
+  [int]$size,
+  [string]$mode,
+  [string]$path
+) {
   $directory = Split-Path -Parent $path
   if ($directory) { [System.IO.Directory]::CreateDirectory($directory) | Out-Null }
-  $bitmap = New-OrionIcon $size $mode
+  $bitmap = New-OrionIcon $master $size $mode
   try { $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png) } finally { $bitmap.Dispose() }
 }
 
@@ -305,59 +259,77 @@ function Assert-Range([double]$value, [double]$minimum, [double]$maximum, [strin
   }
 }
 
-[System.IO.Directory]::CreateDirectory($desktopPublic) | Out-Null
-[System.IO.Directory]::CreateDirectory($mobileAssets) | Out-Null
+function Get-CornerAlpha([string]$path) {
+  $bitmap = [System.Drawing.Bitmap]::FromFile($path)
+  try { return $bitmap.GetPixel(0, 0).A } finally { $bitmap.Dispose() }
+}
 
-$desktopSizes = @(16, 24, 32, 48, 64, 128, 256, 512, 1024)
-$desktopPngs = @()
-foreach ($size in $desktopSizes) {
-  $path = if ($size -eq 1024) {
-    Join-Path $desktopPublic "icon.png"
-  } else {
-    Join-Path $desktopPublic "sized/${size}x${size}.png"
+$master = [System.Drawing.Bitmap]::FromFile($sourcePath)
+try {
+  if ($master.Width -ne $master.Height -or $master.Width -lt 1024) {
+    throw "Orion Pop master must be square and at least 1024px; received $($master.Width)x$($master.Height)."
   }
-  Save-OrionPng $size "desktop" $path
-  if ($size -le 256) { $desktopPngs += $path }
-}
-Save-PngIco $desktopPngs @($desktopSizes | Where-Object { $_ -le 256 }) (Join-Path $desktopPublic "icon.ico")
-Save-OrionPng 1024 "brand" (Join-Path $desktopPublic "brand-mark.png")
 
-Save-OrionPng 1024 "mobile" (Join-Path $mobileAssets "icon.png")
-Save-OrionPng 1024 "brand" (Join-Path $mobileAssets "brand-mark.png")
-Save-OrionPng 1024 "adaptive" (Join-Path $mobileAssets "android-icon-foreground.png")
-Save-OrionPng 512 "background" (Join-Path $mobileAssets "android-icon-background.png")
-Save-OrionPng 432 "monochrome" (Join-Path $mobileAssets "android-icon-monochrome.png")
-Save-OrionPng 1024 "splash" (Join-Path $mobileAssets "splash-icon.png")
-Save-OrionPng 48 "favicon" (Join-Path $mobileAssets "favicon.png")
+  [System.IO.Directory]::CreateDirectory($desktopPublic) | Out-Null
+  [System.IO.Directory]::CreateDirectory($mobileAssets) | Out-Null
 
-$densitySizes = @{
-  "mdpi" = @{ legacy = 48; foreground = 108; splash = 288 }
-  "hdpi" = @{ legacy = 72; foreground = 162; splash = 432 }
-  "xhdpi" = @{ legacy = 96; foreground = 216; splash = 576 }
-  "xxhdpi" = @{ legacy = 144; foreground = 324; splash = 864 }
-  "xxxhdpi" = @{ legacy = 192; foreground = 432; splash = 1152 }
-}
-foreach ($density in $densitySizes.Keys) {
-  $mipmap = Join-Path $androidRes "mipmap-$density"
-  foreach ($name in @("ic_launcher.webp", "ic_launcher_foreground.webp", "ic_launcher_round.webp")) {
-    $legacyPath = Join-Path $mipmap $name
-    if (Test-Path -LiteralPath $legacyPath) { Remove-Item -LiteralPath $legacyPath -Force }
+  $desktopSizes = @(16, 24, 32, 48, 64, 128, 256, 512, 1024)
+  $desktopPngs = @()
+  foreach ($size in $desktopSizes) {
+    $path = if ($size -eq 1024) {
+      Join-Path $desktopPublic "icon.png"
+    } else {
+      Join-Path $desktopPublic "sized/${size}x${size}.png"
+    }
+    Save-OrionPng $master $size "desktop" $path
+    if ($size -le 256) { $desktopPngs += $path }
   }
-  Save-OrionPng $densitySizes[$density].legacy "mobile" (Join-Path $mipmap "ic_launcher.png")
-  Save-OrionPng $densitySizes[$density].legacy "round" (Join-Path $mipmap "ic_launcher_round.png")
-  Save-OrionPng $densitySizes[$density].foreground "adaptive" (Join-Path $mipmap "ic_launcher_foreground.png")
-  Save-OrionPng $densitySizes[$density].splash "splash" (Join-Path $androidRes "drawable-$density/splashscreen_logo.png")
-}
+  Save-PngIco $desktopPngs @($desktopSizes | Where-Object { $_ -le 256 }) (Join-Path $desktopPublic "icon.ico")
+  Save-OrionPng $master 1024 "brand" (Join-Path $desktopPublic "brand-mark.png")
+
+  Save-OrionPng $master 1024 "mobile" (Join-Path $mobileAssets "icon.png")
+  Save-OrionPng $master 1024 "brand" (Join-Path $mobileAssets "brand-mark.png")
+  Save-OrionPng $master 1024 "adaptive" (Join-Path $mobileAssets "android-icon-foreground.png")
+  Save-OrionPng $master 512 "background" (Join-Path $mobileAssets "android-icon-background.png")
+  Save-OrionPng $master 432 "monochrome" (Join-Path $mobileAssets "android-icon-monochrome.png")
+  Save-OrionPng $master 1024 "splash" (Join-Path $mobileAssets "splash-icon.png")
+  Save-OrionPng $master 48 "favicon" (Join-Path $mobileAssets "favicon.png")
+
+  $densitySizes = @{
+    "mdpi" = @{ legacy = 48; foreground = 108; splash = 288 }
+    "hdpi" = @{ legacy = 72; foreground = 162; splash = 432 }
+    "xhdpi" = @{ legacy = 96; foreground = 216; splash = 576 }
+    "xxhdpi" = @{ legacy = 144; foreground = 324; splash = 864 }
+    "xxxhdpi" = @{ legacy = 192; foreground = 432; splash = 1152 }
+  }
+  foreach ($density in $densitySizes.Keys) {
+    $mipmap = Join-Path $androidRes "mipmap-$density"
+    foreach ($name in @("ic_launcher.webp", "ic_launcher_foreground.webp", "ic_launcher_round.webp")) {
+      $legacyPath = Join-Path $mipmap $name
+      if (Test-Path -LiteralPath $legacyPath) { Remove-Item -LiteralPath $legacyPath -Force }
+    }
+    Save-OrionPng $master $densitySizes[$density].legacy "mobile" (Join-Path $mipmap "ic_launcher.png")
+    Save-OrionPng $master $densitySizes[$density].legacy "round" (Join-Path $mipmap "ic_launcher_round.png")
+    Save-OrionPng $master $densitySizes[$density].foreground "adaptive" (Join-Path $mipmap "ic_launcher_foreground.png")
+    Save-OrionPng $master $densitySizes[$density].splash "splash" (Join-Path $androidRes "drawable-$density/splashscreen_logo.png")
+  }
+} finally { $master.Dispose() }
 
 $desktopBounds = Get-AlphaBounds (Join-Path $desktopPublic "icon.png")
 $adaptiveBounds = Get-AlphaBounds (Join-Path $mobileAssets "android-icon-foreground.png")
 $monochromeBounds = Get-AlphaBounds (Join-Path $mobileAssets "android-icon-monochrome.png")
-Assert-Range $desktopBounds.OccupancyX 0.86 0.90 "Desktop tile horizontal occupancy"
-Assert-Range $desktopBounds.OccupancyY 0.86 0.90 "Desktop tile vertical occupancy"
-Assert-Range $adaptiveBounds.OccupancyX 0.63 0.68 "Android adaptive horizontal occupancy"
+$desktopCornerAlpha = Get-CornerAlpha (Join-Path $desktopPublic "icon.png")
+$mobileCornerAlpha = Get-CornerAlpha (Join-Path $mobileAssets "icon.png")
+$adaptiveCornerAlpha = Get-CornerAlpha (Join-Path $mobileAssets "android-icon-foreground.png")
+Assert-Range $desktopBounds.OccupancyX 0.92 0.94 "Desktop tile horizontal occupancy"
+Assert-Range $desktopBounds.OccupancyY 0.92 0.94 "Desktop tile vertical occupancy"
+Assert-Range $adaptiveBounds.OccupancyX 0.54 0.64 "Android adaptive horizontal occupancy"
 Assert-Range $adaptiveBounds.OccupancyY 0.63 0.68 "Android adaptive vertical occupancy"
-Assert-Range $monochromeBounds.OccupancyX 0.63 0.68 "Android monochrome horizontal occupancy"
+Assert-Range $monochromeBounds.OccupancyX 0.54 0.64 "Android monochrome horizontal occupancy"
 Assert-Range $monochromeBounds.OccupancyY 0.63 0.68 "Android monochrome vertical occupancy"
+if ($desktopCornerAlpha -ne 0) { throw "Desktop icon must retain transparent rounded corners." }
+if ($mobileCornerAlpha -ne 255) { throw "Mobile legacy icon must remain fully opaque." }
+if ($adaptiveCornerAlpha -ne 0) { throw "Android adaptive foreground must not contain an opaque outer tile." }
 
 $icoStream = [System.IO.File]::OpenRead((Join-Path $desktopPublic "icon.ico"))
 $icoReader = [System.IO.BinaryReader]::new($icoStream)
@@ -368,12 +340,23 @@ try {
   if ($reserved -ne 0 -or $type -ne 1 -or $count -ne 7) {
     throw "Desktop ICO directory is invalid or missing required resolutions."
   }
+  $expectedIcoSizes = @(16, 24, 32, 48, 64, 128, 256)
+  $decodedIcoSizes = @()
+  for ($index = 0; $index -lt $count; $index++) {
+    $width = $icoReader.ReadByte()
+    $height = $icoReader.ReadByte()
+    $icoReader.BaseStream.Seek(14, [System.IO.SeekOrigin]::Current) | Out-Null
+    $decodedIcoSizes += $(if ($width -eq 0 -and $height -eq 0) { 256 } else { [int]$width })
+  }
+  if (($decodedIcoSizes -join ",") -ne ($expectedIcoSizes -join ",")) {
+    throw "Desktop ICO sizes are invalid: $($decodedIcoSizes -join ', ')."
+  }
 } finally {
   $icoReader.Dispose()
   $icoStream.Dispose()
 }
 
-Write-Host "Generated the Orion Portal Star icon family."
+Write-Host "Generated the Orion Pop icon family from $sourcePath."
 Write-Host ("Desktop tile occupancy: {0:P1} x {1:P1}" -f $desktopBounds.OccupancyX, $desktopBounds.OccupancyY)
 Write-Host ("Android adaptive occupancy: {0:P1} x {1:P1}" -f $adaptiveBounds.OccupancyX, $adaptiveBounds.OccupancyY)
 Write-Host ("Android monochrome occupancy: {0:P1} x {1:P1}" -f $monochromeBounds.OccupancyX, $monochromeBounds.OccupancyY)
