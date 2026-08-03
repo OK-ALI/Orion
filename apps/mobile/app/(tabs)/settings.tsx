@@ -2,9 +2,10 @@ import React from "react";
 import { ScrollView, View, Text, Pressable, StyleSheet, Switch, TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { OrionThemeId } from "@orion/shared/types";
-import { fontFamilies, fontSizes, radii, spacing } from "@orion/shared/tokens";
+import { fontSizes, radii, spacing } from "@orion/shared/tokens";
 import { ORION_MOBILE_THEMES, useOrionTheme } from "../../src/context/ThemeContext";
 import { useResponsiveLayout } from "../../src/services/responsive";
+import { MobilePageHeader } from "../../src/components/MobilePageHeader";
 
 const THEME_LABELS: Record<OrionThemeId, string> = {
   "midnight-premiere": "Midnight Premiere",
@@ -19,15 +20,12 @@ export default function MobileSettingsScreen() {
   const { theme, preferences, setTheme, setReducedMotion, setFollowSystem, setCustomAccent } = useOrionTheme();
   const { isTablet } = useResponsiveLayout();
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: theme.background }}
-      contentContainerStyle={[styles.content, isTablet && styles.contentTablet]}
-    >
-      <Text style={[styles.eyebrow, { color: theme.accent }]}>ORION MOBILE</Text>
-      <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
-      <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-        Appearance and accessibility changes apply immediately on this device.
-      </Text>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <MobilePageHeader eyebrow="ORION MOBILE" title="Settings" subtitle="Appearance and accessibility changes apply immediately on this device." />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.content, isTablet && styles.contentTablet]}
+      >
 
       <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Theme</Text>
@@ -109,16 +107,14 @@ export default function MobileSettingsScreen() {
           Google sign-in and cross-device sync are intentionally scheduled for the next mobile milestone.
         </Text>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingTop: 88, paddingHorizontal: spacing[5], paddingBottom: 80 },
-  contentTablet: { maxWidth: 900, width: "100%", alignSelf: "center", paddingTop: 56 },
-  eyebrow: { fontSize: 11, fontWeight: "900", letterSpacing: 1.8 },
-  title: { fontFamily: fontFamilies.display, fontSize: 34, fontWeight: "900", marginTop: 4 },
-  subtitle: { fontSize: fontSizes.sm, lineHeight: 21, marginTop: 6, marginBottom: spacing[6] },
+  content: { paddingTop: spacing[2], paddingHorizontal: spacing[5], paddingBottom: 80 },
+  contentTablet: { maxWidth: 900, width: "100%", alignSelf: "center" },
   section: { borderRadius: radii["2xl"], borderWidth: 1, padding: spacing[5], marginBottom: spacing[4] },
   sectionTitle: { fontSize: fontSizes.lg, fontWeight: "900", marginBottom: spacing[4] },
   themeGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing[3] },

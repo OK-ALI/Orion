@@ -22,6 +22,7 @@ export function useConnectController() {
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [pairError, setPairError] = useState('');
   const [remoteError, setRemoteError] = useState('');
+  const [qrNotice, setQrNotice] = useState('');
   const socketRef = useRef<WebSocket | null>(null);
   const socketHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -76,7 +77,7 @@ export function useConnectController() {
         if (pin) setPinCode(pin);
         handleConnect(ip, pin);
       } else {
-        alert(`Scanned QR code: ${data}, but no valid IP address found.`);
+        setQrNotice('This QR code does not contain a valid Orion Connect address. Generate a fresh code on Orion Desktop and try again.');
       }
     } catch (e) {
       console.error(e);
@@ -526,6 +527,7 @@ export function useConnectController() {
     panResponder,
     pinCode,
     pulseAnim,
+    qrNotice,
     remoteError,
     remoteText,
     requestCameraPermission,
@@ -534,6 +536,7 @@ export function useConnectController() {
     sendRemoteCommand,
     setActiveTab,
     setCurrentSpeedIndex,
+    setQrNotice,
     setDesktopIp,
     setNavFocusMode,
     setPairingMethod,

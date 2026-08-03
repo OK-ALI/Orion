@@ -1,16 +1,17 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform, Pressable } from 'react-native';
-import { text, backgrounds, spacing, fontSizes, accent, radii } from '@orion/shared/tokens';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { spacing, radii } from '@orion/shared/tokens';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useOrionTheme } from '../../src/context/ThemeContext';
 import { useResponsiveLayout } from '../../src/services/responsive';
+import { MobilePageHeader } from '../../src/components/MobilePageHeader';
 
 export default function DownloadsScreen() {
   const router = useRouter();
   const { theme } = useOrionTheme();
-  const { isTablet } = useResponsiveLayout();
+  useResponsiveLayout();
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -23,10 +24,7 @@ export default function DownloadsScreen() {
       />
 
       {/* Top Header — Padded past left floating sidebar trigger (≡) */}
-      <View style={[styles.header, isTablet && styles.headerTablet]}>
-        <Text style={[styles.headerTitle, { color: theme.text }]}>Downloads</Text>
-        <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>Offline Media Vault</Text>
-      </View>
+      <MobilePageHeader eyebrow="OFFLINE" title="Downloads" subtitle="Your offline media vault and download availability." />
 
       {/* Locked Downloader State Card */}
       <View style={styles.content}>
@@ -70,26 +68,6 @@ export default function DownloadsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: backgrounds.base,
-  },
-  header: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 36,
-    paddingBottom: spacing[4],
-    paddingLeft: 72,
-    paddingRight: spacing[4],
-  },
-  headerTablet: { paddingLeft: spacing[8], paddingTop: spacing[8] },
-  headerTitle: {
-    color: '#ffffff',
-    fontSize: fontSizes['2xl'],
-    fontWeight: '900',
-    letterSpacing: -0.5,
-  },
-  headerSubtitle: {
-    color: text.muted,
-    fontSize: fontSizes.xs,
-    fontWeight: '600',
-    marginTop: 2,
   },
   content: {
     flex: 1,
@@ -101,19 +79,15 @@ const styles = StyleSheet.create({
   lockedCard: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: 'rgba(13, 13, 22, 0.85)',
     borderRadius: radii['2xl'],
     padding: spacing[6],
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.35)',
-    boxShadow: '0 8px 32px rgba(229, 9, 20, 0.15)',
   },
   iconContainer: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(229, 9, 20, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing[4],
@@ -123,38 +97,31 @@ const styles = StyleSheet.create({
     position: 'absolute',
     inset: -8,
     borderRadius: 48,
-    backgroundColor: 'rgba(229, 9, 20, 0.2)',
   },
   badge: {
-    backgroundColor: 'rgba(229, 9, 20, 0.15)',
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: radii.full,
     borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.4)',
     marginBottom: spacing[3],
   },
   badgeText: {
-    color: '#f87171',
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
   },
   cardTitle: {
-    color: '#ffffff',
     fontSize: 22,
     fontWeight: '900',
     marginBottom: spacing[3],
   },
   message: {
-    color: 'rgba(255, 255, 255, 0.85)',
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
     marginBottom: spacing[3],
   },
   subMessage: {
-    color: text.muted,
     fontSize: 12,
     lineHeight: 17,
     textAlign: 'center',
@@ -165,18 +132,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: accent.primary,
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: radii.xl,
     width: '100%',
-    shadowColor: accent.primary,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 10,
   },
   actionBtnText: {
-    color: '#fff',
     fontSize: 14,
     fontWeight: '800',
   },

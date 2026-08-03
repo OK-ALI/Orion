@@ -1,12 +1,14 @@
-import { View, Text, StyleSheet, TextInput, FlatList, ActivityIndicator, Platform, ScrollView, Pressable, Modal } from 'react-native';
-import { useState, useEffect, useCallback } from 'react';
-import { text, backgrounds, radii, spacing, fontSizes, fontFamilies, accent } from '@orion/shared/tokens';
+import { View, Text, StyleSheet, TextInput, FlatList, ActivityIndicator, ScrollView, Pressable, Modal } from 'react-native';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { spacing } from '@orion/shared/tokens';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchSearch, isAnimeContent, tmdbFetch } from '@orion/shared/api';
 import { TmdbMediaItem, TmdbPaginatedResponse } from '@orion/shared/types';
 import { MediaCard } from '../../components/MediaCard';
 import { PersonCard } from '../../components/PersonCard';
+import { MobilePageHeader } from '../../components/MobilePageHeader';
+import { useOrionTheme } from '../../context/ThemeContext';
 import { useRouter } from 'expo-router';
 import {
   getRegionQueryParams,
@@ -20,9 +22,11 @@ import {
   TYPE_FILTERS,
   YEAR_OPTIONS,
 } from './discoverCatalog';
-import { styles } from './discoverStyles';
+import { createDiscoverStyles } from './discoverStyles';
 
 export default function DiscoverScreen() {
+  const { theme } = useOrionTheme();
+  const styles = useMemo(() => createDiscoverStyles(theme), [theme]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<TmdbMediaItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,7 +48,7 @@ export default function DiscoverScreen() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
-  const COLUMN_COUNT = 3;
+  const COLUMN_COUNT = containerWidth >= 900 ? 6 : containerWidth >= 600 ? 5 : containerWidth >= 390 ? 3 : 2;
   const padding = spacing[4] * 2;
   const gaps = spacing[3] * (COLUMN_COUNT - 1);
   const cardWidth = containerWidth > 0 ? (containerWidth - padding - gaps) / COLUMN_COUNT : 110;
@@ -170,19 +174,19 @@ export default function DiscoverScreen() {
   return (
     <View style={styles.container} onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}>
       <LinearGradient
-        colors={['#1e0a1a', backgrounds.base, backgrounds.base, backgrounds.base, '#2a2110']}
+        colors={[theme.accentSoft, theme.background, theme.background, theme.background, theme.surface]}
         locations={[0, 0.3, 0.5, 0.8, 1]}
         start={{ x: 0, y: 1 }}
         end={{ x: 1, y: 0 }}
         style={StyleSheet.absoluteFill}
       />
-      <View style={{ height: Platform.OS === 'ios' ? 100 : 80 }} />
+      <MobilePageHeader eyebrow="EXPLORE" title="Discover" subtitle="Search, filter and explore every corner of Orion." />
       <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={text.muted} style={styles.searchIcon} />
+        <Ionicons name="search" size={20} color={theme.textMuted} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search movies, shows, or actors..."
-          placeholderTextColor={text.muted}
+          placeholderTextColor={theme.textMuted}
           value={query}
           onChangeText={(t) => { setQuery(t); if (t.trim()) setSelectedGenre(null); }}
           autoCapitalize="none"
@@ -193,7 +197,7 @@ export default function DiscoverScreen() {
           <Ionicons 
             name="close-circle" 
             size={20} 
-            color={text.secondary} 
+            color={theme.textSecondary}
             style={styles.clearIcon}
             onPress={() => setQuery('')}
           />
@@ -219,11 +223,12 @@ export default function DiscoverScreen() {
           </View>
           {loading ? (
             <View style={styles.centered}>
-              <ActivityIndicator size="large" color={accent.primary} />
+              <ActivityIndicator size="large" color={theme.accent} />
             </View>
           ) : (
             containerWidth > 0 && (
               <FlatList
+                key={`search-${COLUMN_COUNT}`}
                 data={results.filter(r => {
                   const mt = (r as any).media_type;
                   if (mt !== 'movie' && mt !== 'tv' && mt !== 'person' && !!mt) return false;
@@ -278,7 +283,7 @@ export default function DiscoverScreen() {
               style={({ pressed }) => [styles.backPill, pressed && { opacity: 0.7 }]} 
               onPress={() => { setSelectedGenre(null); setGenreResults([]); setPage(1); }}
             >
-              <Ionicons name="chevron-back" size={18} color="#fff" />
+              <Ionicons name="chevron-back" size={18} color={theme.text} />
               <Text style={styles.backPillText}>Genres</Text>
             </Pressable>
             <Text style={styles.genreActiveLabel} numberOfLines={1}>
@@ -294,7 +299,7 @@ export default function DiscoverScreen() {
                 <Text style={[styles.dropdownPillText, genreType !== 'all' && styles.dropdownPillTextActive]}>
                   Type: {TYPE_FILTERS.find(t => t.id === genreType)?.name.replace(' Only', '')}
                 </Text>
-                <Ionicons name="chevron-down" size={14} color={genreType !== 'all' ? '#fff' : text.secondary} />
+                <Ionicons name="chevron-down" size={14} color={genreType !== 'all' ? theme.onAccent : theme.textSecondary} />
               </Pressable>
               <Pressable
                 style={[styles.dropdownPill, region !== 'all' && styles.dropdownPillActive]}
@@ -303,7 +308,7 @@ export default function DiscoverScreen() {
                 <Text style={[styles.dropdownPillText, region !== 'all' && styles.dropdownPillTextActive]}>
                   Region: {REGION_PRESETS[region as keyof typeof REGION_PRESETS]?.name}
                 </Text>
-                <Ionicons name="chevron-down" size={14} color={region !== 'all' ? '#fff' : text.secondary} />
+                <Ionicons name="chevron-down" size={14} color={region !== 'all' ? theme.onAccent : theme.textSecondary} />
               </Pressable>
               {region !== 'all' && SUBFILTER_PRESETS[region as keyof typeof SUBFILTER_PRESETS] && (
                 <Pressable
@@ -313,7 +318,7 @@ export default function DiscoverScreen() {
                   <Text style={[styles.dropdownPillText, subfilter !== 'all' && styles.dropdownPillTextActive]}>
                     Sub: {SUBFILTER_PRESETS[region as keyof typeof SUBFILTER_PRESETS].find(s => s.id === subfilter)?.name}
                   </Text>
-                  <Ionicons name="chevron-down" size={14} color={subfilter !== 'all' ? '#fff' : text.secondary} />
+                  <Ionicons name="chevron-down" size={14} color={subfilter !== 'all' ? theme.onAccent : theme.textSecondary} />
                 </Pressable>
               )}
               <Pressable
@@ -323,7 +328,7 @@ export default function DiscoverScreen() {
                 <Text style={[styles.dropdownPillText, sortBy !== 'popularity.desc' && styles.dropdownPillTextActive]}>
                   Sort: {SORT_OPTIONS.find(s => s.id === sortBy)?.label}
                 </Text>
-                <Ionicons name="chevron-down" size={14} color={sortBy !== 'popularity.desc' ? '#fff' : text.secondary} />
+                <Ionicons name="chevron-down" size={14} color={sortBy !== 'popularity.desc' ? theme.onAccent : theme.textSecondary} />
               </Pressable>
               <Pressable
                 style={[styles.dropdownPill, minRating !== '0' && styles.dropdownPillActive]}
@@ -332,7 +337,7 @@ export default function DiscoverScreen() {
                 <Text style={[styles.dropdownPillText, minRating !== '0' && styles.dropdownPillTextActive]}>
                   {minRating === '0' ? 'Rating: Any' : `★ ${minRating}.0+`}
                 </Text>
-                <Ionicons name="chevron-down" size={14} color={minRating !== '0' ? '#fff' : text.secondary} />
+                <Ionicons name="chevron-down" size={14} color={minRating !== '0' ? theme.onAccent : theme.textSecondary} />
               </Pressable>
               <Pressable
                 style={[styles.dropdownPill, year !== '' && styles.dropdownPillActive]}
@@ -341,17 +346,18 @@ export default function DiscoverScreen() {
                 <Text style={[styles.dropdownPillText, year !== '' && styles.dropdownPillTextActive]}>
                   {year ? `Year: ${year}` : 'Year: All'}
                 </Text>
-                <Ionicons name="chevron-down" size={14} color={year !== '' ? '#fff' : text.secondary} />
+                <Ionicons name="chevron-down" size={14} color={year !== '' ? theme.onAccent : theme.textSecondary} />
               </Pressable>
             </ScrollView>
           </View>
           {genreLoading ? (
             <View style={styles.centered}>
-              <ActivityIndicator size="large" color={accent.primary} />
+              <ActivityIndicator size="large" color={theme.accent} />
             </View>
           ) : (
             containerWidth > 0 && (
               <FlatList
+                key={`genre-${COLUMN_COUNT}`}
                 data={genreResults}
                 keyExtractor={(item, idx) => `${item.id}_${item.media_type}_${idx}`}
                 numColumns={COLUMN_COUNT}
@@ -381,7 +387,7 @@ export default function DiscoverScreen() {
                         disabled={loadingMore}
                       >
                         {loadingMore ? (
-                          <ActivityIndicator size="small" color="#fff" />
+                          <ActivityIndicator size="small" color={theme.onAccent} />
                         ) : (
                           <Text style={styles.loadMoreButtonText}>Load More</Text>
                         )}
@@ -446,18 +452,18 @@ export default function DiscoverScreen() {
             <View style={styles.regionShelf}>
               <View style={styles.regionShelfHeader}>
                 <Text style={styles.regionShelfTitle}>
-                  Popular in <Text style={{ color: accent.primary }}>{activeRegionName}</Text>
+                  Popular in <Text style={{ color: theme.accent }}>{activeRegionName}</Text>
                 </Text>
                 <Pressable
                   style={({ pressed }) => [styles.browseAllBtn, pressed && { opacity: 0.7 }]}
                   onPress={() => setSelectedGenre({ id: 'all' as any, name: 'All ' + activeRegionName })}
                 >
                   <Text style={styles.browseAllBtnText}>Explore All</Text>
-                  <Ionicons name="chevron-forward" size={14} color={accent.primary} />
+                  <Ionicons name="chevron-forward" size={14} color={theme.accent} />
                 </Pressable>
               </View>
               {regionLoading ? (
-                <ActivityIndicator size="small" color={accent.primary} style={{ marginVertical: 30 }} />
+                <ActivityIndicator size="small" color={theme.accent} style={{ marginVertical: 30 }} />
               ) : (
                 <FlatList
                   data={regionResults}
@@ -521,7 +527,7 @@ export default function DiscoverScreen() {
                 {activeModal === 'year' && 'Release Year'}
               </Text>
               <Pressable onPress={() => setActiveModal(null)} style={styles.modalCloseBtn}>
-                <Ionicons name="close" size={20} color="#fff" />
+                <Ionicons name="close" size={20} color={theme.text} />
               </Pressable>
             </View>
             <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
@@ -534,7 +540,7 @@ export default function DiscoverScreen() {
                   <Text style={[styles.modalOptionText, genreType === item.id && styles.modalOptionTextActive]}>
                     {item.name}
                   </Text>
-                  {genreType === item.id && <Ionicons name="checkmark" size={18} color={accent.primary} />}
+                  {genreType === item.id && <Ionicons name="checkmark" size={18} color={theme.accent} />}
                 </Pressable>
               ))}
               {activeModal === 'region' && Object.entries(REGION_PRESETS).map(([id, preset]) => (
@@ -546,7 +552,7 @@ export default function DiscoverScreen() {
                   <Text style={[styles.modalOptionText, region === id && styles.modalOptionTextActive]}>
                     {preset.name}
                   </Text>
-                  {region === id && <Ionicons name="checkmark" size={18} color={accent.primary} />}
+                  {region === id && <Ionicons name="checkmark" size={18} color={theme.accent} />}
                 </Pressable>
               ))}
               {activeModal === 'subfilter' && region !== 'all' && SUBFILTER_PRESETS[region as keyof typeof SUBFILTER_PRESETS]?.map((sf) => (
@@ -558,7 +564,7 @@ export default function DiscoverScreen() {
                   <Text style={[styles.modalOptionText, subfilter === sf.id && styles.modalOptionTextActive]}>
                     {sf.name}
                   </Text>
-                  {subfilter === sf.id && <Ionicons name="checkmark" size={18} color={accent.primary} />}
+                  {subfilter === sf.id && <Ionicons name="checkmark" size={18} color={theme.accent} />}
                 </Pressable>
               ))}
               {activeModal === 'sort' && SORT_OPTIONS.map((item) => (
@@ -570,7 +576,7 @@ export default function DiscoverScreen() {
                   <Text style={[styles.modalOptionText, sortBy === item.id && styles.modalOptionTextActive]}>
                     {item.label}
                   </Text>
-                  {sortBy === item.id && <Ionicons name="checkmark" size={18} color={accent.primary} />}
+                  {sortBy === item.id && <Ionicons name="checkmark" size={18} color={theme.accent} />}
                 </Pressable>
               ))}
               {activeModal === 'rating' && RATING_OPTIONS.map((item) => (
@@ -582,7 +588,7 @@ export default function DiscoverScreen() {
                   <Text style={[styles.modalOptionText, minRating === item.id && styles.modalOptionTextActive]}>
                     {item.label}
                   </Text>
-                  {minRating === item.id && <Ionicons name="checkmark" size={18} color={accent.primary} />}
+                  {minRating === item.id && <Ionicons name="checkmark" size={18} color={theme.accent} />}
                 </Pressable>
               ))}
               {activeModal === 'year' && YEAR_OPTIONS.map((y) => (
@@ -594,7 +600,7 @@ export default function DiscoverScreen() {
                   <Text style={[styles.modalOptionText, year === y && styles.modalOptionTextActive]}>
                     {y ? y : 'Year: All'}
                   </Text>
-                  {year === y && <Ionicons name="checkmark" size={18} color={accent.primary} />}
+                  {year === y && <Ionicons name="checkmark" size={18} color={theme.accent} />}
                 </Pressable>
               ))}
             </ScrollView>

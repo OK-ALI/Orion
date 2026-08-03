@@ -75,6 +75,7 @@ export function HomeContinueWatching() {
         renderItem={({ item }) => (
           <ContinueWatchingCard
             entry={item}
+            presentation="home-rail"
             onResume={() => resume(item)}
             onOpenDetails={() => router.push({ pathname: '/media/[id]', params: { id: String(item.progress.mediaIdentity.id), type: item.progress.mediaIdentity.mediaType } })}
             onRemove={() => removeProgress(item.key)}

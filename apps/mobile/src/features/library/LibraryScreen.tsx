@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -11,16 +9,28 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import type { ContinueWatchingEntry } from '@orion/shared/types';
 import { useLibrary } from '../../context/LibraryContext';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { MediaCard } from '../../components/MediaCard';
+import { MobilePageHeader } from '../../components/MobilePageHeader';
+import { OrionDialog } from '../../components/OrionDialog';
 import { ContinueWatchingCard } from './ContinueWatchingCard';
 import { HistoryRow } from './HistoryRow';
 import { historyEntryKey, selectLatestHistory } from './playbackLibrary';
 
 type LibraryTab = 'saved' | 'continue' | 'history';
+
+export interface LibraryPagerState {
+  activeTab: LibraryTab;
+  targetTab: LibraryTab | null;
+  gestureProgress: number;
+  transitioning: boolean;
+}
+
+type LibraryDialogState = { type: 'clear' } | { type: 'remove'; historyKey: string } | null;
 
 const TABS: Array<{ id: LibraryTab; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { id: 'saved', label: 'My List', icon: 'bookmark' },
@@ -36,13 +46,14 @@ export default function LibraryScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
   const { width } = useWindowDimensions();
-  const { theme } = useOrionTheme();
+  const { theme, preferences } = useOrionTheme();
   const {
     saved, savedOrder, history, progress, watched,
     clearHistory, removeHistoryEntry, removeProgress, markProgressWatched,
     getContinueWatching, enrichPlaybackMetadata,
   } = useLibrary();
   const [activeTab, setActiveTab] = useState<LibraryTab>(() => validTab(params.tab));
+  const [dialog, setDialog] = useState<LibraryDialogState>(null);
 
   useEffect(() => setActiveTab(validTab(params.tab)), [params.tab]);
 
@@ -115,15 +126,6 @@ export default function LibraryScreen() {
     });
   };
 
-  const confirmClearHistory = () => Alert.alert(
-    'Clear watch history?',
-    'This removes History only. My List, watched state and playback progress stay unchanged.',
-    [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Clear History', style: 'destructive', onPress: clearHistory },
-    ],
-  );
-
   const emptyState = (icon: keyof typeof Ionicons.glyphMap, title: string, message: string) => (
     <View style={styles.emptyState}>
       <View style={[styles.emptyIcon, { backgroundColor: theme.surface }]}>
@@ -140,110 +142,173 @@ export default function LibraryScreen() {
     history: historyItems.length,
   };
 
+  const activeIndex = TABS.findIndex((tab) => tab.id === activeTab);
+  const pagerX = useSharedValue(-activeIndex * width);
+  const dragOrigin = useSharedValue(-activeIndex * width);
+  const changeTab = useCallback((index: number) => {
+    const next = TABS[Math.max(0, Math.min(TABS.length - 1, index))].id;
+    setActiveTab(next);
+    router.setParams({ tab: next });
+  }, [router]);
+
+  useEffect(() => {
+    pagerX.value = withTiming(-activeIndex * width, { duration: preferences.reducedMotion ? 0 : 210 });
+  }, [activeIndex, pagerX, preferences.reducedMotion, width]);
+
+  const pagerGesture = Gesture.Pan()
+    .activeOffsetX([-24, 24])
+    .failOffsetY([-14, 14])
+    .onBegin(() => { dragOrigin.value = -activeIndex * width; })
+    .onUpdate((event) => {
+      let next = dragOrigin.value + event.translationX;
+      const min = -(TABS.length - 1) * width;
+      if (next > 0) next *= 0.24;
+      if (next < min) next = min + (next - min) * 0.24;
+      pagerX.value = next;
+    })
+    .onEnd((event) => {
+      const forward = event.translationX < -width * 0.18 || event.velocityX < -650;
+      const backward = event.translationX > width * 0.18 || event.velocityX > 650;
+      const target = Math.max(0, Math.min(TABS.length - 1, activeIndex + (forward ? 1 : backward ? -1 : 0)));
+      pagerX.value = withTiming(-target * width, { duration: preferences.reducedMotion ? 0 : 210 });
+      if (target !== activeIndex) runOnJS(changeTab)(target);
+    });
+  const pagerStyle = useAnimatedStyle(() => ({ transform: [{ translateX: pagerX.value }] }));
+
+  const historyAction = activeTab === 'history' && historyItems.length > 0 ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Clear watch history"
+      onPress={() => setDialog({ type: 'clear' })}
+      style={({ pressed }) => [styles.headerAction, { borderColor: theme.border, backgroundColor: theme.surface }, pressed && styles.pressed]}
+    >
+      <Ionicons name="trash-outline" size={19} color={theme.textSecondary} />
+    </Pressable>
+  ) : null;
+
   return (
-    <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: theme.background }]}>
-      <View style={styles.container}>
-        <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
-          <View style={styles.titleRow}>
-            <View style={styles.titleCopy}>
-              <Text style={[styles.eyebrow, { color: theme.accent }]}>YOUR STORIES</Text>
-              <Text style={[styles.pageTitle, { color: theme.text }]}>Library</Text>
-            </View>
-            {activeTab === 'history' && historyItems.length > 0 && (
-              <Pressable accessibilityRole="button" accessibilityLabel="Clear watch history" onPress={confirmClearHistory} style={({ pressed }) => [styles.headerAction, { borderColor: theme.border }, pressed && styles.pressed]}>
-                <Ionicons name="trash-outline" size={19} color={theme.textSecondary} />
+    <View style={[styles.safeArea, { backgroundColor: theme.background }]}>
+      <MobilePageHeader eyebrow="YOUR STORIES" title="Library" subtitle="Your saved stories, verified progress and watch history." trailing={historyAction} />
+      <View style={[styles.tabsFrame, styles.tabs, { paddingHorizontal: horizontalPadding }]}>
+          {TABS.map((tab, index) => {
+            const active = activeTab === tab.id;
+            return (
+              <Pressable
+                key={tab.id}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                onPress={() => changeTab(index)}
+                style={({ pressed }) => [
+                  styles.tab,
+                  width < 430 && styles.tabCompact,
+                  { backgroundColor: active ? theme.accentSoft : theme.surface, borderColor: active ? theme.accent : theme.border },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons name={tab.icon} size={18} color={active ? theme.accent : theme.textSecondary} />
+                <Text style={[styles.tabText, { color: active ? theme.text : theme.textSecondary }]}>{tab.label}</Text>
+                <Text style={[styles.count, { color: active ? theme.accent : theme.textMuted }]}>{counts[tab.id]}</Text>
               </Pressable>
-            )}
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-            {TABS.map((tab) => {
-              const active = activeTab === tab.id;
-              return (
-                <Pressable key={tab.id} accessibilityRole="tab" accessibilityState={{ selected: active }} onPress={() => setActiveTab(tab.id)} style={({ pressed }) => [styles.tab, { backgroundColor: active ? theme.accentSoft : theme.surface, borderColor: active ? theme.accent : theme.border }, pressed && styles.pressed]}>
-                  <Ionicons name={tab.icon} size={18} color={active ? theme.accent : theme.textSecondary} />
-                  <Text style={[styles.tabText, { color: active ? theme.text : theme.textSecondary }]}>{tab.label}</Text>
-                  <Text style={[styles.count, { color: active ? theme.accent : theme.textMuted }]}>{counts[tab.id]}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {activeTab === 'saved' && (
-          <FlatList
-            key={`saved-${columnCount}`}
-            data={savedItems}
-            numColumns={columnCount}
-            keyExtractor={(item) => `${item.media_type || 'movie'}_${item.id}`}
-            contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
-            columnWrapperStyle={{ gap: gridGap }}
-            ListEmptyComponent={emptyState('bookmark-outline', 'Your list is ready for its first story', 'Save a movie or series and it will appear here.')}
-            renderItem={({ item }) => (
-              <MediaCard item={item} width={cardWidth} height={cardWidth * 1.52} style={{ marginRight: 0, marginBottom: 18 }} onPress={() => openDetails(item.id, item.media_type === 'tv' ? 'tv' : 'movie')} />
-            )}
-          />
-        )}
-
-        {activeTab === 'continue' && (
-          <FlatList
-            data={continueItems}
-            keyExtractor={(entry) => entry.key}
-            contentContainerStyle={[styles.listContent, styles.continueList, { paddingHorizontal: horizontalPadding }]}
-            ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
-            ListEmptyComponent={emptyState('play-circle-outline', 'Nothing waiting to resume', 'Verified playback appears here after 30 seconds.')}
-            renderItem={({ item }) => (
-              <ContinueWatchingCard
-                entry={item}
-                fullWidth
-                onResume={() => resumeProgress(item)}
-                onOpenDetails={() => openDetails(item.progress.mediaIdentity.id, item.progress.mediaIdentity.mediaType)}
-                onRemove={() => removeProgress(item.key)}
-                onMarkWatched={() => markProgressWatched(item.key)}
-              />
-            )}
-          />
-        )}
-
-        {activeTab === 'history' && (
-          <FlatList
-            data={historyItems}
-            keyExtractor={(item) => item._key}
-            contentContainerStyle={[styles.listContent, styles.historyList, { paddingHorizontal: horizontalPadding }]}
-            ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-            ListEmptyComponent={emptyState('time-outline', 'No verified watch history', 'Movies and episodes enter History after Orion confirms advancing playback.')}
-            renderItem={({ item }) => (
-              <HistoryRow
-                item={item}
-                onResume={() => resumeHistory(item)}
-                onOpenDetails={() => openDetails(item.id, item.media_type === 'tv' ? 'tv' : 'movie')}
-                onRemove={() => {
-                  Alert.alert('Remove from History?', 'Playback progress and watched state will remain unchanged.', [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Remove', style: 'destructive', onPress: () => removeHistoryEntry(item._key) },
-                  ]);
-                }}
-              />
-            )}
-          />
-        )}
+            );
+          })}
       </View>
-    </SafeAreaView>
+
+      <View style={styles.pagerViewport}>
+        <GestureDetector gesture={pagerGesture}>
+          <Animated.View style={[styles.pagerStrip, { width: width * TABS.length }, pagerStyle]}>
+            <View style={[styles.page, { width }]}>
+              <FlatList
+                key={`saved-${columnCount}`}
+                data={savedItems}
+                numColumns={columnCount}
+                keyExtractor={(item) => `${item.media_type || 'movie'}_${item.id}`}
+                contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
+                columnWrapperStyle={{ gap: gridGap }}
+                ListEmptyComponent={emptyState('bookmark-outline', 'Your list is ready for its first story', 'Save a movie or series and it will appear here.')}
+                renderItem={({ item }) => (
+                  <MediaCard item={item} width={cardWidth} height={cardWidth * 1.52} style={{ marginRight: 0, marginBottom: 18 }} onPress={() => openDetails(item.id, item.media_type === 'tv' ? 'tv' : 'movie')} />
+                )}
+              />
+            </View>
+            <View style={[styles.page, { width }]}>
+              <FlatList
+                data={continueItems}
+                keyExtractor={(entry) => entry.key}
+                contentContainerStyle={[styles.listContent, styles.continueList, { paddingHorizontal: horizontalPadding }]}
+                ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
+                ListEmptyComponent={emptyState('play-circle-outline', 'Nothing waiting to resume', 'Verified playback appears here after 30 seconds.')}
+                renderItem={({ item }) => (
+                  <ContinueWatchingCard
+                    entry={item}
+                    presentation="library-full"
+                    onResume={() => resumeProgress(item)}
+                    onOpenDetails={() => openDetails(item.progress.mediaIdentity.id, item.progress.mediaIdentity.mediaType)}
+                    onRemove={() => removeProgress(item.key)}
+                    onMarkWatched={() => markProgressWatched(item.key)}
+                  />
+                )}
+              />
+            </View>
+            <View style={[styles.page, { width }]}>
+              <FlatList
+                data={historyItems}
+                keyExtractor={(item) => item._key}
+                contentContainerStyle={[styles.listContent, styles.historyList, { paddingHorizontal: horizontalPadding }]}
+                ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+                ListEmptyComponent={emptyState('time-outline', 'No verified watch history', 'Movies and episodes enter History after Orion confirms advancing playback.')}
+                renderItem={({ item }) => (
+                  <HistoryRow
+                    item={item}
+                    onResume={() => resumeHistory(item)}
+                    onOpenDetails={() => openDetails(item.id, item.media_type === 'tv' ? 'tv' : 'movie')}
+                    onRemove={() => setDialog({ type: 'remove', historyKey: item._key })}
+                  />
+                )}
+              />
+            </View>
+          </Animated.View>
+        </GestureDetector>
+      </View>
+
+      <OrionDialog
+        visible={dialog?.type === 'clear'}
+        title="Clear watch history?"
+        message="This removes History only. My List, watched state and playback progress stay unchanged."
+        icon="trash-outline"
+        onDismiss={() => setDialog(null)}
+        actions={[
+          { label: 'Cancel', role: 'cancel', onPress: () => setDialog(null) },
+          { label: 'Clear History', role: 'destructive', onPress: () => { clearHistory(); setDialog(null); } },
+        ]}
+      />
+      <OrionDialog
+        visible={dialog?.type === 'remove'}
+        title="Remove from History?"
+        message="Playback progress and watched state will remain unchanged."
+        icon="trash-outline"
+        onDismiss={() => setDialog(null)}
+        actions={[
+          { label: 'Cancel', role: 'cancel', onPress: () => setDialog(null) },
+          { label: 'Remove', role: 'destructive', onPress: () => { if (dialog?.type === 'remove') removeHistoryEntry(dialog.historyKey); setDialog(null); } },
+        ]}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   container: { flex: 1 },
-  header: { paddingTop: 18, paddingBottom: 12, gap: 15 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 66, marginLeft: 48 },
-  titleCopy: { flex: 1, minWidth: 0 },
-  eyebrow: { fontSize: 11, fontWeight: '900', letterSpacing: 2 },
-  pageTitle: { fontSize: 34, lineHeight: 40, fontWeight: '900', letterSpacing: -1 },
+  tabsFrame: { paddingBottom: 12 },
   headerAction: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  tabs: { gap: 9, paddingRight: 4 },
-  tab: { minHeight: 46, borderWidth: 1, borderRadius: 23, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  tabs: { flexDirection: 'row', gap: 8 },
+  tab: { flex: 1, minHeight: 46, borderWidth: 1, borderRadius: 23, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  tabCompact: { paddingHorizontal: 5, gap: 4 },
   tabText: { fontSize: 14, fontWeight: '700' },
   count: { fontSize: 12, fontWeight: '800', minWidth: 12, textAlign: 'center' },
+  pagerViewport: { flex: 1, overflow: 'hidden' },
+  pagerStrip: { flex: 1, flexDirection: 'row' },
+  page: { flex: 1 },
   listContent: { paddingTop: 12, paddingBottom: 96, flexGrow: 1 },
   continueList: { width: '100%', maxWidth: 880, alignSelf: 'center' },
   historyList: { width: '100%', maxWidth: 980, alignSelf: 'center' },

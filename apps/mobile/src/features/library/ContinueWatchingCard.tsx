@@ -11,8 +11,10 @@ interface ContinueWatchingCardProps {
   onRemove: () => void;
   onMarkWatched: () => void;
   onOpenDetails?: () => void;
-  fullWidth?: boolean;
+  presentation?: ContinueWatchingPresentation;
 }
+
+export type ContinueWatchingPresentation = 'home-rail' | 'library-full';
 
 export function ContinueWatchingCard({
   entry,
@@ -20,14 +22,17 @@ export function ContinueWatchingCard({
   onRemove,
   onMarkWatched,
   onOpenDetails,
-  fullWidth = false,
+  presentation: presentationMode = 'home-rail',
 }: ContinueWatchingCardProps) {
   const { width } = useWindowDimensions();
   const { theme } = useOrionTheme();
   const { progress } = entry;
   const { mediaIdentity, presentation } = progress;
   const compact = width < 360;
-  const cardWidth = fullWidth ? '100%' : Math.min(420, Math.max(280, width - (compact ? 28 : 56)));
+  const isLibrary = presentationMode === 'library-full';
+  const cardWidth = isLibrary
+    ? '100%'
+    : Math.min(330, Math.max(252, width * (compact ? 0.82 : 0.79)));
   const artwork = imgUrl(presentation.backdropPath || presentation.posterPath, 'w780');
   const episodeContext = mediaIdentity.mediaType === 'tv'
     ? `S${mediaIdentity.season || 1} E${mediaIdentity.episode || 1}${presentation.episodeTitle ? ` · ${presentation.episodeTitle}` : ''}`
@@ -37,7 +42,7 @@ export function ContinueWatchingCard({
     : 0;
 
   return (
-    <View style={[styles.card, { width: cardWidth, backgroundColor: theme.elevated, borderColor: theme.border }]}>
+    <View style={[styles.card, !isLibrary && styles.homeCard, { width: cardWidth, backgroundColor: theme.elevated, borderColor: theme.border }]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Open ${mediaIdentity.title}`}
@@ -57,8 +62,8 @@ export function ContinueWatchingCard({
         </View>
       </Pressable>
 
-      <View style={styles.content}>
-        <Text style={[styles.title, { color: theme.text }]} numberOfLines={2}>{mediaIdentity.title}</Text>
+      <View style={[styles.content, !isLibrary && styles.homeContent]}>
+        <Text style={[styles.title, !isLibrary && styles.homeTitle, { color: theme.text }]} numberOfLines={2}>{mediaIdentity.title}</Text>
         <Text style={[styles.context, { color: theme.textSecondary }]} numberOfLines={2}>{episodeContext}</Text>
         <Text style={[styles.progressText, { color: theme.textMuted }]} numberOfLines={1}>
           {progressDescription(progress.currentTime, progress.duration, progress.percent)}
@@ -97,14 +102,17 @@ export function ContinueWatchingCard({
 
 const styles = StyleSheet.create({
   card: { borderRadius: 18, borderWidth: 1, overflow: 'hidden', flexShrink: 0 },
-  artworkFrame: { width: '100%', aspectRatio: 16 / 8.3, overflow: 'hidden' },
+  artworkFrame: { width: '100%', aspectRatio: 16 / 9, overflow: 'hidden' },
   artwork: { width: '100%', height: '100%' },
   fallback: { alignItems: 'center', justifyContent: 'center' },
   scrim: { ...StyleSheet.absoluteFill, opacity: 0.22 },
   progressTrack: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 4 },
   progressFill: { height: '100%' },
   content: { padding: 14, gap: 4 },
+  homeCard: { borderRadius: 16 },
+  homeContent: { padding: 12 },
   title: { fontSize: 18, fontWeight: '800', lineHeight: 23 },
+  homeTitle: { fontSize: 16, lineHeight: 20 },
   context: { fontSize: 13, lineHeight: 18 },
   progressText: { fontSize: 12, marginTop: 2 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' },

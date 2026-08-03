@@ -1,9 +1,10 @@
 import { View, Text, StyleSheet, Image, Pressable, StyleProp, ViewStyle } from 'react-native';
-import { text, radii, spacing, fontSizes, backgrounds } from '@orion/shared/tokens';
+import { radii, spacing, fontSizes } from '@orion/shared/tokens';
 import { imgUrl } from '@orion/shared/api';
 import { TmdbMediaItem } from '@orion/shared/types';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useOrionTheme } from '../context/ThemeContext';
 
 interface PersonCardProps {
   item: {
@@ -18,13 +19,14 @@ interface PersonCardProps {
 }
 
 export function PersonCard({ item, onPress, width = 110, height = 165, style }: PersonCardProps) {
+  const { theme } = useOrionTheme();
   const imageUrl = imgUrl(item.profile_path || null, 'w500');
 
   return (
     <Pressable
       style={({ pressed }) => [
         styles.container,
-        { width, height },
+        { width, height, backgroundColor: theme.surface, borderColor: theme.border },
         style,
         pressed && styles.pressedCard
       ]}
@@ -34,8 +36,8 @@ export function PersonCard({ item, onPress, width = 110, height = 165, style }: 
         {imageUrl ? (
           <Image source={{ uri: imageUrl }} style={styles.image} />
         ) : (
-          <View style={styles.placeholder}>
-            <Ionicons name="person" size={40} color={text.muted} />
+          <View style={[styles.placeholder, { backgroundColor: theme.surfaceHover }]}>
+            <Ionicons name="person" size={40} color={theme.textMuted} />
           </View>
         )}
         <LinearGradient
@@ -47,7 +49,7 @@ export function PersonCard({ item, onPress, width = 110, height = 165, style }: 
 
       <View style={styles.infoContainer}>
         <Text style={styles.name} numberOfLines={2}>{item.name}</Text>
-        <Text style={styles.subtitle} numberOfLines={1}>Actor</Text>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]} numberOfLines={1}>Person</Text>
       </View>
     </Pressable>
   );
@@ -57,9 +59,7 @@ const styles = StyleSheet.create({
   container: {
     borderRadius: radii.md,
     overflow: 'hidden',
-    backgroundColor: backgrounds.surface,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
   },
   pressedCard: {
     opacity: 0.7,
@@ -78,7 +78,6 @@ const styles = StyleSheet.create({
   placeholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: 'rgba(255,255,255,0.05)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -98,7 +97,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   subtitle: {
-    color: text.secondary,
     fontSize: 10,
     marginTop: 2,
   },

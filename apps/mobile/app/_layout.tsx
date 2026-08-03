@@ -95,8 +95,6 @@ function ThemedApplication() {
         {/* Background is now handled at the screen level for better compatibility */}
         
         <StatusBar style={theme.dark ? "light" : "dark"} />
-        <OfflineBanner />
-        
         {/* Transparent stack that respects the background */}
         <Stack
           screenOptions={{
@@ -106,6 +104,7 @@ function ThemedApplication() {
         >
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         </Stack>
+        <OfflineBanner />
       </View>
         </GestureHandlerRootView>
       </LibraryProvider>

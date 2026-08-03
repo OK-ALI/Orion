@@ -1,11 +1,18 @@
+import { useMemo } from "react";
 import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { CameraView } from "expo-camera";
-import { text, backgrounds, spacing, accent, radii } from "@orion/shared/tokens";
+import { spacing, radii } from "@orion/shared/tokens";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useConnectController } from "./useConnectController";
-import { styles } from "./connectStyles";
+import { createConnectStyles } from "./connectStyles";
+import { useOrionTheme } from "../../context/ThemeContext";
+import { MobilePageHeader } from "../../components/MobilePageHeader";
+import { OrionDialog } from "../../components/OrionDialog";
 export default function ConnectScreen() {
+  const { theme } = useOrionTheme();
+  const styles = useMemo(() => createConnectStyles(theme), [theme]);
+  const text = { primary: theme.text, secondary: theme.textSecondary, muted: theme.textMuted };
   const {
     activeTab,
     cameraPermission,
@@ -30,6 +37,7 @@ export default function ConnectScreen() {
     panResponder,
     pinCode,
     pulseAnim,
+    qrNotice,
     remoteError,
     remoteText,
     requestCameraPermission,
@@ -38,6 +46,7 @@ export default function ConnectScreen() {
     sendRemoteCommand,
     setActiveTab,
     setCurrentSpeedIndex,
+    setQrNotice,
     setDesktopIp,
     setNavFocusMode,
     setPairingMethod,
@@ -54,17 +63,19 @@ export default function ConnectScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#250508', backgrounds.base, backgrounds.base, '#1a0407']}
+        colors={[theme.accentSoft, theme.background, theme.background, theme.elevated]}
         locations={[0, 0.35, 0.75, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      <View style={styles.header}>
-        <View style={styles.headerTitleRow}>
-          <Text style={styles.headerTitle}>Orion Connect</Text>
-        </View>
-        <Pressable
+      <MobilePageHeader
+        eyebrow="REMOTE"
+        title="Orion Connect"
+        subtitle="Control Orion Desktop from this device over your local network."
+        trailing={<Pressable
+          accessibilityRole="button"
+          accessibilityLabel={isConnected ? 'Disconnect Orion Desktop' : 'Pair Orion Desktop'}
           style={[
             styles.statusPill,
             isConnected ? styles.statusPillConnected : styles.statusPillDisconnected,
@@ -81,22 +92,23 @@ export default function ConnectScreen() {
           <View
             style={[
               styles.statusDot,
-              { backgroundColor: isConnected ? '#10b981' : '#f59e0b' },
+              { backgroundColor: isConnected ? theme.success : theme.warning },
             ]}
           />
           <Text style={styles.statusText}>
             {isConnected ? 'Live' : 'Pair Desktop'}
           </Text>
-          {isConnected && <Ionicons name="power" size={12} color="#10b981" style={{ marginLeft: 2 }} />}
+              {isConnected && <Ionicons name="power" size={12} color={theme.success} style={{ marginLeft: 2 }} />}
         </Pressable>
-      </View>
+        }
+      />
       {!isConnected ? (
         /* Disconnected Hero Banner & Pairing Guide */
         <ScrollView contentContainerStyle={styles.pairingContainer} showsVerticalScrollIndicator={false}>
           <View style={styles.iconContainer}>
             <Animated.View style={[styles.pulseRing, { transform: [{ scale: pulseAnim }] }]} />
             <View style={styles.iconInner}>
-              <Ionicons name="wifi-outline" size={44} color="#f87171" />
+              <Ionicons name="wifi-outline" size={44} color={theme.accent} />
             </View>
           </View>
           <Text style={styles.title}>Smart Remote & TV Pairing</Text>
@@ -126,7 +138,7 @@ export default function ConnectScreen() {
                 setShowPairingModal(true);
               }}
             >
-              <Ionicons name="keypad-outline" size={20} color="#fff" />
+              <Ionicons name="keypad-outline" size={20} color={theme.onAccent} />
               <Text style={styles.primaryConnectBtnText}>Enter Pairing Code</Text>
             </Pressable>
             <Pressable
@@ -136,7 +148,7 @@ export default function ConnectScreen() {
                 setShowPairingModal(true);
               }}
             >
-              <Ionicons name="camera-outline" size={18} color="#fff" />
+              <Ionicons name="camera-outline" size={18} color={theme.text} />
               <Text style={styles.secondaryConnectBtnText}>Scan QR Code</Text>
             </Pressable>
           </View>
@@ -146,7 +158,7 @@ export default function ConnectScreen() {
         <View style={styles.remoteLayout}>
           <View style={styles.nowPlayingBar}>
             <View style={styles.nowPlayingIconGlow}>
-              <Ionicons name="tv-outline" size={18} color="#10b981" />
+              <Ionicons name="tv-outline" size={18} color={theme.success} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.nowPlayingTitle} numberOfLines={1}>
@@ -158,13 +170,13 @@ export default function ConnectScreen() {
               style={styles.disconnectRemoteBtn}
               onPress={() => setShowDisconnectModal(true)}
             >
-              <Ionicons name="power-outline" size={14} color="#f87171" />
+              <Ionicons name="power-outline" size={14} color={theme.danger} />
               <Text style={styles.disconnectRemoteText}>Disconnect</Text>
             </Pressable>
           </View>
           {remoteError ? (
-            <View style={{ marginHorizontal: spacing[4], marginBottom: spacing[3], padding: spacing[3], borderRadius: radii.lg, backgroundColor: 'rgba(239,68,68,0.12)', borderWidth: 1, borderColor: 'rgba(248,113,113,0.35)' }}>
-              <Text style={{ color: '#fca5a5', fontSize: 12, lineHeight: 18 }}>{remoteError}</Text>
+            <View style={{ marginHorizontal: spacing[4], marginBottom: spacing[3], padding: spacing[3], borderRadius: radii.lg, backgroundColor: theme.accentSoft, borderWidth: 1, borderColor: theme.danger }}>
+              <Text style={{ color: theme.danger, fontSize: 12, lineHeight: 18 }}>{remoteError}</Text>
             </View>
           ) : null}
           <View style={styles.modeTabs}>
@@ -175,7 +187,7 @@ export default function ConnectScreen() {
               <Ionicons
                 name="hand-left-outline"
                 size={16}
-                color={activeTab === 'touchpad' ? '#fff' : text.muted}
+                color={activeTab === 'touchpad' ? theme.onAccent : text.muted}
               />
               <Text style={[styles.modeTabText, activeTab === 'touchpad' && styles.modeTabTextActive]}>
                 Touchpad
@@ -188,7 +200,7 @@ export default function ConnectScreen() {
               <Ionicons
                 name="navigate-outline"
                 size={16}
-                color={activeTab === 'dpad' ? '#fff' : text.muted}
+                color={activeTab === 'dpad' ? theme.onAccent : text.muted}
               />
               <Text style={[styles.modeTabText, activeTab === 'dpad' && styles.modeTabTextActive]}>
                 D-Pad
@@ -201,7 +213,7 @@ export default function ConnectScreen() {
               <Ionicons
                 name="play-circle-outline"
                 size={16}
-                color={activeTab === 'playback' ? '#fff' : text.muted}
+                color={activeTab === 'playback' ? theme.onAccent : text.muted}
               />
               <Text style={[styles.modeTabText, activeTab === 'playback' && styles.modeTabTextActive]}>
                 HUD
@@ -214,7 +226,7 @@ export default function ConnectScreen() {
               <Ionicons
                 name="keypad-outline"
                 size={16}
-                color={activeTab === 'keyboard' ? '#fff' : text.muted}
+                color={activeTab === 'keyboard' ? theme.onAccent : text.muted}
               />
               <Text style={[styles.modeTabText, activeTab === 'keyboard' && styles.modeTabTextActive]}>
                 Keyboard
@@ -227,7 +239,7 @@ export default function ConnectScreen() {
                 style={styles.touchpadSurface}
                 {...panResponder.panHandlers}
               >
-                <Ionicons name="finger-print" size={36} color="rgba(255, 255, 255, 0.3)" />
+                <Ionicons name="finger-print" size={36} color={theme.textMuted} />
                 <Text style={styles.touchpadPrompt}>Drag to move laser cursor on TV</Text>
                 <Text style={styles.touchpadSubPrompt}>Tap anywhere to click target item</Text>
               </View>
@@ -247,7 +259,7 @@ export default function ConnectScreen() {
                       ]}
                       onPress={() => sendRemoteCommand('navigate_page', item.id)}
                     >
-                      <Ionicons name={item.icon as any} size={15} color="#f87171" />
+                      <Ionicons name={item.icon as any} size={15} color={theme.accent} />
                       <Text style={styles.quickPageChipText}>{item.label}</Text>
                     </Pressable>
                   ))}
@@ -258,7 +270,7 @@ export default function ConnectScreen() {
                   style={[styles.focusModeBtn, navFocusMode === 'sidebar' && styles.focusModeBtnActive]}
                   onPress={() => setNavFocusMode('sidebar')}
                 >
-                  <Ionicons name="list-outline" size={16} color={navFocusMode === 'sidebar' ? '#fff' : text.muted} />
+                  <Ionicons name="list-outline" size={16} color={navFocusMode === 'sidebar' ? theme.text : text.muted} />
                   <Text style={[styles.focusModeText, navFocusMode === 'sidebar' && styles.focusModeTextActive]}>
                     Sidebar Focus
                   </Text>
@@ -267,7 +279,7 @@ export default function ConnectScreen() {
                   style={[styles.focusModeBtn, navFocusMode === 'content' && styles.focusModeBtnActive]}
                   onPress={() => setNavFocusMode('content')}
                 >
-                  <Ionicons name="grid-outline" size={16} color={navFocusMode === 'content' ? '#fff' : text.muted} />
+                  <Ionicons name="grid-outline" size={16} color={navFocusMode === 'content' ? theme.text : text.muted} />
                   <Text style={[styles.focusModeText, navFocusMode === 'content' && styles.focusModeTextActive]}>
                     Content Focus
                   </Text>
@@ -275,13 +287,13 @@ export default function ConnectScreen() {
               </View>
               <View style={styles.navRow}>
                 <Pressable style={styles.smallNavBtn} onPress={() => sendRemoteCommand('back')}>
-                  <Ionicons name="arrow-back" size={20} color="#fff" />
+                  <Ionicons name="arrow-back" size={20} color={theme.text} />
                 </Pressable>
                 <Pressable style={styles.smallNavBtn} onPress={() => sendRemoteCommand('home')}>
-                  <Ionicons name="home-outline" size={20} color="#fff" />
+                  <Ionicons name="home-outline" size={20} color={theme.text} />
                 </Pressable>
                 <Pressable style={styles.smallNavBtn} onPress={() => sendRemoteCommand('menu')}>
-                  <Ionicons name="menu-outline" size={20} color="#fff" />
+                  <Ionicons name="menu-outline" size={20} color={theme.text} />
                 </Pressable>
               </View>
               <View style={styles.dpadOuter}>
@@ -292,7 +304,7 @@ export default function ConnectScreen() {
                     else sendRemoteCommand('up');
                   }}
                 >
-                  <Ionicons name="chevron-up" size={28} color="#fff" />
+                  <Ionicons name="chevron-up" size={28} color={theme.text} />
                 </Pressable>
                 <View style={styles.dpadMiddleRow}>
                   <Pressable
@@ -302,7 +314,7 @@ export default function ConnectScreen() {
                       else sendRemoteCommand('focus_card_prev');
                     }}
                   >
-                    <Ionicons name="chevron-back" size={28} color="#fff" />
+                    <Ionicons name="chevron-back" size={28} color={theme.text} />
                   </Pressable>
                   <Pressable style={styles.dpadCenterOk} onPress={() => sendRemoteCommand('select')}>
                     <Text style={styles.okText}>OK</Text>
@@ -314,7 +326,7 @@ export default function ConnectScreen() {
                       else sendRemoteCommand('focus_card_next');
                     }}
                   >
-                    <Ionicons name="chevron-forward" size={28} color="#fff" />
+                    <Ionicons name="chevron-forward" size={28} color={theme.text} />
                   </Pressable>
                 </View>
                 <Pressable
@@ -324,7 +336,7 @@ export default function ConnectScreen() {
                     else sendRemoteCommand('down');
                   }}
                 >
-                  <Ionicons name="chevron-down" size={28} color="#fff" />
+                  <Ionicons name="chevron-down" size={28} color={theme.text} />
                 </Pressable>
               </View>
             </View>
@@ -369,24 +381,24 @@ export default function ConnectScreen() {
               </View>
               <View style={styles.seekRow}>
                 <Pressable style={styles.smallNavBtn} onPress={() => sendRemoteCommand('previous')}>
-                  <Ionicons name="play-skip-back" size={18} color="#fff" />
+                  <Ionicons name="play-skip-back" size={18} color={theme.text} />
                 </Pressable>
                 <Pressable style={styles.seekBtn} onPress={() => sendRemoteCommand('seek_-10')}>
-                  <Ionicons name="play-back" size={20} color="#fff" />
+                  <Ionicons name="play-back" size={20} color={theme.text} />
                   <Text style={styles.seekText}>-10s</Text>
                 </Pressable>
                 <Pressable
                   style={styles.bigPlayBtn}
                   onPress={() => sendRemoteCommand('toggle_play')}
                 >
-                  <Ionicons name={isPlaying ? 'pause' : 'play'} size={36} color="#fff" />
+                  <Ionicons name={isPlaying ? 'pause' : 'play'} size={36} color={theme.onAccent} />
                 </Pressable>
                 <Pressable style={styles.seekBtn} onPress={() => sendRemoteCommand('seek_+10')}>
-                  <Ionicons name="play-forward" size={20} color="#fff" />
+                  <Ionicons name="play-forward" size={20} color={theme.text} />
                   <Text style={styles.seekText}>+10s</Text>
                 </Pressable>
                 <Pressable style={styles.smallNavBtn} onPress={() => sendRemoteCommand('next')}>
-                  <Ionicons name="play-skip-forward" size={18} color="#fff" />
+                  <Ionicons name="play-skip-forward" size={18} color={theme.text} />
                 </Pressable>
               </View>
               <View style={styles.hudFeatureGrid}>
@@ -398,28 +410,28 @@ export default function ConnectScreen() {
                     sendRemoteCommand('set_speed', parseFloat(speeds[nextIdx]));
                   }}
                 >
-                  <Ionicons name="speedometer-outline" size={18} color="#f87171" />
+                  <Ionicons name="speedometer-outline" size={18} color={theme.accent} />
                   <Text style={styles.hudFeatureText}>{speeds[currentSpeedIndex]}</Text>
                 </Pressable>
                 <Pressable
                   style={styles.hudFeatureBtn}
                   onPress={() => sendRemoteCommand('toggle_subtitles')}
                 >
-                  <Ionicons name="chatbox-ellipses-outline" size={18} color="#f87171" />
+                  <Ionicons name="chatbox-ellipses-outline" size={18} color={theme.accent} />
                   <Text style={styles.hudFeatureText}>CC</Text>
                 </Pressable>
                 <Pressable
                   style={styles.hudFeatureBtn}
                   onPress={() => sendRemoteCommand('toggle_fullscreen')}
                 >
-                  <Ionicons name="expand-outline" size={18} color="#f87171" />
+                  <Ionicons name="expand-outline" size={18} color={theme.accent} />
                   <Text style={styles.hudFeatureText}>Screen</Text>
                 </Pressable>
                 <Pressable
                   style={styles.hudFeatureBtn}
                   onPress={() => sendRemoteCommand('toggle_pip')}
                 >
-                  <Ionicons name="duplicate-outline" size={18} color="#f87171" />
+                  <Ionicons name="duplicate-outline" size={18} color={theme.accent} />
                   <Text style={styles.hudFeatureText}>PiP</Text>
                 </Pressable>
               </View>
@@ -428,7 +440,7 @@ export default function ConnectScreen() {
                   <Ionicons
                     name={isMuted || volume === 0 ? 'volume-mute' : 'volume-high'}
                     size={22}
-                    color={isMuted ? accent.primary : '#fff'}
+                    color={isMuted ? theme.accent : theme.text}
                   />
                 </Pressable>
                 <View style={styles.volumeTrack}>
@@ -443,14 +455,14 @@ export default function ConnectScreen() {
                   style={styles.volStepBtn}
                   onPress={() => sendRemoteCommand('volume_down')}
                 >
-                  <Ionicons name="remove" size={16} color="#fff" />
+                  <Ionicons name="remove" size={16} color={theme.text} />
                   <Text style={styles.volStepText}>Vol -</Text>
                 </Pressable>
                 <Pressable
                   style={styles.volPresetBtn}
                   onPress={() => sendRemoteCommand('volume_up')}
                 >
-                  <Ionicons name="add" size={16} color="#fff" />
+                  <Ionicons name="add" size={16} color={theme.text} />
                   <Text style={styles.volStepText}>Vol +</Text>
                 </Pressable>
               </View>
@@ -463,7 +475,7 @@ export default function ConnectScreen() {
                   style={[styles.focusModeBtn, searchTarget === 'cinema' && styles.focusModeBtnActive]}
                   onPress={() => setSearchTarget('cinema')}
                 >
-                  <Ionicons name="film-outline" size={16} color={searchTarget === 'cinema' ? '#fff' : text.muted} />
+                  <Ionicons name="film-outline" size={16} color={searchTarget === 'cinema' ? theme.text : text.muted} />
                   <Text style={[styles.focusModeText, searchTarget === 'cinema' && styles.focusModeTextActive]}>
                     Cinema Search
                   </Text>
@@ -472,7 +484,7 @@ export default function ConnectScreen() {
                   style={[styles.focusModeBtn, searchTarget === 'constellation' && styles.focusModeBtnActive]}
                   onPress={() => setSearchTarget('constellation')}
                 >
-                  <Ionicons name="planet-outline" size={16} color={searchTarget === 'constellation' ? '#fff' : text.muted} />
+                  <Ionicons name="planet-outline" size={16} color={searchTarget === 'constellation' ? theme.text : text.muted} />
                   <Text style={[styles.focusModeText, searchTarget === 'constellation' && styles.focusModeTextActive]}>
                     Constellation
                   </Text>
@@ -507,7 +519,7 @@ export default function ConnectScreen() {
                   setRemoteText('');
                 }}
               >
-                <Ionicons name="paper-plane" size={18} color="#fff" />
+                <Ionicons name="paper-plane" size={18} color={theme.onAccent} />
                 <Text style={styles.sendTextBtnText}>
                   {searchTarget === 'cinema' ? 'Send to Cinema Search' : 'Filter Constellation Graph'}
                 </Text>
@@ -527,7 +539,7 @@ export default function ConnectScreen() {
                   setTimeout(() => hiddenPinInputRef.current?.focus(), 150);
                 }}
               >
-                <Ionicons name="keypad-outline" size={14} color={pairingMethod === 'pin' ? '#fff' : text.muted} />
+                <Ionicons name="keypad-outline" size={14} color={pairingMethod === 'pin' ? theme.onAccent : text.muted} />
                 <Text style={[styles.modalMethodTabText, pairingMethod === 'pin' && styles.modalMethodTabTextActive]}>
                   PIN Code
                 </Text>
@@ -536,7 +548,7 @@ export default function ConnectScreen() {
                 style={[styles.modalMethodTab, pairingMethod === 'qr' && styles.modalMethodTabActive]}
                 onPress={() => setPairingMethod('qr')}
               >
-                <Ionicons name="qr-code-outline" size={14} color={pairingMethod === 'qr' ? '#fff' : text.muted} />
+                <Ionicons name="qr-code-outline" size={14} color={pairingMethod === 'qr' ? theme.onAccent : text.muted} />
                 <Text style={[styles.modalMethodTabText, pairingMethod === 'qr' && styles.modalMethodTabTextActive]}>
                   QR Scan
                 </Text>
@@ -545,7 +557,7 @@ export default function ConnectScreen() {
                 style={[styles.modalMethodTab, pairingMethod === 'ip' && styles.modalMethodTabActive]}
                 onPress={() => setPairingMethod('ip')}
               >
-                <Ionicons name="wifi-outline" size={14} color={pairingMethod === 'ip' ? '#fff' : text.muted} />
+                <Ionicons name="wifi-outline" size={14} color={pairingMethod === 'ip' ? theme.onAccent : text.muted} />
                 <Text style={[styles.modalMethodTabText, pairingMethod === 'ip' && styles.modalMethodTabTextActive]}>
                   Direct IP
                 </Text>
@@ -619,7 +631,7 @@ export default function ConnectScreen() {
                   </View>
                 ) : (
                   <View style={[styles.cameraViewfinder, { justifyContent: 'center', alignItems: 'center', gap: 10, padding: 16 }]}>
-                    <Ionicons name="camera-outline" size={42} color="#f87171" />
+                    <Ionicons name="camera-outline" size={42} color={theme.accent} />
                     <Text style={{ color: text.muted, fontSize: 12, textAlign: 'center' }}>
                       Camera access is required to scan the desktop QR code.
                     </Text>
@@ -641,7 +653,7 @@ export default function ConnectScreen() {
                 <Text style={styles.modalTitle}>Manual IP & PIN Connect</Text>
                 <Text style={styles.modalSub}>Enter your computer's local IP and the pairing PIN.</Text>
                 <View style={styles.ipInputRow}>
-                  <Ionicons name="desktop-outline" size={20} color="#f87171" />
+                  <Ionicons name="desktop-outline" size={20} color={theme.accent} />
                   <TextInput
                     style={styles.ipInput}
                     value={desktopIp}
@@ -652,7 +664,7 @@ export default function ConnectScreen() {
                   />
                 </View>
                 <View style={[styles.ipInputRow, { marginTop: 12 }]}>
-                  <Ionicons name="keypad-outline" size={20} color="#f87171" />
+                  <Ionicons name="keypad-outline" size={20} color={theme.accent} />
                   <TextInput
                     style={styles.ipInput}
                     value={pinCode}
@@ -675,8 +687,8 @@ export default function ConnectScreen() {
               </View>
             )}
             {pairError ? (
-              <View style={{ marginTop: spacing[3], padding: spacing[3], borderRadius: radii.lg, backgroundColor: 'rgba(239,68,68,0.12)', borderWidth: 1, borderColor: 'rgba(248,113,113,0.35)' }}>
-                <Text style={{ color: '#fca5a5', fontSize: 12, lineHeight: 18, textAlign: 'center' }}>{pairError}</Text>
+              <View style={{ marginTop: spacing[3], padding: spacing[3], borderRadius: radii.lg, backgroundColor: theme.accentSoft, borderWidth: 1, borderColor: theme.danger }}>
+                <Text style={{ color: theme.danger, fontSize: 12, lineHeight: 18, textAlign: 'center' }}>{pairError}</Text>
                 {/expired/i.test(pairError) ? (
                   <Text style={{ color: text.muted, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 6 }}>
                     Select New code in Orion Desktop, then enter the refreshed code here.
@@ -694,7 +706,7 @@ export default function ConnectScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.glassModalCard}>
             <View style={styles.disconnectIconGlow}>
-              <Ionicons name="power" size={28} color="#f87171" />
+              <Ionicons name="power" size={28} color={theme.danger} />
             </View>
             <Text style={styles.modalTitle}>Disconnect Remote?</Text>
             <Text style={styles.modalSub}>
@@ -711,6 +723,14 @@ export default function ConnectScreen() {
           </View>
         </View>
       </Modal>
+      <OrionDialog
+        visible={Boolean(qrNotice)}
+        title="QR code not recognized"
+        message={qrNotice}
+        icon="qr-code-outline"
+        onDismiss={() => setQrNotice('')}
+        actions={[{ label: 'OK', role: 'primary', onPress: () => setQrNotice('') }]}
+      />
     </View>
   );
 }
