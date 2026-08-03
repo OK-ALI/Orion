@@ -9,12 +9,9 @@ import ErrorBoundary from "../components/common/ErrorBoundary";
 import WindowTitlebar from "../components/layout/WindowTitlebar";
 import { storage, STORAGE_KEYS } from "../services/settingsStore";
 import {
-  applyAccentColor,
-  applyFontPreset,
-  applyInteractionAppearance,
-  applyTheme,
   ACCENT_PRESETS,
 } from "../shared/utils/appearance";
+import { applyStoredAppearance } from "./startup/applyStartupAppearance";
 import { collectCompleteBackupData, restoreCompleteBackupData } from "../services/backup";
 import { playPortalSound } from "../features/music/services/portalSound";
 import { tmdbFetch } from "../services/tmdb";
@@ -403,38 +400,9 @@ export default function App() {
       window.removeEventListener("orion:player-settings-changed", handler);
   }, []);
   useEffect(() => {
-    // Accent colour
-    const accent = storage.get(STORAGE_KEYS.ACCENT_COLOR) || "orion";
-    applyAccentColor(accent, storage.get(STORAGE_KEYS.CINEMA_GLOW_STRENGTH) ?? 50);
-    applyFontPreset(storage.get(STORAGE_KEYS.FONT_PRESET) || "orion");
-    // Theme
-    const theme = storage.get(STORAGE_KEYS.THEME) || "dark";
-    const customVars = storage.get(STORAGE_KEYS.CUSTOM_THEME_VARS) || null;
-    applyTheme(theme, customVars);
-    applyInteractionAppearance({
-      preset: storage.get(STORAGE_KEYS.INTERACTION_HOVER_PRESET) || "balanced",
-      override: storage.get(STORAGE_KEYS.INTERACTION_HOVER_COLOR) || "",
-      strength: storage.get(STORAGE_KEYS.INTERACTION_GLOW_STRENGTH) ?? 50,
-      accentId: accent,
-      themeId: theme,
-    });
-    // Font size
-    const font = storage.get(STORAGE_KEYS.FONT_SIZE) || "normal";
-    const zoomMap = { sm: 0.85, normal: 1, lg: 1.15 };
-    const factor = zoomMap[font] ?? 1;
-    if (window.electron?.setZoomFactor) window.electron.setZoomFactor(factor);
-    // Compact mode
-    const compact = !!storage.get(STORAGE_KEYS.COMPACT_MODE);
-    document.body.classList.toggle("compact-mode", compact);
-    // Reduce animations
-    const noAnim = !!storage.get(STORAGE_KEYS.REDUCE_ANIMATIONS);
-    document.body.classList.toggle("no-anim", noAnim);
-    const motion = noAnim
-      ? "calm"
-      : storage.get(STORAGE_KEYS.MOTION_PRESET) || "balanced";
-    document.body.dataset.motion = motion;
-    document.documentElement.dataset.motion = motion;
-    document.body.dataset.background = storage.get(STORAGE_KEYS.BACKGROUND_SCENE) || "orbit";
+    // Re-apply after mount so runtime settings changes retain the same boundary.
+    // The first application happens synchronously in main.jsx before React paints.
+    applyStoredAppearance();
   }, []);
   useEffect(() => {
     const previous = previousNetworkStatusRef.current;

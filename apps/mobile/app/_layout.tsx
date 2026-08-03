@@ -1,8 +1,6 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { backgrounds } from '@orion/shared/tokens';
 import { initTmdbClient, initAnilistClient } from '@orion/shared/api';
 import { getMobileStorageHealth, mmkvStorageAdapter } from '../src/services/storageAdapter';
 import { useFonts } from 'expo-font';
@@ -10,7 +8,7 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } f
 import { SpaceGrotesk_400Regular, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { Outfit_400Regular, Outfit_600SemiBold, Outfit_700Bold, Outfit_900Black } from '@expo-google-fonts/outfit';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LibraryProvider } from '../src/context/LibraryContext';
 import { ThemeProvider, useOrionTheme } from '../src/context/ThemeContext';
@@ -18,15 +16,11 @@ import { NetworkProvider } from '../src/context/NetworkContext';
 import { OfflineBanner } from '../src/components/OfflineBanner';
 import { StorageUnavailableScreen } from '../src/components/StorageUnavailableScreen';
 import { MobileDiagnosticsBridge } from '../src/components/MobileDiagnosticsBridge';
+import { StartupIntro } from '../src/components/StartupIntro';
 
 
 // Keep the splash screen visible while we fetch resources
-SplashScreen.preventAutoHideAsync();
-
-// Ensure web body is dark
-if (Platform.OS === 'web' && typeof document !== 'undefined') {
-  document.body.style.backgroundColor = '#05050A';
-}
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // Initialize shared API clients with React Native MMKV for persistence
 initAnilistClient(mmkvStorageAdapter);
@@ -40,7 +34,7 @@ initTmdbClient({
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
@@ -58,13 +52,7 @@ export default function RootLayout() {
     'Outfit': Outfit_700Bold, // Display defaults to bold
   });
 
-  useEffect(() => {
-    if (fontsLoaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded]);
-
-  if (!fontsLoaded) {
+  if (!fontsLoaded && !fontError) {
     return null;
   }
 
@@ -82,43 +70,68 @@ export default function RootLayout() {
 function ThemedApplication() {
   const { theme } = useOrionTheme();
   const storageHealth = getMobileStorageHealth();
+  const [startupActive, setStartupActive] = useState(false);
+  const [showStartup, setShowStartup] = useState(true);
+  const didRevealRef = useRef(false);
 
-  if (storageHealth.state === 'unavailable') {
-    return <StorageUnavailableScreen errorCode={storageHealth.errorCode} />;
-  }
+  const revealApplication = useCallback(() => {
+    if (didRevealRef.current) return;
+    didRevealRef.current = true;
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.body.style.backgroundColor = theme.background;
+    }
+    void SplashScreen.hideAsync()
+      .catch(() => {})
+      .finally(() => requestAnimationFrame(() => setStartupActive(true)));
+  }, [theme.background]);
 
-  return (
+  const application = storageHealth.state === 'unavailable'
+    ? <StorageUnavailableScreen errorCode={storageHealth.errorCode} />
+    : (
       <LibraryProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <MobileDiagnosticsBridge />
-        {/* Background is now handled at the screen level for better compatibility */}
-        
-        <StatusBar style={theme.dark ? "light" : "dark"} />
-        {/* Transparent stack that respects the background */}
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: 'transparent' },
-          }}
-        >
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        </Stack>
-        <OfflineBanner />
-      </View>
+            <MobileDiagnosticsBridge />
+            <StatusBar style={theme.dark ? 'light' : 'dark'} />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: 'transparent' },
+              }}
+            >
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            </Stack>
+            <OfflineBanner />
+          </View>
         </GestureHandlerRootView>
       </LibraryProvider>
+    );
+
+  return (
+    <View
+      onLayout={revealApplication}
+      style={[styles.application, { backgroundColor: theme.background }]}
+    >
+      {application}
+      {showStartup && (
+        <StartupIntro
+          active={startupActive}
+          onComplete={() => setShowStartup(false)}
+        />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  application: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: backgrounds.base,
     maxWidth: Platform.OS === 'web' ? 480 : '100%',
     width: '100%',
     alignSelf: 'center',
-    // Add shadow and border for web to look like a phone preview
     ...(Platform.OS === 'web' ? {
       boxShadow: '0 0 30px rgba(0,0,0,0.8)',
       overflow: 'hidden',

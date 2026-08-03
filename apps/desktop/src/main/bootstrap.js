@@ -135,6 +135,7 @@ function createWindow() {
 
 
   mainWindow = new BrowserWindow({
+    show: false,
     width: 1380,
     height: 860,
     minWidth: 940,
@@ -159,6 +160,14 @@ function createWindow() {
       spellcheck: false,
       additionalArguments: ["--js-flags=--max-old-space-size=256 --expose-gc"],
     },
+  });
+
+  // Reveal only after Chromium has painted Orion's saved theme and startup
+  // overlay. This prevents a white/default-theme flash on slower systems.
+  mainWindow.once("ready-to-show", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.show();
+    mainWindow.focus();
   });
 
   const publishMaximizedState = (maximized) => {

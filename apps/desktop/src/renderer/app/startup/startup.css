@@ -1,0 +1,127 @@
+.orion-startup-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--text-primary);
+  background:
+    radial-gradient(circle at 50% 48%, var(--accent-soft), transparent 34%),
+    var(--bg-base);
+  opacity: 1;
+  transition: opacity 300ms var(--ease-out, ease), visibility 300ms linear;
+}
+
+.orion-startup-intro.is-exiting {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.orion-startup-aura {
+  position: absolute;
+  width: min(48vw, 540px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow:
+    0 0 80px color-mix(in srgb, var(--accent) 13%, transparent),
+    inset 0 0 70px color-mix(in srgb, var(--accent) 7%, transparent);
+  opacity: 0;
+  transform: scale(0.76);
+  animation: orion-startup-aura 820ms var(--ease-out, ease) 80ms forwards;
+}
+
+.orion-startup-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(88vw, 560px);
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.orion-startup-mark {
+  width: clamp(78px, 8vw, 112px);
+  height: auto;
+  object-fit: contain;
+  opacity: 0;
+  transform: translateY(8px) scale(0.86);
+  filter: drop-shadow(0 0 22px var(--accent-glow));
+  animation: orion-startup-mark 380ms var(--ease-out, ease) 60ms forwards;
+}
+
+.orion-startup-word {
+  display: flex;
+  justify-content: center;
+  min-height: 1.2em;
+  gap: clamp(4px, 0.75vw, 10px);
+  font-family: var(--font-heading);
+  font-size: clamp(34px, 4.7vw, 64px);
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  line-height: 1;
+}
+
+.orion-startup-word span {
+  opacity: 0;
+  transform: translateY(12px);
+  animation: orion-startup-letter 260ms var(--ease-out, ease) forwards;
+  animation-delay: calc(280ms + var(--startup-letter) * 72ms);
+}
+
+.orion-startup-tagline {
+  max-width: min(82vw, 420px);
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: clamp(13px, 1.4vw, 17px);
+  letter-spacing: 0.08em;
+  line-height: 1.45;
+  opacity: 0;
+  transform: translateY(7px);
+  animation: orion-startup-tagline 280ms var(--ease-out, ease) 700ms forwards;
+}
+
+@keyframes orion-startup-aura {
+  0% { opacity: 0; transform: scale(0.76); }
+  58% { opacity: 0.8; }
+  100% { opacity: 0.34; transform: scale(1); }
+}
+
+@keyframes orion-startup-mark {
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes orion-startup-letter {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes orion-startup-tagline {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.orion-startup-intro.is-reduced,
+.orion-startup-intro.is-reduced * {
+  animation: none !important;
+}
+
+.orion-startup-intro.is-reduced .orion-startup-aura {
+  opacity: 0.22;
+  transform: scale(1);
+}
+
+.orion-startup-intro.is-reduced .orion-startup-mark,
+.orion-startup-intro.is-reduced .orion-startup-word span,
+.orion-startup-intro.is-reduced .orion-startup-tagline {
+  opacity: 1;
+  transform: none;
+}
+
+@media (max-height: 520px) {
+  .orion-startup-content { gap: 8px; }
+  .orion-startup-mark { width: 68px; }
+  .orion-startup-word { font-size: 34px; }
+}
