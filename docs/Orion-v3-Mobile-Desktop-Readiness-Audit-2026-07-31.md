@@ -11,8 +11,8 @@
 >
 > **Last verified:** August 3, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 2 adaptive-polish implementation complete; physical-device visual and reboot persistence acceptance pending
-> **Critical open blockers:** Phase 2 physical-device visual/persistence acceptance, source-aware video fitting, reliable player-overlay touch ownership, trailer embeds, Smart Connect transport hardening, player-surface laser, native provider shield, cross-platform profiles, Mobile updates, and deferred VidKing carried-position compatibility
+> **Current stage:** Phase 2 complete and physically accepted; paused before Phase 3
+> **Critical open blockers:** Source-aware video fitting, reliable player-overlay touch ownership, trailer embeds, Smart Connect transport and pairing-UI hardening, player-surface laser, native provider shield, cross-platform profiles, Mobile updates, low-end-device performance validation, and deferred VidKing carried-position compatibility
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -32,7 +32,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 |---|---:|---:|---:|---|
 | 0. Safety and observability | 8% | 100% | 8.0% | Complete |
 | 1. Playback truth | 12% | 100% | 12.0% | Complete |
-| 2. History and Continue Watching | 10% | 95% | 9.5% | In progress |
+| 2. History and Continue Watching | 10% | 100% | 10.0% | Complete |
 | 3. Trailer reliability | 8% | 35% | 2.8% | In progress |
 | 4. Smart Connect experience | 12% | 45% | 5.4% | In progress |
 | 5. Player-surface laser | 8% | 15% | 1.2% | Foundation only |
@@ -42,7 +42,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 9. Portable profile and Google authentication | 7% | 15% | 1.1% | Foundation only |
 | 10. Mobile updates | 4% | 5% | 0.2% | Not started |
 | 11. Release validation | 4% | 15% | 0.6% | Foundation only |
-| **Total** | **100%** |  | **46.7%, rounded to 47%** | **Not release-ready** |
+| **Total** | **100%** |  | **47.2%, rounded to 47%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -104,9 +104,9 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [x] **V3-P2-007:** Show one latest incomplete episode per series.
 - [x] **V3-P2-008:** Add Resume, Remove Progress, Mark Watched, Remove History, and View All.
 - [x] **V3-P2-009:** Ensure Clear History does not erase progress, watched state, or My List.
-- [ ] **V3-P2-010:** Verify persistence across application restart and device reboot.
+- [x] **V3-P2-010:** Verify persistence across application restart and device reboot.
 - [x] **V3-P2-011:** Synchronize Home, Hero, media cards, Continue Watching, Library tabs, actions, and empty states with the active Orion theme through semantic tokens.
-- [ ] **V3-P2-012:** Physically validate compact phone, standard phone, tablet/landscape, 200% font scaling, Reduced Motion, and the six-theme visual matrix without clipping or inaccessible actions.
+- [x] **V3-P2-012:** Physically validate compact phone, standard phone, tablet/landscape, 200% font scaling, Reduced Motion, and the six-theme visual matrix without clipping or inaccessible actions.
 - [x] **V3-P2-013:** Standardize Discover, Connect, Library, Downloads, and Settings on the shared safe-area-aware editorial page header.
 - [x] **V3-P2-014:** Synchronize Discover/Search and Orion Connect structural surfaces with all six live theme token sets.
 - [x] **V3-P2-015:** Add direction-locked finger paging between My List, Continue, and History while retaining accessible tab controls and per-tab scroll state.
@@ -149,6 +149,8 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [ ] **V3-P4-018:** Measure command round-trip time and playback-telemetry age separately from Orion's internet latency indicator; record median, p95, timeout, and reconnect evidence.
 - [ ] **V3-P4-019:** Prefer Android NSD/mDNS plus the saved trusted endpoint; retain bounded subnet probing only as an explicit fallback.
 - [ ] **V3-P4-020:** Pass hostile-LAN, captured-token, replay, duplicate-command, network-change, sleep/wake, and reconnect security tests.
+- [ ] **V3-P4-021:** Recompose the PIN/QR/Direct-IP pairing sheet for compact phones and keyboards: bounded PIN cells, keyboard-aware scrolling, safe-area/cutout clearance, and no clipped actions.
+- [ ] **V3-P4-022:** Make PIN entry focus deterministic when the pairing sheet opens by focusing after modal presentation, restoring focus after method changes, and providing explicit keyboard recovery without requiring a QR-tab round trip.
 
 ### Phase 5 — Player-surface laser
 
@@ -195,6 +197,8 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [ ] **V3-P7-015:** Validate overlay controls, safe areas, orientation, video fitting, and touch targets across phones, tablets, and every selectable provider.
 - [ ] **V3-P7-016:** Revalidate VidKing startup/resume behavior on Mobile and Desktop mini/pop-out surfaces; Mobile carried-position continuity remains disabled until the provider no longer produces a startup audio/time glitch.
 - [ ] **V3-P7-017:** Expand watched controls across Movie, TV, and Anime detail pages, individual episodes, whole seasons, and the player HUD/More sheet; add theme-aware watched tick badges while keeping Watched, Progress, and History independent, with confirmation and undo for season-wide changes.
+- [ ] **V3-P7-018:** Organize the Mobile drawer into clear Browse, Your Orion, Connect, and System groups while preserving active-route state, accessibility order, theme behavior, and compact-height scrolling.
+- [ ] **V3-P7-019:** Add adaptive performance profiles for low-end phones, including measured startup/navigation/playback targets, reduced image and animation pressure, list virtualization, memory/GPU limits, background-work throttling, and a representative low-end Android device matrix without removing features.
 
 ### Phase 8 — Desktop Orion 3.0 integration
 
@@ -277,6 +281,7 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-08-03 | V3-P1-006–V3-P1-011 | Physical testing accepted the new Resume dialog and cross-source continuation for the other working providers, while confirming VidKing still produces a provider-internal startup audio/time glitch. Phase 1 closes by making the capability boundary truthful: VidKing remains normally playable, but carried-position choices are replaced with Start Over/Cancel and automatic continuity skips it. The obsolete bottom handoff notice was removed and the dialog was made scroll-safe and compact in landscape. | Commit `562af47`; user physical-device report; Mobile typecheck; 30/30 Mobile tests; 64-file source-size gate; Mobile web export; standalone arm64 APK with bundled JavaScript (SHA-256 `8E4753DACF3B170821778D809B38531FA518845DDBFEA1806F0074AC0E813789`). VidKing startup/resume compatibility is deferred to `V3-P7-016` and is not represented as working. | 39% |
 | 2026-08-03 | V3-P2-002 through V3-P2-009, V3-P2-011 | Repaired Library History, added verified Continue Watching to Home and Library, introduced lazy V3 progress normalization, kept History/Progress/Watched/My List mutations independent, carried artwork and episode context through playback, preferred the last healthy resume source, and synchronized the touched Home/Library presentation with live semantic theme tokens. | Commit `cca72a6`; Mobile typecheck; 37/37 Mobile tests including V2 compatibility, verified-evidence filtering, latest-episode selection, independent mutations, and theme-binding checks; 70-file source-size gate; Expo Doctor 20/20; production web export; standalone arm64 APK with bundled JavaScript (SHA-256 `2F7BFEC809A1A64F9A9F27C6BB40C7F750E64C199A5C4B59D3F29A281BC543D6`); Desktop full gate with 52 Node and 136 renderer tests plus source/binding/IPC/secret/theme/cycle/build checks. Physical restart/reboot and responsive six-theme visual acceptance remain open, so Phase 2 is 85%, not complete. | 46% |
 | 2026-08-03 | V3-P2-013 through V3-P2-018, V3-P7-017 | Added shared editorial headers, six-theme Discover/Connect surfaces, direction-locked Library finger paging, a safe-area offline pill, Orion-themed application dialogs, and compact Home Continue cards. Recorded broader watched controls and badges under Phase 7 without awarding Phase 2 completion credit. | Commit `6e7d9e3`; Mobile typecheck; 43/43 Mobile tests; 72-file source-size gate; production web export; browser visual checks in Midnight Premiere and Projector Silver at a 390x844 viewport; successful swipe from My List to Continue; standalone arm64 APK with bundled JavaScript (SHA-256 `8BBF843755B528DC581C909098DC0837610B250447A1FCB6F0559E85ED7B00A8`); Desktop source/binding/IPC/secret/theme/cycle gates, 52/52 Node tests, 136/136 renderer tests, and production build. Expo Doctor passed its 18 local checks; two online Expo catalog checks were unavailable under the validation privacy/network policy. Physical restart/reboot and the complete device/theme/accessibility matrix remain open. | 47% |
+| 2026-08-03 | V3-P2-010, V3-P2-012, V3-P4-021, V3-P4-022, V3-P7-018, V3-P7-019 | Physical-device acceptance closed Phase 2: History, Continue Watching, independent mutations, persistence, swipe navigation, offline placement, themed dialogs, compact cards, and the updated theme/UI matrix all passed. Recorded—not implemented—the drawer grouping, Smart Connect pairing keyboard/overflow, and low-end performance concerns under their owning phases. | User physical-device acceptance and screenshots `216812.jpg`, `216810.jpg`, and `216808.jpg`; no runtime change or completion credit was awarded to the newly recorded Phase 4/7 work. | 47% |
 
 Phase 2 implementation is complete for automated validation. History now reads
 the persisted History collection, Continue Watching derives only from verified
@@ -285,11 +290,12 @@ Home, Hero, cards, Library tabs, actions, loading/empty states, and the new
 Continue surfaces consume the active semantic Mobile theme. Shared editorial
 headers, Discover/Connect theme migration, Library finger paging, the safe-area
 offline indicator, Orion dialogs, and compact Home Continue cards now pass the
-automated and browser-preview gates. Phase 2 remains at 95% until the standalone
-APK passes physical restart/reboot persistence and the
-compact/standard/tablet/landscape, 200% text, Reduced Motion, and six-theme
-visual matrix. No screenshot-only or web-only result is counted as that device
-acceptance.
+automated and browser-preview gates. Physical-device testing subsequently
+accepted restart/reboot persistence, the responsive layouts, theme behavior,
+dialogs, offline placement, compact cards, and swipe navigation. Phase 2 is now
+complete. The newly observed drawer organization and Smart Connect pairing-sheet
+issues are assigned to Phases 7 and 4 respectively and do not reopen verified
+History or Continue Watching behavior.
 
 Phase 1 is complete at its verified-capability boundary. Reopening media at a
 saved position works, and physical testing accepted the new user-selected
