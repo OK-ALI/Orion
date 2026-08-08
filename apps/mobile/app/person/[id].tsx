@@ -1,16 +1,18 @@
 import { View, Text, StyleSheet, ScrollView, Animated, Pressable, Platform, ActivityIndicator, FlatList } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, useRef } from 'react';
-import { tmdbFetch, imgUrl, fetchPersonDetails } from '@orion/shared/api';
-import { backgrounds, text, semantic, radii, spacing, fontSizes, fontFamilies, accent } from '@orion/shared/tokens';
+import { imgUrl, fetchPersonDetails } from '@orion/shared/api';
+import { radii, spacing, fontSizes, fontFamilies } from '@orion/shared/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { MediaCard } from '../../src/components/MediaCard';
+import { useOrionTheme } from '../../src/context/ThemeContext';
 
 export default function PersonDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { theme } = useOrionTheme();
   
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -33,16 +35,16 @@ export default function PersonDetailScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={accent.primary} />
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
   }
 
   if (!data) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <Text style={{ color: text.primary }}>Failed to load profile.</Text>
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
+        <Text style={{ color: theme.text }}>Failed to load profile.</Text>
       </View>
     );
   }
@@ -73,9 +75,9 @@ export default function PersonDetailScreen() {
   });
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <LinearGradient
-        colors={['#1e0a1a', backgrounds.base, backgrounds.base, backgrounds.base]}
+        colors={[theme.accentSoft, theme.background, theme.background, theme.background]}
         locations={[0, 0.4, 0.7, 1]}
         start={{ x: 0, y: 1 }}
         end={{ x: 1, y: 0 }}
@@ -107,7 +109,7 @@ export default function PersonDetailScreen() {
             ]}
           />
           <LinearGradient
-            colors={['transparent', backgrounds.base]}
+            colors={['transparent', theme.background]}
             locations={[0.4, 1]}
             style={StyleSheet.absoluteFill}
           />
@@ -116,34 +118,38 @@ export default function PersonDetailScreen() {
         {/* Content Body */}
         <View style={styles.contentContainer}>
           {/* Floating Info HUD */}
-          <BlurView intensity={70} tint="dark" style={styles.infoHud}>
-            <Text style={styles.title}>{data.name}</Text>
+          <BlurView
+            intensity={70}
+            tint={theme.dark ? 'dark' : 'light'}
+            style={[styles.infoHud, { backgroundColor: theme.elevated, borderColor: theme.border }]}
+          >
+            <Text style={[styles.title, { color: theme.text }]}>{data.name}</Text>
             
             <View style={styles.metaRow}>
               {!!data.birthday && (
-                <Text style={styles.metaText}>Born: {data.birthday}</Text>
+                <Text style={[styles.metaText, { color: theme.textSecondary }]}>Born: {data.birthday}</Text>
               )}
               {!!data.place_of_birth && (
                 <>
-                  <Text style={styles.metaText}>•</Text>
-                  <Text style={styles.metaText}>{data.place_of_birth}</Text>
+                  <Text style={[styles.metaText, { color: theme.textSecondary }]}>•</Text>
+                  <Text style={[styles.metaText, { color: theme.textSecondary }]}>{data.place_of_birth}</Text>
                 </>
               )}
             </View>
 
-            <Text style={styles.knownForText}>Known for {data.known_for_department}</Text>
+            <Text style={[styles.knownForText, { color: theme.accent }]}>Known for {data.known_for_department}</Text>
           </BlurView>
 
           {data.biography ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Biography</Text>
-              <Text style={styles.bioText}>{data.biography}</Text>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Biography</Text>
+              <Text style={[styles.bioText, { color: theme.textSecondary }]}>{data.biography}</Text>
             </View>
           ) : null}
 
           {/* Filmography */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Filmography</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Filmography</Text>
             <FlatList
               data={uniqueCredits}
               horizontal
@@ -170,7 +176,6 @@ export default function PersonDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: backgrounds.base,
   },
   centered: {
     justifyContent: 'center',
@@ -208,13 +213,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     padding: spacing[5],
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
     overflow: 'hidden',
-    backgroundColor: 'rgba(15, 12, 20, 0.6)',
     marginBottom: spacing[6],
   },
   title: {
-    color: '#fff',
     fontSize: fontSizes['3xl'],
     fontFamily: fontFamilies.display,
     fontWeight: 'bold',
@@ -228,13 +230,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing[2],
   },
   metaText: {
-    color: text.secondary,
     fontSize: fontSizes.sm,
     fontFamily: fontFamilies.body,
     fontWeight: '600',
   },
   knownForText: {
-    color: accent.primary,
     fontSize: fontSizes.xs,
     fontWeight: 'bold',
     textTransform: 'uppercase',
@@ -243,13 +243,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing[6],
   },
   sectionTitle: {
-    color: '#fff',
     fontSize: fontSizes.lg,
     fontWeight: 'bold',
     marginBottom: spacing[3],
   },
   bioText: {
-    color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 15,
     lineHeight: 24,
   },

@@ -149,6 +149,12 @@ export default function MediaDetailScreen() {
   }
   const trailerObj = allTrailers.find((v: any) => v.type === 'Trailer') || allTrailers[0];
   const trailerKey = trailerObj?.key || null;
+  // This content crosses the image-to-page fade. Once that fade reaches a light
+  // theme surface, cinema-white metadata no longer has sufficient contrast.
+  const heroText = theme.dark ? '#ffffff' : theme.text;
+  const heroSecondary = theme.dark ? 'rgba(255,255,255,0.82)' : theme.textSecondary;
+  const heroSurface = theme.dark ? 'rgba(255,255,255,0.10)' : theme.surface;
+  const heroBorder = theme.dark ? 'rgba(255,255,255,0.18)' : theme.border;
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Pressable onPress={() => router.back()} style={styles.backButton}>
@@ -178,7 +184,7 @@ export default function MediaDetailScreen() {
           )}
           <View style={styles.headerRow}>
             <View style={styles.posterWrapper}>
-              {poster && <Image source={{ uri: poster }} style={styles.posterImage} />}
+              {poster && <Image source={{ uri: poster }} style={[styles.posterImage, { borderColor: heroBorder }]} />}
               {isUnreleased && (
                 <View style={styles.posterLockOverlay}>
                   <Ionicons name="lock-closed" size={32} color="#f87171" />
@@ -187,22 +193,36 @@ export default function MediaDetailScreen() {
               )}
             </View>
             <View style={styles.headerMeta}>
-              <Text style={styles.titleText}>{title}</Text>
+              <Text style={[
+                styles.titleText,
+                {
+                  color: heroText,
+                  textShadowColor: theme.dark ? 'rgba(0,0,0,0.95)' : 'transparent',
+                },
+              ]}>{title}</Text>
               <View style={styles.metaBadgeRow}>
                 {!!data.vote_average && (
                   <View style={styles.ratingBadge}>
                     <Ionicons name="star" size={12} color="#fbbf24" />
-                    <Text style={styles.metaText}>{data.vote_average.toFixed(1)}</Text>
+                    <Text style={[styles.metaText, { color: heroText }]}>{data.vote_average.toFixed(1)}</Text>
                   </View>
                 )}
-                <Text style={styles.metaText}>{year}</Text>
-                <Text style={styles.metaText}>•</Text>
-                <Text style={styles.metaText}>{runtime}</Text>
-                <View style={styles.hdBadge}><Text style={styles.hdText}>HD</Text></View>
+                <Text style={[styles.metaText, { color: heroSecondary }]}>{year}</Text>
+                <Text style={[styles.metaText, { color: heroSecondary }]}>•</Text>
+                <Text style={[styles.metaText, { color: heroSecondary }]}>{runtime}</Text>
+                <View style={[styles.hdBadge, { backgroundColor: heroSurface, borderColor: heroBorder }]}>
+                  <Text style={[styles.hdText, { color: heroText }]}>HD</Text>
+                </View>
               </View>
               {genres && (
                 <View style={styles.genreInlineRow}>
-                  <Text style={styles.genreInlineText} numberOfLines={1}>{genres}</Text>
+                  <Text style={[
+                    styles.genreInlineText,
+                    {
+                      color: theme.accent,
+                      textShadowColor: theme.dark ? 'rgba(0,0,0,0.9)' : 'transparent',
+                    },
+                  ]} numberOfLines={1}>{genres}</Text>
                 </View>
               )}
             </View>
@@ -285,7 +305,7 @@ export default function MediaDetailScreen() {
                       pressed && { opacity: 0.8 },
                     ]}
                   >
-                    <Text style={[styles.tabPillText, { color: isActive ? theme.accent : theme.textSecondary }, isActive && styles.tabPillTextActive]}>
+                    <Text style={[styles.tabPillText, { color: isActive ? theme.accent : theme.textSecondary }]}>
                       {tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </Text>
                   </Pressable>

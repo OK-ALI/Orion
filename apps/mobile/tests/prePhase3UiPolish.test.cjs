@@ -55,3 +55,23 @@ test("Media Detail structural surfaces consume the active theme", () => {
   assert.match(source, /backgroundColor: selectedSeason === s \? theme\.accent : theme\.surface/);
   assert.doesNotMatch(source, /backgrounds\.base|accent\.primary|text\.muted/);
 });
+
+test("Person profile and filmography use one live semantic theme", () => {
+  const source = read("app/person/[id].tsx");
+  assert.match(source, /useOrionTheme/);
+  assert.match(source, /backgroundColor: theme\.background/);
+  assert.match(source, /backgroundColor: theme\.elevated, borderColor: theme\.border/);
+  assert.match(source, /color: theme\.text/);
+  assert.match(source, /color: theme\.textSecondary/);
+  assert.match(source, /color: theme\.accent/);
+  assert.doesNotMatch(source, /backgrounds\.base|accent\.primary|text\.secondary/);
+});
+
+test("Media Detail changes hero contrast at the image-to-surface boundary", () => {
+  const source = read("src/features/media-detail/MediaDetailScreen.tsx");
+  assert.match(source, /const heroText = theme\.dark \? '#ffffff' : theme\.text/);
+  assert.match(source, /const heroSecondary = theme\.dark/);
+  assert.match(source, /backgroundColor: heroSurface, borderColor: heroBorder/);
+  assert.match(source, /color: isActive \? theme\.accent : theme\.textSecondary/);
+  assert.doesNotMatch(source, /isActive && styles\.tabPillTextActive/);
+});
