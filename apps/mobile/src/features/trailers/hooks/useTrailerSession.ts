@@ -12,6 +12,7 @@ export function useTrailerSession(visible: boolean, candidates: TrailerCandidate
   const [activeIndex, setActiveIndex] = useState(0);
   const [state, setState] = useState<TrailerPlaybackState>('idle');
   const [attempt, setAttempt] = useState(0);
+  const [transport, setTransport] = useState<'wrapper' | 'direct'>('wrapper');
   const [error, setError] = useState<TrailerProviderError | null>(null);
   const retriesRef = useRef<Record<string, number>>({});
   const attemptedRef = useRef<Set<string>>(new Set());
@@ -32,6 +33,7 @@ export function useTrailerSession(visible: boolean, candidates: TrailerCandidate
     }
     setActiveIndex(0);
     setAttempt(0);
+    setTransport('wrapper');
     setError(null);
     setState(candidates.length ? 'preparing' : 'exhausted');
     retriesRef.current = {};
@@ -45,6 +47,7 @@ export function useTrailerSession(visible: boolean, candidates: TrailerCandidate
   const select = useCallback((index: number) => {
     if (index < 0 || index >= candidates.length) return;
     setActiveIndex(index);
+    setTransport('wrapper');
     setError(null);
     setState('preparing');
     setAttempt((value) => value + 1);
@@ -69,6 +72,7 @@ export function useTrailerSession(visible: boolean, candidates: TrailerCandidate
     const retries = retriesRef.current[activeCandidate.id] || 0;
     if (providerError.retryable && retries < MAX_SAME_CANDIDATE_RETRIES) {
       retriesRef.current[activeCandidate.id] = retries + 1;
+      setTransport('direct');
       setState('preparing');
       setAttempt((value) => value + 1);
       return;
@@ -92,11 +96,12 @@ export function useTrailerSession(visible: boolean, candidates: TrailerCandidate
       const message = JSON.parse(raw || '{}');
       if (message.candidateId !== activeCandidate.id) return;
       if (message.type === 'ready') setState('ready');
+      else if (message.type === 'direct-loaded') setState('ready');
       else if (message.type === 'playing') { setState('playing'); setError(null); }
       else if (message.type === 'paused') setState('paused');
       else if (message.type === 'buffering' || message.type === 'autoplay-blocked') setState('ready');
       else if (message.type === 'network-error') fail({ provider: activeCandidate.site, category: 'network', publicCode: null, retryable: true });
-      else if (message.type === 'timeout') fail({ provider: activeCandidate.site, category: 'timeout', publicCode: null, retryable: false });
+      else if (message.type === 'timeout') fail({ provider: activeCandidate.site, category: 'timeout', publicCode: null, retryable: true });
       else if (message.type === 'provider-error') {
         const code = message.detail?.code ?? null;
         fail(activeCandidate.site === 'YouTube' ? classifyYouTubeError(code) : classifyVimeoError(code));
@@ -110,13 +115,14 @@ export function useTrailerSession(visible: boolean, candidates: TrailerCandidate
     if (!activeCandidate) return;
     attemptedRef.current.delete(activeCandidate.id);
     retriesRef.current[activeCandidate.id] = 0;
+    setTransport('wrapper');
     setError(null);
     setState('preparing');
     setAttempt((value) => value + 1);
   }, [activeCandidate]);
 
   return useMemo(() => ({
-    activeCandidate, activeIndex, state, attempt, error, exhausted,
+    activeCandidate, activeIndex, state, attempt, transport, error, exhausted,
     select, next, retry, handleMessage,
-  }), [activeCandidate, activeIndex, attempt, error, exhausted, handleMessage, next, retry, select, state]);
+  }), [activeCandidate, activeIndex, attempt, error, exhausted, handleMessage, next, retry, select, state, transport]);
 }

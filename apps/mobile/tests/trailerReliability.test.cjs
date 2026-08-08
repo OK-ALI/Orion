@@ -44,6 +44,8 @@ test("YouTube errors retain official public codes", () => {
   for (const code of [2, 5, 100, 101, 150, 153]) assert.match(source, new RegExp(`numeric === ${code}`));
   assert.match(source, /category: 'client-identity'/);
   assert.match(source, /widget_referrer/);
+  assert.match(source, /origin:/);
+  assert.match(source, /25000/);
 });
 
 test("trailer session bounds same-candidate retries and rotates", () => {
@@ -51,6 +53,7 @@ test("trailer session bounds same-candidate retries and rotates", () => {
   assert.match(source, /MAX_SAME_CANDIDATE_RETRIES = 1/);
   assert.match(source, /attemptedRef\.current\.add/);
   assert.match(source, /setState\('exhausted'\)/);
+  assert.match(source, /setTransport\('direct'\)/);
 });
 
 test("modal is theme aware, safe-area aware, and supports both providers", () => {
@@ -59,6 +62,10 @@ test("modal is theme aware, safe-area aware, and supports both providers", () =>
   assert.match(source, /useSafeAreaInsets/);
   assert.match(source, /createYouTubeHtml/);
   assert.match(source, /createVimeoHtml/);
-  assert.match(source, /playerWidth \* 9 \/ 16/);
+  assert.match(source, /Math\.max\(200, playerWidth \* 9 \/ 16\)/);
+  assert.match(source, /baseUrl: IDENTITY\.origin/);
+  assert.match(source, /mediaPlaybackRequiresUserAction=\{false\}/);
+  assert.match(source, /headers: \{ Referer: IDENTITY\.referrer \}/);
+  assert.match(source, /session\.transport === 'direct'/);
   assert.doesNotMatch(source, /ANDROID_YOUTUBE_USER_AGENT/);
 });

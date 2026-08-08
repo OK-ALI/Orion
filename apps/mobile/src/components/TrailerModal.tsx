@@ -22,7 +22,8 @@ interface TrailerModalProps {
 const IDENTITY = {
   applicationId: 'com.okali.orion',
   applicationVersion: '2.0.1',
-  referrer: 'android-app://com.okali.orion',
+  origin: 'https://com.okali.orion',
+  referrer: 'https://com.okali.orion/',
 };
 
 function errorCopy(state: TrailerPlaybackState, provider?: string) {
@@ -44,12 +45,26 @@ export function TrailerModal({ visible, onClose, title, candidates }: TrailerMod
   const sheetWidth = Math.min(width - 24, 820);
   const availablePlayerHeight = Math.max(180, height - insets.top - insets.bottom - (landscape ? 190 : 280));
   const playerWidth = Math.min(sheetWidth, landscape ? availablePlayerHeight * 16 / 9 : sheetWidth);
-  const playerHeight = playerWidth * 9 / 16;
+  // YouTube requires an embedded viewport of at least 200 CSS pixels per side.
+  // Compact phones therefore receive a small letterboxed exception to strict 16:9.
+  const playerHeight = Math.max(200, playerWidth * 9 / 16);
 
   const html = useMemo(() => {
     if (!candidate) return '';
-    return candidate.site === 'YouTube' ? createYouTubeHtml(candidate, IDENTITY, session.attempt > 0) : createVimeoHtml(candidate);
-  }, [candidate, session.attempt]);
+    return candidate.site === 'YouTube' ? createYouTubeHtml(candidate, IDENTITY) : createVimeoHtml(candidate);
+  }, [candidate]);
+
+  const directEmbedUrl = useMemo(() => {
+    if (!candidate) return '';
+    if (candidate.site === 'Vimeo') {
+      return `https://player.vimeo.com/video/${encodeURIComponent(candidate.providerKey)}?playsinline=1&dnt=1`;
+    }
+    const params = new URLSearchParams({
+      playsinline: '1', controls: '1', rel: '0', fs: '1',
+      origin: IDENTITY.origin, widget_referrer: IDENTITY.referrer,
+    });
+    return `https://www.youtube.com/embed/${encodeURIComponent(candidate.providerKey)}?${params.toString()}`;
+  }, [candidate]);
 
   useEffect(() => {
     if (session.state === 'playing') clearMobileDiagnosticError('trailer');
@@ -118,12 +133,17 @@ export function TrailerModal({ visible, onClose, title, candidates }: TrailerMod
               ) : (
                 <WebView
                   key={`${candidate.id}-${session.attempt}`}
-                  source={{ html, baseUrl: IDENTITY.referrer }}
+                  source={session.transport === 'direct'
+                    ? { uri: directEmbedUrl, headers: { Referer: IDENTITY.referrer } }
+                    : { html, baseUrl: IDENTITY.origin }}
                   applicationNameForUserAgent="Orion/2.0.1"
-                  originWhitelist={['https://*', 'android-app://*', 'about:*', 'data:*']}
+                  originWhitelist={['*']}
                   javaScriptEnabled domStorageEnabled allowsInlineMediaPlayback allowsFullscreenVideo
-                  mediaPlaybackRequiresUserAction
+                  mediaPlaybackRequiresUserAction={false}
+                  setSupportMultipleWindows={false}
+                  mixedContentMode="never"
                   onMessage={({ nativeEvent }) => session.handleMessage(nativeEvent.data)}
+                  onLoad={() => session.transport === 'direct' && session.handleMessage(JSON.stringify({ candidateId: candidate.id, type: 'direct-loaded' }))}
                   onError={() => session.handleMessage(JSON.stringify({ candidateId: candidate.id, type: 'network-error' }))}
                   onHttpError={({ nativeEvent }) => nativeEvent.statusCode >= 400 && session.handleMessage(JSON.stringify({ candidateId: candidate.id, type: 'provider-error', detail: { code: `http-${nativeEvent.statusCode}` } }))}
                   onShouldStartLoadWithRequest={({ url, navigationType }) => {

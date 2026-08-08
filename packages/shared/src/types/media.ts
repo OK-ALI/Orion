@@ -225,6 +225,7 @@ export interface TrailerSessionV1 {
 export interface TrailerClientIdentity {
   applicationId: string;
   applicationVersion: string;
+  origin: string;
   referrer: string;
 }
 
