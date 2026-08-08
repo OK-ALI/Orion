@@ -7,12 +7,12 @@
 
 ## Living Roadmap Status
 
-> **Overall Orion v3 implementation completion: 47%**
+> **Overall Orion v3 implementation completion: 52%**
 >
 > **Last verified:** August 9, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 2 complete; Pre-Phase 3 Orion Pop branding, theme-aware startup identity, adaptive UI repair, and the final semantic contrast closure are implemented. Physical acceptance of the Person/filmography theme surface and Projector Silver Media Detail hero remains open before Phase 3.
-> **Critical open blockers:** Source-aware video fitting, reliable player-overlay touch ownership, trailer embeds, Smart Connect transport and pairing-UI hardening, player-surface laser, native provider shield, cross-platform profiles, Mobile updates, low-end-device performance validation, and deferred VidKing carried-position compatibility
+> **Current stage:** Phase 3 implementation and automated validation are complete; physical Android YouTube/Vimeo acceptance remains open before Phase 3 can be marked complete.
+> **Critical open blockers:** Physical trailer-provider validation, source-aware video fitting, reliable player-overlay touch ownership, Smart Connect transport and pairing-UI hardening, player-surface laser, native provider shield, cross-platform profiles, Mobile updates, low-end-device performance validation, and deferred VidKing carried-position compatibility
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -33,7 +33,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 0. Safety and observability | 8% | 100% | 8.0% | Complete |
 | 1. Playback truth | 12% | 100% | 12.0% | Complete |
 | 2. History and Continue Watching | 10% | 100% | 10.0% | Complete |
-| 3. Trailer reliability | 8% | 35% | 2.8% | In progress |
+| 3. Trailer reliability | 8% | 90% | 7.2% | In progress |
 | 4. Smart Connect experience | 12% | 45% | 5.4% | In progress |
 | 5. Player-surface laser | 8% | 15% | 1.2% | Foundation only |
 | 6. Native provider shield | 10% | 15% | 1.5% | Foundation only |
@@ -42,7 +42,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 9. Portable profile and Google authentication | 7% | 15% | 1.1% | Foundation only |
 | 10. Mobile updates | 4% | 5% | 0.2% | Not started |
 | 11. Release validation | 4% | 15% | 0.6% | Foundation only |
-| **Total** | **100%** |  | **47.2%, rounded to 47%** | **Not release-ready** |
+| **Total** | **100%** |  | **51.6%, rounded to 52%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -118,13 +118,13 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 
 - [x] **V3-P3-001:** Trailer modal no longer renders only a blank WebView.
 - [x] **V3-P3-002:** Retry and external YouTube fallback exist.
-- [ ] **V3-P3-003:** Preserve every viable TMDB trailer candidate.
-- [ ] **V3-P3-004:** Rank official, language-compatible, recent trailers ahead of teasers.
-- [ ] **V3-P3-005:** Preserve and classify actual YouTube IFrame error codes.
-- [ ] **V3-P3-006:** Rotate automatically after owner-disabled or unavailable candidates.
-- [ ] **V3-P3-007:** Repair Orion player origin, referrer, and Android client identity.
-- [ ] **V3-P3-008:** Add Vimeo support when TMDB supplies Vimeo.
-- [ ] **V3-P3-009:** Recompose the sheet around a stable 16:9 player and persistent actions.
+- [x] **V3-P3-003:** Preserve every viable YouTube and Vimeo TMDB trailer candidate, deduplicated only by provider and key.
+- [x] **V3-P3-004:** Rank official, device/original-language-compatible, selected-season, recent and higher-resolution trailers while retaining penalized fallback candidates.
+- [x] **V3-P3-005:** Preserve and classify YouTube IFrame error codes 2, 5, 100, 101, 150 and 153 without collapsing them into one generic failure.
+- [x] **V3-P3-006:** Retry retryable failures once, unload the failed player, and rotate automatically through the bounded candidate set.
+- [x] **V3-P3-007:** Replace the fake web origin and frozen Chrome user agent with Orion's Android application identity and a truthful app referrer; physical code-153 validation remains part of P3-010.
+- [x] **V3-P3-008:** Add responsive Vimeo playback and provider-event/error handling when TMDB supplies Vimeo candidates.
+- [x] **V3-P3-009:** Recompose the themed sheet around a stable 16:9 viewport, candidate chooser and persistent retry/next/provider/browser actions.
 - [ ] **V3-P3-010:** Validate on physical Android devices, not Expo Web alone.
 
 ### Phase 4 — Smart Connect experience
@@ -287,6 +287,17 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-08-03 | Pre-Phase-3 Orion Pop icon checkpoint | Replaced the interim Portal Star production assets with the user-selected Orion Pop identity while retaining a single reproducible platform family. The high-resolution source is preserved in `assets/branding`; Desktop uses a visually full rounded tile and true small-size variants; Mobile uses an opaque legacy launcher tile plus isolated adaptive, monochrome, splash and startup marks. The shared generator is the sole asset authority and the former Desktop script is now a thin wrapper. No roadmap percentage credit was awarded. | Commit `04c977a`; source SHA-256 `CFD70ABE1B4F9D3B9BBB1053C16C0637AD3FC96AA968E102531247AB87AD2C35`; deterministic regeneration verified across the six primary outputs; Desktop occupancy measured 93.0%, adaptive foreground 58.2% × 64.2%, monochrome 58.3% × 64.1%; ICO contains real 16/24/32/48/64/128/256px entries. Mobile typecheck, 45/45 tests, 73-file size gate, web export and standalone Android APK passed. Desktop source/binding/IPC/secret/theme/cycle gates, 53/53 Node tests, 138/138 renderer tests, production build, ZIP and NSIS packaging passed. APK SHA-256 `4D97710DC06723F2FD427EC678607EB50244FF9B7A942EDCEE257F377E91513A`; installer SHA-256 `681CF689B89D7059911E6FF2C601D83734D3C54473EE175C2F2935F827A789DF`; ZIP SHA-256 `50F93ED29152E186D9DE3448E1C91930D60E9269F710C07F71E2D8112F35283F`. Physical clean-install/update launcher-cache, Android mask and saved-theme startup validation remain open. | 47% |
 | 2026-08-08 | Pre-Phase-3 Phase 1/2 adaptive UI repair | Bounded the landscape playback-position prompt; rebuilt phone History cards into readable summary and action rows; reduced Home hero obscuration while retaining text contrast; synchronized Media Detail structural surfaces, episode lists and action sheets with live theme tokens; made Smart Connect PIN/IP pairing keyboard-aware with compact six-digit geometry; and repaired Follow System Appearance through live Appearance events plus foreground refresh. No roadmap percentage credit was awarded. | Mobile typecheck; 51/51 tests including six new checkpoint guards; 73-file source-size gate; production web export; standalone Android debug APK SHA-256 `DA71C6838BB6DE417C087B8F2D15710902B6F7008DAC9ACD1BA3BA3861A8DCE7`; Desktop source/binding/IPC/secret/theme/cycle gates, 53/53 Node tests, 138/138 renderer tests and production build. Expo Doctor passed all 18 local checks; its two online catalog checks could not run under the validation privacy/network policy. Physical device and six-theme visual acceptance remain open. | 47% |
 | 2026-08-09 | Pre-Phase-3 semantic contrast closure | Converted the legacy Person/cast profile, biography HUD and Filmography surface to the active Mobile theme so its MediaCard captions inherit a matching background. Split Media Detail hero contrast at the image-to-page boundary: dark themes retain cinema-white over-media text while Projector Silver uses readable theme ink, borders and badges after the fade. Removed the legacy active-tab text override that made the Projector Silver Info label disappear. The same semantic bindings cover Midnight Premiere, AMOLED, Mocha, Slate, Projector Silver and Custom rather than special-casing one theme. No roadmap percentage credit was awarded. | Mobile typecheck; 53/53 tests including Person/filmography and hero-boundary regression guards; 73-file source-size gate; production web export; standalone Android debug APK SHA-256 `1F3D479EB0FDAA7F73AA39C96B507C9C650F12BCE188676BB69B563F831F1F66`; Desktop source/binding/IPC/secret/theme/cycle gates, 53/53 Node tests, 138/138 renderer tests and production build. Physical six-theme acceptance remains open. | 47% |
+| 2026-08-09 | V3-P3-003 through V3-P3-009 | Rebuilt Mobile trailers around normalized YouTube/Vimeo candidates, deterministic ranking, exact provider error classification, bounded retry and automatic rotation, strict candidate-bound bridge events, truthful Android client identity, and a six-theme safe-area-aware 16:9 modal with persistent internal/external recovery actions. Previous players are unmounted by keyed attempts before another candidate is loaded. | Mobile typecheck; 59/59 tests including executable candidate/ranking and provider-error tests; 76-file source-size gate; production web export; standalone arm64 Android APK with bundled JavaScript (SHA-256 `C46897315EE0C25CB53D6BAE639C69FFB9E6858E7F38C8E9E45CF57C9A5F8FB8`); Desktop full gate with 53 Node and 138 renderer tests plus source/binding/IPC/secret/theme/cycle/build checks. Expo Doctor passed its 18 local checks; its two online catalog checks were not authorized under the validation privacy policy. Physical Android provider/orientation/background acceptance remains open under V3-P3-010, so Phase 3 is 90%, not complete. | 52% |
+
+Phase 3 is implementation-complete but not yet acceptance-complete. Orion now keeps
+all viable TMDB YouTube and Vimeo candidates, ranks rather than prematurely
+deletes weaker results, and advances through the bounded candidate list after an
+accurately classified failure. Provider readiness and confirmed playback remain
+separate states. The active candidate survives ordinary layout changes, stale
+bridge messages are rejected, delayed rotation is cancelled when the modal
+closes, and every candidate has Retry, Try Next, provider-app and browser
+recovery paths. V3-P3-010 remains open until the generated APK passes the named
+physical-device matrix; no Expo Web result can close that requirement.
 
 Phase 2 implementation is complete for automated validation. History now reads
 the persisted History collection, Continue Watching derives only from verified

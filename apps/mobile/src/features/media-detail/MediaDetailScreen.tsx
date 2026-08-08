@@ -13,6 +13,7 @@ import { useLibrary } from '../../context/LibraryContext';
 import { useResponsiveLayout } from '../../services/responsive';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { styles } from "./mediaDetailStyles";
+import { normalizeTrailerCandidates } from '../trailers/trailerCandidateService';
 export default function MediaDetailScreen() {
   const { id, type } = useLocalSearchParams<{ id: string; type: 'movie' | 'tv' }>();
   const router = useRouter();
@@ -117,38 +118,13 @@ export default function MediaDetailScreen() {
   const releaseDateStr = isMovie ? data.release_date : data.first_air_date;
   const isUnreleased = releaseDateStr ? new Date(releaseDateStr) > new Date() : false;
   const mainVideoResults: any[] = data.videos?.results || [];
-  const combinedVideos = [...mainVideoResults, ...seasonVideos];
-  const seenKeys = new Set<string>();
-  const allTrailers: any[] = [];
-  for (const v of combinedVideos) {
-    if (v.site === 'YouTube' && !seenKeys.has(v.key)) {
-      const type = String(v.type || '').trim();
-      const lowerName = String(v.name || '').toLowerCase();
-      const isOfficialType = type === 'Trailer' || type === 'Teaser';
-      const EXCLUDED_KEYWORDS = [
-        'behind the scenes', 'bloopers', 'blooper', 'interview', 'featurette',
-        'scene clip', 'soundtrack', 'making of', 'announcement', 'date announcement',
-        'premiere date', 'recap', 'special', 'promo', 'first look', 'sneak peek',
-        'title sequence', 'theme song', 'intro', 'outro', 'breakdown', 'review',
-        'reaction', 'cast reacts', 'greeting', 'message', 'commercial', 'tv spot',
-        'spot', 'table read', 'read-through', 'q&a', 'panel', 'comic-con', 'vfx',
-        'ost', 'opening credits', 'ending credits', 'audition'
-      ];
-      const isExcludedTitle = EXCLUDED_KEYWORDS.some((kw) => lowerName.includes(kw));
-      if (isOfficialType && !isExcludedTitle) {
-        seenKeys.add(v.key);
-        const prefix = v.seasonNum ? `Season ${v.seasonNum}: ` : '';
-        allTrailers.push({
-          key: v.key,
-          name: `${prefix}${v.name}`,
-          type: v.type,
-          season: v.seasonNum,
-        });
-      }
-    }
-  }
-  const trailerObj = allTrailers.find((v: any) => v.type === 'Trailer') || allTrailers[0];
-  const trailerKey = trailerObj?.key || null;
+  const originalLanguage = String(data.original_language || 'en').toLowerCase();
+  const preferredLanguage = (() => {
+    try { return Intl.DateTimeFormat().resolvedOptions().locale.split('-')[0]?.toLowerCase() || originalLanguage; }
+    catch { return originalLanguage; }
+  })();
+  const allTrailers = normalizeTrailerCandidates(mainVideoResults, seasonVideos, preferredLanguage, originalLanguage);
+  const trailerObj = allTrailers[0];
   // This content crosses the image-to-page fade. Once that fade reaches a light
   // theme surface, cinema-white metadata no longer has sufficient contrast.
   const heroText = theme.dark ? '#ffffff' : theme.text;
@@ -264,7 +240,7 @@ export default function MediaDetailScreen() {
                 <Ionicons name={isSaved({ ...data, media_type: type }) ? "checkmark" : "add"} size={18} color={theme.text} />
                 <Text style={[styles.trailerBtnText, { color: theme.text }]}>{isSaved({ ...data, media_type: type }) ? "In My List" : "My List"}</Text>
               </Pressable>
-              {trailerKey && (
+              {trailerObj && (
                 <Pressable
                   accessibilityRole="button"
                   style={({ pressed }) => [styles.trailerBtn, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && styles.pressed]}
@@ -287,9 +263,8 @@ export default function MediaDetailScreen() {
           <TrailerModal
             visible={showTrailerModal}
             onClose={() => setShowTrailerModal(false)}
-            trailerKey={trailerKey}
             title={title}
-            allTrailers={allTrailers}
+            candidates={allTrailers}
           />
           <View style={[styles.tabsContainer, { borderBottomColor: theme.border }]}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>

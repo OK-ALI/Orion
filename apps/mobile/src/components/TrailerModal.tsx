@@ -1,329 +1,159 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, Platform, ActivityIndicator, ScrollView, Linking } from 'react-native';
+import React, { useEffect, useMemo } from 'react';
+import {
+  ActivityIndicator, Linking, Modal, Platform, Pressable, ScrollView,
+  StyleSheet, Text, useWindowDimensions, View,
+} from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
-import { accent, fontSizes, radii, spacing, text } from '@orion/shared/tokens';
-import type { TrailerPlaybackState } from '@orion/shared/types';
-import {
-  clearMobileDiagnosticError,
-  reportMobileDiagnosticError,
-} from '../services/mobileDiagnostics';
-
-export interface TrailerItem {
-  key: string;
-  name: string;
-  type?: string;
-  season?: number;
-}
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { TrailerCandidateV1, TrailerPlaybackState } from '@orion/shared/types';
+import { useOrionTheme } from '../context/ThemeContext';
+import { clearMobileDiagnosticError, reportMobileDiagnosticError } from '../services/mobileDiagnostics';
+import { createVimeoHtml, createYouTubeHtml } from '../features/trailers/trailerProviders';
+import { useTrailerSession } from '../features/trailers/hooks/useTrailerSession';
 
 interface TrailerModalProps {
   visible: boolean;
   onClose: () => void;
-  trailerKey: string | null;
   title: string;
-  allTrailers?: TrailerItem[];
+  candidates: TrailerCandidateV1[];
 }
 
-const ANDROID_YOUTUBE_USER_AGENT =
-  'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36';
+const IDENTITY = {
+  applicationId: 'com.okali.orion',
+  applicationVersion: '2.0.1',
+  referrer: 'android-app://com.okali.orion',
+};
 
-function createYouTubePlayerHtml(videoId: string, privacyMode: boolean) {
-  const safeVideoId = JSON.stringify(videoId);
-  const host = privacyMode ? 'https://www.youtube-nocookie.com' : 'https://www.youtube.com';
-  return `<!doctype html>
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-    <meta name="referrer" content="strict-origin-when-cross-origin" />
-    <style>
-      html, body, #player { width: 100%; height: 100%; margin: 0; background: #000; overflow: hidden; }
-      iframe { width: 100% !important; height: 100% !important; border: 0; }
-    </style>
-  </head>
-  <body>
-    <div id="player"></div>
-    <script>
-      (function () {
-        var postedReady = false;
-        function post(type, detail) {
-          if (window.ReactNativeWebView) {
-            window.ReactNativeWebView.postMessage(JSON.stringify({ type: type, detail: detail || null }));
-          }
-        }
-        window.onYouTubeIframeAPIReady = function () {
-          try {
-            new YT.Player('player', {
-              host: ${JSON.stringify(host)},
-              videoId: ${safeVideoId},
-              width: '100%',
-              height: '100%',
-              playerVars: {
-                playsinline: 1,
-                controls: 1,
-                rel: 0,
-                fs: 1,
-                enablejsapi: 1,
-                origin: 'https://www.youtube.com'
-              },
-              events: {
-                onReady: function () { postedReady = true; post('ready'); },
-                onStateChange: function (event) {
-                  if (event.data === YT.PlayerState.PLAYING) post('playing');
-                  if (event.data === YT.PlayerState.PAUSED) post('paused');
-                  if (event.data === YT.PlayerState.BUFFERING) post('buffering');
-                },
-                onError: function (event) { post('error', { code: event.data }); }
-              }
-            });
-          } catch (error) {
-            post('error', { message: String(error && error.message || error) });
-          }
-        };
-        var script = document.createElement('script');
-        script.src = 'https://www.youtube.com/iframe_api';
-        script.onerror = function () { post('network-error'); };
-        document.head.appendChild(script);
-        setTimeout(function () { if (!postedReady) post('timeout'); }, 12000);
-      })();
-    </script>
-  </body>
-</html>`;
+function errorCopy(state: TrailerPlaybackState, provider?: string) {
+  if (state === 'removed' || state === 'private') return ['Trailer is unavailable', 'This upload was removed or made private. Orion is trying another trailer.'];
+  if (state === 'embed-disabled') return ['Embedding is disabled', `The owner does not allow this ${provider || 'provider'} trailer inside apps. Orion is trying another one.`];
+  if (state === 'client-identity-error') return ['Player identification failed', 'The provider could not verify Orion on this device. You can retry or continue externally.'];
+  if (state === 'network-error') return ['Trailer connection failed', 'Check your connection, retry this trailer, or open it in the provider app.'];
+  if (state === 'exhausted') return ['No in-app trailer is available', 'Every available trailer rejected embedded playback or could not be reached.'];
+  return ['Trailer could not play', 'Orion could not start this candidate. Try it again, choose another trailer, or open it externally.'];
 }
 
-export function TrailerModal({ visible, onClose, trailerKey: propTrailerKey, title, allTrailers = [] }: TrailerModalProps) {
-  const [playbackState, setPlaybackState] = useState<TrailerPlaybackState>('idle');
-  const [activeKey, setActiveKey] = useState<string | null>(propTrailerKey);
-  const [useFallback, setUseFallback] = useState(false);
-  const [attempt, setAttempt] = useState(0);
+export function TrailerModal({ visible, onClose, title, candidates }: TrailerModalProps) {
+  const { theme, preferences } = useOrionTheme();
+  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const session = useTrailerSession(visible, candidates);
+  const candidate = session.activeCandidate;
+  const landscape = width > height;
+  const sheetWidth = Math.min(width - 24, 820);
+  const availablePlayerHeight = Math.max(180, height - insets.top - insets.bottom - (landscape ? 190 : 280));
+  const playerWidth = Math.min(sheetWidth, landscape ? availablePlayerHeight * 16 / 9 : sheetWidth);
+  const playerHeight = playerWidth * 9 / 16;
+
+  const html = useMemo(() => {
+    if (!candidate) return '';
+    return candidate.site === 'YouTube' ? createYouTubeHtml(candidate, IDENTITY, session.attempt > 0) : createVimeoHtml(candidate);
+  }, [candidate, session.attempt]);
 
   useEffect(() => {
-    if (visible) {
-      setPlaybackState('loading');
-      setUseFallback(false);
-      setActiveKey(propTrailerKey || (allTrailers.length > 0 ? allTrailers[0].key : null));
-    }
-  }, [visible, propTrailerKey, allTrailers]);
-
-  useEffect(() => {
-    if (!visible || !activeKey || playbackState !== 'loading') return;
-    const timer = setTimeout(() => {
-      if (!useFallback) {
-        setUseFallback(true);
-        setAttempt((value) => value + 1);
-      } else {
-        setPlaybackState('embed-rejected');
-      }
-    }, 13000);
-    return () => clearTimeout(timer);
-  }, [visible, activeKey, playbackState, attempt, useFallback]);
-
-  const primaryUrl = activeKey
-    ? `https://www.youtube-nocookie.com/embed/${activeKey}?playsinline=1&rel=0&modestbranding=1&enablejsapi=1&origin=https%3A%2F%2Fwww.youtube.com`
-    : null;
-  const fallbackUrl = activeKey
-    ? `https://www.youtube.com/embed/${activeKey}?playsinline=1&rel=0&modestbranding=1`
-    : null;
-
-  const activeUrl = useFallback ? fallbackUrl : primaryUrl;
-  const nativeHtml = useMemo(
-    () => activeKey ? createYouTubePlayerHtml(activeKey, !useFallback) : '',
-    [activeKey, useFallback, attempt],
-  );
-
-  const handleSelectTrailer = (key: string) => {
-    if (key !== activeKey) {
-      setPlaybackState('loading');
-      setUseFallback(false);
-      setActiveKey(key);
-      setAttempt((value) => value + 1);
-    }
-  };
-
-  const retry = () => {
-    setUseFallback((current) => !current);
-    setPlaybackState('loading');
-    setAttempt((value) => value + 1);
-  };
-
-  useEffect(() => {
-    if (playbackState === 'ready') {
-      clearMobileDiagnosticError('trailer');
-      return;
-    }
-    if (['embed-rejected', 'network-error', 'playback-error'].includes(playbackState)) {
+    if (session.state === 'playing') clearMobileDiagnosticError('trailer');
+    else if (['network-error', 'embed-disabled', 'client-identity-error', 'playback-error', 'exhausted'].includes(session.state)) {
       reportMobileDiagnosticError({
         area: 'trailer',
-        code: playbackState.toUpperCase().replaceAll('-', '_'),
-        message: `Trailer playback entered ${playbackState}.`,
+        code: session.error?.category?.toUpperCase().replaceAll('-', '_') || session.state.toUpperCase().replaceAll('-', '_'),
+        message: `${candidate?.site || 'Trailer'} playback entered ${session.state}.`,
       });
     }
-  }, [playbackState]);
+  }, [candidate?.site, session.error?.category, session.state]);
 
-  const openExternal = async () => {
-    if (!activeKey) return;
-    const appUrl = `vnd.youtube://${activeKey}`;
-    const webUrl = `https://www.youtube.com/watch?v=${activeKey}`;
-    try {
-      if (Platform.OS !== 'web' && await Linking.canOpenURL(appUrl)) {
-        await Linking.openURL(appUrl);
-        return;
-      }
-      await Linking.openURL(webUrl);
-    } catch {
-      setPlaybackState('playback-error');
-    }
+  const externalUrl = candidate?.site === 'Vimeo'
+    ? `https://vimeo.com/${candidate.providerKey}`
+    : candidate ? `https://www.youtube.com/watch?v=${candidate.providerKey}` : null;
+  const openBrowser = () => externalUrl && Linking.openURL(externalUrl).catch(() => {});
+  const openProvider = async () => {
+    if (!candidate) return;
+    const appUrl = candidate.site === 'YouTube' ? `vnd.youtube://${candidate.providerKey}` : `vimeo://video/${candidate.providerKey}`;
+    if (Platform.OS !== 'web' && await Linking.canOpenURL(appUrl).catch(() => false)) return Linking.openURL(appUrl);
+    return openBrowser();
   };
 
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+  const [errorTitle, errorText] = errorCopy(session.state, candidate?.site);
+  const showError = ['network-error', 'removed', 'private', 'embed-disabled', 'client-identity-error', 'playback-error', 'exhausted'].includes(session.state);
+  const isPreparing = ['preparing', 'rotating'].includes(session.state);
+  const allowedPrefixes = candidate?.site === 'Vimeo'
+    ? ['https://player.vimeo.com/', 'https://vimeo.com/', 'https://f.vimeocdn.com/', 'about:', 'data:']
+    : ['https://www.youtube.com/', 'https://www.youtube-nocookie.com/', 'https://i.ytimg.com/', 'https://s.ytimg.com/', 'about:', 'data:'];
 
-        <View style={styles.modalContent}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <Ionicons name="film-outline" size={18} color="#f87171" />
-              <Text style={styles.headerTitle} numberOfLines={1}>Trailer: {title}</Text>
+  return (
+    <Modal visible={visible} transparent animationType={preferences.reducedMotion ? 'fade' : 'slide'} onRequestClose={onClose} statusBarTranslucent>
+      <View style={[styles.overlay, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 10 }]}>
+        <Pressable accessibilityLabel="Close trailer" style={styles.backdrop} onPress={onClose} />
+        <View style={[styles.sheet, { width: sheetWidth, maxHeight: height - insets.top - insets.bottom - 20, backgroundColor: theme.elevated, borderColor: theme.border }]}>
+          <View style={[styles.header, { borderBottomColor: theme.border }]}>
+            <View style={styles.headerIdentity}>
+              <Ionicons name="film-outline" size={20} color={theme.accent} />
+              <View style={styles.headerText}>
+                <Text style={[styles.eyebrow, { color: theme.accent }]}>TRAILER</Text>
+                <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>{title}</Text>
+              </View>
             </View>
-            <Pressable onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={20} color="#fff" />
+            <Pressable accessibilityRole="button" accessibilityLabel="Close trailer" onPress={onClose} style={[styles.iconButton, { borderColor: theme.border }]}>
+              <Ionicons name="close" size={22} color={theme.text} />
             </Pressable>
           </View>
 
-          {/* Multi-Season / Multi-Trailer Selector Row */}
-          {allTrailers.length > 1 && (
-            <View style={styles.selectorBar}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                {allTrailers.map((t, idx) => {
-                  const isActive = t.key === activeKey;
-                  return (
-                    <Pressable
-                      key={`${t.key}_${idx}`}
-                      style={[styles.trailerPill, isActive && styles.trailerPillActive]}
-                      onPress={() => handleSelectTrailer(t.key)}
-                    >
-                      <Ionicons
-                        name={isActive ? 'play-circle' : 'film-outline'}
-                        size={12}
-                        color={isActive ? '#fff' : 'rgba(255,255,255,0.6)'}
-                      />
-                      <Text style={[styles.trailerPillText, isActive && styles.trailerPillTextActive]}>
-                        {t.name || `Trailer ${idx + 1}`}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
+          {candidates.length > 1 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selector} contentContainerStyle={styles.selectorContent}>
+              {candidates.map((item, index) => {
+                const active = index === session.activeIndex;
+                return <Pressable key={item.id} onPress={() => session.select(index)} style={[styles.pill, { backgroundColor: active ? theme.accentSoft : theme.surface, borderColor: active ? theme.accent : theme.border }]}>
+                  <Ionicons name={item.site === 'Vimeo' ? 'logo-vimeo' : 'logo-youtube'} size={15} color={active ? theme.accent : theme.textSecondary} />
+                  <Text style={[styles.pillText, { color: active ? theme.text : theme.textSecondary }]} numberOfLines={1}>{item.name}</Text>
+                  {item.official && <Text style={[styles.official, { color: theme.accent }]}>OFFICIAL</Text>}
+                </Pressable>;
+              })}
+            </ScrollView>
           )}
 
-          {/* Video Player Box */}
-          <View style={styles.playerBox}>
-            {playbackState === 'loading' && (
-              <View style={styles.loadingBox}>
-                <ActivityIndicator size="large" color={accent.primary} />
-                <Text style={styles.loadingText}>Preparing trailer…</Text>
-              </View>
-            )}
-
-            {['embed-rejected', 'network-error', 'playback-error'].includes(playbackState) && (
-              <View style={styles.errorBox}>
-                <Ionicons name="alert-circle-outline" size={34} color="#f87171" />
-                <Text style={styles.errorTitle}>Trailer could not play in Orion</Text>
-                <Text style={styles.errorText}>
-                  YouTube may have rejected embedded playback on this device. You can retry here or continue in YouTube.
-                </Text>
-                <View style={styles.errorActions}>
-                  <Pressable accessibilityRole="button" style={styles.secondaryAction} onPress={retry}>
-                    <Text style={styles.secondaryActionText}>Retry in Orion</Text>
-                  </Pressable>
-                  <Pressable accessibilityRole="button" style={styles.primaryAction} onPress={openExternal}>
-                    <Ionicons name="open-outline" size={16} color="#fff" />
-                    <Text style={styles.primaryActionText}>Open YouTube</Text>
-                  </Pressable>
-                </View>
-              </View>
-            )}
-
-            {activeUrl && !['embed-rejected', 'network-error', 'playback-error'].includes(playbackState) && (
+          <View style={[styles.playerFrame, { width: playerWidth, height: playerHeight, borderColor: theme.border }]}>
+            {candidate && !showError && (
               Platform.OS === 'web' ? (
-                <iframe
-                  src={activeUrl}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    border: 'none',
-                    backgroundColor: '#000',
-                  }}
-                  allow="autoplay; encrypted-media; picture-in-picture"
-                  allowFullScreen
-                  onLoad={() => setPlaybackState('ready')}
-                  onError={() => {
-                    if (!useFallback) {
-                      setUseFallback(true);
-                      setAttempt((value) => value + 1);
-                    } else {
-                      setPlaybackState('embed-rejected');
-                    }
-                  }}
-                />
+                <iframe key={`${candidate.id}-${session.attempt}`} src={externalUrl?.replace('watch?v=', 'embed/').replace('vimeo.com/', 'player.vimeo.com/video/')} style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#000' }} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen onLoad={() => session.handleMessage(JSON.stringify({ candidateId: candidate.id, type: 'ready' }))} />
               ) : (
                 <WebView
-                  key={`${activeKey}-${useFallback}-${attempt}`}
-                  originWhitelist={['https://*', 'about:*', 'data:*']}
-                  source={{ html: nativeHtml, baseUrl: 'https://www.youtube.com/' }}
-                  userAgent={ANDROID_YOUTUBE_USER_AGENT}
-                  javaScriptEnabled={true}
-                  domStorageEnabled={true}
-                  allowsInlineMediaPlayback={true}
-                  allowsFullscreenVideo={true}
-                  mediaPlaybackRequiresUserAction={true}
-                  androidLayerType="hardware"
-                  onMessage={({ nativeEvent }) => {
-                    try {
-                      const message = JSON.parse(nativeEvent.data || '{}');
-                      if (message.type === 'ready' || message.type === 'playing' || message.type === 'paused') {
-                        setPlaybackState('ready');
-                      } else if (message.type === 'buffering') {
-                        setPlaybackState((current) => current === 'loading' ? current : 'ready');
-                      } else if (message.type === 'network-error') {
-                        setPlaybackState('network-error');
-                      } else if (message.type === 'error' || message.type === 'timeout') {
-                        if (!useFallback) {
-                          setUseFallback(true);
-                          setPlaybackState('loading');
-                          setAttempt((value) => value + 1);
-                        } else {
-                          setPlaybackState('embed-rejected');
-                        }
-                      }
-                    } catch {
-                      // Ignore non-Orion messages emitted by the embedded player.
-                    }
-                  }}
-                  onError={() => setPlaybackState('network-error')}
-                  onHttpError={({ nativeEvent }) => {
-                    if (nativeEvent.statusCode >= 400) setPlaybackState('embed-rejected');
-                  }}
+                  key={`${candidate.id}-${session.attempt}`}
+                  source={{ html, baseUrl: IDENTITY.referrer }}
+                  applicationNameForUserAgent="Orion/2.0.1"
+                  originWhitelist={['https://*', 'android-app://*', 'about:*', 'data:*']}
+                  javaScriptEnabled domStorageEnabled allowsInlineMediaPlayback allowsFullscreenVideo
+                  mediaPlaybackRequiresUserAction
+                  onMessage={({ nativeEvent }) => session.handleMessage(nativeEvent.data)}
+                  onError={() => session.handleMessage(JSON.stringify({ candidateId: candidate.id, type: 'network-error' }))}
+                  onHttpError={({ nativeEvent }) => nativeEvent.statusCode >= 400 && session.handleMessage(JSON.stringify({ candidateId: candidate.id, type: 'provider-error', detail: { code: `http-${nativeEvent.statusCode}` } }))}
                   onShouldStartLoadWithRequest={({ url, navigationType }) => {
-                    const allowed = [
-                      'https://www.youtube.com/',
-                      'https://www.youtube-nocookie.com/',
-                      'https://m.youtube.com/',
-                      'https://googleads.g.doubleclick.net/',
-                      'about:',
-                      'data:',
-                    ].some((prefix) => url.startsWith(prefix));
-                    if (!allowed && navigationType === 'click') {
-                      Linking.openURL(url).catch(() => {});
-                    }
+                    const allowed = allowedPrefixes.some((prefix) => url.startsWith(prefix)) || url.includes('.googlevideo.com/');
+                    if (!allowed && navigationType === 'click') Linking.openURL(url).catch(() => {});
                     return allowed;
                   }}
-                  style={{ flex: 1, backgroundColor: '#000' }}
+                  style={styles.webview}
                 />
               )
             )}
+            {isPreparing && <View style={styles.playerOverlay}><ActivityIndicator size="large" color={theme.accent} /><Text style={[styles.statusText, { color: theme.textSecondary }]}>{session.state === 'rotating' ? 'Trying another trailer…' : 'Preparing trailer…'}</Text></View>}
+            {showError && <View style={[styles.playerOverlay, { backgroundColor: theme.mediaScrim }]}>
+              <Ionicons name="alert-circle-outline" size={34} color={theme.warning} />
+              <Text style={[styles.errorTitle, { color: theme.text }]}>{errorTitle}</Text>
+              <Text style={[styles.errorText, { color: theme.textSecondary }]}>{errorText}</Text>
+            </View>}
+          </View>
+
+          <View style={[styles.actions, { borderTopColor: theme.border }]}>
+            <Pressable accessibilityRole="button" onPress={session.retry} disabled={!candidate} style={[styles.action, { backgroundColor: theme.accent }]}>
+              <Ionicons name="refresh" size={18} color={theme.onAccent} /><Text style={[styles.actionText, { color: theme.onAccent }]}>Retry</Text>
+            </Pressable>
+            {candidates.length > 1 && <Pressable accessibilityRole="button" onPress={session.next} style={[styles.action, { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1 }]}>
+              <Ionicons name="play-skip-forward" size={18} color={theme.text} /><Text style={[styles.actionText, { color: theme.text }]}>Try next</Text>
+            </Pressable>}
+            <Pressable accessibilityRole="button" onPress={openProvider} disabled={!candidate} style={[styles.action, { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1 }]}>
+              <Ionicons name="open-outline" size={18} color={theme.text} /><Text style={[styles.actionText, { color: theme.text }]}>Open {candidate?.site || 'provider'}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={openBrowser} disabled={!candidate} style={styles.browserAction}><Text style={[styles.browserText, { color: theme.textSecondary }]}>Open in browser</Text></Pressable>
           </View>
         </View>
       </View>
@@ -332,129 +162,24 @@ export function TrailerModal({ visible, onClose, trailerKey: propTrailerKey, tit
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing[4],
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-  },
-  modalContent: {
-    width: '100%',
-    maxWidth: 740,
-    backgroundColor: '#0d0d16',
-    borderRadius: radii.xl,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(229, 9, 20, 0.35)',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderBottomWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-    maxWidth: 400,
-  },
-  hdPill: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.35)',
-  },
-  hdPillText: {
-    color: '#10b981',
-    fontSize: 9,
-    fontWeight: '900',
-  },
-  closeBtn: {
-    padding: 4,
-  },
-  selectorBar: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderBottomWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  trailerPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radii.full,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  trailerPillActive: {
-    backgroundColor: accent.primary,
-    borderColor: accent.primary,
-  },
-  trailerPillText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  trailerPillTextActive: {
-    color: '#fff',
-    fontWeight: '800',
-  },
-  playerBox: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    backgroundColor: '#000',
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingBox: {
-    ...StyleSheet.absoluteFill,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#000',
-    zIndex: 10,
-    gap: 12,
-  },
-  loadingText: {
-    color: text.muted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  errorBox: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 15,
-    backgroundColor: '#05050a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing[6],
-    gap: spacing[2],
-  },
-  errorTitle: { color: '#fff', fontSize: fontSizes.lg, fontWeight: '800', textAlign: 'center' },
-  errorText: { color: text.secondary, fontSize: fontSizes.sm, lineHeight: 20, textAlign: 'center', maxWidth: 420 },
-  errorActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing[3], marginTop: spacing[3] },
-  primaryAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, justifyContent: 'center', borderRadius: radii.xl, backgroundColor: accent.primary },
-  primaryActionText: { color: '#fff', fontWeight: '800' },
-  secondaryAction: { minHeight: 44, paddingHorizontal: 18, justifyContent: 'center', borderRadius: radii.xl, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  secondaryActionText: { color: '#fff', fontWeight: '700' },
+  overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.78)' },
+  sheet: { borderWidth: 1, borderRadius: 24, overflow: 'hidden' },
+  header: { minHeight: 72, paddingHorizontal: 18, paddingVertical: 12, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  headerIdentity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerText: { flex: 1 }, eyebrow: { fontSize: 11, fontWeight: '900', letterSpacing: 2 },
+  title: { fontSize: 20, fontWeight: '800' },
+  iconButton: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  selector: { maxHeight: 58 }, selectorContent: { paddingHorizontal: 14, paddingVertical: 9, gap: 8 },
+  pill: { minHeight: 40, maxWidth: 260, paddingHorizontal: 12, borderRadius: 20, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  pillText: { maxWidth: 170, fontSize: 12, fontWeight: '700' }, official: { fontSize: 8, fontWeight: '900' },
+  playerFrame: { maxWidth: '100%', alignSelf: 'center', backgroundColor: '#000', borderWidth: 1, overflow: 'hidden' },
+  webview: { flex: 1, backgroundColor: '#000' },
+  playerOverlay: { ...StyleSheet.absoluteFill, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', padding: 18, gap: 8 },
+  statusText: { fontSize: 14, fontWeight: '700' }, errorTitle: { fontSize: 19, fontWeight: '900', textAlign: 'center' },
+  errorText: { fontSize: 13, lineHeight: 18, textAlign: 'center', maxWidth: 460 },
+  actions: { borderTopWidth: 1, padding: 12, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
+  action: { minHeight: 44, minWidth: 116, paddingHorizontal: 15, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  actionText: { fontSize: 13, fontWeight: '800' }, browserAction: { minHeight: 44, paddingHorizontal: 12, justifyContent: 'center' },
+  browserText: { fontSize: 13, fontWeight: '700' },
 });

@@ -153,11 +153,86 @@ export interface PlaybackHandoffV1 {
 
 export type TrailerPlaybackState =
   | "idle"
-  | "loading"
+  | "preparing"
   | "ready"
-  | "embed-rejected"
+  | "playing"
+  | "paused"
+  | "rotating"
   | "network-error"
-  | "playback-error";
+  | "removed"
+  | "private"
+  | "embed-disabled"
+  | "client-identity-error"
+  | "playback-error"
+  | "exhausted";
+
+export type TrailerProvider = "YouTube" | "Vimeo";
+
+export interface TrailerCandidateV1 {
+  id: string;
+  site: TrailerProvider;
+  providerKey: string;
+  name: string;
+  type: string;
+  official: boolean;
+  language: string | null;
+  country: string | null;
+  publishedAt: number | null;
+  size: number | null;
+  season: number | null;
+  scope: "title" | "season";
+  score: number;
+}
+
+export type TrailerFailureCategory =
+  | "invalid-request"
+  | "html5-playback"
+  | "removed"
+  | "private"
+  | "embed-disabled"
+  | "client-identity"
+  | "network"
+  | "timeout"
+  | "provider-error";
+
+export interface TrailerProviderError {
+  provider: TrailerProvider;
+  category: TrailerFailureCategory;
+  publicCode: number | string | null;
+  retryable: boolean;
+}
+
+export interface TrailerAttemptV1 {
+  candidateId: string;
+  attempt: number;
+  startedAt: number;
+  endedAt: number | null;
+  result: "pending" | "ready" | "playing" | "failed";
+  error: TrailerProviderError | null;
+}
+
+export interface TrailerSessionV1 {
+  id: string;
+  mediaId: number;
+  mediaType: "movie" | "tv";
+  candidates: TrailerCandidateV1[];
+  activeIndex: number;
+  state: TrailerPlaybackState;
+  attempts: TrailerAttemptV1[];
+  startedAt: number;
+}
+
+export interface TrailerClientIdentity {
+  applicationId: string;
+  applicationVersion: string;
+  referrer: string;
+}
+
+export interface TrailerProviderAdapter {
+  provider: TrailerProvider;
+  createHtml(candidate: TrailerCandidateV1, identity: TrailerClientIdentity): string;
+  classifyError(code: number | string | null): TrailerProviderError;
+}
 
 export type ShieldVerificationState =
   | "verified"
