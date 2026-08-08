@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
-import { Appearance, useColorScheme } from "react-native";
+import { Appearance, AppState, type ColorSchemeName } from "react-native";
 import type { MobileThemePreferences, OrionThemeId } from "@orion/shared/types";
 import { mmkvStorageAdapter } from "../services/storageAdapter";
 
@@ -97,7 +97,7 @@ function loadPreferences(systemDark: boolean): MobileThemePreferences {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const systemScheme = useColorScheme() || Appearance.getColorScheme();
+  const [systemScheme, setSystemScheme] = useState<ColorSchemeName>(() => Appearance.getColorScheme() || "dark");
   const [preferences, setPreferences] = useState(() => loadPreferences(systemScheme !== "light"));
   const persist = useCallback((next: MobileThemePreferences) => {
     setPreferences(next);
@@ -120,6 +120,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     persist({ ...preferences, theme: "custom", followSystem: false, customAccent: value });
     return true;
   }, [persist, preferences]);
+  React.useEffect(() => {
+    const appearance = Appearance.addChangeListener(({ colorScheme }) => {
+      setSystemScheme(colorScheme || "dark");
+    });
+    const appState = AppState.addEventListener("change", (state) => {
+      if (state === "active") setSystemScheme(Appearance.getColorScheme() || "dark");
+    });
+    return () => {
+      appearance.remove();
+      appState.remove();
+    };
+  }, []);
   React.useEffect(() => {
     if (!preferences.followSystem) return;
     const next = systemScheme === "light" ? "projector-silver" : "midnight-premiere";

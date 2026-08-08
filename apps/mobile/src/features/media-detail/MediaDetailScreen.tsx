@@ -1,7 +1,7 @@
-import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator, Pressable, Platform, FlatList, Animated, useWindowDimensions, Modal, Share } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator, Pressable, FlatList, Animated, useWindowDimensions, Modal, Share } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect, useRef } from 'react';
-import { accent, spacing, backgrounds, text, fontFamilies, fontSizes, radii } from '@orion/shared/tokens';
+import { spacing } from '@orion/shared/tokens';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { tmdbFetch, imgUrl } from '@orion/shared/api';
@@ -11,10 +11,12 @@ import { TrailerModal } from '../../components/TrailerModal';
 import { MediaCard } from '../../components/MediaCard';
 import { useLibrary } from '../../context/LibraryContext';
 import { useResponsiveLayout } from '../../services/responsive';
+import { useOrionTheme } from '../../context/ThemeContext';
 import { styles } from "./mediaDetailStyles";
 export default function MediaDetailScreen() {
   const { id, type } = useLocalSearchParams<{ id: string; type: 'movie' | 'tv' }>();
   const router = useRouter();
+  const { theme } = useOrionTheme();
   const { isWatched, markWatched, markUnwatched, toggleSave, isSaved } = useLibrary();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -88,19 +90,19 @@ export default function MediaDetailScreen() {
   }, [id, isMovie, selectedSeason]);
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={accent.primary} />
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.accent} />
       </View>
     );
   }
   if (!data) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <Ionicons name="cloud-offline-outline" size={38} color={text.muted} />
-        <Text style={styles.errorTitle}>{loadError || 'Media not found.'}</Text>
-        <Pressable accessibilityRole="button" style={styles.retryButton} onPress={() => setReloadKey((value) => value + 1)}>
-          <Ionicons name="refresh" size={17} color="#fff" />
-          <Text style={styles.retryButtonText}>Retry</Text>
+      <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
+        <Ionicons name="cloud-offline-outline" size={38} color={theme.textMuted} />
+        <Text style={[styles.errorTitle, { color: theme.text }]}>{loadError || 'Media not found.'}</Text>
+        <Pressable accessibilityRole="button" style={[styles.retryButton, { backgroundColor: theme.accent }]} onPress={() => setReloadKey((value) => value + 1)}>
+          <Ionicons name="refresh" size={17} color={theme.onAccent} />
+          <Text style={[styles.retryButtonText, { color: theme.onAccent }]}>Retry</Text>
         </Pressable>
       </View>
     );
@@ -148,7 +150,7 @@ export default function MediaDetailScreen() {
   const trailerObj = allTrailers.find((v: any) => v.type === 'Trailer') || allTrailers[0];
   const trailerKey = trailerObj?.key || null;
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Pressable onPress={() => router.back()} style={styles.backButton}>
         <Ionicons name="arrow-back" size={20} color="#fff" />
       </Pressable>
@@ -157,10 +159,10 @@ export default function MediaDetailScreen() {
           {backdrop ? (
             <Image source={{ uri: backdrop }} style={styles.backdropImage} />
           ) : (
-            <View style={[styles.backdropImage, { backgroundColor: '#1a102b' }]} />
+            <View style={[styles.backdropImage, { backgroundColor: theme.surface }]} />
           )}
           <LinearGradient
-            colors={['rgba(5,5,10,0.15)', 'rgba(5,5,10,0.65)', 'rgba(5,5,10,0.92)', backgrounds.base]}
+            colors={['rgba(5,5,10,0.10)', 'rgba(5,5,10,0.52)', 'rgba(5,5,10,0.84)', theme.background]}
             locations={[0, 0.4, 0.75, 1]}
             style={styles.backdropGradient}
           />
@@ -226,39 +228,39 @@ export default function MediaDetailScreen() {
                   }
                 })}
               >
-                <View style={styles.playButtonGlow} />
-                <View style={styles.playButton}>
-                  <Ionicons name="play" size={18} color="#fff" />
-                  <Text style={styles.playButtonText}>Watch Now</Text>
+                <View style={[styles.playButtonGlow, { backgroundColor: theme.accent }]} />
+                <View style={[styles.playButton, { backgroundColor: theme.accent }]}>
+                  <Ionicons name="play" size={18} color={theme.onAccent} />
+                  <Text style={[styles.playButtonText, { color: theme.onAccent }]}>Watch Now</Text>
                 </View>
               </Pressable>
             )}
             <View style={styles.secondaryActions}>
               <Pressable
                 accessibilityRole="button"
-                style={({ pressed }) => [styles.trailerBtn, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.trailerBtn, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && styles.pressed]}
                 onPress={() => toggleSave({ ...data, media_type: type })}
               >
-                <Ionicons name={isSaved({ ...data, media_type: type }) ? "checkmark" : "add"} size={18} color="#fff" />
-                <Text style={styles.trailerBtnText}>{isSaved({ ...data, media_type: type }) ? "In My List" : "My List"}</Text>
+                <Ionicons name={isSaved({ ...data, media_type: type }) ? "checkmark" : "add"} size={18} color={theme.text} />
+                <Text style={[styles.trailerBtnText, { color: theme.text }]}>{isSaved({ ...data, media_type: type }) ? "In My List" : "My List"}</Text>
               </Pressable>
               {trailerKey && (
                 <Pressable
                   accessibilityRole="button"
-                  style={({ pressed }) => [styles.trailerBtn, pressed && styles.pressed]}
+                  style={({ pressed }) => [styles.trailerBtn, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && styles.pressed]}
                   onPress={() => setShowTrailerModal(true)}
                 >
-                  <Ionicons name="film-outline" size={18} color="#fff" />
-                  <Text style={styles.trailerBtnText}>Trailer</Text>
+                  <Ionicons name="film-outline" size={18} color={theme.text} />
+                  <Text style={[styles.trailerBtnText, { color: theme.text }]}>Trailer</Text>
                 </Pressable>
               )}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="More actions"
-                style={({ pressed }) => [styles.listButton, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.listButton, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && styles.pressed]}
                 onPress={() => setShowMoreSheet(true)}
               >
-                <Ionicons name="ellipsis-horizontal" size={20} color="#fff" />
+                <Ionicons name="ellipsis-horizontal" size={20} color={theme.text} />
               </Pressable>
             </View>
           </View>
@@ -269,7 +271,7 @@ export default function MediaDetailScreen() {
             title={title}
             allTrailers={allTrailers}
           />
-          <View style={styles.tabsContainer}>
+          <View style={[styles.tabsContainer, { borderBottomColor: theme.border }]}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
               {['info', ...(isMovie ? [] : ['episodes']), 'cast', 'recommended'].map((tab) => {
                 const isActive = activeTab === tab;
@@ -279,11 +281,11 @@ export default function MediaDetailScreen() {
                     onPress={() => handleTabChange(tab as any)}
                     style={({ pressed }) => [
                       styles.tabPill,
-                      isActive && styles.tabPillActive,
+                      { backgroundColor: isActive ? theme.accentSoft : theme.surface, borderColor: isActive ? theme.accent : theme.border },
                       pressed && { opacity: 0.8 },
                     ]}
                   >
-                    <Text style={[styles.tabPillText, isActive && styles.tabPillTextActive]}>
+                    <Text style={[styles.tabPillText, { color: isActive ? theme.accent : theme.textSecondary }, isActive && styles.tabPillTextActive]}>
                       {tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </Text>
                   </Pressable>
@@ -294,10 +296,10 @@ export default function MediaDetailScreen() {
           <View style={styles.tabContent}>
             {activeTab === 'info' && (
               <View style={{ gap: spacing[5] }}>
-                <Text style={styles.overviewText}>{data.overview}</Text>
+                <Text style={[styles.overviewText, { color: theme.textSecondary }]}>{data.overview}</Text>
                 {castList.length > 0 && (
                   <View style={styles.castSection}>
-                    <Text style={styles.subSectionTitle}>TOP CAST & CREW</Text>
+                    <Text style={[styles.subSectionTitle, { color: theme.textMuted }]}>TOP CAST & CREW</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.castScroll}>
                       {castList.slice(0, 15).map((actor: any) => (
                         <Pressable 
@@ -307,10 +309,10 @@ export default function MediaDetailScreen() {
                         >
                           <Image 
                             source={{ uri: imgUrl(actor.profile_path, 'w200') || undefined }} 
-                            style={styles.castImage} 
+                            style={[styles.castImage, { backgroundColor: theme.surface, borderColor: theme.border }]}
                           />
-                          <Text style={styles.castName} numberOfLines={1}>{actor.name}</Text>
-                          <Text style={styles.castCharacter} numberOfLines={1}>{actor.character || 'Actor'}</Text>
+                          <Text style={[styles.castName, { color: theme.text }]} numberOfLines={1}>{actor.name}</Text>
+                          <Text style={[styles.castCharacter, { color: theme.textMuted }]} numberOfLines={1}>{actor.character || 'Actor'}</Text>
                         </Pressable>
                       ))}
                     </ScrollView>
@@ -328,10 +330,10 @@ export default function MediaDetailScreen() {
                   >
                     <Image 
                       source={{ uri: imgUrl(actor.profile_path, 'w200') || undefined }} 
-                      style={styles.castImage} 
+                      style={[styles.castImage, { backgroundColor: theme.surface, borderColor: theme.border }]}
                     />
-                    <Text style={styles.castName} numberOfLines={1}>{actor.name}</Text>
-                    <Text style={styles.castCharacter} numberOfLines={1}>{actor.character || 'Actor'}</Text>
+                    <Text style={[styles.castName, { color: theme.text }]} numberOfLines={1}>{actor.name}</Text>
+                    <Text style={[styles.castCharacter, { color: theme.textMuted }]} numberOfLines={1}>{actor.character || 'Actor'}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -350,7 +352,7 @@ export default function MediaDetailScreen() {
                   />
                 )}
                 ListEmptyComponent={
-                  <Text style={styles.placeholderText}>No recommendations available.</Text>
+                  <Text style={[styles.placeholderText, { color: theme.textMuted }]}>No recommendations available.</Text>
                 }
               />
             )}
@@ -362,9 +364,9 @@ export default function MediaDetailScreen() {
                       <Pressable
                         key={s}
                         onPress={() => setSelectedSeason(s)}
-                        style={[styles.seasonPill, selectedSeason === s && styles.seasonPillActive]}
+                        style={[styles.seasonPill, { backgroundColor: selectedSeason === s ? theme.accent : theme.surface, borderColor: selectedSeason === s ? theme.accent : theme.border }]}
                       >
-                        <Text style={[styles.seasonPillText, selectedSeason === s && styles.seasonPillTextActive]}>
+                        <Text style={[styles.seasonPillText, { color: selectedSeason === s ? theme.onAccent : theme.textSecondary }]}>
                           Season {s}
                         </Text>
                       </Pressable>
@@ -372,12 +374,16 @@ export default function MediaDetailScreen() {
                   </ScrollView>
                 )}
                 {episodesLoading ? (
-                  <ActivityIndicator size="small" color={accent.primary} style={{ marginTop: 20 }} />
+                  <ActivityIndicator size="small" color={theme.accent} style={{ marginTop: 20 }} />
                 ) : (
                   episodes.map((ep: any) => (
                     <Pressable
                       key={ep.id}
-                      style={({ pressed }) => [styles.episodeCard, pressed && { opacity: 0.85 }]}
+                      style={({ pressed }) => [
+                        styles.episodeCard,
+                        { backgroundColor: theme.elevated, borderColor: theme.border },
+                        pressed && { opacity: 0.85 },
+                      ]}
                       onPress={() => router.push({
                         pathname: '/player/[id]',
                         params: {
@@ -395,8 +401,8 @@ export default function MediaDetailScreen() {
                         {ep.still_path ? (
                           <Image source={{ uri: imgUrl(ep.still_path, 'w300') || undefined }} style={styles.episodeListThumb} />
                         ) : (
-                          <View style={[styles.episodeListThumb, styles.emptyThumb]}>
-                            <Ionicons name="film-outline" size={24} color="rgba(255,255,255,0.2)" />
+                          <View style={[styles.episodeListThumb, styles.emptyThumb, { backgroundColor: theme.surface }]}>
+                            <Ionicons name="film-outline" size={24} color={theme.textMuted} />
                           </View>
                         )}
                         <View style={styles.playBadgeOverlay}>
@@ -405,7 +411,7 @@ export default function MediaDetailScreen() {
                       </View>
                       <View style={styles.episodeListInfo}>
                         <View style={styles.epMetaRow}>
-                          <Text style={styles.episodeListNum}>E{ep.episode_number}</Text>
+                          <Text style={[styles.episodeListNum, { color: theme.accent }]}>E{ep.episode_number}</Text>
                           {!!ep.vote_average && (
                             <View style={styles.epStarBadge}>
                               <Ionicons name="star" size={10} color="#fbbf24" />
@@ -413,15 +419,15 @@ export default function MediaDetailScreen() {
                             </View>
                           )}
                           {!!ep.runtime && (
-                            <Text style={styles.epRuntimeText}>{ep.runtime}m</Text>
+                            <Text style={[styles.epRuntimeText, { color: theme.textMuted }]}>{ep.runtime}m</Text>
                           )}
                           {!!ep.air_date && (
-                            <Text style={styles.episodeListDate}>{ep.air_date}</Text>
+                            <Text style={[styles.episodeListDate, { color: theme.textMuted }]}>{ep.air_date}</Text>
                           )}
                         </View>
-                        <Text style={styles.episodeListName} numberOfLines={1}>{ep.name}</Text>
+                        <Text style={[styles.episodeListName, { color: theme.text }]} numberOfLines={1}>{ep.name}</Text>
                         {!!ep.overview && (
-                          <Text style={styles.episodeOverviewText} numberOfLines={2}>
+                          <Text style={[styles.episodeOverviewText, { color: theme.textSecondary }]} numberOfLines={2}>
                             {ep.overview}
                           </Text>
                         )}
@@ -438,8 +444,8 @@ export default function MediaDetailScreen() {
                               }
                             }}
                           >
-                            <Ionicons name={isWatched(ep, { isEpisode: true, seriesId: id }) ? "eye" : "eye-outline"} size={14} color={accent.primary} />
-                            <Text style={styles.epDownloadBtnText}>{isWatched(ep, { isEpisode: true, seriesId: id }) ? "Watched" : "Mark Watched"}</Text>
+                            <Ionicons name={isWatched(ep, { isEpisode: true, seriesId: id }) ? "eye" : "eye-outline"} size={14} color={theme.accent} />
+                            <Text style={[styles.epDownloadBtnText, { color: theme.accent }]}>{isWatched(ep, { isEpisode: true, seriesId: id }) ? "Watched" : "Mark Watched"}</Text>
                           </Pressable>
                           <Pressable
                             style={({ pressed }) => [styles.epDownloadBtn, pressed && { opacity: 0.7 }]}
@@ -448,8 +454,8 @@ export default function MediaDetailScreen() {
                               setShowDownloadModal(true);
                             }}
                           >
-                            <Ionicons name="lock-closed-outline" size={12} color={text.muted} />
-                            <Text style={styles.epDownloadBtnText}>Offline info</Text>
+                            <Ionicons name="lock-closed-outline" size={12} color={theme.textMuted} />
+                            <Text style={[styles.epDownloadBtnText, { color: theme.textMuted }]}>Offline info</Text>
                           </Pressable>
                         </View>
                       </View>
@@ -472,32 +478,32 @@ export default function MediaDetailScreen() {
       <Modal visible={showMoreSheet} transparent animationType="fade" onRequestClose={() => setShowMoreSheet(false)}>
         <View style={styles.moreOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowMoreSheet(false)} />
-          <View style={styles.moreSheet}>
+          <View style={[styles.moreSheet, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
             <View style={styles.moreHeader}>
-              <Text style={styles.moreTitle}>More actions</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Close more actions" onPress={() => setShowMoreSheet(false)} style={styles.moreClose}>
-                <Ionicons name="close" size={20} color="#fff" />
+              <Text style={[styles.moreTitle, { color: theme.text }]}>More actions</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close more actions" onPress={() => setShowMoreSheet(false)} style={[styles.moreClose, { borderColor: theme.border }]}>
+                <Ionicons name="close" size={20} color={theme.text} />
               </Pressable>
             </View>
             <Pressable style={styles.moreAction} onPress={() => {
               Share.share({ message: `${title}${year ? ` (${year})` : ''}` }).catch(() => {});
             }}>
-              <Ionicons name="share-social-outline" size={20} color="#fff" />
-              <Text style={styles.moreActionText}>Share title</Text>
+              <Ionicons name="share-social-outline" size={20} color={theme.text} />
+              <Text style={[styles.moreActionText, { color: theme.text }]}>Share title</Text>
             </Pressable>
             <Pressable style={styles.moreAction} onPress={() => {
               setShowMoreSheet(false);
               setShowDownloadModal(true);
             }}>
-              <Ionicons name="lock-closed-outline" size={20} color={text.muted} />
+              <Ionicons name="lock-closed-outline" size={20} color={theme.textMuted} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.moreActionText}>Mobile downloads</Text>
-                <Text style={styles.moreActionDescription}>Locked during native downloader research</Text>
+                <Text style={[styles.moreActionText, { color: theme.text }]}>Mobile downloads</Text>
+                <Text style={[styles.moreActionDescription, { color: theme.textMuted }]}>Locked during native downloader research</Text>
               </View>
             </Pressable>
-            <View style={styles.moreNotice}>
-              <Ionicons name="server-outline" size={18} color={text.muted} />
-              <Text style={styles.moreActionDescription}>Streaming sources are selected inside the player so the active session stays consistent.</Text>
+            <View style={[styles.moreNotice, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Ionicons name="server-outline" size={18} color={theme.textMuted} />
+              <Text style={[styles.moreActionDescription, { color: theme.textMuted }]}>Streaming sources are selected inside the player so the active session stays consistent.</Text>
             </View>
           </View>
         </View>

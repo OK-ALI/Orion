@@ -398,12 +398,16 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
     fontSize: 14,
     fontWeight: '800',
   },
-  modalOverlay: {
+  modalKeyboardAvoider: {
     flex: 1,
+  },
+  modalOverlay: {
+    flexGrow: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.88)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: spacing[5],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[4],
   },
   glassModalCard: {
     width: '100%',
@@ -460,7 +464,7 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
   },
   hiddenPinInput: {
     position: 'absolute',
-    opacity: 0,
+    opacity: 0.01,
     width: 1,
     height: 1,
   },
@@ -498,15 +502,19 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
     width: '100%',
   },
   pinInputRow: {
+    width: '100%',
     flexDirection: 'row',
-    gap: 12,
+    gap: 6,
+    justifyContent: 'center',
     marginBottom: 20,
     paddingVertical: 8,
   },
   pinBox: {
-    width: 52,
-    height: 62,
-    borderRadius: radii.xl,
+    flex: 1,
+    maxWidth: 48,
+    minWidth: 36,
+    aspectRatio: 0.82,
+    borderRadius: radii.lg,
     backgroundColor: theme.input,
     borderWidth: 1.5,
     borderColor: theme.border,

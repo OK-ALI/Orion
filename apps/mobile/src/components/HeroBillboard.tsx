@@ -41,27 +41,27 @@ function HeroSlide({ item, onPlay, onInfo, onPress, width }: {
           style={styles.image}
           imageStyle={{ resizeMode: 'cover' }}
         >
-          {/* Top-to-Bottom dark gradient */}
+          {/* A restrained readability veil keeps the artwork visible in every theme. */}
           <LinearGradient
-            colors={[theme.mediaScrim, 'transparent']}
+            colors={['rgba(0,0,0,0.20)', 'transparent']}
             style={StyleSheet.absoluteFill}
           />
           
           {/* Left-to-Right vignette */}
           <LinearGradient
-            colors={[theme.mediaScrim, 'rgba(5, 5, 10, 0.45)', 'transparent']}
+            colors={['rgba(0,0,0,0.52)', 'rgba(0,0,0,0.18)', 'transparent']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={StyleSheet.absoluteFill}
           />
 
           {/* Bottom Blur Strip */}
-          <BlurView intensity={35} tint="dark" style={styles.bottomBlurEdge} />
+          <BlurView intensity={18} tint="dark" style={styles.bottomBlurEdge} />
 
           {/* Bottom-to-Top heavy fade */}
           <LinearGradient
-            colors={['rgba(5, 5, 10, 0.1)', 'rgba(5, 5, 10, 0.5)', theme.mediaScrim, theme.background]}
-            locations={[0, 0.35, 0.7, 1]}
+            colors={['transparent', 'rgba(0,0,0,0.12)', 'rgba(0,0,0,0.48)', theme.background]}
+            locations={[0, 0.42, 0.78, 1]}
             style={styles.bottomGradient}
           />
 

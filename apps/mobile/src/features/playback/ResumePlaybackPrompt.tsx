@@ -40,6 +40,7 @@ export function ResumePlaybackPrompt({
           style={[
             styles.card,
             compactLandscape && styles.cardCompact,
+            compactLandscape && { width: Math.min(width - spacing[6], 640) },
             { backgroundColor: theme.elevated, borderColor: theme.border },
           ]}
         >
@@ -152,10 +153,10 @@ const styles = StyleSheet.create({
     gap: spacing[3],
   },
   cardCompact: {
-    maxWidth: 760,
+    maxWidth: 640,
     paddingHorizontal: spacing[4],
-    paddingVertical: spacing[2],
-    gap: spacing[1],
+    paddingVertical: spacing[3],
+    gap: spacing[2],
   },
   icon: {
     width: 52,
@@ -189,7 +190,7 @@ const styles = StyleSheet.create({
   time: { fontSize: 24, fontWeight: '900', fontVariant: ['tabular-nums'] },
   timeCompact: { fontSize: 18 },
   actions: { width: '100%', gap: spacing[2] },
-  actionsCompact: { flexDirection: 'row', flexWrap: 'wrap' },
+  actionsCompact: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
   actionButton: {
     minHeight: 46,
     borderRadius: radii.full,
@@ -199,7 +200,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing[2],
     flexGrow: 1,
-    minWidth: 210,
+    minWidth: 0,
+    flexBasis: 220,
   },
   primary: { minHeight: 50 },
   primaryText: { fontSize: 14, fontWeight: '900', textAlign: 'center' },

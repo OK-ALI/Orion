@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { CameraView } from "expo-camera";
 import { spacing, radii } from "@orion/shared/tokens";
 import { LinearGradient } from "expo-linear-gradient";
@@ -528,8 +528,24 @@ export default function ConnectScreen() {
           )}
         </View>
       )}
-      <Modal visible={showPairingModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+      <Modal
+        visible={showPairingModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPairingModal(false)}
+        onShow={() => {
+          if (pairingMethod === 'pin') setTimeout(() => hiddenPinInputRef.current?.focus(), 280);
+        }}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalKeyboardAvoider}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalOverlay}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+          >
           <View style={styles.glassModalCard}>
             <View style={styles.modalMethodTabs}>
               <Pressable
@@ -700,7 +716,8 @@ export default function ConnectScreen() {
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </Pressable>
           </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
       <Modal visible={showDisconnectModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
