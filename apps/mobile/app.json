@@ -35,6 +35,7 @@
         }
       ],
       "expo-video",
+      "./plugins/withOrionNsd",
       [
         "expo-build-properties",
         {

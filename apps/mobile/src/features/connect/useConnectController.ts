@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { Animated, PanResponder, Platform, TextInput } from "react-native";
+import { Animated, AppState, PanResponder, Platform, TextInput } from "react-native";
 import { useCameraPermissions } from "expo-camera";
 import * as SecureStore from "expo-secure-store";
 import { mmkvStorageAdapter } from "../../services/storageAdapter";
 import { SMART_CONNECT_PROTOCOL_VERSION } from "@orion/shared/types";
-import { discoverSmartConnectDesktop } from "../../services/smartConnectDiscovery";
+import {
+  discoverSmartConnectDesktops,
+  inspectSmartConnectEndpoint,
+  scanSmartConnectSubnet,
+  type SmartConnectDiscoveryResult,
+} from "../../services/smartConnectDiscovery";
+import { stopNativeSmartConnectDiscovery } from '../../services/nativeSmartConnectDiscovery';
 import {
   reportMobileDiagnosticError,
   updateMobileDiagnostics,
@@ -17,17 +23,25 @@ export function useConnectController() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [desktopIp, setDesktopIp] = useState('');
+  const [desktopPort, setDesktopPort] = useState(8924);
   const [pairToken, setPairToken] = useState<string | null>(null);
   const [deviceId, setDeviceId] = useState('');
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [pairError, setPairError] = useState('');
   const [remoteError, setRemoteError] = useState('');
   const [qrNotice, setQrNotice] = useState('');
+  const [connectionState, setConnectionState] = useState<'idle' | 'discovering' | 'pairing' | 'connected' | 'reconnecting' | 'endpoint-lost' | 'token-rejected' | 'code-expired' | 'locked-out' | 'protocol-mismatch' | 'failed'>('idle');
+  const [discoveredDesktops, setDiscoveredDesktops] = useState<SmartConnectDiscoveryResult[]>([]);
+  const [deviceName, setDeviceName] = useState('Orion Mobile');
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
   const socketRef = useRef<WebSocket | null>(null);
   const socketHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const disconnectingRef = useRef(false);
-  const connectionRef = useRef({ connected: false, ip: '', token: null as string | null, deviceId: '' });
+  const reconnectAttemptRef = useRef(0);
+  const appActiveRef = useRef(true);
+  const connectionRef = useRef({ connected: false, ip: '', port: 8924, token: null as string | null, deviceId: '' });
   const sendCommandRef = useRef<(cmd: string, value?: any) => Promise<any>>(
     async () => ({ ok: false, error: 'Remote transport is not ready.' }),
   );
@@ -41,11 +55,11 @@ export function useConnectController() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [hasScanned, setHasScanned] = useState(false);
   useEffect(() => {
-    connectionRef.current = { connected: isConnected, ip: desktopIp, token: pairToken, deviceId };
+    connectionRef.current = { connected: isConnected, ip: desktopIp, port: desktopPort, token: pairToken, deviceId };
     updateMobileDiagnostics({
-      smartConnectState: isConnected ? 'connected' : (isConnecting ? 'connecting' : 'disconnected'),
+      smartConnectState: connectionState,
     });
-  }, [isConnected, isConnecting, desktopIp, pairToken, deviceId]);
+  }, [isConnected, connectionState, desktopIp, desktopPort, pairToken, deviceId]);
   useEffect(() => {
     const message = remoteError || pairError;
     if (message) {
@@ -57,13 +71,33 @@ export function useConnectController() {
     }
   }, [pairError, remoteError]);
   useEffect(() => {
+    if (!lockoutUntil) {
+      setLockoutSeconds(0);
+      return;
+    }
+    const update = () => {
+      const remaining = Math.max(0, Math.ceil((lockoutUntil - Date.now()) / 1000));
+      setLockoutSeconds(remaining);
+      if (!remaining) {
+        setLockoutUntil(null);
+        setConnectionState('idle');
+        setPairError('You can try pairing again now.');
+      }
+    };
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutUntil]);
+  useEffect(() => {
     Promise.all([
       SecureStore.getItemAsync('orion_connect_token'),
       SecureStore.getItemAsync('orion_connect_device_id'),
-    ]).then(async ([token, storedDeviceId]) => {
+      SecureStore.getItemAsync('orion_connect_device_name'),
+    ]).then(async ([token, storedDeviceId, storedDeviceName]) => {
       const nextDeviceId = storedDeviceId || `mobile-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       if (!storedDeviceId) await SecureStore.setItemAsync('orion_connect_device_id', nextDeviceId).catch(() => {});
       setDeviceId(nextDeviceId);
+      if (storedDeviceName) setDeviceName(storedDeviceName);
       if (token) setPairToken(token);
     }).catch(() => {});
   }, []);
@@ -75,7 +109,7 @@ export function useConnectController() {
       if (ip) {
         setDesktopIp(ip);
         if (pin) setPinCode(pin);
-        handleConnect(ip, pin);
+        handleConnect(ip, pin, undefined, 'qr');
       } else {
         setQrNotice('This QR code does not contain a valid Orion Connect address. Generate a fresh code on Orion Desktop and try again.');
       }
@@ -118,7 +152,7 @@ export function useConnectController() {
       },
     })
   ).current;
-  const connectSocket = (ip: string, token: string, activeDeviceId: string) => {
+  const connectSocket = (ip: string, token: string, activeDeviceId: string, port = desktopPort) => {
     if (!ip || !token || !activeDeviceId) return;
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
@@ -129,7 +163,8 @@ export function useConnectController() {
       socketHeartbeatRef.current = null;
     }
     try { socketRef.current?.close(); } catch {}
-    const socket = new WebSocket(smartConnectSocketUrl(ip, token));
+    setConnectionState(reconnectAttemptRef.current ? 'reconnecting' : 'pairing');
+    const socket = new WebSocket(smartConnectSocketUrl(ip, token, port));
     socketRef.current = socket;
     socket.onmessage = (event) => {
       try {
@@ -144,6 +179,12 @@ export function useConnectController() {
         }
         if (envelope.type === 'status') {
           setIsConnected(envelope.payload?.connected !== false);
+          setConnectionState('connected');
+          updateMobileDiagnostics({
+            smartConnectState: 'connected',
+            smartConnectReconnectAttempt: 0,
+            smartConnectLastAuthenticatedAt: Date.now(),
+          });
           setRemoteError('');
           const p = envelope.payload?.playback;
           if (p) {
@@ -163,8 +204,15 @@ export function useConnectController() {
     };
     socket.onopen = () => {
       disconnectingRef.current = false;
-      setIsConnected(true);
+      reconnectAttemptRef.current = 0;
+      setConnectionState('pairing');
       setRemoteError('');
+      mmkvStorageAdapter.set('orion_smart_connect_trusted_endpoint_v1', JSON.stringify({
+        host: ip,
+        port,
+        lastVerifiedAt: Date.now(),
+        discoveryMethod: 'saved',
+      }));
       const sendHeartbeat = () => {
         if (socket.readyState !== WebSocket.OPEN) return;
         socket.send(JSON.stringify({
@@ -191,12 +239,17 @@ export function useConnectController() {
         }
         pendingAcks.current.clear();
         if (!disconnectingRef.current) {
+          reconnectAttemptRef.current += 1;
+          setConnectionState('reconnecting');
+          updateMobileDiagnostics({ smartConnectReconnectAttempt: reconnectAttemptRef.current });
+          const baseDelay = Math.min(15_000, 1_000 * (2 ** Math.min(4, reconnectAttemptRef.current - 1)));
+          const delay = baseDelay + Math.round(Math.random() * 350);
           reconnectTimerRef.current = setTimeout(() => {
             const current = connectionRef.current;
-            if (current.token && current.deviceId && current.ip) {
-              connectSocket(current.ip, current.token, current.deviceId);
+            if (appActiveRef.current && current.token && current.deviceId && current.ip) {
+              connectSocket(current.ip, current.token, current.deviceId, current.port);
             }
-          }, 1800);
+          }, delay);
         }
       }
     };
@@ -211,6 +264,23 @@ export function useConnectController() {
     for (const pending of pendingAcks.current.values()) clearTimeout(pending.timer);
     pendingAcks.current.clear();
     try { socketRef.current?.close(); } catch {}
+  }, []);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      appActiveRef.current = state === 'active';
+      if (!appActiveRef.current) {
+        stopNativeSmartConnectDiscovery();
+        if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+        return;
+      }
+      const current = connectionRef.current;
+      if (current.token && current.deviceId && current.ip && socketRef.current?.readyState !== WebSocket.OPEN) {
+        reconnectAttemptRef.current = 0;
+        connectSocket(current.ip, current.token, current.deviceId, current.port);
+      }
+    });
+    return () => subscription.remove();
   }, []);
   const handleTouchpadClick = () => {
     sendRemoteCommand('cursor_click');
@@ -237,9 +307,16 @@ export function useConnectController() {
   const formatTime = formatConnectTime;
   useEffect(() => {
     let savedIp = desktopIp;
+    let savedPort = desktopPort;
     try {
       if (typeof window !== 'undefined') {
         const storedIp = mmkvStorageAdapter.get('orion_desktop_ip');
+        const storedEndpoint = JSON.parse(mmkvStorageAdapter.get('orion_smart_connect_trusted_endpoint_v1') || 'null');
+        if (storedEndpoint?.host) {
+          savedIp = storedEndpoint.host;
+          savedPort = Number(storedEndpoint.port || 8924);
+          setDesktopPort(savedPort);
+        }
         if (storedIp) {
           savedIp = storedIp;
           setDesktopIp(storedIp);
@@ -254,7 +331,7 @@ export function useConnectController() {
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 1200);
-          const res = await fetch(smartConnectHttpUrl(ip, '/api/status'), {
+          const res = await fetch(smartConnectHttpUrl(ip, '/api/status', savedPort), {
             signal: controller.signal,
             headers: pairToken ? { Authorization: `Bearer ${pairToken}` } : undefined,
           });
@@ -263,10 +340,18 @@ export function useConnectController() {
             serverReachable = true;
             const data = await res.json();
             setDesktopIp(ip);
+            setDesktopPort(Number(data.port || savedPort));
             mmkvStorageAdapter.set('orion_desktop_ip', ip);
-            setIsConnected(Boolean(data.connected));
+            if (pairToken && data.paired === false) {
+              setIsConnected(false);
+              setConnectionState('token-rejected');
+              setPairToken(null);
+              await SecureStore.deleteItemAsync('orion_connect_token').catch(() => {});
+              setPairError('This Desktop no longer trusts this device. Pair again to reconnect.');
+              break;
+            }
             if (data.paired && pairToken && deviceId && socketRef.current?.readyState !== WebSocket.OPEN) {
-              connectSocket(ip, pairToken, deviceId);
+              connectSocket(ip, pairToken, deviceId, Number(data.port || savedPort));
             }
             if (data.playback && data.playback.title) {
               const p = data.playback;
@@ -291,10 +376,11 @@ export function useConnectController() {
       }
       if (!serverReachable && socketRef.current?.readyState !== WebSocket.OPEN) {
         setIsConnected(false);
+        if (pairToken) setConnectionState('endpoint-lost');
       }
     };
     checkServer();
-    const interval = setInterval(checkServer, 1500);
+    const interval = setInterval(checkServer, 4000);
     return () => clearInterval(interval);
   }, [pairToken, deviceId]);
   const useNativeDriver = Platform.OS !== 'web';
@@ -318,33 +404,56 @@ export function useConnectController() {
   }, [showPairingModal, pairingMethod]);
   const discoverDesktop = async () => {
     setIsDiscovering(true);
+    setConnectionState('discovering');
     setPairError('');
     try {
       const storedIp = mmkvStorageAdapter.get('orion_desktop_ip');
-      return discoverSmartConnectDesktop(
-        [desktopIp, storedIp],
+      const trusted = JSON.parse(mmkvStorageAdapter.get('orion_smart_connect_trusted_endpoint_v1') || 'null');
+      const discovery = await discoverSmartConnectDesktops(
+        [{ host: trusted?.host, port: trusted?.port }, { host: desktopIp, port: desktopPort }, { host: storedIp, port: 8924 }],
         SMART_CONNECT_PROTOCOL_VERSION,
       );
+      setDiscoveredDesktops(discovery.results);
+      updateMobileDiagnostics({
+        smartConnectState: discovery.results.length ? 'desktop-found' : 'endpoint-lost',
+        smartConnectDiscoveryMethod: discovery.results[0]?.discoveryMethod || 'nsd',
+        smartConnectDiscoveryDurationMs: discovery.durationMs,
+        smartConnectNsdResultCount: discovery.nsdResultCount,
+      });
+      return discovery.results;
     } finally {
       setIsDiscovering(false);
     }
   };
-  const handleConnect = async (targetIp?: string, targetPin?: string) => {
+  const handleConnect = async (
+    targetIp?: string,
+    targetPin?: string,
+    targetPort?: number,
+    requestedMethod?: 'saved' | 'nsd' | 'qr' | 'direct-ip' | 'subnet-fallback',
+  ) => {
     setIsConnecting(true);
     setPairError('');
     let pairedSuccess = false;
     let errorMessage = '';
+    let resolvedPort = Number(targetPort || desktopPort || 8924);
     let rawIpInput = (targetIp || desktopIp || '').trim();
     if (!rawIpInput || (pairingMethod === 'pin' && !targetIp)) {
       const discovered = await discoverDesktop();
-      if (!discovered) {
+      if (!discovered.length) {
         const message = 'Orion Desktop was not found automatically. Keep both devices on the same Wi-Fi, open Smart Connect on Desktop, or use Direct IP.';
         setPairError(message);
         setIsConnecting(false);
         return;
       }
-      rawIpInput = discovered;
-      setDesktopIp(discovered);
+      if (discovered.length > 1) {
+        setPairError('More than one Orion Desktop was found. Choose one below.');
+        setIsConnecting(false);
+        return;
+      }
+      rawIpInput = discovered[0].host;
+      setDesktopIp(rawIpInput);
+      resolvedPort = discovered[0].port;
+      setDesktopPort(resolvedPort);
     }
     const cleanIp = normalizeDesktopAddress(rawIpInput);
     const sendPin = targetPin || pinCode;
@@ -352,12 +461,33 @@ export function useConnectController() {
     const targetIps = Array.from(new Set([cleanIp, hostname])).filter(Boolean);
     for (const ip of targetIps) {
       try {
+        const discoveryMethod = requestedMethod
+          || (pairingMethod === 'qr' ? 'qr' : targetIp ? 'direct-ip' : 'nsd');
+        const endpoint = await inspectSmartConnectEndpoint(
+          ip,
+          resolvedPort,
+          SMART_CONNECT_PROTOCOL_VERSION,
+          discoveryMethod,
+        );
+        if (!endpoint.ok) {
+          if (endpoint.errorCode === 'protocol-mismatch') {
+            setConnectionState('protocol-mismatch');
+            errorMessage = 'This Orion Desktop uses an incompatible Smart Connect protocol. Update both applications and try again.';
+            updateMobileDiagnostics({ smartConnectPairingFailure: 'PROTOCOL_MISMATCH' });
+            break;
+          }
+          setConnectionState('endpoint-lost');
+          errorMessage = 'Orion Desktop is not reachable at this address. Confirm both devices are on the same Wi-Fi and try again.';
+          continue;
+        }
+        resolvedPort = endpoint.result.port;
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 2000);
-        const res = await fetch(smartConnectHttpUrl(ip, '/api/pair'), {
+        setConnectionState('pairing');
+        const res = await fetch(smartConnectHttpUrl(ip, '/api/pair', resolvedPort), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pin: sendPin, token: pairToken, deviceId, deviceName: 'Orion Mobile' }),
+          body: JSON.stringify({ pin: sendPin, token: pairToken, deviceId, deviceName }),
           signal: controller.signal,
         });
         clearTimeout(timer);
@@ -369,13 +499,39 @@ export function useConnectController() {
             disconnectingRef.current = false;
             setPairToken(data.token);
             await SecureStore.setItemAsync('orion_connect_token', data.token).catch(() => {});
-            connectSocket(ip, data.token, data.deviceId || deviceId);
+            connectSocket(ip, data.token, data.deviceId || deviceId, resolvedPort);
           }
           mmkvStorageAdapter.set('orion_desktop_ip', ip);
+          mmkvStorageAdapter.set('orion_smart_connect_trusted_endpoint_v1', JSON.stringify({
+            instanceId: data.instanceId || '', host: ip, port: resolvedPort, lastVerifiedAt: Date.now(), discoveryMethod,
+          }));
           mmkvStorageAdapter.set('orion_pair_status', JSON.stringify({ paired: true, time: Date.now() }));
           break;
         } else if (data.error) {
-          errorMessage = data.error;
+          const error = typeof data.error === 'object' ? data.error : { code: 'FAILED', message: String(data.error) };
+          errorMessage = error.message;
+          if (error.code === 'CODE_EXPIRED') setConnectionState('code-expired');
+          else if (error.code === 'LOCKED_OUT') {
+            setConnectionState('locked-out');
+            const retryAfterMs = Math.max(0, Number(error.retryAfterMs || 0));
+            if (retryAfterMs) setLockoutUntil(Date.now() + retryAfterMs);
+            updateMobileDiagnostics({
+              smartConnectPairingFailure: 'LOCKED_OUT',
+              smartConnectLockoutUntil: retryAfterMs ? Date.now() + retryAfterMs : null,
+            });
+            errorMessage = retryAfterMs
+              ? `Too many pairing attempts. Try again in ${Math.ceil(retryAfterMs / 1000)} seconds.`
+              : error.message;
+          }
+          else if (error.code === 'TOKEN_REJECTED') {
+            setConnectionState('token-rejected');
+            setPairToken(null);
+            await SecureStore.deleteItemAsync('orion_connect_token').catch(() => {});
+          } else if (error.code === 'PROTOCOL_MISMATCH') setConnectionState('protocol-mismatch');
+          else setConnectionState('failed');
+          if (error.code !== 'LOCKED_OUT') {
+            updateMobileDiagnostics({ smartConnectPairingFailure: String(error.code || 'FAILED') });
+          }
         }
       } catch (e) {}
     }
@@ -385,10 +541,39 @@ export function useConnectController() {
       setPairError('');
     } else {
       setIsConnected(false);
-      const message = errorMessage || `Could not pair with Orion Desktop at ${cleanIp}:8924. Check the code and network, then try again.`;
+      const message = errorMessage || `Could not pair with Orion Desktop at ${cleanIp}:${resolvedPort}. Check the code and network, then try again.`;
       if (/expired/i.test(message)) setPinCode('');
       setPairError(message);
     }
+  };
+  const chooseDiscoveredDesktop = (desktop: SmartConnectDiscoveryResult) => {
+    setDesktopIp(desktop.host);
+    setDesktopPort(desktop.port);
+    setDiscoveredDesktops([]);
+    setPairError('');
+    void handleConnect(desktop.host, undefined, desktop.port, desktop.discoveryMethod);
+  };
+  const runSubnetFallback = async () => {
+    setIsDiscovering(true);
+    setPairError('Scanning the local network by request…');
+    const results = await scanSmartConnectSubnet(SMART_CONNECT_PROTOCOL_VERSION).catch(() => []);
+    setIsDiscovering(false);
+    setDiscoveredDesktops(results);
+    setPairError(results.length ? 'Choose the Orion Desktop you want to pair.' : 'No compatible Orion Desktop was found on this subnet.');
+  };
+  const renameThisDevice = async (name: string) => {
+    const cleanName = name.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 80) || 'Orion Mobile';
+    setDeviceName(cleanName);
+    await SecureStore.setItemAsync('orion_connect_device_name', cleanName).catch(() => {});
+    if (!pairToken || !desktopIp) return { ok: true };
+    const response = await fetch(smartConnectHttpUrl(desktopIp, '/api/device', desktopPort), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pairToken}` },
+      body: JSON.stringify({ action: 'rename', deviceName: cleanName }),
+    }).catch(() => null);
+    const ok = Boolean(response?.ok);
+    updateMobileDiagnostics({ smartConnectLastDeviceAck: ok ? 'rename-confirmed' : 'rename-failed' });
+    return { ok };
   };
   const handlePinChange = (val: string) => {
     const clean = val.replace(/[^0-9]/g, '').slice(0, 6);
@@ -417,7 +602,7 @@ export function useConnectController() {
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 1200);
-        await fetch(smartConnectHttpUrl(ip, '/api/unpair'), {
+        await fetch(smartConnectHttpUrl(ip, '/api/unpair', desktopPort), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -472,7 +657,7 @@ export function useConnectController() {
         try {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 2500);
-          const res = await fetch(smartConnectHttpUrl(ip, '/api/command'), {
+          const res = await fetch(smartConnectHttpUrl(ip, '/api/command', desktopPort), {
             method: 'POST',
             headers,
             body: JSON.stringify({ command }),
@@ -548,6 +733,17 @@ export function useConnectController() {
     showDisconnectModal,
     showPairingModal,
     speeds,
-    volume
+    volume,
+    connectionState,
+    discoveredDesktops,
+    chooseDiscoveredDesktop,
+    discoverDesktop,
+    runSubnetFallback,
+    deviceName,
+    renameThisDevice,
+    desktopPort,
+    lockoutSeconds,
   };
 }
+
+export type ConnectController = ReturnType<typeof useConnectController>;

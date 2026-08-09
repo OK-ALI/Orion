@@ -34,6 +34,7 @@
     "@fontsource/space-grotesk": "^5.2.8",
     "@orion/shared": "*",
     "@react-three/fiber": "^9.4.0",
+    "bonjour-service": "^1.4.4",
     "chokidar": "^5.0.0",
     "gsap": "^3.15.0",
     "music-metadata": "^11.13.0",

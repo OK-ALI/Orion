@@ -13,6 +13,8 @@ export default function SmartConnectModal({ onClose }) {
   const [connected, setConnected] = useState(false);
   const [devices, setDevices] = useState([]);
   const [qrDataUrl, setQrDataUrl] = useState("");
+  const [editingDeviceId, setEditingDeviceId] = useState("");
+  const [deviceName, setDeviceName] = useState("");
 
   const applyInfo = useCallback((info) => {
     if (!info) return;
@@ -64,6 +66,20 @@ export default function SmartConnectModal({ onClose }) {
 
   const revokeDevice = async (deviceId) => {
     await window.electron?.revokeSmartConnectDevice?.(deviceId);
+    await refreshInfo();
+  };
+
+  const beginRename = (device) => {
+    setEditingDeviceId(device.deviceId);
+    setDeviceName(device.deviceName || "Orion Mobile");
+  };
+
+  const saveRename = async () => {
+    const nextName = deviceName.trim();
+    if (!editingDeviceId || !nextName) return;
+    await window.electron?.renameSmartConnectDevice?.(editingDeviceId, nextName);
+    setEditingDeviceId("");
+    setDeviceName("");
     await refreshInfo();
   };
 
@@ -229,7 +245,7 @@ export default function SmartConnectModal({ onClose }) {
                   border: "1px solid var(--border)",
                 }}
               >
-                <div style={{ minWidth: 0, textAlign: "left" }}>
+                <div style={{ minWidth: 0, flex: 1, textAlign: "left" }}>
                   <strong style={{ display: "block", color: "var(--text1)" }}>
                     <span style={{ color: device.connected ? "var(--success)" : "var(--warning)" }}>● </span>
                     {device.deviceName || "Orion Mobile"}
@@ -238,10 +254,38 @@ export default function SmartConnectModal({ onClose }) {
                     {device.connected ? "Live now" : "Offline"} · Last active{" "}
                     {device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : "recently"}
                   </span>
+                  {editingDeviceId === device.deviceId && (
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      <input
+                        autoFocus
+                        value={deviceName}
+                        maxLength={80}
+                        aria-label="Paired device name"
+                        onChange={(event) => setDeviceName(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") saveRename();
+                          if (event.key === "Escape") setEditingDeviceId("");
+                        }}
+                        style={{
+                          minWidth: 0,
+                          flex: 1,
+                          color: "var(--text1)",
+                          background: "var(--surface2)",
+                          border: "1px solid var(--border-accent)",
+                          borderRadius: 8,
+                          padding: "7px 9px",
+                        }}
+                      />
+                      <button className="btn btn-primary" onClick={saveRename}>Save</button>
+                    </div>
+                  )}
                 </div>
-                <button className="btn btn-secondary" onClick={() => revokeDevice(device.deviceId)}>
-                  Revoke
-                </button>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  {editingDeviceId !== device.deviceId && (
+                    <button className="btn btn-secondary" onClick={() => beginRename(device)}>Rename</button>
+                  )}
+                  <button className="btn btn-secondary" onClick={() => revokeDevice(device.deviceId)}>Revoke</button>
+                </div>
               </div>
             ))}
             <button

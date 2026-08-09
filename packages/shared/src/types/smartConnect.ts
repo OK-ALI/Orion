@@ -1,5 +1,79 @@
 export const SMART_CONNECT_PROTOCOL_VERSION = 2 as const;
 
+export type SmartConnectDiscoveryMethod =
+  | "saved"
+  | "nsd"
+  | "qr"
+  | "direct-ip"
+  | "subnet-fallback";
+
+export type SmartConnectConnectionStateName =
+  | "idle"
+  | "discovering"
+  | "pairing"
+  | "connected"
+  | "reconnecting"
+  | "endpoint-lost"
+  | "token-rejected"
+  | "code-expired"
+  | "locked-out"
+  | "protocol-mismatch"
+  | "failed";
+
+export interface SmartConnectDiscoveryResult {
+  instanceId: string;
+  displayName: string;
+  host: string;
+  port: number;
+  protocolVersion: number;
+  method: SmartConnectDiscoveryMethod;
+}
+
+export interface SmartConnectConnectionState {
+  state: SmartConnectConnectionStateName;
+  attempt: number;
+  nextRetryAt?: number;
+  reason?: string;
+}
+
+export type SmartConnectPairingErrorCode =
+  | "INVALID_CODE"
+  | "CODE_EXPIRED"
+  | "LOCKED_OUT"
+  | "DESKTOP_UNAVAILABLE"
+  | "PROTOCOL_MISMATCH"
+  | "TOKEN_REJECTED"
+  | "INVALID_REQUEST"
+  | "UNKNOWN";
+
+export interface SmartConnectPairingError {
+  code: SmartConnectPairingErrorCode;
+  message: string;
+  retryAfterMs?: number;
+}
+
+export interface SmartConnectTrustedEndpoint {
+  instanceId: string;
+  host: string;
+  port: number;
+  lastVerifiedAt: number;
+  method: SmartConnectDiscoveryMethod;
+}
+
+export interface SmartConnectDeviceSummary {
+  deviceId: string;
+  deviceName: string;
+  createdAt: number;
+  lastSeenAt: number;
+  connected: boolean;
+}
+
+export interface SmartConnectDeviceUpdate {
+  action: "rename" | "revoke";
+  deviceId: string;
+  deviceName?: string;
+}
+
 export type SmartConnectCommandAction =
   | "navigate_page"
   | "back"

@@ -13,6 +13,14 @@ export interface MobileDiagnosticsSnapshot {
   networkState: string;
   smartConnectState: string;
   smartConnectProtocol: number;
+  smartConnectDiscoveryMethod: string | null;
+  smartConnectDiscoveryDurationMs: number | null;
+  smartConnectNsdResultCount: number;
+  smartConnectReconnectAttempt: number;
+  smartConnectPairingFailure: string | null;
+  smartConnectLockoutRemainingMs: number | null;
+  smartConnectLastAuthenticatedAt: number | null;
+  smartConnectLastDeviceAck: string | null;
   activeSourceId: string | null;
   sourceHealth: string | null;
   playbackState: string | null;
@@ -34,6 +42,14 @@ interface DiagnosticsMutableState {
   route: string;
   networkState: string;
   smartConnectState: string;
+  smartConnectDiscoveryMethod: string | null;
+  smartConnectDiscoveryDurationMs: number | null;
+  smartConnectNsdResultCount: number;
+  smartConnectReconnectAttempt: number;
+  smartConnectPairingFailure: string | null;
+  smartConnectLockoutUntil: number | null;
+  smartConnectLastAuthenticatedAt: number | null;
+  smartConnectLastDeviceAck: string | null;
   activeSourceId: string | null;
   sourceHealth: string | null;
   playbackState: string | null;
@@ -54,6 +70,14 @@ const state: DiagnosticsMutableState = {
   route: '/',
   networkState: 'unknown',
   smartConnectState: 'disconnected',
+  smartConnectDiscoveryMethod: null,
+  smartConnectDiscoveryDurationMs: null,
+  smartConnectNsdResultCount: 0,
+  smartConnectReconnectAttempt: 0,
+  smartConnectPairingFailure: null,
+  smartConnectLockoutUntil: null,
+  smartConnectLastAuthenticatedAt: null,
+  smartConnectLastDeviceAck: null,
   activeSourceId: null,
   sourceHealth: null,
   playbackState: null,
@@ -113,6 +137,16 @@ export function getMobileDiagnosticsSnapshot(): MobileDiagnosticsSnapshot {
     networkState: state.networkState,
     smartConnectState: state.smartConnectState,
     smartConnectProtocol: SMART_CONNECT_PROTOCOL_VERSION,
+    smartConnectDiscoveryMethod: state.smartConnectDiscoveryMethod,
+    smartConnectDiscoveryDurationMs: state.smartConnectDiscoveryDurationMs,
+    smartConnectNsdResultCount: state.smartConnectNsdResultCount,
+    smartConnectReconnectAttempt: state.smartConnectReconnectAttempt,
+    smartConnectPairingFailure: state.smartConnectPairingFailure,
+    smartConnectLockoutRemainingMs: state.smartConnectLockoutUntil == null
+      ? null
+      : Math.max(0, state.smartConnectLockoutUntil - Date.now()),
+    smartConnectLastAuthenticatedAt: state.smartConnectLastAuthenticatedAt,
+    smartConnectLastDeviceAck: state.smartConnectLastDeviceAck,
     activeSourceId: state.activeSourceId,
     sourceHealth: state.sourceHealth,
     playbackState: state.playbackState,

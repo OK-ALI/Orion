@@ -4,6 +4,7 @@ module.exports = ({ ipcRenderer }) => ({
   updateSmartConnectPlayback: (data) => ipcRenderer.invoke("smart-connect:update-playback", data),
   disconnectSmartConnect: () => ipcRenderer.invoke("smart-connect:disconnect"),
   revokeSmartConnectDevice: (deviceId) => ipcRenderer.invoke("smart-connect:revoke-device", deviceId),
+  renameSmartConnectDevice: (deviceId, deviceName) => ipcRenderer.invoke("smart-connect:rename-device", deviceId, deviceName),
   acknowledgeSmartConnectCommand: (ack) => ipcRenderer.invoke("smart-connect:ack-command", ack),
   onSmartConnectStatus: (callback) => {
     const handler = (_event, data) => callback(data);

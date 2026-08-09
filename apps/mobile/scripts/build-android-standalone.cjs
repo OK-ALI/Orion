@@ -1,8 +1,15 @@
 const path = require("node:path");
+const fs = require("node:fs");
 const { spawnSync } = require("node:child_process");
 
 const androidDirectory = path.resolve(__dirname, "..", "android");
 const gradleWrapper = process.platform === "win32" ? "gradlew.bat" : "./gradlew";
+const defaultWindowsSdk = process.env.LOCALAPPDATA
+  ? path.join(process.env.LOCALAPPDATA, "Android", "Sdk")
+  : "";
+const androidSdk = process.env.ANDROID_HOME
+  || process.env.ANDROID_SDK_ROOT
+  || (defaultWindowsSdk && fs.existsSync(defaultWindowsSdk) ? defaultWindowsSdk : "");
 
 const result = spawnSync(
   gradleWrapper,
@@ -18,6 +25,7 @@ const result = spawnSync(
     env: {
       ...process.env,
       NODE_ENV: "production",
+      ...(androidSdk ? { ANDROID_HOME: androidSdk, ANDROID_SDK_ROOT: androidSdk } : {}),
     },
     shell: process.platform === "win32",
     stdio: "inherit",

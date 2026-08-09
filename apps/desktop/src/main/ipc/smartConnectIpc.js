@@ -7,6 +7,7 @@ const path = require("path");
 const { app, ipcMain, safeStorage } = require("electron");
 const { WebSocketServer } = require("ws");
 const QRCode = require("qrcode");
+const { Bonjour } = require("bonjour-service");
 const { normalizeSmartConnectCommand } = require("../../../../../packages/shared/src/smartConnectProtocol.cjs");
 
 const PORT = 8924;
@@ -26,6 +27,8 @@ let getMainWindowRef = null;
 let currentPlayback = null;
 let pairAttempts = [];
 let lockedUntil = 0;
+let bonjour = null;
+let advertisedService = null;
 const pairedSessions = new Map();
 const pendingCommands = new Map();
 const connectedSockets = new Map();
@@ -35,12 +38,79 @@ function socketIsOpen(socket) {
 }
 
 function publicDevices() {
-  return [...pairedSessions.values()].map(({ deviceId, deviceName, lastSeenAt }) => ({
+  return [...pairedSessions.values()].map(({ deviceId, deviceName, device, createdAt, lastSeenAt }) => ({
     deviceId,
-    deviceName,
+    deviceName: sanitizeDeviceName(deviceName || device),
+    createdAt: Number(createdAt || lastSeenAt || Date.now()),
     lastSeenAt,
     connected: socketIsOpen(connectedSockets.get(deviceId)),
   }));
+}
+
+function sanitizeDeviceName(value) {
+  return String(value || "Orion Mobile").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 80) || "Orion Mobile";
+}
+
+function instanceIdFile() {
+  return path.join(app.getPath("userData"), "smart-connect-instance-id");
+}
+
+function getDesktopInstanceId() {
+  try {
+    const file = instanceIdFile();
+    if (fs.existsSync(file)) {
+      const value = fs.readFileSync(file, "utf8").trim();
+      if (/^[a-f0-9-]{16,64}$/i.test(value)) return value;
+    }
+    const value = crypto.randomUUID();
+    fs.writeFileSync(file, value, { encoding: "utf8", mode: 0o600 });
+    return value;
+  } catch {
+    return crypto.createHash("sha256").update(`${app.getPath("userData")}:${os.hostname()}`).digest("hex").slice(0, 32);
+  }
+}
+
+let desktopInstanceId = "";
+
+function ensureDesktopInstanceId() {
+  if (!desktopInstanceId) desktopInstanceId = getDesktopInstanceId();
+  return desktopInstanceId;
+}
+
+function pairingError(res, status, code, message, retryAfterMs) {
+  return json(res, status, {
+    ok: false,
+    error: { code, message, ...(Number.isFinite(retryAfterMs) ? { retryAfterMs } : {}) },
+  });
+}
+
+function startServiceAdvertisement() {
+  if (bonjour || advertisedService) return;
+  try {
+    bonjour = new Bonjour({}, (error) => {
+      console.warn("[SmartConnect] NSD advertisement warning:", error?.message || error);
+    });
+    advertisedService = bonjour.publish({
+      name: `Orion Desktop (${os.hostname()})`,
+      type: "orion-connect",
+      protocol: "tcp",
+      port: PORT,
+      txt: {
+        app: "orion",
+        version: String(PROTOCOL_VERSION),
+        instanceId: ensureDesktopInstanceId(),
+      },
+    });
+  } catch (error) {
+    console.warn("[SmartConnect] Could not advertise NSD service:", error.message);
+  }
+}
+
+function stopServiceAdvertisement() {
+  try { advertisedService?.stop?.(); } catch {}
+  try { bonjour?.destroy?.(); } catch {}
+  advertisedService = null;
+  bonjour = null;
 }
 
 function createPin() {
@@ -81,7 +151,11 @@ function loadSessions() {
     const entries = JSON.parse(decoded);
     for (const [token, session] of Array.isArray(entries) ? entries : []) {
       if (token && session?.deviceId && Date.now() - Number(session.lastSeenAt || 0) < TOKEN_IDLE_TTL_MS) {
-        pairedSessions.set(token, session);
+        pairedSessions.set(token, {
+          ...session,
+          deviceName: sanitizeDeviceName(session.deviceName || session.device),
+          createdAt: Number(session.createdAt || session.lastSeenAt || Date.now()),
+        });
       }
     }
   } catch (error) {
@@ -254,6 +328,7 @@ function notifyConnectionStatus() {
 function startSmartConnectServer(getMainWindow) {
   getMainWindowRef = getMainWindow;
   if (server) return;
+  ensureDesktopInstanceId();
   ensureFreshPin();
   loadSessions();
 
@@ -270,6 +345,8 @@ function startSmartConnectServer(getMainWindow) {
         ? {
             ok: true,
             version: PROTOCOL_VERSION,
+            instanceId: desktopInstanceId,
+            displayName: `Orion Desktop (${os.hostname()})`,
             ip: getLocalIpAddress(),
             availableIps: getAllLocalIpAddresses(),
             port: PORT,
@@ -281,6 +358,8 @@ function startSmartConnectServer(getMainWindow) {
         : {
             ok: true,
             version: PROTOCOL_VERSION,
+            instanceId: desktopInstanceId,
+            displayName: `Orion Desktop (${os.hostname()})`,
             ip: getLocalIpAddress(),
             availableIps: getAllLocalIpAddresses(),
             port: PORT,
@@ -294,19 +373,30 @@ function startSmartConnectServer(getMainWindow) {
         const data = await readJson(req);
         const now = Date.now();
         pairAttempts = pairAttempts.filter((time) => now - time < ATTEMPT_WINDOW_MS);
-        if (now < lockedUntil) return json(res, 429, { ok: false, error: "Pairing is temporarily locked. Try again shortly." });
         const existingToken = String(data.token || "");
         const existing = authenticate(existingToken);
+        if (!existing && now < lockedUntil) {
+          return pairingError(res, 429, "LOCKED_OUT", "Pairing is temporarily locked. Try again shortly.", lockedUntil - now);
+        }
+        const codeExpired = !currentPin || now >= pinExpiresAt;
         ensureFreshPin();
         if (!existing && (String(data.pin || "") !== currentPin || now >= pinExpiresAt)) {
           pairAttempts.push(now);
-          if (pairAttempts.length >= MAX_PAIR_ATTEMPTS) lockedUntil = now + LOCKOUT_MS;
-          return json(res, 401, { ok: false, error: "Invalid or expired six-digit pairing code." });
+          if (pairAttempts.length >= MAX_PAIR_ATTEMPTS) {
+            lockedUntil = now + LOCKOUT_MS;
+            return pairingError(res, 429, "LOCKED_OUT", "Pairing is temporarily locked. Try again shortly.", LOCKOUT_MS);
+          }
+          return pairingError(
+            res,
+            401,
+            codeExpired ? "CODE_EXPIRED" : "INVALID_CODE",
+            codeExpired ? "The six-digit pairing code expired. Generate a new code on Orion Desktop." : "The six-digit pairing code is invalid.",
+          );
         }
         const token = existingToken && existing ? existingToken : crypto.randomBytes(32).toString("hex");
         const session = existing || {
           deviceId: String(data.deviceId || crypto.randomUUID()),
-          deviceName: String(data.deviceName || data.device || "Orion Mobile").slice(0, 80),
+          deviceName: sanitizeDeviceName(data.deviceName || data.device),
           createdAt: now,
           lastSeenAt: now,
         };
@@ -324,6 +414,7 @@ function startSmartConnectServer(getMainWindow) {
         return json(res, 200, {
           ok: true,
           version: PROTOCOL_VERSION,
+          instanceId: desktopInstanceId,
           paired: true,
           token,
           deviceId: session.deviceId,
@@ -331,7 +422,34 @@ function startSmartConnectServer(getMainWindow) {
           socketUrl: `ws://${getLocalIpAddress()}:${PORT}/api/socket`,
         });
       } catch (error) {
-        return json(res, 400, { ok: false, error: error.message });
+        return pairingError(res, 400, "INVALID_REQUEST", error.message);
+      }
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/device") {
+      try {
+        const body = await readJson(req);
+        const token = getBearer(req, body);
+        const session = authenticate(token);
+        if (!session) return pairingError(res, 401, "TOKEN_REJECTED", "The remembered pairing is no longer authorized.");
+        const action = String(body.action || "rename");
+        if (action === "rename") {
+          session.deviceName = sanitizeDeviceName(body.deviceName);
+          saveSessions();
+          notifyConnectionStatus();
+          return json(res, 200, { ok: true, device: publicDevices().find((item) => item.deviceId === session.deviceId) });
+        }
+        if (action === "revoke") {
+          pairedSessions.delete(token);
+          connectedSockets.get(session.deviceId)?.close();
+          connectedSockets.delete(session.deviceId);
+          saveSessions();
+          notifyConnectionStatus();
+          return json(res, 200, { ok: true });
+        }
+        return pairingError(res, 400, "INVALID_REQUEST", "Unsupported device update action.");
+      } catch (error) {
+        return pairingError(res, 400, "INVALID_REQUEST", error.message);
       }
     }
 
@@ -370,8 +488,10 @@ function startSmartConnectServer(getMainWindow) {
   configureSockets();
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`[SmartConnect] v${PROTOCOL_VERSION} listening at http://${getLocalIpAddress()}:${PORT}`);
+    startServiceAdvertisement();
   });
   server.on("error", (error) => console.error("[SmartConnect] Server error:", error.message));
+  app.once("before-quit", stopServiceAdvertisement);
 }
 
 ipcMain.handle("smart-connect:get-info", async () => {
@@ -386,6 +506,7 @@ ipcMain.handle("smart-connect:get-info", async () => {
   return {
     ok: true,
     version: PROTOCOL_VERSION,
+    instanceId: desktopInstanceId,
     ip,
     availableIps: getAllLocalIpAddresses(),
     port: PORT,
@@ -445,6 +566,17 @@ ipcMain.handle("smart-connect:revoke-device", (_, deviceId) => {
   if (removed) saveSessions();
   notifyConnectionStatus();
   return { ok: removed, devices: [...pairedSessions.values()] };
+});
+
+ipcMain.handle("smart-connect:rename-device", (_, deviceId, deviceName) => {
+  const target = String(deviceId || "");
+  if (!target) return { ok: false, error: "A paired device ID is required." };
+  const session = [...pairedSessions.values()].find((item) => item.deviceId === target);
+  if (!session) return { ok: false, error: "The paired device was not found." };
+  session.deviceName = sanitizeDeviceName(deviceName);
+  saveSessions();
+  notifyConnectionStatus();
+  return { ok: true, device: publicDevices().find((item) => item.deviceId === target) };
 });
 
 ipcMain.handle("smart-connect:disconnect", () => {
