@@ -10,7 +10,7 @@ const {
 } = require("../../../packages/shared/src/smartConnectProtocol.cjs");
 
 test("Smart Connect protocol stays versioned", () => {
-  assert.equal(SMART_CONNECT_PROTOCOL_VERSION, 2);
+  assert.equal(SMART_CONNECT_PROTOCOL_VERSION, 3);
 });
 
 test("pointer ratios are finite and clamped", () => {

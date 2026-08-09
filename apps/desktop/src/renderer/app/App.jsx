@@ -38,6 +38,7 @@ import {
 import { getMiniPlayerBounds } from "../shared/utils/miniPlayerGeometry";
 import { useSystemIntegration } from "./hooks/useSystemIntegration";
 import { useSmartConnectRemoteCommands } from "./hooks/useSmartConnectRemoteCommands";
+import { useSmartConnectTelemetry } from "./hooks/useSmartConnectTelemetry";
 import useNetworkStatus from "../shared/hooks/useNetworkStatus";
 
 const WHATS_NEW_EDITION = "orion-x-music-planet";
@@ -555,23 +556,7 @@ export default function App() {
     }
   }, []);
 
-  // Sync Live Playback Status to Smart Connect
-  useEffect(() => {
-    if (window.electron?.updateSmartConnectPlayback) {
-      window.electron.updateSmartConnectPlayback(
-        playbackSession
-          ? {
-              title: playbackSession.title || playbackSession.item?.name || playbackSession.item?.title || "Now Playing",
-              mediaType: playbackSession.mediaType || (playbackSession.item?.first_air_date ? "TV Series" : "Movie"),
-              currentTime: playbackSession.playbackState?.currentTime || 0,
-              duration: playbackSession.playbackState?.duration || 0,
-              paused: Boolean(playbackSession.playbackState?.paused),
-              posterPath: playbackSession.posterPath || playbackSession.item?.poster_path || null,
-            }
-          : null
-      );
-    }
-  }, [playbackSession]);
+  useSmartConnectTelemetry({ page, playbackSession });
 
   // ── Smart Connect Remote Commands ─────────────────────────────────────────
   useSmartConnectRemoteCommands({

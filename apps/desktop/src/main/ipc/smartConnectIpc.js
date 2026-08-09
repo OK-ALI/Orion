@@ -8,10 +8,10 @@ const { app, ipcMain, safeStorage } = require("electron");
 const { WebSocketServer } = require("ws");
 const QRCode = require("qrcode");
 const { Bonjour } = require("bonjour-service");
-const { normalizeSmartConnectCommand } = require("../../../../../packages/shared/src/smartConnectProtocol.cjs");
+const { SMART_CONNECT_PROTOCOL_VERSION, normalizeSmartConnectCommand, normalizePlaybackTelemetry } = require("../../../../../packages/shared/src/smartConnectProtocol.cjs");
 
 const PORT = 8924;
-const PROTOCOL_VERSION = 2;
+const PROTOCOL_VERSION = SMART_CONNECT_PROTOCOL_VERSION;
 const PIN_TTL_MS = 5 * 60 * 1000;
 const TOKEN_IDLE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const COMMAND_TIMEOUT_MS = 1800;
@@ -27,6 +27,8 @@ let currentPin = "";
 let pinExpiresAt = 0;
 let getMainWindowRef = null;
 let currentPlayback = null;
+let currentContext = null;
+let telemetrySequence = 0;
 let pairAttempts = [];
 let lockedUntil = 0;
 let bonjour = null;
@@ -327,7 +329,9 @@ function configureSockets() {
     if (previousSocket && previousSocket !== socket) previousSocket.close();
     connectedSockets.set(session.deviceId, socket);
     session.lastSeenAt = Date.now();
-    sendSocket(socket, "status", session.deviceId, { connected: true, playback: currentPlayback });
+    sendSocket(socket, "status", session.deviceId, { connected: true });
+    if (currentContext) sendSocket(socket, "context", session.deviceId, currentContext);
+    if (currentPlayback) sendSocket(socket, "telemetry", session.deviceId, currentPlayback);
     notifyConnectionStatus();
     socket.on("message", async (raw) => {
       try {
@@ -601,11 +605,23 @@ ipcMain.handle("smart-connect:set-pin", (_, pin) => {
 });
 
 ipcMain.handle("smart-connect:update-playback", (_, data) => {
-  currentPlayback = data || null;
+  currentPlayback = data ? normalizePlaybackTelemetry(data, telemetrySequence) : null;
+  telemetrySequence = currentPlayback?.sequence || telemetrySequence;
   for (const [deviceId, socket] of connectedSockets) {
-    sendSocket(socket, "status", deviceId, { connected: true, playback: currentPlayback });
+    sendSocket(socket, "telemetry", deviceId, currentPlayback);
   }
   return { ok: true };
+});
+
+ipcMain.handle("smart-connect:update-telemetry", (_, data) => {
+  currentContext = data?.context && typeof data.context === "object" ? data.context : currentContext;
+  currentPlayback = data?.telemetry ? normalizePlaybackTelemetry(data.telemetry, telemetrySequence) : null;
+  telemetrySequence = currentPlayback?.sequence || telemetrySequence;
+  for (const [deviceId, socket] of connectedSockets) {
+    if (currentContext) sendSocket(socket, "context", deviceId, currentContext);
+    sendSocket(socket, "telemetry", deviceId, currentPlayback);
+  }
+  return { ok: true, connected: connectedSockets.size > 0 };
 });
 
 ipcMain.handle("smart-connect:ack-command", (_, ack) => {
@@ -620,6 +636,7 @@ ipcMain.handle("smart-connect:ack-command", (_, ack) => {
     appliedAt: Date.now(),
     error: ack.error || undefined,
     pointer: ack.pointer || undefined,
+    authoritativeTelemetry: currentPlayback || undefined,
   });
   return { ok: true };
 });

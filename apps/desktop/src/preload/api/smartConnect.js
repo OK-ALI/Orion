@@ -2,6 +2,7 @@ module.exports = ({ ipcRenderer }) => ({
   getSmartConnectInfo: () => ipcRenderer.invoke("smart-connect:get-info"),
   setSmartConnectPin: (pin) => ipcRenderer.invoke("smart-connect:set-pin", pin),
   updateSmartConnectPlayback: (data) => ipcRenderer.invoke("smart-connect:update-playback", data),
+  updateSmartConnectTelemetry: (data) => ipcRenderer.invoke("smart-connect:update-telemetry", data),
   disconnectSmartConnect: () => ipcRenderer.invoke("smart-connect:disconnect"),
   revokeSmartConnectDevice: (deviceId) => ipcRenderer.invoke("smart-connect:revoke-device", deviceId),
   renameSmartConnectDevice: (deviceId, deviceName) => ipcRenderer.invoke("smart-connect:rename-device", deviceId, deviceName),

@@ -6,6 +6,10 @@ export interface SmartConnectPlaybackStatus {
   duration: number;
   paused: boolean;
   hasMedia: boolean;
+  state?: string;
+  canSeek?: boolean;
+  observedAt?: number;
+  bufferedTime?: number;
 }
 
 export const IDLE_CONNECT_STATUS: SmartConnectPlaybackStatus = {
@@ -29,4 +33,3 @@ export function formatConnectTime(seconds: number): string {
   }
   return `${minutes}:${remainder < 10 ? '0' : ''}${remainder}`;
 }
-

@@ -1,4 +1,84 @@
-export const SMART_CONNECT_PROTOCOL_VERSION = 2 as const;
+export const SMART_CONNECT_PROTOCOL_VERSION = 3 as const;
+
+export type RemoteFocusedRole =
+  | "none" | "button" | "link" | "text-input" | "search"
+  | "media-control" | "protected-input";
+
+export interface RemotePlaybackCapabilities {
+  canPlayPause: boolean;
+  canSeek: boolean;
+  canSetVolume: boolean;
+  canSetSpeed: boolean;
+  canToggleSubtitles: boolean;
+  canToggleFullscreen: boolean;
+  canTogglePip: boolean;
+  canNavigate: boolean;
+}
+
+export interface RemoteUiContextV1 {
+  version: 1;
+  route: string;
+  surface: "browse" | "embedded-player" | "local-player" | "mini-player" | "popout" | "music" | "unknown";
+  focusedRole: RemoteFocusedRole;
+  canType: boolean;
+  playbackOwner: "cinema" | "local-video" | "music" | "none";
+  fullscreen: boolean;
+  miniPlayer: boolean;
+  popout: boolean;
+  capabilities: RemotePlaybackCapabilities;
+  observedAt: number;
+}
+
+export interface SmartConnectPlaybackTelemetryV1 {
+  version: 1;
+  sessionId: string;
+  sequence: number;
+  title: string;
+  mediaId: string | null;
+  playbackKind: "cinema" | "local-video" | "music" | "none";
+  currentTime: number | null;
+  duration: number | null;
+  bufferedTime: number | null;
+  state: "playing" | "paused" | "buffering" | "ended" | "unobservable" | "idle";
+  volume: number;
+  muted: boolean;
+  speed: number;
+  canSeek: boolean;
+  evidence: string;
+  observedAt: number;
+}
+
+export interface SmartConnectTelemetryFreshness { ageMs: number; fresh: boolean }
+export interface SmartConnectLatencySnapshot {
+  latestRttMs: number | null;
+  medianRttMs: number | null;
+  p95RttMs: number | null;
+  telemetryAgeMs: number | null;
+  reconnectDurationMs: number | null;
+}
+
+export interface SmartConnectSecureIdentity {
+  instanceId: string;
+  certificateFingerprint: string;
+  signingAlgorithm: "ECDSA_P256_SHA256";
+  createdAt: number;
+}
+export interface SmartConnectVerificationPhrase { words: [string, string, string, string]; expiresAt: number }
+export interface SmartConnectPairingTranscript {
+  pairingId: string; desktopInstanceId: string; deviceId: string;
+  certificateFingerprint: string; phrase: SmartConnectVerificationPhrase;
+  desktopConfirmed: boolean; mobileConfirmed: boolean;
+}
+export interface SmartConnectSocketTicket { ticketId: string; deviceId: string; expiresAt: number }
+export interface SmartConnectProtocolV3Envelope<T = unknown> {
+  version: 3; type: "command" | "ack" | "context" | "telemetry" | "heartbeat" | "error";
+  deviceId: string; connectionId: string; sequence: number; commandId?: string; payload: T;
+}
+export interface SmartConnectReplayWindow { lastSequence: number; rememberedCommandIds: string[]; updatedAt: number }
+export interface SmartConnectNetworkPolicy {
+  privateLanOnly: true; publicNetworkAllowedUntil: number | null; maxConnections: number;
+  commandRatePerSecond: number;
+}
 
 export type SmartConnectDiscoveryMethod =
   | "saved"
@@ -106,7 +186,8 @@ export type SmartConnectCommandAction =
   | "send_text"
   | "constellation_search"
   | "cursor_move"
-  | "cursor_click";
+  | "cursor_click"
+  | "scroll";
 
 export interface SmartConnectPointerState {
   x: number;
@@ -124,7 +205,7 @@ export interface SmartConnectRemoteCommand {
 
 export interface SmartConnectEnvelope<T = unknown> {
   version: typeof SMART_CONNECT_PROTOCOL_VERSION;
-  type: "command" | "ack" | "status" | "heartbeat" | "error";
+  type: "command" | "ack" | "status" | "context" | "telemetry" | "heartbeat" | "error";
   deviceId: string;
   payload: T;
 }
@@ -136,6 +217,7 @@ export interface SmartConnectCommandAck {
   appliedAt: number;
   error?: string;
   pointer?: SmartConnectPointerState;
+  authoritativeTelemetry?: SmartConnectPlaybackTelemetryV1;
 }
 
 export interface SmartConnectPairingSession {

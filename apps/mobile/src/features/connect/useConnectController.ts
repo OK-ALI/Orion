@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Animated, AppState, PanResponder, Platform, TextInput } from "react-native";
+import { Animated, AppState, Platform, TextInput } from "react-native";
 import { useCameraPermissions } from "expo-camera";
 import * as SecureStore from "expo-secure-store";
 import { mmkvStorageAdapter } from "../../services/storageAdapter";
-import { SMART_CONNECT_PROTOCOL_VERSION } from "@orion/shared/types";
+import { SMART_CONNECT_PROTOCOL_VERSION, type SmartConnectPlaybackTelemetryV1 } from "@orion/shared/types";
 import {
   discoverSmartConnectDesktops,
   inspectSmartConnectEndpoint,
@@ -18,6 +18,8 @@ import { normalizeDesktopAddress, parsePairingPayload } from "./pairingControlle
 import { smartConnectHttpUrl, smartConnectSocketUrl } from "./sessionTransport";
 import { clearPairingGuard, writePairingGuard } from './pairingGuardStore';
 import { usePairingGuardState } from './usePairingGuardState';
+import { useLiveTelemetry } from './useLiveTelemetry';
+import { useRemotePointer } from './useRemotePointer';
 export function useConnectController() {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -45,13 +47,23 @@ export function useConnectController() {
   );
   const sequenceRef = useRef(0);
   const pendingAcks = useRef(new Map<string, { resolve: (value: any) => void; timer: ReturnType<typeof setTimeout> }>());
-  const gestureStart = useRef({ x: 0.5, y: 0.5 });
-  const lastPointerSentAt = useRef(0);
   const [showPairingModal, setShowPairingModal] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [pairingMethod, setPairingMethod] = useState<'pin' | 'qr' | 'ip'>('pin');
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [hasScanned, setHasScanned] = useState(false);
+  const [nowPlaying, setNowPlaying] = useState(IDLE_CONNECT_STATUS);
+  const {
+    latency,
+    remoteContext,
+    setRemoteContext,
+    telemetry,
+    ingestTelemetry,
+    isScrubbing,
+    setIsScrubbing,
+    markSent,
+    recordAck,
+  } = useLiveTelemetry(setNowPlaying);
   useEffect(() => {
     connectionRef.current = { connected: isConnected, ip: desktopIp, port: desktopPort, token: pairToken, deviceId };
     updateMobileDiagnostics({
@@ -110,35 +122,7 @@ export function useConnectController() {
   const [activeTab, setActiveTab] = useState<'touchpad' | 'dpad' | 'playback' | 'keyboard'>('touchpad');
   const [navFocusMode, setNavFocusMode] = useState<'sidebar' | 'content'>('sidebar');
   const [searchTarget, setSearchTarget] = useState<'cinema' | 'constellation'>('cinema');
-  const cursorRef = useRef({ xRatio: 0.5, yRatio: 0.5 });
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        gestureStart.current = { x: cursorRef.current.xRatio, y: cursorRef.current.yRatio };
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        const sensitivity = 0.0015;
-        let newX = gestureStart.current.x + gestureState.dx * sensitivity;
-        let newY = gestureStart.current.y + gestureState.dy * sensitivity;
-        newX = Math.max(0, Math.min(1, newX));
-        newY = Math.max(0, Math.min(1, newY));
-        cursorRef.current.xRatio = newX;
-        cursorRef.current.yRatio = newY;
-        const now = Date.now();
-        if (now - lastPointerSentAt.current >= 33) {
-          lastPointerSentAt.current = now;
-          void sendCommandRef.current('cursor_move', { x: newX, y: newY });
-        }
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        if (Math.abs(gestureState.dx) < 5 && Math.abs(gestureState.dy) < 5) {
-          void sendCommandRef.current('cursor_click');
-        }
-      },
-    })
-  ).current;
+  const { cursorRef, panResponder } = useRemotePointer(sendCommandRef);
   const connectSocket = (ip: string, token: string, activeDeviceId: string, port = desktopPort) => {
     if (!ip || !token || !activeDeviceId) return;
     if (reconnectTimerRef.current) {
@@ -162,6 +146,15 @@ export function useConnectController() {
             clearTimeout(pending.timer);
             pendingAcks.current.delete(envelope.payload.id);
             pending.resolve(envelope.payload);
+          }
+          if (envelope.payload?.id) recordAck(envelope.payload.id);
+        }
+        if (envelope.type === 'context') setRemoteContext(envelope.payload || null);
+        if (envelope.type === 'telemetry') {
+          const p = envelope.payload as SmartConnectPlaybackTelemetryV1 | null;
+          ingestTelemetry(p);
+          if (p) {
+            setIsPlaying(p.state === 'playing'); setVolume(Math.round((p.volume ?? 1) * 100)); setIsMuted(Boolean(p.muted));
           }
         }
         if (envelope.type === 'status') {
@@ -288,7 +281,6 @@ export function useConnectController() {
   const [currentSpeedIndex, setCurrentSpeedIndex] = useState(0);
   const speeds = ['1.0x', '1.25x', '1.5x', '2.0x'];
   const [remoteText, setRemoteText] = useState('');
-  const [nowPlaying, setNowPlaying] = useState(IDLE_CONNECT_STATUS);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const scanLineAnim = useRef(new Animated.Value(0)).current;
   const formatTime = formatConnectTime;
@@ -680,6 +672,7 @@ export function useConnectController() {
     let ack: any = null;
     const socketWasOpen = socketRef.current?.readyState === WebSocket.OPEN;
     if (socketWasOpen) {
+      markSent(id);
       ack = await new Promise((resolve) => {
         const timer = setTimeout(() => {
           pendingAcks.current.delete(id);
@@ -723,10 +716,7 @@ export function useConnectController() {
     }
     if (ack?.ok) {
       setRemoteError('');
-      if (cmd === 'toggle_play') setIsPlaying((value) => !value);
-      if (cmd === 'volume_up') setVolume((value) => Math.min(100, value + 5));
-      if (cmd === 'volume_down') setVolume((value) => Math.max(0, value - 5));
-      if (cmd === 'toggle_mute') setIsMuted((value) => !value);
+      if (ack.authoritativeTelemetry) ingestTelemetry(ack.authoritativeTelemetry);
       if (cmd === 'cursor_move' && ack.pointer) {
         cursorRef.current = { xRatio: ack.pointer.x, yRatio: ack.pointer.y };
       }
@@ -793,6 +783,11 @@ export function useConnectController() {
     lockoutSeconds,
     attemptsRemaining,
     prepareDirectIp,
+    remoteContext,
+    telemetry,
+    latency,
+    isScrubbing,
+    setIsScrubbing,
   };
 }
 
