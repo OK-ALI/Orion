@@ -107,6 +107,7 @@ export interface SmartConnectDiscoveryResult {
   port: number;
   protocolVersion: number;
   method: SmartConnectDiscoveryMethod;
+  certificateFingerprint: string;
 }
 
 export interface SmartConnectConnectionState {
@@ -187,7 +188,9 @@ export type SmartConnectCommandAction =
   | "constellation_search"
   | "cursor_move"
   | "cursor_click"
-  | "scroll";
+  | "scroll"
+  | "smart_connect_rename"
+  | "smart_connect_unpair";
 
 export interface SmartConnectPointerState {
   x: number;
@@ -223,7 +226,10 @@ export interface SmartConnectCommandAck {
 export interface SmartConnectPairingSession {
   deviceId: string;
   deviceName: string;
-  token: string;
+  protocolVersion: 3;
+  desktopInstanceId: string;
+  certificateFingerprint: string;
+  deviceKeyAlias: string;
   createdAt: number;
   lastSeenAt: number;
 }

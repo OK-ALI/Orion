@@ -57,7 +57,7 @@ function withNsdSources(config) {
       ...PACKAGE_PATH,
     );
     fs.mkdirSync(packageRoot, { recursive: true });
-    for (const name of ['OrionNsdModule.kt', 'OrionNsdPackage.kt']) {
+    for (const name of ['OrionNsdModule.kt', 'OrionNsdPackage.kt', 'OrionSecureConnectModule.kt']) {
       fs.copyFileSync(path.join(NATIVE_SOURCE, name), path.join(packageRoot, name));
     }
     return nextConfig;
@@ -70,4 +70,3 @@ module.exports = function withOrionNsd(config) {
   config = withNsdSources(config);
   return config;
 };
-

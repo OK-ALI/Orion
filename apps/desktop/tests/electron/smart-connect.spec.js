@@ -1,7 +1,37 @@
 const path = require("path");
 const os = require("os");
+const crypto = require("crypto");
+const https = require("https");
 const { WebSocket } = require("ws");
 const { test, expect, _electron: electron } = require("@playwright/test");
+
+function secureJson(baseUrl, pathname, body, attempts = 20) {
+  return new Promise((resolve, reject) => {
+    const payload = Buffer.from(JSON.stringify(body || {}));
+    const request = https.request(`${baseUrl}${pathname}`, {
+      method: "POST",
+      rejectUnauthorized: false,
+      headers: { "Content-Type": "application/json", "Content-Length": payload.length },
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => resolve({
+        ok: response.statusCode >= 200 && response.statusCode < 300,
+        status: response.statusCode,
+        value: JSON.parse(Buffer.concat(chunks).toString("utf8")),
+      }));
+    });
+    request.once("error", (error) => {
+      if (attempts > 1 && error.code === "ECONNREFUSED") {
+        setTimeout(() => secureJson(baseUrl, pathname, body, attempts - 1).then(resolve, reject), 250);
+        return;
+      }
+      reject(error);
+    });
+    request.setTimeout(5_000, () => request.destroy(new Error(`Timed out requesting ${pathname}`)));
+    request.end(payload);
+  });
+}
 
 function waitForEnvelope(socket, predicate, timeoutMs = 4_000) {
   return new Promise((resolve, reject) => {
@@ -21,6 +51,7 @@ function waitForEnvelope(socket, predicate, timeoutMs = 4_000) {
 }
 
 test("Smart Connect reports live transport and applies pointer commands", async ({}, testInfo) => {
+  test.setTimeout(90_000);
   const userDataDir = path.join(
     os.tmpdir(),
     `orion-smart-connect-${process.pid}-${testInfo.workerIndex}-${Date.now()}`,
@@ -30,6 +61,7 @@ test("Smart Connect reports live transport and applies pointer commands", async 
       path.join(__dirname, "../.."),
       `--user-data-dir=${userDataDir}`,
       "--disable-gpu",
+      "--orion-electron-test",
     ],
   });
   await app.evaluate(({ app }) => {
@@ -54,23 +86,52 @@ test("Smart Connect reports live transport and applies pointer commands", async 
     const continueCinema = page.getByRole("button", { name: "Continue to Cinema" });
     if (await continueCinema.count()) await continueCinema.click();
 
-    const info = await page.evaluate(() => window.electron.getSmartConnectInfo());
+    let info = await page.evaluate(() => window.electron.getSmartConnectInfo());
     expect(info.connected).toBe(false);
+    if (!info.networkPolicy?.allowed) {
+      await page.evaluate(() => window.electron.allowSmartConnectPublicNetwork());
+      info = await page.evaluate(() => window.electron.getSmartConnectInfo());
+      expect(info.networkPolicy.allowed).toBe(true);
+    }
 
-    const pairResponse = await fetch("http://127.0.0.1:8924/api/pair", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        pin: info.pin,
-        deviceId: "electron-test-mobile",
-        deviceName: "Test Mobile",
-      }),
+    const baseUrl = `https://${info.ip}:${info.port}`;
+    const { publicKey, privateKey } = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const publicKeyBase64 = publicKey.export({ type: "spki", format: "der" }).toString("base64");
+    const pairResponse = await secureJson(baseUrl, "/api/pair/start", {
+      pin: info.pin,
+      deviceId: "electron-test-mobile",
+      deviceName: "Test Mobile",
+      publicKey: publicKeyBase64,
     });
-    const paired = await pairResponse.json();
     expect(pairResponse.ok).toBe(true);
-    expect(paired.token).toBeTruthy();
+    const pairingId = pairResponse.value.transcript.pairingId;
+    const desktopConfirmation = await page.evaluate(() => window.electron.confirmSmartConnectPairing());
+    expect(desktopConfirmation.ok).toBe(true);
+    const mobileConfirmation = await secureJson(baseUrl, "/api/pair/confirm", {
+      pairingId,
+      deviceId: "electron-test-mobile",
+    });
+    expect(mobileConfirmation.value.paired).toBe(true);
 
-    socket = new WebSocket(`ws://127.0.0.1:8924/api/socket?token=${paired.token}`);
+    const challengeResponse = await secureJson(baseUrl, "/api/auth/challenge", {
+      deviceId: "electron-test-mobile",
+    });
+    expect(challengeResponse.ok).toBe(true);
+    const signature = crypto.sign(
+      "sha256",
+      Buffer.from(challengeResponse.value.nonce),
+      privateKey,
+    ).toString("base64");
+    const ticketResponse = await secureJson(baseUrl, "/api/auth/ticket", {
+      deviceId: "electron-test-mobile",
+      signature,
+    });
+    expect(ticketResponse.ok).toBe(true);
+
+    socket = new WebSocket(baseUrl.replace("https:", "wss:") + "/api/socket", {
+      rejectUnauthorized: false,
+      headers: { "X-Orion-Ticket": ticketResponse.value.ticket.ticketId },
+    });
     await new Promise((resolve, reject) => {
       socket.once("open", resolve);
       socket.once("error", reject);
@@ -83,9 +144,12 @@ test("Smart Connect reports live transport and applies pointer commands", async 
 
     const commandId = "pointer-test-1";
     socket.send(JSON.stringify({
-      version: 2,
+      version: 3,
       type: "command",
       deviceId: "electron-test-mobile",
+      connectionId: ticketResponse.value.connectionId,
+      sequence: 1,
+      commandId,
       payload: {
         id: commandId,
         sequence: 1,
@@ -116,9 +180,12 @@ test("Smart Connect reports live transport and applies pointer commands", async 
 
     const restoreCommandId = "pointer-test-2";
     socket.send(JSON.stringify({
-      version: 2,
+      version: 3,
       type: "command",
       deviceId: "electron-test-mobile",
+      connectionId: ticketResponse.value.connectionId,
+      sequence: 2,
+      commandId: restoreCommandId,
       payload: {
         id: restoreCommandId,
         sequence: 2,

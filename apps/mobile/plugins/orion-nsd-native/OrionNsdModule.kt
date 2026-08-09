@@ -91,6 +91,7 @@ class OrionNsdModule(private val context: ReactApplicationContext) : ReactContex
       map.putString("host", host)
       map.putInt("port", info.port)
       map.putInt("protocolVersion", attribute(info, "version")?.toIntOrNull() ?: 0)
+      map.putString("certificateFingerprint", attribute(info, "fingerprint") ?: "")
       items.pushMap(map)
     }
     stopInternal(false)
@@ -125,4 +126,3 @@ class OrionNsdModule(private val context: ReactApplicationContext) : ReactContex
     }
   }
 }
-

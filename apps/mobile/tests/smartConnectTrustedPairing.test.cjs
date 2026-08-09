@@ -91,7 +91,7 @@ test("pairing failures expose and persist remaining attempts and lockout", () =>
   assert.match(modal, /Pairing unlocks automatically in/);
 });
 
-test("Desktop advertises only non-sensitive identity and supports structured pairing/device management", () => {
+test("Desktop advertises only non-sensitive identity and keeps device management on authenticated protocol v3", () => {
   const desktop = readRepo("apps/desktop/src/main/ipc/smartConnectIpc.js");
   const advertisement = desktop.slice(
     desktop.indexOf("advertisedService = bonjour.publish"),
@@ -103,9 +103,10 @@ test("Desktop advertises only non-sensitive identity and supports structured pai
   assert.doesNotMatch(advertisement, /\b(?:pin|token|playback|user)\s*:/i);
   assert.match(desktop, /"LOCKED_OUT"/);
   assert.match(desktop, /"CODE_EXPIRED"/);
-  assert.match(desktop, /url\.pathname === "\/api\/device"/);
-  assert.match(desktop, /action === "rename"/);
-  assert.match(desktop, /action === "revoke"/);
+  assert.match(desktop, /\["\/api\/pair", "\/api\/device", "\/api\/command", "\/api\/unpair"\]\.includes/);
+  assert.match(desktop, /envelope\.payload\?\.action === "smart_connect_rename"/);
+  assert.match(desktop, /envelope\.payload\?\.action === "smart_connect_unpair"/);
+  assert.match(desktop, /secureSession\(deviceId\)/);
 });
 
 test("Smart Connect diagnostics stay redacted", () => {
@@ -115,4 +116,33 @@ test("Smart Connect diagnostics stay redacted", () => {
   assert.match(diagnostics, /smartConnectPairingFailure/);
   assert.match(diagnostics, /smartConnectLastDeviceAck/);
   assert.doesNotMatch(diagnostics, /pairToken|pinCode|socketUrl|qrPayload/);
+});
+
+test("protocol v3 uses pinned native TLS, Keystore identity, and no bearer URL", () => {
+  const nativeModule = readMobile("plugins/orion-nsd-native/OrionSecureConnectModule.kt");
+  const secureClient = readMobile("src/features/connect/secureConnectClient.ts");
+  const transport = readMobile("src/features/connect/sessionTransport.ts");
+  const controller = readMobile("src/features/connect/useConnectController.ts");
+  assert.match(nativeModule, /AndroidKeyStore/);
+  assert.match(nativeModule, /SHA256withECDSA/);
+  assert.match(nativeModule, /certificateFingerprint/);
+  assert.match(nativeModule, /X-Orion-Ticket/);
+  assert.match(nativeModule, /wss:\/\//);
+  assert.doesNotMatch(nativeModule, /[?&]token=/i);
+  assert.match(secureClient, /certificateFingerprint/);
+  assert.match(secureClient, /pairingId/);
+  assert.match(controller, /SMART_CONNECT_PROTOCOL_VERSION/);
+  assert.doesNotMatch(transport, /http:\/\/.+api\/command/);
+});
+
+test("Desktop enforces protocol-v3 origin, network, replay, and rate policies", () => {
+  const desktop = readRepo("apps/desktop/src/main/ipc/smartConnectIpc.js");
+  const trust = readRepo("apps/desktop/src/main/smartConnect/secureTrust.js");
+  assert.match(desktop, /ALLOWED_REMOTE_ORIGIN/);
+  assert.match(desktop, /COMMAND_RATE_LIMITED/);
+  assert.match(desktop, /connectedSockets\.size >= policy\.maxConnections/);
+  assert.match(desktop, /!policy\.allowed/);
+  assert.match(trust, /deviceCommandIds/);
+  assert.match(trust, /DUPLICATE_COMMAND/);
+  assert.match(trust, /publicNetworkAllowedUntil/);
 });

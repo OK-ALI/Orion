@@ -6,6 +6,7 @@ export interface NativeSmartConnectService {
   host: string;
   port: number;
   protocolVersion: number;
+  certificateFingerprint: string;
 }
 
 interface NativeDiscoveryResponse {

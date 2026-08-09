@@ -562,6 +562,7 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
     marginBottom: 20,
     paddingVertical: 8,
     position: 'relative',
+    paddingHorizontal: spacing[1],
   },
   keyboardRecoveryBtn: {
     minHeight: 44,

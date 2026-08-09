@@ -1,5 +1,5 @@
-// Orion Smart Connect v2 — authenticated local remote-control transport.
-const http = require("http");
+// Orion Smart Connect v3 - encrypted, device-bound local remote-control transport.
+const https = require("https");
 const os = require("os");
 const crypto = require("crypto");
 const fs = require("fs");
@@ -9,6 +9,8 @@ const { WebSocketServer } = require("ws");
 const QRCode = require("qrcode");
 const { Bonjour } = require("bonjour-service");
 const { SMART_CONNECT_PROTOCOL_VERSION, normalizeSmartConnectCommand, normalizePlaybackTelemetry } = require("../../../../../packages/shared/src/smartConnectProtocol.cjs");
+const { loadOrCreateSecureIdentity, signChallenge, verifyDeviceSignature } = require("../smartConnect/secureIdentity");
+const { createTrustState, eligibleLanAddresses, privateAddress } = require("../smartConnect/secureTrust");
 
 const PORT = 8924;
 const PROTOCOL_VERSION = SMART_CONNECT_PROTOCOL_VERSION;
@@ -20,6 +22,8 @@ const MAX_PAIR_ATTEMPTS = 5;
 // Connect surface must not silently restore all five attempts.
 const ATTEMPT_WINDOW_MS = PIN_TTL_MS;
 const LOCKOUT_MS = 2 * 60 * 1000;
+const ALLOWED_REMOTE_ORIGIN = "orion://mobile";
+const COMMAND_RATE_WINDOW_MS = 1000;
 
 let server = null;
 let socketServer = null;
@@ -36,17 +40,60 @@ let advertisedService = null;
 const pairedSessions = new Map();
 const pendingCommands = new Map();
 const connectedSockets = new Map();
-
+const secureTrust = createTrustState();
+const authChallenges = new Map();
+let secureIdentity = null;
+let activePairingId = null;
+function completeSecurePairing(transcript) {
+  if (!transcript?.desktopConfirmed || !transcript?.mobileConfirmed) return null;
+  const session = {
+    deviceId: transcript.deviceId,
+    deviceName: sanitizeDeviceName(transcript.deviceName),
+    publicKey: transcript.publicKey,
+    protocolVersion: 3,
+    certificateFingerprint: transcript.certificateFingerprint,
+    createdAt: Date.now(),
+    lastSeenAt: Date.now(),
+    rePairRequired: false,
+  };
+  for (const [key, saved] of pairedSessions) {
+    if (saved.deviceId === session.deviceId) pairedSessions.delete(key);
+  }
+  pairedSessions.set(`v3:${session.deviceId}`, session);
+  pairAttempts = [];
+  lockedUntil = 0;
+  savePairingGuard();
+  saveSessions();
+  activePairingId = null;
+  createPin();
+  notifyConnectionStatus();
+  return session;
+}
 function socketIsOpen(socket) {
   return Boolean(socket && socket.readyState === 1);
 }
 
+function originAllowed(req) {
+  return !req.headers.origin || req.headers.origin === ALLOWED_REMOTE_ORIGIN;
+}
+function acceptCommandRate(socket, droppable) {
+  const now = Date.now();
+  if (!socket.commandRateWindowAt || now - socket.commandRateWindowAt >= COMMAND_RATE_WINDOW_MS) {
+    socket.commandRateWindowAt = now; socket.commandRateCount = 0;
+  }
+  socket.commandRateCount += 1;
+  return socket.commandRateCount <= secureTrust.networkPolicy().commandRatePerSecond
+    ? { ok: true }
+    : { ok: false, droppable, reason: "COMMAND_RATE_LIMITED" };
+}
+
 function publicDevices() {
-  return [...pairedSessions.values()].map(({ deviceId, deviceName, device, createdAt, lastSeenAt }) => ({
+  return [...pairedSessions.values()].map(({ deviceId, deviceName, device, createdAt, lastSeenAt, rePairRequired }) => ({
     deviceId,
     deviceName: sanitizeDeviceName(deviceName || device),
     createdAt: Number(createdAt || lastSeenAt || Date.now()),
     lastSeenAt,
+    rePairRequired: Boolean(rePairRequired),
     connected: socketIsOpen(connectedSockets.get(deviceId)),
   }));
 }
@@ -108,6 +155,7 @@ function startServiceAdvertisement() {
         app: "orion",
         version: String(PROTOCOL_VERSION),
         instanceId: ensureDesktopInstanceId(),
+        fingerprint: secureIdentity?.certificateFingerprint || "",
       },
     });
   } catch (error) {
@@ -205,12 +253,13 @@ function loadSessions() {
     const payload = fs.readFileSync(file);
     const decoded = safeStorage.decryptString(payload);
     const entries = JSON.parse(decoded);
-    for (const [token, session] of Array.isArray(entries) ? entries : []) {
-      if (token && session?.deviceId && Date.now() - Number(session.lastSeenAt || 0) < TOKEN_IDLE_TTL_MS) {
-        pairedSessions.set(token, {
+    for (const [credentialId, session] of Array.isArray(entries) ? entries : []) {
+      if (credentialId && session?.deviceId && Date.now() - Number(session.lastSeenAt || 0) < TOKEN_IDLE_TTL_MS) {
+        pairedSessions.set(credentialId, {
           ...session,
           deviceName: sanitizeDeviceName(session.deviceName || session.device),
           createdAt: Number(session.createdAt || session.lastSeenAt || Date.now()),
+          rePairRequired: session.protocolVersion !== 3 || !session.publicKey,
         });
       }
     }
@@ -235,20 +284,14 @@ function getAllLocalIpAddresses() {
     .map((entry) => entry.address);
 }
 
-function getLocalIpAddress() {
-  return getAllLocalIpAddresses()[0] || "127.0.0.1";
-}
-
+function getLocalIpAddress() { return getAllLocalIpAddresses()[0] || "127.0.0.1"; }
 function notifyDesktopRenderer(event, data) {
-  const win = getMainWindowRef?.();
-  if (win && !win.isDestroyed()) win.webContents.send(event, data);
+  const win = getMainWindowRef?.(); if (win && !win.isDestroyed()) win.webContents.send(event, data);
 }
 
 function json(res, status, body) {
-  res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-  res.end(JSON.stringify(body));
+  res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" }); res.end(JSON.stringify(body));
 }
-
 function readJson(req) {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -263,26 +306,22 @@ function readJson(req) {
   });
 }
 
-function getBearer(req, body = {}) {
-  const header = String(req.headers.authorization || "");
-  return header.replace(/^Bearer\s+/i, "").trim() || String(body.token || "");
+function secureSession(deviceId) {
+  const session = pairedSessions.get(`v3:${String(deviceId || "")}`);
+  return !session || session.rePairRequired || session.revokedAt ? null : session;
 }
 
-function authenticate(token) {
-  const session = pairedSessions.get(token);
-  if (!session) return null;
-  if (Date.now() - Number(session.lastSeenAt || 0) > TOKEN_IDLE_TTL_MS) {
-    pairedSessions.delete(token);
-    saveSessions();
-    return null;
-  }
-  session.lastSeenAt = Date.now();
-  return session;
+function requireSecureRequest(req, body = {}) {
+  const deviceId = String(req.headers["x-orion-device"] || body.deviceId || "");
+  const signature = String(req.headers["x-orion-signature"] || body.signature || "");
+  const timestamp = Number(req.headers["x-orion-timestamp"] || body.timestamp || 0);
+  const session = secureSession(deviceId);
+  if (!session || !signature || Math.abs(Date.now() - timestamp) > 30_000) return null;
+  const message = `${req.method}\n${req.url}\n${timestamp}`;
+  return verifyDeviceSignature(session.publicKey, message, signature) ? session : null;
 }
 
-function normalizeCommand(input = {}) {
-  return normalizeSmartConnectCommand(input, () => crypto.randomUUID());
-}
+function normalizeCommand(input = {}) { return normalizeSmartConnectCommand(input, () => crypto.randomUUID()); }
 
 function dispatchCommand(command) {
   return new Promise((resolve) => {
@@ -303,7 +342,15 @@ function dispatchCommand(command) {
 
 function sendSocket(socket, type, deviceId, payload) {
   if (socket.readyState === socket.OPEN) {
-    socket.send(JSON.stringify({ version: PROTOCOL_VERSION, type, deviceId, payload }));
+    socket.outgoingSequence = Number(socket.outgoingSequence || 0) + 1;
+    socket.send(JSON.stringify({
+      version: PROTOCOL_VERSION,
+      type,
+      deviceId,
+      connectionId: socket.smartConnectConnectionId,
+      sequence: socket.outgoingSequence,
+      payload,
+    }));
   }
 }
 
@@ -311,13 +358,17 @@ function configureSockets() {
   socketServer = new WebSocketServer({ noServer: true });
   server.on("upgrade", (req, socket, head) => {
     let parsed;
-    try { parsed = new URL(req.url, `http://${req.headers.host || "localhost"}`); } catch { socket.destroy(); return; }
+    try { parsed = new URL(req.url, `https://${req.headers.host || "localhost"}`); } catch { socket.destroy(); return; }
     if (parsed.pathname !== "/api/socket") { socket.destroy(); return; }
-    const token = parsed.searchParams.get("token") || "";
-    const session = authenticate(token);
-    if (!session) { socket.destroy(); return; }
+    const policy = secureTrust.networkPolicy();
+    if (!policy.allowed || !originAllowed(req) || !privateAddress(req.socket.remoteAddress)) { socket.destroy(); return; }
+    const ticket = secureTrust.consumeTicket(req.headers["x-orion-ticket"]);
+    const session = ticket ? secureSession(ticket.deviceId) : null;
+    const replacingExistingDevice = Boolean(session && connectedSockets.has(session.deviceId));
+    if (!session || (!replacingExistingDevice && connectedSockets.size >= policy.maxConnections)) { socket.destroy(); return; }
     socketServer.handleUpgrade(req, socket, head, (ws) => {
       ws.smartConnectSession = session;
+      ws.smartConnectConnectionId = ticket.connectionId;
       socketServer.emit("connection", ws);
     });
   });
@@ -337,7 +388,8 @@ function configureSockets() {
       try {
         socket.lastSmartConnectHeartbeat = Date.now();
         const envelope = JSON.parse(String(raw));
-        if (envelope.version !== PROTOCOL_VERSION) throw new Error("Unsupported Smart Connect protocol.");
+        if (envelope.version !== PROTOCOL_VERSION || envelope.deviceId !== session.deviceId) throw new Error("Unsupported Smart Connect envelope.");
+        if (envelope.connectionId !== socket.smartConnectConnectionId) throw new Error("Connection identity mismatch.");
         if (envelope.type === "heartbeat") {
           session.lastSeenAt = Date.now();
           socket.lastSmartConnectHeartbeat = Date.now();
@@ -345,6 +397,42 @@ function configureSockets() {
           return;
         }
         if (envelope.type !== "command") return;
+        const droppable = envelope.payload?.action === "cursor_move";
+        const rate = acceptCommandRate(socket, droppable);
+        if (!rate.ok) {
+          if (!rate.droppable) sendSocket(socket, "error", session.deviceId, { error: rate.reason });
+          return;
+        }
+        const replay = secureTrust.acceptEnvelope(
+          session.deviceId,
+          socket.smartConnectConnectionId,
+          Number(envelope.sequence),
+          String(envelope.commandId || envelope.payload?.id || ""),
+          droppable,
+        );
+        if (!replay.ok) {
+          if (!replay.droppable) sendSocket(socket, "error", session.deviceId, { error: "Replay or duplicate command rejected." });
+          return;
+        }
+        if (envelope.payload?.action === "smart_connect_rename") {
+          session.deviceName = sanitizeDeviceName(envelope.payload?.value);
+          saveSessions();
+          notifyConnectionStatus();
+          sendSocket(socket, "ack", session.deviceId, {
+            id: envelope.payload?.id, sequence: envelope.payload?.sequence, ok: true, appliedAt: Date.now(),
+          });
+          return;
+        }
+        if (envelope.payload?.action === "smart_connect_unpair") {
+          pairedSessions.delete(`v3:${session.deviceId}`);
+          saveSessions();
+          sendSocket(socket, "ack", session.deviceId, {
+            id: envelope.payload?.id, sequence: envelope.payload?.sequence, ok: true, appliedAt: Date.now(),
+          });
+          setTimeout(() => socket.close(), 30);
+          notifyConnectionStatus();
+          return;
+        }
         const command = normalizeCommand(envelope.payload);
         const ack = await dispatchCommand(command);
         sendSocket(socket, "ack", session.deviceId, ack);
@@ -380,26 +468,33 @@ function notifyConnectionStatus() {
     devices,
     pin: currentPin,
     pinExpiresAt,
+    pendingPairing: activePairingId ? secureTrust.transcript(activePairingId) : null,
+    networkPolicy: secureTrust.networkPolicy(),
   });
 }
 
-function startSmartConnectServer(getMainWindow) {
+async function startSmartConnectServer(getMainWindow) {
   getMainWindowRef = getMainWindow;
   if (server) return;
   ensureDesktopInstanceId();
   ensureFreshPin();
   loadSessions();
   loadPairingGuard();
+  secureIdentity = await loadOrCreateSecureIdentity(app.getPath("userData"), desktopInstanceId);
 
-  server = http.createServer(async (req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
+  server = https.createServer({ cert: secureIdentity.certificatePem, key: secureIdentity.privateKeyPem }, async (req, res) => {
+    if (!originAllowed(req)) return json(res, 403, { ok: false, error: "ORIGIN_REJECTED" });
+    res.setHeader("Access-Control-Allow-Origin", ALLOWED_REMOTE_ORIGIN);
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Orion-Device, X-Orion-Signature, X-Orion-Timestamp");
     if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
-    const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+    const url = new URL(req.url, `https://${req.headers.host || "localhost"}`);
+    if (!privateAddress(req.socket.remoteAddress)) return json(res, 403, { ok: false, error: "PRIVATE_LAN_REQUIRED" });
+    const policy = secureTrust.networkPolicy();
+    if (!policy.allowed) return json(res, 403, { ok: false, error: "PUBLIC_NETWORK_BLOCKED", networkPolicy: policy });
 
     if (req.method === "GET" && url.pathname === "/api/status") {
-      const session = authenticate(getBearer(req));
+      const session = requireSecureRequest(req);
       return json(res, 200, session
         ? {
             ok: true,
@@ -414,6 +509,8 @@ function startSmartConnectServer(getMainWindow) {
             device: session.deviceName,
             playback: currentPlayback,
             pairingGuard: pairingGuardSnapshot(),
+            certificateFingerprint: secureIdentity.certificateFingerprint,
+            secureTransport: true,
           }
         : {
             ok: true,
@@ -426,141 +523,135 @@ function startSmartConnectServer(getMainWindow) {
             paired: false,
             connected: false,
             pairingGuard: pairingGuardSnapshot(),
+            certificateFingerprint: secureIdentity.certificateFingerprint,
+            secureTransport: true,
+            rePairRequired: publicDevices().some((device) => device.rePairRequired),
           });
     }
 
-    if (req.method === "POST" && url.pathname === "/api/pair") {
+    if (req.method === "POST" && url.pathname === "/api/pair/start") {
       try {
         const data = await readJson(req);
         const now = Date.now();
         normalizePairingGuard(now);
-        const existingToken = String(data.token || "");
-        const existing = authenticate(existingToken);
-        if (!existing && now < lockedUntil) {
-          return pairingError(res, 429, "LOCKED_OUT", "Pairing is temporarily locked. Try again shortly.", lockedUntil - now, 0);
+        if (now < lockedUntil) return pairingError(res, 429, "LOCKED_OUT", "Pairing is temporarily locked.", lockedUntil - now, 0);
+        if (!currentPin || now >= pinExpiresAt) {
+          ensureFreshPin();
+          return pairingError(res, 401, "CODE_EXPIRED", "The pairing code expired.", undefined, pairingGuardSnapshot(now).attemptsRemaining);
         }
-        const codeExpired = !currentPin || now >= pinExpiresAt;
-        ensureFreshPin();
-        if (!existing && codeExpired) {
-          // Expiry is not a failed authentication attempt. A fresh code was
-          // generated above; retain the user's remaining attempts.
-          const guard = pairingGuardSnapshot(now);
-          return pairingError(res, 401, "CODE_EXPIRED", "The six-digit pairing code expired. Generate a new code on Orion Desktop.", undefined, guard.attemptsRemaining);
-        }
-        if (!existing && String(data.pin || "") !== currentPin) {
+        if (String(data.pin || "") !== currentPin) {
           pairAttempts.push(now);
-          if (pairAttempts.length >= MAX_PAIR_ATTEMPTS) {
-            lockedUntil = now + LOCKOUT_MS;
-            savePairingGuard();
-            return pairingError(res, 429, "LOCKED_OUT", "Pairing is temporarily locked. Try again shortly.", LOCKOUT_MS, 0);
-          }
+          if (pairAttempts.length >= MAX_PAIR_ATTEMPTS) lockedUntil = now + LOCKOUT_MS;
           savePairingGuard();
-          return pairingError(
-            res,
-            401,
-            "INVALID_CODE",
-            "The six-digit pairing code is invalid.",
-            undefined,
-            Math.max(0, MAX_PAIR_ATTEMPTS - pairAttempts.length),
-          );
+          const guard = pairingGuardSnapshot(now);
+          return pairingError(res, lockedUntil ? 429 : 401, lockedUntil ? "LOCKED_OUT" : "INVALID_CODE",
+            lockedUntil ? "Pairing is temporarily locked." : "The pairing code is invalid.",
+            guard.retryAfterMs || undefined, guard.attemptsRemaining);
         }
-        const token = existingToken && existing ? existingToken : crypto.randomBytes(32).toString("hex");
-        const session = existing || {
-          deviceId: String(data.deviceId || crypto.randomUUID()),
-          deviceName: sanitizeDeviceName(data.deviceName || data.device),
-          createdAt: now,
-          lastSeenAt: now,
-        };
-        session.lastSeenAt = now;
-        if (!existing) {
-          for (const [savedToken, savedSession] of pairedSessions) {
-            if (savedSession.deviceId === session.deviceId) pairedSessions.delete(savedToken);
-          }
-        }
-        pairedSessions.set(token, session);
-        pairAttempts = [];
-        lockedUntil = 0;
-        savePairingGuard();
-        createPin();
-        saveSessions();
+        if (!data.deviceId || !data.publicKey) return pairingError(res, 400, "INVALID_REQUEST", "A device-bound public identity is required.");
+        const transcript = secureTrust.beginTranscript({
+          desktopInstanceId,
+          deviceId: String(data.deviceId),
+          deviceName: sanitizeDeviceName(data.deviceName),
+          publicKey: String(data.publicKey),
+          fingerprint: secureIdentity.certificateFingerprint,
+        });
+        activePairingId = transcript.pairingId;
         notifyConnectionStatus();
+        return json(res, 200, { ok: true, transcript });
+      } catch (error) {
+        return pairingError(res, 400, "INVALID_REQUEST", error.message);
+      }
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/pair/confirm") {
+      try {
+        const data = await readJson(req);
+        const transcript = secureTrust.confirmTranscript(data.pairingId, "mobile");
+        if (!transcript || transcript.deviceId !== String(data.deviceId || "")) {
+          return pairingError(res, 410, "PAIRING_EXPIRED", "The verification phrase expired.");
+        }
+        const session = completeSecurePairing(transcript);
         return json(res, 200, {
           ok: true,
-          version: PROTOCOL_VERSION,
+          pendingDesktopConfirmation: !session,
+          paired: Boolean(session),
+          deviceId: transcript.deviceId,
           instanceId: desktopInstanceId,
-          paired: true,
-          token,
-          deviceId: session.deviceId,
-          deviceName: session.deviceName,
-          socketUrl: `ws://${getLocalIpAddress()}:${PORT}/api/socket`,
+          certificateFingerprint: secureIdentity.certificateFingerprint,
         });
       } catch (error) {
         return pairingError(res, 400, "INVALID_REQUEST", error.message);
       }
     }
 
-    if (req.method === "POST" && url.pathname === "/api/device") {
-      try {
-        const body = await readJson(req);
-        const token = getBearer(req, body);
-        const session = authenticate(token);
-        if (!session) return pairingError(res, 401, "TOKEN_REJECTED", "The remembered pairing is no longer authorized.");
-        const action = String(body.action || "rename");
-        if (action === "rename") {
-          session.deviceName = sanitizeDeviceName(body.deviceName);
-          saveSessions();
-          notifyConnectionStatus();
-          return json(res, 200, { ok: true, device: publicDevices().find((item) => item.deviceId === session.deviceId) });
-        }
-        if (action === "revoke") {
-          pairedSessions.delete(token);
-          connectedSockets.get(session.deviceId)?.close();
-          connectedSockets.delete(session.deviceId);
-          saveSessions();
-          notifyConnectionStatus();
-          return json(res, 200, { ok: true });
-        }
-        return pairingError(res, 400, "INVALID_REQUEST", "Unsupported device update action.");
-      } catch (error) {
-        return pairingError(res, 400, "INVALID_REQUEST", error.message);
+    if (req.method === "POST" && url.pathname === "/api/pair/result") {
+      const data = await readJson(req).catch(() => ({}));
+      const session = secureSession(data.deviceId);
+      if (session) return json(res, 200, {
+        ok: true, paired: true, deviceId: session.deviceId,
+        instanceId: desktopInstanceId, certificateFingerprint: secureIdentity.certificateFingerprint,
+      });
+      const transcript = secureTrust.transcript(data.pairingId);
+      if (!transcript || transcript.deviceId !== String(data.deviceId || "")) {
+        return pairingError(res, 410, "PAIRING_EXPIRED", "The verification phrase expired.");
       }
+      return json(res, 200, { ok: true, paired: false, pendingDesktopConfirmation: true });
     }
 
-    if (req.method === "POST" && url.pathname === "/api/command") {
-      try {
-        const body = await readJson(req);
-        const session = authenticate(getBearer(req, body));
-        if (!session) return json(res, 401, { ok: false, error: "Unauthorized pairing token." });
-        const ack = await dispatchCommand(normalizeCommand(body.command || body));
-        return json(res, ack.ok ? 200 : 504, { ok: ack.ok, ack });
-      } catch (error) {
-        return json(res, 400, { ok: false, error: error.message });
-      }
+    if (req.method === "POST" && url.pathname === "/api/pair/reject") {
+      const data = await readJson(req).catch(() => ({}));
+      const rejected = secureTrust.rejectTranscript(data.pairingId, data.deviceId);
+      if (rejected && activePairingId === String(data.pairingId || "")) activePairingId = null;
+      notifyConnectionStatus();
+      return json(res, rejected ? 200 : 410, rejected
+        ? { ok: true }
+        : { ok: false, error: { code: "PAIRING_EXPIRED", message: "The verification phrase expired." } });
     }
 
-    if (req.method === "POST" && url.pathname === "/api/unpair") {
-      try {
-        const body = await readJson(req);
-        const token = getBearer(req, body);
-        const session = authenticate(token);
-        if (!session) return json(res, 401, { ok: false, error: "Unauthorized pairing token." });
-        pairedSessions.delete(token);
-        connectedSockets.get(session.deviceId)?.close();
-        connectedSockets.delete(session.deviceId);
-        saveSessions();
-        notifyConnectionStatus();
-        return json(res, 200, { ok: true, paired: pairedSessions.size > 0 });
-      } catch (error) {
-        return json(res, 400, { ok: false, error: error.message });
+    if (req.method === "POST" && url.pathname === "/api/auth/challenge") {
+      const data = await readJson(req).catch(() => ({}));
+      const session = secureSession(data.deviceId);
+      if (!session) return pairingError(res, 401, "REPAIR_REQUIRED", "This device must be paired with protocol v3.");
+      const nonce = crypto.randomBytes(32).toString("base64url");
+      authChallenges.set(session.deviceId, { nonce, expiresAt: Date.now() + 30_000 });
+      return json(res, 200, {
+        ok: true,
+        nonce,
+        desktopPublicKey: secureIdentity.publicKey,
+        desktopSignature: signChallenge(secureIdentity, nonce),
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/auth/ticket") {
+      const data = await readJson(req).catch(() => ({}));
+      const session = secureSession(data.deviceId);
+      const challenge = authChallenges.get(String(data.deviceId || ""));
+      authChallenges.delete(String(data.deviceId || ""));
+      if (!session || !challenge || challenge.expiresAt <= Date.now()
+        || !verifyDeviceSignature(session.publicKey, challenge.nonce, data.signature)) {
+        return pairingError(res, 401, "DEVICE_AUTH_FAILED", "Device-bound authentication failed.");
       }
+      const connectionId = crypto.randomUUID();
+      const ticket = secureTrust.createTicket(session.deviceId, connectionId);
+      return json(res, 200, { ok: true, ticket, connectionId });
+    }
+
+    if (["/api/pair", "/api/device", "/api/command", "/api/unpair"].includes(url.pathname)) {
+      return json(res, 426, {
+        ok: false,
+        error: { code: "REPAIR_REQUIRED", message: "Secure Smart Connect v3 is required." },
+      });
     }
 
     return json(res, 404, { ok: false, error: "Not Found" });
   });
 
   configureSockets();
-  server.listen(PORT, "0.0.0.0", () => {
-    console.log(`[SmartConnect] v${PROTOCOL_VERSION} listening at http://${getLocalIpAddress()}:${PORT}`);
+  const listenAddress = eligibleLanAddresses()[0];
+  if (!listenAddress) throw new Error("SMART_CONNECT_PRIVATE_LAN_UNAVAILABLE");
+  server.listen(PORT, listenAddress, () => {
+    console.log(`[SmartConnect] secure v${PROTOCOL_VERSION} listening at https://${listenAddress}:${PORT}`);
     startServiceAdvertisement();
   });
   server.on("error", (error) => console.error("[SmartConnect] Server error:", error.message));
@@ -570,7 +661,7 @@ function startSmartConnectServer(getMainWindow) {
 ipcMain.handle("smart-connect:get-info", async () => {
   ensureFreshPin();
   const ip = getLocalIpAddress();
-  const qrPayload = `orion://connect?ip=${encodeURIComponent(ip)}&port=${PORT}&pin=${encodeURIComponent(currentPin)}`;
+  const qrPayload = `orion://connect?ip=${encodeURIComponent(ip)}&port=${PORT}&pin=${encodeURIComponent(currentPin)}&version=3&instanceId=${encodeURIComponent(desktopInstanceId)}&fingerprint=${encodeURIComponent(secureIdentity?.certificateFingerprint || "")}`;
   const qrDataUrl = await QRCode.toDataURL(qrPayload, {
     width: 248,
     margin: 1,
@@ -590,7 +681,33 @@ ipcMain.handle("smart-connect:get-info", async () => {
     connected: publicDevices().some((device) => device.connected),
     devices: publicDevices(),
     pairingGuard: pairingGuardSnapshot(),
+    certificateFingerprint: secureIdentity?.certificateFingerprint || "",
+    secureTransport: true,
+    pendingPairing: activePairingId ? secureTrust.transcript(activePairingId) : null,
+    networkPolicy: secureTrust.networkPolicy(),
   };
+});
+
+ipcMain.handle("smart-connect:confirm-pairing", () => {
+  if (!activePairingId) return { ok: false, error: "No pending secure pairing." };
+  const transcript = secureTrust.confirmTranscript(activePairingId, "desktop");
+  if (!transcript) return { ok: false, error: "The verification phrase expired." };
+  const session = completeSecurePairing(transcript);
+  notifyConnectionStatus();
+  return { ok: true, paired: Boolean(session), pendingPairing: session ? null : transcript };
+});
+
+ipcMain.handle("smart-connect:reject-pairing", () => {
+  activePairingId = null;
+  createPin();
+  notifyConnectionStatus();
+  return { ok: true };
+});
+
+ipcMain.handle("smart-connect:allow-public-network", () => {
+  secureTrust.allowPublicNetworkForSession();
+  notifyConnectionStatus();
+  return { ok: true, networkPolicy: secureTrust.networkPolicy() };
 });
 
 ipcMain.handle("smart-connect:set-pin", (_, pin) => {

@@ -48,6 +48,7 @@ export function SmartConnectPairingModal({ controller }: SmartConnectPairingModa
     lockoutSeconds,
     attemptsRemaining,
     pairError,
+    pendingTranscript,
     pairingMethod,
     pinCode,
     prepareDirectIp,
@@ -58,6 +59,8 @@ export function SmartConnectPairingModal({ controller }: SmartConnectPairingModa
     setPairingMethod,
     setShowPairingModal,
     showPairingModal,
+    confirmVerificationPhrase,
+    rejectVerificationPhrase,
   } = controller;
 
   useEffect(() => {
@@ -89,6 +92,30 @@ export function SmartConnectPairingModal({ controller }: SmartConnectPairingModa
             wide ? styles.glassModalCardWide : styles.glassModalCardPhone,
             keyboardVisible && styles.glassModalCardKeyboard,
           ]}>
+            {pendingTranscript ? (
+              <View style={styles.verificationSection}>
+                <Text style={styles.verificationEyebrow}>VERIFY BOTH DEVICES</Text>
+                <Text style={styles.modalTitle}>Do these words match?</Text>
+                <Text style={styles.modalSub}>Confirm only when Orion Desktop shows this exact phrase. This protects your remote from another device on the network.</Text>
+                <View style={styles.verificationPhrase} accessibilityLabel={`Verification phrase ${pendingTranscript.phrase.words.join(' ')}`}>
+                  {pendingTranscript.phrase.words.map((word, index) => (
+                    <View key={`${word}-${index}`} style={styles.verificationWord}>
+                      <Text style={styles.verificationWordIndex}>{index + 1}</Text>
+                      <Text style={styles.verificationWordText}>{word}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.verificationExpiry}>This request expires automatically. Neither Orion app stores the phrase.</Text>
+                <Pressable style={({ pressed }) => [styles.confirmBtn, pressed && { opacity: 0.85 }]} onPress={() => void confirmVerificationPhrase()} disabled={isConnecting}>
+                  <Text style={styles.confirmBtnText}>{isConnecting ? 'Confirming secure trust…' : 'The phrase matches'}</Text>
+                </Pressable>
+                <Pressable style={styles.verificationReject} onPress={() => void rejectVerificationPhrase()} disabled={isConnecting}>
+                  <Text style={styles.verificationRejectText}>The phrase does not match</Text>
+                </Pressable>
+                {pairError ? <Text style={styles.verificationStatus}>{pairError}</Text> : null}
+              </View>
+            ) : (
+              <>
             <View style={styles.modalMethodTabs}>
               {([
                 ['pin', 'keypad-outline', 'PIN Code'],
@@ -230,6 +257,8 @@ export function SmartConnectPairingModal({ controller }: SmartConnectPairingModa
               </View>
             ) : null}
             <Pressable style={styles.cancelBtnFull} onPress={() => setShowPairingModal(false)}><Text style={styles.cancelBtnText}>Cancel</Text></Pressable>
+              </>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

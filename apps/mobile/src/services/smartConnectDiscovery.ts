@@ -1,5 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import { discoverNativeSmartConnectServices } from './nativeSmartConnectDiscovery';
+import { secureSmartConnectRequest } from './nativeSecureConnect';
 
 export type SmartConnectDiscoveryMethod = 'saved' | 'nsd' | 'qr' | 'direct-ip' | 'subnet-fallback';
 
@@ -11,6 +12,7 @@ export interface SmartConnectDiscoveryResult {
   protocolVersion: number;
   discoveryMethod: SmartConnectDiscoveryMethod;
   verifiedAt: number;
+  certificateFingerprint: string;
 }
 
 export type SmartConnectEndpointProbe =
@@ -22,17 +24,19 @@ export async function inspectSmartConnectEndpoint(
   port: number,
   protocolVersion: number,
   discoveryMethod: SmartConnectDiscoveryMethod,
+  expectedFingerprint: string | null = null,
   timeoutMs = 1_500,
 ): Promise<SmartConnectEndpointProbe> {
   if (!host || host === '127.0.0.1' || host === 'localhost') {
     return { ok: false, errorCode: 'endpoint-lost' };
   }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`http://${host}:${port}/api/status`, { signal: controller.signal });
+    const response = await Promise.race([
+      secureSmartConnectRequest<any>(host, port, expectedFingerprint, '/api/status'),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)),
+    ]);
     if (!response.ok) return { ok: false, errorCode: 'endpoint-lost' };
-    const status = await response.json();
+    const status = response.data;
     if (Number(status?.version) !== protocolVersion) {
       return { ok: false, errorCode: 'protocol-mismatch' };
     }
@@ -46,12 +50,11 @@ export async function inspectSmartConnectEndpoint(
         protocolVersion,
         discoveryMethod,
         verifiedAt: Date.now(),
+        certificateFingerprint: String(status.certificateFingerprint || response.fingerprint || ''),
       },
     };
   } catch {
     return { ok: false, errorCode: 'endpoint-lost' };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -60,6 +63,7 @@ async function probeDesktop(
   port: number,
   protocolVersion: number,
   discoveryMethod: SmartConnectDiscoveryMethod,
+  expectedFingerprint: string | null = null,
   timeoutMs = 900,
 ): Promise<SmartConnectDiscoveryResult | null> {
   const probe = await inspectSmartConnectEndpoint(
@@ -67,19 +71,20 @@ async function probeDesktop(
     port,
     protocolVersion,
     discoveryMethod,
+    expectedFingerprint,
     timeoutMs,
   );
   return probe.ok ? probe.result : null;
 }
 
 export async function discoverSmartConnectDesktops(
-  savedEndpoints: Array<{ host?: string | null; port?: number | null }>,
+  savedEndpoints: Array<{ host?: string | null; port?: number | null; certificateFingerprint?: string | null }>,
   protocolVersion: number,
 ) {
   const startedAt = Date.now();
   const verified = new Map<string, SmartConnectDiscoveryResult>();
   for (const endpoint of savedEndpoints) {
-    const result = await probeDesktop(String(endpoint.host || '').trim(), Number(endpoint.port || 8924), protocolVersion, 'saved', 1_200);
+    const result = await probeDesktop(String(endpoint.host || '').trim(), Number(endpoint.port || 8924), protocolVersion, 'saved', endpoint.certificateFingerprint || null, 1_200);
     if (result) verified.set(result.instanceId, result);
   }
   if (verified.size) return { results: [...verified.values()], durationMs: Date.now() - startedAt, nsdResultCount: 0 };
@@ -87,7 +92,7 @@ export async function discoverSmartConnectDesktops(
   const nativeResults = await discoverNativeSmartConnectServices(4_500).catch(() => []);
   for (const candidate of nativeResults) {
     if (candidate.protocolVersion !== protocolVersion) continue;
-    const result = await probeDesktop(candidate.host, candidate.port, protocolVersion, 'nsd', 1_100);
+    const result = await probeDesktop(candidate.host, candidate.port, protocolVersion, 'nsd', candidate.certificateFingerprint || null, 1_100);
     if (result) verified.set(result.instanceId, result);
   }
   return {
@@ -108,7 +113,7 @@ export async function scanSmartConnectSubnet(protocolVersion: number) {
   const candidates = Array.from({ length: 254 }, (_, index) => index + 1).filter((host) => host !== ownHost);
   for (let offset = 0; offset < candidates.length && !results.length; offset += 18) {
     const batch = candidates.slice(offset, offset + 18);
-    const found = await Promise.all(batch.map((host) => probeDesktop(`${prefix}.${host}`, 8924, protocolVersion, 'subnet-fallback', 650)));
+    const found = await Promise.all(batch.map((host) => probeDesktop(`${prefix}.${host}`, 8924, protocolVersion, 'subnet-fallback', null, 650)));
     results.push(...found.filter((item): item is SmartConnectDiscoveryResult => Boolean(item)));
   }
   return results;
@@ -120,7 +125,7 @@ export async function verifySmartConnectEndpoint(
   protocolVersion: number,
   method: SmartConnectDiscoveryMethod,
 ) {
-  return probeDesktop(host, port, protocolVersion, method, 1_500);
+  return probeDesktop(host, port, protocolVersion, method, null, 1_500);
 }
 
 /** @deprecated Prefer discoverSmartConnectDesktops so multiple Desktops remain visible. */

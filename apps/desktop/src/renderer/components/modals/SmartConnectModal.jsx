@@ -32,6 +32,8 @@ export default function SmartConnectModal({ onClose }) {
   const [editingDeviceId, setEditingDeviceId] = useState("");
   const [deviceName, setDeviceName] = useState("");
   const [desktopAddress, setDesktopAddress] = useState("");
+  const [pendingPairing, setPendingPairing] = useState(null);
+  const [networkPolicy, setNetworkPolicy] = useState(null);
 
   const applyInfo = useCallback((info) => {
     if (!info) return;
@@ -43,6 +45,8 @@ export default function SmartConnectModal({ onClose }) {
     if (info.pinExpiresAt) setPinExpiresAt(Number(info.pinExpiresAt));
     if (info.qrDataUrl) setQrDataUrl(info.qrDataUrl);
     if (info.ip) setDesktopAddress(`${info.ip}:${Number(info.port || 8924)}`);
+    setPendingPairing(info.pendingPairing || null);
+    setNetworkPolicy(info.networkPolicy || null);
   }, []);
 
   const refreshInfo = useCallback(async () => {
@@ -79,6 +83,21 @@ export default function SmartConnectModal({ onClose }) {
 
   const disconnectAll = async () => {
     await window.electron?.disconnectSmartConnect?.();
+    await refreshInfo();
+  };
+
+  const confirmPhrase = async () => {
+    await window.electron?.confirmSmartConnectPairing?.();
+    await refreshInfo();
+  };
+
+  const rejectPhrase = async () => {
+    await window.electron?.rejectSmartConnectPairing?.();
+    await refreshInfo();
+  };
+
+  const allowPublicNetwork = async () => {
+    await window.electron?.allowSmartConnectPublicNetwork?.();
     await refreshInfo();
   };
 
@@ -146,6 +165,29 @@ export default function SmartConnectModal({ onClose }) {
             {connected ? "Live remote connected" : paired ? "Paired device offline" : "Pair Orion Mobile as a smart remote"}
           </p>
         </div>
+
+        {networkPolicy?.publicNetwork && !networkPolicy?.allowed && (
+          <div className="smart-connect-verification" role="alert">
+            <strong>Public network blocked</strong>
+            <p>Orion Connect accepts remotes on private local networks by default. You may allow this network for this app session only.</p>
+            <button className="btn btn-primary" onClick={allowPublicNetwork}>Allow for this session</button>
+          </div>
+        )}
+
+        {pendingPairing && (
+          <div className="smart-connect-verification" role="status" aria-live="polite">
+            <span className="smart-connect-verification-eyebrow">VERIFY BOTH DEVICES</span>
+            <h3>Do these words match?</h3>
+            <div className="smart-connect-verification-phrase">
+              {(pendingPairing.phrase?.words || []).map((word) => <span key={word}>{word}</span>)}
+            </div>
+            <p>Confirm only if Orion Mobile shows these exact words.</p>
+            <div className="smart-connect-verification-actions">
+              <button className="btn btn-secondary" onClick={rejectPhrase}>They do not match</button>
+              <button className="btn btn-primary" onClick={confirmPhrase}>The phrase matches</button>
+            </div>
+          </div>
+        )}
 
         {!connected && (
           <div
@@ -269,6 +311,11 @@ export default function SmartConnectModal({ onClose }) {
                     {device.connected ? "Live now" : "Offline"} · Last active{" "}
                     {device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : "recently"}
                   </span>
+                  {device.rePairRequired && (
+                    <span style={{ display: "block", color: "var(--warning)", fontSize: 11, marginTop: 4 }}>
+                      Secure v3 re-pair required
+                    </span>
+                  )}
                   {editingDeviceId === device.deviceId && (
                     <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                       <input

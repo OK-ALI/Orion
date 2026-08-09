@@ -33,6 +33,7 @@
     "@fontsource/sora": "^5.2.8",
     "@fontsource/space-grotesk": "^5.2.8",
     "@orion/shared": "*",
+    "@peculiar/x509": "^2.0.0",
     "@react-three/fiber": "^9.4.0",
     "bonjour-service": "^1.4.4",
     "chokidar": "^5.0.0",
@@ -41,6 +42,7 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "reflect-metadata": "^0.2.2",
     "three": "^0.160.0",
     "ws": "^8.21.1"
   },

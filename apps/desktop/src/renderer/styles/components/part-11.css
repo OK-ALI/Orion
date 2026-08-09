@@ -120,6 +120,11 @@ body.no-anim .smart-connect-signal-pulse { animation: none; }
 body.no-anim .smart-connect-signal-arc,
 body.no-anim .smart-connect-signal-dot { opacity: 1; }
 body.no-anim .smart-connect-signal-pulse { opacity: .34; }
+.smart-connect-verification { display:grid; gap:13px; margin:16px 0; padding:18px; border:1px solid var(--warning); border-radius:16px; background:var(--warning-soft); text-align:center; }
+.smart-connect-verification-eyebrow { color:var(--warning); font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+.smart-connect-verification-phrase { display:flex; justify-content:center; flex-wrap:wrap; gap:8px; }
+.smart-connect-verification-phrase span { padding:9px 12px; border:1px solid var(--border); border-radius:999px; background:var(--surface); color:var(--text); font-weight:750; }
+.smart-connect-verification-actions { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; }
 @media (prefers-reduced-motion:reduce) {
   .smart-connect-signal *,
   .smart-connect-signal-pulse { animation: none; }

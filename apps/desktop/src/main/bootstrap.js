@@ -439,8 +439,6 @@ diagnosticsIpc.register({
   getDownloads: downloadsIpc.getDownloads,
   getPlayerWebContentsCount: () => playerWcIds.size,
 });
-smartConnectIpc.startSmartConnectServer(getMainWindow);
-
 ipcMain.on("mini-player-status", (_, status) => {
   trayController.setMiniPlayerStatus(status);
 });
@@ -505,7 +503,9 @@ ipcMain.on("player-stopped", () => {
 registerNotifications();
 popoutController.register();
 // ── Single-instance lock ──────────────────────────────────────────────────────
-const gotTheLock = app.requestSingleInstanceLock();
+const gotTheLock = process.argv.includes("--orion-electron-test")
+  ? true
+  : app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
   app.quit();
@@ -521,6 +521,9 @@ if (!gotTheLock) {
     mediaControls.register();
     localMedia.register({ getDownloads: downloadsIpc.getDownloads, saveDownloads: downloadsIpc.saveDownloads });
     music.register().catch((error) => console.error("[music] startup failed", error));
+    smartConnectIpc.startSmartConnectServer(getMainWindow).catch((error) => {
+      console.error("[SmartConnect] Secure server failed to start:", error?.message || error);
+    });
     createWindow();
   });
   app.on("window-all-closed", () => app.quit());
