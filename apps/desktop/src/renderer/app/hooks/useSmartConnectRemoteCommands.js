@@ -136,6 +136,10 @@ export function useSmartConnectRemoteCommands({
 
       if (action === "cursor_move") moveCursor(payload);
       if (action === "cursor_click") clickCursor();
+      if (action === "scroll") {
+        const deltaY = Math.max(-240, Math.min(240, Number(value?.deltaY) || 0));
+        getScrollContainer()?.scrollBy?.({ top: deltaY, behavior: "auto" });
+      }
       if (action === "navigate_page" && value) baseNavigate(value);
       if (action === "sidebar_next" || action === "sidebar_prev") {
         const current = SIDEBAR_PAGES.indexOf(pageRef.current || "home");
