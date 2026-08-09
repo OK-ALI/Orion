@@ -2,6 +2,7 @@ import { StyleSheet } from "react-native";
 import { spacing, radii } from "@orion/shared/tokens";
 import type { MobileThemeTokens } from "../../context/ThemeContext";
 import { createConnectRemoteStyles } from './connectRemoteStyles';
+import { createConnectPairingLayoutStyles } from './connectPairingLayoutStyles';
 
 export const createConnectStyles = (theme: MobileThemeTokens) => {
   const text = { primary: theme.text, secondary: theme.textSecondary, muted: theme.textMuted };
@@ -154,9 +155,17 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
     fontWeight: '800',
   },
   remoteLayout: {
-    flex: 1,
+    flexGrow: 1,
+    width: '100%',
+    maxWidth: 1100,
+    alignSelf: 'center',
     paddingHorizontal: spacing[5],
     paddingTop: spacing[2],
+    paddingBottom: spacing[8],
+  },
+  remoteLayoutLandscape: {
+    paddingHorizontal: spacing[4],
+    paddingTop: 0,
   },
   deviceIdentityRow: {
     flexDirection: 'row',
@@ -231,14 +240,15 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
     backgroundColor: theme.surface,
     borderRadius: radii.xl,
     padding: 4,
-    marginBottom: spacing[5],
+    marginBottom: spacing[4],
   },
   modeTab: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 4,
+    minWidth: 0,
     paddingVertical: 10,
     borderRadius: radii.lg,
   },
@@ -247,7 +257,7 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
   },
   modeTabText: {
     color: text.muted,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   modeTabTextActive: {
@@ -257,7 +267,6 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
   dpadSection: {
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
     paddingBottom: 20,
   },
   navRow: {
@@ -323,9 +332,8 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
     fontWeight: '900',
   },
   playbackSection: {
-    flex: 1,
     justifyContent: 'center',
-    gap: spacing[6],
+    gap: spacing[4],
   },
   seekRow: {
     flexDirection: 'row',
@@ -383,7 +391,6 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
     textAlign: 'right',
   },
   keyboardSection: {
-    flex: 1,
     paddingTop: spacing[4],
     gap: spacing[4],
   },
@@ -422,45 +429,7 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
     fontSize: 14,
     fontWeight: '800',
   },
-  modalKeyboardAvoider: {
-    flex: 1,
-  },
-  modalOverlay: {
-    flexGrow: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.88)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[4],
-  },
-  modalOverlayPhone: {
-    justifyContent: 'flex-end',
-    paddingHorizontal: 0,
-    paddingBottom: 0,
-  },
-  glassModalCard: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: theme.elevated,
-    borderRadius: radii['2xl'],
-    padding: spacing[5],
-    borderWidth: 1,
-    borderColor: theme.danger,
-    alignItems: 'center',
-  },
-  glassModalCardPhone: {
-    maxWidth: undefined,
-    maxHeight: '88%',
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-  },
-  glassModalCardWide: {
-    maxHeight: '92%',
-    maxWidth: 560,
-  },
-  glassModalCardKeyboard: {
-    paddingVertical: spacing[3],
-  },
+  ...createConnectPairingLayoutStyles(theme),
   modalMethodTabs: {
     flexDirection: 'row',
     backgroundColor: theme.surface,
@@ -588,7 +557,7 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
   pinInputRow: {
     width: '100%',
     flexDirection: 'row',
-    gap: 6,
+    gap: 5,
     justifyContent: 'center',
     marginBottom: 20,
     paddingVertical: 8,
@@ -656,6 +625,15 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
     textAlign: 'center',
     marginTop: spacing[1],
   },
+  attemptsRemainingText: {
+    color: theme.warning,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginTop: -10,
+    marginBottom: spacing[2],
+  },
     connectionNotice: {
       marginTop: spacing[3],
       maxWidth: 420,
@@ -687,7 +665,7 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
   pinBox: {
     flex: 1,
     maxWidth: 48,
-    minWidth: 36,
+    minWidth: 0,
     aspectRatio: 0.82,
     borderRadius: radii.lg,
     backgroundColor: theme.input,

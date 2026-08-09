@@ -31,6 +31,7 @@ export default function SmartConnectModal({ onClose }) {
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [editingDeviceId, setEditingDeviceId] = useState("");
   const [deviceName, setDeviceName] = useState("");
+  const [desktopAddress, setDesktopAddress] = useState("");
 
   const applyInfo = useCallback((info) => {
     if (!info) return;
@@ -41,6 +42,7 @@ export default function SmartConnectModal({ onClose }) {
     if (info.pin) setPin(info.pin);
     if (info.pinExpiresAt) setPinExpiresAt(Number(info.pinExpiresAt));
     if (info.qrDataUrl) setQrDataUrl(info.qrDataUrl);
+    if (info.ip) setDesktopAddress(`${info.ip}:${Number(info.port || 8924)}`);
   }, []);
 
   const refreshInfo = useCallback(async () => {
@@ -210,6 +212,19 @@ export default function SmartConnectModal({ onClose }) {
                 New code
               </button>
             </div>
+            {desktopAddress && (
+              <div
+                aria-label={`Desktop address ${desktopAddress}`}
+                style={{
+                  marginTop: 12,
+                  color: "var(--text2)",
+                  fontSize: 11,
+                  lineHeight: 1.5,
+                }}
+              >
+                Desktop address <strong style={{ color: "var(--text-primary)" }}>{desktopAddress}</strong>
+              </div>
+            )}
             {paired && (
               <p style={{ color: "var(--warning)", fontSize: 11, lineHeight: 1.5, margin: "12px 0 0" }}>
                 This device is remembered but not currently online. Open Orion Connect on Mobile to reconnect,

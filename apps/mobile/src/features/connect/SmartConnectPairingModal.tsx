@@ -46,15 +46,16 @@ export function SmartConnectPairingModal({ controller }: SmartConnectPairingModa
     isConnecting,
     isDiscovering,
     lockoutSeconds,
+    attemptsRemaining,
     pairError,
     pairingMethod,
     pinCode,
+    prepareDirectIp,
     requestCameraPermission,
     runSubnetFallback,
     scanLineAnim,
     setDesktopIp,
     setPairingMethod,
-    setPinCode,
     setShowPairingModal,
     showPairingModal,
   } = controller;
@@ -130,10 +131,17 @@ export function SmartConnectPairingModal({ controller }: SmartConnectPairingModa
                       pinCode[index] && styles.pinBoxFilled,
                       pinCode.length === index && styles.pinBoxFocused,
                     ]}>
-                      <Text style={styles.pinBoxText}>{pinCode[index] || ''}</Text>
+                      <Text style={styles.pinBoxText} adjustsFontSizeToFit numberOfLines={1} maxFontSizeMultiplier={1.35}>
+                        {pinCode[index] || ''}
+                      </Text>
                     </View>
                   ))}
                 </Pressable>
+                {Number.isFinite(attemptsRemaining) && attemptsRemaining !== null && connectionState !== 'locked-out' && (
+                  <Text style={styles.attemptsRemainingText}>
+                    {attemptsRemaining} pairing attempt{attemptsRemaining === 1 ? '' : 's'} remaining
+                  </Text>
+                )}
                 {!keyboardVisible && (
                   <Pressable style={styles.keyboardRecoveryBtn} onPress={focusPin}>
                     <Ionicons name="keypad-outline" size={16} color={theme.accent} />
@@ -191,18 +199,25 @@ export function SmartConnectPairingModal({ controller }: SmartConnectPairingModa
 
             {pairingMethod === 'ip' && (
               <View style={styles.ipSection}>
-                <Text style={styles.modalTitle}>Manual IP & PIN Connect</Text>
-                {!keyboardVisible && <Text style={styles.modalSub}>Enter your computer's local IP and pairing PIN.</Text>}
+                <Text style={styles.modalTitle}>Find Desktop by Address</Text>
+                {!keyboardVisible && <Text style={styles.modalSub}>Orion keeps the last discovered address filled in. This step finds Desktop; the dedicated PIN screen securely pairs a new device.</Text>}
                 <View style={styles.ipInputRow}>
                   <Ionicons name="desktop-outline" size={20} color={theme.accent} />
-                  <TextInput style={styles.ipInput} value={desktopIp} onChangeText={setDesktopIp} placeholder="Desktop IP (192.168…)" placeholderTextColor={muted} keyboardType="numeric" returnKeyType="next" />
+                  <TextInput
+                    style={styles.ipInput}
+                    value={desktopIp}
+                    onChangeText={setDesktopIp}
+                    placeholder="Desktop IP (192.168…)"
+                    placeholderTextColor={muted}
+                    keyboardType="numbers-and-punctuation"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="done"
+                    onSubmitEditing={() => void prepareDirectIp()}
+                  />
                 </View>
-                <View style={styles.ipInputRow}>
-                  <Ionicons name="keypad-outline" size={20} color={theme.accent} />
-                  <TextInput style={styles.ipInput} value={pinCode} onChangeText={setPinCode} placeholder="6-digit pairing code" placeholderTextColor={muted} keyboardType="number-pad" maxLength={6} />
-                </View>
-                <Pressable style={styles.confirmBtn} onPress={() => handleConnect(undefined, undefined, undefined, 'direct-ip')} disabled={isConnecting}>
-                  <Text style={styles.confirmBtnText}>{isConnecting ? 'Connecting…' : 'Connect to Desktop'}</Text>
+                <Pressable style={styles.confirmBtn} onPress={() => void prepareDirectIp()} disabled={isConnecting}>
+                  <Text style={styles.confirmBtnText}>{isConnecting ? 'Checking Desktop…' : 'Find Desktop'}</Text>
                 </Pressable>
               </View>
             )}

@@ -1,8 +1,9 @@
-import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { imgUrl } from '@orion/shared/api';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { formatPlaybackClock } from './playbackFormatting';
+import { useResponsiveLayout } from '../../services/responsive';
 
 interface HistoryRowProps {
   item: any;
@@ -12,9 +13,9 @@ interface HistoryRowProps {
 }
 
 export function HistoryRow({ item, onResume, onOpenDetails, onRemove }: HistoryRowProps) {
-  const { width } = useWindowDimensions();
+  const { isPhone } = useResponsiveLayout();
   const { theme } = useOrionTheme();
-  const phoneLayout = width < 600;
+  const phoneLayout = isPhone;
   const artwork = imgUrl(item.backdrop_path || item.poster_path, 'w500');
   const title = item.media_type === 'tv' ? (item.name || item.title) : item.title;
   const context = item.media_type === 'tv' && item.season && item.episode

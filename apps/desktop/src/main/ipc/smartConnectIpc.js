@@ -16,7 +16,9 @@ const PIN_TTL_MS = 5 * 60 * 1000;
 const TOKEN_IDLE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const COMMAND_TIMEOUT_MS = 1800;
 const MAX_PAIR_ATTEMPTS = 5;
-const ATTEMPT_WINDOW_MS = 60 * 1000;
+// Failed attempts live for the displayed code's lifetime. Reopening either
+// Connect surface must not silently restore all five attempts.
+const ATTEMPT_WINDOW_MS = PIN_TTL_MS;
 const LOCKOUT_MS = 2 * 60 * 1000;
 
 let server = null;
@@ -77,10 +79,15 @@ function ensureDesktopInstanceId() {
   return desktopInstanceId;
 }
 
-function pairingError(res, status, code, message, retryAfterMs) {
+function pairingError(res, status, code, message, retryAfterMs, attemptsRemaining) {
   return json(res, status, {
     ok: false,
-    error: { code, message, ...(Number.isFinite(retryAfterMs) ? { retryAfterMs } : {}) },
+    error: {
+      code,
+      message,
+      ...(Number.isFinite(retryAfterMs) ? { retryAfterMs } : {}),
+      ...(Number.isFinite(attemptsRemaining) ? { attemptsRemaining } : {}),
+    },
   });
 }
 
@@ -125,6 +132,53 @@ function ensureFreshPin() {
 
 function tokenFile() {
   return path.join(app.getPath("userData"), "smart-connect-sessions.bin");
+}
+
+function pairingGuardFile() {
+  return path.join(app.getPath("userData"), "smart-connect-pairing-guard.json");
+}
+
+function normalizePairingGuard(now = Date.now()) {
+  pairAttempts = pairAttempts
+    .map(Number)
+    .filter((time) => Number.isFinite(time) && now - time < ATTEMPT_WINDOW_MS);
+  if (!Number.isFinite(lockedUntil) || lockedUntil <= now) lockedUntil = 0;
+}
+
+function pairingGuardSnapshot(now = Date.now()) {
+  normalizePairingGuard(now);
+  return {
+    attemptsRemaining: now < lockedUntil ? 0 : Math.max(0, MAX_PAIR_ATTEMPTS - pairAttempts.length),
+    retryAfterMs: now < lockedUntil ? lockedUntil - now : 0,
+    lockedUntil: now < lockedUntil ? lockedUntil : 0,
+  };
+}
+
+function savePairingGuard() {
+  try {
+    normalizePairingGuard();
+    fs.writeFileSync(pairingGuardFile(), JSON.stringify({ pairAttempts, lockedUntil }), {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+  } catch (error) {
+    console.warn("[SmartConnect] Could not persist pairing guard:", error.message);
+  }
+}
+
+function loadPairingGuard() {
+  try {
+    const file = pairingGuardFile();
+    if (!fs.existsSync(file)) return;
+    const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+    pairAttempts = Array.isArray(saved.pairAttempts) ? saved.pairAttempts : [];
+    lockedUntil = Number(saved.lockedUntil || 0);
+    normalizePairingGuard();
+  } catch (error) {
+    pairAttempts = [];
+    lockedUntil = 0;
+    console.warn("[SmartConnect] Ignoring unreadable pairing guard:", error.message);
+  }
 }
 
 function saveSessions() {
@@ -331,6 +385,7 @@ function startSmartConnectServer(getMainWindow) {
   ensureDesktopInstanceId();
   ensureFreshPin();
   loadSessions();
+  loadPairingGuard();
 
   server = http.createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -354,6 +409,7 @@ function startSmartConnectServer(getMainWindow) {
             connected: socketIsOpen(connectedSockets.get(session.deviceId)),
             device: session.deviceName,
             playback: currentPlayback,
+            pairingGuard: pairingGuardSnapshot(),
           }
         : {
             ok: true,
@@ -365,6 +421,7 @@ function startSmartConnectServer(getMainWindow) {
             port: PORT,
             paired: false,
             connected: false,
+            pairingGuard: pairingGuardSnapshot(),
           });
     }
 
@@ -372,25 +429,35 @@ function startSmartConnectServer(getMainWindow) {
       try {
         const data = await readJson(req);
         const now = Date.now();
-        pairAttempts = pairAttempts.filter((time) => now - time < ATTEMPT_WINDOW_MS);
+        normalizePairingGuard(now);
         const existingToken = String(data.token || "");
         const existing = authenticate(existingToken);
         if (!existing && now < lockedUntil) {
-          return pairingError(res, 429, "LOCKED_OUT", "Pairing is temporarily locked. Try again shortly.", lockedUntil - now);
+          return pairingError(res, 429, "LOCKED_OUT", "Pairing is temporarily locked. Try again shortly.", lockedUntil - now, 0);
         }
         const codeExpired = !currentPin || now >= pinExpiresAt;
         ensureFreshPin();
-        if (!existing && (String(data.pin || "") !== currentPin || now >= pinExpiresAt)) {
+        if (!existing && codeExpired) {
+          // Expiry is not a failed authentication attempt. A fresh code was
+          // generated above; retain the user's remaining attempts.
+          const guard = pairingGuardSnapshot(now);
+          return pairingError(res, 401, "CODE_EXPIRED", "The six-digit pairing code expired. Generate a new code on Orion Desktop.", undefined, guard.attemptsRemaining);
+        }
+        if (!existing && String(data.pin || "") !== currentPin) {
           pairAttempts.push(now);
           if (pairAttempts.length >= MAX_PAIR_ATTEMPTS) {
             lockedUntil = now + LOCKOUT_MS;
-            return pairingError(res, 429, "LOCKED_OUT", "Pairing is temporarily locked. Try again shortly.", LOCKOUT_MS);
+            savePairingGuard();
+            return pairingError(res, 429, "LOCKED_OUT", "Pairing is temporarily locked. Try again shortly.", LOCKOUT_MS, 0);
           }
+          savePairingGuard();
           return pairingError(
             res,
             401,
-            codeExpired ? "CODE_EXPIRED" : "INVALID_CODE",
-            codeExpired ? "The six-digit pairing code expired. Generate a new code on Orion Desktop." : "The six-digit pairing code is invalid.",
+            "INVALID_CODE",
+            "The six-digit pairing code is invalid.",
+            undefined,
+            Math.max(0, MAX_PAIR_ATTEMPTS - pairAttempts.length),
           );
         }
         const token = existingToken && existing ? existingToken : crypto.randomBytes(32).toString("hex");
@@ -408,6 +475,8 @@ function startSmartConnectServer(getMainWindow) {
         }
         pairedSessions.set(token, session);
         pairAttempts = [];
+        lockedUntil = 0;
+        savePairingGuard();
         createPin();
         saveSessions();
         notifyConnectionStatus();
@@ -516,6 +585,7 @@ ipcMain.handle("smart-connect:get-info", async () => {
     paired: pairedSessions.size > 0,
     connected: publicDevices().some((device) => device.connected),
     devices: publicDevices(),
+    pairingGuard: pairingGuardSnapshot(),
   };
 });
 
@@ -523,6 +593,9 @@ ipcMain.handle("smart-connect:set-pin", (_, pin) => {
   const value = String(pin || "");
   currentPin = /^\d{6}$/.test(value) ? value : createPin();
   pinExpiresAt = Date.now() + PIN_TTL_MS;
+  pairAttempts = [];
+  lockedUntil = 0;
+  savePairingGuard();
   notifyConnectionStatus();
   return { ok: true, pin: currentPin, pinExpiresAt };
 });

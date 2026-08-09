@@ -19,7 +19,7 @@ test("top-level utility pages use the shared editorial header", () => {
     assert.match(read(relative), /MobilePageHeader/);
   }
   const header = read("src/components/MobilePageHeader.tsx");
-  assert.match(header, /paddingTop: isTablet \? insets\.top \+ 20 : insets\.top \+ 64/);
+  assert.match(header, /paddingTop: isTablet \? insets\.top \+ 20 : isLandscape \? insets\.top \+ 12 : insets\.top \+ 64/);
   assert.match(header, /accessibilityRole="header"/);
 });
 

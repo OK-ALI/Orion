@@ -23,6 +23,7 @@ import {
   YEAR_OPTIONS,
 } from './discoverCatalog';
 import { createDiscoverStyles } from './discoverStyles';
+import { useResponsiveLayout } from '../../services/responsive';
 
 export default function DiscoverScreen() {
   const { theme } = useOrionTheme();
@@ -48,7 +49,10 @@ export default function DiscoverScreen() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
-  const COLUMN_COUNT = containerWidth >= 900 ? 6 : containerWidth >= 600 ? 5 : containerWidth >= 390 ? 3 : 2;
+  const { isPhone, isTablet, isLandscape } = useResponsiveLayout();
+  const COLUMN_COUNT = isPhone
+    ? (isLandscape ? 4 : containerWidth >= 390 ? 3 : 2)
+    : containerWidth >= 900 ? 6 : isTablet ? 5 : 3;
   const padding = spacing[4] * 2;
   const gaps = spacing[3] * (COLUMN_COUNT - 1);
   const cardWidth = containerWidth > 0 ? (containerWidth - padding - gaps) / COLUMN_COUNT : 110;

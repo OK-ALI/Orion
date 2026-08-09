@@ -42,9 +42,13 @@ export function TrailerModal({ visible, onClose, title, candidates }: TrailerMod
   const session = useTrailerSession(visible, candidates);
   const candidate = session.activeCandidate;
   const landscape = width > height;
-  const sheetWidth = Math.min(width - 24, 820);
-  const availablePlayerHeight = Math.max(180, height - insets.top - insets.bottom - (landscape ? 190 : 280));
-  const playerWidth = Math.min(sheetWidth, landscape ? availablePlayerHeight * 16 / 9 : sheetWidth);
+  const sheetWidth = Math.min(width - 24, landscape ? 1080 : 820);
+  const candidateRailWidth = candidates.length > 1 ? Math.min(220, Math.max(150, sheetWidth * 0.2)) : 0;
+  const actionRailWidth = Math.min(190, Math.max(150, sheetWidth * 0.18));
+  const landscapeChromeWidth = candidateRailWidth + actionRailWidth + (candidates.length > 1 ? 20 : 10);
+  const availablePlayerHeight = Math.max(200, height - insets.top - insets.bottom - (landscape ? 116 : 280));
+  const availablePlayerWidth = landscape ? Math.max(300, sheetWidth - landscapeChromeWidth) : sheetWidth;
+  const playerWidth = Math.min(availablePlayerWidth, availablePlayerHeight * 16 / 9);
   // YouTube requires an embedded viewport of at least 200 CSS pixels per side.
   // Compact phones therefore receive a small letterboxed exception to strict 16:9.
   const playerHeight = Math.max(200, playerWidth * 9 / 16);
@@ -113,13 +117,20 @@ export function TrailerModal({ visible, onClose, title, candidates }: TrailerMod
             </Pressable>
           </View>
 
+          <View style={[styles.body, landscape && styles.bodyLandscape]}>
           {candidates.length > 1 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selector} contentContainerStyle={styles.selectorContent}>
+            <ScrollView
+              horizontal={!landscape}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              style={[styles.selector, landscape && { width: candidateRailWidth, maxHeight: playerHeight }]}
+              contentContainerStyle={[styles.selectorContent, landscape && styles.selectorContentLandscape]}
+            >
               {candidates.map((item, index) => {
                 const active = index === session.activeIndex;
-                return <Pressable key={item.id} onPress={() => session.select(index)} style={[styles.pill, { backgroundColor: active ? theme.accentSoft : theme.surface, borderColor: active ? theme.accent : theme.border }]}>
+                return <Pressable key={item.id} onPress={() => session.select(index)} accessibilityRole="button" accessibilityState={{ selected: active }} style={[styles.pill, landscape && styles.pillLandscape, { backgroundColor: active ? theme.accentSoft : theme.surface, borderColor: active ? theme.accent : theme.border }]}>
                   <Ionicons name={item.site === 'Vimeo' ? 'logo-vimeo' : 'logo-youtube'} size={15} color={active ? theme.accent : theme.textSecondary} />
-                  <Text style={[styles.pillText, { color: active ? theme.text : theme.textSecondary }]} numberOfLines={1}>{item.name}</Text>
+                  <Text style={[styles.pillText, landscape && styles.pillTextLandscape, { color: active ? theme.text : theme.textSecondary }]} numberOfLines={landscape ? 2 : 1}>{item.name}</Text>
                   {item.official && <Text style={[styles.official, { color: theme.accent }]}>OFFICIAL</Text>}
                 </Pressable>;
               })}
@@ -163,17 +174,18 @@ export function TrailerModal({ visible, onClose, title, candidates }: TrailerMod
             </View>}
           </View>
 
-          <View style={[styles.actions, { borderTopColor: theme.border }]}>
-            <Pressable accessibilityRole="button" onPress={session.retry} disabled={!candidate} style={[styles.action, { backgroundColor: theme.accent }]}>
+          <View style={[styles.actions, landscape && [styles.actionsLandscape, { width: actionRailWidth }], { borderColor: theme.border }]}>
+            <Pressable accessibilityRole="button" onPress={session.retry} disabled={!candidate} style={[styles.action, landscape && styles.actionLandscape, { backgroundColor: theme.accent }]}>
               <Ionicons name="refresh" size={18} color={theme.onAccent} /><Text style={[styles.actionText, { color: theme.onAccent }]}>Retry</Text>
             </Pressable>
-            {candidates.length > 1 && <Pressable accessibilityRole="button" onPress={session.next} style={[styles.action, { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1 }]}>
+            {candidates.length > 1 && <Pressable accessibilityRole="button" onPress={session.next} style={[styles.action, landscape && styles.actionLandscape, { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1 }]}>
               <Ionicons name="play-skip-forward" size={18} color={theme.text} /><Text style={[styles.actionText, { color: theme.text }]}>Try next</Text>
             </Pressable>}
-            <Pressable accessibilityRole="button" onPress={openProvider} disabled={!candidate} style={[styles.action, { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1 }]}>
-              <Ionicons name="open-outline" size={18} color={theme.text} /><Text style={[styles.actionText, { color: theme.text }]}>Open {candidate?.site || 'provider'}</Text>
+            <Pressable accessibilityRole="button" onPress={openProvider} disabled={!candidate} style={[styles.action, landscape && styles.actionLandscape, { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1 }]}>
+              <Ionicons name="open-outline" size={18} color={theme.text} /><Text style={[styles.actionText, { color: theme.text }]} numberOfLines={2}>Open {candidate?.site || 'provider'}</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" onPress={openBrowser} disabled={!candidate} style={styles.browserAction}><Text style={[styles.browserText, { color: theme.textSecondary }]}>Open in browser</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={openBrowser} disabled={!candidate} style={[styles.browserAction, landscape && styles.browserActionLandscape]}><Text style={[styles.browserText, { color: theme.textSecondary }]}>Open in browser</Text></Pressable>
+          </View>
           </View>
         </View>
       </View>
@@ -190,16 +202,24 @@ const styles = StyleSheet.create({
   headerText: { flex: 1 }, eyebrow: { fontSize: 11, fontWeight: '900', letterSpacing: 2 },
   title: { fontSize: 20, fontWeight: '800' },
   iconButton: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  body: { alignItems: 'center' },
+  bodyLandscape: { flexDirection: 'row', alignItems: 'stretch', justifyContent: 'center', padding: 10, gap: 10 },
   selector: { maxHeight: 58 }, selectorContent: { paddingHorizontal: 14, paddingVertical: 9, gap: 8 },
+  selectorContentLandscape: { paddingHorizontal: 0, paddingVertical: 0, flexDirection: 'column' },
   pill: { minHeight: 40, maxWidth: 260, paddingHorizontal: 12, borderRadius: 20, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  pillLandscape: { width: '100%', maxWidth: '100%', minHeight: 52, borderRadius: 16 },
   pillText: { maxWidth: 170, fontSize: 12, fontWeight: '700' }, official: { fontSize: 8, fontWeight: '900' },
+  pillTextLandscape: { flex: 1, maxWidth: undefined },
   playerFrame: { maxWidth: '100%', alignSelf: 'center', backgroundColor: '#000', borderWidth: 1, overflow: 'hidden' },
   webview: { flex: 1, backgroundColor: '#000' },
   playerOverlay: { ...StyleSheet.absoluteFill, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', padding: 18, gap: 8 },
   statusText: { fontSize: 14, fontWeight: '700' }, errorTitle: { fontSize: 19, fontWeight: '900', textAlign: 'center' },
   errorText: { fontSize: 13, lineHeight: 18, textAlign: 'center', maxWidth: 460 },
   actions: { borderTopWidth: 1, padding: 12, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
+  actionsLandscape: { borderTopWidth: 0, borderLeftWidth: 1, paddingVertical: 0, paddingHorizontal: 10, flexDirection: 'column', flexWrap: 'nowrap', justifyContent: 'center' },
   action: { minHeight: 44, minWidth: 116, paddingHorizontal: 15, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  actionLandscape: { width: '100%', minWidth: 0, paddingHorizontal: 10 },
   actionText: { fontSize: 13, fontWeight: '800' }, browserAction: { minHeight: 44, paddingHorizontal: 12, justifyContent: 'center' },
+  browserActionLandscape: { width: '100%', alignItems: 'center', paddingHorizontal: 4 },
   browserText: { fontSize: 13, fontWeight: '700' },
 });

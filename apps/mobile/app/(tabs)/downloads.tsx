@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { spacing, radii } from '@orion/shared/tokens';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,7 +27,11 @@ export default function DownloadsScreen() {
       <MobilePageHeader eyebrow="OFFLINE" title="Downloads" subtitle="Your offline media vault and download availability." />
 
       {/* Locked Downloader State Card */}
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={[styles.lockedCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={[styles.iconContainer, { backgroundColor: theme.accentSoft }]}>
             <View style={[styles.iconGlow, { backgroundColor: theme.accentSoft }]} />
@@ -60,7 +64,7 @@ export default function DownloadsScreen() {
             <Text style={[styles.actionBtnText, { color: theme.onAccent }]}>Explore Orion Catalog</Text>
           </Pressable>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -69,8 +73,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  scroll: { flex: 1 },
   content: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: spacing[5],

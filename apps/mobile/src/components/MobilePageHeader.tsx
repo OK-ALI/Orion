@@ -16,7 +16,7 @@ export interface MobilePageHeaderProps {
 export function MobilePageHeader({ eyebrow, title, subtitle, trailing, compact = false, layoutMode = 'regular' }: MobilePageHeaderProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useOrionTheme();
-  const { isTablet, width } = useResponsiveLayout();
+  const { isTablet, isLandscape, width } = useResponsiveLayout();
   const horizontal = width < 360 ? 12 : isTablet ? 32 : 18;
   const isCompact = compact || layoutMode === 'compact';
 
@@ -25,7 +25,7 @@ export function MobilePageHeader({ eyebrow, title, subtitle, trailing, compact =
       style={[
         styles.header,
         {
-          paddingTop: isTablet ? insets.top + 20 : insets.top + 64,
+          paddingTop: isTablet ? insets.top + 20 : isLandscape ? insets.top + 12 : insets.top + 64,
           paddingHorizontal: horizontal,
           paddingBottom: isCompact ? 12 : 18,
         },
@@ -35,7 +35,7 @@ export function MobilePageHeader({ eyebrow, title, subtitle, trailing, compact =
         {!!eyebrow && <Text style={[styles.eyebrow, { color: theme.accent }]}>{eyebrow}</Text>}
         {!!trailing && <View style={styles.trailing}>{trailing}</View>}
       </View>
-      <Text accessibilityRole="header" style={[styles.title, isCompact && styles.titleCompact, { color: theme.text }]}>{title}</Text>
+      <Text accessibilityRole="header" style={[styles.title, (isCompact || isLandscape) && styles.titleCompact, { color: theme.text }]}>{title}</Text>
       {!!subtitle && <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{subtitle}</Text>}
     </View>
   );

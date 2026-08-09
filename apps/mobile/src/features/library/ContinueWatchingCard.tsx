@@ -1,9 +1,10 @@
-import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { imgUrl } from '@orion/shared/api';
 import type { ContinueWatchingEntry } from '@orion/shared/types';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { progressDescription } from './playbackFormatting';
+import { useResponsiveLayout } from '../../services/responsive';
 
 interface ContinueWatchingCardProps {
   entry: ContinueWatchingEntry;
@@ -24,11 +25,11 @@ export function ContinueWatchingCard({
   onOpenDetails,
   presentation: presentationMode = 'home-rail',
 }: ContinueWatchingCardProps) {
-  const { width } = useWindowDimensions();
+  const { width, shortestEdge } = useResponsiveLayout();
   const { theme } = useOrionTheme();
   const { progress } = entry;
   const { mediaIdentity, presentation } = progress;
-  const compact = width < 360;
+  const compact = shortestEdge < 360;
   const isLibrary = presentationMode === 'library-full';
   const cardWidth = isLibrary
     ? '100%'

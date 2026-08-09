@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useMemo, useRef } from "react";
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { spacing, radii } from "@orion/shared/tokens";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,6 +10,9 @@ import { MobilePageHeader } from "../../components/MobilePageHeader";
 import { OrionDialog } from "../../components/OrionDialog";
 import { SmartConnectPairingModal } from "./SmartConnectPairingModal";
 export default function ConnectScreen() {
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+  const scrubberWidthRef = useRef(1);
   const { theme } = useOrionTheme();
   const styles = useMemo(() => createConnectStyles(theme), [theme]);
   const text = { primary: theme.text, secondary: theme.textSecondary, muted: theme.textMuted };
@@ -169,7 +172,12 @@ export default function ConnectScreen() {
         </ScrollView>
       ) : (
         /* Connected Smart Remote Interface */
-        <View style={styles.remoteLayout}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.remoteLayout, isLandscape && styles.remoteLayoutLandscape]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.nowPlayingBar}>
             <View style={styles.nowPlayingIconGlow}>
               <Ionicons name="tv-outline" size={18} color={theme.success} />
@@ -263,7 +271,7 @@ export default function ConnectScreen() {
           {activeTab === 'touchpad' && (
             <View style={styles.touchpadSection}>
               <View
-                style={styles.touchpadSurface}
+                style={[styles.touchpadSurface, isLandscape && styles.touchpadSurfaceLandscape]}
                 {...panResponder.panHandlers}
               >
                 <Ionicons name="finger-print" size={36} color={theme.textMuted} />
@@ -381,12 +389,14 @@ export default function ConnectScreen() {
                 </View>
                 <Pressable
                   style={styles.scrubberTrack}
+                  onLayout={(event) => {
+                    scrubberWidthRef.current = Math.max(1, event.nativeEvent.layout.width);
+                  }}
                   onPress={(e) => {
                     if (nowPlaying.duration && nowPlaying.duration > 0) {
                       const nativeEvent = e.nativeEvent as any;
                       const locationX = nativeEvent.locationX || 0;
-                      const layoutWidth = 320;
-                      const ratio = Math.max(0, Math.min(1, locationX / layoutWidth));
+                      const ratio = Math.max(0, Math.min(1, locationX / scrubberWidthRef.current));
                       const targetSec = Math.floor(ratio * nowPlaying.duration);
                       sendRemoteCommand('seek_to', targetSec);
                     }
@@ -553,7 +563,7 @@ export default function ConnectScreen() {
               </Pressable>
             </View>
           )}
-        </View>
+        </ScrollView>
       )}
       <SmartConnectPairingModal controller={controller} />
       <Modal visible={showDisconnectModal} transparent animationType="fade">

@@ -67,5 +67,9 @@ test("modal is theme aware, safe-area aware, and supports both providers", () =>
   assert.match(source, /mediaPlaybackRequiresUserAction=\{false\}/);
   assert.match(source, /headers: \{ Referer: IDENTITY\.referrer \}/);
   assert.match(source, /session\.transport === 'direct'/);
+  assert.match(source, /landscape \? 1080 : 820/);
+  assert.match(source, /styles\.bodyLandscape/);
+  assert.match(source, /horizontal=\{!landscape\}/);
+  assert.match(source, /styles\.actionsLandscape/);
   assert.doesNotMatch(source, /ANDROID_YOUTUBE_USER_AGENT/);
 });

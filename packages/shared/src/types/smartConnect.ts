@@ -50,6 +50,7 @@ export interface SmartConnectPairingError {
   code: SmartConnectPairingErrorCode;
   message: string;
   retryAfterMs?: number;
+  attemptsRemaining?: number;
 }
 
 export interface SmartConnectTrustedEndpoint {

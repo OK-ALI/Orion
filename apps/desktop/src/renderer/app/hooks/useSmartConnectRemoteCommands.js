@@ -1,5 +1,8 @@
 import { useEffect } from "react";
 
+const REMOTE_CURSOR_INACTIVITY_MS = 4_000;
+let remoteCursorInactivityTimer = null;
+
 const SIDEBAR_PAGES = [
   "home",
   "search",
@@ -19,6 +22,26 @@ function getScrollContainer() {
     document.scrollingElement ||
     window
   );
+}
+
+function clearRemoteCursor() {
+  if (remoteCursorInactivityTimer) {
+    window.clearTimeout(remoteCursorInactivityTimer);
+    remoteCursorInactivityTimer = null;
+  }
+  document.querySelector(".orion-virtual-cursor")?.remove();
+  document
+    .querySelectorAll(".spatial-remote-focused")
+    .forEach((node) => node.classList.remove("spatial-remote-focused"));
+}
+
+function scheduleRemoteCursorCleanup() {
+  if (remoteCursorInactivityTimer) {
+    window.clearTimeout(remoteCursorInactivityTimer);
+  }
+  remoteCursorInactivityTimer = window.setTimeout(() => {
+    clearRemoteCursor();
+  }, REMOTE_CURSOR_INACTIVITY_MS);
 }
 
 function moveCursor(payload) {
@@ -45,11 +68,13 @@ function moveCursor(payload) {
     .querySelectorAll(".spatial-remote-focused")
     .forEach((node) => node.classList.remove("spatial-remote-focused"));
   interactive?.classList.add("spatial-remote-focused");
+  scheduleRemoteCursorCleanup();
 }
 
 function clickCursor() {
   const cursor = document.querySelector(".orion-virtual-cursor");
   if (!cursor) return;
+  scheduleRemoteCursorCleanup();
   const rect = cursor.getBoundingClientRect();
   const element = document.elementFromPoint(
     rect.left + rect.width / 2,
@@ -252,6 +277,20 @@ export function useSmartConnectRemoteCommands({
     };
 
     const unsubscribe = window.electron?.onRemoteCommand?.(handleRemoteCommand);
+    const handleSmartConnectStatus = (status) => {
+      const devices = Array.isArray(status?.devices) ? status.devices : [];
+      const connected = Boolean(
+        status?.connected || devices.some((device) => device?.connected),
+      );
+      if (!connected) clearRemoteCursor();
+    };
+    const unsubscribeStatus = window.electron?.onSmartConnectStatus?.(
+      handleSmartConnectStatus,
+    );
+    const initialStatus = window.electron?.getSmartConnectInfo?.();
+    initialStatus
+      ?.then(handleSmartConnectStatus)
+      .catch(() => clearRemoteCursor());
     let channel;
     try {
       if (typeof window.BroadcastChannel !== "undefined") {
@@ -269,6 +308,8 @@ export function useSmartConnectRemoteCommands({
     window.addEventListener("orion:remote-command-custom", handleCustomRemote);
     return () => {
       unsubscribe?.();
+      unsubscribeStatus?.();
+      clearRemoteCursor();
       try {
         channel?.close();
       } catch {

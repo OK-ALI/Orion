@@ -4,7 +4,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +19,7 @@ import { OrionDialog } from '../../components/OrionDialog';
 import { ContinueWatchingCard } from './ContinueWatchingCard';
 import { HistoryRow } from './HistoryRow';
 import { historyEntryKey, selectLatestHistory } from './playbackLibrary';
+import { useResponsiveLayout } from '../../services/responsive';
 
 type LibraryTab = 'saved' | 'continue' | 'history';
 
@@ -45,7 +45,7 @@ function validTab(value: string | undefined): LibraryTab {
 export default function LibraryScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
-  const { width } = useWindowDimensions();
+  const { width, shortestEdge, isLandscape, isTablet } = useResponsiveLayout();
   const { theme, preferences } = useOrionTheme();
   const {
     saved, savedOrder, history, progress, watched,
@@ -80,9 +80,11 @@ export default function LibraryScreen() {
     keys.forEach((key) => { enrichPlaybackMetadata(key).catch(() => {}); });
   }, [continueItems, enrichPlaybackMetadata, historyItems, progress]);
 
-  const horizontalPadding = width < 360 ? 12 : width >= 900 ? 32 : 18;
-  const columnCount = width >= 900 ? 5 : width >= 600 ? 4 : width >= 390 ? 3 : 2;
-  const gridGap = width < 360 ? 8 : 12;
+  const horizontalPadding = shortestEdge < 360 ? 12 : isTablet ? 32 : 18;
+  const columnCount = isTablet
+    ? (width >= 900 ? 5 : 4)
+    : (isLandscape ? 3 : width >= 390 ? 3 : 2);
+  const gridGap = shortestEdge < 360 ? 8 : 12;
   const cardWidth = Math.max(112, (width - horizontalPadding * 2 - gridGap * (columnCount - 1)) / columnCount);
 
   const openDetails = (id: string | number, mediaType: 'movie' | 'tv') => {

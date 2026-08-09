@@ -26,7 +26,7 @@ export const createConnectRemoteStyles = (theme: MobileThemeTokens) => StyleShee
     color: theme.textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase',
     letterSpacing: 0.8, marginBottom: 8, paddingLeft: 4,
   },
-  quickLaunchRail: { flexDirection: 'row', gap: 8, paddingHorizontal: 2 },
+  quickLaunchRail: { flexDirection: 'row', gap: 8, paddingHorizontal: 2, paddingRight: 18 },
   quickPageChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.surface,
     borderWidth: 1, borderColor: theme.border, paddingHorizontal: 12, paddingVertical: 8,
@@ -56,6 +56,7 @@ export const createConnectRemoteStyles = (theme: MobileThemeTokens) => StyleShee
     borderColor: theme.border, borderRadius: radii.xl, justifyContent: 'center',
     alignItems: 'center', gap: 8,
   },
+  touchpadSurfaceLandscape: { height: 160 },
   touchpadPrompt: { color: theme.text, fontSize: 14, fontWeight: '700' },
   touchpadSubPrompt: { color: theme.textMuted, fontSize: 12 },
 });

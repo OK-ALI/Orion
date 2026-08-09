@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Animated, Pressable, Platform, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Animated, Pressable, ActivityIndicator, FlatList } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState, useRef } from 'react';
 import { imgUrl, fetchPersonDetails } from '@orion/shared/api';
@@ -8,11 +8,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { MediaCard } from '../../src/components/MediaCard';
 import { useOrionTheme } from '../../src/context/ThemeContext';
+import { useResponsiveLayout } from '../../src/services/responsive';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function PersonDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { theme } = useOrionTheme();
+  const { isLandscape, isTablet } = useResponsiveLayout();
+  const insets = useSafeAreaInsets();
   
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -85,7 +89,7 @@ export default function PersonDetailScreen() {
       />
 
       {/* Floating Back Button */}
-      <Pressable style={styles.backButton} onPress={() => router.back()}>
+      <Pressable style={[styles.backButton, { top: insets.top + 10, left: insets.left + 16 }]} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back">
         <BlurView intensity={80} tint="dark" style={styles.backButtonInner}>
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </BlurView>
@@ -100,7 +104,7 @@ export default function PersonDetailScreen() {
         scrollEventThrottle={16}
       >
         {/* Parallax Header */}
-        <View style={styles.headerContainer}>
+        <View style={[styles.headerContainer, isLandscape && styles.headerContainerLandscape, isTablet && styles.headerContainerTablet]}>
           <Animated.Image
             source={{ uri: profileImage || undefined }}
             style={[
@@ -116,7 +120,7 @@ export default function PersonDetailScreen() {
         </View>
 
         {/* Content Body */}
-        <View style={styles.contentContainer}>
+        <View style={[styles.contentContainer, isLandscape && styles.contentContainerLandscape, isTablet && styles.contentContainerTablet]}>
           {/* Floating Info HUD */}
           <BlurView
             intensity={70}
@@ -183,8 +187,6 @@ const styles = StyleSheet.create({
   },
   backButton: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 20,
-    left: 20,
     zIndex: 100,
     borderRadius: 20,
     overflow: 'hidden',
@@ -200,6 +202,8 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 500,
   },
+  headerContainerLandscape: { height: 300 },
+  headerContainerTablet: { height: 440 },
   backdrop: {
     width: '100%',
     height: '100%',
@@ -208,7 +212,12 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingHorizontal: spacing[4],
     marginTop: -100,
+    width: '100%',
+    maxWidth: 1120,
+    alignSelf: 'center',
   },
+  contentContainerLandscape: { marginTop: -64, paddingHorizontal: spacing[6] },
+  contentContainerTablet: { paddingHorizontal: spacing[8] },
   infoHud: {
     borderRadius: radii.lg,
     padding: spacing[5],

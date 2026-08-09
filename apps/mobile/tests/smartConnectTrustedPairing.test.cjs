@@ -57,6 +57,38 @@ test("pairing sheet uses a real focusable PIN input and keyboard-safe responsive
   assert.match(modal, /Enter code/);
   assert.match(modal, /discoveredDesktops\.map/);
   assert.match(modal, /Find Desktop again/);
+  const directIp = modal.slice(modal.indexOf("pairingMethod === 'ip'"), modal.indexOf("pairError &&"));
+  assert.match(directIp, /Find Desktop by Address/);
+  assert.match(directIp, /prepareDirectIp/);
+  assert.doesNotMatch(directIp, /pairPin|pairWithDesktop/);
+});
+
+test("Direct IP discovers an endpoint before the single PIN flow", () => {
+  const controller = readMobile("src/features/connect/useConnectController.ts");
+  const directIp = controller.slice(
+    controller.indexOf("const prepareDirectIp"),
+    controller.indexOf("const handlePinChange"),
+  );
+  assert.match(directIp, /inspectSmartConnectEndpoint/);
+  assert.match(directIp, /setPairingMethod\('pin'\)/);
+  assert.match(directIp, /setPinCode\(''\)/);
+  assert.doesNotMatch(directIp, /pairWithDesktop\(/);
+});
+
+test("pairing failures expose and persist remaining attempts and lockout", () => {
+  const desktop = readRepo("apps/desktop/src/main/ipc/smartConnectIpc.js");
+  const controller = readMobile("src/features/connect/useConnectController.ts");
+  const guardStore = readMobile("src/features/connect/pairingGuardStore.ts");
+  const guardState = readMobile("src/features/connect/usePairingGuardState.ts");
+  const modal = readMobile("src/features/connect/SmartConnectPairingModal.tsx");
+  assert.match(desktop, /smart-connect-pairing-guard\.json/);
+  assert.match(desktop, /attemptsRemaining/);
+  assert.match(desktop, /savePairingGuard\(\)/);
+  assert.match(guardStore, /orion_smart_connect_pairing_guard_v1/);
+  assert.match(guardState, /readPairingGuard/);
+  assert.match(controller, /setAttemptsRemaining/);
+  assert.match(modal, /pairing attempt/);
+  assert.match(modal, /Pairing unlocks automatically in/);
 });
 
 test("Desktop advertises only non-sensitive identity and supports structured pairing/device management", () => {

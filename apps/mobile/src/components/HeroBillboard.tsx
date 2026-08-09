@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ImageBackground, Pressable, Platform, FlatList, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ImageBackground, Pressable, Platform, FlatList, Dimensions, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { spacing, fontFamilies, semantic } from '@orion/shared/tokens';
 import { imgUrl } from '@orion/shared/api';
@@ -122,6 +122,9 @@ function HeroSlide({ item, onPlay, onInfo, onPress, width }: {
 
 export function HeroBillboard({ items, onPlay, onInfo, onPress }: HeroBillboardProps) {
   const { theme, preferences } = useOrionTheme();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isPhoneLandscape = windowWidth > windowHeight && Math.min(windowWidth, windowHeight) < 600;
+  const heroHeight = isPhoneLandscape ? Math.max(240, Math.min(300, windowHeight - 24)) : 380;
   const spotlightItems = useMemo(() => items.slice(0, 5), [items]);
   const baseCount = spotlightItems.length;
 
@@ -200,7 +203,7 @@ export function HeroBillboard({ items, onPlay, onInfo, onPress }: HeroBillboardP
 
   return (
     <View
-      style={styles.container}
+      style={[styles.container, { height: heroHeight }]}
       onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
     >
       <FlatList
@@ -255,7 +258,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing[2],
   },
   slideContainer: {
-    height: 380,
+    height: '100%',
   },
   image: {
     width: '100%',

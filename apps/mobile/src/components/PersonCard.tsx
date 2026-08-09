@@ -21,6 +21,7 @@ interface PersonCardProps {
 export function PersonCard({ item, onPress, width = 110, height = 165, style }: PersonCardProps) {
   const { theme } = useOrionTheme();
   const imageUrl = imgUrl(item.profile_path || null, 'w500');
+  const compact = width < 100;
 
   return (
     <Pressable
@@ -31,6 +32,8 @@ export function PersonCard({ item, onPress, width = 110, height = 165, style }: 
         pressed && styles.pressedCard
       ]}
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${item.name || 'person'} profile`}
     >
       <View style={styles.imageContainer}>
         {imageUrl ? (
@@ -41,15 +44,15 @@ export function PersonCard({ item, onPress, width = 110, height = 165, style }: 
           </View>
         )}
         <LinearGradient
-          colors={['transparent', 'rgba(10, 15, 26, 0.9)']}
-          locations={[0.5, 1]}
+          colors={['transparent', theme.mediaScrim]}
+          locations={[0.42, 1]}
           style={styles.gradient}
         />
       </View>
 
-      <View style={styles.infoContainer}>
-        <Text style={styles.name} numberOfLines={2}>{item.name}</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]} numberOfLines={1}>Person</Text>
+      <View style={[styles.infoContainer, compact && styles.infoContainerCompact]}>
+        <Text style={[styles.name, compact && styles.nameCompact, { color: theme.onAccent }]} numberOfLines={2}>{item.name}</Text>
+        <Text style={[styles.subtitle, { color: theme.onAccent }]} numberOfLines={1}>Person</Text>
       </View>
     </Pressable>
   );
@@ -91,13 +94,15 @@ const styles = StyleSheet.create({
     right: 0,
     padding: spacing[2],
   },
+  infoContainerCompact: { padding: spacing[1] },
   name: {
-    color: '#ffffff',
     fontSize: fontSizes.sm,
     fontWeight: 'bold',
   },
+  nameCompact: { fontSize: fontSizes.xs },
   subtitle: {
     fontSize: 10,
     marginTop: 2,
+    opacity: 0.78,
   },
 });

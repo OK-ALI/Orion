@@ -26,7 +26,11 @@ test("Smart Connect reports live transport and applies pointer commands", async 
     `orion-smart-connect-${process.pid}-${testInfo.workerIndex}-${Date.now()}`,
   );
   const app = await electron.launch({
-    args: [path.join(__dirname, "../.."), `--user-data-dir=${userDataDir}`],
+    args: [
+      path.join(__dirname, "../.."),
+      `--user-data-dir=${userDataDir}`,
+      "--disable-gpu",
+    ],
   });
   await app.evaluate(({ app }) => {
     globalThis.__smartConnectRenderGone = null;
@@ -44,8 +48,6 @@ test("Smart Connect reports live transport and applies pointer commands", async 
       const details = await app.evaluate(() => globalThis.__smartConnectRenderGone);
       throw new Error(`${error.message}; render-process-gone=${JSON.stringify(details)}`);
     }
-    const windows = await app.windows();
-    page = windows.find((candidate) => candidate.url().startsWith("file:")) || page;
     await page.waitForLoadState("domcontentloaded");
     const skipSignIn = page.getByRole("button", { name: "Skip / Use Offline" });
     if (await skipSignIn.count()) await skipSignIn.click();
@@ -110,10 +112,37 @@ test("Smart Connect reports live transport and applies pointer commands", async 
     expect(cursorPosition.left / cursorPosition.width).toBeCloseTo(0.25, 1);
     expect(cursorPosition.top / cursorPosition.height).toBeCloseTo(0.4, 1);
 
+    await expect(cursor).toHaveCount(0, { timeout: 5_000 });
+
+    const restoreCommandId = "pointer-test-2";
+    socket.send(JSON.stringify({
+      version: 2,
+      type: "command",
+      deviceId: "electron-test-mobile",
+      payload: {
+        id: restoreCommandId,
+        sequence: 2,
+        action: "cursor_move",
+        pointer: { x: 0.3, y: 0.45 },
+        sentAt: Date.now(),
+      },
+    }));
+    await waitForEnvelope(
+      socket,
+      (message) => message.type === "ack" && message.payload?.id === restoreCommandId,
+    );
+    await expect(cursor).toBeVisible();
+
+    await cursor.evaluate((element) => {
+      element.classList.add("spatial-remote-focused");
+    });
+
     socket.close();
     await expect.poll(
       () => page.evaluate(() => window.electron.getSmartConnectInfo().then((value) => value.connected)),
     ).toBe(false);
+    await expect(cursor).toHaveCount(0);
+    await expect(page.locator(".spatial-remote-focused")).toHaveCount(0);
   } finally {
     try { socket?.close(); } catch {}
     await app.close();

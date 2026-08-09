@@ -1,14 +1,15 @@
 import { useEffect, useMemo } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useLibrary } from '../../context/LibraryContext';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { ContinueWatchingCard } from './ContinueWatchingCard';
+import { useResponsiveLayout } from '../../services/responsive';
 
 export function HomeContinueWatching() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const { shortestEdge } = useResponsiveLayout();
   const { theme } = useOrionTheme();
   const {
     progress, watched, getContinueWatching, enrichPlaybackMetadata,
@@ -29,7 +30,7 @@ export function HomeContinueWatching() {
   }, [enrichPlaybackMetadata, entries]);
 
   if (!entries.length) return null;
-  const padding = width < 360 ? 12 : 20;
+  const padding = shortestEdge < 360 ? 12 : 20;
 
   const resume = (entry: typeof entries[number]) => {
     const { mediaIdentity, presentation } = entry.progress;

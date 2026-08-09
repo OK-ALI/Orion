@@ -299,7 +299,7 @@ export default function MediaDetailScreen() {
                       {castList.slice(0, 15).map((actor: any) => (
                         <Pressable 
                           key={actor.id} 
-                          style={({ pressed }) => [styles.castCard, pressed && { opacity: 0.8 }]}
+                          style={({ pressed }) => [styles.castCard, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && { opacity: 0.8 }]}
                           onPress={() => router.push(`/person/${actor.id}` as any)}
                         >
                           <Image 
@@ -320,7 +320,7 @@ export default function MediaDetailScreen() {
                 {castList.slice(0, 25).map((actor: any) => (
                   <Pressable 
                     key={actor.id} 
-                    style={({ pressed }) => [styles.castCard, pressed && { opacity: 0.8 }]}
+                    style={({ pressed }) => [styles.castCard, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && { opacity: 0.8 }]}
                     onPress={() => router.push(`/person/${actor.id}` as any)}
                   >
                     <Image 
