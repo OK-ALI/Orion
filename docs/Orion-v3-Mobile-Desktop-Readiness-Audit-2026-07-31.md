@@ -11,7 +11,7 @@
 >
 > **Last verified:** August 9, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 3 complete and physically accepted; paused before Phase 4 planning and implementation.
+> **Current stage:** Phase 4 Checkpoint 1 implemented and automated validation complete; physical-device acceptance pending.
 > **Critical open blockers:** Source-aware video fitting, reliable player-overlay touch ownership, Smart Connect transport and pairing-UI hardening, player-surface laser, native provider shield, cross-platform profiles, Mobile updates, low-end-device performance validation, and deferred VidKing carried-position compatibility
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
@@ -152,6 +152,31 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [ ] **V3-P4-021:** Recompose the PIN/QR/Direct-IP pairing sheet for compact phones and keyboards: bounded PIN cells, keyboard-aware scrolling, safe-area/cutout clearance, and no clipped actions.
 - [ ] **V3-P4-022:** Make PIN entry focus deterministic when the pairing sheet opens by focusing after modal presentation, restoring focus after method changes, and providing explicit keyboard recovery without requiring a QR-tab round trip.
 
+#### Phase 4 Checkpoint 1 acceptance status
+
+Implementation and automated validation are complete for `V3-P4-010`,
+`V3-P4-019`, `V3-P4-021`, and `V3-P4-022`. These items intentionally remain
+unchecked and Phase 4 remains at 45% until the following physical Android
+matrix is accepted:
+
+- Discover and pair with Desktop through NSD/mDNS without entering an IP.
+- Pair through QR and Direct IP fallbacks.
+- Confirm that the PIN keyboard appears on the first sheet opening and after
+  returning from QR or Direct IP.
+- Rotate the device and open the keyboard without clipped fields, tabs, or
+  actions.
+- Let a code expire, create a new code, and pair successfully.
+- Trigger the five-attempt lockout and confirm its recovery countdown.
+- Close and reopen Mobile and confirm automatic trusted-endpoint reconnection.
+- Restart Desktop and change Wi-Fi availability; verify that Mobile reports
+  reconnecting, endpoint lost, or failure rather than a stale connected state.
+- Rename the Mobile device from both applications.
+- Revoke the device from Desktop and confirm that Mobile immediately returns to
+  pairing.
+- Validate the pairing and recovery surfaces in all six Orion themes.
+- Confirm existing remote commands, acknowledgements, and ordinary-page laser
+  behavior remain functional.
+
 ### Phase 5 — Player-surface laser
 
 - [x] **V3-P5-001:** Main-renderer `.orion-virtual-cursor` exists.
@@ -290,6 +315,7 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-08-09 | V3-P3-003 through V3-P3-009 | Rebuilt Mobile trailers around normalized YouTube/Vimeo candidates, deterministic ranking, exact provider error classification, bounded retry and automatic rotation, strict candidate-bound bridge events, truthful Android client identity, and a six-theme safe-area-aware 16:9 modal with persistent internal/external recovery actions. Previous players are unmounted by keyed attempts before another candidate is loaded. | Checkpoint `3ec037e`; Mobile typecheck; 59/59 tests including executable candidate/ranking and provider-error tests; 76-file source-size gate; production web export; standalone arm64 Android APK with bundled JavaScript (SHA-256 `C46897315EE0C25CB53D6BAE639C69FFB9E6858E7F38C8E9E45CF57C9A5F8FB8`); Desktop full gate with 53 Node and 138 renderer tests plus source/binding/IPC/secret/theme/cycle/build checks. Expo Doctor passed its 18 local checks; its two online catalog checks were not authorized under the validation privacy policy. Physical Android provider/orientation/background acceptance remains open under V3-P3-010, so Phase 3 is 90%, not complete. | 52% |
 | 2026-08-09 | V3-P3-010 blocker repair | Physical Android testing found that every candidate failed after Preparing. The wrapper supplied an `android-app://` identity even though current YouTube embeds require an HTTP Referer or equivalent client identity, and compact-phone 16:9 geometry could place the player below YouTube's documented 200 CSS-pixel minimum height. Repaired the in-modal path with an HTTPS application origin and Referer, standard YouTube host first, a 200px minimum player viewport, a 25-second initialization window, and one bounded direct-provider embed retry inside Orion when the JavaScript wrapper cannot initialize. External app/browser actions remain final fallbacks only. | Mobile typecheck; 59/59 tests; 76-file source-size gate; production web export; standalone arm64 Android APK with bundled JavaScript (SHA-256 `A32B02800428AD6EEF50D9584CF1D06DBF9675CCB9628E219A590C3DF819A976`). Physical YouTube/Vimeo playback acceptance remains open, so Phase 3 stays at 90% and `V3-P3-010` remains incomplete. | 52% |
 | 2026-08-09 | V3-P3-010 and Phase 3 acceptance | Physical Android testing of the repaired APK confirmed that trailers now play successfully inside Orion's Trailer Modal. In-app playback remains the primary path; candidate rotation and provider-app/browser actions remain recovery paths for genuinely removed, private or owner-disabled embeds. | User physical-device acceptance of APK SHA-256 `A32B02800428AD6EEF50D9584CF1D06DBF9675CCB9628E219A590C3DF819A976`, following the automated typecheck, 59/59 tests, source-size, web-export and standalone-build evidence recorded above. Phase 3 is complete at 100%. | 52% |
+| 2026-08-09 | V3-P4-010, V3-P4-019, V3-P4-021, V3-P4-022 implementation checkpoint | Implemented bounded Android-native NSD/mDNS discovery, saved-endpoint-first reconnection, explicit connection and pairing failure states, structured expiry/lockout recovery, responsive keyboard-safe pairing, and authenticated rename/revoke management on Mobile and Desktop. Automatic 253-address probing was removed; subnet discovery is now an explicit advanced fallback. No completion credit is awarded before physical-device acceptance. | Rollback checkpoint `5e22ac5`; implementation checkpoints `7aa3d73` and `43a3cbe`; Mobile typecheck; 65/65 tests; 79-file source-size gate; Expo Doctor 20/20; production web export; Expo prebuild; standalone Android debug APK with compiled Orion NSD module, SHA-256 `656D667FAB573D15EC24499FFA81BCF84DD03470ED0703B3A2EE500F37CB00BC`; Desktop source/binding/IPC/secret/theme/cycle gates, 53/53 Node tests, 138/138 renderer tests and production build. Physical NSD, lifecycle, keyboard, expiry, lockout, rename, revoke and six-theme validation remains open. | 52% |
 
 Phase 3 is complete. Orion now keeps
 all viable TMDB YouTube and Vimeo candidates, ranks rather than prematurely
