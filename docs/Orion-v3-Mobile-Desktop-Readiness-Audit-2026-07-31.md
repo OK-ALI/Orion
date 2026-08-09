@@ -7,12 +7,12 @@
 
 ## Living Roadmap Status
 
-> **Overall Orion v3 implementation completion: 52%**
+> **Overall Orion v3 implementation completion: 54%**
 >
 > **Last verified:** August 9, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 4 Checkpoint 1 implemented and automated validation complete; physical-device acceptance pending.
-> **Critical open blockers:** Source-aware video fitting, reliable player-overlay touch ownership, Smart Connect transport and pairing-UI hardening, player-surface laser, native provider shield, cross-platform profiles, Mobile updates, low-end-device performance validation, and deferred VidKing carried-position compatibility
+> **Current stage:** Phase 4 Checkpoint 1 physically accepted; Checkpoints 2–4 implemented with automated validation complete and physical security/latency/device acceptance pending.
+> **Critical open blockers:** Phase 4 physical secure-pairing, telemetry, unified-remote and hostile-LAN acceptance; source-aware video fitting; reliable player-overlay touch ownership; player-surface laser; native provider shield; cross-platform profiles; Mobile updates; low-end-device performance validation; and deferred VidKing carried-position compatibility
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -34,7 +34,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 1. Playback truth | 12% | 100% | 12.0% | Complete |
 | 2. History and Continue Watching | 10% | 100% | 10.0% | Complete |
 | 3. Trailer reliability | 8% | 100% | 8.0% | Complete |
-| 4. Smart Connect experience | 12% | 45% | 5.4% | In progress |
+| 4. Smart Connect experience | 12% | 60% | 7.2% | In progress |
 | 5. Player-surface laser | 8% | 15% | 1.2% | Foundation only |
 | 6. Native provider shield | 10% | 15% | 1.5% | Foundation only |
 | 7. Adaptive Mobile UI | 10% | 30% | 3.0% | In progress |
@@ -42,7 +42,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 9. Portable profile and Google authentication | 7% | 15% | 1.1% | Foundation only |
 | 10. Mobile updates | 4% | 5% | 0.2% | Not started |
 | 11. Release validation | 4% | 15% | 0.6% | Foundation only |
-| **Total** | **100%** |  | **52.4%, rounded to 52%** | **Not release-ready** |
+| **Total** | **100%** |  | **54.2%, rounded to 54%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -138,7 +138,7 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [ ] **V3-P4-007:** Add live playback telemetry while an authenticated remote is connected.
 - [ ] **V3-P4-008:** Interpolate Mobile progress locally and reconcile with authoritative snapshots.
 - [ ] **V3-P4-009:** Replace the hard-coded seek width with measured geometry.
-- [ ] **V3-P4-010:** Add code regeneration, expiry recovery, reconnect, lockout, rename, and revoke UX.
+- [x] **V3-P4-010:** Add code regeneration, expiry recovery, reconnect, lockout, rename, and revoke UX.
 - [ ] **V3-P4-011:** Add automatic keyboard actions when Desktop focuses a text field.
 - [ ] **V3-P4-012:** Meet command acknowledgement and telemetry freshness targets.
 - [ ] **V3-P4-013:** Document and enforce the trusted-LAN threat model; warn when Desktop is on a public network and prevent accidental public-internet exposure.
@@ -147,35 +147,56 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [ ] **V3-P4-016:** Enforce monotonic sequences, replay rejection, and command-ID deduplication so WebSocket timeout followed by HTTP fallback cannot apply one action twice.
 - [ ] **V3-P4-017:** Harden interface binding, firewall guidance, CORS/origin policy, request limits, and per-device/per-address rate limits.
 - [ ] **V3-P4-018:** Measure command round-trip time and playback-telemetry age separately from Orion's internet latency indicator; record median, p95, timeout, and reconnect evidence.
-- [ ] **V3-P4-019:** Prefer Android NSD/mDNS plus the saved trusted endpoint; retain bounded subnet probing only as an explicit fallback.
+- [x] **V3-P4-019:** Prefer Android NSD/mDNS plus the saved trusted endpoint; retain bounded subnet probing only as an explicit fallback.
 - [ ] **V3-P4-020:** Pass hostile-LAN, captured-token, replay, duplicate-command, network-change, sleep/wake, and reconnect security tests.
-- [ ] **V3-P4-021:** Recompose the PIN/QR/Direct-IP pairing sheet for compact phones and keyboards: bounded PIN cells, keyboard-aware scrolling, safe-area/cutout clearance, and no clipped actions.
-- [ ] **V3-P4-022:** Make PIN entry focus deterministic when the pairing sheet opens by focusing after modal presentation, restoring focus after method changes, and providing explicit keyboard recovery without requiring a QR-tab round trip.
+- [x] **V3-P4-021:** Recompose the PIN/QR/Direct-IP pairing sheet for compact phones and keyboards: bounded PIN cells, keyboard-aware scrolling, safe-area/cutout clearance, and no clipped actions.
+- [x] **V3-P4-022:** Make PIN entry focus deterministic when the pairing sheet opens by focusing after modal presentation, restoring focus after method changes, and providing explicit keyboard recovery without requiring a QR-tab round trip.
 
 #### Phase 4 Checkpoint 1 acceptance status
 
-Implementation and automated validation are complete for `V3-P4-010`,
-`V3-P4-019`, `V3-P4-021`, and `V3-P4-022`. These items intentionally remain
-unchecked and Phase 4 remains at 45% until the following physical Android
-matrix is accepted:
+Implementation, automated validation and physical-device acceptance are complete
+for `V3-P4-010`, `V3-P4-019`, `V3-P4-021`, and `V3-P4-022`. The user accepted
+automatic discovery/reconnection, expiry and lockout recovery, device management,
+keyboard-safe pairing, Direct IP behavior, and portrait/landscape presentation on
+August 9, 2026. Phase 4 therefore advances to 60% and overall Orion v3 to 54%.
 
-- Discover and pair with Desktop through NSD/mDNS without entering an IP.
-- Pair through QR and Direct IP fallbacks.
-- Confirm that the PIN keyboard appears on the first sheet opening and after
-  returning from QR or Direct IP.
-- Rotate the device and open the keyboard without clipped fields, tabs, or
-  actions.
-- Let a code expire, create a new code, and pair successfully.
-- Trigger the five-attempt lockout and confirm its recovery countdown.
-- Close and reopen Mobile and confirm automatic trusted-endpoint reconnection.
-- Restart Desktop and change Wi-Fi availability; verify that Mobile reports
-  reconnecting, endpoint lost, or failure rather than a stale connected state.
-- Rename the Mobile device from both applications.
-- Revoke the device from Desktop and confirm that Mobile immediately returns to
-  pairing.
-- Validate the pairing and recovery surfaces in all six Orion themes.
-- Confirm existing remote commands, acknowledgements, and ordinary-page laser
-  behavior remain functional.
+#### Phase 4 Checkpoints 2–4 implementation status
+
+The three internal rollback checkpoints now exist:
+
+- `f9562f1` — authoritative Desktop context, playback telemetry, freshness and
+  measured seeking.
+- `2305893` — one adaptive Mobile remote with a persistent touchpad and
+  context-aware controls.
+- `5d49264` — protocol v3 pinned HTTPS/WSS, Desktop TLS identity, Android
+  Keystore device identity, matching-phrase trust, one-time tickets, replay
+  rejection, request/rate limits and fail-closed public-network policy.
+
+Automated implementation evidence passes, but `V3-P4-005` through
+`V3-P4-009`, `V3-P4-011` through `V3-P4-018`, and `V3-P4-020` remain unchecked
+until the following physical Android plus packaged Desktop matrix is accepted:
+
+- Re-pair a protocol-v2 remembered device once and confirm its name survives.
+- Complete QR and PIN pairing with the same matching Orion phrase confirmed on
+  both devices; reject a mismatched phrase.
+- Confirm pinned reconnection after Mobile foregrounding, Desktop restart,
+  sleep/wake and Wi-Fi interruption.
+- Exercise Cinema embedded/default, local download, mini-player, pop-out and
+  Music playback; verify authoritative state, capabilities and stale telemetry.
+- Measure command median/p95 RTT, telemetry age and reconnection time against
+  the published budgets.
+- Seek at compact-phone, standard-phone, landscape and tablet widths and confirm
+  the Desktop acknowledgement reconciles the Mobile scrubber.
+- Exercise pointer, click, two-finger scrolling, playback, navigation, safe text
+  entry, protected-field blocking and the D-pad accessibility overlay.
+- Validate every adaptive remote surface in all six themes, Reduced Motion and
+  200% font scaling without overlap or inaccessible controls.
+- Reject the wrong certificate, altered phrase, old bearer token, mismatched
+  device key, replayed sequence and duplicate command ID.
+- Verify Windows public-network blocking and the explicit session-only override,
+  then return to a private network.
+- Revoke the device and confirm the socket, tickets and trust stop immediately.
+- Confirm disconnect cleanup still hides the Desktop laser immediately.
 
 ### Phase 5 — Player-surface laser
 
@@ -318,6 +339,8 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-08-09 | V3-P4-010, V3-P4-019, V3-P4-021, V3-P4-022 implementation checkpoint | Implemented bounded Android-native NSD/mDNS discovery, saved-endpoint-first reconnection, explicit connection and pairing failure states, structured expiry/lockout recovery, responsive keyboard-safe pairing, and authenticated rename/revoke management on Mobile and Desktop. Automatic 253-address probing was removed; subnet discovery is now an explicit advanced fallback. No completion credit is awarded before physical-device acceptance. | Rollback checkpoint `5e22ac5`; implementation checkpoints `7aa3d73` and `43a3cbe`; Mobile typecheck; 68/68 tests; 79-file source-size gate; Expo Doctor 20/20; production web export; Expo prebuild; corrected standalone Android APK with compiled Orion NSD module and verified 4,705,085-byte `assets/index.android.bundle`, SHA-256 `2D251A03652CCCA4A855FF0FB9D0A8031ED56C2A146CB84C513518B645A5E289`; Desktop source/binding/IPC/secret/theme/cycle gates, 53/53 Node tests, 138/138 renderer tests and production build. The earlier `656D667F...` debug artifact was invalid because it omitted the JavaScript bundle and has been superseded. Physical NSD, lifecycle, keyboard, expiry, lockout, rename, revoke and six-theme validation remains open. | 52% |
 | 2026-08-09 | Phase 4 Checkpoint 1 packaging correction | Corrected the Android standalone builder after physical installation proved that `assembleDebug` had skipped React Native bundling and produced a Metro-dependent APK. The builder now creates a minified production bundle first, assembles the debug-signed native application, inspects the APK archive, and fails unless `assets/index.android.bundle` is present. It publishes a distinctly named standalone artifact to prevent confusion with Gradle's ordinary Debug output. | 68/68 Mobile tests, including standalone-build regression guards; archive verification confirmed `assets/index.android.bundle` at 4,705,085 bytes inside the 105,563,769-byte APK; SHA-256 `2D251A03652CCCA4A855FF0FB9D0A8031ED56C2A146CB84C513518B645A5E289`. No roadmap completion credit awarded. | 52% |
 | 2026-08-09 | Phase 4 Checkpoint 1 responsive-pairing follow-up | Corrected phone-landscape classification across the Mobile shell by using the shortest viewport edge, bounded Connect controls inside a scrollable landscape layout, and adjusted Home, Discover, Library, Downloads, shared headers and media-card density for rotated phones. Direct IP now discovers/verifies a Desktop and reconnects an existing trusted session; an untrusted endpoint proceeds to the single PIN flow instead of duplicating PIN entry. Desktop Connect visibly reports its current address. Pairing failures now expose a descending attempts counter, enter a timed lockout after the fifth failure, and persist attempts/lockout across Connect and application restarts on both Desktop and Mobile. | Mobile TypeScript passed; 71/71 tests passed; 82-file source-size gate passed; Expo Doctor 20/20 passed; production web export passed. Physical phone/tablet portrait and landscape validation, automatic discovery, attempt countdown, process-restart persistence and final standalone APK verification remain required, so no completion credit is awarded. | 52% |
+| 2026-08-09 | V3-P4-010, V3-P4-019, V3-P4-021, V3-P4-022 | Closed Checkpoint 1 after the user physically accepted trusted discovery/reconnection, expiry and lockout UX, remembered-device management, keyboard-safe pairing and responsive phone/landscape behavior. | User physical-device acceptance following the standalone APK and responsive-pairing fixes; checkpoints `f34b14d` and prior implementation commits recorded above. | 54% |
+| 2026-08-09 | Phase 4 Checkpoints 2–4 implementation | Added authoritative Desktop UI/playback context and telemetry, freshness-aware Mobile interpolation, measured acknowledged seeking, a persistent-touchpad adaptive remote, context-aware actions, protected-field typing rules, protocol-v3 pinned HTTPS/WSS, ECDSA Desktop identity, Android Keystore identity, matching-phrase trust, single-use tickets, private-LAN/public-profile policy, and replay/duplicate/rate-limit enforcement. Physical security, latency, device-layout and packaged Desktop acceptance remains open, so Phase 4 does not advance beyond 60%. | Checkpoints `f9562f1`, `2305893`, `5d49264`; Mobile typecheck, 79/79 tests, 89-file size gate and production web export passed; secure trust 5/5 tests and focused Smart Connect Electron test passed; Desktop source/binding/IPC/secret/theme/cycle/Node/renderer/build gate passed; full Electron suite passed 12/14 with Smart Connect green and two unrelated quick-search timing failures (one passed on isolated retry, one remains). Standalone APK: 110,289,054 bytes, SHA-256 `FABC15D210442D48F14769FC68FC6DE38AE70FF21942D3E06842D0BD765099DE`. | 54% |
 
 Phase 3 is complete. Orion now keeps
 all viable TMDB YouTube and Vimeo candidates, ranks rather than prematurely
