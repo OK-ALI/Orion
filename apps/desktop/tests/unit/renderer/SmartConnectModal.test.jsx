@@ -1,0 +1,33 @@
+import { render, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import SmartConnectModal from "../../../src/renderer/components/modals/SmartConnectModal";
+
+describe("SmartConnectModal signal", () => {
+  it("uses the animated signal state language for waiting, reconnecting and connected", async () => {
+    const renderState = async (info, expectedClass) => {
+      window.electron = {
+        getSmartConnectInfo: vi.fn().mockResolvedValue({
+          devices: [],
+          pin: "123456",
+          pinExpiresAt: Date.now() + 60_000,
+          ...info,
+        }),
+        onSmartConnectStatus: vi.fn().mockReturnValue(() => {}),
+      };
+      const view = render(<SmartConnectModal onClose={vi.fn()} />);
+      await waitFor(() => {
+        expect(view.container.querySelector(`.smart-connect-signal.${expectedClass}`)).toBeInTheDocument();
+      });
+      expect(view.container.querySelectorAll(".smart-connect-signal-arc")).toHaveLength(3);
+      view.unmount();
+    };
+
+    await renderState({ paired: false, connected: false }, "is-waiting");
+    await renderState({ paired: true, connected: false }, "is-reconnecting");
+    await renderState({
+      paired: true,
+      connected: true,
+      devices: [{ deviceId: "mobile-1", deviceName: "Orion Mobile", connected: true }],
+    }, "is-connected");
+  });
+});

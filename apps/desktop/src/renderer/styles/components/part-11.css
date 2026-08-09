@@ -50,3 +50,79 @@
 body.no-anim .constellation-rail--loading span,body.no-anim .constellation-grid--loading span { animation:none; }
 @media (prefers-reduced-motion:reduce) { .constellation-rail--loading span,.constellation-grid--loading span { animation:none; } }
 @media (max-width:760px) { .constellation-page { padding-inline:18px; } .constellation-feature { min-height:0; grid-template-columns:130px minmax(0,1fr); } .constellation-feature-portrait { min-height:220px; } .constellation-feature-copy { padding:20px; } .constellation-feature-copy strong { font-size:28px; } .constellation-filter-row { display:block; } .constellation-filter-row > * { margin-top:14px; } .constellation-sort { margin-left:0; } .constellation-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+.smart-connect-signal {
+  --smart-connect-signal-color: var(--accent);
+  --smart-connect-signal-soft: var(--accent-soft);
+  position: relative;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 12px;
+  border: 1px solid color-mix(in srgb,var(--smart-connect-signal-color) 66%,var(--border));
+  border-radius: 50%;
+  background: var(--smart-connect-signal-soft);
+  color: var(--smart-connect-signal-color);
+  box-shadow: 0 0 22px color-mix(in srgb,var(--smart-connect-signal-color) 18%,transparent);
+  isolation: isolate;
+}
+.smart-connect-signal.is-connected {
+  --smart-connect-signal-color: var(--success);
+  --smart-connect-signal-soft: var(--success-soft);
+}
+.smart-connect-signal.is-reconnecting {
+  --smart-connect-signal-color: var(--warning);
+  --smart-connect-signal-soft: var(--warning-soft);
+}
+.smart-connect-signal-pulse {
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border: 1px solid color-mix(in srgb,var(--smart-connect-signal-color) 62%,transparent);
+  border-radius: inherit;
+  opacity: .7;
+  animation: smart-connect-signal-breathe 2.4s var(--ease-out) infinite;
+}
+.smart-connect-signal-glyph { width: 34px; height: 34px; overflow: visible; }
+.smart-connect-signal-arc {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  opacity: .28;
+  animation: smart-connect-signal-wave 1.8s ease-in-out infinite;
+}
+.smart-connect-signal-arc.arc-inner { animation-delay: 0s; }
+.smart-connect-signal-arc.arc-middle { animation-delay: .18s; }
+.smart-connect-signal-arc.arc-outer { animation-delay: .36s; }
+.smart-connect-signal-dot {
+  fill: currentColor;
+  transform-origin: 24px 37px;
+  animation: smart-connect-signal-dot 1.8s ease-in-out infinite;
+}
+.smart-connect-signal.is-connected .smart-connect-signal-arc,
+.smart-connect-signal.is-connected .smart-connect-signal-dot { animation-duration: 2.8s; }
+@keyframes smart-connect-signal-breathe {
+  0%,100% { opacity: .22; transform: scale(1); }
+  50% { opacity: .72; transform: scale(1.18); }
+}
+@keyframes smart-connect-signal-wave {
+  0%,22%,100% { opacity: .25; }
+  42%,68% { opacity: 1; }
+}
+@keyframes smart-connect-signal-dot {
+  0%,100% { opacity: .72; transform: scale(.9); }
+  46% { opacity: 1; transform: scale(1.12); }
+}
+body.no-anim .smart-connect-signal *,
+body.no-anim .smart-connect-signal-pulse { animation: none; }
+body.no-anim .smart-connect-signal-arc,
+body.no-anim .smart-connect-signal-dot { opacity: 1; }
+body.no-anim .smart-connect-signal-pulse { opacity: .34; }
+@media (prefers-reduced-motion:reduce) {
+  .smart-connect-signal *,
+  .smart-connect-signal-pulse { animation: none; }
+  .smart-connect-signal-arc,.smart-connect-signal-dot { opacity: 1; }
+  .smart-connect-signal-pulse { opacity: .34; }
+}

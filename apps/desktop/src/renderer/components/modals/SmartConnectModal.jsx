@@ -5,6 +5,22 @@ const formatCountdown = (seconds) => (
   `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
 );
 
+function SmartConnectSignal({ connected, paired }) {
+  const state = connected ? "connected" : paired ? "reconnecting" : "waiting";
+
+  return (
+    <span className={`smart-connect-signal is-${state}`} aria-hidden="true">
+      <span className="smart-connect-signal-pulse" />
+      <svg className="smart-connect-signal-glyph" viewBox="0 0 48 48" focusable="false">
+        <path className="smart-connect-signal-arc arc-outer" d="M8.6 20.2a22 22 0 0 1 30.8 0" />
+        <path className="smart-connect-signal-arc arc-middle" d="M14.8 26.3a13.2 13.2 0 0 1 18.4 0" />
+        <path className="smart-connect-signal-arc arc-inner" d="M20.3 31.9a5.3 5.3 0 0 1 7.4 0" />
+        <circle className="smart-connect-signal-dot" cx="24" cy="37" r="2.8" />
+      </svg>
+    </span>
+  );
+}
+
 export default function SmartConnectModal({ onClose }) {
   const [pin, setPin] = useState("------");
   const [pinExpiresAt, setPinExpiresAt] = useState(0);
@@ -120,23 +136,7 @@ export default function SmartConnectModal({ onClose }) {
         </button>
 
         <div style={{ marginBottom: 18 }}>
-          <div
-            aria-hidden="true"
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: 28,
-              background: connected ? "var(--success-soft)" : "var(--accent-soft)",
-              margin: "0 auto 12px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              border: connected ? "1px solid var(--success)" : "1px solid var(--border-accent)",
-              fontSize: 24,
-            }}
-          >
-            {connected ? "📱" : "📶"}
-          </div>
+          <SmartConnectSignal connected={connected} paired={paired} />
           <h2 style={{ fontSize: 22, fontWeight: 900, color: "var(--text-primary)", margin: "0 0 6px" }}>
             Orion Smart Connect
           </h2>
