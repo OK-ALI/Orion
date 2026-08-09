@@ -39,7 +39,7 @@ test("system-following theme listens live and refreshes after foregrounding", ()
 });
 
 test("pairing modal is keyboard-aware and PIN boxes fit compact phones", () => {
-  const screen = read("src/features/connect/ConnectScreen.tsx");
+  const screen = read("src/features/connect/SmartConnectPairingModal.tsx");
   const styles = read("src/features/connect/connectStyles.ts");
   assert.match(screen, /KeyboardAvoidingView/);
   assert.match(screen, /keyboardShouldPersistTaps="handled"/);

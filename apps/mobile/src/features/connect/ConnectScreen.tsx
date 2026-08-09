@@ -1,6 +1,5 @@
 import { useMemo } from "react";
-import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { CameraView } from "expo-camera";
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { spacing, radii } from "@orion/shared/tokens";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,45 +8,33 @@ import { createConnectStyles } from "./connectStyles";
 import { useOrionTheme } from "../../context/ThemeContext";
 import { MobilePageHeader } from "../../components/MobilePageHeader";
 import { OrionDialog } from "../../components/OrionDialog";
+import { SmartConnectPairingModal } from "./SmartConnectPairingModal";
 export default function ConnectScreen() {
   const { theme } = useOrionTheme();
   const styles = useMemo(() => createConnectStyles(theme), [theme]);
   const text = { primary: theme.text, secondary: theme.textSecondary, muted: theme.textMuted };
+  const controller = useConnectController();
   const {
     activeTab,
-    cameraPermission,
     currentSpeedIndex,
-    desktopIp,
     formatTime,
-    handleBarCodeScanned,
-    handleConnect,
     handleDisconnect,
-    handlePinChange,
-    hiddenPinInputRef,
     isConnected,
-    isConnecting,
-    isDiscovering,
     isMuted,
     isPlaying,
     navFocusMode,
     nowPlaying,
     pageShortcutItems,
-    pairError,
-    pairingMethod,
     panResponder,
-    pinCode,
     pulseAnim,
     qrNotice,
     remoteError,
     remoteText,
-    requestCameraPermission,
-    scanLineAnim,
     searchTarget,
     sendRemoteCommand,
     setActiveTab,
     setCurrentSpeedIndex,
     setQrNotice,
-    setDesktopIp,
     setNavFocusMode,
     setPairingMethod,
     setPinCode,
@@ -56,10 +43,13 @@ export default function ConnectScreen() {
     setShowDisconnectModal,
     setShowPairingModal,
     showDisconnectModal,
-    showPairingModal,
     speeds,
-    volume
-  } = useConnectController();
+    volume,
+    connectionState,
+    deviceName,
+    renameThisDevice,
+    lockoutSeconds,
+  } = controller;
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -152,6 +142,30 @@ export default function ConnectScreen() {
               <Text style={styles.secondaryConnectBtnText}>Scan QR Code</Text>
             </Pressable>
           </View>
+          {connectionState !== 'idle' && (
+            <View style={styles.connectionNotice}>
+              <Ionicons
+                name={connectionState === 'reconnecting' || connectionState === 'discovering' ? 'sync-outline' : 'information-circle-outline'}
+                size={16}
+                color={connectionState === 'failed' || connectionState === 'token-rejected' ? theme.danger : theme.warning}
+              />
+              <Text style={styles.connectionNoticeText}>
+                {{
+                  discovering: 'Looking for Orion Desktop on this Wi-Fi…',
+                  pairing: 'Confirming this device with Orion Desktop…',
+                  connected: 'Desktop connection confirmed.',
+                  reconnecting: 'Reconnecting to your trusted Desktop…',
+                  'endpoint-lost': 'Trusted Desktop is currently unavailable.',
+                  'token-rejected': 'This device needs to be paired again.',
+                  'code-expired': 'The pairing code expired. Generate a new code on Desktop.',
+                  'locked-out': `Pairing is temporarily locked${lockoutSeconds ? ` for ${lockoutSeconds}s` : ''}.`,
+                  'protocol-mismatch': 'Desktop and Mobile use incompatible Connect versions.',
+                  failed: 'Orion could not complete the connection.',
+                  idle: '',
+                }[connectionState]}
+              </Text>
+            </View>
+          )}
         </ScrollView>
       ) : (
         /* Connected Smart Remote Interface */
@@ -173,6 +187,19 @@ export default function ConnectScreen() {
               <Ionicons name="power-outline" size={14} color={theme.danger} />
               <Text style={styles.disconnectRemoteText}>Disconnect</Text>
             </Pressable>
+          </View>
+          <View style={styles.deviceIdentityRow}>
+            <Ionicons name="phone-portrait-outline" size={16} color={theme.accent} />
+            <TextInput
+              defaultValue={deviceName}
+              maxLength={80}
+              selectTextOnFocus
+              returnKeyType="done"
+              accessibilityLabel="This mobile device name"
+              onSubmitEditing={(event) => void renameThisDevice(event.nativeEvent.text)}
+              style={styles.deviceIdentityInput}
+            />
+            <Text style={styles.deviceIdentityHint}>Enter to rename</Text>
           </View>
           {remoteError ? (
             <View style={{ marginHorizontal: spacing[4], marginBottom: spacing[3], padding: spacing[3], borderRadius: radii.lg, backgroundColor: theme.accentSoft, borderWidth: 1, borderColor: theme.danger }}>
@@ -528,197 +555,7 @@ export default function ConnectScreen() {
           )}
         </View>
       )}
-      <Modal
-        visible={showPairingModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowPairingModal(false)}
-        onShow={() => {
-          if (pairingMethod === 'pin') setTimeout(() => hiddenPinInputRef.current?.focus(), 280);
-        }}
-      >
-        <KeyboardAvoidingView
-          style={styles.modalKeyboardAvoider}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <ScrollView
-            contentContainerStyle={styles.modalOverlay}
-            keyboardShouldPersistTaps="handled"
-            bounces={false}
-          >
-          <View style={styles.glassModalCard}>
-            <View style={styles.modalMethodTabs}>
-              <Pressable
-                style={[styles.modalMethodTab, pairingMethod === 'pin' && styles.modalMethodTabActive]}
-                onPress={() => {
-                  setPairingMethod('pin');
-                  setTimeout(() => hiddenPinInputRef.current?.focus(), 150);
-                }}
-              >
-                <Ionicons name="keypad-outline" size={14} color={pairingMethod === 'pin' ? theme.onAccent : text.muted} />
-                <Text style={[styles.modalMethodTabText, pairingMethod === 'pin' && styles.modalMethodTabTextActive]}>
-                  PIN Code
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modalMethodTab, pairingMethod === 'qr' && styles.modalMethodTabActive]}
-                onPress={() => setPairingMethod('qr')}
-              >
-                <Ionicons name="qr-code-outline" size={14} color={pairingMethod === 'qr' ? theme.onAccent : text.muted} />
-                <Text style={[styles.modalMethodTabText, pairingMethod === 'qr' && styles.modalMethodTabTextActive]}>
-                  QR Scan
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.modalMethodTab, pairingMethod === 'ip' && styles.modalMethodTabActive]}
-                onPress={() => setPairingMethod('ip')}
-              >
-                <Ionicons name="wifi-outline" size={14} color={pairingMethod === 'ip' ? theme.onAccent : text.muted} />
-                <Text style={[styles.modalMethodTabText, pairingMethod === 'ip' && styles.modalMethodTabTextActive]}>
-                  Direct IP
-                </Text>
-              </Pressable>
-            </View>
-            {pairingMethod === 'pin' && (
-              <View style={styles.pinSection}>
-                <Text style={styles.modalTitle}>Enter Pairing Code</Text>
-                <Text style={styles.modalSub}>
-                  Enter the six-digit code from Orion Desktop. Mobile will find Orion automatically on the same Wi-Fi.
-                </Text>
-                <TextInput
-                  ref={hiddenPinInputRef}
-                  style={styles.hiddenPinInput}
-                  value={pinCode}
-                  onChangeText={handlePinChange}
-                  keyboardType="numeric"
-                  maxLength={6}
-                  autoFocus
-                />
-                <Pressable
-                  style={styles.pinInputRow}
-                  onPress={() => hiddenPinInputRef.current?.focus()}
-                >
-                  {[0, 1, 2, 3, 4, 5].map((idx) => {
-                    const digit = pinCode[idx] || '';
-                    const isFocused = pinCode.length === idx;
-                    return (
-                      <View
-                        key={idx}
-                        style={[
-                          styles.pinBox,
-                          digit !== '' && styles.pinBoxFilled,
-                          isFocused && styles.pinBoxFocused,
-                        ]}
-                      >
-                        <Text style={styles.pinBoxText}>{digit}</Text>
-                      </View>
-                    );
-                  })}
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [styles.confirmBtn, pressed && { opacity: 0.85 }]}
-                  onPress={() => handleConnect()}
-                  disabled={isConnecting}
-                >
-                  <Text style={styles.confirmBtnText}>
-                    {isDiscovering ? 'Finding Orion Desktop…' : isConnecting ? 'Verifying & Pairing…' : 'Verify & Connect'}
-                  </Text>
-                </Pressable>
-                <Pressable onPress={() => setPairingMethod('ip')} style={{ minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ color: text.muted, fontSize: 12, fontWeight: '700' }}>Desktop not found? Use Direct IP</Text>
-                </Pressable>
-              </View>
-            )}
-            {pairingMethod === 'qr' && (
-              <View style={styles.qrSection}>
-                <Text style={styles.modalTitle}>Scan Desktop QR Code</Text>
-                <Text style={styles.modalSub}>Point camera at the QR code on Orion Desktop screen.</Text>
-                {cameraPermission?.granted ? (
-                  <View style={styles.cameraViewfinder}>
-                    <CameraView
-                      style={StyleSheet.absoluteFill}
-                      facing="back"
-                      barcodeScannerSettings={{
-                        barcodeTypes: ['qr'],
-                      }}
-                      onBarcodeScanned={handleBarCodeScanned}
-                    />
-                    <Animated.View style={[styles.laserScanLine, { transform: [{ translateY: scanLineAnim }] }]} />
-                  </View>
-                ) : (
-                  <View style={[styles.cameraViewfinder, { justifyContent: 'center', alignItems: 'center', gap: 10, padding: 16 }]}>
-                    <Ionicons name="camera-outline" size={42} color={theme.accent} />
-                    <Text style={{ color: text.muted, fontSize: 12, textAlign: 'center' }}>
-                      Camera access is required to scan the desktop QR code.
-                    </Text>
-                    <Pressable
-                      style={({ pressed }) => [styles.confirmBtn, { paddingVertical: 10, paddingHorizontal: 20 }, pressed && { opacity: 0.85 }]}
-                      onPress={requestCameraPermission}
-                    >
-                      <Text style={styles.confirmBtnText}>Grant Camera Permission</Text>
-                    </Pressable>
-                  </View>
-                )}
-                <Text style={{ color: text.muted, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: spacing[3] }}>
-                  Pairing begins automatically after Orion reads the QR code.
-                </Text>
-              </View>
-            )}
-            {pairingMethod === 'ip' && (
-              <View style={styles.ipSection}>
-                <Text style={styles.modalTitle}>Manual IP & PIN Connect</Text>
-                <Text style={styles.modalSub}>Enter your computer's local IP and the pairing PIN.</Text>
-                <View style={styles.ipInputRow}>
-                  <Ionicons name="desktop-outline" size={20} color={theme.accent} />
-                  <TextInput
-                    style={styles.ipInput}
-                    value={desktopIp}
-                    onChangeText={setDesktopIp}
-                    placeholder="Desktop IP (192.168...)"
-                    placeholderTextColor={text.muted}
-                    keyboardType="numeric"
-                  />
-                </View>
-                <View style={[styles.ipInputRow, { marginTop: 12 }]}>
-                  <Ionicons name="keypad-outline" size={20} color={theme.accent} />
-                  <TextInput
-                    style={styles.ipInput}
-                    value={pinCode}
-                    onChangeText={setPinCode}
-                    placeholder="6-digit pairing code"
-                    placeholderTextColor={text.muted}
-                    keyboardType="numeric"
-                    maxLength={6}
-                  />
-                </View>
-                <Pressable
-                  style={({ pressed }) => [styles.confirmBtn, pressed && { opacity: 0.85 }, { marginTop: 24 }]}
-                  onPress={() => handleConnect()}
-                  disabled={isConnecting}
-                >
-                  <Text style={styles.confirmBtnText}>
-                    {isConnecting ? 'Connecting...' : 'Connect to Desktop'}
-                  </Text>
-                </Pressable>
-              </View>
-            )}
-            {pairError ? (
-              <View style={{ marginTop: spacing[3], padding: spacing[3], borderRadius: radii.lg, backgroundColor: theme.accentSoft, borderWidth: 1, borderColor: theme.danger }}>
-                <Text style={{ color: theme.danger, fontSize: 12, lineHeight: 18, textAlign: 'center' }}>{pairError}</Text>
-                {/expired/i.test(pairError) ? (
-                  <Text style={{ color: text.muted, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 6 }}>
-                    Select New code in Orion Desktop, then enter the refreshed code here.
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
-            <Pressable style={styles.cancelBtnFull} onPress={() => setShowPairingModal(false)}>
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </Pressable>
-          </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
+      <SmartConnectPairingModal controller={controller} />
       <Modal visible={showDisconnectModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.glassModalCard}>
