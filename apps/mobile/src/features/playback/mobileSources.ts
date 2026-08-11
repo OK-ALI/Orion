@@ -1,10 +1,9 @@
 import {
   DEFAULT_CINEMA_SOURCE_ID,
   PLAYER_SOURCES,
-  getNextHealthyNonAsyncSource,
   getSource,
 } from '@orion/shared/sources';
-import { getMobileSourceHealth } from '../../services/sourceHealth';
+import { getMobileSourceHealth, getMobileSourceHealthV2 } from '../../services/sourceHealth';
 
 export const MOBILE_PLAYER_SOURCES = PLAYER_SOURCES.filter(
   (source) => !source.async && !source.animeOnly,
@@ -42,17 +41,39 @@ export function getNextMobileContinuitySource(
   attemptedSourceIds: string[] = [],
 ): string | null {
   const attempted = new Set([currentSourceId, ...attemptedSourceIds]);
-  for (let index = 0; index < MOBILE_PLAYER_SOURCES.length; index += 1) {
-    const candidateId = getNextHealthyNonAsyncSource(currentSourceId, {
-      mediaType,
-      includeExperimental: true,
-      attempted: [...attempted],
-    });
-    if (!candidateId) return null;
-    attempted.add(candidateId);
-    const candidate = getSource(candidateId);
+  const now = Date.now();
+  const stateScore: Record<string, number> = {
+    ready: 0,
+    slow: 1,
+    limited: 2,
+    unknown: 3,
+    failed: 9,
+  };
+  const releaseScore: Record<string, number> = { primary: 0, candidate: 1, experimental: 2 };
+  const eligible = MOBILE_PLAYER_SOURCES.filter((candidate) => {
+    const candidateId = candidate.id;
     const supportsMedia = mediaType === 'movie' ? candidate.media.movie : candidate.media.tv;
-    if (supportsMedia && mobileSourceSupportsContinuity(candidateId)) return candidateId;
-  }
-  return null;
+    const health = getMobileSourceHealthV2(candidateId, mediaType);
+    return supportsMedia
+      && mobileSourceSupportsContinuity(candidateId)
+      && !attempted.has(candidateId)
+      && !(health?.cooldownUntil && health.cooldownUntil > now);
+  });
+  if (!eligible.length) return null;
+  return [...eligible].sort((a, b) => {
+    const aHealth = getMobileSourceHealthV2(a.id, mediaType);
+    const bHealth = getMobileSourceHealthV2(b.id, mediaType);
+    const aScore = stateScore[aHealth?.state || 'unknown'] ?? 3;
+    const bScore = stateScore[bHealth?.state || 'unknown'] ?? 3;
+    if (aScore !== bScore) return aScore - bScore;
+    const aRatio = aHealth?.successRatio ?? 0;
+    const bRatio = bHealth?.successRatio ?? 0;
+    if (aRatio !== bRatio) return bRatio - aRatio;
+    const aRelease = releaseScore[a.releaseStatus] ?? 3;
+    const bRelease = releaseScore[b.releaseStatus] ?? 3;
+    if (aRelease !== bRelease) return aRelease - bRelease;
+    const aStartup = aHealth?.startupMs ?? Number.MAX_SAFE_INTEGER;
+    const bStartup = bHealth?.startupMs ?? Number.MAX_SAFE_INTEGER;
+    return aStartup - bStartup;
+  })[0].id;
 }

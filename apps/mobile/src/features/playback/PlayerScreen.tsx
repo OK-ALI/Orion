@@ -34,6 +34,7 @@ import {
   updateHandoffStatus,
 } from './handoffPolicy';
 import { getNextMobileContinuitySource, getPreferredMobileResumeSource } from './mobileSources';
+import { classifyCinemaSourceFailure } from './sourceFailure';
 import type { VerifiedPlaybackSnapshot } from './playerTypes';
 
 type PlayerRouteParams = {
@@ -212,6 +213,7 @@ export default function PlayerScreen() {
       expired.targetSourceId,
       type,
       expired.failureCode || 'CONTINUITY_UNCONFIRMED',
+      classifyCinemaSourceFailure(expired.failureCode || 'continuity unconfirmed'),
     );
     const nextTarget = getNextMobileContinuitySource(
       expired.targetSourceId,
