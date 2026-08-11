@@ -16,7 +16,7 @@ import { useLiveTelemetry } from './useLiveTelemetry';
 import { useRemotePointer } from './useRemotePointer';
 import {
   authenticateSecureSocket, closeSecureSmartConnectSocket, confirmSecurePairing,
-  rejectSecurePairing, sendSecureEnvelope, startSecurePairing, subscribeSecureSmartConnect,
+  rejectSecurePairing, sendRealtimeSecureEnvelope, sendSecureEnvelope, startSecurePairing, subscribeSecureSmartConnect,
   waitForDesktopConfirmation, type PairingTranscript, type SecureEndpoint,
 } from './secureConnectClient';
 
@@ -70,12 +70,22 @@ export function useConnectController() {
   const sequenceRef = useRef(0);
   const pendingAcks = useRef(new Map<string, { resolve(value: any): void; timer: ReturnType<typeof setTimeout> }>());
   const sendCommandRef = useRef<(cmd: string, value?: any) => Promise<any>>(async () => ({ ok: false, error: 'Remote transport is not ready.' }));
-  const { cursorRef, panResponder } = useRemotePointer(sendCommandRef);
+  const fireAndForgetRef = useRef<(cmd: string, value?: any) => void>(() => {});
+  const { cursorRef, panResponder, onTouchpadLayout, pointerMode, setPointerMode } = useRemotePointer(fireAndForgetRef);
   const { latency, remoteContext, setRemoteContext, telemetry, ingestTelemetry, isScrubbing, setIsScrubbing, markSent, recordAck } = useLiveTelemetry(setNowPlaying);
+
+  const rejectAllPendingAcks = (reason: string) => {
+    for (const pending of pendingAcks.current.values()) {
+      clearTimeout(pending.timer);
+      pending.resolve({ ok: false, error: reason });
+    }
+    pendingAcks.current.clear();
+  };
 
   const closeTransport = async () => {
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     heartbeatRef.current = null;
+    rejectAllPendingAcks('Connection closed.');
     await closeSecureSmartConnectSocket().catch(() => {});
     connectionRef.current.connected = false;
   };
@@ -101,7 +111,18 @@ export function useConnectController() {
         setRemoteError('');
         updateMobileDiagnostics({ smartConnectState: 'connected', smartConnectReconnectAttempt: 0, smartConnectLastAuthenticatedAt: Date.now() });
       }
-      if (envelope.type === 'error') setRemoteError(String(envelope.payload?.error || 'Desktop rejected the remote command.'));
+      if (envelope.type === 'error') {
+        const errorCommandId = envelope.payload?.commandId;
+        if (errorCommandId) {
+          const pending = pendingAcks.current.get(errorCommandId);
+          if (pending) {
+            clearTimeout(pending.timer);
+            pendingAcks.current.delete(errorCommandId);
+            pending.resolve({ ok: false, error: String(envelope.payload?.error || 'Desktop rejected the command.') });
+          }
+        }
+        setRemoteError(String(envelope.payload?.error || 'Desktop rejected the remote command.'));
+      }
     } catch {}
   };
 
@@ -136,8 +157,8 @@ export function useConnectController() {
 
   useEffect(() => subscribeSecureSmartConnect({
     onMessage: consumeSocketMessage,
-    onClose: () => { setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
-    onFailure: (message) => { setRemoteError(message); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
+    onClose: () => { rejectAllPendingAcks('Socket connection closed.'); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
+    onFailure: (message) => { rejectAllPendingAcks(message); setRemoteError(message); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
   }), [deviceId]);
 
   useEffect(() => {
@@ -269,17 +290,36 @@ export function useConnectController() {
   const handleBarCodeScanned = ({ data }: { data: string }) => {
     if (hasScanned || isConnecting) return; setHasScanned(true);
     const parsed = parsePairingPayload(data);
-    if (parsed.ip && parsed.fingerprint) {
-      setDesktopIp(parsed.ip); setDesktopPort(parsed.port); setPinCode(parsed.pin);
-      void handleConnect(parsed.ip, parsed.pin, parsed.port, 'qr', parsed.fingerprint);
-    } else setQrNotice('This QR code is not a secure Orion Connect v3 code. Generate a fresh code on Desktop.');
+    if (parsed.ip) {
+      setDesktopIp(parsed.ip);
+      if (parsed.port) setDesktopPort(parsed.port);
+      if (parsed.pin) setPinCode(parsed.pin);
+      setQrNotice('');
+      void handleConnect(parsed.ip, parsed.pin || pinCode, parsed.port || desktopPort, 'qr', parsed.fingerprint || undefined);
+    } else {
+      setQrNotice('This QR code is not a valid Orion Connect code.');
+    }
     setTimeout(() => setHasScanned(false), 3000);
   };
 
   const handlePinChange = (value: string) => setPinCode(value.replace(/\D/g, '').slice(0, 6));
 
+  const FIRE_AND_FORGET_ACTIONS = new Set(['cursor_move', 'scroll']);
+
+  const sendFireAndForget = (action: string, value?: any) => {
+    if (!isConnected || !connectionRef.current.connected) return;
+    const sequence = ++sequenceRef.current;
+    const command = createRemoteCommand(action, value, deviceId, sequence);
+    sendRealtimeSecureEnvelope({ version: SMART_CONNECT_PROTOCOL_VERSION, type: 'command', deviceId, connectionId: connectionRef.current.connectionId, sequence, commandId: command.id, payload: command });
+  };
+  fireAndForgetRef.current = sendFireAndForget;
+
   const sendRemoteCommand = async (action: string, value?: any) => {
     if (!isConnected || !connectionRef.current.connected) return { ok: false, error: 'Desktop is not live.' };
+    if (FIRE_AND_FORGET_ACTIONS.has(action)) {
+      sendFireAndForget(action, value);
+      return { ok: true };
+    }
     const sequence = ++sequenceRef.current;
     const command = createRemoteCommand(action, value, deviceId, sequence);
     markSent(command.id);
@@ -333,6 +373,7 @@ export function useConnectController() {
     renameThisDevice, desktopPort, lockoutSeconds, attemptsRemaining, prepareDirectIp, remoteContext,
     telemetry, latency, isScrubbing, setIsScrubbing, pendingTranscript,
     confirmVerificationPhrase, rejectVerificationPhrase,
+    onTouchpadLayout, pointerMode, setPointerMode,
   };
 }
 

@@ -71,6 +71,9 @@ export function SmartConnectPairingModal({ controller }: SmartConnectPairingModa
 
   const focusPin = () => InteractionManager.runAfterInteractions(() => hiddenPinInputRef.current?.focus());
 
+  const [cameraZoom, setCameraZoom] = useState(0.04);
+  const [cameraTorch, setCameraTorch] = useState(false);
+
   return (
     <Modal
       visible={showPairingModal}
@@ -209,9 +212,45 @@ export function SmartConnectPairingModal({ controller }: SmartConnectPairingModa
                 <Text style={styles.modalTitle}>Scan Desktop QR Code</Text>
                 <Text style={styles.modalSub}>Point the camera at the QR code on Orion Desktop.</Text>
                 {cameraPermission?.granted ? (
-                  <View style={styles.cameraViewfinder}>
-                    <CameraView style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={handleBarCodeScanned} />
-                    <Animated.View style={[styles.laserScanLine, { transform: [{ translateY: scanLineAnim }] }]} />
+                  <View style={styles.cameraContainer}>
+                    <View style={styles.cameraViewfinder}>
+                      <CameraView
+                        style={StyleSheet.absoluteFill}
+                        facing="back"
+                        autofocus="on"
+                        zoom={cameraZoom}
+                        enableTorch={cameraTorch}
+                        barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+                        onBarcodeScanned={handleBarCodeScanned}
+                      />
+                      <Animated.View style={[styles.laserScanLine, { transform: [{ translateY: scanLineAnim }] }]} />
+                    </View>
+                    <View style={styles.cameraControlsRow}>
+                      <Pressable
+                        style={[styles.cameraControlPill, cameraZoom === 0 && styles.cameraControlPillActive]}
+                        onPress={() => setCameraZoom(0)}
+                      >
+                        <Text style={[styles.cameraControlText, cameraZoom === 0 && styles.cameraControlTextActive]}>1x</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.cameraControlPill, cameraZoom === 0.06 && styles.cameraControlPillActive]}
+                        onPress={() => setCameraZoom(0.06)}
+                      >
+                        <Text style={[styles.cameraControlText, cameraZoom === 0.06 && styles.cameraControlTextActive]}>1.5x</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.cameraControlPill, cameraZoom === 0.12 && styles.cameraControlPillActive]}
+                        onPress={() => setCameraZoom(0.12)}
+                      >
+                        <Text style={[styles.cameraControlText, cameraZoom === 0.12 && styles.cameraControlTextActive]}>2x</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.cameraControlPill, cameraTorch && styles.cameraControlPillActive]}
+                        onPress={() => setCameraTorch((prev) => !prev)}
+                      >
+                        <Ionicons name={cameraTorch ? "flash" : "flash-outline"} size={14} color={cameraTorch ? theme.onAccent : theme.textMuted} />
+                      </Pressable>
+                    </View>
                   </View>
                 ) : (
                   <View style={[styles.cameraViewfinder, styles.cameraPermissionState]}>

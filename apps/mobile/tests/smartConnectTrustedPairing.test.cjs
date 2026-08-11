@@ -131,6 +131,9 @@ test("protocol v3 uses pinned native TLS, Keystore identity, and no bearer URL",
   assert.doesNotMatch(nativeModule, /[?&]token=/i);
   assert.match(secureClient, /certificateFingerprint/);
   assert.match(secureClient, /pairingId/);
+  assert.match(secureClient, /ticket\.data\?\.ticket\?\.ticketId/);
+  assert.match(secureClient, /openSecureSmartConnectSocket\([^;]+ticketId, deviceId\)/s);
+  assert.doesNotMatch(secureClient, /openSecureSmartConnectSocket\([^;]+ticket\.data\.ticket, deviceId\)/s);
   assert.match(controller, /SMART_CONNECT_PROTOCOL_VERSION/);
   assert.doesNotMatch(transport, /http:\/\/.+api\/command/);
 });

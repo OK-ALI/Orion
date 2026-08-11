@@ -26,8 +26,14 @@ export function useLiveTelemetry(setNowPlaying: React.Dispatch<React.SetStateAct
   const recordAck = useCallback((id: string) => {
     const sentAt = sentAtRef.current.get(id); if (!sentAt) return;
     sentAtRef.current.delete(id);
-    samplesRef.current = [...samplesRef.current.slice(-99), Date.now() - sentAt];
-    setLatency(latencySnapshot(samplesRef.current, telemetry ? Date.now() - telemetry.observedAt : null, null));
+    const samples = samplesRef.current;
+    samples.push(Date.now() - sentAt);
+    if (samples.length > 100) samples.splice(0, samples.length - 100);
+    const snapshot = latencySnapshot(samples, telemetry ? Date.now() - telemetry.observedAt : null, null);
+    setLatency((prev) => {
+      if (prev.medianRttMs != null && snapshot.medianRttMs != null && Math.abs(prev.medianRttMs - snapshot.medianRttMs) < 1) return prev;
+      return snapshot;
+    });
   }, [telemetry]);
 
   useEffect(() => {

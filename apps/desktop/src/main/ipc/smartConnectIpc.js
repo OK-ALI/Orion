@@ -43,6 +43,7 @@ const connectedSockets = new Map();
 const secureTrust = createTrustState();
 const authChallenges = new Map();
 let secureIdentity = null;
+
 let activePairingId = null;
 function completeSecurePairing(transcript) {
   if (!transcript?.desktopConfirmed || !transcript?.mobileConfirmed) return null;
@@ -76,15 +77,30 @@ function socketIsOpen(socket) {
 function originAllowed(req) {
   return !req.headers.origin || req.headers.origin === ALLOWED_REMOTE_ORIGIN;
 }
-function acceptCommandRate(socket, droppable) {
+function acceptCommandRate(socket, droppable, action) {
   const now = Date.now();
-  if (!socket.commandRateWindowAt || now - socket.commandRateWindowAt >= COMMAND_RATE_WINDOW_MS) {
-    socket.commandRateWindowAt = now; socket.commandRateCount = 0;
+  const policy = secureTrust.networkPolicy();
+  const isRealtime = action === "cursor_move";
+
+  if (isRealtime) {
+    if (!socket.realtimeRateWindowAt || now - socket.realtimeRateWindowAt >= COMMAND_RATE_WINDOW_MS) {
+      socket.realtimeRateWindowAt = now; socket.realtimeRateCount = 0;
+    }
+    socket.realtimeRateCount += 1;
+    const maxRealtime = Number(policy.realtimeCommandRatePerSecond || policy.commandRatePerSecond || 120);
+    return socket.realtimeRateCount <= maxRealtime
+      ? { ok: true }
+      : { ok: false, droppable: true, reason: "REALTIME_RATE_LIMITED" };
   }
-  socket.commandRateCount += 1;
-  return socket.commandRateCount <= secureTrust.networkPolicy().commandRatePerSecond
+
+  if (!socket.reliableRateWindowAt || now - socket.reliableRateWindowAt >= COMMAND_RATE_WINDOW_MS) {
+    socket.reliableRateWindowAt = now; socket.reliableRateCount = 0;
+  }
+  socket.reliableRateCount += 1;
+  const maxReliable = Number(policy.reliableCommandRatePerSecond || 60);
+  return socket.reliableRateCount <= maxReliable
     ? { ok: true }
-    : { ok: false, droppable, reason: "COMMAND_RATE_LIMITED" };
+    : { ok: false, droppable: Boolean(droppable), reason: "COMMAND_RATE_LIMITED" };
 }
 
 function publicDevices() {
@@ -269,22 +285,12 @@ function loadSessions() {
 }
 
 function getAllLocalIpAddresses() {
-  const addresses = [];
-  for (const [name, networks] of Object.entries(os.networkInterfaces())) {
-    for (const network of networks || []) {
-      if (network.family === "IPv4" && !network.internal) {
-        addresses.push({ name: name.toLowerCase(), address: network.address });
-      }
-    }
-  }
-  const isLan = (address) => /^192\.168\./.test(address) || /^10\./.test(address)
-    || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(address);
-  return addresses
-    .sort((a, b) => Number(isLan(b.address)) - Number(isLan(a.address)))
-    .map((entry) => entry.address);
+  return eligibleLanAddresses();
 }
 
-function getLocalIpAddress() { return getAllLocalIpAddresses()[0] || "127.0.0.1"; }
+function getLocalIpAddress() {
+  return getAllLocalIpAddresses()[0] || "127.0.0.1";
+}
 function notifyDesktopRenderer(event, data) {
   const win = getMainWindowRef?.(); if (win && !win.isDestroyed()) win.webContents.send(event, data);
 }
@@ -380,6 +386,25 @@ function configureSockets() {
     if (previousSocket && previousSocket !== socket) previousSocket.close();
     connectedSockets.set(session.deviceId, socket);
     session.lastSeenAt = Date.now();
+socket.smartConnectRealtimeDiagnostics = {
+  received: 0,
+  rateRejected: 0,
+  replayRejected: 0,
+  forwarded: 0,
+};
+
+const realtimeDiagnosticsTimer = setInterval(() => {
+  const diagnostics = socket.smartConnectRealtimeDiagnostics;
+
+  console.log(
+    `[SmartConnect realtime] received=${diagnostics.received} rateRejected=${diagnostics.rateRejected} replayRejected=${diagnostics.replayRejected} forwarded=${diagnostics.forwarded}`,
+  );
+
+  diagnostics.received = 0;
+  diagnostics.rateRejected = 0;
+  diagnostics.replayRejected = 0;
+  diagnostics.forwarded = 0;
+}, 1000);
     sendSocket(socket, "status", session.deviceId, { connected: true });
     if (currentContext) sendSocket(socket, "context", session.deviceId, currentContext);
     if (currentPlayback) sendSocket(socket, "telemetry", session.deviceId, currentPlayback);
@@ -397,12 +422,23 @@ function configureSockets() {
           return;
         }
         if (envelope.type !== "command") return;
-        const droppable = envelope.payload?.action === "cursor_move";
-        const rate = acceptCommandRate(socket, droppable);
-        if (!rate.ok) {
-          if (!rate.droppable) sendSocket(socket, "error", session.deviceId, { error: rate.reason });
-          return;
-        }
+        const action = envelope.payload?.action;
+const realtimeAction = action === "cursor_move" || action === "scroll";
+
+if (realtimeAction) {
+  socket.smartConnectRealtimeDiagnostics.received += 1;
+}
+
+const droppable = action === "cursor_move";
+        const rate = acceptCommandRate(socket, droppable, action);
+if (!rate.ok) {
+  if (realtimeAction) {
+    socket.smartConnectRealtimeDiagnostics.rateRejected += 1;
+  }
+
+  if (!rate.droppable) sendSocket(socket, "error", session.deviceId, { error: rate.reason, commandId: String(envelope.commandId || envelope.payload?.id || "") });
+  return;
+}
         const replay = secureTrust.acceptEnvelope(
           session.deviceId,
           socket.smartConnectConnectionId,
@@ -411,7 +447,10 @@ function configureSockets() {
           droppable,
         );
         if (!replay.ok) {
-          if (!replay.droppable) sendSocket(socket, "error", session.deviceId, { error: "Replay or duplicate command rejected." });
+	   if (realtimeAction) {
+    socket.smartConnectRealtimeDiagnostics.replayRejected += 1;
+  }
+          if (!replay.droppable) sendSocket(socket, "error", session.deviceId, { error: "Replay or duplicate command rejected.", commandId: String(envelope.commandId || envelope.payload?.id || "") });
           return;
         }
         if (envelope.payload?.action === "smart_connect_rename") {
@@ -433,11 +472,17 @@ function configureSockets() {
           notifyConnectionStatus();
           return;
         }
+        if (action === 'cursor_move' || action === 'scroll') {
+  const command = normalizeCommand(envelope.payload);
+  socket.smartConnectRealtimeDiagnostics.forwarded += 1;
+  notifyDesktopRenderer("orion:remote-command", command);
+  return;
+}
         const command = normalizeCommand(envelope.payload);
         const ack = await dispatchCommand(command);
         sendSocket(socket, "ack", session.deviceId, ack);
       } catch (error) {
-        sendSocket(socket, "error", session.deviceId, { error: error.message });
+        sendSocket(socket, "error", session.deviceId, { error: error.message, commandId: String(envelope?.commandId || envelope?.payload?.id || "") });
       }
     });
     const watchdog = setInterval(() => {
@@ -445,6 +490,7 @@ function configureSockets() {
     }, 15_000);
     socket.on("close", () => {
       clearInterval(watchdog);
+      clearInterval(realtimeDiagnosticsTimer);
       if (connectedSockets.get(session.deviceId) === socket) {
         connectedSockets.delete(session.deviceId);
         notifyConnectionStatus();
@@ -661,10 +707,10 @@ async function startSmartConnectServer(getMainWindow) {
 ipcMain.handle("smart-connect:get-info", async () => {
   ensureFreshPin();
   const ip = getLocalIpAddress();
-  const qrPayload = `orion://connect?ip=${encodeURIComponent(ip)}&port=${PORT}&pin=${encodeURIComponent(currentPin)}&version=3&instanceId=${encodeURIComponent(desktopInstanceId)}&fingerprint=${encodeURIComponent(secureIdentity?.certificateFingerprint || "")}`;
+  const qrPayload = `orion://connect?ip=${encodeURIComponent(ip)}&port=${PORT}&pin=${encodeURIComponent(currentPin)}&version=3`;
   const qrDataUrl = await QRCode.toDataURL(qrPayload, {
-    width: 248,
-    margin: 1,
+    width: 256,
+    margin: 2,
     errorCorrectionLevel: "M",
   }).catch(() => "");
   return {

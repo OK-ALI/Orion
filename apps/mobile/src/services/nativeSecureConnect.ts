@@ -10,6 +10,8 @@ const module = NativeModules.OrionSecureConnect as undefined | {
   request(host: string, port: number, fingerprint: string | null, path: string, method: string, body: string | null): Promise<SecureResponse>;
   openSocket(host: string, port: number, fingerprint: string, ticket: string, deviceId: string): Promise<boolean>;
   sendSocket(payload: string): Promise<boolean>;
+  sendRealtimeSocket?(payload: string): Promise<boolean>;
+  sendRealtimeSocketFireAndForget?(payload: string): void;
   closeSocket(): Promise<void>;
   addListener(name: string): void;
   removeListeners(count: number): void;
@@ -45,6 +47,16 @@ export const openSecureSmartConnectSocket = (
   host: string, port: number, fingerprint: string, ticket: string, deviceId: string,
 ) => requireModule().openSocket(host, port, fingerprint, ticket, deviceId);
 export const sendSecureSmartConnectSocket = (payload: string) => requireModule().sendSocket(payload);
+export const sendRealtimeSmartConnectSocket = (payload: string) => {
+  const mod = requireModule();
+  if (mod.sendRealtimeSocketFireAndForget) {
+    mod.sendRealtimeSocketFireAndForget(payload);
+  } else if (mod.sendRealtimeSocket) {
+    void mod.sendRealtimeSocket(payload);
+  } else {
+    void mod.sendSocket(payload);
+  }
+};
 export const closeSecureSmartConnectSocket = () => module?.closeSocket() ?? Promise.resolve();
 
 export function subscribeSecureSmartConnect(

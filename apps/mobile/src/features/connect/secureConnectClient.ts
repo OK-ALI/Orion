@@ -3,6 +3,7 @@ import {
   getSecureDeviceIdentity,
   openSecureSmartConnectSocket,
   secureSmartConnectRequest,
+  sendRealtimeSmartConnectSocket,
   sendSecureSmartConnectSocket,
   signSecureValue,
   subscribeSecureSmartConnect,
@@ -23,6 +24,19 @@ export interface PairingTranscript {
   deviceName: string;
   certificateFingerprint: string;
   phrase: { words: string[]; expiresAt: number };
+}
+
+interface SecureSocketTicket {
+  ticketId: string;
+  deviceId: string;
+  connectionId: string;
+  expiresAt: number;
+}
+
+interface SecureSocketTicketResponse {
+  ok: boolean;
+  ticket: SecureSocketTicket;
+  connectionId: string;
 }
 
 export async function startSecurePairing(endpoint: SecureEndpoint, pin: string, deviceName: string) {
@@ -77,16 +91,25 @@ export async function authenticateSecureSocket(endpoint: SecureEndpoint, deviceI
   );
   if (!validDesktop) throw Object.assign(new Error('Desktop identity verification failed.'), { code: 'DESKTOP_IDENTITY_FAILED' });
   const signature = await signSecureValue(String(challenge.data.nonce));
-  const ticket = await secureSmartConnectRequest<any>(
+  const ticket = await secureSmartConnectRequest<SecureSocketTicketResponse>(
     endpoint.host, endpoint.port, endpoint.fingerprint, '/api/auth/ticket', 'POST',
     { deviceId, signature },
   );
-  if (!ticket.ok || !ticket.data?.ticket) throw pairingFailure(ticket.data, ticket.status);
-  await openSecureSmartConnectSocket(endpoint.host, endpoint.port, endpoint.fingerprint, ticket.data.ticket, deviceId);
+  const ticketId = ticket.data?.ticket?.ticketId;
+  if (!ticket.ok || typeof ticketId !== 'string' || !ticketId) {
+    if (ticket.ok) {
+      throw Object.assign(new Error('Desktop returned an invalid secure socket ticket.'), {
+        code: 'SECURE_SOCKET_TICKET_INVALID',
+      });
+    }
+    throw pairingFailure(ticket.data, ticket.status);
+  }
+  await openSecureSmartConnectSocket(endpoint.host, endpoint.port, endpoint.fingerprint, ticketId, deviceId);
   return { connectionId: String(ticket.data.connectionId || '') };
 }
 
 export const sendSecureEnvelope = (payload: unknown) => sendSecureSmartConnectSocket(JSON.stringify(payload));
+export const sendRealtimeSecureEnvelope = (payload: unknown) => sendRealtimeSmartConnectSocket(JSON.stringify(payload));
 export { closeSecureSmartConnectSocket, subscribeSecureSmartConnect };
 
 function pairingFailure(data: any, status: number) {

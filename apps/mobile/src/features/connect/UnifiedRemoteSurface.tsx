@@ -7,7 +7,7 @@ type Props = { controller: any; theme: any; isLandscape: boolean; legacyStyles: 
 
 export function UnifiedRemoteSurface({ controller, theme, isLandscape, legacyStyles }: Props) {
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const [pending, setPending] = useState<string | null>(null);
+  const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
   const [showMore, setShowMore] = useState(false);
   const [text, setText] = useState('');
   const context = controller.remoteContext;
@@ -15,23 +15,27 @@ export function UnifiedRemoteSurface({ controller, theme, isLandscape, legacySty
   const capabilities = context?.capabilities || {};
 
   const command = async (action: string, value?: unknown) => {
-    if (pending) return;
-    setPending(action);
-    try { await controller.sendRemoteCommand(action, value); } finally { setPending(null); }
+    setPendingActions((prev) => new Set(prev).add(action));
+    try { await controller.sendRemoteCommand(action, value); } finally {
+      setPendingActions((prev) => { const next = new Set(prev); next.delete(action); return next; });
+    }
   };
 
-  const Action = ({ action, icon, label, value, disabled = false }: any) => (
+  const Action = ({ action, icon, label, value, disabled = false }: any) => {
+    const isActionPending = pendingActions.has(action);
+    return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      disabled={disabled || Boolean(pending)}
+      disabled={disabled || isActionPending}
       onPress={() => command(action, value)}
-      style={({ pressed }) => [styles.action, pressed && styles.pressed, (disabled || pending) && styles.disabled]}
+      style={({ pressed }) => [styles.action, pressed && styles.pressed, (disabled || isActionPending) && styles.disabled]}
     >
-      {pending === action ? <ActivityIndicator color={theme.accent} /> : <Ionicons name={icon} size={21} color={theme.text} />}
+      {isActionPending ? <ActivityIndicator color={theme.accent} /> : <Ionicons name={icon} size={21} color={theme.text} />}
       <Text style={styles.actionLabel}>{label}</Text>
     </Pressable>
-  );
+    );
+  };
 
   const PlaybackPanel = () => playback.hasMedia ? (
     <View style={styles.playbackCard}>
@@ -75,20 +79,30 @@ export function UnifiedRemoteSurface({ controller, theme, isLandscape, legacySty
     <View style={styles.touchpadBlock}>
       <View style={styles.touchpadHeader}>
         <View>
-          <Text style={styles.eyebrow}>TOUCHPAD</Text>
-          <Text style={styles.meta}>One finger moves · tap selects · two fingers scroll</Text>
+          <Text style={styles.eyebrow}>TOUCHPAD ({controller.pointerMode === 'absolute' ? 'DIRECT 1:1 MIRROR' : 'TRACKPAD'})</Text>
+          <Text style={styles.meta}>{controller.pointerMode === 'absolute' ? 'Touch area mirrors desktop 1:1 · tap selects' : 'One finger moves · tap selects · two fingers scroll'}</Text>
         </View>
-        <View style={styles.latency}><Text style={styles.latencyText}>{controller.latency?.medianRttMs ?? '—'} ms</Text></View>
+        <Pressable
+          style={styles.latency}
+          onPress={() => controller.setPointerMode(controller.pointerMode === 'relative' ? 'absolute' : 'relative')}
+        >
+          <Text style={styles.latencyText}>{controller.pointerMode === 'relative' ? 'Trackpad' : '1:1 Direct'}</Text>
+        </Pressable>
       </View>
-      <View accessibilityLabel="Desktop touchpad" style={styles.touchpad} {...controller.panResponder.panHandlers}>
+      <View
+        accessibilityLabel="Desktop touchpad"
+        style={styles.touchpad}
+        onLayout={controller.onTouchpadLayout}
+        {...controller.panResponder.panHandlers}
+      >
         <Ionicons name="hand-left-outline" size={38} color={theme.textMuted} />
-        <Text style={styles.touchpadText}>Control Orion Desktop</Text>
+        <Text style={styles.touchpadText}>Control Orion Desktop ({controller.pointerMode === 'relative' ? 'Trackpad Mode' : '1:1 Surface Mode'})</Text>
       </View>
     </View>
   );
 
   return (
-    <ScrollView contentContainerStyle={[styles.root, isLandscape && styles.rootLandscape]} keyboardShouldPersistTaps="handled">
+    <ScrollView scrollEnabled={true} contentContainerStyle={[styles.root, isLandscape && styles.rootLandscape]} keyboardShouldPersistTaps="handled">
       <View style={isLandscape ? styles.leftPane : undefined}><PlaybackPanel /></View>
       <View style={isLandscape ? styles.rightPane : undefined}>
         <Touchpad />

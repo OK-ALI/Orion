@@ -10,7 +10,7 @@
     "build": "vite build",
     "test": "npm run test:node && npm run test:renderer",
     "test:node": "node --test tests/unit/main/*.test.js tests/integration/*.test.js",
-    "test:renderer": "vitest run",
+    "test:renderer": "vitest run --pool=threads",
     "test:electron": "playwright test --config tests/electron/playwright.config.js",
     "check:source-size": "node scripts/check-source-size.js",
     "check:bindings": "node scripts/check-renderer-bindings.js",

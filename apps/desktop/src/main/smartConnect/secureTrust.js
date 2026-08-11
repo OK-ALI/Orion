@@ -22,11 +22,44 @@ function privateAddress(address) {
 }
 
 function eligibleLanAddresses() {
-  return Object.values(os.networkInterfaces()).flat().filter((item) =>
-    item && item.family === "IPv4" && !item.internal && privateAddress(item.address),
-  ).map((item) => item.address);
-}
+  const isVirtualAdapter = (name) =>
+    /(vethernet|virtual|hyper-v|wsl|vmware|virtualbox|vpn|tap|radmin|hamachi)/i.test(
+      String(name || ""),
+    );
 
+  const isPhysicalLanAdapter = (name) =>
+    !isVirtualAdapter(name)
+    && /(wi-?fi|wireless|ethernet|lan)/i.test(String(name || ""));
+
+  return Object.entries(os.networkInterfaces())
+    .flatMap(([name, networks]) =>
+      (networks || [])
+        .filter(
+          (item) =>
+            item
+            && item.family === "IPv4"
+            && !item.internal
+            && privateAddress(item.address),
+        )
+        .map((item) => ({ name, address: item.address })),
+    )
+    .sort((a, b) => {
+      const physicalDelta =
+        Number(isPhysicalLanAdapter(b.name))
+        - Number(isPhysicalLanAdapter(a.name));
+
+      if (physicalDelta !== 0) return physicalDelta;
+
+      const virtualDelta =
+        Number(isVirtualAdapter(a.name))
+        - Number(isVirtualAdapter(b.name));
+
+      if (virtualDelta !== 0) return virtualDelta;
+
+      return a.name.localeCompare(b.name);
+    })
+    .map((item) => item.address);
+}
 let publicNetworkCache = { value: false, expiresAt: 0 };
 
 function windowsPublicNetwork() {
@@ -153,7 +186,9 @@ function createTrustState() {
         allowed: !publicNetwork || publicNetworkAllowedUntil > Date.now(),
         publicNetworkAllowedUntil: publicNetworkAllowedUntil || null,
         maxConnections: 4,
-        commandRatePerSecond: 60,
+        commandRatePerSecond: 120,
+        realtimeCommandRatePerSecond: 120,
+        reliableCommandRatePerSecond: 60,
       };
     },
     allowPublicNetworkForSession(durationMs = 4 * 60 * 60 * 1000) {

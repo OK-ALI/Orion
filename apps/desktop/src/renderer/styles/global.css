@@ -592,6 +592,8 @@ ol {
 /* ── Virtual Touchpad Laser Pointer Dot ─────────────────────────────────── */
 .orion-virtual-cursor {
   position: fixed;
+  top: 0;
+  left: 0;
   width: 20px;
   height: 20px;
   border-radius: 50%;
@@ -599,8 +601,9 @@ ol {
   box-shadow: 0 0 16px #e50914, 0 0 32px rgba(229, 9, 20, 0.8);
   pointer-events: none;
   z-index: 999999;
-  transform: translate(-50%, -50%);
-  transition: top 0.05s ease-out, left 0.05s ease-out;
+  will-change: transform;
+  transform: translate3d(-50%, -50%, 0);
+  transition: opacity 0.15s ease;
 }
 
 .source-dropdown__tag {

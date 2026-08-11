@@ -22,7 +22,7 @@ test('connected Smart Connect uses one unified adaptive surface', () => {
 test('pointer input coalesces movement and supports two-finger scrolling', () => {
   const pointer = read('src/features/connect/useRemotePointer.ts');
 
-  assert.match(pointer, /33/);
+  assert.match(pointer, /16/);
   assert.match(pointer, /touches\.length >= 2/);
   assert.match(pointer, /scroll/);
   assert.match(pointer, /cursor_move/);

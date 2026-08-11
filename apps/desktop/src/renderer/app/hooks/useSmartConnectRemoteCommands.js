@@ -1,7 +1,18 @@
 import { useEffect } from "react";
 
 const REMOTE_CURSOR_INACTIVITY_MS = 4_000;
+let lastCursorActivityAt = 0;
+let latestCursorPayload = null;
+let hoverCheckTimer = null;
+let rafHandle = null;
 let remoteCursorInactivityTimer = null;
+
+const rendererRealtimeDiagnostics = {
+  received: 0,
+  cursorMoveCalled: 0,
+  rafTicks: 0,
+  cursorFramesRendered: 0,
+};
 
 const SIDEBAR_PAGES = [
   "home",
@@ -24,62 +35,129 @@ function getScrollContainer() {
   );
 }
 
-function clearRemoteCursor() {
-  if (remoteCursorInactivityTimer) {
-    window.clearTimeout(remoteCursorInactivityTimer);
-    remoteCursorInactivityTimer = null;
-  }
-  document.querySelector(".orion-virtual-cursor")?.remove();
-  document
-    .querySelectorAll(".spatial-remote-focused")
-    .forEach((node) => node.classList.remove("spatial-remote-focused"));
-}
-
-function scheduleRemoteCursorCleanup() {
-  if (remoteCursorInactivityTimer) {
-    window.clearTimeout(remoteCursorInactivityTimer);
-  }
-  remoteCursorInactivityTimer = window.setTimeout(() => {
-    clearRemoteCursor();
-  }, REMOTE_CURSOR_INACTIVITY_MS);
-}
-
-function moveCursor(payload) {
+function getOrCreateVirtualCursor() {
   let cursor = document.querySelector(".orion-virtual-cursor");
   if (!cursor) {
     cursor = document.createElement("div");
     cursor.className = "orion-virtual-cursor";
+    cursor.style.opacity = "0";
     document.body.appendChild(cursor);
   }
-  const pointer = payload?.pointer || payload?.value || payload || {};
-  const x = Math.max(0, Math.min(1, Number(pointer.x ?? pointer.xRatio) || 0));
-  const y = Math.max(0, Math.min(1, Number(pointer.y ?? pointer.yRatio) || 0));
-  const clientX = x * window.innerWidth;
-  const clientY = y * window.innerHeight;
-  cursor.style.left = `${clientX}px`;
-  cursor.style.top = `${clientY}px`;
-  cursor.style.display = "block";
-
-  const element = document.elementFromPoint(clientX, clientY);
-  const interactive = element?.closest(
-    ".media-card, button, a, [role='button'], [tabindex='0']",
-  );
-  document
-    .querySelectorAll(".spatial-remote-focused")
-    .forEach((node) => node.classList.remove("spatial-remote-focused"));
-  interactive?.classList.add("spatial-remote-focused");
-  scheduleRemoteCursorCleanup();
+  return cursor;
 }
 
+function clearRemoteCursor() {
+  latestCursorPayload = null;
+  lastCursorActivityAt = 0;
+
+  if (remoteCursorInactivityTimer) {
+    window.clearTimeout(remoteCursorInactivityTimer);
+    remoteCursorInactivityTimer = null;
+  }
+
+  if (rafHandle) {
+    cancelAnimationFrame(rafHandle);
+    rafHandle = null;
+  }
+
+  const cursor = document.querySelector(".orion-virtual-cursor");
+
+  if (cursor) {
+    cursor.style.opacity = "0";
+  }
+
+  document
+    .querySelectorAll(".spatial-remote-focused")
+    .forEach((node) =>
+      node.classList.remove("spatial-remote-focused"),
+    );
+}
+function scheduleRemoteCursorCleanup() {
+  lastCursorActivityAt = performance.now();
+
+  const cursor = getOrCreateVirtualCursor();
+  cursor.style.opacity = "1";
+
+  if (remoteCursorInactivityTimer) {
+    window.clearTimeout(remoteCursorInactivityTimer);
+  }
+
+  remoteCursorInactivityTimer = window.setTimeout(() => {
+    remoteCursorInactivityTimer = null;
+    clearRemoteCursor();
+  }, REMOTE_CURSOR_INACTIVITY_MS);
+}
+function moveCursor(payload) {
+  rendererRealtimeDiagnostics.cursorMoveCalled += 1;
+
+  latestCursorPayload = payload;
+  scheduleRemoteCursorCleanup();
+
+  if (!rafHandle) {
+    rafHandle = requestAnimationFrame(renderCursorFrame);
+  }
+}
+function renderCursorFrame() {
+  rafHandle = null;
+  rendererRealtimeDiagnostics.rafTicks += 1;
+
+  const payload = latestCursorPayload;
+  latestCursorPayload = null;
+
+  if (!payload) return;
+
+  rendererRealtimeDiagnostics.cursorFramesRendered += 1;
+
+  const cursor = getOrCreateVirtualCursor();
+  const pointer = payload?.pointer || payload?.value || payload || {};
+
+  const x = Math.max(
+    0,
+    Math.min(1, Number(pointer.x ?? pointer.xRatio) || 0),
+  );
+
+  const y = Math.max(
+    0,
+    Math.min(1, Number(pointer.y ?? pointer.yRatio) || 0),
+  );
+
+  const clientX = Math.round(x * window.innerWidth);
+  const clientY = Math.round(y * window.innerHeight);
+
+  cursor.style.transform =
+    `translate3d(${clientX}px, ${clientY}px, 0) translate(-50%, -50%)`;
+
+  cursor.style.opacity = "1";
+  cursor.dataset.x = String(clientX);
+  cursor.dataset.y = String(clientY);
+
+  if (!hoverCheckTimer) {
+    hoverCheckTimer = window.setTimeout(() => {
+      hoverCheckTimer = null;
+
+      const element = document.elementFromPoint(clientX, clientY);
+
+      const interactive = element?.closest(
+        ".media-card, button, a, [role='button'], [tabindex='0']",
+      );
+
+      document
+        .querySelectorAll(".spatial-remote-focused")
+        .forEach((node) =>
+          node.classList.remove("spatial-remote-focused"),
+        );
+
+      interactive?.classList.add("spatial-remote-focused");
+    }, 50);
+  }
+}
 function clickCursor() {
   const cursor = document.querySelector(".orion-virtual-cursor");
   if (!cursor) return;
   scheduleRemoteCursorCleanup();
-  const rect = cursor.getBoundingClientRect();
-  const element = document.elementFromPoint(
-    rect.left + rect.width / 2,
-    rect.top + rect.height / 2,
-  );
+  const clientX = Number(cursor.dataset.x) || (cursor.getBoundingClientRect().left + 10);
+  const clientY = Number(cursor.dataset.y) || (cursor.getBoundingClientRect().top + 10);
+  const element = document.elementFromPoint(clientX, clientY);
   const clickable =
     element?.closest(".media-card, button, a, [role='button'], input") ||
     element;
@@ -129,9 +207,26 @@ export function useSmartConnectRemoteCommands({
   setShowSearch,
 }) {
   useEffect(() => {
+const rendererDiagnosticsTimer = window.setInterval(() => {
+  const diagnostics = rendererRealtimeDiagnostics;
+
+  console.log(
+    `[SmartConnect renderer] received=${diagnostics.received} cursorMoveCalled=${diagnostics.cursorMoveCalled} rafTicks=${diagnostics.rafTicks} cursorFramesRendered=${diagnostics.cursorFramesRendered}`,
+  );
+
+  diagnostics.received = 0;
+  diagnostics.cursorMoveCalled = 0;
+  diagnostics.rafTicks = 0;
+  diagnostics.cursorFramesRendered = 0;
+}, 1000);
     const handleRemoteCommand = async (payload) => {
       const { action, value } = payload || {};
-      const targetScroll = getScrollContainer();
+
+if (action === "cursor_move" || action === "scroll") {
+  rendererRealtimeDiagnostics.received += 1;
+}
+
+const targetScroll = getScrollContainer();
       let commandResult = { ok: true };
 
       if (action === "cursor_move") moveCursor(payload);
@@ -168,11 +263,21 @@ export function useSmartConnectRemoteCommands({
         );
       }
       if (action === "up" || action === "down") {
-        const top = action === "up" ? -280 : 280;
-        if (typeof targetScroll.scrollBy === "function") {
-          targetScroll.scrollBy({ top, behavior: "smooth" });
+        const active = document.activeElement;
+        if (active && active !== document.body) {
+          active.dispatchEvent(
+            new window.KeyboardEvent("keydown", {
+              key: action === "up" ? "ArrowUp" : "ArrowDown",
+              bubbles: true,
+            }),
+          );
         } else {
-          window.scrollBy({ top, behavior: "smooth" });
+          const top = action === "up" ? -280 : 280;
+          if (typeof targetScroll.scrollBy === "function") {
+            targetScroll.scrollBy({ top, behavior: "smooth" });
+          } else {
+            window.scrollBy({ top, behavior: "smooth" });
+          }
         }
       }
       if (action === "left" || action === "right") {
@@ -241,7 +346,8 @@ export function useSmartConnectRemoteCommands({
       }
       if (action === "toggle_pip") createMiniHandoff();
 
-      if (payload?.id && window.electron?.acknowledgeSmartConnectCommand) {
+      const isRealtimeCommand = action === "cursor_move" || action === "scroll";
+if (!isRealtimeCommand && payload?.id && window.electron?.acknowledgeSmartConnectCommand) {
         window.electron
           .acknowledgeSmartConnectCommand({
             id: payload.id,
@@ -311,7 +417,9 @@ export function useSmartConnectRemoteCommands({
     const handleCustomRemote = (event) => handleRemoteCommand(event.detail);
     window.addEventListener("orion:remote-command-custom", handleCustomRemote);
     return () => {
-      unsubscribe?.();
+      if (rafHandle) cancelAnimationFrame(rafHandle);
+window.clearInterval(rendererDiagnosticsTimer);
+unsubscribe?.();
       unsubscribeStatus?.();
       clearRemoteCursor();
       try {

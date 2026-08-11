@@ -525,9 +525,13 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
     textAlign: 'center',
     marginBottom: spacing[3],
   },
+  cameraContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   cameraViewfinder: {
-    width: 180,
-    height: 180,
+    width: 210,
+    height: 210,
     borderRadius: radii.xl,
     backgroundColor: theme.surface,
     borderWidth: 2,
@@ -536,7 +540,34 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
     alignItems: 'center',
     position: 'relative',
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 10,
+  },
+  cameraControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cameraControlPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radii.full,
+    backgroundColor: theme.surfaceHover,
+    borderWidth: 1,
+    borderColor: theme.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cameraControlPillActive: {
+    backgroundColor: theme.accent,
+    borderColor: theme.accent,
+  },
+  cameraControlText: {
+    color: theme.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cameraControlTextActive: {
+    color: theme.onAccent,
   },
   laserScanLine: {
     position: 'absolute',

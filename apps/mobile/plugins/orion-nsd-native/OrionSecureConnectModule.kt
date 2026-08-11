@@ -133,6 +133,8 @@ class OrionSecureConnectModule(private val context: ReactApplicationContext) : R
   }
 
   @ReactMethod fun sendSocket(payload: String, promise: Promise) { promise.resolve(socket?.send(payload) == true) }
+  @ReactMethod fun sendRealtimeSocket(payload: String, promise: Promise) { promise.resolve(socket?.send(payload) == true) }
+  @ReactMethod fun sendRealtimeSocketFireAndForget(payload: String) { socket?.send(payload) }
   @ReactMethod fun closeSocket(promise: Promise) { closeSocketInternal(); promise.resolve(null) }
   @ReactMethod fun addListener(eventName: String) = Unit
   @ReactMethod fun removeListeners(count: Double) = Unit

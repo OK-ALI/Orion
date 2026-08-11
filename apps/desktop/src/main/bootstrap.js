@@ -318,11 +318,11 @@ function createWindow() {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
 
-  mainWindow.webContents.on("console-message", (_event, details) => {
-    console.log(
-      `[Renderer Console ${details.level}] ${details.message} (${details.sourceId}:${details.lineNumber})`,
-    );
-  });
+  mainWindow.webContents.on("console-message", (details) => {
+  console.log(
+    `[Renderer Console ${details.level}] ${details.message} (${details.sourceId}:${details.lineNumber})`,
+  );
+});
   mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription) => {
     console.error(`[Renderer Fail Load] ${errorCode}: ${errorDescription}`);
   });
