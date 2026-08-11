@@ -11,6 +11,20 @@ export interface SubtitleTrack {
   provider: 'subdl' | 'wyzie';
 }
 
+export type SubtitleSearchState =
+  | 'available'
+  | 'no-results'
+  | 'language-unavailable'
+  | 'api-key-required'
+  | 'provider-failure'
+  | 'invalid-file'
+  | 'offline';
+
+export interface SubtitleSearchOutcome {
+  tracks: SubtitleTrack[];
+  state: SubtitleSearchState;
+}
+
 const SUBDL_KEY_STORAGE = 'orion_mobile_subdl_api_key';
 
 export async function setSubtitleProviderKey(provider: 'subdl', value: string | null) {
@@ -49,19 +63,35 @@ const LANG_MAP: Record<string, string> = {
   ru: 'Russian',
 };
 
-/**
- * Fetch subtitle tracks from SubDL and Wyzie APIs matching Desktop logic
- */
-export async function searchSubtitles(params: {
+function isSafeSubtitleUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+function classifyNetworkFailure(error: unknown): 'offline' | 'provider-failure' {
+  const message = String(error || '').toLowerCase();
+  return /network|offline|failed to fetch|timed out|timeout/.test(message) ? 'offline' : 'provider-failure';
+}
+
+/** Fetch subtitle search results without surfacing provider URLs to presentation callers. */
+export async function searchSubtitlesWithOutcome(params: {
   tmdbId: string;
   mediaType: 'movie' | 'tv';
   season?: number;
   episode?: number;
   languages?: string;
-}): Promise<SubtitleTrack[]> {
+}): Promise<SubtitleSearchOutcome> {
   const { tmdbId, mediaType, season = 1, episode = 1, languages = 'en' } = params;
   const results: SubtitleTrack[] = [];
   const subdlApiKey = await SecureStore.getItemAsync(SUBDL_KEY_STORAGE).catch(() => null);
+  let sawProviderFailure = false;
+  let sawOffline = false;
+  let sawInvalidFile = false;
 
   // 1. Fetch from SubDL API if Key present
   if (subdlApiKey) {
@@ -81,20 +111,28 @@ export async function searchSubtitles(params: {
             const langLabel = sub.language_name || LANG_MAP[cleanLang] || cleanLang.toUpperCase();
             const release = sub.release_name || sub.film_name || sub.name || `${langLabel} Subtitle`;
 
+            const url = sub.url ? (sub.url.startsWith('http') ? sub.url : `https://dl.subdl.com${sub.url}`) : undefined;
+            if (!url || !isSafeSubtitleUrl(url)) {
+              sawInvalidFile = true;
+              return;
+            }
             results.push({
               id: `subdl_${sub.id || idx}`,
               file_id: `subdl_${sub.url || idx}`,
               lang: cleanLang,
               langLabel,
               release_name: release,
-              url: sub.url ? (sub.url.startsWith('http') ? sub.url : `https://dl.subdl.com${sub.url}`) : undefined,
+              url,
               provider: 'subdl',
             });
           });
         }
+      } else {
+        sawProviderFailure = true;
       }
     } catch (err) {
-      console.warn('SubDL Search Error:', err);
+      sawOffline ||= classifyNetworkFailure(err) === 'offline';
+      sawProviderFailure ||= classifyNetworkFailure(err) === 'provider-failure';
     }
   }
 
@@ -105,8 +143,8 @@ export async function searchSubtitles(params: {
       wyzieUrl += `&season=${season}&episode=${episode}`;
     }
 
-    const res = await fetch(wyzieUrl);
-    if (res.ok) {
+      const res = await fetch(wyzieUrl);
+      if (res.ok) {
       const json = await res.json();
       if (Array.isArray(json)) {
         json.forEach((sub: any, idx: number) => {
@@ -115,6 +153,10 @@ export async function searchSubtitles(params: {
           const langLabel = sub.display || LANG_MAP[cleanLang] || cleanLang.toUpperCase();
           const release = sub.release || sub.filename || sub.media || sub.title || `${langLabel} Subtitle`;
 
+          if (!isSafeSubtitleUrl(sub.url)) {
+            sawInvalidFile = true;
+            return;
+          }
           results.push({
             id: `wyzie_${sub.id || idx}`,
             file_id: `wyzie_${sub.url || idx}`,
@@ -126,10 +168,28 @@ export async function searchSubtitles(params: {
           });
         });
       }
+    } else {
+      sawProviderFailure = true;
     }
   } catch (err) {
-    console.warn('Wyzie Subtitles Error:', err);
+    sawOffline ||= classifyNetworkFailure(err) === 'offline';
+    sawProviderFailure ||= classifyNetworkFailure(err) === 'provider-failure';
   }
 
-  return results;
+  if (results.length) return { tracks: results, state: 'available' };
+  if (sawOffline) return { tracks: [], state: 'offline' };
+  if (sawProviderFailure) return { tracks: [], state: 'provider-failure' };
+  if (sawInvalidFile) return { tracks: [], state: 'invalid-file' };
+  return { tracks: [], state: 'no-results' };
+}
+
+/** Backwards-compatible legacy track-only result. */
+export async function searchSubtitles(params: {
+  tmdbId: string;
+  mediaType: 'movie' | 'tv';
+  season?: number;
+  episode?: number;
+  languages?: string;
+}): Promise<SubtitleTrack[]> {
+  return (await searchSubtitlesWithOutcome(params)).tracks;
 }

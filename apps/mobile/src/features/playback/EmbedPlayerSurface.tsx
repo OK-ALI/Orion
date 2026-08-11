@@ -5,7 +5,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import type { WebView as WebViewType } from 'react-native-webview';
-import type { MobilePlayerHudState, ShieldVerificationState } from '@orion/shared/types';
+import type {
+  EmbeddedSubtitleTrackV1,
+  MobilePlayerHudState,
+  ShieldVerificationState,
+  SubtitleDiscoveryState,
+} from '@orion/shared/types';
 import {
   ALL_CINEMA_SOURCES,
 } from '@orion/shared/sources';
@@ -19,7 +24,7 @@ import {
 } from '../../services/mobileDiagnostics';
 import {
   markMobileSourceFailure,
-  updateMobileSourceHealth,
+  markMobileSourceSuccess,
 } from '../../services/sourceHealth';
 import {
   createEmbeddedTelemetryScript,
@@ -27,6 +32,13 @@ import {
 } from './embeddedTelemetry';
 import { createVerifiedResumeScript, mobileAdBlockerScript } from './mobileAdBlocker';
 import { OrionCinemaWebView } from './OrionCinemaWebView';
+import { classifyCinemaSourceFailure } from './sourceFailure';
+import {
+  clearSubtitleSession,
+  createObservedSubtitleTrack,
+  discoverExternalSubtitleTracks,
+  getInternalSubtitleTrack,
+} from './subtitleDiscovery';
 import { playerStyles as styles } from './playerStyles';
 import type { PlaybackSurfaceProps } from './playerTypes';
 import { ResumePlaybackPrompt } from './ResumePlaybackPrompt';
@@ -78,9 +90,13 @@ export function EmbedPlayerSurface({
   const [shieldState, setShieldState] = useState<ShieldVerificationState>('limited');
   const [blockedRequests, setBlockedRequests] = useState(0);
   const [allowedDependencies, setAllowedDependencies] = useState(0);
+  const [subtitleState, setSubtitleState] = useState<SubtitleDiscoveryState>('idle');
+  const [subtitleTracks, setSubtitleTracks] = useState<EmbeddedSubtitleTrackV1[]>([]);
+  const [selectedSubtitleId, setSelectedSubtitleId] = useState<string | null>(null);
   const [watchdogDismissed, setWatchdogDismissed] = useState(false);
   const [isLandscape, setIsLandscape] = useState(true);
   const [surfaceReleased, setSurfaceReleased] = useState(false);
+  const [surfaceRetryKey, setSurfaceRetryKey] = useState(0);
   const [pendingManualSource, setPendingManualSource] = useState<{
     id: string;
     label: string;
@@ -93,11 +109,24 @@ export function EmbedPlayerSurface({
   const resumeRequested = useRef(false);
   const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sourceTransitionPending = useRef(false);
+  const healthRecorded = useRef(false);
   const webViewRef = useRef<WebViewType>(null);
   const source = ALL_CINEMA_SOURCES.find((entry) => entry.id === sourceId);
   const sourceLabel = source?.label || 'VidEasy Direct';
   const expectedOrigins = source?.expectedOrigins || [];
   const shieldManifest = source?.requestManifest;
+  const selectedSubtitle = selectedSubtitleId ? getInternalSubtitleTrack(selectedSubtitleId) : null;
+  const shieldedEmbedUrl = useMemo(() => {
+    if (!selectedSubtitle?.url || !source?.externalSubtitleParam) return embedUrl;
+    try {
+      const url = new URL(embedUrl);
+      url.searchParams.set(source.externalSubtitleParam, selectedSubtitle.url);
+      if (source.externalSubtitleLabelParam) url.searchParams.set(source.externalSubtitleLabelParam, selectedSubtitle.label);
+      return url.toString();
+    } catch {
+      return embedUrl;
+    }
+  }, [embedUrl, selectedSubtitle?.id, source?.externalSubtitleLabelParam, source?.externalSubtitleParam]);
   const media = useMemo(() => ({
     id,
     mediaType: type,
@@ -156,13 +185,18 @@ export function EmbedPlayerSurface({
     setShieldState('limited');
     setBlockedRequests(0);
     setAllowedDependencies(0);
+    setSubtitleState('idle');
+    setSubtitleTracks([]);
+    setSelectedSubtitleId(null);
+    healthRecorded.current = false;
     setWatchdogDismissed(false);
     return () => {
       if (observationTimeout.current) clearTimeout(observationTimeout.current);
       if (releaseTimer.current) clearTimeout(releaseTimer.current);
       telemetry.flush();
+      clearSubtitleSession(telemetry.getSession().id);
     };
-  }, [embedUrl, sourceId]);
+  }, [embedUrl, sourceId, surfaceRetryKey]);
 
   const toggleOrientation = async () => {
     if (Platform.OS === 'web') return;
@@ -257,6 +291,36 @@ export function EmbedPlayerSurface({
     releaseSurfaceThen(onAutomaticFailover);
   };
 
+  const retryCurrentSource = () => {
+    if (sourceTransitionPending.current || activeHandoffId) return;
+    telemetry.flush();
+    setShowSources(false);
+    setSurfaceReleased(true);
+    setHudState('buffering');
+    setIsBuffering(true);
+    setTimeout(() => {
+      setSurfaceRetryKey((value) => value + 1);
+      setSurfaceReleased(false);
+    }, WEBVIEW_AUDIO_RELEASE_MS);
+  };
+
+  const findExternalSubtitles = async () => {
+    const sessionId = telemetry.getSession().id;
+    setSubtitleState('discovering');
+    const result = await discoverExternalSubtitleTracks({
+      sessionId,
+      tmdbId: id,
+      mediaType: type,
+      season: Number(season) || undefined,
+      episode: Number(episode) || undefined,
+    });
+    setSubtitleState(result.state);
+    setSubtitleTracks((existing) => {
+      const known = new Set(existing.map((track) => track.id));
+      return [...existing, ...result.tracks.filter((track) => !known.has(track.id))];
+    });
+  };
+
   const requiredOrigins = new Set([
     ...(source?.expectedOrigins || []),
     ...(source?.allowedNavigationOrigins || []),
@@ -305,7 +369,11 @@ export function EmbedPlayerSurface({
     setShowControls(true);
     setShieldState('failed');
     telemetry.emitTelemetry({ evidence: 'provider-message', state: 'error' });
-    const health = markMobileSourceFailure(sourceId, type, message);
+    const failure = classifyCinemaSourceFailure(message, {
+      superseded: sourceTransitionPending.current || surfaceReleased,
+    });
+    if (failure === 'user-cancelled') return;
+    const health = markMobileSourceFailure(sourceId, type, message, failure);
     updateMobileDiagnostics({ activeSourceId: sourceId, sourceHealth: health.state });
     reportMobileDiagnosticError({ area: 'playback', code: 'SOURCE_FAILED', message });
   };
@@ -330,6 +398,13 @@ export function EmbedPlayerSurface({
         setShieldState('dependency-allowed');
       } else if (decision === 'rule-failure') {
         setShieldState('failed');
+      } else if (decision === 'observed-subtitle') {
+        const track = createObservedSubtitleTrack(telemetry.getSession().id, {
+          provider: sourceId,
+          method: 'request-capture',
+        });
+        setSubtitleTracks((existing) => existing.some((entry) => entry.id === track.id) ? existing : [...existing, track]);
+        setSubtitleState('available');
       } else {
         // Unknown subresources are intentionally allowed during the learning
         // pass. They make the session Limited, never falsely Protected.
@@ -372,16 +447,18 @@ export function EmbedPlayerSurface({
     if (decision.state.session.verified) {
       if (observationTimeout.current) clearTimeout(observationTimeout.current);
       const startupMs = Date.now() - loadStartedAt.current;
-      const health = updateMobileSourceHealth(sourceId, type, {
-        state: startupMs > 12_000 ? 'slow' : 'ready',
-        startupMs,
-        failureCount: 0,
-        cooldownUntil: 0,
-        blockedRequests,
-        allowedDependencies,
-        lastError: null,
-      });
-      updateMobileDiagnostics({ activeSourceId: sourceId, sourceHealth: health.state });
+      if (!healthRecorded.current) {
+        healthRecorded.current = true;
+        const health = markMobileSourceSuccess(sourceId, type, {
+          startupMs,
+          telemetrySupport: 'observable',
+          subtitleSupport: subtitleTracks.length ? 'available' : source?.supportsExternalSubtitles ? 'limited' : 'unknown',
+          blockedRequests,
+          allowedDependencies,
+          limited: shieldState !== 'verified',
+        });
+        updateMobileDiagnostics({ activeSourceId: sourceId, sourceHealth: health.state });
+      }
       clearMobileDiagnosticError('playback');
       clearMobileDiagnosticError('playback-telemetry');
       const snapshot = telemetry.getVerifiedSnapshot();
@@ -413,7 +490,8 @@ export function EmbedPlayerSurface({
             onLoad={markSurfaceLoaded}
           />
         ) : (
-        <OrionCinemaWebView
+          <OrionCinemaWebView
+          key={`${sourceId}:${surfaceRetryKey}`}
           ref={webViewRef}
           shieldManifest={shieldManifest || {
             schemaVersion: 1,
@@ -427,7 +505,7 @@ export function EmbedPlayerSurface({
             popupPolicy: 'block',
             rules: [],
           }}
-            source={{ uri: embedUrl }}
+            source={{ uri: shieldedEmbedUrl }}
             javaScriptEnabled
             domStorageEnabled
             allowsInlineMediaPlayback
@@ -519,7 +597,21 @@ export function EmbedPlayerSurface({
         <SourcesSheet
           currentSourceId={sourceId}
           onSelect={selectSource}
+          onRetry={retryCurrentSource}
           mediaType={type}
+          shieldState={shieldState}
+          blockedRequests={blockedRequests}
+          allowedDependencies={allowedDependencies}
+          subtitleState={subtitleState}
+          subtitleCount={subtitleTracks.length}
+          subtitleTracks={subtitleTracks}
+          selectedSubtitleId={selectedSubtitleId}
+          onSelectSubtitle={(trackId) => {
+            if (!source?.externalSubtitleParam) return;
+            setSelectedSubtitleId(trackId);
+            setShowSources(false);
+          }}
+          onFindExternalSubtitles={source?.supportsExternalSubtitles ? findExternalSubtitles : undefined}
           onClose={() => {
             setShowSources(false);
             setHudState('visible');

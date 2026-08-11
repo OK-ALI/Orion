@@ -242,6 +242,28 @@ export type ShieldVerificationState =
   | "dependency-allowed"
   | "failed";
 
+/** A renderer-safe subtitle reference. Provider URLs and request headers stay native/internal. */
+export interface EmbeddedSubtitleTrackV1 {
+  id: string;
+  language: string;
+  label: string;
+  format: "vtt" | "srt" | "ass" | "unknown";
+  provider: string;
+  discoveryMethod: "url-param" | "text-track" | "request-capture" | "provider" | "external";
+  availability: "available" | "limited" | "unavailable";
+}
+
+export type SubtitleDiscoveryState =
+  | "idle"
+  | "discovering"
+  | "available"
+  | "no-results"
+  | "language-unavailable"
+  | "api-key-required"
+  | "provider-failure"
+  | "invalid-file"
+  | "offline";
+
 export interface PlaybackProgressV2 {
   schemaVersion: 2;
   media: MediaIdentity;
