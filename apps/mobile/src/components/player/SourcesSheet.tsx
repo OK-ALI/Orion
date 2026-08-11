@@ -104,6 +104,8 @@ export function SourcesSheet({
                 ? 'Rule problem'
                 : shieldState === 'disabled'
                   ? 'Protection disabled'
+                  : shieldState === 'unavailable'
+                    ? 'Protection unavailable'
                   : shieldState === 'dependency-allowed'
                     ? 'Required playback request allowed'
                   : 'Limited protection'}

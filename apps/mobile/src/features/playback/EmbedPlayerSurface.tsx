@@ -87,7 +87,9 @@ export function EmbedPlayerSurface({
   const [showControls, setShowControls] = useState(true);
   const [isBuffering, setIsBuffering] = useState(true);
   const [hudState, setHudState] = useState<MobilePlayerHudState>('buffering');
-  const [shieldState, setShieldState] = useState<ShieldVerificationState>('limited');
+  const [shieldState, setShieldState] = useState<ShieldVerificationState>(
+    Platform.OS === 'android' ? 'limited' : 'unavailable',
+  );
   const [blockedRequests, setBlockedRequests] = useState(0);
   const [allowedDependencies, setAllowedDependencies] = useState(0);
   const [subtitleState, setSubtitleState] = useState<SubtitleDiscoveryState>('idle');
@@ -182,7 +184,7 @@ export function EmbedPlayerSurface({
     setIsBuffering(true);
     setHudState('buffering');
     setShowControls(true);
-    setShieldState('limited');
+    setShieldState(Platform.OS === 'android' ? 'limited' : 'unavailable');
     setBlockedRequests(0);
     setAllowedDependencies(0);
     setSubtitleState('idle');
@@ -321,32 +323,9 @@ export function EmbedPlayerSurface({
     });
   };
 
-  const requiredOrigins = new Set([
-    ...(source?.expectedOrigins || []),
-    ...(source?.allowedNavigationOrigins || []),
-    ...(source?.requiredRequestOrigins || []),
-  ]);
-  const handleShouldStartLoad = (request: any) => {
-    const url = request?.url || '';
-    if (!url) return true;
-    let origin = '';
-    try { origin = new URL(url).origin; } catch {}
-    const required = requiredOrigins.has(origin)
-      || /\.(m3u8|mpd|vtt|srt|m4s|ts)(\?|$)/i.test(url)
-      || /subtitle|caption|manifest|playlist/i.test(url);
-    if (required) {
-      setAllowedDependencies((value) => value + 1);
-      setShieldState('dependency-allowed');
-      return true;
-    }
-    if (/doubleclick|popcash|adsterra|profitableratecpm|adexchangeclear|bet365|exoclick|googlesyndication/i.test(url)) {
-      setBlockedRequests((value) => value + 1);
-      // The JavaScript bridge remains a compatibility guard for Web/iOS and
-      // cosmetic cleanup only. Android protection is verified exclusively by
-      // the native interceptor.
-      setShieldState('limited');
-      return false;
-    }
+  const handleShouldStartLoad = () => {
+    // Android native interception owns navigation and request decisions for
+    // Cinema sessions. JS intentionally makes no shielding claim or block.
     return true;
   };
 
@@ -367,7 +346,6 @@ export function EmbedPlayerSurface({
     setIsBuffering(false);
     setHudState('error');
     setShowControls(true);
-    setShieldState('failed');
     telemetry.emitTelemetry({ evidence: 'provider-message', state: 'error' });
     const failure = classifyCinemaSourceFailure(message, {
       superseded: sourceTransitionPending.current || surfaceReleased,
@@ -563,7 +541,15 @@ export function EmbedPlayerSurface({
               />
               {!compact && (
                 <Text style={[styles.shieldText, shieldState !== 'verified' && styles.shieldTextLimited]}>
-                  {shieldState === 'verified' ? `Shield ${blockedRequests}` : shieldState === 'failed' ? 'Shield failed' : 'Shield limited'}
+                  {shieldState === 'verified'
+                    ? `Shield ${blockedRequests}`
+                    : shieldState === 'failed'
+                      ? 'Rule problem'
+                      : shieldState === 'unavailable'
+                        ? 'Shield unavailable'
+                        : shieldState === 'dependency-allowed'
+                          ? 'Required request allowed'
+                          : 'Shield limited'}
                 </Text>
               )}
             </View>

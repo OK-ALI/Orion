@@ -238,6 +238,7 @@ export interface TrailerProviderAdapter {
 export type ShieldVerificationState =
   | "verified"
   | "limited"
+  | "unavailable"
   | "disabled"
   | "dependency-allowed"
   | "failed";
