@@ -7,10 +7,11 @@ const path = require("path");
 const { app, ipcMain, safeStorage } = require("electron");
 const { WebSocketServer } = require("ws");
 const QRCode = require("qrcode");
-const { Bonjour } = require("bonjour-service");
 const { SMART_CONNECT_PROTOCOL_VERSION, normalizeSmartConnectCommand, normalizePlaybackTelemetry } = require("../../../../../packages/shared/src/smartConnectProtocol.cjs");
 const { loadOrCreateSecureIdentity, signChallenge, verifyDeviceSignature } = require("../smartConnect/secureIdentity");
 const { createTrustState, eligibleLanAddresses, privateAddress } = require("../smartConnect/secureTrust");
+const { createRealtimeDiagnostics } = require("../smartConnect/realtimeDiagnostics");
+const { createServiceAdvertisement } = require("../smartConnect/serviceAdvertisement");
 
 const PORT = 8924;
 const PROTOCOL_VERSION = SMART_CONNECT_PROTOCOL_VERSION;
@@ -35,8 +36,6 @@ let currentContext = null;
 let telemetrySequence = 0;
 let pairAttempts = [];
 let lockedUntil = 0;
-let bonjour = null;
-let advertisedService = null;
 const pairedSessions = new Map();
 const pendingCommands = new Map();
 const connectedSockets = new Map();
@@ -138,6 +137,8 @@ function getDesktopInstanceId() {
 }
 
 let desktopInstanceId = "";
+const serviceAdvertisement = createServiceAdvertisement({ port: PORT, protocolVersion: PROTOCOL_VERSION,
+  getInstanceId: ensureDesktopInstanceId, getFingerprint: () => secureIdentity?.certificateFingerprint || "" });
 
 function ensureDesktopInstanceId() {
   if (!desktopInstanceId) desktopInstanceId = getDesktopInstanceId();
@@ -154,36 +155,6 @@ function pairingError(res, status, code, message, retryAfterMs, attemptsRemainin
       ...(Number.isFinite(attemptsRemaining) ? { attemptsRemaining } : {}),
     },
   });
-}
-
-function startServiceAdvertisement() {
-  if (bonjour || advertisedService) return;
-  try {
-    bonjour = new Bonjour({}, (error) => {
-      console.warn("[SmartConnect] NSD advertisement warning:", error?.message || error);
-    });
-    advertisedService = bonjour.publish({
-      name: `Orion Desktop (${os.hostname()})`,
-      type: "orion-connect",
-      protocol: "tcp",
-      port: PORT,
-      txt: {
-        app: "orion",
-        version: String(PROTOCOL_VERSION),
-        instanceId: ensureDesktopInstanceId(),
-        fingerprint: secureIdentity?.certificateFingerprint || "",
-      },
-    });
-  } catch (error) {
-    console.warn("[SmartConnect] Could not advertise NSD service:", error.message);
-  }
-}
-
-function stopServiceAdvertisement() {
-  try { advertisedService?.stop?.(); } catch {}
-  try { bonjour?.destroy?.(); } catch {}
-  advertisedService = null;
-  bonjour = null;
 }
 
 function createPin() {
@@ -386,33 +357,16 @@ function configureSockets() {
     if (previousSocket && previousSocket !== socket) previousSocket.close();
     connectedSockets.set(session.deviceId, socket);
     session.lastSeenAt = Date.now();
-socket.smartConnectRealtimeDiagnostics = {
-  received: 0,
-  rateRejected: 0,
-  replayRejected: 0,
-  forwarded: 0,
-};
-
-const realtimeDiagnosticsTimer = setInterval(() => {
-  const diagnostics = socket.smartConnectRealtimeDiagnostics;
-
-  console.log(
-    `[SmartConnect realtime] received=${diagnostics.received} rateRejected=${diagnostics.rateRejected} replayRejected=${diagnostics.replayRejected} forwarded=${diagnostics.forwarded}`,
-  );
-
-  diagnostics.received = 0;
-  diagnostics.rateRejected = 0;
-  diagnostics.replayRejected = 0;
-  diagnostics.forwarded = 0;
-}, 1000);
+    const realtimeDiagnostics = createRealtimeDiagnostics();
     sendSocket(socket, "status", session.deviceId, { connected: true });
     if (currentContext) sendSocket(socket, "context", session.deviceId, currentContext);
     if (currentPlayback) sendSocket(socket, "telemetry", session.deviceId, currentPlayback);
     notifyConnectionStatus();
     socket.on("message", async (raw) => {
+      let envelope;
       try {
         socket.lastSmartConnectHeartbeat = Date.now();
-        const envelope = JSON.parse(String(raw));
+        envelope = JSON.parse(String(raw));
         if (envelope.version !== PROTOCOL_VERSION || envelope.deviceId !== session.deviceId) throw new Error("Unsupported Smart Connect envelope.");
         if (envelope.connectionId !== socket.smartConnectConnectionId) throw new Error("Connection identity mismatch.");
         if (envelope.type === "heartbeat") {
@@ -425,18 +379,14 @@ const realtimeDiagnosticsTimer = setInterval(() => {
         const action = envelope.payload?.action;
 const realtimeAction = action === "cursor_move" || action === "scroll";
 
-if (realtimeAction) {
-  socket.smartConnectRealtimeDiagnostics.received += 1;
-}
+if (realtimeAction) realtimeDiagnostics.record("received");
 
 const droppable = action === "cursor_move";
         const rate = acceptCommandRate(socket, droppable, action);
 if (!rate.ok) {
-  if (realtimeAction) {
-    socket.smartConnectRealtimeDiagnostics.rateRejected += 1;
-  }
+  if (realtimeAction) realtimeDiagnostics.record("rateRejected");
 
-  if (!rate.droppable) sendSocket(socket, "error", session.deviceId, { error: rate.reason, commandId: String(envelope.commandId || envelope.payload?.id || "") });
+  if (!rate.droppable) sendSocket(socket, "error", session.deviceId, { error: rate.reason, commandId: String(envelope.commandId || envelope.payload?.id || ""), sequence: envelope.payload?.sequence });
   return;
 }
         const replay = secureTrust.acceptEnvelope(
@@ -447,10 +397,8 @@ if (!rate.ok) {
           droppable,
         );
         if (!replay.ok) {
-	   if (realtimeAction) {
-    socket.smartConnectRealtimeDiagnostics.replayRejected += 1;
-  }
-          if (!replay.droppable) sendSocket(socket, "error", session.deviceId, { error: "Replay or duplicate command rejected.", commandId: String(envelope.commandId || envelope.payload?.id || "") });
+          if (realtimeAction) realtimeDiagnostics.record("replayRejected");
+          if (!replay.droppable) sendSocket(socket, "error", session.deviceId, { error: "Replay or duplicate command rejected.", commandId: String(envelope.commandId || envelope.payload?.id || ""), sequence: envelope.payload?.sequence });
           return;
         }
         if (envelope.payload?.action === "smart_connect_rename") {
@@ -474,7 +422,7 @@ if (!rate.ok) {
         }
         if (action === 'cursor_move' || action === 'scroll') {
   const command = normalizeCommand(envelope.payload);
-  socket.smartConnectRealtimeDiagnostics.forwarded += 1;
+  realtimeDiagnostics.record("forwarded");
   notifyDesktopRenderer("orion:remote-command", command);
   return;
 }
@@ -482,7 +430,7 @@ if (!rate.ok) {
         const ack = await dispatchCommand(command);
         sendSocket(socket, "ack", session.deviceId, ack);
       } catch (error) {
-        sendSocket(socket, "error", session.deviceId, { error: error.message, commandId: String(envelope?.commandId || envelope?.payload?.id || "") });
+        sendSocket(socket, "error", session.deviceId, { error: error.message, commandId: String(envelope?.commandId || envelope?.payload?.id || ""), sequence: envelope?.payload?.sequence });
       }
     });
     const watchdog = setInterval(() => {
@@ -490,7 +438,7 @@ if (!rate.ok) {
     }, 15_000);
     socket.on("close", () => {
       clearInterval(watchdog);
-      clearInterval(realtimeDiagnosticsTimer);
+      realtimeDiagnostics.stop();
       if (connectedSockets.get(session.deviceId) === socket) {
         connectedSockets.delete(session.deviceId);
         notifyConnectionStatus();
@@ -498,6 +446,7 @@ if (!rate.ok) {
     });
     socket.on("error", () => {
       clearInterval(watchdog);
+      realtimeDiagnostics.stop();
       if (connectedSockets.get(session.deviceId) === socket) {
         connectedSockets.delete(session.deviceId);
         notifyConnectionStatus();
@@ -698,10 +647,10 @@ async function startSmartConnectServer(getMainWindow) {
   if (!listenAddress) throw new Error("SMART_CONNECT_PRIVATE_LAN_UNAVAILABLE");
   server.listen(PORT, listenAddress, () => {
     console.log(`[SmartConnect] secure v${PROTOCOL_VERSION} listening at https://${listenAddress}:${PORT}`);
-    startServiceAdvertisement();
+    serviceAdvertisement.start();
   });
   server.on("error", (error) => console.error("[SmartConnect] Server error:", error.message));
-  app.once("before-quit", stopServiceAdvertisement);
+  app.once("before-quit", () => serviceAdvertisement.stop());
 }
 
 ipcMain.handle("smart-connect:get-info", async () => {

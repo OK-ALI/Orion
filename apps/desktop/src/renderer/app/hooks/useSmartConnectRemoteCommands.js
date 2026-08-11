@@ -7,6 +7,8 @@ let hoverCheckTimer = null;
 let rafHandle = null;
 let remoteCursorInactivityTimer = null;
 
+const rendererDiagnosticsEnabled =
+  globalThis.__ORION_SMART_CONNECT_DIAGNOSTICS__ === true;
 const rendererRealtimeDiagnostics = {
   received: 0,
   cursorMoveCalled: 0,
@@ -207,7 +209,7 @@ export function useSmartConnectRemoteCommands({
   setShowSearch,
 }) {
   useEffect(() => {
-const rendererDiagnosticsTimer = window.setInterval(() => {
+const rendererDiagnosticsTimer = rendererDiagnosticsEnabled ? window.setInterval(() => {
   const diagnostics = rendererRealtimeDiagnostics;
 
   console.log(
@@ -218,11 +220,11 @@ const rendererDiagnosticsTimer = window.setInterval(() => {
   diagnostics.cursorMoveCalled = 0;
   diagnostics.rafTicks = 0;
   diagnostics.cursorFramesRendered = 0;
-}, 1000);
+}, 1000) : null;
     const handleRemoteCommand = async (payload) => {
       const { action, value } = payload || {};
 
-if (action === "cursor_move" || action === "scroll") {
+if (rendererDiagnosticsEnabled && (action === "cursor_move" || action === "scroll")) {
   rendererRealtimeDiagnostics.received += 1;
 }
 
@@ -418,7 +420,7 @@ if (!isRealtimeCommand && payload?.id && window.electron?.acknowledgeSmartConnec
     window.addEventListener("orion:remote-command-custom", handleCustomRemote);
     return () => {
       if (rafHandle) cancelAnimationFrame(rafHandle);
-window.clearInterval(rendererDiagnosticsTimer);
+      if (rendererDiagnosticsTimer) window.clearInterval(rendererDiagnosticsTimer);
 unsubscribe?.();
       unsubscribeStatus?.();
       clearRemoteCursor();

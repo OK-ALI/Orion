@@ -68,15 +68,22 @@ export function useConnectController() {
   const disconnectingRef = useRef(false);
   const appActiveRef = useRef(true);
   const sequenceRef = useRef(0);
-  const pendingAcks = useRef(new Map<string, { resolve(value: any): void; timer: ReturnType<typeof setTimeout> }>());
+  const pendingAcks = useRef(new Map<string, {
+    resolve(value: any): void;
+    timer: ReturnType<typeof setTimeout>;
+    sequence: number;
+    deviceId: string;
+    connectionId: string;
+  }>());
   const sendCommandRef = useRef<(cmd: string, value?: any) => Promise<any>>(async () => ({ ok: false, error: 'Remote transport is not ready.' }));
   const fireAndForgetRef = useRef<(cmd: string, value?: any) => void>(() => {});
-  const { cursorRef, panResponder, onTouchpadLayout, pointerMode, setPointerMode } = useRemotePointer(fireAndForgetRef);
-  const { latency, remoteContext, setRemoteContext, telemetry, ingestTelemetry, isScrubbing, setIsScrubbing, markSent, recordAck } = useLiveTelemetry(setNowPlaying);
+  const { clearPendingPointer, cursorRef, isPointerGestureActive, panResponder, onTouchpadLayout, pointerMode, setPointerMode } = useRemotePointer(fireAndForgetRef);
+  const { latency, remoteContext, setRemoteContext, telemetry, ingestTelemetry, isScrubbing, setIsScrubbing, markSent, forgetSent, recordAck } = useLiveTelemetry(setNowPlaying);
 
   const rejectAllPendingAcks = (reason: string) => {
-    for (const pending of pendingAcks.current.values()) {
+    for (const [commandId, pending] of pendingAcks.current.entries()) {
       clearTimeout(pending.timer);
+      forgetSent(commandId);
       pending.resolve({ ok: false, error: reason });
     }
     pendingAcks.current.clear();
@@ -85,6 +92,7 @@ export function useConnectController() {
   const closeTransport = async () => {
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     heartbeatRef.current = null;
+    clearPendingPointer('transport-closed');
     rejectAllPendingAcks('Connection closed.');
     await closeSecureSmartConnectSocket().catch(() => {});
     connectionRef.current.connected = false;
@@ -94,9 +102,18 @@ export function useConnectController() {
     try {
       const envelope = JSON.parse(raw);
       if (envelope.type === 'ack') {
-        const pending = pendingAcks.current.get(envelope.payload?.id);
-        if (pending) { clearTimeout(pending.timer); pendingAcks.current.delete(envelope.payload.id); pending.resolve(envelope.payload); }
-        if (envelope.payload?.id) recordAck(envelope.payload.id);
+        const ackId = String(envelope.payload?.id || '');
+        const pending = pendingAcks.current.get(ackId);
+        const identityMatches = pending
+          && pending.sequence === Number(envelope.payload?.sequence)
+          && pending.deviceId === String(envelope.deviceId || '')
+          && pending.connectionId === String(envelope.connectionId || '');
+        if (pending && identityMatches) {
+          clearTimeout(pending.timer);
+          pendingAcks.current.delete(ackId);
+          recordAck(ackId);
+          pending.resolve(envelope.payload);
+        }
       }
       if (envelope.type === 'context') setRemoteContext(envelope.payload || null);
       if (envelope.type === 'telemetry') {
@@ -115,9 +132,14 @@ export function useConnectController() {
         const errorCommandId = envelope.payload?.commandId;
         if (errorCommandId) {
           const pending = pendingAcks.current.get(errorCommandId);
-          if (pending) {
+          const identityMatches = pending
+            && pending.sequence === Number(envelope.payload?.sequence)
+            && pending.deviceId === String(envelope.deviceId || '')
+            && pending.connectionId === String(envelope.connectionId || '');
+          if (pending && identityMatches) {
             clearTimeout(pending.timer);
             pendingAcks.current.delete(errorCommandId);
+            forgetSent(errorCommandId);
             pending.resolve({ ok: false, error: String(envelope.payload?.error || 'Desktop rejected the command.') });
           }
         }
@@ -157,8 +179,8 @@ export function useConnectController() {
 
   useEffect(() => subscribeSecureSmartConnect({
     onMessage: consumeSocketMessage,
-    onClose: () => { rejectAllPendingAcks('Socket connection closed.'); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
-    onFailure: (message) => { rejectAllPendingAcks(message); setRemoteError(message); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
+    onClose: () => { clearPendingPointer('socket-closed'); rejectAllPendingAcks('Socket connection closed.'); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
+    onFailure: (message) => { clearPendingPointer('socket-failed'); rejectAllPendingAcks(message); setRemoteError(message); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
   }), [deviceId]);
 
   useEffect(() => {
@@ -323,12 +345,26 @@ export function useConnectController() {
     const sequence = ++sequenceRef.current;
     const command = createRemoteCommand(action, value, deviceId, sequence);
     markSent(command.id);
-    const sent = await sendSecureEnvelope({ version: SMART_CONNECT_PROTOCOL_VERSION, type: 'command', deviceId, connectionId: connectionRef.current.connectionId, sequence, commandId: command.id, payload: command }).catch(() => false);
-    if (!sent) return { ok: false, error: 'Secure Desktop connection is unavailable.' };
-    const ack = await new Promise<any>((resolve) => {
-      const timer = setTimeout(() => { pendingAcks.current.delete(command.id); resolve({ ok: false, error: 'Desktop acknowledgement timed out.' }); }, 2200);
-      pendingAcks.current.set(command.id, { resolve, timer });
+    const connectionId = connectionRef.current.connectionId;
+    const ackPromise = new Promise<any>((resolve) => {
+      const timer = setTimeout(() => {
+        pendingAcks.current.delete(command.id);
+        forgetSent(command.id);
+        resolve({ ok: false, error: 'Desktop acknowledgement timed out.' });
+      }, 2200);
+      pendingAcks.current.set(command.id, { resolve, timer, sequence, deviceId, connectionId });
     });
+    const sent = await sendSecureEnvelope({ version: SMART_CONNECT_PROTOCOL_VERSION, type: 'command', deviceId, connectionId, sequence, commandId: command.id, payload: command }).catch(() => false);
+    if (!sent) {
+      const pending = pendingAcks.current.get(command.id);
+      if (pending) {
+        clearTimeout(pending.timer);
+        pendingAcks.current.delete(command.id);
+        forgetSent(command.id);
+        pending.resolve({ ok: false, error: 'Secure Desktop connection is unavailable.' });
+      }
+    }
+    const ack = await ackPromise;
     if (ack?.ok) { setRemoteError(''); if (ack.authoritativeTelemetry) ingestTelemetry(ack.authoritativeTelemetry); if (action === 'cursor_move' && ack.pointer) cursorRef.current = { xRatio: ack.pointer.x, yRatio: ack.pointer.y }; }
     else setRemoteError(ack?.error || 'Desktop did not acknowledge the command.');
     return ack;
@@ -373,7 +409,7 @@ export function useConnectController() {
     renameThisDevice, desktopPort, lockoutSeconds, attemptsRemaining, prepareDirectIp, remoteContext,
     telemetry, latency, isScrubbing, setIsScrubbing, pendingTranscript,
     confirmVerificationPhrase, rejectVerificationPhrase,
-    onTouchpadLayout, pointerMode, setPointerMode,
+    isPointerGestureActive, onTouchpadLayout, pointerMode, setPointerMode,
   };
 }
 

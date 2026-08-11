@@ -3,6 +3,7 @@ import { spacing, radii } from "@orion/shared/tokens";
 import type { MobileThemeTokens } from "../../context/ThemeContext";
 import { createConnectRemoteStyles } from './connectRemoteStyles';
 import { createConnectPairingLayoutStyles } from './connectPairingLayoutStyles';
+import { createConnectStatusStyles } from './connectStatusStyles';
 
 export const createConnectStyles = (theme: MobileThemeTokens) => {
   const text = { primary: theme.text, secondary: theme.textSecondary, muted: theme.textMuted };
@@ -10,33 +11,7 @@ export const createConnectStyles = (theme: MobileThemeTokens) => {
   const accent = { primary: theme.accent };
   return StyleSheet.create({
   container: { flex: 1, backgroundColor: backgrounds.base },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: radii.full,
-    borderWidth: 1,
-  },
-  statusPillConnected: {
-    backgroundColor: theme.surface,
-    borderColor: theme.success,
-  },
-  statusPillDisconnected: {
-    backgroundColor: theme.surface,
-    borderColor: theme.warning,
-  },
-  statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-  statusText: {
-    color: theme.text,
-    fontSize: 11,
-    fontWeight: '700',
-  },
+  ...createConnectStatusStyles(theme),
   pairingContainer: {
     alignItems: 'center',
     paddingHorizontal: spacing[6],

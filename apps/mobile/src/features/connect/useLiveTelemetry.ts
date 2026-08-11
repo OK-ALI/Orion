@@ -23,6 +23,7 @@ export function useLiveTelemetry(setNowPlaying: React.Dispatch<React.SetStateAct
   }, [setNowPlaying]);
 
   const markSent = useCallback((id: string) => sentAtRef.current.set(id, Date.now()), []);
+  const forgetSent = useCallback((id: string) => sentAtRef.current.delete(id), []);
   const recordAck = useCallback((id: string) => {
     const sentAt = sentAtRef.current.get(id); if (!sentAt) return;
     sentAtRef.current.delete(id);
@@ -42,9 +43,9 @@ export function useLiveTelemetry(setNowPlaying: React.Dispatch<React.SetStateAct
       const value = interpolateTelemetry(telemetry, Date.now(), isScrubbing);
       setNowPlaying((current) => ({ ...current, currentTime: value.currentTime }));
       setLatency(latencySnapshot(samplesRef.current, Number.isFinite(value.ageMs) ? value.ageMs : null, null));
-    }, 250);
+    }, 500);
     return () => clearInterval(timer);
   }, [telemetry, isScrubbing, setNowPlaying]);
 
-  return { latency, remoteContext, setRemoteContext, telemetry, ingestTelemetry, isScrubbing, setIsScrubbing, markSent, recordAck };
+  return { latency, remoteContext, setRemoteContext, telemetry, ingestTelemetry, isScrubbing, setIsScrubbing, markSent, forgetSent, recordAck };
 }

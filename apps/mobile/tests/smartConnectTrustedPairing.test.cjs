@@ -93,13 +93,10 @@ test("pairing failures expose and persist remaining attempts and lockout", () =>
 
 test("Desktop advertises only non-sensitive identity and keeps device management on authenticated protocol v3", () => {
   const desktop = readRepo("apps/desktop/src/main/ipc/smartConnectIpc.js");
-  const advertisement = desktop.slice(
-    desktop.indexOf("advertisedService = bonjour.publish"),
-    desktop.indexOf("function stopServiceAdvertisement"),
-  );
-  assert.match(advertisement, /type: "orion-connect"/);
-  assert.match(advertisement, /version: String\(PROTOCOL_VERSION\)/);
-  assert.match(advertisement, /instanceId: ensureDesktopInstanceId\(\)/);
+  const advertisement = readRepo("apps/desktop/src/main/smartConnect/serviceAdvertisement.js");
+  assert.match(advertisement, /type: ['"]orion-connect['"]/);
+  assert.match(advertisement, /version: String\(protocolVersion\)/);
+  assert.match(advertisement, /instanceId: getInstanceId\(\)/);
   assert.doesNotMatch(advertisement, /\b(?:pin|token|playback|user)\s*:/i);
   assert.match(desktop, /"LOCKED_OUT"/);
   assert.match(desktop, /"CODE_EXPIRED"/);
