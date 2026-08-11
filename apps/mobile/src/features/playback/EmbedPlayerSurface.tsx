@@ -4,7 +4,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { WebView } from 'react-native-webview';
 import type { WebView as WebViewType } from 'react-native-webview';
 import type { MobilePlayerHudState, ShieldVerificationState } from '@orion/shared/types';
 import {
@@ -27,6 +26,7 @@ import {
   parseEmbeddedTelemetryMessage,
 } from './embeddedTelemetry';
 import { createVerifiedResumeScript, mobileAdBlockerScript } from './mobileAdBlocker';
+import { OrionCinemaWebView } from './OrionCinemaWebView';
 import { playerStyles as styles } from './playerStyles';
 import type { PlaybackSurfaceProps } from './playerTypes';
 import { ResumePlaybackPrompt } from './ResumePlaybackPrompt';
@@ -97,6 +97,7 @@ export function EmbedPlayerSurface({
   const source = ALL_CINEMA_SOURCES.find((entry) => entry.id === sourceId);
   const sourceLabel = source?.label || 'VidEasy Direct';
   const expectedOrigins = source?.expectedOrigins || [];
+  const shieldManifest = source?.requestManifest;
   const media = useMemo(() => ({
     id,
     mediaType: type,
@@ -276,7 +277,10 @@ export function EmbedPlayerSurface({
     }
     if (/doubleclick|popcash|adsterra|profitableratecpm|adexchangeclear|bet365|exoclick|googlesyndication/i.test(url)) {
       setBlockedRequests((value) => value + 1);
-      setShieldState('verified');
+      // The JavaScript bridge remains a compatibility guard for Web/iOS and
+      // cosmetic cleanup only. Android protection is verified exclusively by
+      // the native interceptor.
+      setShieldState('limited');
       return false;
     }
     return true;
@@ -309,6 +313,30 @@ export function EmbedPlayerSurface({
   const handleMessage = (raw: string) => {
     let envelope: any = null;
     try { envelope = JSON.parse(raw); } catch {}
+    if (envelope?.kind === 'orion-shield') {
+      const decision = String(envelope.decision || 'unknown');
+      const counts = envelope?.counts && typeof envelope.counts === 'object' ? envelope.counts : {};
+      const blockedCount = Object.entries(counts)
+        .filter(([key]) => key === 'blocked' || key.startsWith('blocked-'))
+        .reduce((total, [, value]) => total + Math.max(0, Number(value) || 0), 0);
+      const dependencyCount = Math.max(0, Number(counts['required-dependency']) || 0);
+      if (decision === 'blocked' || decision === 'blocked-advertisement' || decision === 'blocked-tracker' || decision === 'blocked-popup' || decision === 'blocked-unsafe-navigation') {
+        setBlockedRequests((value) => value + (blockedCount || 1));
+        // A native, enforced block is evidence, but this session can be
+        // Protected only after playback also proves healthy.
+        setShieldState(source?.requestManifest?.mode === 'enforce' ? 'verified' : 'limited');
+      } else if (decision === 'required-dependency') {
+        setAllowedDependencies((value) => value + (dependencyCount || 1));
+        setShieldState('dependency-allowed');
+      } else if (decision === 'rule-failure') {
+        setShieldState('failed');
+      } else {
+        // Unknown subresources are intentionally allowed during the learning
+        // pass. They make the session Limited, never falsely Protected.
+        setShieldState((current) => current === 'verified' ? current : 'limited');
+      }
+      return;
+    }
     if (envelope?.type === 'TAP') {
       handleScreenTap();
       return;
@@ -385,8 +413,20 @@ export function EmbedPlayerSurface({
             onLoad={markSurfaceLoaded}
           />
         ) : (
-          <WebView
-            ref={webViewRef}
+        <OrionCinemaWebView
+          ref={webViewRef}
+          shieldManifest={shieldManifest || {
+            schemaVersion: 1,
+            sourceId,
+            mode: 'observe',
+            allowedNavigationOrigins: expectedOrigins,
+            requiredOrigins: expectedOrigins,
+            mediaOrigins: [],
+            artworkOrigins: [],
+            subtitleOrigins: [],
+            popupPolicy: 'block',
+            rules: [],
+          }}
             source={{ uri: embedUrl }}
             javaScriptEnabled
             domStorageEnabled

@@ -46,6 +46,31 @@ export type ProgressStrategy = (typeof SOURCE_PROGRESS_STRATEGIES)[number];
 export type ResumeStrategy = (typeof SOURCE_RESUME_STRATEGIES)[number];
 export type SubtitleStrategy = (typeof SOURCE_SUBTITLE_STRATEGIES)[number];
 
+/**
+ * A declarative, serializable WebView request policy.  It intentionally
+ * describes hosts and classifications only; it never carries cookies,
+ * request headers, signed media URLs, or provider credentials.
+ */
+export interface ProviderRequestRule {
+  id: string;
+  kind: "advertisement" | "tracker" | "popup" | "unsafe-navigation";
+  hostPattern: string;
+  action: "block" | "observe";
+}
+
+export interface ProviderRequestManifestV1 {
+  schemaVersion: 1;
+  sourceId: string;
+  mode: "observe" | "enforce";
+  allowedNavigationOrigins: string[];
+  requiredOrigins: string[];
+  mediaOrigins: string[];
+  artworkOrigins: string[];
+  subtitleOrigins: string[];
+  popupPolicy: "block";
+  rules: ProviderRequestRule[];
+}
+
 export interface CinemaSourceDescriptor {
   id: string;
   label: string;
@@ -57,6 +82,8 @@ export interface CinemaSourceDescriptor {
   expectedOrigins: string[];
   allowedNavigationOrigins: string[];
   requiredRequestOrigins: string[];
+  /** Android-only request policy for a shielded Cinema session. */
+  requestManifest?: ProviderRequestManifestV1;
   progressStrategy: ProgressStrategy;
   resumeStrategy: ResumeStrategy;
   subtitleStrategy: SubtitleStrategy;
@@ -121,6 +148,17 @@ export function validateSourceDescriptor(source: CinemaSourceDescriptor): string
     const arr = source[field];
     if (!Array.isArray(arr) || arr.some((value: string) => !isOrigin(value))) {
       errors.push(`${field} must contain normalized URL origins.`);
+    }
+  }
+  if (source.requestManifest) {
+    const manifest = source.requestManifest;
+    if (manifest.schemaVersion !== 1) errors.push("requestManifest schemaVersion is invalid.");
+    if (manifest.sourceId !== source.id) errors.push("requestManifest sourceId must match the source id.");
+    if (!["observe", "enforce"].includes(manifest.mode)) errors.push("requestManifest mode is invalid.");
+    for (const field of ["allowedNavigationOrigins", "requiredOrigins", "mediaOrigins", "artworkOrigins", "subtitleOrigins"] as const) {
+      if (!Array.isArray(manifest[field]) || manifest[field].some((value) => !isOrigin(value))) {
+        errors.push(`requestManifest.${field} must contain normalized URL origins.`);
+      }
     }
   }
   if (!(SOURCE_PROGRESS_STRATEGIES as readonly string[]).includes(source.progressStrategy)) errors.push("progressStrategy is invalid.");

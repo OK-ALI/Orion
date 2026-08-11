@@ -6,6 +6,8 @@ export {
   type ProgressStrategy,
   type ResumeStrategy,
   type SubtitleStrategy,
+  type ProviderRequestRule,
+  type ProviderRequestManifestV1,
   validateSourceDescriptor,
   assertSourceRegistry,
 } from "./contracts";
