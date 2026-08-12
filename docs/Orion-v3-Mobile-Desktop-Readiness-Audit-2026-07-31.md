@@ -9,10 +9,10 @@
 
 > **Overall Orion v3 implementation completion: 54%**
 >
-> **Last verified:** August 9, 2026
+> **Last verified:** August 11, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 4 Checkpoint 1 physically accepted; Checkpoints 2–4 implemented with automated validation complete and physical security/latency/device acceptance pending.
-> **Critical open blockers:** Phase 4 physical secure-pairing, telemetry, unified-remote and hostile-LAN acceptance; source-aware video fitting; reliable player-overlay touch ownership; player-surface laser; native provider shield; cross-platform profiles; Mobile updates; low-end-device performance validation; and deferred VidKing carried-position compatibility
+> **Current stage:** Phase 4 is closed at its physically accepted secure-foundation boundary. Phase 5 — Streaming Safety and Source Reliability — is active.
+> **Critical open blockers:** native provider request interception and evidence-backed shielding; complete provider, subtitle and failover validation; source-aware video fitting; reliable player-overlay touch ownership; cross-platform profiles; Mobile distribution and updates; notification policy; a real resumable Mobile downloader and offline library; low-end-device performance validation; deferred VidKing continuity; and the explicitly deferred Orion Connect findings in Phase 11
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -34,15 +34,16 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 1. Playback truth | 12% | 100% | 12.0% | Complete |
 | 2. History and Continue Watching | 10% | 100% | 10.0% | Complete |
 | 3. Trailer reliability | 8% | 100% | 8.0% | Complete |
-| 4. Smart Connect experience | 12% | 60% | 7.2% | In progress |
-| 5. Player-surface laser | 8% | 15% | 1.2% | Foundation only |
-| 6. Native provider shield | 10% | 15% | 1.5% | Foundation only |
-| 7. Adaptive Mobile UI | 10% | 30% | 3.0% | In progress |
-| 8. Desktop Orion 3.0 integration | 7% | 20% | 1.4% | Foundation only |
-| 9. Portable profile and Google authentication | 7% | 15% | 1.1% | Foundation only |
-| 10. Mobile updates | 4% | 5% | 0.2% | Not started |
-| 11. Release validation | 4% | 15% | 0.6% | Foundation only |
-| **Total** | **100%** |  | **54.2%, rounded to 54%** | **Not release-ready** |
+| 4. Secure Orion Connect foundation | 8% | 100% | 8.0% | Complete at rebaselined scope |
+| 5. Streaming safety and source reliability | 11% | 15% | 1.65% | Foundation only — active |
+| 6. Unified Mobile player experience | 10% | 15% | 1.5% | Foundation only |
+| 7. Complete Mobile UX and performance | 8% | 30% | 2.4% | In progress |
+| 8. Google identity and portable profiles | 6% | 15% | 0.9% | Foundation only |
+| 9. Distribution, updates, availability and notifications | 5% | 5% | 0.25% | Foundation only |
+| 10. Mobile downloads and Offline Library | 8% | 10% | 0.8% | Foundation only |
+| 11. Deferred Orion Connect expansion | 2% | 10% | 0.2% | Deferred |
+| 12. Release validation | 4% | 7% | 0.28% | Foundation only |
+| **Total** | **100%** |  | **53.98%, rounded to 54%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -127,176 +128,181 @@ A feature that works only in Expo Web, only on one provider, or only on one mach
 - [x] **V3-P3-009:** Recompose the themed sheet around a stable 16:9 viewport, candidate chooser and persistent retry/next/provider/browser actions.
 - [x] **V3-P3-010:** Physical Android testing confirms trailers now play inside Orion's Trailer Modal using the repaired in-app transport.
 
-### Phase 4 — Smart Connect experience
+### Phase 4 — Secure Orion Connect foundation
 
-- [x] **V3-P4-001:** Versioned command envelopes exist.
-- [x] **V3-P4-002:** Authenticated WebSocket transport and acknowledgements exist.
-- [x] **V3-P4-003:** QR and manual-IP pairing paths exist.
-- [x] **V3-P4-004:** Ordinary-page touchpad and laser movement work.
-- [ ] **V3-P4-005:** Replace manual Touchpad/D-pad/HUD/Keyboard modes with one Unified Control Surface.
-- [ ] **V3-P4-006:** Add Desktop `RemoteUiContext`.
-- [ ] **V3-P4-007:** Add live playback telemetry while an authenticated remote is connected.
-- [ ] **V3-P4-008:** Interpolate Mobile progress locally and reconcile with authoritative snapshots.
-- [ ] **V3-P4-009:** Replace the hard-coded seek width with measured geometry.
-- [x] **V3-P4-010:** Add code regeneration, expiry recovery, reconnect, lockout, rename, and revoke UX.
-- [ ] **V3-P4-011:** Add automatic keyboard actions when Desktop focuses a text field.
-- [ ] **V3-P4-012:** Meet command acknowledgement and telemetry freshness targets.
-- [ ] **V3-P4-013:** Document and enforce the trusted-LAN threat model; warn when Desktop is on a public network and prevent accidental public-internet exposure.
-- [ ] **V3-P4-014:** Replace plaintext bearer transport with pinned WSS or an equivalently authenticated encrypted session; never place a reusable token in a URL or unencrypted request.
-- [ ] **V3-P4-015:** Add device-bound session keys, key rotation, token-version migration, and explicit re-pairing after trust material changes.
-- [ ] **V3-P4-016:** Enforce monotonic sequences, replay rejection, and command-ID deduplication so WebSocket timeout followed by HTTP fallback cannot apply one action twice.
-- [ ] **V3-P4-017:** Harden interface binding, firewall guidance, CORS/origin policy, request limits, and per-device/per-address rate limits.
-- [ ] **V3-P4-018:** Measure command round-trip time and playback-telemetry age separately from Orion's internet latency indicator; record median, p95, timeout, and reconnect evidence.
-- [x] **V3-P4-019:** Prefer Android NSD/mDNS plus the saved trusted endpoint; retain bounded subnet probing only as an explicit fallback.
-- [ ] **V3-P4-020:** Pass hostile-LAN, captured-token, replay, duplicate-command, network-change, sleep/wake, and reconnect security tests.
-- [x] **V3-P4-021:** Recompose the PIN/QR/Direct-IP pairing sheet for compact phones and keyboards: bounded PIN cells, keyboard-aware scrolling, safe-area/cutout clearance, and no clipped actions.
-- [x] **V3-P4-022:** Make PIN entry focus deterministic when the pairing sheet opens by focusing after modal presentation, restoring focus after method changes, and providing explicit keyboard recovery without requiring a QR-tab round trip.
+- [x] **V3-P4-001:** Use versioned command envelopes, authenticated acknowledgements and bounded retries.
+- [x] **V3-P4-002:** Pair through QR, PIN and Direct IP recovery with matching-phrase trust.
+- [x] **V3-P4-003:** Protect ordinary remote traffic with pinned WSS and device-bound identity.
+- [x] **V3-P4-004:** Enforce replay rejection, command deduplication, rate limits and private-LAN policy.
+- [x] **V3-P4-005:** Reconnect trusted devices and handle expiry, lockout, rename and revoke honestly.
+- [x] **V3-P4-006:** Preserve a unified remote foundation with acknowledged commands and continuous ordinary-page touchpad movement.
+- [x] **V3-P4-007:** Present source-aware playback capabilities without fabricating timing or command success.
+- [x] **V3-P4-008:** Clear remote cursor and focus state on disconnect, revoke, timeout and renderer restoration.
 
-#### Phase 4 Checkpoint 1 acceptance status
+Phase 4 is closed at this deliberately narrower, physically accepted foundation.
+Automated work beyond the boundary remains preserved, but five failed or incomplete
+physical outcomes are transferred to Phase 11 and are not represented as passed:
 
-Implementation, automated validation and physical-device acceptance are complete
-for `V3-P4-010`, `V3-P4-019`, `V3-P4-021`, and `V3-P4-022`. The user accepted
-automatic discovery/reconnection, expiry and lockout recovery, device management,
-keyboard-safe pairing, Direct IP behavior, and portrait/landscape presentation on
-August 9, 2026. Phase 4 therefore advances to 60% and overall Orion v3 to 54%.
+- startup remote Play may not apply before an embedded provider becomes ready;
+- Desktop context may retain stale media after navigation away from playback;
+- the current remote cursor appearance is unsuitable;
+- pointer movement still needs latency refinement; and
+- Mobile has no remote source selector.
 
-#### Phase 4 Checkpoints 2–4 implementation status
+This scope change awards no completion credit by itself. Historical Checkpoints
+1–4, their rollback hashes and their physical findings remain unchanged in the
+Progress Log.
 
-The three internal rollback checkpoints now exist:
+### Phase 5 — Streaming safety and source reliability
 
-- `f9562f1` — authoritative Desktop context, playback telemetry, freshness and
-  measured seeking.
-- `2305893` — one adaptive Mobile remote with a persistent touchpad and
-  context-aware controls.
-- `5d49264` — protocol v3 pinned HTTPS/WSS, Desktop TLS identity, Android
-  Keystore device identity, matching-phrase trust, one-time tickets, replay
-  rejection, request/rate limits and fail-closed public-network policy.
+- [x] **V3-P5-001:** Mobile has limited JavaScript and top-level navigation filtering; it is not yet a verified native shield.
+- [ ] **V3-P5-002:** Add an Android-native request-interception boundary capable of observing provider subresources.
+- [ ] **V3-P5-003:** Add provider-specific ad, tracker, popup and unsafe-navigation rules.
+- [ ] **V3-P5-004:** Allow required manifests, media, images, CDNs, player dependencies and subtitle hosts.
+- [ ] **V3-P5-005:** Validate every selectable provider through a maintained capability and health matrix.
+- [ ] **V3-P5-006:** Add failure classification and health-aware failover without losing verified playback state.
+- [ ] **V3-P5-007:** Complete embedded text-track detection, captured VTT delivery and Orion subtitle fallback.
+- [ ] **V3-P5-008:** Revalidate VidKing startup/audio continuity and retain truthful restrictions until it passes.
+- [ ] **V3-P5-009:** Resolve WebView lifecycle, unexpected navigation abort, cache and GPU diagnostics where they affect playback.
+- [ ] **V3-P5-010:** Expose only evidence-backed Verified, Limited, Disabled, Dependency Allowed and Rule Failure shield states.
+- [ ] **V3-P5-011:** Prove that blocking rules do not break playback, artwork, manifests or subtitles.
+- [ ] **V3-P5-012:** Pass the complete provider, shield, subtitle and failover physical-device matrix.
 
-Automated implementation evidence passes, but `V3-P4-005` through
-`V3-P4-009`, `V3-P4-011` through `V3-P4-018`, and `V3-P4-020` remain unchecked
-until the following physical Android plus packaged Desktop matrix is accepted:
+### Phase 6 — Unified Mobile player experience
 
-- Re-pair a protocol-v2 remembered device once and confirm its name survives.
-- Complete QR and PIN pairing with the same matching Orion phrase confirmed on
-  both devices; reject a mismatched phrase.
-- Confirm pinned reconnection after Mobile foregrounding, Desktop restart,
-  sleep/wake and Wi-Fi interruption.
-- Exercise Cinema embedded/default, local download, mini-player, pop-out and
-  Music playback; verify authoritative state, capabilities and stale telemetry.
-- Measure command median/p95 RTT, telemetry age and reconnection time against
-  the published budgets.
-- Seek at compact-phone, standard-phone, landscape and tablet widths and confirm
-  the Desktop acknowledgement reconciles the Mobile scrubber.
-- Exercise pointer, click, two-finger scrolling, playback, navigation, safe text
-  entry, protected-field blocking and the D-pad accessibility overlay.
-- Validate every adaptive remote surface in all six themes, Reduced Motion and
-  200% font scaling without overlap or inaccessible controls.
-- Reject the wrong certificate, altered phrase, old bearer token, mismatched
-  device key, replayed sequence and duplicate command ID.
-- Verify Windows public-network blocking and the explicit session-only override,
-  then return to a private network.
-- Revoke the device and confirm the socket, tickets and trust stop immediately.
-- Confirm disconnect cleanup still hides the Desktop laser immediately.
+- [x] **V3-P6-001:** Native and embedded Mobile playback surfaces and a shared Orion HUD foundation exist.
+- [ ] **V3-P6-002:** Drive native and embedded playback through one reachable HUD state machine.
+- [ ] **V3-P6-003:** Own touch/reveal handling outside cross-origin provider frames.
+- [ ] **V3-P6-004:** Add Fit, Fill, Stretch and Provider/Original presentation modes with truthful provider limits.
+- [ ] **V3-P6-005:** Correct portrait, landscape, fullscreen, tablet, foldable and cutout geometry.
+- [ ] **V3-P6-006:** Recompose source, subtitle, shield, diagnostics and error sheets responsively.
+- [ ] **V3-P6-007:** Keep controls reachable while paused, buffering, seeking, switching sources or showing errors.
+- [ ] **V3-P6-008:** Unify loading, buffering and source-switch presentation without fake state.
+- [ ] **V3-P6-009:** Prevent overlapping Orion/provider controls, duplicate surfaces and duplicate audio.
+- [ ] **V3-P6-010:** Validate every provider and presentation mode with 200% text and Reduced Motion.
 
-### Phase 5 — Player-surface laser
+### Phase 7 — Complete Mobile UX and performance
 
-- [x] **V3-P5-001:** Main-renderer `.orion-virtual-cursor` exists.
-- [ ] **V3-P5-002:** Add main-process `RemotePointerSurfaceManager`.
-- [ ] **V3-P5-003:** Register main, embedded, fullscreen, mini, pop-out, and local-player surfaces.
-- [ ] **V3-P5-004:** Add transparent, click-through pointer overlay ownership.
-- [ ] **V3-P5-005:** Map normalized coordinates to active surface bounds.
-- [ ] **V3-P5-006:** Route click input to the correct `webContents`.
-- [ ] **V3-P5-007:** Transfer laser ownership during player handoffs.
-- [ ] **V3-P5-008:** Follow window movement, resize, maximize, and fullscreen.
-- [ ] **V3-P5-009:** Hide on disconnect, inactivity, or surface destruction.
-- [ ] **V3-P5-010:** Pass the complete laser acceptance matrix.
+- [x] **V3-P7-001:** Six-theme semantic foundation and basic phone safe-area navigation exist.
+- [x] **V3-P7-002:** Shared editorial headers and several Home, Discover, Library, Settings and detail surfaces are adaptive and theme-aware.
+- [ ] **V3-P7-003:** Finish compact-phone, phone, tablet, large-tablet, foldable and landscape layouts across all routes.
+- [ ] **V3-P7-004:** Complete Discover, Library, Settings, episode and Media Detail responsive composition.
+- [ ] **V3-P7-005:** Complete six-theme contrast and semantic-color validation, including Projector Silver and Custom.
+- [ ] **V3-P7-006:** Add watched movie, episode and season actions with badges, confirmation and undo.
+- [ ] **V3-P7-007:** Organize the drawer into Browse, Your Orion, Connect and System groups.
+- [ ] **V3-P7-008:** Complete screen-reader order, labels, visible focus and 44×44 dp targets.
+- [ ] **V3-P7-009:** Add list virtualization, image-memory limits and background-work throttling.
+- [ ] **V3-P7-010:** Add automatic Efficiency, Balanced and Quality performance profiles.
+- [ ] **V3-P7-011:** Meet measured startup, navigation, playback, memory and GPU targets on representative low-end Android hardware.
+- [ ] **V3-P7-022:** Reorganize Mobile Settings into scalable sections—Account, Appearance, Sync, Playback, Accessibility, Updates, Connect and Downloads—using Desktop Settings as a parity reference without copying desktop-only layout.
+- [ ] **V3-P7-023:** Add concise descriptions to every theme and bring Custom-theme controls toward supported Desktop parity while preserving responsive Mobile composition and live semantic-token updates.
 
-### Phase 6 — Native provider shield
+### Phase 8 — Google identity and portable profiles
 
-- [x] **V3-P6-001:** Mobile has limited JavaScript and navigation filtering.
-- [ ] **V3-P6-002:** Build Android `shouldInterceptRequest` boundary.
-- [ ] **V3-P6-003:** Add provider-specific block and dependency profiles.
-- [ ] **V3-P6-004:** Add required manifest, media, CDN, image, and subtitle allowlists.
-- [ ] **V3-P6-005:** Block provider popup and unsafe external navigation.
-- [ ] **V3-P6-006:** Report redacted blocked and allowed counts.
-- [ ] **V3-P6-007:** Expose Verified, Limited, Disabled, Dependency Allowed, and Rule Failure states.
-- [ ] **V3-P6-008:** Prove that Verified is never shown without native evidence.
-- [ ] **V3-P6-009:** Validate VidSrc and every supported provider.
-- [ ] **V3-P6-010:** Verify shield rules do not break playback or subtitles.
+- [x] **V3-P8-001:** Desktop Google authentication/Drive backup and Mobile MMKV/SecureStore foundations exist.
+- [x] **V3-P8-002:** Native Mobile storage fails safely instead of silently falling back to volatile production memory.
+- [ ] **V3-P8-003:** Add Orion-owned Android and Desktop OAuth clients; users never supply cloud credentials.
+- [ ] **V3-P8-004:** Add account-namespaced Mobile profiles and non-destructive anonymous-profile import.
+- [ ] **V3-P8-005:** Define and validate `PortableProfileV3` across Desktop and Mobile.
+- [ ] **V3-P8-006:** Synchronize My List, History, Continue Watching, watched state, preferences and supported Music data.
+- [ ] **V3-P8-007:** Add record revisions, merge rules and deletion tombstones.
+- [ ] **V3-P8-008:** Preserve offline-first operation and reconcile later without erasing unknown namespaces.
+- [ ] **V3-P8-009:** Exclude credentials, caches, downloads, signed URLs and machine-specific paths.
+- [ ] **V3-P8-010:** Keep tokens exclusively in platform secure storage and test account switching, interruption and rollback.
 
-### Phase 7 — Adaptive Mobile UI
+### Phase 9 — Distribution, updates, availability and notifications
 
-- [x] **V3-P7-001:** Six-theme Mobile foundation exists.
-- [x] **V3-P7-002:** Basic phone navigation and safe-area support exist.
-- [ ] **V3-P7-003:** Add shared compact-phone, phone, tablet, and large-tablet breakpoints.
-- [ ] **V3-P7-004:** Replace fixed module-level dimensions with live responsive layout.
-- [ ] **V3-P7-005:** Recompose Discover filters and genre density.
-- [ ] **V3-P7-006:** Recompose Library grids, tabs, search, and sorting.
-- [ ] **V3-P7-007:** Recompose Projector Silver theme selection.
-- [ ] **V3-P7-008:** Repair episode metadata/action overflow.
-- [ ] **V3-P7-009:** Recompose Media Detail hero and actions.
-- [ ] **V3-P7-010:** Validate portrait, landscape, cutouts, 200% text, and Reduced Motion.
-- [ ] **V3-P7-011:** Validate all six themes on the complete device matrix.
-- [ ] **V3-P7-012:** Add source-aware video presentation modes—Fit, Fill, Stretch, and provider/original—without distorting unsupported embedded players.
-- [ ] **V3-P7-013:** Give Orion's player overlay a native touch/reveal layer independent of cross-origin iframe tap propagation.
-- [ ] **V3-P7-014:** Reconcile native and embedded HUD behavior through one reachable visible/hidden/pinned/sheet/buffering/error state machine.
-- [ ] **V3-P7-015:** Validate overlay controls, safe areas, orientation, video fitting, and touch targets across phones, tablets, and every selectable provider.
-- [ ] **V3-P7-016:** Revalidate VidKing startup/resume behavior on Mobile and Desktop mini/pop-out surfaces; Mobile carried-position continuity remains disabled until the provider no longer produces a startup audio/time glitch.
-- [ ] **V3-P7-017:** Expand watched controls across Movie, TV, and Anime detail pages, individual episodes, whole seasons, and the player HUD/More sheet; add theme-aware watched tick badges while keeping Watched, Progress, and History independent, with confirmation and undo for season-wide changes.
-- [ ] **V3-P7-018:** Organize the Mobile drawer into clear Browse, Your Orion, Connect, and System groups while preserving active-route state, accessibility order, theme behavior, and compact-height scrolling.
-- [ ] **V3-P7-019:** Add adaptive performance profiles for low-end phones, including measured startup/navigation/playback targets, reduced image and animation pressure, list virtualization, memory/GPU limits, background-work throttling, and a representative low-end Android device matrix without removing features.
+- [x] **V3-P9-001:** Desktop updater/status foundations exist; no complete Mobile update channel is claimed.
+- [ ] **V3-P9-002:** Add a Desktop Mobile Download area with a distinct installation QR and signed direct APK link.
+- [ ] **V3-P9-003:** Show stable/preview channel, latest Mobile version, minimum Android version and installer availability.
+- [ ] **V3-P9-004:** Present checking, available, downloading, ready, restart-required, current, failed and unsupported states consistently.
+- [ ] **V3-P9-005:** Support signed GitHub APK, Play Core flexible and runtime-compatible Expo update paths.
+- [ ] **V3-P9-006:** Validate checksums and signing identity before installation.
+- [ ] **V3-P9-007:** Add staged rollout, rollback, release notes, retry and restart UX.
+- [ ] **V3-P9-008:** Add local-first Android checks for updates, sync failures, offline recovery, provider degradation, watchlist releases and availability changes.
+- [ ] **V3-P9-009:** Add per-category controls, quiet hours, deduplication and deep links.
+- [ ] **V3-P9-010:** Request notification permission contextually and persist preferences in the portable profile.
 
-### Phase 8 — Desktop Orion 3.0 integration
+### Phase 10 — Mobile downloads and Offline Library
 
-- [x] **V3-P8-001:** Desktop Smart Connect pairing modal exists.
-- [ ] **V3-P8-002:** Build Mobile Companion Center.
-- [ ] **V3-P8-003:** Add separate Mobile-installation QR.
-- [ ] **V3-P8-004:** Preserve separate short-lived pairing QR.
-- [ ] **V3-P8-005:** Add connected-device management and last-seen status.
-- [ ] **V3-P8-006:** Add protocol compatibility and upgrade guidance.
-- [ ] **V3-P8-007:** Add profile synchronization and conflict status.
-- [ ] **V3-P8-008:** Preserve Smart Connect v2 compatibility during migration.
+- [ ] **V3-P10-001:** Replace the engineering-oriented locked page with a premium, six-theme Downloads surface; keep Download actions disabled until the corresponding candidate and engine paths pass validation.
+- [ ] **V3-P10-002:** Add versioned `MobileDownloadCandidateV1`, `MobileDownloadJobV1`, `MobileDownloadAssetV1` and `OfflineMediaEntryV1` contracts with non-sensitive, restart-safe persistence.
+- [ ] **V3-P10-003:** Capture download candidates within the active playback session and classify direct video, HLS, DASH and MIME-detected extensionless media without exposing raw URLs, cookies or credentials to presentation code.
+- [ ] **V3-P10-004:** Preflight candidate reachability, expiry, request context, manifest shape, storage requirements and DRM/protection status; unsupported or protected media remains unavailable with an honest reason.
+- [ ] **V3-P10-005:** Build an Android-owned foreground download service with WorkManager recovery, durable queue ownership, progress notifications and restart/reboot continuation.
+- [ ] **V3-P10-006:** Implement resumable direct-range downloads and authorized HLS/DASH fragment acquisition with bounded concurrency, playlist refresh and deterministic fragment accounting.
+- [ ] **V3-P10-007:** Add a narrow job-scoped request-context broker for providers that require the active WebView's permitted headers/cookies; it may access only the selected manifest and discovered descendants and must never become a general proxy.
+- [ ] **V3-P10-008:** Add pause, resume, retry, cancel, retry-all and recovery after network loss, application termination, reboot, low battery and storage pressure.
+- [ ] **V3-P10-009:** Validate completed assets before atomic finalization; detect missing fragments, truncated output, invalid containers and corrupt metadata, and retain repairable partial jobs without reporting false completion.
+- [ ] **V3-P10-010:** Preserve supported audio tracks, embedded/captured subtitles, episode identity, artwork and source attribution beside the downloaded asset.
+- [ ] **V3-P10-011:** Build adaptive queue, active, completed and failed views with search, filters, sorting, storage usage, per-job diagnostics and clear recovery actions across all six themes.
+- [ ] **V3-P10-012:** Add an Offline Library and route completed assets through Orion's unified native player with seek, subtitles, audio selection, playback speed and honest unsupported-format diagnostics.
+- [ ] **V3-P10-013:** Integrate offline playback with History, Continue Watching, watched state and the existing Resume dialog without requiring network access.
+- [ ] **V3-P10-014:** Use Android scoped storage and user-selected destinations without broad legacy storage permission; verify free space before starting and before final processing.
+- [ ] **V3-P10-015:** Back up portable download metadata only; exclude media bytes, partial fragments, credentials, signed URLs, cookies and machine-specific paths from Google profiles.
+- [ ] **V3-P10-016:** Pass direct/HLS/DASH, interruption, reboot, low-storage, subtitles, source expiry, integrity, offline playback, deletion and upgrade matrices on representative Android devices.
 
-### Phase 9 — Portable profile and Google authentication
+Desktop is the behavioral reference, not reusable Mobile implementation. Its proven
+pattern is scoped `CaptureSession` detection, opaque candidates, preflight, captured
+browser request context, a per-job restricted HLS proxy, managed fragmented tools,
+durable records and local playback. Mobile must recreate those boundaries with
+Android-native services and Media3-compatible download/playback components rather
+than attempting to run Electron session code or silently bundling unrestricted
+Desktop tooling.
 
-- [x] **V3-P9-001:** Desktop Google authentication and Drive backup foundations exist.
-- [x] **V3-P9-002:** Mobile uses MMKV for local data and SecureStore for selected secrets.
-- [x] **V3-P9-003:** Replace silent in-memory MMKV fallback.
-- [ ] **V3-P9-004:** Add account-namespaced Mobile profiles.
-- [ ] **V3-P9-005:** Define shared `PortableProfileV3`.
-- [ ] **V3-P9-006:** Add separate Android and Desktop OAuth clients under Orion's Google project.
-- [ ] **V3-P9-007:** Keep OAuth tokens exclusively in platform secure storage.
-- [ ] **V3-P9-008:** Add non-destructive anonymous-profile import on first sign-in.
-- [ ] **V3-P9-009:** Add record-level merge, revisions, and deletion tombstones.
-- [ ] **V3-P9-010:** Preserve unknown namespaces such as Desktop Music data on Mobile.
-- [ ] **V3-P9-011:** Exclude credentials, device state, paths, downloads, and caches.
-- [ ] **V3-P9-012:** Test account switching, offline edits, conflicts, interruption, and rollback.
+### Phase 11 — Deferred Orion Connect expansion
 
-### Phase 10 — Mobile updates
+- [x] **V3-P11-001:** Secure pairing, acknowledged transport and ordinary-page remote-control foundations remain available from Phase 4.
+- [ ] **V3-P11-002:** Repair provider-ready startup Play without relying on the remote cursor.
+- [ ] **V3-P11-003:** Clear or replace stale Desktop playback context after navigation away from media.
+- [ ] **V3-P11-004:** Replace the raw cursor treatment with a polished theme-aware Orion cursor.
+- [ ] **V3-P11-005:** Reduce pointer latency while preserving encrypted delivery, replay protection and bounded queues.
+- [ ] **V3-P11-006:** Add Mobile source selection from Desktop's live healthy-provider catalog.
+- [ ] **V3-P11-007:** Add player-surface cursor ownership for embedded, fullscreen, mini, pop-out and local players.
+- [ ] **V3-P11-008:** Transfer cursor ownership safely across player handoffs, window movement and teardown.
+- [ ] **V3-P11-009:** Finish Mobile Companion Center and advanced device/status presentation.
 
-- [ ] **V3-P10-001:** Add `expo-updates`.
-- [ ] **V3-P10-002:** Define runtime version and preview/production channels.
-- [ ] **V3-P10-003:** Add staged OTA rollout and rollback.
-- [ ] **V3-P10-004:** Detect Play versus side-loaded installation source.
-- [ ] **V3-P10-005:** Add Play Core flexible updates.
-- [ ] **V3-P10-006:** Add signed GitHub APK manifest and SHA-256 validation.
-- [ ] **V3-P10-007:** Require matching Android signing identity.
-- [ ] **V3-P10-008:** Add release notes, progress, failure, retry, and restart UX.
+### Phase 12 — Release validation
 
-### Phase 11 — Release validation
+- [x] **V3-P12-001:** Basic Mobile, Desktop and Smart Connect automated gates exist.
+- [ ] **V3-P12-002:** Pass the complete provider, ad-shield, failover and subtitle matrix.
+- [ ] **V3-P12-003:** Pass player fitting, overlay touch, orientation, cutout and accessibility matrices.
+- [ ] **V3-P12-004:** Pass low-end startup, navigation, memory, GPU and playback validation.
+- [ ] **V3-P12-005:** Pass Google profile migration, merge, conflict and offline-recovery tests.
+- [ ] **V3-P12-006:** Pass signed installation, update, rollback and release-channel tests.
+- [ ] **V3-P12-007:** Pass notification permission, quiet-hours, deduplication and deep-link tests.
+- [ ] **V3-P12-008:** Pass Mobile download capture, fragment recovery, integrity, scoped-storage and offline-playback matrices.
+- [ ] **V3-P12-009:** Install signed Desktop and Android builds on clean devices.
+- [ ] **V3-P12-010:** Upgrade copied 2.0.1 profiles and active/partial download records without data loss or false completion.
+- [ ] **V3-P12-011:** Confirm no Cinema, Music Planet, Desktop downloads, trailers or secure Connect regressions.
 
-- [x] **V3-P11-001:** Basic Mobile type and Smart Connect protocol checks exist.
-- [ ] **V3-P11-002:** Pass native and embedded playback tests.
-- [ ] **V3-P11-003:** Pass History and Continue Watching tests.
-- [ ] **V3-P11-004:** Pass trailer candidate and fallback tests.
-- [ ] **V3-P11-005:** Pass Smart Connect and laser surface matrix.
-- [ ] **V3-P11-006:** Pass native shield provider matrix.
-- [ ] **V3-P11-007:** Pass responsive, accessibility, and six-theme matrix.
-- [ ] **V3-P11-008:** Pass cross-device profile migration and merge tests.
-- [ ] **V3-P11-009:** Pass OTA/native update tests.
-- [ ] **V3-P11-010:** Install signed Desktop and Android builds on clean devices.
-- [ ] **V3-P11-011:** Upgrade copied 2.0.1 profiles without data loss.
-- [ ] **V3-P11-012:** Confirm no Desktop Cinema or Music regressions.
+## Checklist ID Migration — August 11, 2026 Rebaseline
+
+Historical checklist IDs and Progress Log rows remain valid evidence for the
+scope they described at that time. The table below redirects unfinished work;
+it does not retroactively rename old commits, rewrite old evidence or award
+completion credit.
+
+| Previous checklist scope | Revised destination | Migration rule |
+|---|---|---|
+| Old `V3-P4-001`–`V3-P4-004`, `010`, `019`, `021`, `022` and physically accepted secure foundations from Checkpoints 2–4 | Revised Phase 4 | Closed only at the accepted secure-foundation boundary. |
+| Old incomplete `V3-P4-005`–`V3-P4-009`, `011`, `012`, `018`, plus failed startup Play, stale context, cursor quality and pointer-latency findings | Revised `V3-P11-002`–`V3-P11-006` | Deferred, not passed. Security mechanisms retained by revised Phase 4 are not reopened. |
+| Old `V3-P5-001`–`V3-P5-010` player-surface laser | Revised `V3-P11-004`, `V3-P11-007`, `V3-P11-008` | Deferred until the core Mobile experience is complete. |
+| Old `V3-P6-001`–`V3-P6-010` native shield | Revised `V3-P5-001`–`V3-P5-012` | Expanded to include source health, failover, subtitles and provider diagnostics. |
+| Old `V3-P7-012`–`V3-P7-015` player fitting/HUD ownership | Revised Phase 6 | Becomes the dedicated unified Mobile player phase. |
+| Old `V3-P7-016` and `V3-P7-020` provider/lifecycle diagnostics | Revised `V3-P5-008`, `V3-P5-009` | Moves into source reliability before player presentation work. |
+| Old `V3-P7-001`–`V3-P7-011`, `017`–`019` | Revised Phase 7 | Retains UI, watched-state, drawer, accessibility and performance evidence. |
+| Unfinished `V3-P7-021` locked Downloads copy plus the previously deferred Mobile downloader | Revised Phase 10 | Becomes a complete downloader, fragment recovery, Offline Library and offline-playback milestone; the locked page alone earns no completion. |
+| Old `V3-P8-002`–`V3-P8-006` Desktop companion/install/status work | Revised Phase 9 or Phase 11 | Installation/update status moves to Phase 9; advanced Connect presentation moves to Phase 11. |
+| Old `V3-P9-001`–`V3-P9-012` portable profile/authentication | Revised Phase 8 | Same ownership outcome, moved earlier. |
+| Old `V3-P10-001`–`V3-P10-008` Mobile updates | Revised Phase 9 | Combined with distribution, availability and notifications. |
+| Old `V3-P11-001`–`V3-P11-012` | Revised Phase 12 | Expanded release gate; existing evidence remains foundational only. |
+
+The reweighted tracker remains at 54% because the reordering itself earns no
+credit. Revised Phase 4 is complete only because its scope was narrowed to the
+accepted secure foundation; every excluded failed outcome remains open in Phase
+11. Phase 10 adds an essential Mobile downloader without awarding new completion
+for roadmap text alone. Phase 5 is now the active implementation stage.
 
 ## Progress Log
 
@@ -343,6 +349,10 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-08-09 | Phase 4 Checkpoints 2–4 implementation | Added authoritative Desktop UI/playback context and telemetry, freshness-aware Mobile interpolation, measured acknowledged seeking, a persistent-touchpad adaptive remote, context-aware actions, protected-field typing rules, protocol-v3 pinned HTTPS/WSS, ECDSA Desktop identity, Android Keystore identity, matching-phrase trust, single-use tickets, private-LAN/public-profile policy, and replay/duplicate/rate-limit enforcement. Physical security, latency, device-layout and packaged Desktop acceptance remains open, so Phase 4 does not advance beyond 60%. | Checkpoints `f9562f1`, `2305893`, `5d49264`; Mobile typecheck, 79/79 tests, 89-file size gate and production web export passed; secure trust 5/5 tests and focused Smart Connect Electron test passed; Desktop source/binding/IPC/secret/theme/cycle/Node/renderer/build gate passed; full Electron suite passed 12/14 with Smart Connect green and two unrelated quick-search timing failures (one passed on isolated retry, one remains). Standalone APK: 110,289,054 bytes, SHA-256 `FABC15D210442D48F14769FC68FC6DE38AE70FF21942D3E06842D0BD765099DE`. | 54% |
 
 | 2026-08-11 | Phase 4 pointer and command latency recovery implementation | Removed the telemetry-driven touch-target remount by extracting a stable memoized touchpad and isolated playback/action components. The parent scroll surface now yields while the touchpad owns a gesture. Pointer and two-finger scroll traffic share a latest-state scheduler near 30 Hz with an immediate first update and stale-state cleanup. Reliable command waiters are installed before transport send and accept acknowledgements only for the matching command sequence, device and connection. Production one-second diagnostics are disabled unless explicitly opted in. Protocol-v3 trust, WSS, replay protection and pairing remain unchanged. Physical latency acceptance is still required, so Phase 4 remains at 60%. | Safety checkpoint `7a0bbb4`; Mobile typecheck; 80/80 tests; 90-file source-size gate; production web export; Desktop source/binding/IPC/secret/theme/cycle gates, 58 Node tests, 139 renderer tests and production build; standalone bundled APK 110,260,295 bytes, SHA-256 `60F586B12BA30FA52FE988D914F1C6F9BF526E328A4DB06025FB670968BD6762`. Expo Doctor passed 18 local checks; two online catalog checks were blocked by the validation sandbox. Continuous 60-second pointer, command RTT and six-theme device acceptance remain open. | 54% |
+| 2026-08-11 | Phase 4 source-aware final-acceptance implementation | Added exact Cinema source/session control targeting, bounded player readiness, idempotent Play/Pause, provider-accepted acknowledgement truth, stale-target rejection and cancellation-safe source changes. Mobile now exposes the provider label and readiness, suppresses fabricated timing and unsupported controls, keeps Back/Home/More available, uses a denser responsive playback/touchpad composition, and renders a lightweight Orion arrow cursor with target-change-only hover/press feedback. Pointer delivery adapts between 24, 30 and 40 Hz while retaining only the newest unsent realtime update. Protocol-v3 WSS, device trust and replay protection remain unchanged. Physical acceptance is still required; Phase 4 remains at 60% and Orion v3 at 54%. | Mobile typecheck; 81/81 tests; 90-file source-size gate; production web export; Desktop source/binding/IPC/secret/theme/cycle gates, 58/58 Node tests, 139/139 renderer tests and production build; `git diff --check` passed. Expo Doctor passed 18 local checks while two online catalog checks were unavailable under restricted validation egress. Standalone bundled APK `orion-mobile-standalone.apk`: 110,265,648 bytes, SHA-256 `11EE916E88AD7D5805388A7A73C5CD0D5435CF44FECC4E4952DA809ED690CEC0`; archive verification confirmed `assets/index.android.bundle`. Provider acceptance, continuous-pointer gaps, RTT/p95, six-theme layouts and packaged-Desktop security regression remain open. | 54% |
+| 2026-08-11 | Orion v3 post-Phase-4 roadmap rebaseline | Reordered the remaining roadmap around Mobile viewing quality: streaming safety, unified player, complete Mobile UX, portable profiles, then distribution/updates/notifications. Closed Phase 4 only at its accepted secure-foundation boundary and transferred startup Play readiness, stale context, cursor quality, pointer latency, source selection and player-surface cursor work into deferred Phase 10. Added an explicit checklist-ID migration table and made native provider shielding—including ad/tracker interception and dependency allowlists—the active Phase 5. | Roadmap-only change based on the existing implementation record and user physical findings. Historical Progress Log rows are unchanged; no implementation or validation credit was added. Reweighted evidence remains 54.2%, rounded to 54%; package versions remain 2.0.1. | 54% |
+| 2026-08-11 | Phase 7 product-language and Settings IA additions | Recorded three deferred Mobile UX requirements: replace engineering-oriented Downloads copy with a premium honest locked state; reorganize growing Settings into Account, Appearance, Sync, Playback, Accessibility, Updates, Connect and Downloads sections; and add theme descriptions plus validated Custom-theme parity using Desktop as a reference. | Roadmap-only clarification based on user review. No runtime implementation, acceptance result or percentage credit was added. | 54% |
+| 2026-08-11 | V3-P10-001 through V3-P10-016, V3-P12-008 through V3-P12-010 | Added Mobile downloads and Offline Library as an essential Orion v3 milestone. Defined scoped candidate capture, direct/HLS/DASH fragment jobs, Android-native foreground execution, WorkManager recovery, request-context isolation, integrity-checked finalization, offline metadata/tracks/subtitles and unified native playback. Shifted deferred Connect expansion to Phase 11 and release validation to Phase 12. | Roadmap-only architecture update grounded in the existing Desktop downloader contracts and diagnostics. No downloader implementation or acceptance credit was added. Reweighted evidence remains 53.98%, rounded to 54%; package versions remain 2.0.1. | 54% |
 
 Phase 3 is complete. Orion now keeps
 all viable TMDB YouTube and Vimeo candidates, ranks rather than prematurely
@@ -396,86 +406,85 @@ by this checkpoint.
 - Never mark a checklist item complete based only on a screenshot or a build succeeding.
 - Never reduce the list of known blockers to increase the percentage.
 - Reopen a checked item if a regression invalidates its acceptance.
-- Keep package versions unchanged until Phase 11 passes.
+- Keep package versions unchanged until Phase 12 passes.
 - Preserve this document as the authoritative Orion v3 execution tracker.
 
 ## Executive Summary
 
-Orion Mobile is a promising Android-first companion with working metadata browsing, media details, provider playback, themes, local state, and a substantially improved Smart Connect transport. It is not ready for an Orion 3.0 release yet.
+Orion Mobile now has four completed foundations: safety and observability,
+verified playback truth, evidence-backed History/Continue Watching, and reliable
+in-app trailers. Phase 4 is closed at the narrower boundary proven by physical
+testing: secure local pairing, encrypted device trust, reconnection and a usable
+unified remote foundation. Orion is not ready for an Orion 3.0 release yet.
 
-The authoritative playback-truth pipeline now exists for native and embedded surfaces. It accepts only active-session telemetry, requires a real playing event plus advancing time before verification, and isolates unobservable embedded sessions in a bounded Recent Opens journal. Physical Android validation of the source-specific adapters remains the acceptance blocker. Until that evidence is recorded, these user-facing outcomes remain intentionally deferred or incomplete:
+The next priority is the viewing experience itself. Phase 5 must provide native
+Android request interception, provider-specific ad/tracker/popup rules, required
+media and subtitle allowlists, a complete selectable-source matrix, health-aware
+failover, subtitle recovery and evidence-backed shield states. Phase 6 then owns
+the unified responsive player, Orion-controlled HUD behavior and video fitting.
+Phase 7 completes application-wide UX, accessibility and low-end performance.
 
-- Mobile History does not reliably update.
-- Continue Watching is absent and cannot be populated reliably.
-- Smart Connect's Now Playing HUD and progress pointer become stale.
-- Embedded-player buffering and playback states can be misleading.
-- Source changes cannot always preserve an exact resume position.
+The five physical Smart Connect outcomes that did not pass are preserved as
+deferred Phase 11 work rather than being represented as Phase 4 successes:
 
-The next implementation should establish verified playback telemetry first. History, progress, Continue Watching, Smart Connect HUD, source failover, and cross-device synchronization should all consume that shared contract.
+- Startup remote Play may not apply before an embedded provider becomes ready.
+- Desktop context can retain stale media after leaving playback.
+- The remote cursor appearance is not yet release quality.
+- Pointer movement still needs latency refinement.
+- Mobile does not yet expose Desktop's healthy source catalog for source switching.
 
-Other release blockers are:
-
-- Trailer playback frequently falls back instead of succeeding inside Orion.
-- Mobile ad blocking cannot inspect all Android WebView subrequests.
-- The Smart Connect laser exists only in the main renderer and disappears over every player surface.
-- Smart Connect still requires inconvenient manual switching between control modes.
-- Mobile updates and cross-platform Google profile restoration are not implemented.
-- Several phone layouts are oversized, clipped, or insufficiently adaptive.
-- Automated coverage is too narrow for the current feature surface.
+Other essential release blockers are portable Google-backed profiles, signed
+Mobile distribution and updates, availability reporting, notification policy,
+the complete Mobile downloader and Offline Library, low-end Android validation
+and the complete upgrade/regression matrix. Casting remains a separate post-v3
+milestone. Mobile downloads stay visibly and honestly locked only until Phase 10
+proves candidate capture, fragment recovery, integrity and offline playback.
 
 ## Code-Verified Baseline
 
-At the time of this audit:
+The dated Progress Log is the source of truth for individual build and test
+results. The latest recorded implementation gates include Mobile type checking,
+81 Mobile tests, source-size validation, production web export, Desktop contract
+and renderer gates, and bundled standalone APK inspection. Those automated
+results do not replace the provider, orientation, performance, security and
+clean-install physical matrices required by the remaining phases.
 
-- Mobile strict TypeScript compilation passes.
-- Eighteen Mobile unit/safety tests pass, including playback-truth rejection and persistence guards; physical provider behavior remains unverified.
-- Desktop IPC contract validation passes.
-- Desktop renderer-binding validation passes.
-- Mobile and Desktop package versions are both 2.0.1.
-- Mobile does not currently include a complete `expo-updates` configuration.
-- Connect, Discover, Media Detail, and Player routes are thin shims, and the Mobile source-size gate has no oversized allowlist.
-
-These results confirm that the repository is buildable, but they do not establish release-level behavioral confidence.
+Mobile and Desktop package versions remain `2.0.1`. Version numbers must not move
+until Phase 12 release validation succeeds.
 
 ## Priority Audit
 
 | Priority | Area | Current condition | Required outcome |
 |---|---|---|---|
-| P0 | Embedded playback telemetry | Provider WebViews do not consistently report verified position, duration, pause, buffering, or completion | One source-aware `MobilePlaybackTelemetry` stream |
-| P0 | History | Verified progress and History are written together, but Library renders the separate `watched` map instead of `history` | Chronological, evidence-backed History backed by the actual History collection |
-| P0 | Source handoff | Reopening saved playback works, but physical source switching can stick or resume at an incorrect timestamp because verified snapshots and target seek capabilities are inconsistent | Persist outgoing verified time, negotiate target resume capability, and confirm the applied position from new-source telemetry |
-| P0 | Continue Watching | Missing from Mobile Home and Library | Resumable Home rail and Library Continue tab |
-| P0 | Trailers | WebView is no longer blank, but many YouTube embeds still fail inside Orion | Candidate rotation, precise errors, valid player identity, and fallback |
-| P0 | Smart Connect laser | Works on ordinary pages but disappears over default, fullscreen, mini, and pop-out players | Player-surface-aware pointer compositor |
-| P0 | Mobile provider shield | JavaScript and navigation filtering cannot intercept every iframe/subresource request | Native Android request interception with provider profiles |
-| P0 | Smart Connect HUD | Desktop publishes occasional snapshots instead of continuous telemetry | Authoritative live status plus locally interpolated progress |
-| P1 | Smart Connect UX | Users manually switch Touchpad, D-pad, HUD, and Keyboard modes | One context-aware Control Surface |
-| P1 | Player HUD | Embedded controls can become difficult to reveal and use | Reachable, explicit HUD state machine |
-| P1 | Player touch ownership | Embedded HUD reveal partly depends on page-level injected taps that nested cross-origin frames do not reliably propagate | Native Orion-owned gesture/reveal layer above the provider surface |
-| P1 | Video presentation | The outer player fills the display, but inner provider video may remain cropped, letterboxed, or incorrectly sized with no user fit choice | Capability-aware Fit, Fill, Stretch, and Provider/Original modes |
-| P1 | Source matrix | Nine sources are selectable, but only three representative telemetry paths were initially named; AllManga's async/native contract is not honored by Mobile routing | Per-source routing, health, telemetry, subtitle, shield, and UI acceptance matrix |
-| P1 | Responsive UI | Fixed dimensions and oversized controls create clipping and wasted space | Phone, tablet, foldable, landscape, and large-text layouts |
-| P1 | Mobile updates | No production OTA/native update flow | Runtime-safe OTA plus signed native updates |
-| P1 | Cross-device profile | Mobile has no compatible Google authentication or profile restoration | Portable Profile v3 with record-level merging |
-| P1 | Desktop integration | Smart Connect is a modal rather than a complete companion system | Orion 3.0 Mobile Companion Center |
-| P2 | Architecture | Large screen files combine transport, state, layout, and presentation | Focused controllers, hooks, services, and components |
+| P0 | Provider shield | JavaScript/navigation filtering cannot inspect every Android WebView subrequest | Native interception with provider-specific block and dependency-allow rules |
+| P0 | Source reliability | Selectable providers do not yet share a complete health, failover, subtitle and diagnostics matrix | Validate every selectable source and skip evidence-backed failures safely |
+| P0 | Unified player | Provider and Orion overlays, touch ownership and video fitting remain inconsistent across orientations | One responsive HUD plus Fit, Fill, Stretch and Provider/Original modes |
+| P1 | Responsive UX | Several application surfaces still need adaptive and accessibility validation | Complete phone, tablet, foldable, landscape and 200% text layouts |
+| P1 | Low-end performance | Startup, image memory, background work and GPU cost lack representative-device targets | Automatic Efficiency/Balanced/Quality profiles backed by measurements |
+| P1 | Cross-device profile | Mobile has no compatible Google authentication or portable profile restoration | Orion-owned OAuth clients and offline-first Portable Profile v3 merging |
+| P1 | Distribution and updates | Mobile lacks the signed Desktop download flow and complete native/runtime update policy | Verified installers, staged updates, rollback and clear availability states |
+| P1 | Notifications | Operational and optional content events lack a user-controlled local-first policy | Categories, quiet hours, deduplication, contextual permission and deep links |
+| P1 | Mobile downloads | The visible Mobile page is intentionally locked and has no durable fragment engine or Offline Library | Android-owned candidate capture, resumable fragment jobs, integrity verification, scoped storage and unified offline playback |
+| Deferred | Connect expansion | Five physical Phase 4 findings and player-surface cursor ownership remain open | Resume only after the core Mobile viewing and ownership experience is complete |
 | Deferred | TV casting | Remote control foundations exist, but casting is a different protocol category | Separate post-v3 casting milestone |
 
 ## 1. Playback Truth, History, and Continue Watching
 
 ### Confirmed condition
 
-Phase 1 now routes native and embedded observations through the versioned
-telemetry reducer under `apps/mobile/src/features/playback`. Only verified,
-advancing playback can reach `recordPlayback()` in the Library context.
+Phases 1 and 2 are complete. Native and embedded observations pass through the
+versioned telemetry reducer under `apps/mobile/src/features/playback`, and only
+verified advancing playback can reach the Library repository. History consumes
+the persisted History collection, while Continue Watching derives independently
+from incomplete verified progress. Both surfaces were accepted on a physical
+Android device, including persistence across restart and reboot.
 
-Remaining conditions:
+Current boundaries:
 
-- Cross-origin provider frames do not automatically expose current time or duration, so every declared adapter still requires physical-device evidence.
-- Unobservable providers are recorded only in `recentOpensV1`; they cannot create History, progress, watched state, completion, or percentages.
-- `apps/mobile/app/(tabs)/library.tsx` obtains `history` from `useLibrary()` indirectly but renders values from the `watched` map as its History list.
-- Mobile Home has no proper Continue Watching section.
-- Online sources are still routed through `EmbedPlayerSurface`; this conflicts with AllManga's declared async/native strategy.
+- Unobservable providers remain isolated in `recentOpensV1`; they cannot create History, progress, watched state, completion or percentages.
+- VidKing remains excluded from carried-position continuity because its provider-internal startup audio/time glitch failed physical testing.
+- Async/native AllManga remains hidden on Mobile until a safe native resolver exists.
+- The revised Phase 5 source matrix must validate the health, shield, subtitle and routing behavior of every selectable provider.
 
 ### Required data separation
 
@@ -1030,6 +1039,36 @@ Recommended:
 - Miniature surface/accent/text previews.
 - Semantic theme colors rather than dark hard-coded cards.
 
+### Settings information architecture and themes
+
+Observed:
+
+- Theme selection currently dominates the Settings page even though Account, Sync, Playback, Accessibility, Updates, Connect and Downloads will expand the page.
+- Theme names do not explain the atmosphere or display purpose of each preset.
+- Mobile Custom-theme controls remain substantially behind the supported Desktop customization surface.
+
+Recommended:
+
+- Make Appearance a dedicated Settings subsection rather than the entire Settings identity.
+- Use Desktop Settings as a feature and terminology reference while retaining adaptive Mobile navigation and control density.
+- Add short descriptions, for example `Midnight Premiere — cinematic black with Orion red`, `AMOLED — deeper black for OLED screens`, and `Mocha — warmer brown-toned dark theme`.
+- Treat Custom as a first-class differentiator with live preview, validated controls, reset behavior and portable-profile support where the corresponding setting is cross-platform.
+- Do not expose Desktop-only controls on Mobile unless the Mobile runtime can apply and validate them.
+
+### Downloads locked state
+
+Observed:
+
+- The locked Downloads page is visually polished, but copy such as `stabilization boundary`, `resumable native engine`, `simulated job` and `file integrity pass` reads like internal engineering documentation.
+- Internal implementation details weaken trust when the user only needs an honest capability status.
+
+Recommended:
+
+- Lead with `Mobile downloads are coming soon` or equivalent premium product language.
+- Explain briefly that Orion is preparing reliable offline playback and will enable it only when downloads can be completed and verified safely.
+- Keep the page visible and honest, but remove architecture, simulation and internal validation terminology from user-facing copy.
+- Never show simulated progress, fake completion or actions that imply an unavailable download has started.
+
 ### Episode list
 
 Observed:
@@ -1199,6 +1238,7 @@ Use a sharded, versioned profile rather than one last-write-wins blob:
 - Watched status.
 - Music playlists and folders.
 - Music favorites and history.
+- Download preferences and portable title/episode identity without claiming that media exists on another device.
 - Portable appearance and accessibility preferences.
 - Tombstones.
 - Per-device revision and timestamp.
@@ -1211,7 +1251,7 @@ Exclude:
 - Provider cookies and credentials.
 - Signed stream URLs.
 - Smart Connect pairing secrets.
-- Downloads.
+- Downloaded media bytes, partial fragments and device-bound job state.
 - Local filesystem paths.
 - Managed tools and caches.
 
@@ -1260,6 +1300,16 @@ apps/mobile/
     │   ├── SourceSheet.tsx
     │   └── ShieldStatus.tsx
     │
+    ├── downloads/
+    │   ├── contracts.ts
+    │   ├── candidateCapture.ts
+    │   ├── candidatePreflight.ts
+    │   ├── downloadRepository.ts
+    │   ├── downloadPolicy.ts
+    │   ├── integrityVerifier.ts
+    │   ├── OfflineLibrary.tsx
+    │   └── DownloadJobCard.tsx
+    │
     ├── smart-connect/
     │   ├── useSmartConnectSession.ts
     │   ├── useRemoteTelemetry.ts
@@ -1278,6 +1328,38 @@ apps/mobile/
         ├── breakpoints.ts
         └── useResponsiveLayout.ts
 ```
+
+Android-native download boundary:
+
+```text
+apps/mobile/android/app/src/main/java/com/orion/mobile/downloads/
+├── OrionDownloadService.kt
+├── OrionDownloadWorker.kt
+├── OrionDownloadStore.kt
+├── OrionRequestContextBroker.kt
+└── OrionMedia3DownloadBridge.kt
+```
+
+The Mobile download pipeline is deliberately split across trust boundaries:
+
+```text
+active playback session
+  -> scoped opaque candidate capture
+  -> reachability / expiry / DRM / storage preflight
+  -> durable Android download job
+  -> range or fragment store
+  -> integrity verification and atomic finalization
+  -> Offline Library
+  -> Orion native player
+```
+
+The renderer may display redacted job state and issue user actions, but it must
+never receive captured cookies, signed media URLs, provider credentials or raw
+machine paths. Desktop's downloader is the behavioral reference for scoped
+capture, request-context preservation, fragment accounting and recovery. Mobile
+recreates those contracts with Android foreground services, WorkManager and
+Media3-compatible components rather than importing Electron session code or
+silently bundling unrestricted Desktop command-line tooling.
 
 Desktop additions:
 
@@ -1322,58 +1404,82 @@ apps/desktop/src/main/smart-connect/
 - Repair player origin/client identity.
 - Keep reliable external fallback.
 
-### Phase 4: Smart Connect experience
+### Phase 4: Secure Orion Connect foundation
 
-- Add live telemetry.
-- Replace manual control modes with Unified Control Surface.
-- Repair real-width seeking.
-- Add pairing regeneration and connection states.
+- Preserve the physically accepted secure pairing, matching-phrase trust and encrypted WSS transport.
+- Preserve device-bound identity, reconnection, expiry, lockout, rename and revoke.
+- Preserve acknowledged commands, continuous touchpad movement and the unified remote foundation.
+- Transfer failed startup Play, stale context, cursor quality, pointer latency, source selection and player-surface cursor outcomes to Phase 11.
 
-### Phase 5: Player-surface laser
+### Phase 5: Streaming safety and source reliability
 
-- Add `RemotePointerSurfaceManager`.
-- Register every player surface.
-- Add transparent click-through pointer overlays.
-- Route clicks to the active `webContents`.
-- Verify every handoff and fullscreen transition.
+- Add native Android request interception and provider-specific ad, tracker, popup and unsafe-navigation rules.
+- Allow required media, manifest, image, CDN and subtitle dependencies.
+- Validate every selectable source and add evidence-backed health and failover.
+- Complete embedded/captured subtitle discovery and Orion fallback.
+- Investigate VidKing continuity and playback-relevant WebView/cache/GPU diagnostics.
+- Report only shield states supported by observed evidence.
 
-### Phase 6: Native shield
+### Phase 6: Unified Mobile player experience
 
-- Add Android request interceptor.
-- Add provider-specific rules.
-- Add shield evidence and diagnostics.
-- Validate playback and subtitles for each source.
+- Add one HUD state machine for native and embedded playback.
+- Own touch/reveal behavior outside cross-origin provider frames.
+- Add Fit, Fill, Stretch and Provider/Original presentation modes.
+- Make every player sheet and state responsive across phone, landscape, tablet, foldable and fullscreen layouts.
+- Prevent overlapping controls, unreachable actions, duplicated surfaces and fabricated state.
 
-### Phase 7: Adaptive UI
+### Phase 7: Complete Mobile UX and performance
 
-- Recompose Discover, Library, Settings, Episodes, Media Detail, Trailer, Player, and Connect.
-- Validate all breakpoints, themes, orientations, and accessibility modes.
+- Finish adaptive Discover, Library, Settings, episodes and Media Detail layouts.
+- Complete six-theme contrast, watched actions/badges and organized navigation groups.
+- Move themes into an Appearance section, add preset descriptions and close supported Custom-theme parity gaps using Desktop Settings as a reference.
+- Complete accessibility ordering, labels and touch targets.
+- Add list virtualization, image-memory controls and background-work throttling.
+- Validate automatic Efficiency, Balanced and Quality profiles on representative low-end Android hardware.
 
-### Phase 8: Desktop Orion 3.0 integration
+### Phase 8: Google identity and portable profiles
 
-- Add Mobile Companion Center.
-- Separate install and pairing QR flows.
-- Add protocol compatibility and device management.
+- Add Orion-owned Android and Desktop OAuth clients; users never supply cloud credentials.
+- Add account-namespaced Portable Profile v3 storage and anonymous-profile import.
+- Synchronize supported Cinema, settings and Music records with revisions, merge rules and tombstones.
+- Preserve offline-first behavior, unknown namespaces and secure token storage.
 
-### Phase 9: Portable profile and Google authentication
+### Phase 9: Distribution, updates, availability and notifications
 
-- Add application-owned OAuth clients.
-- Add Portable Profile v3.
-- Add record-level merging, tombstones, and migrations.
-- Preserve offline-first behavior.
+- Add a separate Desktop Mobile-download area with signed APK/install QR flow.
+- Add verified GitHub, Play Core and runtime-compatible update channels with staged rollout and rollback.
+- Expose installer, version, compatibility and provider-availability status clearly on both platforms.
+- Add local-first notification categories, quiet hours, deduplication, deep links and contextual permission prompts.
 
-### Phase 10: Mobile updates
+### Phase 10: Mobile downloads and Offline Library
 
-- Add runtime-safe OTA updates.
-- Add Play/GitHub native update paths.
-- Add signing and checksum verification.
+- Replace the locked engineering copy with a premium six-theme Downloads experience, while keeping unavailable actions honest until the engine passes.
+- Capture active-session direct, HLS, DASH and extensionless media as opaque, scoped candidates and preflight reachability, expiry, request context, storage and protection status.
+- Recreate Desktop's proven scoped capture, fragment accounting and restricted request-context boundaries through Android-native foreground services, WorkManager recovery and Media3-compatible components.
+- Add resumable range and fragment jobs, bounded concurrency, pause/resume/retry, battery/network/storage policy and atomic integrity-checked finalization.
+- Preserve supported artwork, metadata, audio tracks and subtitles and expose completed media through a responsive six-theme Offline Library.
+- Play completed assets through Orion's unified native player and integrate offline Resume, History, Continue Watching and watched state without requiring network access.
+- Use scoped storage, portable metadata-only backup and explicit unsupported/DRM diagnostics; never expose credentials or report false completion.
 
-### Phase 11: Release validation
+### Phase 11: Deferred Orion Connect expansion
+
+- Repair provider-ready startup Play and stale Desktop context.
+- Replace the cursor presentation and reduce remaining pointer latency.
+- Add Mobile source selection from Desktop's live healthy-source catalog.
+- Add safe player-surface cursor ownership across default, fullscreen, mini, pop-out and local playback.
+- Complete the Mobile Companion Center and advanced device/status presentation.
+
+### Phase 12: Release validation
 
 - Clean-device installation.
 - Existing-profile upgrade.
 - Network interruption and offline tests.
-- Source/shield live tests.
+- Complete provider, shield, subtitle, player fitting and orientation matrices.
+- Low-end performance and memory validation.
+- Profile migration, conflicts and offline recovery.
+- Signed installation, update and rollback testing.
+- Notification permission, quiet-hours and deep-link testing.
+- Complete download candidate, fragment recovery, interruption, integrity, scoped-storage and offline-playback matrices.
 - Desktop/Mobile compatibility matrix.
 - Signed Android production build.
 
@@ -1479,6 +1585,22 @@ Set both packages to 3.0.0 only after the complete acceptance matrix passes.
 - Native APK/store update.
 - Interrupted and checksum-failed update.
 
+### Downloads and offline playback
+
+- Direct-file range download, pause/resume and server-without-range fallback.
+- HLS master/media playlist selection, AES-128 where authorized, fragment accounting and restart recovery.
+- DASH manifest selection, separate audio/video fragments and deterministic finalization.
+- Extensionless media and MIME-derived candidate detection.
+- Expired candidate, unreachable host, missing request context and unsupported/DRM diagnostics.
+- Provider-required headers, cookies, referer and user-agent remain job-scoped and never enter renderer state or logs.
+- App kill, process death, device reboot, Wi-Fi loss, metered-network policy, battery restriction and low-storage recovery.
+- Integrity verification, atomic completion, partial-file cleanup and honest failed/cancelled states.
+- Multiple audio tracks, embedded/captured/external subtitles, artwork and episode metadata where the source exposes them.
+- Offline movie and exact TV-episode playback, seeking, Resume, History, Continue Watching and watched state without network access.
+- Delete media, retain/remove metadata, repair missing files and reconcile externally removed storage.
+- Scoped-storage behavior on supported Android versions without broad legacy storage permission.
+- Queue and Offline Library layouts across compact phone, standard phone, tablet, landscape, 200% text, Reduced Motion and all six themes.
+
 ## 14. Orion 3.0 Release Gates
 
 Orion 3.0 is acceptable only when:
@@ -1498,6 +1620,9 @@ Orion 3.0 is acceptable only when:
 - Google profile restoration preserves Cinema and Music data without exposing credentials.
 - OTA updates cannot cross an incompatible native runtime.
 - Native updates verify signatures/checksums.
+- Mobile downloads resume honestly across interruption, verify integrity before completion and never expose captured request context.
+- Completed Mobile downloads play, seek and update Resume, History and Continue Watching while fully offline.
+- Downloaded media, partial fragments and machine-bound job state are excluded from portable cloud backups while portable metadata remains compatible.
 - Desktop and Mobile upgrade safely from 2.0.1 profiles.
 - Existing Desktop Cinema and Music behavior remains regression-free.
 

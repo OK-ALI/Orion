@@ -55,7 +55,15 @@ export interface ProviderRequestRule {
   id: string;
   kind: "advertisement" | "tracker" | "popup" | "unsafe-navigation";
   hostPattern: string;
+  includeSubdomains?: boolean;
   action: "block" | "observe";
+}
+
+export interface CinemaBlockRuleCatalogV1 {
+  id: string;
+  host: string;
+  includeSubdomains: boolean;
+  classification: "advertisement" | "tracker" | "popup";
 }
 
 export interface ProviderRequestManifestV1 {

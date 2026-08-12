@@ -1,7 +1,27 @@
 export const mobileAdBlockerScript = `
   (function() {
+    if (window.__orionCinemaCleanupInstalled) return true;
+    window.__orionCinemaCleanupInstalled = true;
     window.open = function() { return null; };
     window.alert = function() {};
+
+    function isExternal(anchor) {
+      try {
+        if (!anchor || !anchor.href) return false;
+        return new URL(anchor.href, location.href).origin !== location.origin;
+      } catch (_) { return true; }
+    }
+
+    function coversPlayer(element) {
+      try {
+        var style = getComputedStyle(element);
+        var rect = element.getBoundingClientRect();
+        var viewport = Math.max(1, innerWidth * innerHeight);
+        return (style.position === 'fixed' || style.position === 'absolute') &&
+          rect.width * rect.height > viewport * 0.55 &&
+          (Number(style.opacity || 1) < 0.08 || element.tagName === 'A');
+      } catch (_) { return false; }
+    }
 
     function removeAds() {
       var selectors = [
@@ -15,22 +35,41 @@ export const mobileAdBlockerScript = `
         "a[target='_blank'][style*='position: fixed']",
         "[class*='ad-overlay']",
         "[class*='popunder']",
-        "[class*='adblock-detector']"
+        "[class*='adblock-detector']",
+        "iframe[src*='gsbdom.click']",
+        "iframe[src*='popcash.net']",
+        "iframe[src*='exoclick.com']"
       ];
       document.querySelectorAll(selectors.join(',')).forEach(function(element) {
         element.remove();
       });
+      document.querySelectorAll('a[target="_blank"], a[href]').forEach(function(anchor) {
+        if ((isExternal(anchor) && coversPlayer(anchor)) || coversPlayer(anchor)) anchor.remove();
+      });
     }
 
-    document.addEventListener('DOMContentLoaded', removeAds);
-    setInterval(removeAds, 1000);
+    function installObserver() {
+      removeAds();
+      var remaining = 80;
+      var observer = new MutationObserver(function() {
+        removeAds();
+        remaining -= 1;
+        if (remaining <= 0) observer.disconnect();
+      });
+      observer.observe(document.documentElement || document.body, { childList: true, subtree: true, attributes: true });
+      setTimeout(function() { observer.disconnect(); }, 30000);
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installObserver, { once: true });
+    else installObserver();
     document.addEventListener('click', function(event) {
       var anchor = event.target && event.target.closest
-        ? event.target.closest('a[target="_blank"]')
+        ? event.target.closest('a')
         : null;
-      if (anchor) {
+      if (anchor && (anchor.target === '_blank' || isExternal(anchor))) {
         event.preventDefault();
         event.stopImmediatePropagation();
+        return false;
       } else if (window.ReactNativeWebView) {
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'TAP' }));
       }

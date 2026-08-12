@@ -9,23 +9,159 @@ export const MOBILE_PLAYER_SOURCES = PLAYER_SOURCES.filter(
   (source) => !source.async && !source.animeOnly,
 );
 
-/**
- * VidKing remains a selectable playback source, but its embedded player does
- * not currently apply a carried timestamp without a startup audio/time glitch.
- * Do not advertise it as a continuity target until that provider behavior is
- * verified again on a physical Android device.
- */
-export const MOBILE_CONTINUITY_DEFERRED_SOURCE_IDS = new Set(['vidking']);
+export type MobileContinuityMode =
+  | 'seamless'
+  | 'outgoing-only'
+  | 'resume-unverified'
+  | 'limited-resume'
+  | 'unpredictable'
+  | 'start-over-only';
 
+export interface MobileSourceContinuityCapability {
+  mode: MobileContinuityMode;
+  label: string;
+  shortLabel: string;
+  description: string;
+  canTrackProgress: boolean;
+  canTransferOut: boolean;
+  canReceivePosition: boolean;
+  automaticTarget: boolean;
+}
+
+const CAPABILITIES: Readonly<Record<string, MobileSourceContinuityCapability>> = Object.freeze({
+  videasy: Object.freeze({
+    mode: 'seamless',
+    label: 'Seamless Resume',
+    shortLabel: 'Seamless Resume',
+    description: 'Your place is saved here, and you can continue smoothly when switching to or from this source.',
+    canTrackProgress: true,
+    canTransferOut: true,
+    canReceivePosition: true,
+    automaticTarget: true,
+  }),
+  vidlink: Object.freeze({
+    mode: 'seamless',
+    label: 'Seamless Resume',
+    shortLabel: 'Seamless Resume',
+    description: 'Your place is saved here, and you can continue smoothly when switching to or from this source.',
+    canTrackProgress: true,
+    canTransferOut: true,
+    canReceivePosition: true,
+    automaticTarget: true,
+  }),
+  vixsrc: Object.freeze({
+    mode: 'seamless',
+    label: 'Seamless Resume',
+    shortLabel: 'Seamless Resume',
+    description: 'Your place is saved here, and you can continue smoothly when switching to or from this source.',
+    canTrackProgress: true,
+    canTransferOut: true,
+    canReceivePosition: true,
+    automaticTarget: true,
+  }),
+  vidsrc: Object.freeze({
+    mode: 'outgoing-only',
+    label: 'Tracks Progress',
+    shortLabel: 'Tracks Progress',
+    description: 'Orion saves where you stop here. You can continue from that point on another compatible source, but this source starts from the beginning when you switch to it.',
+    canTrackProgress: true,
+    canTransferOut: true,
+    canReceivePosition: false,
+    automaticTarget: false,
+  }),
+  vsembed: Object.freeze({
+    mode: 'outgoing-only',
+    label: 'Tracks Progress',
+    shortLabel: 'Tracks Progress',
+    description: 'Orion saves where you stop here. You can continue from that point on another compatible source, but this source starts from the beginning when you switch to it.',
+    canTrackProgress: true,
+    canTransferOut: true,
+    canReceivePosition: false,
+    automaticTarget: false,
+  }),
+  vidking: Object.freeze({
+    mode: 'limited-resume',
+    label: 'Limited Resume',
+    shortLabel: 'Limited Resume',
+    description: 'VidKing can usually continue near your saved place, but it may briefly jump while loading. Starting over may still use VidKing\'s own saved place.',
+    canTrackProgress: true,
+    canTransferOut: true,
+    canReceivePosition: true,
+    automaticTarget: false,
+  }),
+  '111movies': Object.freeze({
+    mode: 'seamless',
+    label: 'Seamless Resume',
+    shortLabel: 'Seamless Resume',
+    description: 'Your place is saved here, and you can continue smoothly when switching to or from this source.',
+    canTrackProgress: true,
+    canTransferOut: true,
+    canReceivePosition: true,
+    automaticTarget: true,
+  }),
+  autoembed: Object.freeze({
+    mode: 'unpredictable',
+    label: 'Unpredictable',
+    shortLabel: 'Unpredictable',
+    description: 'This source may be unavailable or fail to load. Resume and saved progress are not guaranteed.',
+    canTrackProgress: false,
+    canTransferOut: false,
+    canReceivePosition: false,
+    automaticTarget: false,
+  }),
+});
+
+const START_OVER_ONLY: MobileSourceContinuityCapability = Object.freeze({
+  mode: 'start-over-only',
+  label: 'Start Over Only',
+  shortLabel: 'Start Over',
+  description: 'This source starts from the beginning. Your current place stays saved for other compatible sources.',
+  canTrackProgress: false,
+  canTransferOut: false,
+  canReceivePosition: false,
+  automaticTarget: false,
+});
+
+export function getMobileSourceContinuityCapability(sourceId: string): MobileSourceContinuityCapability {
+  const explicit = CAPABILITIES[sourceId];
+  if (explicit) return explicit;
+  const source = getSource(sourceId);
+  if (source.resumeStrategy === 'none') return START_OVER_ONLY;
+  return {
+    mode: 'resume-unverified',
+    label: 'Resume May Vary',
+    shortLabel: 'Resume May Vary',
+    description: 'Resume behavior has not been confirmed for this source yet. You can try it, but it may start somewhere else.',
+    canTrackProgress: source.progressStrategy !== 'none',
+    canTransferOut: source.progressStrategy !== 'none',
+    canReceivePosition: true,
+    automaticTarget: false,
+  };
+}
+
+/**
+ * True only for sources Orion has physically accepted as automatic continuity
+ * targets. Manual source changes use mobileSourceCanReceiveContinuity.
+ */
 export function mobileSourceSupportsContinuity(sourceId: string): boolean {
-  if (MOBILE_CONTINUITY_DEFERRED_SOURCE_IDS.has(sourceId)) return false;
-  return getSource(sourceId).resumeStrategy !== 'none';
+  return getMobileSourceContinuityCapability(sourceId).automaticTarget;
+}
+
+export function mobileSourceCanReceiveContinuity(sourceId: string): boolean {
+  return getMobileSourceContinuityCapability(sourceId).canReceivePosition;
+}
+
+export function mobileSourceRequiresStartOver(sourceId: string): boolean {
+  return !getMobileSourceContinuityCapability(sourceId).canReceivePosition;
 }
 
 export function getPreferredMobileResumeSource(
   sourceId: string | null | undefined,
   mediaType: 'movie' | 'tv',
 ): string {
+  // Continue Watching must land on a physically verified incoming target. An
+  // outgoing-only source can still contribute its verified position, but Orion
+  // resumes that position through the default seamless source instead.
   if (!sourceId || !mobileSourceSupportsContinuity(sourceId)) return DEFAULT_CINEMA_SOURCE_ID;
   const source = MOBILE_PLAYER_SOURCES.find((entry) => entry.id === sourceId);
   const supportsMedia = mediaType === 'movie' ? source?.media.movie : source?.media.tv;

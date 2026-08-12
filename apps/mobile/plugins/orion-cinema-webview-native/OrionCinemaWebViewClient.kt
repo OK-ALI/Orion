@@ -20,11 +20,16 @@ import java.util.Locale
 class OrionCinemaWebViewClient : RNCWebViewClient() {
   private var manifest: ShieldManifest? = null
   private val pendingCounts = mutableMapOf<String, Int>()
+  private val pendingClassifications = mutableMapOf<String, Int>()
   private var latestDecision: ShieldDecision? = null
   private var flushScheduled = false
 
   fun setShieldManifest(serialized: String?) {
     manifest = ShieldManifest.parse(serialized)
+  }
+
+  fun recordPopupBlocked(view: WebView) {
+    emit(view, ShieldDecision("blocked", "popup", "native-popup-deny"))
   }
 
   override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -75,12 +80,18 @@ class OrionCinemaWebViewClient : RNCWebViewClient() {
 
   private fun classify(uri: Uri?, isMainFrame: Boolean, isPopup: Boolean): ShieldDecision {
     val current = manifest ?: return ShieldDecision("allow", "inactive", null)
+    val scheme = uri?.scheme?.lowercase(Locale.US).orEmpty()
+    val raw = uri?.toString().orEmpty()
+    if (raw == "about:blank") return ShieldDecision("allow", "navigation", null)
+    if (scheme != "http" && scheme != "https") {
+      return ShieldDecision("blocked", "unsafe-navigation", "scheme-deny")
+    }
     val host = uri?.host?.lowercase(Locale.US).orEmpty()
-    if (host.isEmpty()) return ShieldDecision("allow", "unknown", null)
+    if (host.isEmpty()) return ShieldDecision("blocked", "unsafe-navigation", "hostless-deny")
     val knownOrigin = current.allowedNavigationOrigins.any { originMatches(it, uri) }
     if (isPopup || (isMainFrame && !knownOrigin)) return ShieldDecision("blocked", "unsafe-navigation", null)
     if (current.requiredOrigins.any { originMatches(it, uri) }) return ShieldDecision("required-dependency", "required", null)
-    val classifiedRule = current.rules.firstOrNull { hostMatches(it.hostPattern, host) }
+    val classifiedRule = current.rules.firstOrNull { hostMatches(it, host) }
     if (classifiedRule != null) {
       // Observation mode preserves playback compatibility; only device-validated
       // enforce manifests may block subresources.
@@ -97,6 +108,8 @@ class OrionCinemaWebViewClient : RNCWebViewClient() {
     // a React render for every request.
     synchronized(this) {
       pendingCounts[decision.decision] = (pendingCounts[decision.decision] ?: 0) + 1
+      pendingClassifications[decision.classification] =
+        (pendingClassifications[decision.classification] ?: 0) + 1
       latestDecision = decision
       if (flushScheduled) return
       flushScheduled = true
@@ -104,10 +117,13 @@ class OrionCinemaWebViewClient : RNCWebViewClient() {
     view.post {
       view.postDelayed({
         val counts: Map<String, Int>
+        val classifications: Map<String, Int>
         val latest: ShieldDecision?
         synchronized(this) {
           counts = pendingCounts.toMap()
           pendingCounts.clear()
+          classifications = pendingClassifications.toMap()
+          pendingClassifications.clear()
           latest = latestDecision
           latestDecision = null
           flushScheduled = false
@@ -116,6 +132,7 @@ class OrionCinemaWebViewClient : RNCWebViewClient() {
           .put("decision", latest?.decision ?: "unknown")
           .put("classification", latest?.classification ?: "unknown")
           .put("counts", JSONObject(counts))
+          .put("classifications", JSONObject(classifications))
         if (latest?.ruleId != null) payload.put("ruleId", latest?.ruleId)
         val script = "window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(${JSONObject.quote(payload.toString())});true;"
         view.evaluateJavascript(script, null)
@@ -128,12 +145,19 @@ class OrionCinemaWebViewClient : RNCWebViewClient() {
     approved.scheme.equals(uri?.scheme, true) && approved.host.equals(uri?.host, true) && approved.port == uri?.port
   } catch (_: Exception) { false }
 
-  private fun hostMatches(pattern: String, host: String): Boolean = host == pattern || host.endsWith(".$pattern")
+  private fun hostMatches(rule: ShieldRule, host: String): Boolean =
+    host == rule.hostPattern || (rule.includeSubdomains && host.endsWith(".${rule.hostPattern}"))
   private fun isMediaPath(path: String?): Boolean = path?.contains(Regex("\\.(m3u8|mpd|m4s|ts|mp4|webm)(\\?|$)", RegexOption.IGNORE_CASE)) == true
   private fun isSubtitlePath(path: String?): Boolean = path?.contains(Regex("\\.(vtt|srt|ass|ssa)(\\?|$)", RegexOption.IGNORE_CASE)) == true
 }
 
-private data class ShieldRule(val id: String, val kind: String, val hostPattern: String, val action: String)
+private data class ShieldRule(
+  val id: String,
+  val kind: String,
+  val hostPattern: String,
+  val includeSubdomains: Boolean,
+  val action: String,
+)
 private data class ShieldManifest(
   val mode: String,
   val allowedNavigationOrigins: List<String>,
@@ -154,7 +178,13 @@ private data class ShieldManifest(
           val rule = ruleArray.optJSONObject(index) ?: return@mapNotNull null
           val id = rule.optString("id")
           val host = rule.optString("hostPattern")
-          if (id.isBlank() || host.isBlank()) null else ShieldRule(id, rule.optString("kind", "unknown"), host, rule.optString("action", "observe"))
+          if (id.isBlank() || host.isBlank()) null else ShieldRule(
+            id,
+            rule.optString("kind", "unknown"),
+            host.lowercase(Locale.US),
+            rule.optBoolean("includeSubdomains", false),
+            rule.optString("action", "observe"),
+          )
         }
         ShieldManifest(json.optString("mode", "observe"), strings("allowedNavigationOrigins"), strings("requiredOrigins"), strings("subtitleOrigins"), rules)
       }

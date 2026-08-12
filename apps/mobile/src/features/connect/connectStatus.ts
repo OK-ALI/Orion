@@ -10,6 +10,15 @@ export interface SmartConnectPlaybackStatus {
   canSeek?: boolean;
   observedAt?: number;
   bufferedTime?: number;
+  sessionId?: string;
+  sourceId?: string | null;
+  sourceLabel?: string;
+  controlState?: string;
+  controlStrategy?: string;
+  canPlay?: boolean;
+  canPause?: boolean;
+  canSkipPrevious?: boolean;
+  canSkipNext?: boolean;
 }
 
 export const IDLE_CONNECT_STATUS: SmartConnectPlaybackStatus = {
@@ -20,6 +29,8 @@ export const IDLE_CONNECT_STATUS: SmartConnectPlaybackStatus = {
   duration: 0,
   paused: false,
   hasMedia: false,
+  sourceLabel: 'Orion Desktop',
+  controlState: 'unavailable',
 };
 
 export function formatConnectTime(seconds: number): string {

@@ -4,6 +4,7 @@
 const { URL } = require("url");
 const blockStats = require("../ipc/blockStatsIpc");
 const { addCandidate } = require("../downloader/streamCandidates");
+const { toElectronBlockedPatterns } = require("@orion/shared/cinema-block-rules");
 
 const BLOCKED_HOSTS = [
   // ── Google analytics / ads ──
@@ -71,6 +72,13 @@ const BLOCKED_HOSTS = [
   "*://unpkg.com/disable-devtool*",
   "*://cdn.jsdelivr.net/npm/disable-devtool*",
 ];
+
+// Desktop and Mobile share the same host catalog. Keep Desktop-only path
+// patterns above (for example anti-devtool scripts) while deduplicating the
+// common coverage here.
+for (const pattern of toElectronBlockedPatterns()) {
+  if (!BLOCKED_HOSTS.includes(pattern)) BLOCKED_HOSTS.push(pattern);
+}
 
 function setupSession(playerSession, trailerSession, getMainWindow) {
   const mediaRequestContexts = new Map();

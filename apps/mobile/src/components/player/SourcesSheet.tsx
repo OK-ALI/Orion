@@ -1,15 +1,15 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, Platform, ScrollView, useWindowDimensions } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { accent, radii, spacing } from '@orion/shared/tokens';
+import { radii, spacing } from '@orion/shared/tokens';
 import { getMobileSourceHealthV2 } from '../../services/sourceHealth';
 import { useOrionTheme } from '../../context/ThemeContext';
-import { MOBILE_PLAYER_SOURCES } from '../../features/playback/mobileSources';
-import type {
-  EmbeddedSubtitleTrackV1,
-  ShieldVerificationState,
-  SubtitleDiscoveryState,
-} from '@orion/shared/types';
+import {
+  MOBILE_PLAYER_SOURCES,
+  getMobileSourceContinuityCapability,
+} from '../../features/playback/mobileSources';
+import type { EmbeddedSubtitleTrackV1, ShieldVerificationState, SubtitleDiscoveryState } from '@orion/shared/types';
 
 interface SourcesSheetProps {
   currentSourceId: string;
@@ -28,462 +28,239 @@ interface SourcesSheetProps {
   onFindExternalSubtitles?: () => void;
 }
 
-// Rich Source Metadata & Labels
-const SOURCE_DETAILS: Record<string, { label: string; badge: string; badgeColor: string }> = {
-  videasy: { label: 'VidEasy Ultra', badge: 'FAST • 1080p', badgeColor: '#10b981' },
-  vidsrc: { label: 'VidSrc Primary', badge: 'RECOMMENDED', badgeColor: '#67e8f9' },
-  vidking: { label: 'VidKing Cinema', badge: 'HIGH SPEED', badgeColor: '#3b82f6' },
-  vidlink: { label: 'VidLink Engine', badge: 'EXP', badgeColor: '#f59e0b' },
-  autoembed: { label: 'AutoEmbed Direct', badge: 'MULTI-HOST', badgeColor: '#a855f7' },
-  vsembed: { label: 'VSEmbed Stream', badge: 'STABLE', badgeColor: '#10b981' },
-  '111movies': { label: '111Movies Server', badge: 'EXP', badgeColor: '#f59e0b' },
-  vixsrc: { label: 'VixSrc Stream', badge: 'EXP', badgeColor: '#f59e0b' },
-  allmanga: { label: 'AllManga Anime', badge: 'ANIME SPECIAL', badgeColor: '#ec4899' },
+const DISPLAY_NAMES: Record<string, string> = {
+  videasy: 'Videasy', vidsrc: 'VidSrc', vidking: 'VidKing', vidlink: 'VidLink',
+  autoembed: 'AutoEmbed', vsembed: 'VsEmbed', '111movies': '111Movies', vixsrc: 'VixSrc',
 };
 
-export function SourcesSheet({
-  currentSourceId,
-  onSelect,
-  onRetry,
-  onClose,
-  mediaType = 'movie',
-  shieldState = 'limited',
-  blockedRequests = 0,
-  allowedDependencies = 0,
-  subtitleState = 'idle',
-  subtitleCount = 0,
-  subtitleTracks = [],
-  selectedSubtitleId = null,
-  onSelectSubtitle,
-  onFindExternalSubtitles,
-}: SourcesSheetProps) {
+const protectionLabel = (state: ShieldVerificationState) => ({
+  verified: 'Protected', failed: 'Protection issue', disabled: 'Protection off',
+  unavailable: 'Protection unavailable', 'dependency-allowed': 'Protection active',
+  limited: 'Protection limited',
+}[state] || 'Protection limited');
+
+const playbackStatusLabel = (state: string | null | undefined, cooling = false) => {
+  if (cooling) return 'Try again shortly';
+  return ({
+    ready: 'Playing normally',
+    slow: 'Starting slowly',
+    limited: 'May be limited',
+    failed: 'Having trouble',
+    unknown: 'Checking source',
+  } as Record<string, string>)[state || 'unknown'] || 'Available';
+};
+
+export function SourcesSheet(props: SourcesSheetProps) {
+  const {
+    currentSourceId, onSelect, onRetry, onClose, mediaType = 'movie', shieldState = 'limited',
+    blockedRequests = 0, allowedDependencies = 0, subtitleState = 'idle', subtitleCount = 0,
+    subtitleTracks = [], selectedSubtitleId = null, onSelectSubtitle, onFindExternalSubtitles,
+  } = props;
   const { width, height } = useWindowDimensions();
-  const isLandscape = width > height;
+  const insets = useSafeAreaInsets();
   const { theme } = useOrionTheme();
-  const activeSource = MOBILE_PLAYER_SOURCES.find((source) => source.id === currentSourceId);
-  const activeHealth = getMobileSourceHealthV2(currentSourceId, mediaType);
-  const activeResume = activeSource?.resumeStrategy && activeSource.resumeStrategy !== 'none'
-    ? 'Position support available'
-    : 'Position support unavailable';
-  const activeTelemetry = activeHealth?.telemetrySupport === 'observable'
-    ? 'Timing available'
-    : activeHealth?.telemetrySupport === 'unobservable'
-      ? 'Timing unavailable'
-      : 'Timing not verified yet';
-  const activeSubtitles = activeHealth?.subtitleSupport === 'available'
-    ? 'Provider subtitles available'
-    : activeSource?.supportsExternalSubtitles
-      ? 'External subtitles available'
-      : 'Subtitle support not verified';
+  const wide = width >= 700 || width > height;
+  const [detailsOpen, setDetailsOpen] = useState(wide);
+  const active = MOBILE_PLAYER_SOURCES.find((source) => source.id === currentSourceId);
+  const health = getMobileSourceHealthV2(currentSourceId, mediaType);
+  const sourceName = DISPLAY_NAMES[currentSourceId] || active?.label || 'Selected source';
+  const activeContinuity = getMobileSourceContinuityCapability(currentSourceId);
+  const healthLabel = playbackStatusLabel(health?.state);
+  const subtitleLabel = health?.subtitleSupport === 'available' || subtitleCount > 0
+    ? 'Subtitles available'
+    : active?.supportsExternalSubtitles ? 'More subtitles available' : 'Subtitles may vary';
+  const timingLabel = health?.telemetrySupport === 'observable'
+    ? 'Progress saving ready'
+    : health?.telemetrySupport === 'unobservable' ? 'Progress saving unavailable' : 'Checking progress saving';
+
+  const sourceList = (
+    <ScrollView style={styles.sourceScroll} contentContainerStyle={styles.sourceList} showsVerticalScrollIndicator={false}>
+      {MOBILE_PLAYER_SOURCES.map((source) => {
+        const selected = source.id === currentSourceId;
+        const runtime = getMobileSourceHealthV2(source.id, mediaType);
+        const supported = mediaType === 'movie' ? source.media.movie : source.media.tv;
+        const cooling = Boolean(runtime?.cooldownUntil && runtime.cooldownUntil > Date.now());
+        const status = playbackStatusLabel(runtime?.state, cooling);
+        const continuity = getMobileSourceContinuityCapability(source.id);
+        const continuityTone = continuity.mode === 'seamless'
+          ? theme.success
+          : continuity.mode === 'outgoing-only' || continuity.mode === 'limited-resume' || continuity.mode === 'unpredictable'
+            ? theme.warning
+            : theme.textSecondary;
+        return (
+          <Pressable
+            key={source.id}
+            disabled={!supported}
+            accessibilityRole="button"
+            accessibilityLabel={`${DISPLAY_NAMES[source.id] || source.label}. ${continuity.label}. ${status}.`}
+            accessibilityHint={continuity.description}
+            accessibilityState={{ selected, disabled: !supported }}
+            onPress={() => { onSelect(source.id); onClose(); }}
+            style={({ pressed }) => [
+              styles.sourceRow,
+              { backgroundColor: selected ? theme.accentSoft : theme.surface, borderColor: selected ? theme.accent : theme.border },
+              !supported && styles.disabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            <View style={[styles.sourceIcon, { backgroundColor: selected ? theme.accent : theme.elevated, borderColor: selected ? theme.accent : theme.border }]}>
+              <Ionicons name={selected ? 'play' : 'hardware-chip-outline'} size={17} color={selected ? theme.onAccent : theme.textSecondary} />
+            </View>
+            <View style={styles.sourceCopy}>
+              <View style={styles.sourceNameRow}>
+                <Text numberOfLines={1} style={[styles.sourceName, { color: theme.text }]}>{DISPLAY_NAMES[source.id] || source.label}</Text>
+                <View style={[styles.continuityBadge, { borderColor: continuityTone }]}>
+                  <Text numberOfLines={1} style={[styles.continuityBadgeText, { color: continuityTone }]}>{continuity.shortLabel}</Text>
+                </View>
+              </View>
+              <Text numberOfLines={1} style={[styles.sourceStatus, { color: runtime?.state === 'failed' ? theme.danger : theme.textSecondary }]}>{status}</Text>
+            </View>
+            <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={21} color={selected ? theme.accent : theme.textSecondary} />
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+
+  const details = (
+    <ScrollView style={styles.detailsScroll} contentContainerStyle={styles.detailsBody} showsVerticalScrollIndicator={false}>
+      <View style={[styles.detailCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <Text style={[styles.detailTitle, { color: theme.text }]}>{protectionLabel(shieldState)}</Text>
+        <Text style={[styles.detailText, { color: theme.textSecondary }]}>
+          {blockedRequests > 0 ? `${blockedRequests} unwanted connection${blockedRequests === 1 ? '' : 's'} blocked` : 'Protection is active while you watch.'}
+        </Text>
+        {allowedDependencies > 0 && <Text style={[styles.detailText, { color: theme.textSecondary }]}>Playback connections needed by this source are allowed</Text>}
+      </View>
+      <View style={[styles.detailCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <Text style={[styles.detailTitle, { color: theme.text }]}>Resume & progress</Text>
+        <Text style={[
+          styles.detailTextStrong,
+          { color: activeContinuity.mode === 'seamless' ? theme.success : activeContinuity.mode === 'outgoing-only' || activeContinuity.mode === 'limited-resume' || activeContinuity.mode === 'unpredictable' || activeContinuity.mode === 'start-over-only' ? theme.warning : theme.textSecondary },
+        ]}>{activeContinuity.label}</Text>
+        <View style={styles.capabilityList}>
+          <Text style={[styles.capabilityLine, { color: activeContinuity.canTrackProgress ? theme.text : theme.textMuted }]}>
+            {activeContinuity.canTrackProgress ? '✓' : '–'} Saves your place
+          </Text>
+          <Text style={[styles.capabilityLine, { color: activeContinuity.canTransferOut ? theme.text : theme.textMuted }]}>
+            {activeContinuity.canTransferOut ? '✓' : '–'} Continue on another source
+          </Text>
+          <Text style={[styles.capabilityLine, { color: activeContinuity.mode === 'limited-resume' ? theme.warning : activeContinuity.canReceivePosition ? theme.text : theme.textMuted }]}>
+            {activeContinuity.mode === 'limited-resume' ? '⚠' : activeContinuity.canReceivePosition ? '✓' : '✕'} Continue here from another source
+          </Text>
+        </View>
+        <Text style={[styles.detailText, { color: theme.textSecondary }]}>{activeContinuity.description}</Text>
+        <Text style={[styles.detailMeta, { color: theme.textMuted }]}>{timingLabel} · {subtitleLabel}</Text>
+        {health?.lastFailure && <Text numberOfLines={2} style={[styles.detailText, { color: theme.warning }]}>This source had trouble recently. Try again if playback doesn't start.</Text>}
+      </View>
+      {onRetry && (
+        <Pressable onPress={onRetry} style={({ pressed }) => [styles.outlineAction, { borderColor: theme.accent }, pressed && styles.pressed]}>
+          <Ionicons name="refresh-outline" size={17} color={theme.accent} />
+          <Text style={[styles.actionText, { color: theme.accent }]}>Try again</Text>
+        </Pressable>
+      )}
+      <View style={[styles.detailCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <Text style={[styles.detailTitle, { color: theme.text }]}>Subtitles</Text>
+        <Text style={[styles.detailText, { color: theme.textSecondary }]}>
+          {subtitleState === 'discovering' ? 'Finding subtitles…' : subtitleCount > 0 ? `${subtitleCount} subtitle track${subtitleCount === 1 ? '' : 's'} available` : subtitleLabel}
+        </Text>
+        {subtitleTracks.slice(0, 4).map((track) => {
+          const selected = track.id === selectedSubtitleId;
+          return (
+            <Pressable
+              key={track.id}
+              disabled={!onSelectSubtitle || track.availability === 'unavailable'}
+              onPress={() => onSelectSubtitle?.(track.id)}
+              style={({ pressed }) => [styles.subtitleRow, { borderColor: selected ? theme.accent : theme.border }, pressed && styles.pressed]}
+            >
+              <Text numberOfLines={1} style={[styles.subtitleName, { color: theme.text }]}>{track.label}</Text>
+              <Ionicons name={selected ? 'checkmark-circle' : 'add-circle-outline'} size={19} color={selected ? theme.accent : theme.textSecondary} />
+            </Pressable>
+          );
+        })}
+        {onFindExternalSubtitles && (
+          <Pressable disabled={subtitleState === 'discovering'} onPress={onFindExternalSubtitles} style={({ pressed }) => [styles.inlineAction, pressed && styles.pressed]}>
+            <Text style={[styles.actionText, { color: theme.accent }]}>{subtitleState === 'discovering' ? 'Searching…' : 'Find more subtitles'}</Text>
+          </Pressable>
+        )}
+      </View>
+    </ScrollView>
+  );
 
   return (
-    <View style={[styles.overlay, isLandscape && styles.overlayLandscape]}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheetContent, { backgroundColor: theme.elevated, borderColor: theme.border }, isLandscape && styles.sheetContentLandscape]}>
-        {/* Top Handle */}
-        <View style={styles.handle} />
-
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTitleRow}>
-            <Ionicons name="server-outline" size={18} color={theme.accent} />
+    <View style={[styles.overlay, wide && styles.overlayWide]}>
+      <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: theme.mediaScrim }]} onPress={onClose} />
+      <View style={[
+        styles.sheet,
+        { backgroundColor: theme.elevated, borderColor: theme.border, paddingBottom: Math.max(insets.bottom, 12) },
+        wide && styles.sheetWide,
+      ]}>
+        {!wide && <View style={[styles.handle, { backgroundColor: theme.border }]} />}
+        <View style={[styles.header, { borderBottomColor: theme.border }]}>
+          <View style={styles.headerCopy}>
             <Text style={[styles.title, { color: theme.text }]}>Streaming Servers</Text>
+            <Text numberOfLines={1} style={[styles.currentLine, { color: theme.textSecondary }]}>{sourceName} · {protectionLabel(shieldState)} · {healthLabel}</Text>
           </View>
-
-          <Pressable onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={18} color={theme.text} />
+          <Pressable accessibilityLabel="Close streaming servers" onPress={onClose} style={[styles.close, { backgroundColor: theme.surface }]}>
+            <Ionicons name="close" size={22} color={theme.text} />
           </Pressable>
         </View>
-
-        {/* Compact Sources List */}
-        <View style={[styles.evidence, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.evidenceTitle, { color: theme.text }]}>
-            {shieldState === 'verified'
-              ? 'Protected'
-              : shieldState === 'failed'
-                ? 'Rule problem'
-                : shieldState === 'disabled'
-                  ? 'Protection disabled'
-                  : shieldState === 'unavailable'
-                    ? 'Protection unavailable'
-                  : shieldState === 'dependency-allowed'
-                    ? 'Required playback request allowed'
-                  : 'Limited protection'}
-          </Text>
-          <Text style={[styles.evidenceText, { color: theme.textSecondary }]}>
-            {blockedRequests > 0 ? `${blockedRequests} unwanted request${blockedRequests === 1 ? '' : 's'} blocked` : 'Watching required playback requests'}
-            {allowedDependencies > 0 ? ` · ${allowedDependencies} required request${allowedDependencies === 1 ? '' : 's'} allowed` : ''}
-          </Text>
+        {!wide && (
+          <Pressable onPress={() => setDetailsOpen((value) => !value)} style={[styles.detailsToggle, { borderBottomColor: theme.border }]}>
+            <Text style={[styles.toggleText, { color: theme.text }]}>Source details</Text>
+            <Ionicons name={detailsOpen ? 'chevron-up' : 'chevron-down'} size={18} color={theme.textSecondary} />
+          </Pressable>
+        )}
+        <View style={[styles.content, wide && styles.contentWide]}>
+          <View style={[styles.listPane, wide && { borderRightColor: theme.border }]}>{sourceList}</View>
+          {(wide || detailsOpen) && <View style={[styles.detailsPane, !wide && styles.detailsPanePhone]}>{details}</View>}
         </View>
-
-        <View style={[styles.activeSummary, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={[styles.activeSummaryTitle, { color: theme.text }]} numberOfLines={1}>
-            {activeSource?.label || 'Selected source'}
-          </Text>
-          <Text style={[styles.activeSummaryDetail, { color: theme.textSecondary }]} numberOfLines={2}>
-            {activeTelemetry} / {activeResume} / {activeSubtitles}
-          </Text>
-          {activeHealth?.lastFailure && (
-            <Text style={[styles.activeSummaryWarning, { color: theme.warning || theme.accent }]} numberOfLines={1}>
-              Last issue: {activeHealth.lastFailure.replace(/-/g, ' ')}
-            </Text>
-          )}
-        </View>
-        {onRetry && (
-          <View style={styles.recoveryActions}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Retry selected streaming source"
-              onPress={onRetry}
-              style={({ pressed }) => [styles.retryAction, { borderColor: theme.accent }, pressed && { opacity: 0.76 }]}
-            >
-              <Ionicons name="refresh-outline" size={14} color={theme.accent} />
-              <Text style={[styles.retryActionText, { color: theme.accent }]}>Retry source</Text>
-            </Pressable>
-          </View>
-        )}
-
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
-          {MOBILE_PLAYER_SOURCES.map((source) => {
-            const isActive = source.id === currentSourceId;
-            const runtimeHealth = getMobileSourceHealthV2(source.id, mediaType);
-            const isCoolingDown = Boolean(runtimeHealth?.cooldownUntil && runtimeHealth.cooldownUntil > Date.now());
-            const supportsMedia = mediaType === 'movie' ? source.media.movie : source.media.tv;
-            const meta = SOURCE_DETAILS[source.id] || {
-              label: source.id.toUpperCase(),
-              badge: source.health === 'experimental' ? 'EXP' : 'STABLE',
-              badgeColor: '#f59e0b',
-            };
-
-            return (
-              <Pressable
-                key={source.id}
-                disabled={!supportsMedia}
-                style={({ pressed }) => [
-                  styles.sourceRow,
-                  { backgroundColor: theme.surface, borderColor: theme.border },
-                  isActive && { backgroundColor: theme.accentSoft, borderColor: theme.accent },
-                  !supportsMedia && styles.disabledRow,
-                  pressed && { opacity: 0.85 },
-                ]}
-                onPress={() => {
-                  onSelect(source.id);
-                  onClose();
-                }}
-              >
-                {/* Left Icon + Title */}
-                <View style={styles.leftCol}>
-                  <View style={[
-                    styles.iconContainer,
-                    { backgroundColor: theme.elevated, borderColor: theme.border },
-                    isActive && { backgroundColor: theme.accent, borderColor: theme.accent },
-                  ]}>
-                    <Ionicons 
-                      name={isActive ? "play" : "hardware-chip-outline"} 
-                      size={14} 
-                      color={isActive ? theme.onAccent : theme.textSecondary}
-                    />
-                  </View>
-
-                  <View style={styles.nameCol}>
-                    <Text style={[styles.sourceName, { color: isActive ? theme.text : theme.textSecondary }, isActive && styles.activeText]}>
-                      {meta.label}
-                    </Text>
-
-                    <View style={styles.badgeRow}>
-                      <View style={[styles.badge, { backgroundColor: `${meta.badgeColor}22`, borderColor: `${meta.badgeColor}55` }]}>
-                        <Text style={[styles.badgeText, { color: meta.badgeColor }]}>{meta.badge}</Text>
-                      </View>
-                      {runtimeHealth?.state && runtimeHealth.state !== 'unknown' && (
-                        <Text style={[
-                          styles.healthText,
-                          runtimeHealth.state === 'failed' && { color: theme.danger },
-                        ]}>
-                          {isCoolingDown ? 'Cooling down' : runtimeHealth.state}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                </View>
-
-                {/* Right Selection Radio / Checkmark */}
-                {isActive ? (
-                  <View style={[styles.activeCheckPill, { backgroundColor: theme.accent }]}>
-                    <Ionicons name="checkmark-circle" size={14} color={theme.onAccent} />
-                    <Text style={styles.activePillText}>ACTIVE</Text>
-                  </View>
-                ) : (
-                  <View style={[styles.unselectedDot, { borderColor: theme.border }]} />
-                )}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-        {subtitleTracks.length > 0 && (
-          <View style={[styles.subtitleTracks, { borderTopColor: theme.border }]}>
-            {subtitleTracks.slice(0, 3).map((track) => {
-              const selected = track.id === selectedSubtitleId;
-              return (
-                <Pressable
-                  key={track.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Use ${track.label} subtitles`}
-                  disabled={!onSelectSubtitle || track.availability === 'unavailable'}
-                  onPress={() => onSelectSubtitle?.(track.id)}
-                  style={({ pressed }) => [
-                    styles.subtitleTrack,
-                    { backgroundColor: selected ? theme.accentSoft : theme.surface, borderColor: selected ? theme.accent : theme.border },
-                    pressed && { opacity: 0.76 },
-                  ]}
-                >
-                  <View style={styles.subtitleTrackCopy}>
-                    <Text numberOfLines={1} style={[styles.subtitleTrackLabel, { color: theme.text }]}>{track.label}</Text>
-                    <Text numberOfLines={1} style={[styles.subtitleTrackMeta, { color: theme.textSecondary }]}>
-                      {track.language.toUpperCase()} / {track.discoveryMethod === 'external' ? 'Orion fallback' : 'Provider track'}
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name={selected ? 'checkmark-circle' : 'add-circle-outline'}
-                    size={18}
-                    color={selected ? theme.accent : theme.textSecondary}
-                  />
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
-        {onFindExternalSubtitles && (
-          <View style={[styles.subtitleFooter, { borderTopColor: theme.border }]}>
-            <View style={styles.subtitleCopy}>
-              <Text style={[styles.subtitleTitle, { color: theme.text }]}>Subtitles</Text>
-              <Text style={[styles.subtitleDetail, { color: theme.textSecondary }]}>
-                {subtitleState === 'discovering'
-                  ? 'Finding subtitle tracks…'
-                  : subtitleCount > 0
-                    ? `${subtitleCount} track${subtitleCount === 1 ? '' : 's'} available or detected`
-                    : 'Find external subtitle tracks when this source has none.'}
-              </Text>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Find external subtitles"
-              disabled={subtitleState === 'discovering'}
-              onPress={onFindExternalSubtitles}
-              style={({ pressed }) => [styles.subtitleAction, { borderColor: theme.accent }, pressed && { opacity: 0.76 }]}
-            >
-              <Text style={[styles.subtitleActionText, { color: theme.accent }]}>
-                {subtitleState === 'discovering' ? 'Searching' : 'Find'}
-              </Text>
-            </Pressable>
-          </View>
-        )}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFill,
-    justifyContent: 'flex-end',
-    zIndex: 1000,
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-  },
-  sheetContent: {
-    backgroundColor: '#0d0d16',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: 'hidden',
-    maxHeight: '60%',
-    paddingBottom: Platform.OS === 'ios' ? 30 : 16,
-    borderTopWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-  },
-  sheetContentLandscape: {
-    width: 400,
-    alignSelf: 'center',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    borderWidth: 1,
-    maxHeight: '80%',
-    paddingBottom: 16,
-  },
-  overlayLandscape: {
-    justifyContent: 'center',
-  },
-  handle: {
-    width: 32,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    alignSelf: 'center',
-    marginTop: 8,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  title: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-  },
-  closeBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  list: {
-    padding: spacing[3],
-    gap: 6,
-  },
-  evidence: {
-    marginHorizontal: spacing[3],
-    marginTop: 2,
-    paddingHorizontal: spacing[3],
-    paddingVertical: 9,
-    borderRadius: radii.md,
-    borderWidth: 1,
-  },
-  evidenceTitle: { fontSize: 12, fontWeight: '800' },
-  evidenceText: { marginTop: 2, fontSize: 11, lineHeight: 16 },
-  activeSummary: {
-    marginHorizontal: spacing[3],
-    marginTop: 8,
-    paddingHorizontal: spacing[3],
-    paddingVertical: 9,
-    borderRadius: radii.md,
-    borderWidth: 1,
-  },
-  activeSummaryTitle: { fontSize: 12, fontWeight: '800' },
-  activeSummaryDetail: { marginTop: 2, fontSize: 10, lineHeight: 15 },
-  activeSummaryWarning: { marginTop: 4, fontSize: 10, fontWeight: '700', textTransform: 'capitalize' },
-  recoveryActions: { flexDirection: 'row', paddingHorizontal: spacing[3], paddingTop: 8 },
-  retryAction: { minHeight: 36, paddingHorizontal: 12, gap: 6, borderRadius: radii.full, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  retryActionText: { fontSize: 12, fontWeight: '800' },
-  subtitleFooter: {
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: spacing[3],
-    paddingTop: 10,
-  },
-  subtitleTracks: { borderTopWidth: 1, paddingHorizontal: spacing[3], paddingTop: 8, gap: 6 },
-  subtitleTrack: { minHeight: 44, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  subtitleTrackCopy: { flex: 1, minWidth: 0 },
-  subtitleTrackLabel: { fontSize: 12, fontWeight: '700' },
-  subtitleTrackMeta: { marginTop: 1, fontSize: 10 },
-  subtitleCopy: { flex: 1 },
-  subtitleTitle: { fontSize: 12, fontWeight: '800' },
-  subtitleDetail: { marginTop: 2, fontSize: 10, lineHeight: 14 },
-  subtitleAction: { minWidth: 64, minHeight: 36, paddingHorizontal: 12, borderRadius: radii.full, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
-  subtitleActionText: { fontSize: 12, fontWeight: '800' },
-  sourceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing[3],
-    paddingVertical: 8,
-    borderRadius: radii.lg,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  activeRow: {
-    backgroundColor: 'rgba(229, 9, 20, 0.16)',
-    borderColor: accent.primary,
-  },
-  disabledRow: {
-    opacity: 0.48,
-  },
-  leftCol: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  iconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  activeIconContainer: {
-    backgroundColor: accent.primary,
-    borderColor: accent.primary,
-  },
-  nameCol: {
-    gap: 2,
-  },
-  sourceName: {
-    color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  activeText: {
-    color: '#ffffff',
-    fontWeight: '800',
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  healthText: { color: 'rgba(255,255,255,0.55)', fontSize: 9, textTransform: 'uppercase', fontWeight: '700' },
-  healthFailed: { color: '#f87171' },
-  badge: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: radii.full,
-    borderWidth: 1,
-  },
-  badgeText: {
-    fontSize: 8,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-  },
-  activeCheckPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: accent.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radii.full,
-  },
-  activePillText: {
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
-  unselectedDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-  },
+  overlay: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', zIndex: 1000 },
+  overlayWide: { justifyContent: 'center', alignItems: 'center' },
+  sheet: { width: '100%', height: '78%', maxHeight: '86%', borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, overflow: 'hidden' },
+  sheetWide: { width: '86%', height: '78%', maxWidth: 980, borderRadius: 24 },
+  handle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 8 },
+  header: { minHeight: 68, paddingHorizontal: spacing[4], flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1 },
+  headerCopy: { flex: 1, minWidth: 0 },
+  title: { fontSize: 19, fontWeight: '800' },
+  currentLine: { marginTop: 3, fontSize: 12 },
+  close: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  detailsToggle: { minHeight: 46, paddingHorizontal: spacing[4], flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1 },
+  toggleText: { fontSize: 14, fontWeight: '700' },
+  content: { flex: 1, minHeight: 0 },
+  contentWide: { flexDirection: 'row' },
+  listPane: { flex: 1, minWidth: 0 },
+  detailsPane: { flex: 1, minWidth: 0 },
+  detailsPanePhone: { flex: 0, maxHeight: '46%' },
+  sourceScroll: { flex: 1 },
+  sourceList: { padding: spacing[3], gap: 8 },
+  sourceRow: { minHeight: 58, borderRadius: radii.lg, borderWidth: 1, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sourceIcon: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  sourceCopy: { flex: 1, minWidth: 0 },
+  sourceNameRow: { flexDirection: 'row', alignItems: 'center', gap: 7, minWidth: 0 },
+  sourceName: { fontSize: 14, fontWeight: '800', flexShrink: 1 },
+  continuityBadge: { borderWidth: 1, borderRadius: radii.full, paddingHorizontal: 7, paddingVertical: 2, maxWidth: 126 },
+  continuityBadgeText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.2 },
+  sourceStatus: { marginTop: 2, fontSize: 11, textTransform: 'capitalize' },
+  disabled: { opacity: 0.45 },
+  pressed: { opacity: 0.72 },
+  detailsScroll: { flex: 1 },
+  detailsBody: { padding: spacing[3], gap: 10 },
+  detailCard: { borderWidth: 1, borderRadius: radii.lg, padding: 12, gap: 4 },
+  detailTitle: { fontSize: 14, fontWeight: '800' },
+  detailText: { fontSize: 12, lineHeight: 17, textTransform: 'none' },
+  detailMeta: { fontSize: 10, lineHeight: 15, marginTop: 2 },
+  detailTextStrong: { fontSize: 12, lineHeight: 17, fontWeight: '900' },
+  capabilityList: { gap: 2, marginTop: 2, marginBottom: 2 },
+  capabilityLine: { fontSize: 11, lineHeight: 16, fontWeight: '700' },
+  outlineAction: { minHeight: 44, borderRadius: radii.full, borderWidth: 1, paddingHorizontal: 14, flexDirection: 'row', gap: 7, alignItems: 'center', justifyContent: 'center' },
+  actionText: { fontSize: 13, fontWeight: '800' },
+  subtitleRow: { minHeight: 44, marginTop: 5, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  subtitleName: { flex: 1, fontSize: 12, fontWeight: '700' },
+  inlineAction: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
 });

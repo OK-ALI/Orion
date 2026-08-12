@@ -594,16 +594,54 @@ ol {
   position: fixed;
   top: 0;
   left: 0;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #ff4d4d 0%, #e50914 70%, rgba(229, 9, 20, 0) 100%);
-  box-shadow: 0 0 16px #e50914, 0 0 32px rgba(229, 9, 20, 0.8);
+  width: 1px;
+  height: 1px;
   pointer-events: none;
   z-index: 999999;
   will-change: transform;
-  transform: translate3d(-50%, -50%, 0);
   transition: opacity 0.15s ease;
+}
+
+.orion-virtual-cursor__glyph {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  width: 24px;
+  height: 30px;
+  background: var(--accent, var(--primary));
+  clip-path: polygon(5% 0, 82% 57%, 53% 60%, 69% 93%, 53% 100%, 36% 65%, 15% 87%);
+  filter: drop-shadow(0 2px 2px var(--shadow-color)) drop-shadow(0 0 6px var(--accent-soft));
+  transform-origin: 3px 3px;
+  transition: transform 100ms ease, filter 120ms ease;
+}
+
+.orion-virtual-cursor[data-kind="interactive"]::before {
+  content: "";
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  left: -14px;
+  top: -14px;
+  border: 2px solid var(--focus-ring, var(--accent));
+  border-radius: 50%;
+  background: var(--accent-soft);
+  box-shadow: 0 0 14px var(--accent-soft);
+}
+
+.orion-virtual-cursor[data-kind="text"] .orion-virtual-cursor__glyph {
+  width: 5px;
+  height: 26px;
+  clip-path: polygon(0 0, 100% 0, 100% 12%, 70% 12%, 70% 88%, 100% 88%, 100% 100%, 0 100%, 0 88%, 30% 88%, 30% 12%, 0 12%);
+}
+
+.orion-virtual-cursor.is-pressed .orion-virtual-cursor__glyph {
+  transform: scale(0.78);
+  filter: drop-shadow(0 0 9px var(--focus-ring, var(--accent)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orion-virtual-cursor,
+  .orion-virtual-cursor__glyph { transition: none; }
 }
 
 .source-dropdown__tag {

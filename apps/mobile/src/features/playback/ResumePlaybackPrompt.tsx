@@ -3,19 +3,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { radii, spacing } from '@orion/shared/tokens';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { formatPlaybackTime, type ResumePlaybackChoice } from './resumeChoice';
+import type { MobileContinuityMode } from './mobileSources';
 
 export function ResumePlaybackPrompt({
   title,
   savedTime,
   targetSourceLabel = null,
-  resumeRestricted = false,
+  continuityMode = 'seamless',
   onChoose,
   onCancel,
 }: {
   title: string;
   savedTime: number;
   targetSourceLabel?: string | null;
-  resumeRestricted?: boolean;
+  continuityMode?: MobileContinuityMode;
   onChoose: (choice: ResumePlaybackChoice) => void;
   onCancel: () => void;
 }) {
@@ -23,7 +24,39 @@ export function ResumePlaybackPrompt({
   const { width, height } = useWindowDimensions();
   const switching = Boolean(targetSourceLabel);
   const compactLandscape = width > height && height < 600;
-  const sourceName = targetSourceLabel || 'VidKing';
+  const sourceName = targetSourceLabel || 'This source';
+  const unpredictable = continuityMode === 'unpredictable';
+  const resumeRestricted = continuityMode === 'outgoing-only' || continuityMode === 'start-over-only' || unpredictable;
+  const limitedResume = continuityMode === 'limited-resume';
+  const resumeUnverified = continuityMode === 'resume-unverified';
+
+  const eyebrow = resumeRestricted
+    ? unpredictable ? 'MAY BE UNAVAILABLE' : 'STARTS FROM BEGINNING'
+    : limitedResume ? 'LIMITED RESUME'
+      : resumeUnverified ? 'RESUME MAY VARY'
+        : 'YOUR SAVED PLACE';
+  const heading = unpredictable
+    ? `Open ${sourceName} anyway?`
+    : resumeRestricted
+      ? `Start ${sourceName} from the beginning?`
+      : limitedResume
+        ? `Resume on ${sourceName}?`
+        : resumeUnverified
+          ? `Try resuming on ${sourceName}?`
+          : switching ? `Resume on ${sourceName}?` : 'Resume playback?';
+  const description = resumeRestricted
+    ? unpredictable
+      ? `${sourceName} may not load or may stop unexpectedly. Your current place will stay saved in Orion if you decide to try it.`
+      : continuityMode === 'outgoing-only'
+        ? `${sourceName} can't continue from your current spot. Your place is still saved in Orion, so you can return to it on another compatible source.`
+        : `${sourceName} starts from the beginning. Your current place will stay saved in Orion.`
+    : limitedResume
+      ? `${sourceName} can usually continue near your saved place, but it may briefly jump while loading. Starting over may still use ${sourceName}'s own saved place.`
+      : resumeUnverified
+        ? `${sourceName}'s resume behavior hasn't been confirmed yet. You can try to continue, or start from the beginning.`
+        : switching
+          ? `${sourceName} can continue from your saved place. Choose how you'd like to start.`
+          : `You watched ${title} before. Choose how you'd like to continue.`;
 
   return (
     <Modal transparent statusBarTranslucent animationType="fade" onRequestClose={onCancel}>
@@ -46,21 +79,25 @@ export function ResumePlaybackPrompt({
         >
           {!compactLandscape && (
             <View style={[styles.icon, { backgroundColor: theme.accentSoft }]}>
-              <Ionicons name={resumeRestricted ? 'alert-circle-outline' : 'play-back'} size={24} color={theme.accent} />
+              <Ionicons
+                name={resumeRestricted || limitedResume ? 'alert-circle-outline' : resumeUnverified ? 'help-circle-outline' : 'play-back'}
+                size={24}
+                color={resumeRestricted || limitedResume ? theme.warning : theme.accent}
+              />
             </View>
           )}
-          <Text style={[styles.eyebrow, compactLandscape && styles.eyebrowCompact, { color: theme.accent }]}>
-            {resumeRestricted ? 'SOURCE LIMITATION' : 'PLAYBACK POSITION'}
+          <Text style={[
+            styles.eyebrow,
+            compactLandscape && styles.eyebrowCompact,
+            { color: resumeRestricted || limitedResume ? theme.warning : theme.accent },
+          ]}>
+            {eyebrow}
           </Text>
           <Text style={[styles.heading, compactLandscape && styles.headingCompact, { color: theme.text }]}>
-            {resumeRestricted ? `Start ${sourceName}?` : 'Resume playback?'}
+            {heading}
           </Text>
           <Text style={[styles.description, compactLandscape && styles.descriptionCompact, { color: theme.textSecondary }]}>
-            {resumeRestricted
-              ? `${sourceName} cannot reliably restore a carried position yet. Start from the beginning, or cancel to keep your current source.`
-              : switching
-                ? `Choose where ${targetSourceLabel} should begin.`
-                : `You watched ${title} previously. Choose where to begin.`}
+            {description}
           </Text>
           <View
             style={[
@@ -70,7 +107,7 @@ export function ResumePlaybackPrompt({
             ]}
           >
             <Text style={[styles.timeLabel, { color: theme.textMuted }]}>
-              {resumeRestricted ? 'POSITION AVAILABLE IN OTHER SOURCES' : 'VERIFIED POSITION'}
+              {resumeRestricted ? 'YOUR CURRENT PLACE STAYS SAVED' : 'YOUR SAVED PLACE'}
             </Text>
             <Text style={[styles.time, compactLandscape && styles.timeCompact, { color: theme.text }]}>
               {formatPlaybackTime(savedTime)}
@@ -113,7 +150,7 @@ export function ResumePlaybackPrompt({
                 resumeRestricted ? styles.primaryText : styles.secondaryText,
                 { color: resumeRestricted ? theme.onAccent : theme.text },
               ]}>
-                Start over
+                {unpredictable ? 'Open anyway' : limitedResume ? 'Try from beginning' : 'Start from beginning'}
               </Text>
             </Pressable>
             <Pressable

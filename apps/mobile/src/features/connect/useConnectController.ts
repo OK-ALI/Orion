@@ -77,8 +77,12 @@ export function useConnectController() {
   }>());
   const sendCommandRef = useRef<(cmd: string, value?: any) => Promise<any>>(async () => ({ ok: false, error: 'Remote transport is not ready.' }));
   const fireAndForgetRef = useRef<(cmd: string, value?: any) => void>(() => {});
-  const { clearPendingPointer, cursorRef, isPointerGestureActive, panResponder, onTouchpadLayout, pointerMode, setPointerMode } = useRemotePointer(fireAndForgetRef);
+  const { clearPendingPointer, cursorRef, isPointerGestureActive, panResponder, onTouchpadLayout, pointerMode, setPointerMode, updatePointerHealth } = useRemotePointer(fireAndForgetRef);
   const { latency, remoteContext, setRemoteContext, telemetry, ingestTelemetry, isScrubbing, setIsScrubbing, markSent, forgetSent, recordAck } = useLiveTelemetry(setNowPlaying);
+
+  useEffect(() => {
+    updatePointerHealth({ medianRttMs: latency.medianRttMs, telemetryAgeMs: latency.telemetryAgeMs });
+  }, [latency.medianRttMs, latency.telemetryAgeMs, updatePointerHealth]);
 
   const rejectAllPendingAcks = (reason: string) => {
     for (const [commandId, pending] of pendingAcks.current.entries()) {
@@ -365,9 +369,17 @@ export function useConnectController() {
       }
     }
     const ack = await ackPromise;
-    if (ack?.ok) { setRemoteError(''); if (ack.authoritativeTelemetry) ingestTelemetry(ack.authoritativeTelemetry); if (action === 'cursor_move' && ack.pointer) cursorRef.current = { xRatio: ack.pointer.x, yRatio: ack.pointer.y }; }
-    else setRemoteError(ack?.error || 'Desktop did not acknowledge the command.');
-    return ack;
+    const controlResult = ack?.commandResult;
+    if (ack?.authoritativeTelemetry) ingestTelemetry(ack.authoritativeTelemetry);
+    const applied = !controlResult || controlResult.applied !== false;
+    const normalizedAck = ack?.ok && !applied
+      ? { ...ack, ok: false, error: controlResult.failureCode || 'The active provider did not accept that control.' }
+      : ack;
+    if (normalizedAck?.ok) {
+      setRemoteError('');
+      if (action === 'cursor_move' && normalizedAck.pointer) cursorRef.current = { xRatio: normalizedAck.pointer.x, yRatio: normalizedAck.pointer.y };
+    } else setRemoteError(normalizedAck?.error || 'Desktop did not acknowledge the command.');
+    return normalizedAck;
   };
   sendCommandRef.current = sendRemoteCommand;
 

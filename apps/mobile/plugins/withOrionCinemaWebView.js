@@ -38,6 +38,7 @@ function withCinemaSources(config) {
     fs.mkdirSync(packageRoot, { recursive: true });
     for (const name of [
       'OrionCinemaWebViewClient.kt',
+      'OrionCinemaWebChromeClient.kt',
       'OrionCinemaWebViewManager.kt',
       'OrionCinemaWebViewPackage.kt',
     ]) {

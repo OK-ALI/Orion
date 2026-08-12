@@ -749,6 +749,7 @@ ipcMain.handle("smart-connect:ack-command", (_, ack) => {
     error: ack.error || undefined,
     pointer: ack.pointer || undefined,
     authoritativeTelemetry: currentPlayback || undefined,
+    commandResult: ack.commandResult || undefined,
   });
   return { ok: true };
 });

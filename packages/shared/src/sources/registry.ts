@@ -17,6 +17,7 @@ import { primarySources } from "./adapters/primary";
 import { candidateSources } from "./adapters/candidates";
 import { experimentalSources, disabledSources } from "./adapters/experimental";
 import { allMangaSource } from "./adapters/allmanga";
+import { CINEMA_BLOCK_RULE_CATALOG_V1 } from "@orion/shared/cinema-block-rules";
 
 // ── Legacy health mapping ───────────────────────────────────────────────────
 const LEGACY_HEALTH: Record<string, string> = Object.freeze({
@@ -26,35 +27,33 @@ const LEGACY_HEALTH: Record<string, string> = Object.freeze({
   disabled: "unavailable",
 });
 
-const COMMON_OBSERVATION_RULES = Object.freeze([
-  { id: "doubleclick", kind: "advertisement" as const, hostPattern: "doubleclick.net", action: "block" as const },
-  { id: "google-ads", kind: "advertisement" as const, hostPattern: "googlesyndication.com", action: "block" as const },
-  { id: "adsterra", kind: "advertisement" as const, hostPattern: "adsterra.com", action: "block" as const },
-  { id: "popcash", kind: "popup" as const, hostPattern: "popcash.net", action: "block" as const },
-  { id: "exoclick", kind: "advertisement" as const, hostPattern: "exoclick.com", action: "block" as const },
-]);
+const ENFORCED_BLOCK_RULES = Object.freeze(CINEMA_BLOCK_RULE_CATALOG_V1.map((rule) => ({
+  id: rule.id,
+  kind: rule.classification,
+  hostPattern: rule.host,
+  includeSubdomains: rule.includeSubdomains,
+  action: "block" as const,
+})));
 
-function createObservationManifest(source: CinemaSourceDescriptor): ProviderRequestManifestV1 {
+function createEnforcedManifest(source: CinemaSourceDescriptor): ProviderRequestManifestV1 {
   return {
     schemaVersion: 1,
     sourceId: source.id,
-    // Every provider starts in compatibility-first observation mode. Blocking
-    // provider-specific subresources is enabled only after device evidence.
-    mode: "observe",
+    mode: "enforce",
     allowedNavigationOrigins: Array.from(new Set([...source.expectedOrigins, ...source.allowedNavigationOrigins])),
     requiredOrigins: Array.from(new Set(source.requiredRequestOrigins)),
     mediaOrigins: [],
     artworkOrigins: [],
     subtitleOrigins: [],
     popupPolicy: "block",
-    rules: [...COMMON_OBSERVATION_RULES],
+    rules: [...ENFORCED_BLOCK_RULES],
   };
 }
 
 function toLegacyCompatibleSource(source: CinemaSourceDescriptor): LegacyCompatibleSource {
   return Object.freeze({
     ...source,
-    requestManifest: source.requestManifest ?? createObservationManifest(source),
+    requestManifest: source.requestManifest ?? createEnforcedManifest(source),
     tag: source.animeOnly ? "ANIME" : ["candidate", "experimental"].includes(source.releaseStatus) ? "EXP" : null,
     note: source.releaseStatus === "candidate" ? "Candidate" : source.releaseStatus === "experimental" ? "Experimental" : source.releaseStatus === "disabled" ? (source.disabledReason ?? null) : null,
     movieIdType: source.idPolicy.movie,

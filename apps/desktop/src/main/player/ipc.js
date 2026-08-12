@@ -508,8 +508,8 @@ function register(getMainWindow, { writeSecretMigration }) {
 
   ipcMain.handle("control-video", async (_, webContentsId, action) => {
     const scripts = {
-      toggle: `if (v.paused) { v.play().catch(() => {}); } else { v.pause(); }`,
-      play: `v.play().catch(() => {});`,
+      toggle: `if (v.paused) { await v.play(); } else { v.pause(); }`,
+      play: `await v.play();`,
       pause: `v.pause();`,
       mute: `v.muted = true;`,
       unmute: `v.muted = false;`,
@@ -518,7 +518,7 @@ function register(getMainWindow, { writeSecretMigration }) {
       volumeDown: `v.volume = Math.max(0, v.volume - 0.05);`,
       seekBackward: `v.currentTime = Math.max(0, (v.currentTime || 0) - 10);`,
       seekForward: `v.currentTime = Math.min(Number.isFinite(v.duration) ? v.duration : Infinity, (v.currentTime || 0) + 10);`,
-      restart: `v.currentTime = 0; v.play().catch(() => {});`,
+      restart: `v.currentTime = 0; await v.play();`,
       toggleSubtitles: `
         if (v.textTracks && v.textTracks.length) {
           const visible = Array.from(v.textTracks).some((track) => track.mode === 'showing');
@@ -555,7 +555,7 @@ function register(getMainWindow, { writeSecretMigration }) {
       collect(wc.mainFrame);
 
       const script = `
-        (() => {
+        (async () => {
           const v = document.querySelector('video');
           if (!v) return null;
           ${selectedScript}

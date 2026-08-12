@@ -21,6 +21,17 @@ function normalizePlaybackTelemetry(input = {}, previousSequence = 0) {
     playbackKind: ["cinema", "local-video", "music", "none"].includes(input.playbackKind)
       ? input.playbackKind
       : "none",
+    sourceId: input.sourceId == null ? null : String(input.sourceId),
+    sourceLabel: String(input.sourceLabel || "Orion Player"),
+    surface: ["browse", "embedded-player", "local-player", "mini-player", "popout", "music", "unknown"].includes(input.surface)
+      ? input.surface
+      : "unknown",
+    controlState: ["loading", "ready", "limited", "unobservable", "unavailable", "failed"].includes(input.controlState)
+      ? input.controlState
+      : "unavailable",
+    controlStrategy: ["direct-video", "provider-event", "media-session", "unavailable"].includes(input.controlStrategy)
+      ? input.controlStrategy
+      : "unavailable",
     currentTime,
     duration,
     bufferedTime: finiteOrNull(input.bufferedTime),

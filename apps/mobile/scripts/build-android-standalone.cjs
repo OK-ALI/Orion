@@ -39,6 +39,52 @@ const androidSdk = process.env.ANDROID_HOME
   || process.env.ANDROID_SDK_ROOT
   || (defaultWindowsSdk && fs.existsSync(defaultWindowsSdk) ? defaultWindowsSdk : "");
 
+const cinemaNativeSourceDirectory = path.join(
+  projectDirectory,
+  "plugins",
+  "orion-cinema-webview-native",
+);
+const cinemaNativeTargetDirectory = path.join(
+  androidDirectory,
+  "app",
+  "src",
+  "main",
+  "java",
+  "com",
+  "okali",
+  "orion",
+  "playback",
+);
+const cinemaNativeFiles = [
+  "OrionCinemaWebViewClient.kt",
+  "OrionCinemaWebChromeClient.kt",
+  "OrionCinemaWebViewManager.kt",
+  "OrionCinemaWebViewPackage.kt",
+];
+
+function syncCinemaNativeSources() {
+  fs.mkdirSync(cinemaNativeTargetDirectory, { recursive: true });
+  for (const fileName of cinemaNativeFiles) {
+    const source = path.join(cinemaNativeSourceDirectory, fileName);
+    const target = path.join(cinemaNativeTargetDirectory, fileName);
+    if (!fs.existsSync(source)) {
+      throw new Error(`Missing authoritative Cinema native source: ${source}`);
+    }
+    fs.copyFileSync(source, target);
+    if (!fs.readFileSync(source).equals(fs.readFileSync(target))) {
+      throw new Error(`Cinema native source did not synchronize: ${fileName}`);
+    }
+  }
+  console.log(`[Android] Synchronized ${cinemaNativeFiles.length} Cinema shield sources.`);
+}
+
+try {
+  syncCinemaNativeSources();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+
 const entryResult = spawnSync(
   process.execPath,
   ["-e", "require('expo/scripts/resolveAppEntry')", projectDirectory, "android", "absolute"],

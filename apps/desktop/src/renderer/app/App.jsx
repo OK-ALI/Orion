@@ -254,6 +254,8 @@ export default function App() {
   const [playerSettings, setPlayerSettings] = useState(readPlayerSettings);
   const [miniPlayer, setMiniPlayer] = useState(null);
   const [playbackSession, setPlaybackSession] = useState(null);
+  const playbackSessionRef = useRef(null);
+  playbackSessionRef.current = playbackSession;
   const [miniTransition, setMiniTransition] = useState(null);
   const [expandedLocalDownload, setExpandedLocalDownload] = useState(null);
   const miniReadyResolverRef = useRef(null);
@@ -511,40 +513,70 @@ export default function App() {
     }
   }, []);
 
-  const handleSystemMediaCommand = useCallback(async (command) => {
-    if (getPlaybackOwner() === "music") return { ok: false, error: "Cinema playback is not active." };
-    const session = playbackSession;
-    if (!session) return { ok: false, error: "No Cinema player is active." };
+  const handleSystemMediaCommand = useCallback(async (command, expected = {}) => {
+    const failure = (session, failureCode, error, readiness = "unavailable") => ({
+      ok: false, error, commandResult: { applied: false, sessionId: session?.id || null, sourceId: session?.sourceId || session?.playerSource || null, readiness, failureCode },
+    });
+    if (getPlaybackOwner() === "music") return failure(null, "provider-control-limited", "Music is active, but this remote control boundary is limited.", "limited");
+    let session = playbackSessionRef.current;
+    if (!session) return failure(null, "player-unavailable", "No Cinema player is active.");
+    const identityMatches = (candidate) => (!expected?.sessionId || String(candidate?.id || candidate?.mediaId || candidate?.item?.id) === String(expected.sessionId))
+      && (!expected?.sourceId || String(candidate?.sourceId || candidate?.playerSource || "") === String(expected.sourceId));
+    if (!identityMatches(session)) return failure(session, "stale-control-target", "The player source changed before the command was applied.", "failed");
+
+    if (command === "play" && !session.webContentsId) {
+      const deadline = Date.now() + 3_500;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
+        session = playbackSessionRef.current;
+        if (!session || !identityMatches(session)) return failure(session, "stale-control-target", "The player source changed while controls were preparing.", "failed");
+        if (session.webContentsId) break;
+      }
+      if (!session.webContentsId) return failure(session, "player-not-ready", "The provider player is not ready for remote control.", "loading");
+    }
     if (command === "next") {
       session.nextAction?.();
-      return { ok: Boolean(session.nextAction), error: session.nextAction ? undefined : "No next item is available." };
+      const ok = Boolean(session.nextAction);
+      return ok ? { ok, commandResult: { applied: true, appliedState: "unchanged", sessionId: session.id || null, sourceId: session.sourceId || session.playerSource || null, readiness: "ready" } }
+        : failure(session, "capability-unavailable", "No next item is available.", "limited");
     }
     if (command === "previous") {
       const state = session.webContentsId
         ? await window.electron?.queryVideoProgress?.(session.webContentsId).catch(() => null)
         : null;
       if (Number(state?.currentTime) > 5 || session.mediaType !== "tv") {
-        if (session.webContentsId) window.electron?.controlVideo?.(session.webContentsId, "restart");
-        else window.dispatchEvent(new CustomEvent("orion:media-command", { detail: "restart" }));
-      } else session.previousAction?.();
-      return { ok: true };
+        if (session.webContentsId) {
+          const response = await window.electron?.controlVideo?.(session.webContentsId, "restart");
+          if (!response?.ok) return failure(session, "provider-control-limited", response?.error || "The provider did not accept restart.", "limited");
+        } else {
+          window.dispatchEvent(new CustomEvent("orion:media-command", { detail: "restart" }));
+          return failure(session, "provider-control-limited", "This playback surface must be restarted in its own player.", "limited");
+        }
+      } else if (session.previousAction) session.previousAction();
+      else return failure(session, "capability-unavailable", "No previous item is available.", "limited");
+      return { ok: true, commandResult: { applied: true, appliedState: "unchanged", sessionId: session.id || null, sourceId: session.sourceId || session.playerSource || null, readiness: "ready" } };
     }
     if (command === "stop") {
-      if (session.webContentsId) await window.electron?.controlVideo?.(session.webContentsId, "pause");
+      if (session.webContentsId) {
+        const response = await window.electron?.controlVideo?.(session.webContentsId, "pause");
+        if (!response?.ok) return failure(session, "provider-control-limited", response?.error || "The provider did not accept stop.", "limited");
+      }
       if (session.mode === "popout") window.electron?.closePipWindow?.();
       window.dispatchEvent(new CustomEvent("orion:media-command", { detail: "stop" }));
       setMiniPlayer(null);
       setPlaybackSession(null);
-      return { ok: true };
+      return { ok: true, commandResult: { applied: true, appliedState: "paused", sessionId: session.id || null, sourceId: session.sourceId || session.playerSource || null, readiness: "ready" } };
     }
     const normalized = command === "playPause" ? "toggle" : command;
     if (session.webContentsId) {
-      return window.electron?.controlVideo?.(session.webContentsId, normalized)
-        || { ok: false, error: "The player control boundary is unavailable." };
+      const response = await window.electron?.controlVideo?.(session.webContentsId, normalized);
+      if (!response?.ok) return failure(session, response?.error === "No active video was found yet." ? "player-not-ready" : "provider-control-limited", response?.error || "The player control boundary is unavailable.", response?.error === "No active video was found yet." ? "loading" : "limited");
+      const appliedState = normalized === "play" ? "playing" : normalized === "pause" ? "paused" : "unchanged";
+      return { ...response, commandResult: { applied: true, appliedState, sessionId: session.id || null, sourceId: session.sourceId || session.playerSource || null, readiness: "ready" } };
     }
     window.dispatchEvent(new CustomEvent("orion:media-command", { detail: normalized }));
-    return { ok: true };
-  }, [playbackSession]);
+    return failure(session, "provider-control-limited", "This playback surface must be controlled in its provider player.", "limited");
+  }, []);
 
   useSystemIntegration({ playbackSession, onMediaCommand: handleSystemMediaCommand, setToast });
 

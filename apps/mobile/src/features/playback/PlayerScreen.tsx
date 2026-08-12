@@ -33,7 +33,12 @@ import {
   handoffTargetMissedPosition,
   updateHandoffStatus,
 } from './handoffPolicy';
-import { getNextMobileContinuitySource, getPreferredMobileResumeSource } from './mobileSources';
+import {
+  getMobileSourceContinuityCapability,
+  getNextMobileContinuitySource,
+  getPreferredMobileResumeSource,
+  mobileSourceCanReceiveContinuity,
+} from './mobileSources';
 import { classifyCinemaSourceFailure } from './sourceFailure';
 import type { VerifiedPlaybackSnapshot } from './playerTypes';
 
@@ -112,6 +117,8 @@ export default function PlayerScreen() {
     const resumeParams: Record<string, string | number> = {
       ...getSourceResumeParams(sourceId, resumeTime),
     };
+    // URL resume params are emitted only when the registered source contract
+    // exposes one. Sources that cannot receive continuity are given resumeTime=0.
     return getSourceUrl(
       sourceId,
       type,
@@ -137,6 +144,14 @@ export default function PlayerScreen() {
     fromSessionId: string | null;
     attemptedSourceIds?: string[];
   }) => {
+    if ((requestedTime || 0) > 0 && !mobileSourceCanReceiveContinuity(targetSourceId)) {
+      // Truthful Mobile capability boundary: outgoing-only sources may report
+      // verified progress, but Orion never fabricates an incoming seek for them.
+      publishHandoff(null);
+      setResumeTime(0);
+      setSourceId(targetSourceId);
+      return true;
+    }
     const strategy = sourceResumeStrategy(targetSourceId);
     const next = createPlaybackHandoff({
       reason,
@@ -283,9 +298,9 @@ export default function PlayerScreen() {
   }, [publishHandoff, retryAutomaticHandoff]);
 
   const chooseInitialPosition = useCallback((choice: ResumePlaybackChoice) => {
-    const chosenTime = sourceId === 'vidking'
-      ? 0
-      : resolveResumeChoiceTime(choice, initialSavedTime);
+    const chosenTime = mobileSourceCanReceiveContinuity(sourceId)
+      ? resolveResumeChoiceTime(choice, initialSavedTime)
+      : 0;
     setResumeTime(chosenTime);
     setInitialChoicePending(false);
   }, [initialSavedTime, sourceId]);
@@ -327,7 +342,7 @@ export default function PlayerScreen() {
         <ResumePlaybackPrompt
           title={title || 'this title'}
           savedTime={initialSavedTime}
-          resumeRestricted={sourceId === 'vidking'}
+          continuityMode={getMobileSourceContinuityCapability(sourceId).mode}
           onChoose={chooseInitialPosition}
           onCancel={() => router.back()}
         />

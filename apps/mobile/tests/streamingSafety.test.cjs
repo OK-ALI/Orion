@@ -10,6 +10,9 @@ const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
 test("Cinema shield stays native-only, compatibility-first, and redacted", () => {
   const client = read("apps", "mobile", "plugins", "orion-cinema-webview-native", "OrionCinemaWebViewClient.kt");
+  const chromeClient = read("apps", "mobile", "plugins", "orion-cinema-webview-native", "OrionCinemaWebChromeClient.kt");
+  const manager = read("apps", "mobile", "plugins", "orion-cinema-webview-native", "OrionCinemaWebViewManager.kt");
+  const plugin = read("apps", "mobile", "plugins", "withOrionCinemaWebView.js");
   const surface = read("apps", "mobile", "src", "features", "playback", "OrionCinemaWebView.tsx");
 
   assert.match(client, /class OrionCinemaWebViewClient/);
@@ -17,21 +20,98 @@ test("Cinema shield stays native-only, compatibility-first, and redacted", () =>
   assert.match(client, /SafeBrowsingResponse/);
   assert.match(client, /isForMainFrame/);
   assert.match(client, /latest\?\.decision/);
+  assert.match(client, /pendingClassifications/);
+  assert.match(client, /"classifications"/);
   assert.match(client, /redacted evidence/);
+  assert.match(client, /scheme-deny/);
+  assert.match(client, /hostless-deny/);
+  assert.match(chromeClient, /onCreateWindow/);
+  assert.match(chromeClient, /return false/);
+  assert.match(manager, /setSupportMultipleWindows\(false\)/);
+  assert.match(manager, /javaScriptCanOpenWindowsAutomatically = false/);
+  assert.match(plugin, /OrionCinemaWebChromeClient\.kt/);
   assert.match(surface, /nativeConfig/);
   assert.doesNotMatch(surface, /https?:\/\/.*token/i);
 });
 
-test("all current Mobile Cinema providers carry an observation manifest", () => {
+test("standalone Android builds synchronize the authoritative Cinema shield client", () => {
+  const sourceRoot = path.join(root, "apps", "mobile", "plugins", "orion-cinema-webview-native");
+  const generatedRoot = path.join(
+    root,
+    "apps",
+    "mobile",
+    "android",
+    "app",
+    "src",
+    "main",
+    "java",
+    "com",
+    "okali",
+    "orion",
+    "playback",
+  );
+  const files = [
+    "OrionCinemaWebViewClient.kt",
+    "OrionCinemaWebChromeClient.kt",
+    "OrionCinemaWebViewManager.kt",
+    "OrionCinemaWebViewPackage.kt",
+  ];
+  for (const fileName of files) {
+    assert.equal(
+      fs.readFileSync(path.join(generatedRoot, fileName), "utf8"),
+      fs.readFileSync(path.join(sourceRoot, fileName), "utf8"),
+      `${fileName} must match its authoritative plugin source`,
+    );
+  }
+
+  const buildScript = read("apps", "mobile", "scripts", "build-android-standalone.cjs");
+  assert.match(buildScript, /syncCinemaNativeSources/);
+  assert.match(buildScript, /OrionCinemaWebChromeClient\.kt/);
+  assert.match(buildScript, /fs\.copyFileSync/);
+});
+
+test("all current Mobile Cinema providers carry an enforced shared blocker manifest", () => {
   const registry = read("packages", "shared", "src", "sources", "registry.ts");
+  const blockerCatalog = read("packages", "shared", "cinemaBlockRules.cjs");
   const mobileSources = read("apps", "mobile", "src", "features", "playback", "mobileSources.ts");
 
-  assert.match(registry, /createObservationManifest/);
-  assert.match(registry, /mode:\s*"observe"/);
+  assert.match(registry, /createEnforcedManifest/);
+  assert.match(registry, /mode:\s*"enforce"/);
+  assert.match(registry, /CINEMA_BLOCK_RULE_CATALOG_V1/);
   assert.match(registry, /allowedNavigationOrigins/);
   assert.match(registry, /popupPolicy:\s*"block"/);
+  assert.match(blockerCatalog, /gsbdom\.click/);
+  assert.match(blockerCatalog, /includeSubdomains/);
   assert.match(mobileSources, /!source\.async && !source\.animeOnly/);
   assert.match(mobileSources, /vidking/);
+});
+
+test("Cinema cleanup blocks popup links without permanent polling", () => {
+  const blocker = read("apps", "mobile", "src", "features", "playback", "mobileAdBlocker.ts");
+  assert.match(blocker, /window\.open/);
+  assert.match(blocker, /MutationObserver/);
+  assert.match(blocker, /gsbdom\.click/);
+  assert.doesNotMatch(blocker, /setInterval/);
+});
+
+test("Streaming Servers keeps source selection primary and details expandable", () => {
+  const sheet = read("apps", "mobile", "src", "components", "player", "SourcesSheet.tsx");
+  assert.match(sheet, /flex:\s*1/);
+  assert.match(sheet, /Source details/);
+  assert.match(sheet, /detailsOpen/);
+  assert.match(sheet, /detailsPanePhone/);
+  assert.match(sheet, /MOBILE_PLAYER_SOURCES\.map/);
+  assert.match(sheet, /useOrionTheme/);
+  assert.doesNotMatch(sheet, /#[0-9a-f]{3,8}/i);
+});
+
+test("player HUD exposes native shield status and a blocked-request counter", () => {
+  const surface = read("apps", "mobile", "src", "features", "playback", "EmbedPlayerSurface.tsx");
+  assert.match(surface, /surfaceLoaded\.current/);
+  assert.match(surface, /nativeProtectionVerified/);
+  assert.match(surface, /styles\.shieldCounter/);
+  assert.match(surface, /\{blockedRequests\}/);
+  assert.match(surface, /'Protected'/);
 });
 
 test("subtitle references remain opaque and external fallback validates outcomes", () => {

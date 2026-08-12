@@ -87,25 +87,43 @@ export function createEmbeddedTelemetryScript({
   const config = JSON.stringify({ sessionId, sourceId, strategy, expectedOrigins });
   return `
     (function() {
-      if (window.__orionPlaybackTelemetry) return true;
       var config = ${config};
+      var existing = window.__orionPlaybackTelemetry;
+      if (existing
+        && existing.sessionId === config.sessionId
+        && existing.sourceId === config.sourceId) return true;
+      if (existing && typeof existing.stop === 'function') {
+        try { existing.stop(); } catch (_) {}
+      }
+
       var sequence = 0;
       var attached = new WeakSet();
       var allowedOrigins = new Set(config.expectedOrigins || []);
+      var providerMessageOrigins = {
+        vidsrc: new Set(['https://cloudorchestranova.com']),
+        vsembed: new Set(['https://cloudorchestranova.com'])
+      };
+
       function numberOrNull(value) {
         var number = Number(value);
         return Number.isFinite(number) && number >= 0 ? number : null;
       }
+
       function bufferedPosition(video) {
         try {
           if (!video.buffered || !video.buffered.length) return null;
           return numberOrNull(video.buffered.end(video.buffered.length - 1));
         } catch (_) { return null; }
       }
-      function send(state, evidence, values) {
+
+      function post(payload) {
         if (!window.ReactNativeWebView) return;
+        try { window.ReactNativeWebView.postMessage(JSON.stringify(payload)); } catch (_) {}
+      }
+
+      function send(state, evidence, values) {
         var payload = values || {};
-        window.ReactNativeWebView.postMessage(JSON.stringify({
+        post({
           type: '${EVENT_TYPE}',
           sessionId: config.sessionId,
           sourceId: config.sourceId,
@@ -117,8 +135,9 @@ export function createEmbeddedTelemetryScript({
           duration: numberOrNull(payload.duration),
           bufferedPosition: numberOrNull(payload.bufferedPosition),
           observedAt: Date.now()
-        }));
+        });
       }
+
       function stateFor(video, eventName) {
         if (eventName === 'ended' || video.ended) return 'ended';
         if (eventName === 'waiting' || eventName === 'stalled') return 'buffering';
@@ -127,6 +146,7 @@ export function createEmbeddedTelemetryScript({
         if (video.paused) return 'paused';
         return 'playing';
       }
+
       function reportVideo(video, eventName) {
         send(stateFor(video, eventName), 'provider-video-event', {
           currentTime: video.currentTime,
@@ -134,21 +154,30 @@ export function createEmbeddedTelemetryScript({
           bufferedPosition: bufferedPosition(video)
         });
       }
+
       function attach(video) {
         if (!video || attached.has(video)) return;
         attached.add(video);
         ['playing', 'pause', 'waiting', 'stalled', 'seeking', 'seeked', 'ended', 'error', 'durationchange']
-          .forEach(function(name) { video.addEventListener(name, function() { reportVideo(video, name); }, { passive: true }); });
+          .forEach(function(name) {
+            video.addEventListener(name, function() { reportVideo(video, name); }, { passive: true });
+          });
         reportVideo(video, 'attached');
       }
+
       function discoverVideos() {
         if (config.strategy !== 'frame-video') return;
         document.querySelectorAll('video').forEach(attach);
       }
+
       function normalizeProviderMessage(event) {
-        if (config.strategy !== 'player-event' || !allowedOrigins.has(event.origin)) return;
-        var supportedSources = { vidking: true, vidlink: true, vixsrc: true };
+        var hybridFrameMessageSource = config.sourceId === 'vidsrc' || config.sourceId === 'vsembed';
+        if (config.strategy !== 'player-event' && !hybridFrameMessageSource) return;
+        var extraOrigins = providerMessageOrigins[config.sourceId];
+        if (!allowedOrigins.has(event.origin) && !(extraOrigins && extraOrigins.has(event.origin))) return;
+        var supportedSources = { vidking: true, vidlink: true, vixsrc: true, vidsrc: true, vsembed: true };
         if (!supportedSources[config.sourceId]) return;
+
         var value = event.data;
         if (typeof value === 'string' && value.length <= 4096) {
           try { value = JSON.parse(value); } catch (_) { return; }
@@ -158,14 +187,50 @@ export function createEmbeddedTelemetryScript({
           ? value.data
           : null;
         if (!payload) return;
+
+        // VidSrc/VsEmbed use provider_progress/provider_duration/provider_status
+        // fields inside PLAYER_EVENT. These are physically verified outgoing
+        // telemetry only; their incoming continuity capability remains disabled.
+        var providerProgress = numberOrNull(payload.player_progress);
+        var providerDuration = numberOrNull(payload.player_duration);
+        if (providerProgress != null
+          && providerDuration != null
+          && providerDuration > 0
+          && providerProgress <= providerDuration + 5) {
+          var providerStatus = String(payload.player_status || '').toLowerCase();
+          var providerState = providerStatus.indexOf('pause') >= 0
+            ? 'paused'
+            : providerStatus.indexOf('buffer') >= 0 || providerStatus.indexOf('wait') >= 0 || providerStatus.indexOf('load') >= 0
+              ? 'buffering'
+              : providerStatus.indexOf('seek') >= 0
+                ? 'seeking'
+                : providerStatus.indexOf('end') >= 0 || providerStatus.indexOf('finish') >= 0
+                  ? 'ended'
+                  : providerStatus.indexOf('error') >= 0
+                    ? 'error'
+                    : providerStatus.indexOf('play') >= 0
+                      ? 'playing'
+                      : null;
+          if (providerState) {
+            send(providerState, 'provider-message', {
+              currentTime: providerProgress,
+              duration: providerDuration,
+              bufferedPosition: payload.bufferedPosition
+            });
+            return;
+          }
+        }
+
         var eventName = String(payload.event || payload.action || payload.type || '').toLowerCase();
         if (!['play', 'pause', 'seeked', 'ended', 'timeupdate', 'waiting', 'buffering'].includes(eventName)) return;
         var state = eventName === 'waiting' || eventName === 'buffering'
           ? 'buffering'
           : eventName === 'pause'
             ? 'paused'
-            : eventName === 'ended' ? 'ended'
-              : eventName === 'seeked' ? 'seeking'
+            : eventName === 'ended'
+              ? 'ended'
+              : eventName === 'seeked'
+                ? 'seeking'
                 : 'playing';
         send(state, 'provider-message', {
           currentTime: payload.currentTime != null ? payload.currentTime : payload.time != null ? payload.time : payload.position,
@@ -173,6 +238,7 @@ export function createEmbeddedTelemetryScript({
           bufferedPosition: payload.bufferedPosition
         });
       }
+
       window.addEventListener('message', normalizeProviderMessage, false);
       discoverVideos();
       var timer = setInterval(function() {
@@ -182,7 +248,15 @@ export function createEmbeddedTelemetryScript({
           if (video) reportVideo(video, 'sample');
         }
       }, 1000);
-      window.__orionPlaybackTelemetry = { stop: function() { clearInterval(timer); } };
+
+      window.__orionPlaybackTelemetry = {
+        sessionId: config.sessionId,
+        sourceId: config.sourceId,
+        stop: function() {
+          clearInterval(timer);
+          window.removeEventListener('message', normalizeProviderMessage, false);
+        }
+      };
       return true;
     })();
     true;

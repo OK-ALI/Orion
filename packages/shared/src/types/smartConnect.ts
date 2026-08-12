@@ -6,6 +6,10 @@ export type RemoteFocusedRole =
 
 export interface RemotePlaybackCapabilities {
   canPlayPause: boolean;
+  canPlay: boolean;
+  canPause: boolean;
+  canSkipPrevious: boolean;
+  canSkipNext: boolean;
   canSeek: boolean;
   canSetVolume: boolean;
   canSetSpeed: boolean;
@@ -13,6 +17,40 @@ export interface RemotePlaybackCapabilities {
   canToggleFullscreen: boolean;
   canTogglePip: boolean;
   canNavigate: boolean;
+}
+
+export type RemotePlaybackControlState =
+  | "loading" | "ready" | "limited" | "unobservable" | "unavailable" | "failed";
+export type RemotePlaybackControlStrategy =
+  | "direct-video" | "provider-event" | "media-session" | "unavailable";
+
+export interface RemotePlaybackControlTargetV1 {
+  version: 1;
+  sessionId: string;
+  sourceId: string | null;
+  sourceLabel: string;
+  surface: RemoteUiContextV1["surface"];
+  strategy: RemotePlaybackControlStrategy;
+  readiness: RemotePlaybackControlState;
+  capabilities: RemotePlaybackCapabilities;
+  observedAt: number;
+}
+
+export interface SmartConnectPlaybackCommandResult {
+  applied: boolean;
+  appliedState?: "playing" | "paused" | "unchanged";
+  sessionId: string | null;
+  sourceId: string | null;
+  readiness: RemotePlaybackControlState;
+  failureCode?: string;
+}
+
+export interface AdaptivePointerPolicy {
+  activeRateHz: 24 | 30 | 40;
+  rttClass: "healthy" | "moderate" | "constrained";
+  backpressure: "clear" | "elevated";
+  coalescedUpdates: number;
+  droppedUpdates: number;
 }
 
 export interface RemoteUiContextV1 {
@@ -26,6 +64,7 @@ export interface RemoteUiContextV1 {
   miniPlayer: boolean;
   popout: boolean;
   capabilities: RemotePlaybackCapabilities;
+  controlTarget?: RemotePlaybackControlTargetV1;
   observedAt: number;
 }
 
@@ -36,6 +75,11 @@ export interface SmartConnectPlaybackTelemetryV1 {
   title: string;
   mediaId: string | null;
   playbackKind: "cinema" | "local-video" | "music" | "none";
+  sourceId: string | null;
+  sourceLabel: string;
+  surface: RemoteUiContextV1["surface"];
+  controlState: RemotePlaybackControlState;
+  controlStrategy: RemotePlaybackControlStrategy;
   currentTime: number | null;
   duration: number | null;
   bufferedTime: number | null;
@@ -172,6 +216,8 @@ export type SmartConnectCommandAction =
   | "focus_card_prev"
   | "toggle_play"
   | "play_pause"
+  | "play"
+  | "pause"
   | "seek_to"
   | "seek_-10"
   | "seek_+10"
@@ -221,6 +267,7 @@ export interface SmartConnectCommandAck {
   error?: string;
   pointer?: SmartConnectPointerState;
   authoritativeTelemetry?: SmartConnectPlaybackTelemetryV1;
+  commandResult?: SmartConnectPlaybackCommandResult;
 }
 
 export interface SmartConnectPairingSession {

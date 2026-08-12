@@ -13,6 +13,7 @@ import { playerStyles as styles } from './playerStyles';
 import type { PlaybackSurfaceProps } from './playerTypes';
 import { ResumePlaybackPrompt } from './ResumePlaybackPrompt';
 import { resolveResumeChoiceTime, type ResumePlaybackChoice } from './resumeChoice';
+import { getMobileSourceContinuityCapability } from './mobileSources';
 
 interface NativePlayerSurfaceProps extends PlaybackSurfaceProps {
   streamUrl: string;
@@ -199,7 +200,7 @@ export function NativePlayerSurface({
           title={title || 'this title'}
           savedTime={pendingManualSource.savedTime}
           targetSourceLabel={pendingManualSource.label}
-          resumeRestricted={pendingManualSource.id === 'vidking'}
+          continuityMode={getMobileSourceContinuityCapability(pendingManualSource.id).mode}
           onChoose={completeManualSourceChoice}
           onCancel={() => {
             setPendingManualSource(null);

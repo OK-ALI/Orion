@@ -6,6 +6,8 @@ let latestCursorPayload = null;
 let hoverCheckTimer = null;
 let rafHandle = null;
 let remoteCursorInactivityTimer = null;
+let hoveredRemoteElement = null;
+let pressedCursorTimer = null;
 
 const rendererDiagnosticsEnabled =
   globalThis.__ORION_SMART_CONNECT_DIAGNOSTICS__ === true;
@@ -42,6 +44,9 @@ function getOrCreateVirtualCursor() {
   if (!cursor) {
     cursor = document.createElement("div");
     cursor.className = "orion-virtual-cursor";
+    const glyph = document.createElement("span");
+    glyph.className = "orion-virtual-cursor__glyph";
+    cursor.appendChild(glyph);
     cursor.style.opacity = "0";
     document.body.appendChild(cursor);
   }
@@ -61,18 +66,37 @@ function clearRemoteCursor() {
     cancelAnimationFrame(rafHandle);
     rafHandle = null;
   }
+  if (pressedCursorTimer) {
+    window.clearTimeout(pressedCursorTimer);
+    pressedCursorTimer = null;
+  }
+  if (hoverCheckTimer) {
+    window.clearTimeout(hoverCheckTimer);
+    hoverCheckTimer = null;
+  }
 
   const cursor = document.querySelector(".orion-virtual-cursor");
 
   if (cursor) {
     cursor.style.opacity = "0";
+    cursor.classList.remove("is-pressed");
+    cursor.dataset.kind = "default";
   }
 
-  document
-    .querySelectorAll(".spatial-remote-focused")
-    .forEach((node) =>
-      node.classList.remove("spatial-remote-focused"),
-    );
+  hoveredRemoteElement?.classList.remove("spatial-remote-focused");
+  hoveredRemoteElement = null;
+}
+
+function updateRemoteHover(element) {
+  const candidate = element?.closest?.(".media-card, button, a, [role='button'], [tabindex='0'], input, textarea, [contenteditable='true']") || null;
+  if (candidate !== hoveredRemoteElement) {
+    hoveredRemoteElement?.classList.remove("spatial-remote-focused");
+    hoveredRemoteElement = candidate;
+    hoveredRemoteElement?.classList.add("spatial-remote-focused");
+  }
+  const cursor = getOrCreateVirtualCursor();
+  const input = candidate?.matches?.("input:not([type='password']), textarea, [contenteditable='true']");
+  cursor.dataset.kind = input ? "text" : candidate ? "interactive" : "default";
 }
 function scheduleRemoteCursorCleanup() {
   lastCursorActivityAt = performance.now();
@@ -127,7 +151,7 @@ function renderCursorFrame() {
   const clientY = Math.round(y * window.innerHeight);
 
   cursor.style.transform =
-    `translate3d(${clientX}px, ${clientY}px, 0) translate(-50%, -50%)`;
+    `translate3d(${clientX}px, ${clientY}px, 0)`;
 
   cursor.style.opacity = "1";
   cursor.dataset.x = String(clientX);
@@ -139,17 +163,7 @@ function renderCursorFrame() {
 
       const element = document.elementFromPoint(clientX, clientY);
 
-      const interactive = element?.closest(
-        ".media-card, button, a, [role='button'], [tabindex='0']",
-      );
-
-      document
-        .querySelectorAll(".spatial-remote-focused")
-        .forEach((node) =>
-          node.classList.remove("spatial-remote-focused"),
-        );
-
-      interactive?.classList.add("spatial-remote-focused");
+      updateRemoteHover(element);
     }, 50);
   }
 }
@@ -163,6 +177,12 @@ function clickCursor() {
   const clickable =
     element?.closest(".media-card, button, a, [role='button'], input") ||
     element;
+  cursor.classList.add("is-pressed");
+  if (pressedCursorTimer) window.clearTimeout(pressedCursorTimer);
+  pressedCursorTimer = window.setTimeout(() => {
+    cursor.classList.remove("is-pressed");
+    pressedCursorTimer = null;
+  }, 150);
   clickable?.click?.();
 }
 
@@ -248,9 +268,9 @@ const targetScroll = getScrollContainer();
         moveSpatialFocus(action);
       }
       if (action === "seek_to") {
-        const seconds = Number(value);
+        const seconds = Number(value?.seconds ?? value);
         commandResult = Number.isFinite(seconds)
-          ? await handleSystemMediaCommand(`seek:${seconds}`)
+          ? await handleSystemMediaCommand(`seek:${seconds}`, value)
           : { ok: false, error: "The requested seek position is invalid." };
       }
       if (action === "play_media") {
@@ -325,6 +345,8 @@ const targetScroll = getScrollContainer();
       const mediaCommands = {
         toggle_play: "toggle",
         play_pause: "toggle",
+        play: "play",
+        pause: "pause",
         "seek_-10": "seekBackward",
         "seek_+10": "seekForward",
         previous: "previous",
@@ -335,7 +357,7 @@ const targetScroll = getScrollContainer();
         toggle_subtitles: "toggleSubtitles",
       };
       if (mediaCommands[action]) {
-        commandResult = await handleSystemMediaCommand(mediaCommands[action]);
+        commandResult = await handleSystemMediaCommand(mediaCommands[action], value);
       }
       if (action === "set_speed") {
         commandResult = await handleSystemMediaCommand(`speed:${Number(value)}`);
@@ -356,6 +378,7 @@ if (!isRealtimeCommand && payload?.id && window.electron?.acknowledgeSmartConnec
             sequence: payload.sequence || 0,
             ok: commandResult?.ok !== false,
             error: commandResult?.error,
+            commandResult: commandResult?.commandResult,
             pointer:
               action === "cursor_move"
                 ? {

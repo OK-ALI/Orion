@@ -13,7 +13,11 @@
     "./types": "./src/types/index.ts",
     "./api": "./src/api/index.ts",
     "./api/*": "./src/api/*.ts",
-    "./sources": "./src/sources/index.ts"
+    "./sources": "./src/sources/index.ts",
+    "./cinema-block-rules": {
+      "types": "./cinemaBlockRules.d.ts",
+      "default": "./cinemaBlockRules.cjs"
+    }
   },
   "scripts": {
     "build": "tsc --noEmit",

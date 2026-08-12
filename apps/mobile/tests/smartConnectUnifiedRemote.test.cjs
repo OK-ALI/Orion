@@ -25,13 +25,27 @@ test('connected Smart Connect uses one unified adaptive surface', () => {
 test('pointer input coalesces movement and supports two-finger scrolling', () => {
   const pointer = read('src/features/connect/useRemotePointer.ts');
 
-  assert.match(pointer, /TARGET_FRAME_MS = 33/);
+  assert.match(pointer, /activeRateHz: 30 as 24 \| 30 \| 40/);
+  assert.match(pointer, /constrained \? 24 : healthy \? 40 : 30/);
+  assert.match(pointer, /frameIntervalRef\.current = Math\.round\(1000 \/ rate\)/);
   assert.match(pointer, /touches\.length >= 2/);
   assert.match(pointer, /pendingScrollRef/);
   assert.match(pointer, /cursor_move/);
   assert.match(pointer, /clearPendingPointer/);
   assert.match(pointer, /isPointerGestureActive/);
   assert.doesNotMatch(pointer, /console\.log/);
+});
+
+test('remote playback remains source-aware and does not fabricate unavailable timing', () => {
+  const surface = read('src/features/connect/UnifiedRemoteSurface.tsx');
+  const telemetry = read('src/features/connect/useLiveTelemetry.ts');
+
+  assert.match(surface, /playback\.sourceLabel/);
+  assert.match(surface, /Playback timing unavailable/);
+  assert.match(surface, /primaryAction = playback\.paused \? 'play' : 'pause'/);
+  assert.doesNotMatch(surface, /accessibilityLabel=["']Disconnect remote["']/);
+  assert.match(surface, /Disconnect remote/);
+  assert.match(telemetry, /remoteContextRef\.current\?\.capabilities\?\.canPlay/);
 });
 
 test('reliable command acknowledgement waiter is installed before socket send', () => {

@@ -43,6 +43,11 @@ import { playerStyles as styles } from './playerStyles';
 import type { PlaybackSurfaceProps } from './playerTypes';
 import { ResumePlaybackPrompt } from './ResumePlaybackPrompt';
 import { resolveResumeChoiceTime, type ResumePlaybackChoice } from './resumeChoice';
+import {
+  getMobileSourceContinuityCapability,
+  mobileSourceCanReceiveContinuity,
+  type MobileContinuityMode,
+} from './mobileSources';
 import { usePlaybackTelemetryController } from './usePlaybackTelemetryController';
 
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
@@ -103,6 +108,7 @@ export function EmbedPlayerSurface({
     id: string;
     label: string;
     savedTime: number;
+    continuityMode: MobileContinuityMode;
   } | null>(null);
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const observationTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -112,10 +118,17 @@ export function EmbedPlayerSurface({
   const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sourceTransitionPending = useRef(false);
   const healthRecorded = useRef(false);
+  const nativeBlockObserved = useRef(false);
+  const shieldFailureObserved = useRef(false);
+  const surfaceLoaded = useRef(false);
   const webViewRef = useRef<WebViewType>(null);
   const source = ALL_CINEMA_SOURCES.find((entry) => entry.id === sourceId);
   const sourceLabel = source?.label || 'VidEasy Direct';
   const expectedOrigins = source?.expectedOrigins || [];
+  const sourceContinuity = getMobileSourceContinuityCapability(sourceId);
+  const telemetryExpectedOrigins = sourceId === '111movies'
+    ? Array.from(new Set([...expectedOrigins, 'https://player.vidlove.cc']))
+    : expectedOrigins;
   const shieldManifest = source?.requestManifest;
   const selectedSubtitle = selectedSubtitleId ? getInternalSubtitleTrack(selectedSubtitleId) : null;
   const shieldedEmbedUrl = useMemo(() => {
@@ -162,7 +175,7 @@ export function EmbedPlayerSurface({
     sessionId: telemetry.getSession().id,
     sourceId,
     strategy: source?.progressStrategy || 'none',
-    expectedOrigins,
+    expectedOrigins: telemetryExpectedOrigins,
   }), [sourceId]);
   const injectedScript = `${mobileAdBlockerScript}\n${telemetryScript}`;
 
@@ -191,6 +204,9 @@ export function EmbedPlayerSurface({
     setSubtitleTracks([]);
     setSelectedSubtitleId(null);
     healthRecorded.current = false;
+    nativeBlockObserved.current = false;
+    shieldFailureObserved.current = false;
+    surfaceLoaded.current = false;
     setWatchdogDismissed(false);
     return () => {
       if (observationTimeout.current) clearTimeout(observationTimeout.current);
@@ -267,10 +283,12 @@ export function EmbedPlayerSurface({
     const savedTime = Math.max(0, Number(snapshot?.currentTime) || 0);
     if (savedTime > 30) {
       const target = ALL_CINEMA_SOURCES.find((entry) => entry.id === nextSourceId);
+      const capability = getMobileSourceContinuityCapability(nextSourceId);
       setPendingManualSource({
         id: nextSourceId,
         label: target?.label || nextSourceId,
         savedTime,
+        continuityMode: capability.mode,
       });
       setHudState('sheet-open');
       setShowControls(true);
@@ -283,7 +301,9 @@ export function EmbedPlayerSurface({
   const completeManualSourceChoice = (choice: ResumePlaybackChoice) => {
     const pending = pendingManualSource;
     if (!pending) return;
-    const requestedTime = resolveResumeChoiceTime(choice, pending.savedTime);
+    const requestedTime = mobileSourceCanReceiveContinuity(pending.id)
+      ? resolveResumeChoiceTime(choice, pending.savedTime)
+      : 0;
     setPendingManualSource(null);
     releaseSurfaceThen((snapshot) => (
       onSourceChange(pending.id, snapshot, 'manual', requestedTime)
@@ -324,15 +344,21 @@ export function EmbedPlayerSurface({
   };
 
   const handleShouldStartLoad = () => {
-    // Android native interception owns navigation and request decisions for
-    // Cinema sessions. JS intentionally makes no shielding claim or block.
     return true;
   };
 
   const markSurfaceLoaded = () => {
+    bridgeSequence.current = 0;
+    webViewRef.current?.injectJavaScript(injectedScript);
+    surfaceLoaded.current = true;
     setIsBuffering(false);
     setHudState('visible');
     resetHideTimer();
+    if (source?.requestManifest?.mode === 'enforce'
+      && nativeBlockObserved.current
+      && !shieldFailureObserved.current) {
+      setShieldState('verified');
+    }
     if (observationTimeout.current) clearTimeout(observationTimeout.current);
     observationTimeout.current = setTimeout(() => {
       if (!telemetry.getSession().verified) {
@@ -366,15 +392,20 @@ export function EmbedPlayerSurface({
         .filter(([key]) => key === 'blocked' || key.startsWith('blocked-'))
         .reduce((total, [, value]) => total + Math.max(0, Number(value) || 0), 0);
       const dependencyCount = Math.max(0, Number(counts['required-dependency']) || 0);
-      if (decision === 'blocked' || decision === 'blocked-advertisement' || decision === 'blocked-tracker' || decision === 'blocked-popup' || decision === 'blocked-unsafe-navigation') {
-        setBlockedRequests((value) => value + (blockedCount || 1));
-        // A native, enforced block is evidence, but this session can be
-        // Protected only after playback also proves healthy.
-        setShieldState(source?.requestManifest?.mode === 'enforce' ? 'verified' : 'limited');
-      } else if (decision === 'required-dependency') {
-        setAllowedDependencies((value) => value + (dependencyCount || 1));
-        setShieldState('dependency-allowed');
-      } else if (decision === 'rule-failure') {
+      if (blockedCount > 0) {
+        nativeBlockObserved.current = true;
+        setBlockedRequests((value) => value + blockedCount);
+        const nativeProtectionVerified = source?.requestManifest?.mode === 'enforce'
+          && surfaceLoaded.current
+          && !shieldFailureObserved.current;
+        setShieldState(nativeProtectionVerified ? 'verified' : 'limited');
+      }
+      if (dependencyCount > 0) {
+        setAllowedDependencies((value) => value + dependencyCount);
+        if (!nativeBlockObserved.current) setShieldState('dependency-allowed');
+      }
+      if (decision === 'rule-failure') {
+        shieldFailureObserved.current = true;
         setShieldState('failed');
       } else if (decision === 'observed-subtitle') {
         const track = createObservedSubtitleTrack(telemetry.getSession().id, {
@@ -383,9 +414,7 @@ export function EmbedPlayerSurface({
         });
         setSubtitleTracks((existing) => existing.some((entry) => entry.id === track.id) ? existing : [...existing, track]);
         setSubtitleState('available');
-      } else {
-        // Unknown subresources are intentionally allowed during the learning
-        // pass. They make the session Limited, never falsely Protected.
+      } else if (blockedCount === 0 && dependencyCount === 0) {
         setShieldState((current) => current === 'verified' ? current : 'limited');
       }
       return;
@@ -404,27 +433,42 @@ export function EmbedPlayerSurface({
     const parsed = parseEmbeddedTelemetryMessage(raw, {
       sessionId: telemetry.getSession().id,
       sourceId,
-      expectedOrigins,
+      expectedOrigins: telemetryExpectedOrigins,
       lastSequence: bridgeSequence.current,
     });
     if (!parsed) {
       if (envelope?.type === 'ORION_PLAYBACK_TELEMETRY') {
+        const sequence = Number(envelope.sequence);
+        let rejectReason = 'parse-rejected';
+        if (envelope.sessionId !== telemetry.getSession().id) rejectReason = 'session-mismatch';
+        else if (envelope.sourceId !== sourceId) rejectReason = 'source-mismatch';
+        else if (!Number.isInteger(sequence)) rejectReason = 'invalid-sequence';
+        else if (sequence <= bridgeSequence.current) rejectReason = 'stale-bridge-sequence';
+        else if (typeof envelope.origin !== 'string' || !telemetryExpectedOrigins.includes(envelope.origin)) rejectReason = 'unexpected-origin';
+        else if (!['loading', 'playing', 'paused', 'buffering', 'seeking', 'ended', 'error'].includes(String(envelope.state || '').toLowerCase())) rejectReason = 'invalid-state';
+        else if (!['provider-message', 'provider-video-event'].includes(envelope.evidence)) rejectReason = 'invalid-evidence';
         reportMobileDiagnosticError({
           area: 'playback-telemetry',
           code: 'TELEMETRY_REJECTED',
-          message: 'Provider telemetry did not match the active playback session.',
+          message: `Provider telemetry rejected: ${rejectReason}.`,
         });
       }
       return;
     }
     bridgeSequence.current = parsed.bridgeSequence;
     const decision = telemetry.emitTelemetry(parsed.input);
-    if (!decision.accepted) return;
+    if (!decision.accepted) {
+      return;
+    }
     setIsBuffering(parsed.input.state === 'buffering');
     setHudState(parsed.input.state === 'buffering' ? 'buffering' : 'visible');
     if (decision.state.session.verified) {
       if (observationTimeout.current) clearTimeout(observationTimeout.current);
       const startupMs = Date.now() - loadStartedAt.current;
+      const protectionVerified = source?.requestManifest?.mode === 'enforce'
+        && nativeBlockObserved.current
+        && !shieldFailureObserved.current;
+      setShieldState(protectionVerified ? 'verified' : shieldFailureObserved.current ? 'failed' : 'limited');
       if (!healthRecorded.current) {
         healthRecorded.current = true;
         const health = markMobileSourceSuccess(sourceId, type, {
@@ -433,15 +477,19 @@ export function EmbedPlayerSurface({
           subtitleSupport: subtitleTracks.length ? 'available' : source?.supportsExternalSubtitles ? 'limited' : 'unknown',
           blockedRequests,
           allowedDependencies,
-          limited: shieldState !== 'verified',
+          limited: !protectionVerified,
         });
         updateMobileDiagnostics({ activeSourceId: sourceId, sourceHealth: health.state });
       }
       clearMobileDiagnosticError('playback');
       clearMobileDiagnosticError('playback-telemetry');
       const snapshot = telemetry.getVerifiedSnapshot();
-      if (snapshot) onPlaybackSnapshot?.(snapshot);
-      if (source?.resumeStrategy === 'verified-seek'
+      if (snapshot) {
+        onPlaybackSnapshot?.(snapshot);
+      }
+      const shouldUseTopLevelVerifiedSeek = sourceContinuity.canReceivePosition
+        && (source?.resumeStrategy === 'verified-seek' || sourceId === 'vidlink');
+      if (shouldUseTopLevelVerifiedSeek
         && initialResumeTime > 0
         && !resumeRequested.current) {
         resumeRequested.current = true;
@@ -469,7 +517,7 @@ export function EmbedPlayerSurface({
           />
         ) : (
           <OrionCinemaWebView
-          key={`${sourceId}:${surfaceRetryKey}`}
+          key={`${sourceId}:${telemetry.getSession().id}:${surfaceRetryKey}`}
           ref={webViewRef}
           shieldManifest={shieldManifest || {
             schemaVersion: 1,
@@ -493,6 +541,7 @@ export function EmbedPlayerSurface({
             style={styles.webVideo}
             userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             onLoadStart={() => {
+              surfaceLoaded.current = false;
               setIsBuffering(true);
               setHudState('buffering');
             }}
@@ -533,23 +582,40 @@ export function EmbedPlayerSurface({
             <Text style={styles.framelessTitle} numberOfLines={1}>{title || 'Orion Stream'}</Text>
           </View>
           <View style={styles.headerActions}>
-            <View style={styles.shieldBadge}>
+            <View style={[
+              styles.shieldBadge,
+              shieldState === 'verified'
+                ? styles.shieldBadgeVerified
+                : shieldState === 'failed'
+                  ? styles.shieldBadgeFailed
+                  : styles.shieldBadgeLimited,
+            ]}>
               <Ionicons
                 name={shieldState === 'failed' ? 'shield-outline' : 'shield-checkmark'}
                 size={12}
-                color={shieldState === 'verified' ? '#4ade80' : '#fbbf24'}
+                color={shieldState === 'verified' ? '#4ade80' : shieldState === 'failed' ? '#fb7185' : '#fbbf24'}
               />
+              <Text style={[
+                styles.shieldCounter,
+                shieldState === 'verified'
+                  ? styles.shieldCounterVerified
+                  : shieldState === 'failed'
+                    ? styles.shieldCounterFailed
+                    : styles.shieldCounterLimited,
+              ]}>
+                {blockedRequests}
+              </Text>
               {!compact && (
                 <Text style={[styles.shieldText, shieldState !== 'verified' && styles.shieldTextLimited]}>
                   {shieldState === 'verified'
-                    ? `Shield ${blockedRequests}`
+                    ? 'Protected'
                     : shieldState === 'failed'
-                      ? 'Rule problem'
+                      ? 'Protection issue'
                       : shieldState === 'unavailable'
-                        ? 'Shield unavailable'
+                        ? 'Protection unavailable'
                         : shieldState === 'dependency-allowed'
-                          ? 'Required request allowed'
-                          : 'Shield limited'}
+                          ? 'Protection active'
+                          : 'Protection limited'}
                 </Text>
               )}
             </View>
@@ -610,7 +676,7 @@ export function EmbedPlayerSurface({
           title={title || 'this title'}
           savedTime={pendingManualSource.savedTime}
           targetSourceLabel={pendingManualSource.label}
-          resumeRestricted={pendingManualSource.id === 'vidking'}
+          continuityMode={pendingManualSource.continuityMode}
           onChoose={completeManualSourceChoice}
           onCancel={() => {
             setPendingManualSource(null);
