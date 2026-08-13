@@ -5,8 +5,17 @@ import {
 } from '@orion/shared/sources';
 import { getMobileSourceHealth, getMobileSourceHealthV2 } from '../../services/sourceHealth';
 
+/**
+ * Mobile-only quarantine. AutoEmbed remains in the shared registry for future
+ * revalidation, but is not selectable on Mobile after repeated physical tests
+ * reproduced an external-browser advertising escape.
+ */
+export const MOBILE_QUARANTINED_SOURCE_IDS: ReadonlySet<string> = new Set(['autoembed']);
+
 export const MOBILE_PLAYER_SOURCES = PLAYER_SOURCES.filter(
-  (source) => !source.async && !source.animeOnly,
+  (source) => !source.async
+    && !source.animeOnly
+    && !MOBILE_QUARANTINED_SOURCE_IDS.has(source.id),
 );
 
 export type MobileContinuityMode =

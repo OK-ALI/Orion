@@ -82,22 +82,35 @@ test("embedded page load cannot write playback history or claim source readiness
   assert.match(surface, /decision\.state\.session\.verified/);
 });
 
-test("mobile source selection quarantines async and anime-only resolvers", () => {
+test("mobile source selection quarantines unsafe resolvers and Mobile-blocked providers", () => {
   const mobileSources = read("src/features/playback/mobileSources.ts");
   const sourceSheet = read("src/components/player/SourcesSheet.tsx");
-  assert.match(mobileSources, /!source\.async && !source\.animeOnly/);
+
+  assert.match(mobileSources, /!source\.async[\s\S]*?!source\.animeOnly/);
+  assert.match(
+    mobileSources,
+    /!MOBILE_QUARANTINED_SOURCE_IDS\.has\(source\.id\)/
+  );
+
   assert.match(sourceSheet, /MOBILE_PLAYER_SOURCES\.map/);
   assert.doesNotMatch(sourceSheet, /\{\s*PLAYER_SOURCES\s*\}\s+from/);
 });
 
-test("VidKing stays playable but is excluded from carried-position continuity", () => {
+test("VidKing stays playable with limited resume but is excluded from automatic continuity targets", () => {
   const mobileSources = read("src/features/playback/mobileSources.ts");
   const prompt = read("src/features/playback/ResumePlaybackPrompt.tsx");
   const player = read("src/features/playback/PlayerScreen.tsx");
-  assert.match(mobileSources, /MOBILE_CONTINUITY_DEFERRED_SOURCE_IDS = new Set\(\['vidking'\]\)/);
+
+  assert.match(
+    mobileSources,
+    /vidking:\s*Object\.freeze\(\{[\s\S]*?mode: 'limited-resume'[\s\S]*?canReceivePosition: true[\s\S]*?automaticTarget: false[\s\S]*?\}\),/
+  );
+
   assert.match(mobileSources, /mobileSourceSupportsContinuity\(candidateId\)/);
-  assert.match(prompt, /resumeRestricted/);
-  assert.match(prompt, /cannot reliably restore a carried position yet/);
+
+  assert.match(prompt, /limitedResume/);
+  assert.match(prompt, /can usually continue near your saved place/);
+
   assert.doesNotMatch(player, /HandoffNotice/);
   assert.doesNotMatch(player, /autoPlay:\s*['"]false['"]/);
 });

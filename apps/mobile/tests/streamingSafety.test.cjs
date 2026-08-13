@@ -82,8 +82,21 @@ test("all current Mobile Cinema providers carry an enforced shared blocker manif
   assert.match(registry, /popupPolicy:\s*"block"/);
   assert.match(blockerCatalog, /gsbdom\.click/);
   assert.match(blockerCatalog, /includeSubdomains/);
-  assert.match(mobileSources, /!source\.async && !source\.animeOnly/);
+  assert.match(mobileSources, /MOBILE_QUARANTINED_SOURCE_IDS/);
+  assert.match(mobileSources, /new Set\(\['autoembed'\]\)/);
+  assert.match(mobileSources, /!MOBILE_QUARANTINED_SOURCE_IDS\.has\(source\.id\)/);
   assert.match(mobileSources, /vidking/);
+});
+
+test("AutoEmbed stays registered but is quarantined from Mobile selection after failed protection verification", () => {
+  const experimental = read("packages", "shared", "src", "sources", "adapters", "experimental.ts");
+  const mobileSources = read("apps", "mobile", "src", "features", "playback", "mobileSources.ts");
+
+  assert.match(experimental, /id:\s*"autoembed"/);
+  assert.match(mobileSources, /MOBILE_QUARANTINED_SOURCE_IDS/);
+  assert.match(mobileSources, /new Set\(\['autoembed'\]\)/);
+  assert.match(mobileSources, /!MOBILE_QUARANTINED_SOURCE_IDS\.has\(source\.id\)/);
+  assert.match(mobileSources, /autoembed:\s*Object\.freeze/);
 });
 
 test("Cinema cleanup blocks popup links without permanent polling", () => {
