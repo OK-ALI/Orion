@@ -7,12 +7,12 @@
 
 ## Living Roadmap Status
 
-> **Overall Orion v3 implementation completion: 54%**
+> **Overall Orion v3 implementation completion: 59%**
 >
-> **Last verified:** August 11, 2026
+> **Last verified:** August 13, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 4 is closed at its physically accepted secure-foundation boundary. Phase 5 — Streaming Safety and Source Reliability — is active.
-> **Critical open blockers:** native provider request interception and evidence-backed shielding; complete provider, subtitle and failover validation; source-aware video fitting; reliable player-overlay touch ownership; cross-platform profiles; Mobile distribution and updates; notification policy; a real resumable Mobile downloader and offline library; low-end-device performance validation; deferred VidKing continuity; and the explicitly deferred Orion Connect findings in Phase 11
+> **Current stage:** Phase 4 is closed at its physically accepted secure-foundation boundary. Phase 5 — Streaming Safety and Source Reliability — is 60% complete; dependency validation, captured subtitle delivery, lifecycle diagnosis and the final physical matrix remain active.
+> **Critical open blockers:** provider dependency validation on physical Android hardware; safe captured VTT delivery; playback-relevant WebView/cache/GPU diagnosis; complete provider, subtitle and shield regression evidence; source-aware video fitting; reliable player-overlay touch ownership; cross-platform profiles; Mobile distribution and updates; notification policy; a real resumable Mobile downloader and offline library; low-end-device performance validation; deferred VidKing continuity; and the explicitly deferred Orion Connect findings in Phase 11
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -35,7 +35,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 2. History and Continue Watching | 10% | 100% | 10.0% | Complete |
 | 3. Trailer reliability | 8% | 100% | 8.0% | Complete |
 | 4. Secure Orion Connect foundation | 8% | 100% | 8.0% | Complete at rebaselined scope |
-| 5. Streaming safety and source reliability | 11% | 15% | 1.65% | Foundation only — active |
+| 5. Streaming safety and source reliability | 11% | 60% | 6.6% | In progress — physical closure pending |
 | 6. Unified Mobile player experience | 10% | 15% | 1.5% | Foundation only |
 | 7. Complete Mobile UX and performance | 8% | 30% | 2.4% | In progress |
 | 8. Google identity and portable profiles | 6% | 15% | 0.9% | Foundation only |
@@ -43,7 +43,7 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 10. Mobile downloads and Offline Library | 8% | 10% | 0.8% | Foundation only |
 | 11. Deferred Orion Connect expansion | 2% | 10% | 0.2% | Deferred |
 | 12. Release validation | 4% | 7% | 0.28% | Foundation only |
-| **Total** | **100%** |  | **53.98%, rounded to 54%** | **Not release-ready** |
+| **Total** | **100%** |  | **58.93%, rounded to 59%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -156,17 +156,31 @@ Progress Log.
 ### Phase 5 — Streaming safety and source reliability
 
 - [x] **V3-P5-001:** Mobile has limited JavaScript and top-level navigation filtering; it is not yet a verified native shield.
-- [ ] **V3-P5-002:** Add an Android-native request-interception boundary capable of observing provider subresources.
-- [ ] **V3-P5-003:** Add provider-specific ad, tracker, popup and unsafe-navigation rules.
+- [x] **V3-P5-002:** Add an Android-native request-interception boundary capable of observing provider subresources.
+- [x] **V3-P5-003:** Add provider-specific ad, tracker, popup and unsafe-navigation rules. AutoEmbed is explicitly Mobile-quarantined after two failed physical protection repairs; it remains registered for future revalidation.
 - [ ] **V3-P5-004:** Allow required manifests, media, images, CDNs, player dependencies and subtitle hosts.
-- [ ] **V3-P5-005:** Validate every selectable provider through a maintained capability and health matrix.
-- [ ] **V3-P5-006:** Add failure classification and health-aware failover without losing verified playback state.
+- [x] **V3-P5-005:** Validate every selectable provider through a maintained capability and health matrix.
+- [x] **V3-P5-006:** Add failure classification and health-aware failover without losing verified playback state.
 - [ ] **V3-P5-007:** Complete embedded text-track detection, captured VTT delivery and Orion subtitle fallback.
-- [ ] **V3-P5-008:** Revalidate VidKing startup/audio continuity and retain truthful restrictions until it passes.
+- [x] **V3-P5-008:** Revalidate VidKing startup/audio continuity and retain truthful restrictions until it passes. VidKing is Limited Resume and is not an automatic continuity target.
 - [ ] **V3-P5-009:** Resolve WebView lifecycle, unexpected navigation abort, cache and GPU diagnostics where they affect playback.
-- [ ] **V3-P5-010:** Expose only evidence-backed Verified, Limited, Disabled, Dependency Allowed and Rule Failure shield states.
+- [x] **V3-P5-010:** Expose only evidence-backed Verified, Limited, Disabled, Dependency Allowed and Rule Failure shield states.
 - [ ] **V3-P5-011:** Prove that blocking rules do not break playback, artwork, manifests or subtitles.
 - [ ] **V3-P5-012:** Pass the complete provider, shield, subtitle and failover physical-device matrix.
+
+Phase 5 accepted source capability boundary:
+
+- **Seamless continuity and automatic targets:** Videasy, VidLink, VixSrc and 111Movies.
+- **Verified outgoing progress only:** VidSrc and VsEmbed; neither is an automatic carried-position target.
+- **Limited manual continuity:** VidKing; provider-side jumps/glitches prevent automatic targeting.
+- **Mobile-quarantined:** AutoEmbed, after repeated physical external-browser advertising escapes.
+
+`V3-P5-004` is structurally implemented: manifests now carry separate required,
+media, artwork and subtitle-origin categories, and Android applies category-aware
+precedence. It stays open until physically learned provider dependencies are
+populated and proven not to damage playback. `V3-P5-007` includes embedded
+text-track detection and external fallback, but safe opaque captured-VTT delivery
+is still open. `V3-P5-009`, `V3-P5-011` and `V3-P5-012` remain acceptance work.
 
 ### Phase 6 — Unified Mobile player experience
 
@@ -353,6 +367,8 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-08-11 | Orion v3 post-Phase-4 roadmap rebaseline | Reordered the remaining roadmap around Mobile viewing quality: streaming safety, unified player, complete Mobile UX, portable profiles, then distribution/updates/notifications. Closed Phase 4 only at its accepted secure-foundation boundary and transferred startup Play readiness, stale context, cursor quality, pointer latency, source selection and player-surface cursor work into deferred Phase 10. Added an explicit checklist-ID migration table and made native provider shielding—including ad/tracker interception and dependency allowlists—the active Phase 5. | Roadmap-only change based on the existing implementation record and user physical findings. Historical Progress Log rows are unchanged; no implementation or validation credit was added. Reweighted evidence remains 54.2%, rounded to 54%; package versions remain 2.0.1. | 54% |
 | 2026-08-11 | Phase 7 product-language and Settings IA additions | Recorded three deferred Mobile UX requirements: replace engineering-oriented Downloads copy with a premium honest locked state; reorganize growing Settings into Account, Appearance, Sync, Playback, Accessibility, Updates, Connect and Downloads sections; and add theme descriptions plus validated Custom-theme parity using Desktop as a reference. | Roadmap-only clarification based on user review. No runtime implementation, acceptance result or percentage credit was added. | 54% |
 | 2026-08-11 | V3-P10-001 through V3-P10-016, V3-P12-008 through V3-P12-010 | Added Mobile downloads and Offline Library as an essential Orion v3 milestone. Defined scoped candidate capture, direct/HLS/DASH fragment jobs, Android-native foreground execution, WorkManager recovery, request-context isolation, integrity-checked finalization, offline metadata/tracks/subtitles and unified native playback. Shifted deferred Connect expansion to Phase 11 and release validation to Phase 12. | Roadmap-only architecture update grounded in the existing Desktop downloader contracts and diagnostics. No downloader implementation or acceptance credit was added. Reweighted evidence remains 53.98%, rounded to 54%; package versions remain 2.0.1. | 54% |
+| 2026-08-13 | V3-P5-002, V3-P5-003, V3-P5-005, V3-P5-006, V3-P5-008 | Recorded the physically accepted Phase 5 protection and continuity boundary. Android-native Cinema interception, provider-specific shield rules, source capability/health classification and health-aware failover are present. Videasy, VidLink, VixSrc and 111Movies are seamless automatic targets; VidSrc and VsEmbed are outgoing-only; VidKing remains Limited Resume/manual; AutoEmbed is Mobile-quarantined after two failed physical popup-containment repairs. | Accepted physical-device investigation summarized in the Phase 5 handoff; checkpoint `9098b53`; AutoEmbed quarantine commit `b3c94f8`; 89/89 Mobile tests. No accepted continuity behavior was reopened. | 58% |
+| 2026-08-13 | V3-P5-004, V3-P5-007, V3-P5-010 implementation checkpoint | Added category-aware required/media/artwork/subtitle dependency handling to the shared source manifest and Android classifier, a native-session evidence handshake, redacted shield counters and truthful protection copy, plus read-only embedded text-track discovery. Protected no longer requires an ad to have appeared, but still requires an enforced native session with no rule failure. | Commit `dd2523c`; Mobile typecheck; 89/89 Mobile tests; 93-file source-size gate; production web export; `git diff --check`. Expo Doctor passed 18 local checks; its two online catalog checks were unavailable under restricted egress. Safe captured-VTT delivery, learned dependency population, lifecycle diagnosis and the complete physical provider matrix remain open. | 59% |
 
 Phase 3 is complete. Orion now keeps
 all viable TMDB YouTube and Vimeo candidates, ranks rather than prematurely
@@ -415,7 +431,11 @@ Orion Mobile now has four completed foundations: safety and observability,
 verified playback truth, evidence-backed History/Continue Watching, and reliable
 in-app trailers. Phase 4 is closed at the narrower boundary proven by physical
 testing: secure local pairing, encrypted device trust, reconnection and a usable
-unified remote foundation. Orion is not ready for an Orion 3.0 release yet.
+unified remote foundation. Phase 5 now has a native Cinema shield, accepted
+source capability boundaries, health-aware failover, evidence-backed protection
+states and embedded text-track discovery. It is not complete: provider dependency
+allowlists, captured subtitle delivery, lifecycle diagnosis and the full physical
+provider matrix still require evidence. Orion is not ready for an Orion 3.0 release yet.
 
 The next priority is the viewing experience itself. Phase 5 must provide native
 Android request interception, provider-specific ad/tracker/popup rules, required
