@@ -42,9 +42,9 @@ function createEnforcedManifest(source: CinemaSourceDescriptor): ProviderRequest
     mode: "enforce",
     allowedNavigationOrigins: Array.from(new Set([...source.expectedOrigins, ...source.allowedNavigationOrigins])),
     requiredOrigins: Array.from(new Set(source.requiredRequestOrigins)),
-    mediaOrigins: [],
-    artworkOrigins: [],
-    subtitleOrigins: [],
+    mediaOrigins: Array.from(new Set(source.mediaRequestOrigins ?? [])),
+    artworkOrigins: Array.from(new Set(source.artworkRequestOrigins ?? [])),
+    subtitleOrigins: Array.from(new Set(source.subtitleRequestOrigins ?? [])),
     popupPolicy: "block",
     rules: [...ENFORCED_BLOCK_RULES],
   };

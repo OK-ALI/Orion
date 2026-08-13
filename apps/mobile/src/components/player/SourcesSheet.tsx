@@ -9,7 +9,7 @@ import {
   MOBILE_PLAYER_SOURCES,
   getMobileSourceContinuityCapability,
 } from '../../features/playback/mobileSources';
-import type { EmbeddedSubtitleTrackV1, ShieldVerificationState, SubtitleDiscoveryState } from '@orion/shared/types';
+import type { EmbeddedSubtitleTrackV1, MobileShieldEvidenceV1, ShieldVerificationState, SubtitleDiscoveryState } from '@orion/shared/types';
 
 interface SourcesSheetProps {
   currentSourceId: string;
@@ -20,6 +20,7 @@ interface SourcesSheetProps {
   shieldState?: ShieldVerificationState;
   blockedRequests?: number;
   allowedDependencies?: number;
+  shieldEvidence?: MobileShieldEvidenceV1;
   subtitleState?: SubtitleDiscoveryState;
   subtitleCount?: number;
   subtitleTracks?: EmbeddedSubtitleTrackV1[];
@@ -53,7 +54,7 @@ const playbackStatusLabel = (state: string | null | undefined, cooling = false) 
 export function SourcesSheet(props: SourcesSheetProps) {
   const {
     currentSourceId, onSelect, onRetry, onClose, mediaType = 'movie', shieldState = 'limited',
-    blockedRequests = 0, allowedDependencies = 0, subtitleState = 'idle', subtitleCount = 0,
+    blockedRequests = 0, allowedDependencies = 0, shieldEvidence, subtitleState = 'idle', subtitleCount = 0,
     subtitleTracks = [], selectedSubtitleId = null, onSelectSubtitle, onFindExternalSubtitles,
   } = props;
   const { width, height } = useWindowDimensions();
@@ -127,9 +128,18 @@ export function SourcesSheet(props: SourcesSheetProps) {
       <View style={[styles.detailCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <Text style={[styles.detailTitle, { color: theme.text }]}>{protectionLabel(shieldState)}</Text>
         <Text style={[styles.detailText, { color: theme.textSecondary }]}>
-          {blockedRequests > 0 ? `${blockedRequests} unwanted connection${blockedRequests === 1 ? '' : 's'} blocked` : 'Protection is active while you watch.'}
+          {shieldState === 'verified'
+            ? blockedRequests > 0
+              ? `${blockedRequests} unwanted connection${blockedRequests === 1 ? '' : 's'} blocked`
+              : 'Native protection is active. No unwanted request has been observed yet.'
+            : shieldState === 'failed'
+              ? 'Protection encountered a rule or renderer problem.'
+              : 'Protection is still gathering native playback evidence.'}
         </Text>
         {allowedDependencies > 0 && <Text style={[styles.detailText, { color: theme.textSecondary }]}>Playback connections needed by this source are allowed</Text>}
+        {shieldEvidence?.observedSubtitleRequests ? (
+          <Text style={[styles.detailText, { color: theme.textSecondary }]}>Subtitle requests detected: {shieldEvidence.observedSubtitleRequests}</Text>
+        ) : null}
       </View>
       <View style={[styles.detailCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <Text style={[styles.detailTitle, { color: theme.text }]}>Resume & progress</Text>

@@ -7,6 +7,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import type { WebView as WebViewType } from 'react-native-webview';
 import type {
   EmbeddedSubtitleTrackV1,
+  MobileShieldEvidenceV1,
   MobilePlayerHudState,
   ShieldVerificationState,
   SubtitleDiscoveryState,
@@ -56,6 +57,18 @@ interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
 }
 
 const WEBVIEW_AUDIO_RELEASE_MS = Platform.OS === 'android' ? 240 : 80;
+const EMPTY_SHIELD_EVIDENCE: MobileShieldEvidenceV1 = {
+  nativeSessionObserved: false,
+  blockedRequests: 0,
+  blockedPopups: 0,
+  blockedNavigations: 0,
+  blockedAdvertisements: 0,
+  blockedTrackers: 0,
+  allowedPlaybackDependencies: 0,
+  observedMediaRequests: 0,
+  observedSubtitleRequests: 0,
+  lastRuleId: null,
+};
 const QUIET_CURRENT_SURFACE_SCRIPT = `
   (() => {
     document.querySelectorAll('video, audio').forEach((media) => {
@@ -97,6 +110,7 @@ export function EmbedPlayerSurface({
   );
   const [blockedRequests, setBlockedRequests] = useState(0);
   const [allowedDependencies, setAllowedDependencies] = useState(0);
+  const [shieldEvidence, setShieldEvidence] = useState<MobileShieldEvidenceV1>(EMPTY_SHIELD_EVIDENCE);
   const [subtitleState, setSubtitleState] = useState<SubtitleDiscoveryState>('idle');
   const [subtitleTracks, setSubtitleTracks] = useState<EmbeddedSubtitleTrackV1[]>([]);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string | null>(null);
@@ -118,7 +132,7 @@ export function EmbedPlayerSurface({
   const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sourceTransitionPending = useRef(false);
   const healthRecorded = useRef(false);
-  const nativeBlockObserved = useRef(false);
+  const nativeShieldObserved = useRef(false);
   const shieldFailureObserved = useRef(false);
   const surfaceLoaded = useRef(false);
   const webViewRef = useRef<WebViewType>(null);
@@ -200,11 +214,12 @@ export function EmbedPlayerSurface({
     setShieldState(Platform.OS === 'android' ? 'limited' : 'unavailable');
     setBlockedRequests(0);
     setAllowedDependencies(0);
+    setShieldEvidence(EMPTY_SHIELD_EVIDENCE);
     setSubtitleState('idle');
     setSubtitleTracks([]);
     setSelectedSubtitleId(null);
     healthRecorded.current = false;
-    nativeBlockObserved.current = false;
+    nativeShieldObserved.current = false;
     shieldFailureObserved.current = false;
     surfaceLoaded.current = false;
     setWatchdogDismissed(false);
@@ -355,7 +370,7 @@ export function EmbedPlayerSurface({
     setHudState('visible');
     resetHideTimer();
     if (source?.requestManifest?.mode === 'enforce'
-      && nativeBlockObserved.current
+      && nativeShieldObserved.current
       && !shieldFailureObserved.current) {
       setShieldState('verified');
     }
@@ -392,17 +407,38 @@ export function EmbedPlayerSurface({
         .filter(([key]) => key === 'blocked' || key.startsWith('blocked-'))
         .reduce((total, [, value]) => total + Math.max(0, Number(value) || 0), 0);
       const dependencyCount = Math.max(0, Number(counts['required-dependency']) || 0);
+      const classifications = envelope?.classifications && typeof envelope.classifications === 'object'
+        ? envelope.classifications : {};
+      const popupCount = Math.max(0, Number(classifications.popup) || 0);
+      const navigationCount = Math.max(0, Number(classifications['unsafe-navigation']) || 0);
+      const advertisementCount = Math.max(0, Number(classifications.advertisement) || 0);
+      const trackerCount = Math.max(0, Number(classifications.tracker) || 0);
+      const mediaCount = Math.max(0, Number(counts['observed-media']) || 0);
+      const subtitleCount = Math.max(0, Number(counts['observed-subtitle']) || 0);
+      const nativeSessionCount = Math.max(0, Number(counts.active) || 0);
+      const nativeEvidenceSeen = nativeSessionCount > 0 || decision === 'active';
+      if (nativeEvidenceSeen) nativeShieldObserved.current = true;
+      const safeRuleId = typeof envelope.ruleId === 'string'
+        ? envelope.ruleId.replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 64) || null
+        : null;
+      setShieldEvidence((current) => ({
+        nativeSessionObserved: current.nativeSessionObserved || nativeEvidenceSeen,
+        blockedRequests: current.blockedRequests + blockedCount,
+        blockedPopups: current.blockedPopups + popupCount,
+        blockedNavigations: current.blockedNavigations + navigationCount,
+        blockedAdvertisements: current.blockedAdvertisements + advertisementCount,
+        blockedTrackers: current.blockedTrackers + trackerCount,
+        allowedPlaybackDependencies: current.allowedPlaybackDependencies + dependencyCount,
+        observedMediaRequests: current.observedMediaRequests + mediaCount,
+        observedSubtitleRequests: current.observedSubtitleRequests + subtitleCount,
+        lastRuleId: safeRuleId || current.lastRuleId,
+      }));
       if (blockedCount > 0) {
-        nativeBlockObserved.current = true;
         setBlockedRequests((value) => value + blockedCount);
-        const nativeProtectionVerified = source?.requestManifest?.mode === 'enforce'
-          && surfaceLoaded.current
-          && !shieldFailureObserved.current;
-        setShieldState(nativeProtectionVerified ? 'verified' : 'limited');
       }
       if (dependencyCount > 0) {
         setAllowedDependencies((value) => value + dependencyCount);
-        if (!nativeBlockObserved.current) setShieldState('dependency-allowed');
+        if (!nativeShieldObserved.current) setShieldState('dependency-allowed');
       }
       if (decision === 'rule-failure') {
         shieldFailureObserved.current = true;
@@ -414,13 +450,35 @@ export function EmbedPlayerSurface({
         });
         setSubtitleTracks((existing) => existing.some((entry) => entry.id === track.id) ? existing : [...existing, track]);
         setSubtitleState('available');
-      } else if (blockedCount === 0 && dependencyCount === 0) {
-        setShieldState((current) => current === 'verified' ? current : 'limited');
+      } else {
+        const nativeProtectionVerified = source?.requestManifest?.mode === 'enforce'
+          && surfaceLoaded.current
+          && nativeShieldObserved.current
+          && !shieldFailureObserved.current;
+        setShieldState(nativeProtectionVerified ? 'verified' : dependencyCount > 0 ? 'dependency-allowed' : 'limited');
       }
       return;
     }
     if (envelope?.type === 'TAP') {
       handleScreenTap();
+      return;
+    }
+    if (envelope?.type === 'ORION_SUBTITLE_TRACK') {
+      const language = typeof envelope.language === 'string'
+        ? envelope.language.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 12) || 'und'
+        : 'und';
+      const label = typeof envelope.label === 'string'
+        ? envelope.label.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 80) || 'Embedded subtitles'
+        : 'Embedded subtitles';
+      const track = createObservedSubtitleTrack(telemetry.getSession().id, {
+        provider: sourceId,
+        language,
+        label,
+        method: 'text-track',
+        availability: 'available',
+      });
+      setSubtitleTracks((existing) => existing.some((entry) => entry.id === track.id) ? existing : [...existing, track]);
+      setSubtitleState('available');
       return;
     }
     if (envelope?.type === 'ORION_RESUME_RESULT') {
@@ -466,7 +524,7 @@ export function EmbedPlayerSurface({
       if (observationTimeout.current) clearTimeout(observationTimeout.current);
       const startupMs = Date.now() - loadStartedAt.current;
       const protectionVerified = source?.requestManifest?.mode === 'enforce'
-        && nativeBlockObserved.current
+        && nativeShieldObserved.current
         && !shieldFailureObserved.current;
       setShieldState(protectionVerified ? 'verified' : shieldFailureObserved.current ? 'failed' : 'limited');
       if (!healthRecorded.current) {
@@ -654,6 +712,7 @@ export function EmbedPlayerSurface({
           shieldState={shieldState}
           blockedRequests={blockedRequests}
           allowedDependencies={allowedDependencies}
+          shieldEvidence={shieldEvidence}
           subtitleState={subtitleState}
           subtitleCount={subtitleTracks.length}
           subtitleTracks={subtitleTracks}

@@ -45,6 +45,7 @@ export function createObservedSubtitleTrack(sessionId: string, input: {
   label?: string;
   formatHint?: string;
   method?: EmbeddedSubtitleTrackV1['discoveryMethod'];
+  availability?: EmbeddedSubtitleTrackV1['availability'];
 }): EmbeddedSubtitleTrackV1 {
   const language = String(input.language || 'und').slice(0, 12);
   const id = opaqueId(sessionId, input.provider, `${language}-${input.label || 'observed'}`);
@@ -55,7 +56,7 @@ export function createObservedSubtitleTrack(sessionId: string, input: {
     format: formatFrom(input.formatHint),
     provider: input.provider,
     discoveryMethod: input.method || 'request-capture',
-    availability: 'limited',
+    availability: input.availability || 'limited',
   }])[0];
 }
 

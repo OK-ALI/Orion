@@ -48,11 +48,35 @@ export const mobileAdBlockerScript = `
       });
     }
 
+    var reportedTracks = Object.create(null);
+    function reportTextTracks() {
+      if (!window.ReactNativeWebView) return;
+      document.querySelectorAll('video').forEach(function(video, videoIndex) {
+        try {
+          Array.from(video.textTracks || []).forEach(function(track, trackIndex) {
+            var language = String(track.language || 'und').slice(0, 12);
+            var label = String(track.label || track.kind || 'Embedded subtitles').slice(0, 80);
+            var identity = [videoIndex, trackIndex, language, label].join(':');
+            if (reportedTracks[identity]) return;
+            reportedTracks[identity] = true;
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'ORION_SUBTITLE_TRACK',
+              language: language,
+              label: label,
+              method: 'text-track'
+            }));
+          });
+        } catch (_) {}
+      });
+    }
+
     function installObserver() {
       removeAds();
+      reportTextTracks();
       var remaining = 80;
       var observer = new MutationObserver(function() {
         removeAds();
+        reportTextTracks();
         remaining -= 1;
         if (remaining <= 0) observer.disconnect();
       });

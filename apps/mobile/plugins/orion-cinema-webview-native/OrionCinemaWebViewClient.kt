@@ -58,7 +58,7 @@ class OrionCinemaWebViewClient : RNCWebViewClient() {
   }
 
   override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-    emit(view, ShieldDecision("allow", "navigation", null))
+    emit(view, ShieldDecision("active", "native-session", null))
     super.onPageStarted(view, url, favicon)
   }
 
@@ -91,6 +91,9 @@ class OrionCinemaWebViewClient : RNCWebViewClient() {
     val knownOrigin = current.allowedNavigationOrigins.any { originMatches(it, uri) }
     if (isPopup || (isMainFrame && !knownOrigin)) return ShieldDecision("blocked", "unsafe-navigation", null)
     if (current.requiredOrigins.any { originMatches(it, uri) }) return ShieldDecision("required-dependency", "required", null)
+    if (current.mediaOrigins.any { originMatches(it, uri) }) return ShieldDecision("observed-media", "media", null)
+    if (current.artworkOrigins.any { originMatches(it, uri) }) return ShieldDecision("allow", "artwork", null)
+    if (current.subtitleOrigins.any { originMatches(it, uri) }) return ShieldDecision("observed-subtitle", "subtitle", null)
     val classifiedRule = current.rules.firstOrNull { hostMatches(it, host) }
     if (classifiedRule != null) {
       // Observation mode preserves playback compatibility; only device-validated
@@ -98,8 +101,9 @@ class OrionCinemaWebViewClient : RNCWebViewClient() {
       if (current.mode == "enforce" && classifiedRule.action == "block") return ShieldDecision("blocked", classifiedRule.kind, classifiedRule.id)
       return ShieldDecision("unknown", classifiedRule.kind, classifiedRule.id)
     }
-    if (current.subtitleOrigins.any { originMatches(it, uri) } || isSubtitlePath(uri?.path)) return ShieldDecision("observed-subtitle", "subtitle", null)
+    if (isSubtitlePath(uri?.path)) return ShieldDecision("observed-subtitle", "subtitle", null)
     if (isMediaPath(uri?.path)) return ShieldDecision("observed-media", "media", null)
+    if (isArtworkPath(uri?.path)) return ShieldDecision("allow", "artwork", null)
     return ShieldDecision("unknown", "unknown", null)
   }
 
@@ -149,6 +153,7 @@ class OrionCinemaWebViewClient : RNCWebViewClient() {
     host == rule.hostPattern || (rule.includeSubdomains && host.endsWith(".${rule.hostPattern}"))
   private fun isMediaPath(path: String?): Boolean = path?.contains(Regex("\\.(m3u8|mpd|m4s|ts|mp4|webm)(\\?|$)", RegexOption.IGNORE_CASE)) == true
   private fun isSubtitlePath(path: String?): Boolean = path?.contains(Regex("\\.(vtt|srt|ass|ssa)(\\?|$)", RegexOption.IGNORE_CASE)) == true
+  private fun isArtworkPath(path: String?): Boolean = path?.contains(Regex("\\.(avif|gif|jpe?g|png|webp)(\\?|$)", RegexOption.IGNORE_CASE)) == true
 }
 
 private data class ShieldRule(
@@ -162,6 +167,8 @@ private data class ShieldManifest(
   val mode: String,
   val allowedNavigationOrigins: List<String>,
   val requiredOrigins: List<String>,
+  val mediaOrigins: List<String>,
+  val artworkOrigins: List<String>,
   val subtitleOrigins: List<String>,
   val rules: List<ShieldRule>,
 ) {
@@ -186,7 +193,15 @@ private data class ShieldManifest(
             rule.optString("action", "observe"),
           )
         }
-        ShieldManifest(json.optString("mode", "observe"), strings("allowedNavigationOrigins"), strings("requiredOrigins"), strings("subtitleOrigins"), rules)
+        ShieldManifest(
+          json.optString("mode", "observe"),
+          strings("allowedNavigationOrigins"),
+          strings("requiredOrigins"),
+          strings("mediaOrigins"),
+          strings("artworkOrigins"),
+          strings("subtitleOrigins"),
+          rules,
+        )
       }
     } catch (_: Exception) { null }
   }

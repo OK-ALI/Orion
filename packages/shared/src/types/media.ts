@@ -243,6 +243,20 @@ export type ShieldVerificationState =
   | "dependency-allowed"
   | "failed";
 
+/** Redacted native interception evidence safe to expose to Mobile UI. */
+export interface MobileShieldEvidenceV1 {
+  nativeSessionObserved: boolean;
+  blockedRequests: number;
+  blockedPopups: number;
+  blockedNavigations: number;
+  blockedAdvertisements: number;
+  blockedTrackers: number;
+  allowedPlaybackDependencies: number;
+  observedMediaRequests: number;
+  observedSubtitleRequests: number;
+  lastRuleId: string | null;
+}
+
 /** A renderer-safe subtitle reference. Provider URLs and request headers stay native/internal. */
 export interface EmbeddedSubtitleTrackV1 {
   id: string;

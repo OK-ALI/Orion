@@ -22,6 +22,10 @@ test("Cinema shield stays native-only, compatibility-first, and redacted", () =>
   assert.match(client, /latest\?\.decision/);
   assert.match(client, /pendingClassifications/);
   assert.match(client, /"classifications"/);
+  assert.match(client, /"active"/);
+  assert.match(client, /mediaOrigins/);
+  assert.match(client, /artworkOrigins/);
+  assert.match(client, /subtitleOrigins/);
   assert.match(client, /redacted evidence/);
   assert.match(client, /scheme-deny/);
   assert.match(client, /hostless-deny/);
@@ -79,6 +83,9 @@ test("all current Mobile Cinema providers carry an enforced shared blocker manif
   assert.match(registry, /mode:\s*"enforce"/);
   assert.match(registry, /CINEMA_BLOCK_RULE_CATALOG_V1/);
   assert.match(registry, /allowedNavigationOrigins/);
+  assert.match(registry, /mediaRequestOrigins/);
+  assert.match(registry, /artworkRequestOrigins/);
+  assert.match(registry, /subtitleRequestOrigins/);
   assert.match(registry, /popupPolicy:\s*"block"/);
   assert.match(blockerCatalog, /gsbdom\.click/);
   assert.match(blockerCatalog, /includeSubdomains/);
@@ -105,6 +112,8 @@ test("Cinema cleanup blocks popup links without permanent polling", () => {
   assert.match(blocker, /MutationObserver/);
   assert.match(blocker, /gsbdom\.click/);
   assert.doesNotMatch(blocker, /setInterval/);
+  assert.match(blocker, /ORION_SUBTITLE_TRACK/);
+  assert.match(blocker, /video\.textTracks/);
 });
 
 test("Streaming Servers keeps source selection primary and details expandable", () => {
@@ -122,6 +131,9 @@ test("player HUD exposes native shield status and a blocked-request counter", ()
   const surface = read("apps", "mobile", "src", "features", "playback", "EmbedPlayerSurface.tsx");
   assert.match(surface, /surfaceLoaded\.current/);
   assert.match(surface, /nativeProtectionVerified/);
+  assert.match(surface, /nativeShieldObserved/);
+  assert.match(surface, /nativeSessionObserved/);
+  assert.match(surface, /ORION_SUBTITLE_TRACK/);
   assert.match(surface, /styles\.shieldCounter/);
   assert.match(surface, /\{blockedRequests\}/);
   assert.match(surface, /'Protected'/);

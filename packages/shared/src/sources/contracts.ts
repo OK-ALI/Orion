@@ -90,6 +90,10 @@ export interface CinemaSourceDescriptor {
   expectedOrigins: string[];
   allowedNavigationOrigins: string[];
   requiredRequestOrigins: string[];
+  /** Optional classified dependency origins learned from physical provider evidence. */
+  mediaRequestOrigins?: string[];
+  artworkRequestOrigins?: string[];
+  subtitleRequestOrigins?: string[];
   /** Android-only request policy for a shielded Cinema session. */
   requestManifest?: ProviderRequestManifestV1;
   progressStrategy: ProgressStrategy;
@@ -156,6 +160,12 @@ export function validateSourceDescriptor(source: CinemaSourceDescriptor): string
     const arr = source[field];
     if (!Array.isArray(arr) || arr.some((value: string) => !isOrigin(value))) {
       errors.push(`${field} must contain normalized URL origins.`);
+    }
+  }
+  for (const field of ["mediaRequestOrigins", "artworkRequestOrigins", "subtitleRequestOrigins"] as const) {
+    const arr = source[field];
+    if (arr !== undefined && (!Array.isArray(arr) || arr.some((value: string) => !isOrigin(value)))) {
+      errors.push(`${field} must contain normalized URL origins when provided.`);
     }
   }
   if (source.requestManifest) {
