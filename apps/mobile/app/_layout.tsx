@@ -12,11 +12,13 @@ import { useCallback, useRef, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LibraryProvider } from '../src/context/LibraryContext';
 import { ThemeProvider, useOrionTheme } from '../src/context/ThemeContext';
+import { PerformanceProvider } from '../src/context/PerformanceContext';
 import { NetworkProvider } from '../src/context/NetworkContext';
 import { OfflineBanner } from '../src/components/OfflineBanner';
 import { StorageUnavailableScreen } from '../src/components/StorageUnavailableScreen';
 import { MobileDiagnosticsBridge } from '../src/components/MobileDiagnosticsBridge';
 import { StartupIntro } from '../src/components/StartupIntro';
+import { GlobalSearchShortcut } from '../src/components/GlobalSearchShortcut';
 
 
 // Keep the splash screen visible while we fetch resources
@@ -59,9 +61,11 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <NetworkProvider>
-          <ThemedApplication />
-        </NetworkProvider>
+        <PerformanceProvider>
+          <NetworkProvider>
+            <ThemedApplication />
+          </NetworkProvider>
+        </PerformanceProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );
@@ -101,6 +105,7 @@ function ThemedApplication() {
             >
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             </Stack>
+            <GlobalSearchShortcut />
             <OfflineBanner />
           </View>
         </GestureHandlerRootView>

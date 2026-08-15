@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator, Pressable, FlatList, Animated, useWindowDimensions, Modal, Share } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState, useEffect, useRef } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { spacing } from '@orion/shared/tokens';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,19 +9,78 @@ import { TmdbMediaItem } from '@orion/shared/types';
 import { DownloadModal } from '../../components/DownloadModal';
 import { TrailerModal } from '../../components/TrailerModal';
 import { MediaCard } from '../../components/MediaCard';
-import { useLibrary } from '../../context/LibraryContext';
+import { useLibraryPlaybackActions, useLibraryVisual } from '../../context/LibraryContext';
 import { useResponsiveLayout } from '../../services/responsive';
+import { getRailRenderBudget } from '../../services/listPerformance';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { usePerformanceProfile } from '../../context/PerformanceContext';
 import { styles } from "./mediaDetailStyles";
 import { normalizeTrailerCandidates } from '../trailers/trailerCandidateService';
+import { useMediaDetailWatched } from './useMediaDetailWatched';
+import { EpisodeWatchedButton, MovieWatchedBadge, SeasonWatchedControl, WatchedFeedback } from './WatchedControls';
+import { MovieCollectionTab } from './MovieCollectionTab';
+import { isVerifiedPlaybackEvidence } from '../library/playbackLibrary';
+
+function EpisodeOverview({ overview, theme }: { overview: string; theme: any }) {
+  const [expanded, setExpanded] = useState(false);
+  const [measured, setMeasured] = useState(false);
+  const [canExpand, setCanExpand] = useState(false);
+
+  const handleMeasure = useCallback((event: any) => {
+    setCanExpand(event.nativeEvent.lines.length > 2);
+    setMeasured(true);
+  }, []);
+
+  return (
+    <View style={styles.episodeOverviewBlock}>
+      {!measured && (
+        <Text
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[styles.episodeOverviewText, styles.episodeOverviewMeasure, { color: theme.textSecondary }]}
+          onTextLayout={handleMeasure}
+        >
+          {overview}
+        </Text>
+      )}
+      <Text
+        style={[styles.episodeOverviewText, { color: theme.textSecondary }]}
+        numberOfLines={expanded ? undefined : 2}
+        ellipsizeMode="tail"
+      >
+        {overview}
+      </Text>
+      {canExpand && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? 'Show less episode information' : 'Show more episode information'}
+          accessibilityState={{ expanded }}
+          hitSlop={6}
+          style={({ pressed }) => [styles.episodeOverviewToggle, pressed && { opacity: 0.7 }]}
+          onPress={(event) => {
+            event.stopPropagation();
+            setExpanded((value) => !value);
+          }}
+        >
+          <Text style={[styles.episodeOverviewToggleText, { color: theme.accent }]}>
+            {expanded ? 'Show less' : 'Show more'}
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 export default function MediaDetailScreen() {
   const { id, type } = useLocalSearchParams<{ id: string; type: 'movie' | 'tv' }>();
   const router = useRouter();
   const { theme } = useOrionTheme();
-  const { isWatched, markWatched, markUnwatched, toggleSave, isSaved } = useLibrary();
+  const { resolvedProfile } = usePerformanceProfile();
+  const { toggleSave, isSaved } = useLibraryVisual();
+  const { getPlaybackProgress } = useLibraryPlaybackActions();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'info' | 'episodes' | 'cast' | 'recommended'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'episodes' | 'cast' | 'recommended' | 'collection'>('info');
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [showTrailerModal, setShowTrailerModal] = useState(false);
@@ -31,7 +90,9 @@ export default function MediaDetailScreen() {
   const [seasonVideos, setSeasonVideos] = useState<any[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const { isTablet } = useResponsiveLayout();
+  const [, setProgressRefreshVersion] = useState(0);
+  const { width, isTablet } = useResponsiveLayout();
+  const { fontScale } = useWindowDimensions();
   const tabFadeAnim = useRef(new Animated.Value(1)).current;
   const handleTabChange = (tabKey: typeof activeTab) => {
     Animated.sequence([
@@ -41,6 +102,53 @@ export default function MediaDetailScreen() {
     setActiveTab(tabKey);
   };
   const isMovie = type === 'movie';
+  const watchedActions = useMediaDetailWatched({
+    data,
+    type,
+    seriesId: id,
+    title: isMovie ? (data?.title || 'This movie') : (data?.name || 'This show'),
+    selectedSeason,
+    episodes,
+  });
+  const castList = useMemo(() => data?.credits?.cast || [], [data?.credits?.cast]);
+  const topCast = useMemo(() => castList.slice(0, 15), [castList]);
+  const fullCast = useMemo(() => castList.slice(0, 25), [castList]);
+  const recommendedItems = useMemo(
+    () => (data?.recommendations?.results || [])
+      .filter((item: any) => item.poster_path)
+      .map((item: TmdbMediaItem) => ({ ...item, media_type: type } as TmdbMediaItem)),
+    [data?.recommendations?.results, type],
+  );
+  const castRenderBudget = useMemo(() => getRailRenderBudget(width, 106 + spacing[3], resolvedProfile), [resolvedProfile, width]);
+  const recommendationRenderBudget = useMemo(
+    () => getRailRenderBudget(width, 140 + spacing[4] + spacing[3], resolvedProfile),
+    [resolvedProfile, width],
+  );
+  const collectionRef = useMemo(() => {
+    if (!isMovie || !data?.belongs_to_collection?.id) return null;
+    return {
+      id: Number(data.belongs_to_collection.id),
+      name: String(data.belongs_to_collection.name || 'Movie Collection'),
+    };
+  }, [data?.belongs_to_collection?.id, data?.belongs_to_collection?.name, isMovie]);
+  const fitCollectionTabs = isMovie && !!collectionRef && !isTablet && fontScale <= 1.05;
+  const openCollectionMovie = useCallback((movieId: number) => {
+    if (String(movieId) === String(id)) return;
+    // Push rather than replace so Android/Orion Back restores the originating
+    // Media Detail instance, including its selected tab and scroll context.
+    router.push({
+      pathname: '/media/[id]',
+      params: { id: String(movieId), type: 'movie' },
+    });
+  }, [id, router]);
+  useFocusEffect(
+    useCallback(() => {
+      // Progress is deliberately read through the stable playback-actions lane so
+      // Media Detail does not subscribe to every telemetry persistence write.
+      // Refresh only when the screen becomes active again after playback.
+      setProgressRefreshVersion((version) => version + 1);
+    }, []),
+  );
   useEffect(() => {
     async function loadDetails() {
       setLoading(true);
@@ -74,21 +182,22 @@ export default function MediaDetailScreen() {
     return () => { cancelled = true; };
   }, [id, type, showTrailerModal, selectedSeason]);
   useEffect(() => {
-    if (!isMovie && selectedSeason) {
-      async function loadEpisodes() {
-        setEpisodesLoading(true);
-        try {
-          const res = await tmdbFetch<any>(`/tv/${id}/season/${selectedSeason}`);
-          setEpisodes(res.episodes || []);
-        } catch (err) {
-          console.error('Failed to fetch episodes:', err);
-        } finally {
-          setEpisodesLoading(false);
-        }
+    if (isMovie || activeTab !== 'episodes' || !selectedSeason) return;
+    let cancelled = false;
+    async function loadEpisodes() {
+      setEpisodesLoading(true);
+      try {
+        const res = await tmdbFetch<any>(`/tv/${id}/season/${selectedSeason}`);
+        if (!cancelled) setEpisodes(res.episodes || []);
+      } catch (err) {
+        if (!cancelled) console.error('Failed to fetch episodes:', err);
+      } finally {
+        if (!cancelled) setEpisodesLoading(false);
       }
-      loadEpisodes();
     }
-  }, [id, isMovie, selectedSeason]);
+    loadEpisodes();
+    return () => { cancelled = true; };
+  }, [activeTab, id, isMovie, selectedSeason]);
   if (loading) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
@@ -114,7 +223,6 @@ export default function MediaDetailScreen() {
   const genres = data.genres?.map((g: any) => g.name).join(' • ');
   const backdrop = imgUrl(data.backdrop_path, 'original');
   const poster = imgUrl(data.poster_path, 'w500');
-  const castList = data.credits?.cast || [];
   const releaseDateStr = isMovie ? data.release_date : data.first_air_date;
   const isUnreleased = releaseDateStr ? new Date(releaseDateStr) > new Date() : false;
   const mainVideoResults: any[] = data.videos?.results || [];
@@ -131,9 +239,21 @@ export default function MediaDetailScreen() {
   const heroSecondary = theme.dark ? 'rgba(255,255,255,0.82)' : theme.textSecondary;
   const heroSurface = theme.dark ? 'rgba(255,255,255,0.10)' : theme.surface;
   const heroBorder = theme.dark ? 'rgba(255,255,255,0.18)' : theme.border;
+  // Dark themes keep the cinematic black fade. Light themes fade the artwork
+  // directly into their own page surface so Projector Silver never develops a
+  // muddy grey band behind the title/metadata area.
+  const backdropFadeColors = theme.dark
+    ? ['rgba(5,5,10,0.10)', 'rgba(5,5,10,0.52)', 'rgba(5,5,10,0.84)', theme.background] as const
+    : [`${theme.background}00`, `${theme.background}52`, `${theme.background}E8`, theme.background] as const;
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <Pressable onPress={() => router.back()} style={styles.backButton}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        hitSlop={6}
+        onPress={() => router.back()}
+        style={styles.backButton}
+      >
         <Ionicons name="arrow-back" size={20} color="#fff" />
       </Pressable>
       <Animated.ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
@@ -144,7 +264,7 @@ export default function MediaDetailScreen() {
             <View style={[styles.backdropImage, { backgroundColor: theme.surface }]} />
           )}
           <LinearGradient
-            colors={['rgba(5,5,10,0.10)', 'rgba(5,5,10,0.52)', 'rgba(5,5,10,0.84)', theme.background]}
+            colors={backdropFadeColors}
             locations={[0, 0.4, 0.75, 1]}
             style={styles.backdropGradient}
           />
@@ -169,11 +289,13 @@ export default function MediaDetailScreen() {
               )}
             </View>
             <View style={styles.headerMeta}>
-              <Text style={[
+              <Text accessibilityRole="header" style={[
                 styles.titleText,
                 {
                   color: heroText,
                   textShadowColor: theme.dark ? 'rgba(0,0,0,0.95)' : 'transparent',
+                  textShadowOffset: theme.dark ? { width: 0, height: 2 } : { width: 0, height: 0 },
+                  textShadowRadius: theme.dark ? 10 : 0,
                 },
               ]}>{title}</Text>
               <View style={styles.metaBadgeRow}>
@@ -197,13 +319,16 @@ export default function MediaDetailScreen() {
                     {
                       color: theme.accent,
                       textShadowColor: theme.dark ? 'rgba(0,0,0,0.9)' : 'transparent',
+                      textShadowOffset: theme.dark ? { width: 0, height: 1 } : { width: 0, height: 0 },
+                      textShadowRadius: theme.dark ? 4 : 0,
                     },
-                  ]} numberOfLines={1}>{genres}</Text>
+                  ]} numberOfLines={2}>{genres}</Text>
                 </View>
               )}
+              {isMovie && <MovieWatchedBadge watched={watchedActions.movieWatched} theme={theme} />}
             </View>
           </View>
-          <View style={[styles.actionRow, isTablet && styles.actionRowTablet]}>
+          <View style={[styles.actionStack, isTablet && styles.actionRowTablet]}>
             {isUnreleased ? (
               <View style={styles.unreleasedBtn}>
                 <Ionicons name="lock-closed" size={16} color="#f87171" />
@@ -231,10 +356,17 @@ export default function MediaDetailScreen() {
                 </View>
               </Pressable>
             )}
-            <View style={styles.secondaryActions}>
+            <View style={styles.secondaryActionRow}>
               <Pressable
                 accessibilityRole="button"
-                style={({ pressed }) => [styles.trailerBtn, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && styles.pressed]}
+                accessibilityLabel={isSaved({ ...data, media_type: type }) ? `Remove ${title} from My List` : `Add ${title} to My List`}
+                accessibilityState={{ selected: isSaved({ ...data, media_type: type }) }}
+                style={({ pressed }) => [
+                  styles.trailerBtn,
+                  styles.secondaryActionButton,
+                  { backgroundColor: theme.surface, borderColor: theme.border },
+                  pressed && styles.pressed,
+                ]}
                 onPress={() => toggleSave({ ...data, media_type: type })}
               >
                 <Ionicons name={isSaved({ ...data, media_type: type }) ? "checkmark" : "add"} size={18} color={theme.text} />
@@ -243,7 +375,13 @@ export default function MediaDetailScreen() {
               {trailerObj && (
                 <Pressable
                   accessibilityRole="button"
-                  style={({ pressed }) => [styles.trailerBtn, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && styles.pressed]}
+                  accessibilityLabel={`Play ${title} trailer`}
+                  style={({ pressed }) => [
+                    styles.trailerBtn,
+                    styles.secondaryActionButton,
+                    { backgroundColor: theme.surface, borderColor: theme.border },
+                    pressed && styles.pressed,
+                  ]}
                   onPress={() => setShowTrailerModal(true)}
                 >
                   <Ionicons name="film-outline" size={18} color={theme.text} />
@@ -267,26 +405,60 @@ export default function MediaDetailScreen() {
             candidates={allTrailers}
           />
           <View style={[styles.tabsContainer, { borderBottomColor: theme.border }]}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {['info', ...(isMovie ? [] : ['episodes']), 'cast', 'recommended'].map((tab) => {
-                const isActive = activeTab === tab;
-                return (
-                  <Pressable
-                    key={tab}
-                    onPress={() => handleTabChange(tab as any)}
-                    style={({ pressed }) => [
-                      styles.tabPill,
-                      { backgroundColor: isActive ? theme.accentSoft : theme.surface, borderColor: isActive ? theme.accent : theme.border },
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <Text style={[styles.tabPillText, { color: isActive ? theme.accent : theme.textSecondary }]}>
-                      {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            {fitCollectionTabs ? (
+              <View style={{ flexDirection: 'row', gap: 6, width: '100%' }}>
+                {(['info', 'cast', 'recommended', 'collection'] as const).map((tab) => {
+                  const isActive = activeTab === tab;
+                  const fittedFlex = tab === 'recommended' ? 1.8 : tab === 'collection' ? 1.5 : 0.85;
+                  return (
+                    <Pressable
+                      key={tab}
+                      accessibilityRole="tab"
+                      accessibilityLabel={`${tab.charAt(0).toUpperCase() + tab.slice(1)} section`}
+                      accessibilityState={{ selected: isActive }}
+                      onPress={() => handleTabChange(tab)}
+                      style={({ pressed }) => [
+                        styles.tabPill,
+                        { flex: fittedFlex, paddingHorizontal: 6, alignItems: 'center' },
+                        { backgroundColor: isActive ? theme.accentSoft : theme.surface, borderColor: isActive ? theme.accent : theme.border },
+                        pressed && { opacity: 0.8 },
+                      ]}
+                    >
+                      <Text
+                        numberOfLines={1}
+                        style={[styles.tabPillText, { color: isActive ? theme.accent : theme.textSecondary }]}
+                      >
+                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                {['info', ...(isMovie ? [] : ['episodes']), 'cast', 'recommended', ...(collectionRef ? ['collection'] : [])].map((tab) => {
+                  const isActive = activeTab === tab;
+                  return (
+                    <Pressable
+                      key={tab}
+                      accessibilityRole="tab"
+                      accessibilityLabel={`${tab.charAt(0).toUpperCase() + tab.slice(1)} section`}
+                      accessibilityState={{ selected: isActive }}
+                      onPress={() => handleTabChange(tab as any)}
+                      style={({ pressed }) => [
+                        styles.tabPill,
+                        { backgroundColor: isActive ? theme.accentSoft : theme.surface, borderColor: isActive ? theme.accent : theme.border },
+                        pressed && { opacity: 0.8 },
+                      ]}
+                    >
+                      <Text style={[styles.tabPillText, { color: isActive ? theme.accent : theme.textSecondary }]}>
+                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
           </View>
           <View style={styles.tabContent}>
             {activeTab === 'info' && (
@@ -295,60 +467,85 @@ export default function MediaDetailScreen() {
                 {castList.length > 0 && (
                   <View style={styles.castSection}>
                     <Text style={[styles.subSectionTitle, { color: theme.textMuted }]}>TOP CAST & CREW</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.castScroll}>
-                      {castList.slice(0, 15).map((actor: any) => (
-                        <Pressable 
-                          key={actor.id} 
+                    <FlatList
+                      data={topCast}
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.castScroll}
+                      keyExtractor={(actor: any) => String(actor.id)}
+                      initialNumToRender={castRenderBudget.initialNumToRender}
+                      maxToRenderPerBatch={castRenderBudget.maxToRenderPerBatch}
+                      windowSize={castRenderBudget.windowSize}
+                      renderItem={({ item: actor }: { item: any }) => (
+                        <Pressable
                           style={({ pressed }) => [styles.castCard, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && { opacity: 0.8 }]}
                           onPress={() => router.push(`/person/${actor.id}` as any)}
                         >
-                          <Image 
-                            source={{ uri: imgUrl(actor.profile_path, 'w200') || undefined }} 
+                          <Image
+                            source={{ uri: imgUrl(actor.profile_path, 'w200') || undefined }}
                             style={[styles.castImage, { backgroundColor: theme.surface, borderColor: theme.border }]}
                           />
                           <Text style={[styles.castName, { color: theme.text }]} numberOfLines={1}>{actor.name}</Text>
                           <Text style={[styles.castCharacter, { color: theme.textMuted }]} numberOfLines={1}>{actor.character || 'Actor'}</Text>
                         </Pressable>
-                      ))}
-                    </ScrollView>
+                      )}
+                    />
                   </View>
                 )}
               </View>
             )}
             {activeTab === 'cast' && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.castScroll}>
-                {castList.slice(0, 25).map((actor: any) => (
-                  <Pressable 
-                    key={actor.id} 
+              <FlatList
+                data={fullCast}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.castScroll}
+                keyExtractor={(actor: any) => String(actor.id)}
+                initialNumToRender={castRenderBudget.initialNumToRender}
+                maxToRenderPerBatch={castRenderBudget.maxToRenderPerBatch}
+                windowSize={castRenderBudget.windowSize}
+                renderItem={({ item: actor }: { item: any }) => (
+                  <Pressable
                     style={({ pressed }) => [styles.castCard, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && { opacity: 0.8 }]}
                     onPress={() => router.push(`/person/${actor.id}` as any)}
                   >
-                    <Image 
-                      source={{ uri: imgUrl(actor.profile_path, 'w200') || undefined }} 
+                    <Image
+                      source={{ uri: imgUrl(actor.profile_path, 'w200') || undefined }}
                       style={[styles.castImage, { backgroundColor: theme.surface, borderColor: theme.border }]}
                     />
                     <Text style={[styles.castName, { color: theme.text }]} numberOfLines={1}>{actor.name}</Text>
                     <Text style={[styles.castCharacter, { color: theme.textMuted }]} numberOfLines={1}>{actor.character || 'Actor'}</Text>
                   </Pressable>
-                ))}
-              </ScrollView>
+                )}
+              />
             )}
             {activeTab === 'recommended' && (
               <FlatList
-                data={(data.recommendations?.results || []).filter((r: any) => r.poster_path)}
+                data={recommendedItems}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: spacing[3], paddingBottom: spacing[4] }}
                 keyExtractor={(item: any, idx: number) => `${item.id}_${idx}`}
+                initialNumToRender={recommendationRenderBudget.initialNumToRender}
+                maxToRenderPerBatch={recommendationRenderBudget.maxToRenderPerBatch}
+                windowSize={recommendationRenderBudget.windowSize}
                 renderItem={({ item }: { item: TmdbMediaItem }) => (
                   <MediaCard
-                    item={{ ...item, media_type: type } as TmdbMediaItem}
+                    item={item}
                     onPress={() => router.push(`/media/${item.id}?type=${type}`)}
                   />
                 )}
                 ListEmptyComponent={
                   <Text style={[styles.placeholderText, { color: theme.textMuted }]}>No recommendations available.</Text>
                 }
+              />
+            )}
+            {activeTab === 'collection' && collectionRef && (
+              <MovieCollectionTab
+                collectionId={collectionRef.id}
+                collectionName={collectionRef.name}
+                currentMovieId={id}
+                onOpenMovie={openCollectionMovie}
               />
             )}
             {activeTab === 'episodes' && (
@@ -358,6 +555,9 @@ export default function MediaDetailScreen() {
                     {Array.from({ length: data.number_of_seasons }, (_, i) => i + 1).map((s) => (
                       <Pressable
                         key={s}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Season ${s}`}
+                        accessibilityState={{ selected: selectedSeason === s }}
                         onPress={() => setSelectedSeason(s)}
                         style={[styles.seasonPill, { backgroundColor: selectedSeason === s ? theme.accent : theme.surface, borderColor: selectedSeason === s ? theme.accent : theme.border }]}
                       >
@@ -368,94 +568,122 @@ export default function MediaDetailScreen() {
                     ))}
                   </ScrollView>
                 )}
+                {!episodesLoading && episodes.length > 0 && (
+                  <SeasonWatchedControl
+                    season={selectedSeason}
+                    watched={watchedActions.seasonWatched}
+                    onPress={watchedActions.requestSeasonToggle}
+                    theme={theme}
+                  />
+                )}
                 {episodesLoading ? (
                   <ActivityIndicator size="small" color={theme.accent} style={{ marginTop: 20 }} />
                 ) : (
-                  episodes.map((ep: any) => (
-                    <Pressable
-                      key={ep.id}
-                      style={({ pressed }) => [
-                        styles.episodeCard,
-                        { backgroundColor: theme.elevated, borderColor: theme.border },
-                        pressed && { opacity: 0.85 },
-                      ]}
-                      onPress={() => router.push({
-                        pathname: '/player/[id]',
-                        params: {
-                          id, type, title: ep.name, year,
-                          seriesTitle: title,
-                          season: selectedSeason,
-                          episode: ep.episode_number,
-                          episodeTitle: ep.name,
-                          posterPath: data.poster_path || undefined,
-                          backdropPath: ep.still_path || data.backdrop_path || undefined,
-                        }
-                      })}
-                    >
-                      <View style={styles.epThumbWrapper}>
-                        {ep.still_path ? (
-                          <Image source={{ uri: imgUrl(ep.still_path, 'w300') || undefined }} style={styles.episodeListThumb} />
-                        ) : (
-                          <View style={[styles.episodeListThumb, styles.emptyThumb, { backgroundColor: theme.surface }]}>
-                            <Ionicons name="film-outline" size={24} color={theme.textMuted} />
-                          </View>
-                        )}
-                        <View style={styles.playBadgeOverlay}>
-                          <Ionicons name="play" size={12} color="#fff" />
-                        </View>
-                      </View>
-                      <View style={styles.episodeListInfo}>
-                        <View style={styles.epMetaRow}>
-                          <Text style={[styles.episodeListNum, { color: theme.accent }]}>E{ep.episode_number}</Text>
-                          {!!ep.vote_average && (
-                            <View style={styles.epStarBadge}>
-                              <Ionicons name="star" size={10} color="#fbbf24" />
-                              <Text style={styles.epStarText}>{ep.vote_average.toFixed(1)}</Text>
+                  episodes.map((ep: any) => {
+                    const episodeWatched = watchedActions.isEpisodeWatched(ep);
+                    const episodeProgress = getPlaybackProgress('tv', id, selectedSeason, ep.episode_number);
+                    const episodeProgressPercent = !episodeWatched
+                      && episodeProgress
+                      && isVerifiedPlaybackEvidence(episodeProgress.evidence)
+                      && episodeProgress.currentTime > 0
+                      && episodeProgress.percent != null
+                      ? Math.max(0, Math.min(100, episodeProgress.percent))
+                      : 0;
+                    const progressLabel = episodeProgressPercent > 0
+                      ? `, ${Math.round(episodeProgressPercent)} percent watched`
+                      : '';
+                    return (
+                      <Pressable
+                        key={ep.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Episode ${ep.episode_number}, ${ep.name}${episodeWatched ? ', watched' : progressLabel}`}
+                        accessibilityHint="Starts this episode"
+                        style={({ pressed }) => [
+                          styles.episodeCard,
+                          { backgroundColor: theme.elevated, borderColor: theme.border },
+                          pressed && { opacity: 0.85 },
+                        ]}
+                        onPress={() => router.push({
+                          pathname: '/player/[id]',
+                          params: {
+                            id, type, title: ep.name, year,
+                            seriesTitle: title,
+                            season: selectedSeason,
+                            episode: ep.episode_number,
+                            episodeTitle: ep.name,
+                            posterPath: data.poster_path || undefined,
+                            backdropPath: ep.still_path || data.backdrop_path || undefined,
+                          }
+                        })}
+                      >
+                        <View style={styles.epThumbWrapper}>
+                          {ep.still_path ? (
+                            <Image source={{ uri: imgUrl(ep.still_path, 'w300') || undefined }} style={styles.episodeListThumb} />
+                          ) : (
+                            <View style={[styles.episodeListThumb, styles.emptyThumb, { backgroundColor: theme.surface }]}>
+                              <Ionicons name="film-outline" size={24} color={theme.textMuted} />
                             </View>
                           )}
-                          {!!ep.runtime && (
-                            <Text style={[styles.epRuntimeText, { color: theme.textMuted }]}>{ep.runtime}m</Text>
+                          <View style={styles.playBadgeOverlay}>
+                            <Ionicons name="play" size={12} color="#fff" />
+                          </View>
+                          {episodeProgressPercent > 0 && (
+                            <View style={[styles.episodeProgressTrack, { backgroundColor: theme.border }]}>
+                              <View
+                                style={[
+                                  styles.episodeProgressFill,
+                                  { backgroundColor: theme.accent, width: `${episodeProgressPercent}%` as `${number}%` },
+                                ]}
+                              />
+                            </View>
                           )}
+                        </View>
+                        <View style={styles.episodeListInfo}>
+                          <View style={styles.epMetaRow}>
+                            <Text style={[styles.episodeListNum, { color: theme.accent }]}>E{ep.episode_number}</Text>
+                            {!!ep.vote_average && (
+                              <View style={styles.epStarBadge}>
+                                <Ionicons name="star" size={10} color="#fbbf24" />
+                                <Text style={styles.epStarText}>{ep.vote_average.toFixed(1)}</Text>
+                              </View>
+                            )}
+                            {!!ep.runtime && (
+                              <Text style={[styles.epRuntimeText, { color: theme.textMuted }]}>{ep.runtime}m</Text>
+                            )}
+                          </View>
                           {!!ep.air_date && (
                             <Text style={[styles.episodeListDate, { color: theme.textMuted }]}>{ep.air_date}</Text>
                           )}
+                          <Text style={[styles.episodeListName, { color: theme.text }]} numberOfLines={1}>{ep.name}</Text>
+                          {!!ep.overview && (
+                            <EpisodeOverview overview={ep.overview} theme={theme} />
+                          )}
+                          <View style={styles.epActionRow}>
+                            <EpisodeWatchedButton
+                              episodeNumber={ep.episode_number}
+                              watched={episodeWatched}
+                              theme={theme}
+                              onPress={() => watchedActions.toggleEpisodeWatched(ep)}
+                            />
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Offline information for Episode ${ep.episode_number}`}
+                              accessibilityHint="Shows the current Mobile downloads availability status"
+                              hitSlop={4}
+                              style={({ pressed }) => [styles.epDownloadBtn, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && { opacity: 0.7 }]}
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                setShowDownloadModal(true);
+                              }}
+                            >
+                              <Ionicons name="lock-closed-outline" size={12} color={theme.textMuted} />
+                              <Text numberOfLines={1} style={[styles.epDownloadBtnText, { color: theme.textMuted }]}>Offline info</Text>
+                            </Pressable>
+                          </View>
                         </View>
-                        <Text style={[styles.episodeListName, { color: theme.text }]} numberOfLines={1}>{ep.name}</Text>
-                        {!!ep.overview && (
-                          <Text style={[styles.episodeOverviewText, { color: theme.textSecondary }]} numberOfLines={2}>
-                            {ep.overview}
-                          </Text>
-                        )}
-                        <View style={styles.epActionRow}>
-                          <Pressable
-                            style={({ pressed }) => [styles.epDownloadBtn, pressed && { opacity: 0.7 }, { marginRight: 8 }]}
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              const watched = isWatched(ep, { isEpisode: true, seriesId: id });
-                              if (watched) {
-                                markUnwatched(ep, { isEpisode: true, seriesId: id });
-                              } else {
-                                markWatched(ep, { isEpisode: true, seriesId: id });
-                              }
-                            }}
-                          >
-                            <Ionicons name={isWatched(ep, { isEpisode: true, seriesId: id }) ? "eye" : "eye-outline"} size={14} color={theme.accent} />
-                            <Text style={[styles.epDownloadBtnText, { color: theme.accent }]}>{isWatched(ep, { isEpisode: true, seriesId: id }) ? "Watched" : "Mark Watched"}</Text>
-                          </Pressable>
-                          <Pressable
-                            style={({ pressed }) => [styles.epDownloadBtn, pressed && { opacity: 0.7 }]}
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              setShowDownloadModal(true);
-                            }}
-                          >
-                            <Ionicons name="lock-closed-outline" size={12} color={theme.textMuted} />
-                            <Text style={[styles.epDownloadBtnText, { color: theme.textMuted }]}>Offline info</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    </Pressable>
-                  ))
+                      </Pressable>
+                    );
+                  })
                 )}
               </View>
             )}
@@ -476,17 +704,38 @@ export default function MediaDetailScreen() {
           <View style={[styles.moreSheet, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
             <View style={styles.moreHeader}>
               <Text style={[styles.moreTitle, { color: theme.text }]}>More actions</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Close more actions" onPress={() => setShowMoreSheet(false)} style={[styles.moreClose, { borderColor: theme.border }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close more actions" hitSlop={4} onPress={() => setShowMoreSheet(false)} style={[styles.moreClose, { borderColor: theme.border }]}>
                 <Ionicons name="close" size={20} color={theme.text} />
               </Pressable>
             </View>
-            <Pressable style={styles.moreAction} onPress={() => {
+            {isMovie && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={watchedActions.movieWatched ? `Mark ${title} unwatched` : `Mark ${title} watched`}
+                style={styles.moreAction}
+                onPress={() => {
+                  setShowMoreSheet(false);
+                  watchedActions.toggleMovieWatched();
+                }}
+              >
+                <Ionicons name={watchedActions.movieWatched ? "checkmark-circle" : "eye-outline"} size={20} color={theme.accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.moreActionText, { color: theme.text }]}>
+                    {watchedActions.movieWatched ? "Mark unwatched" : "Mark watched"}
+                  </Text>
+                  <Text style={[styles.moreActionDescription, { color: theme.textMuted }]}>
+                    Watched state stays separate from History, progress and My List.
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+            <Pressable accessibilityRole="button" accessibilityLabel={`Share ${title}`} style={styles.moreAction} onPress={() => {
               Share.share({ message: `${title}${year ? ` (${year})` : ''}` }).catch(() => {});
             }}>
               <Ionicons name="share-social-outline" size={20} color={theme.text} />
               <Text style={[styles.moreActionText, { color: theme.text }]}>Share title</Text>
             </Pressable>
-            <Pressable style={styles.moreAction} onPress={() => {
+            <Pressable accessibilityRole="button" accessibilityLabel="Mobile downloads information" style={styles.moreAction} onPress={() => {
               setShowMoreSheet(false);
               setShowDownloadModal(true);
             }}>
@@ -503,6 +752,15 @@ export default function MediaDetailScreen() {
           </View>
         </View>
       </Modal>
+      <WatchedFeedback
+        dialog={watchedActions.seasonDialog}
+        selectedSeason={selectedSeason}
+        episodeCount={episodes.length}
+        onDismissDialog={watchedActions.dismissSeasonDialog}
+        onConfirmDialog={watchedActions.confirmSeasonToggle}
+        undoNotice={watchedActions.undoNotice}
+        onDismissUndo={watchedActions.dismissUndo}
+      />
     </View>
   );
 }

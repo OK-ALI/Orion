@@ -17,6 +17,7 @@
     "expo-build-properties": "~57.0.10",
     "expo-camera": "~57.0.3",
     "expo-constants": "~57.0.9",
+    "expo-device": "~57.0.1",
     "expo-font": "~57.0.1",
     "expo-linear-gradient": "~57.0.1",
     "expo-linking": "~57.0.5",

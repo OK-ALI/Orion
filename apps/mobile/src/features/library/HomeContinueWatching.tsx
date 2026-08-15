@@ -6,11 +6,14 @@ import { useLibrary } from '../../context/LibraryContext';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { ContinueWatchingCard } from './ContinueWatchingCard';
 import { useResponsiveLayout } from '../../services/responsive';
+import { getRailRenderBudget } from '../../services/listPerformance';
+import { usePerformanceProfile } from '../../context/PerformanceContext';
 
 export function HomeContinueWatching() {
   const router = useRouter();
-  const { shortestEdge } = useResponsiveLayout();
+  const { width, shortestEdge } = useResponsiveLayout();
   const { theme } = useOrionTheme();
+  const { resolvedProfile } = usePerformanceProfile();
   const {
     progress, watched, getContinueWatching, enrichPlaybackMetadata,
     removeProgress, markProgressWatched,
@@ -31,6 +34,9 @@ export function HomeContinueWatching() {
 
   if (!entries.length) return null;
   const padding = shortestEdge < 360 ? 12 : 20;
+  const compact = shortestEdge < 360;
+  const cardSpan = Math.min(330, Math.max(252, width * (compact ? 0.82 : 0.79))) + 12;
+  const renderBudget = getRailRenderBudget(width, cardSpan, resolvedProfile);
 
   const resume = (entry: typeof entries[number]) => {
     const { mediaIdentity, presentation } = entry.progress;
@@ -72,6 +78,9 @@ export function HomeContinueWatching() {
         horizontal
         showsHorizontalScrollIndicator={false}
         keyExtractor={(entry) => entry.key}
+        initialNumToRender={renderBudget.initialNumToRender}
+        maxToRenderPerBatch={renderBudget.maxToRenderPerBatch}
+        windowSize={renderBudget.windowSize}
         contentContainerStyle={{ paddingHorizontal: padding, gap: 12 }}
         renderItem={({ item }) => (
           <ContinueWatchingCard

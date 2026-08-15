@@ -18,6 +18,8 @@ import {
   reducePlaybackTelemetry,
   type PlaybackTelemetryState,
 } from './telemetryReducer';
+import { isVerifiedPlaybackCompletion } from './playbackCompletion';
+import type { VerifiedPlaybackSnapshot } from './playerTypes';
 
 interface PlaybackRecordWriter {
   (record: {
@@ -30,6 +32,7 @@ interface PlaybackRecordWriter {
     episode?: number | null;
     evidence?: MobilePlaybackEvidence | null;
     sessionId?: string | null;
+    completionVerified?: boolean;
   }): void;
 }
 
@@ -39,6 +42,7 @@ interface ControllerOptions {
   sourceId: string;
   surface: MobilePlayerSurface;
   recordPlayback: PlaybackRecordWriter;
+  onVerifiedCompletion?: (snapshot: VerifiedPlaybackSnapshot) => void;
 }
 
 export interface PlaybackTelemetryInput {
@@ -81,12 +85,14 @@ export function usePlaybackTelemetryController({
   sourceId,
   surface,
   recordPlayback,
+  onVerifiedCompletion,
 }: ControllerOptions) {
   const stateRef = useRef<PlaybackTelemetryState>(
     createPlaybackTelemetryState(createMobilePlaybackSession(media, sourceId, surface)),
   );
   const sequenceRef = useRef(0);
   const lastPersistedAtRef = useRef(0);
+  const completionReportedRef = useRef(false);
 
   const persistState = useCallback((state = stateRef.current) => {
     if (!state.session.verified || state.session.lastVerifiedTime == null) return false;
@@ -100,6 +106,12 @@ export function usePlaybackTelemetryController({
       episode: media.episode ?? null,
       evidence: state.evidence,
       sessionId: state.session.id,
+      completionVerified: isVerifiedPlaybackCompletion({
+        verified: state.session.verified,
+        state: state.session.state,
+        currentTime: state.session.lastVerifiedTime,
+        duration: state.duration,
+      }),
     });
     lastPersistedAtRef.current = Date.now();
     return true;
@@ -141,13 +153,32 @@ export function usePlaybackTelemetryController({
       removeRecentOpen(decision.state.session.id);
       clearMobileDiagnosticError('playback-telemetry');
     }
+    const completionVerified = isVerifiedPlaybackCompletion({
+      verified: decision.state.session.verified,
+      state: decision.state.session.state,
+      currentTime: decision.state.session.lastVerifiedTime,
+      duration: decision.state.duration,
+    });
+    const firstCompletion = completionVerified && !completionReportedRef.current;
     const terminal = ['paused', 'seeking', 'ended', 'error'].includes(input.state);
     if (decision.shouldPersist
-      && (terminal || Date.now() - lastPersistedAtRef.current >= 5_000)) {
+      && (firstCompletion || terminal || Date.now() - lastPersistedAtRef.current >= 5_000)) {
       persistState(decision.state);
     }
+    if (firstCompletion) {
+      completionReportedRef.current = true;
+      const snapshot: VerifiedPlaybackSnapshot = {
+        sessionId: decision.state.session.id,
+        sourceId: decision.state.session.sourceId,
+        currentTime: decision.state.session.lastVerifiedTime as number,
+        duration: decision.state.duration,
+        evidence: decision.state.evidence,
+        observedAt: decision.state.session.updatedAt,
+      };
+      onVerifiedCompletion?.(snapshot);
+    }
     return decision;
-  }, [persistState, sourceId]);
+  }, [onVerifiedCompletion, persistState, sourceId]);
 
   const markOpenedOnly = useCallback(() => {
     if (stateRef.current.session.verified) return;

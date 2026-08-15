@@ -11,9 +11,18 @@ export interface MobilePageHeaderProps {
   trailing?: ReactNode;
   compact?: boolean;
   layoutMode?: 'regular' | 'compact';
+  reserveFloatingTriggerInLandscape?: boolean;
 }
 
-export function MobilePageHeader({ eyebrow, title, subtitle, trailing, compact = false, layoutMode = 'regular' }: MobilePageHeaderProps) {
+export function MobilePageHeader({
+  eyebrow,
+  title,
+  subtitle,
+  trailing,
+  compact = false,
+  layoutMode = 'regular',
+  reserveFloatingTriggerInLandscape = false,
+}: MobilePageHeaderProps) {
   const insets = useSafeAreaInsets();
   const { theme } = useOrionTheme();
   const { isTablet, isLandscape, width } = useResponsiveLayout();
@@ -26,7 +35,8 @@ export function MobilePageHeader({ eyebrow, title, subtitle, trailing, compact =
         styles.header,
         {
           paddingTop: isTablet ? insets.top + 20 : isLandscape ? insets.top + 12 : insets.top + 64,
-          paddingHorizontal: horizontal,
+          paddingLeft: reserveFloatingTriggerInLandscape && isLandscape && !isTablet ? 72 : horizontal,
+          paddingRight: horizontal,
           paddingBottom: isCompact ? 12 : 18,
         },
       ]}

@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.62)', justifyContent: 'center', paddingHorizontal: 18 },
   dialog: { width: '100%', maxWidth: 520, maxHeight: '86%', alignSelf: 'center', borderWidth: 1, borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.38, shadowRadius: 28, elevation: 18 },
   icon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
-  scroll: { flexGrow: 0 },
+  scroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
   copy: { paddingBottom: 20 },
   title: { fontSize: 24, lineHeight: 31, fontWeight: '900', letterSpacing: -0.5 },
   message: { marginTop: 9, fontSize: 15, lineHeight: 23 },

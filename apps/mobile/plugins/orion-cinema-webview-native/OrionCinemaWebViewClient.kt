@@ -7,6 +7,8 @@ import android.webkit.SafeBrowsingResponse
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import com.facebook.react.bridge.ReactContext
+import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.reactnativecommunity.webview.RNCWebViewClient
 import org.json.JSONArray
 import org.json.JSONObject
@@ -17,12 +19,17 @@ import java.util.Locale
  * Native, Cinema-only request classifier. It deliberately never exports a
  * request URL, headers, cookies, signed media location or credentials.
  */
-class OrionCinemaWebViewClient : RNCWebViewClient() {
+class OrionCinemaWebViewClient(
+  private val reactContext: ReactContext,
+  private val nativeViewTag: Int,
+) : RNCWebViewClient() {
   private var manifest: ShieldManifest? = null
   private val pendingCounts = mutableMapOf<String, Int>()
   private val pendingClassifications = mutableMapOf<String, Int>()
+  private val reportedRoutineEvidence = mutableSetOf<String>()
   private var latestDecision: ShieldDecision? = null
   private var flushScheduled = false
+  private var nativeSequence = 0L
 
   fun setShieldManifest(serialized: String?) {
     manifest = ShieldManifest.parse(serialized)
@@ -47,17 +54,18 @@ class OrionCinemaWebViewClient : RNCWebViewClient() {
   override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
     val decision = classify(request.url, request.isForMainFrame, isPopup = false)
     emit(view, decision)
-    return if (decision.decision == "blocked") emptyBlockedResponse() else super.shouldInterceptRequest(view, request)
+    return if (decision.decision == "blocked") emptyBlockedResponse() else null
   }
 
   @Deprecated("Deprecated in Android")
   override fun shouldInterceptRequest(view: WebView, url: String): WebResourceResponse? {
     val decision = classify(Uri.parse(url), isMainFrame = false, isPopup = false)
     emit(view, decision)
-    return if (decision.decision == "blocked") emptyBlockedResponse() else super.shouldInterceptRequest(view, url)
+    return if (decision.decision == "blocked") emptyBlockedResponse() else null
   }
 
   override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+    resetEvidence()
     emit(view, ShieldDecision("active", "native-session", null))
     super.onPageStarted(view, url, favicon)
   }
@@ -108,9 +116,19 @@ class OrionCinemaWebViewClient : RNCWebViewClient() {
   }
 
   private fun emit(view: WebView, decision: ShieldDecision) {
-    // Provider pages issue many subrequests. Batch redacted evidence to avoid
-    // a React render for every request.
+    // HLS players can issue hundreds of media and artwork requests per minute.
+    // React needs proof that observation is working, not a live request meter.
+    // Report routine redacted evidence once per page and keep exact aggregation only for
+    // actual blocks/failures so shielding cannot starve provider bootstrap.
     synchronized(this) {
+      val alwaysReport = decision.decision == "blocked" || decision.decision == "rule-failure"
+      val routineKey = when (decision.decision) {
+        "active", "required-dependency", "observed-media", "observed-subtitle" -> decision.decision
+        else -> null
+      }
+      if (!alwaysReport) {
+        if (routineKey == null || !reportedRoutineEvidence.add(routineKey)) return
+      }
       pendingCounts[decision.decision] = (pendingCounts[decision.decision] ?: 0) + 1
       pendingClassifications[decision.classification] =
         (pendingClassifications[decision.classification] ?: 0) + 1
@@ -138,9 +156,27 @@ class OrionCinemaWebViewClient : RNCWebViewClient() {
           .put("counts", JSONObject(counts))
           .put("classifications", JSONObject(classifications))
         if (latest?.ruleId != null) payload.put("ruleId", latest?.ruleId)
+        payload.put("sourceId", manifest?.sourceId ?: "")
+          .put("sessionId", manifest?.sessionId ?: "")
+          .put("sequence", ++nativeSequence)
+          .put("nativeViewTag", nativeViewTag)
+        reactContext
+          .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+          .emit("OrionShieldEvidence", payload.toString())
         val script = "window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(${JSONObject.quote(payload.toString())});true;"
         view.evaluateJavascript(script, null)
-      }, 250L)
+      }, 750L)
+    }
+  }
+
+  private fun resetEvidence() {
+    synchronized(this) {
+      pendingCounts.clear()
+      pendingClassifications.clear()
+      reportedRoutineEvidence.clear()
+      latestDecision = null
+      // A previously posted flush may still run, but it will find an empty
+      // snapshot. Keeping its scheduled flag prevents duplicate callbacks.
     }
   }
 
@@ -164,6 +200,8 @@ private data class ShieldRule(
   val action: String,
 )
 private data class ShieldManifest(
+  val sourceId: String,
+  val sessionId: String,
   val mode: String,
   val allowedNavigationOrigins: List<String>,
   val requiredOrigins: List<String>,
@@ -194,6 +232,8 @@ private data class ShieldManifest(
           )
         }
         ShieldManifest(
+          json.optString("sourceId", ""),
+          json.optString("sessionId", ""),
           json.optString("mode", "observe"),
           strings("allowedNavigationOrigins"),
           strings("requiredOrigins"),

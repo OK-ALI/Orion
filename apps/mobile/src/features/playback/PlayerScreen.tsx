@@ -9,7 +9,7 @@ import {
 } from '@orion/shared/sources';
 import type { PlaybackHandoffV1 } from '@orion/shared/types';
 import { tmdbFetch } from '@orion/shared/api';
-import { useLibrary } from '../../context/LibraryContext';
+import { useLibraryPlaybackActions } from '../../context/LibraryContext';
 import {
   getMobileSourceHealth,
   hydrateMobileSourceHealth,
@@ -34,6 +34,7 @@ import {
   updateHandoffStatus,
 } from './handoffPolicy';
 import {
+  MOBILE_PLAYER_SOURCES,
   getMobileSourceContinuityCapability,
   getNextMobileContinuitySource,
   getPreferredMobileResumeSource,
@@ -41,6 +42,12 @@ import {
 } from './mobileSources';
 import { classifyCinemaSourceFailure } from './sourceFailure';
 import type { VerifiedPlaybackSnapshot } from './playerTypes';
+import { MobilePlayerControllerProvider } from './MobilePlayerController';
+import { NextEpisodePrompt } from './NextEpisodePrompt';
+import {
+  getNextReleasedEpisode,
+  type NextEpisodeCandidate,
+} from './playbackCompletion';
 
 type PlayerRouteParams = {
   id: string;
@@ -55,18 +62,23 @@ type PlayerRouteParams = {
   episodeTitle?: string;
   offlineUri?: string;
   isOffline?: string;
+  nextSourceId?: string;
 };
 
 export default function PlayerScreen() {
   const router = useRouter();
   const {
     id, type, title, season, episode, year, seriesTitle,
-    posterPath, backdropPath, episodeTitle, offlineUri, isOffline,
+    posterPath, backdropPath, episodeTitle, offlineUri, isOffline, nextSourceId,
   } =
     useLocalSearchParams<PlayerRouteParams>();
-  const { getPlaybackProgress } = useLibrary();
+  const { getPlaybackProgress } = useLibraryPlaybackActions();
   const existingProgress = getPlaybackProgress(type, id, Number(season) || null, Number(episode) || null);
-  const [sourceId, setSourceId] = useState(() => getPreferredMobileResumeSource(
+  const routedNextSource = nextSourceId
+    && MOBILE_PLAYER_SOURCES.some((source) => source.id === nextSourceId)
+    ? nextSourceId
+    : null;
+  const [sourceId, setSourceId] = useState(() => routedNextSource || getPreferredMobileResumeSource(
     existingProgress?.sourceId || DEFAULT_CINEMA_SOURCE_ID,
     type,
   ));
@@ -78,6 +90,11 @@ export default function PlayerScreen() {
     : Math.max(0, Number(existingProgress?.currentTime) || 0);
   const [initialChoicePending, setInitialChoicePending] = useState(initialSavedTime > 30);
   const [resumeTime, setResumeTime] = useState(initialSavedTime > 30 ? 0 : initialSavedTime);
+  const [nextEpisodePrompt, setNextEpisodePrompt] = useState<NextEpisodeCandidate | null>(null);
+  const completionHandledRef = useRef(new Set<string>());
+  const nextEpisodeRequestRef = useRef(0);
+  const playbackIdentity = `${type}:${id}:s${Number(season) || 0}:e${Number(episode) || 0}`;
+  const playbackIdentityRef = useRef(playbackIdentity);
 
   const publishHandoff = useCallback((next: PlaybackHandoffV1 | null) => {
     handoffRef.current = next;
@@ -90,6 +107,25 @@ export default function PlayerScreen() {
       handoffFailureCode: next?.failureCode ?? null,
     });
   }, []);
+
+  useEffect(() => {
+    if (playbackIdentityRef.current === playbackIdentity) return;
+    playbackIdentityRef.current = playbackIdentity;
+    nextEpisodeRequestRef.current += 1;
+    setNextEpisodePrompt(null);
+    publishHandoff(null);
+    const routeProgress = getPlaybackProgress(
+      type,
+      id,
+      Number(season) || null,
+      Number(episode) || null,
+    );
+    const savedTime = routeProgress?.completed
+      ? 0
+      : Math.max(0, Number(routeProgress?.currentTime) || 0);
+    setInitialChoicePending(savedTime > 30);
+    setResumeTime(savedTime > 30 ? 0 : savedTime);
+  }, [episode, getPlaybackProgress, id, playbackIdentity, publishHandoff, season, type]);
 
   useEffect(() => { hydrateMobileSourceHealth(); }, []);
   useEffect(() => {
@@ -305,6 +341,66 @@ export default function PlayerScreen() {
     setInitialChoicePending(false);
   }, [initialSavedTime, sourceId]);
 
+  const handleVerifiedPlaybackCompletion = useCallback((_snapshot: VerifiedPlaybackSnapshot) => {
+    if (type !== 'tv' || isOffline === 'true') return;
+    const seasonNumber = Number(season);
+    const episodeNumber = Number(episode);
+    if (!Number.isFinite(seasonNumber) || seasonNumber <= 0
+      || !Number.isFinite(episodeNumber) || episodeNumber <= 0) return;
+    const completionKey = `tv:${id}:s${seasonNumber}:e${episodeNumber}`;
+    if (completionHandledRef.current.has(completionKey)) return;
+    completionHandledRef.current.add(completionKey);
+    const requestId = ++nextEpisodeRequestRef.current;
+    tmdbFetch<any>(`/tv/${id}/season/${seasonNumber}`)
+      .then((seasonData) => {
+        if (requestId !== nextEpisodeRequestRef.current) return;
+        const next = getNextReleasedEpisode(
+          seasonData?.episodes,
+          seasonNumber,
+          episodeNumber,
+        );
+        if (next) setNextEpisodePrompt(next);
+      })
+      .catch(() => {});
+  }, [episode, id, isOffline, season, type]);
+
+  const playNextEpisode = useCallback(() => {
+    const next = nextEpisodePrompt;
+    if (!next) return;
+    nextEpisodeRequestRef.current += 1;
+    setNextEpisodePrompt(null);
+    publishHandoff(null);
+    setResumeTime(0);
+    setInitialChoicePending(false);
+    router.replace({
+      pathname: '/player/[id]',
+      params: {
+        id,
+        type: 'tv',
+        title: next.name,
+        year,
+        seriesTitle: seriesTitle || title,
+        season: String(next.seasonNumber),
+        episode: String(next.episodeNumber),
+        episodeTitle: next.name,
+        posterPath: posterPath || undefined,
+        backdropPath: next.stillPath || backdropPath || undefined,
+        nextSourceId: sourceId,
+      },
+    });
+  }, [
+    backdropPath,
+    id,
+    nextEpisodePrompt,
+    posterPath,
+    publishHandoff,
+    router,
+    seriesTitle,
+    sourceId,
+    title,
+    year,
+  ]);
+
   const commonProps = {
     title,
     seriesTitle,
@@ -316,6 +412,7 @@ export default function PlayerScreen() {
     onSourceChange: changeSource,
     onAutomaticFailover: (snapshot: VerifiedPlaybackSnapshot | null) => changeSource(sourceId, snapshot, 'automatic'),
     onPlaybackSnapshot: handlePlaybackSnapshot,
+    onVerifiedPlaybackCompletion: handleVerifiedPlaybackCompletion,
     activeHandoffId: handoffIsPending(handoff) ? handoff?.id : null,
     id,
     type,
@@ -336,6 +433,7 @@ export default function PlayerScreen() {
   );
 
   return (
+    <MobilePlayerControllerProvider>
     <View style={{ flex: 1 }}>
       {surface}
       {initialChoicePending && (
@@ -347,6 +445,14 @@ export default function PlayerScreen() {
           onCancel={() => router.back()}
         />
       )}
+      {nextEpisodePrompt && !initialChoicePending && (
+        <NextEpisodePrompt
+          episode={nextEpisodePrompt}
+          onPlayNow={playNextEpisode}
+          onCancel={() => setNextEpisodePrompt(null)}
+        />
+      )}
     </View>
+    </MobilePlayerControllerProvider>
   );
 }

@@ -13,14 +13,38 @@ interface SidebarDrawerProps {
   persistent?: boolean;
 }
 
-const MAIN_NAV = [
-  { id: 'home', name: 'Home', icon: 'home-outline', activeIcon: 'home', route: '/' },
-  { id: 'discover', name: 'Discover & Search', icon: 'compass-outline', activeIcon: 'compass', route: '/discover' },
-  { id: 'library', name: 'Library', icon: 'library-outline', activeIcon: 'library', route: '/library' },
-  { id: 'downloads', name: 'Downloads', icon: 'download-outline', activeIcon: 'download', route: '/downloads' },
-  { id: 'connect', name: 'Smart Remote', icon: 'wifi-outline', activeIcon: 'wifi', route: '/connect' },
-  { id: 'settings', name: 'Settings', icon: 'settings-outline', activeIcon: 'settings', route: '/settings' },
-];
+const NAV_SECTIONS = [
+  {
+    id: 'browse',
+    label: 'BROWSE',
+    items: [
+      { id: 'home', name: 'Home', icon: 'home-outline', activeIcon: 'home', route: '/' },
+      { id: 'discover', name: 'Discover & Search', icon: 'compass-outline', activeIcon: 'compass', route: '/discover' },
+    ],
+  },
+  {
+    id: 'your-orion',
+    label: 'YOUR ORION',
+    items: [
+      { id: 'library', name: 'Library', icon: 'library-outline', activeIcon: 'library', route: '/library' },
+      { id: 'downloads', name: 'Downloads', icon: 'download-outline', activeIcon: 'download', route: '/downloads' },
+    ],
+  },
+  {
+    id: 'connect',
+    label: 'CONNECT',
+    items: [
+      { id: 'connect', name: 'Smart Remote', icon: 'wifi-outline', activeIcon: 'wifi', route: '/connect' },
+    ],
+  },
+  {
+    id: 'system',
+    label: 'SYSTEM',
+    items: [
+      { id: 'settings', name: 'Settings', icon: 'settings-outline', activeIcon: 'settings', route: '/settings' },
+    ],
+  },
+] as const;
 
 export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarDrawerProps) {
   const router = useRouter();
@@ -37,7 +61,7 @@ export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarD
   };
 
   const drawerContent = (
-        <View style={[styles.drawer, persistent && styles.drawerPersistent, { backgroundColor: theme.background }]}>
+        <View accessibilityViewIsModal={!persistent} style={[styles.drawer, persistent && styles.drawerPersistent, { backgroundColor: theme.background }]}>
           <LinearGradient
             colors={[theme.accentSoft, theme.elevated, theme.background]}
             start={{ x: 0, y: 0 }}
@@ -48,37 +72,47 @@ export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarD
           <View style={styles.header}>
             <View style={styles.brandRow}><Text style={[styles.logo, { color: theme.text }]}>ORION</Text></View>
             {!persistent && (
-              <Pressable accessibilityRole="button" accessibilityLabel="Close navigation" onPress={onClose} style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.7 }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close navigation" accessibilityHint="Closes the Orion navigation drawer" hitSlop={6} onPress={onClose} style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.7 }]}>
                 <Ionicons name="close" size={20} color={theme.text} />
               </Pressable>
             )}
           </View>
-          <ScrollView showsVerticalScrollIndicator={false} style={styles.menuContainer}>
-            <Text style={[styles.sectionTitle, { color: theme.textMuted }]}>BROWSE</Text>
-            {MAIN_NAV.map((item) => {
-              const isActive = pathname === item.route || (item.route !== '/' && pathname.startsWith(item.route));
-              return (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={item.name}
-                  accessibilityState={{ selected: isActive }}
-                  key={item.id}
-                  style={({ pressed }) => [
-                    styles.menuRow,
-                    isActive && styles.menuRowActive,
-                    isActive && { backgroundColor: theme.accentSoft, borderColor: theme.accent },
-                    pressed && styles.menuRowHover,
-                  ]}
-                  onPress={() => handleNavigate(item.route)}
-                >
-                  <View style={[styles.iconBadge, isActive && styles.iconBadgeActive]}>
-                    <Ionicons name={(isActive ? item.activeIcon : item.icon) as any} size={18} color={isActive ? theme.onAccent : theme.textSecondary} />
-                  </View>
-                  <Text style={[styles.menuText, { color: theme.textSecondary }, isActive && styles.menuTextActive, isActive && { color: theme.text }]}>{item.name}</Text>
-                  {isActive ? <View style={[styles.activeDot, { backgroundColor: theme.accent }]} /> : <Ionicons name="chevron-forward" size={14} color={theme.textMuted} />}
-                </Pressable>
-              );
-            })}
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.menuContainer} contentContainerStyle={styles.menuContent}>
+            {NAV_SECTIONS.map((section, sectionIndex) => (
+              <View key={section.id} style={sectionIndex > 0 ? styles.sectionBlock : undefined}>
+                <Text accessibilityRole="header" style={[styles.sectionTitle, { color: theme.textMuted }]}>{section.label}</Text>
+                {section.items.map((item) => {
+                  const isActive = pathname === item.route || (item.route !== '/' && pathname.startsWith(item.route));
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={item.name}
+                      accessibilityState={{ selected: isActive }}
+                      key={item.id}
+                      style={({ pressed }) => [
+                        styles.menuRow,
+                        isActive && styles.menuRowActive,
+                        isActive && { backgroundColor: theme.accentSoft, borderColor: theme.accent, shadowColor: theme.accent },
+                        pressed && styles.menuRowHover,
+                      ]}
+                      onPress={() => handleNavigate(item.route)}
+                    >
+                      <View
+                        style={[
+                          styles.iconBadge,
+                          isActive && styles.iconBadgeActive,
+                          isActive && { backgroundColor: theme.accent, borderColor: theme.accent, shadowColor: theme.accent },
+                        ]}
+                      >
+                        <Ionicons name={(isActive ? item.activeIcon : item.icon) as any} size={18} color={isActive ? theme.onAccent : theme.textSecondary} />
+                      </View>
+                      <Text style={[styles.menuText, { color: theme.textSecondary }, isActive && styles.menuTextActive, isActive && { color: theme.text }]}>{item.name}</Text>
+                      {isActive ? <View style={[styles.activeDot, { backgroundColor: theme.accent, shadowColor: theme.accent }]} /> : <Ionicons name="chevron-forward" size={14} color={theme.textMuted} />}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
           </ScrollView>
           <View style={[styles.footerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.statusRow}>
@@ -102,7 +136,7 @@ export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarD
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable accessible={false} importantForAccessibility="no-hide-descendants" style={styles.backdrop} onPress={onClose} />
         {drawerContent}
       </View>
     </Modal>
@@ -182,6 +216,12 @@ const styles = StyleSheet.create({
   },
   menuContainer: {
     flex: 1,
+  },
+  menuContent: {
+    paddingBottom: spacing[2],
+  },
+  sectionBlock: {
+    marginTop: spacing[3],
   },
   sectionTitle: {
     color: text.muted,

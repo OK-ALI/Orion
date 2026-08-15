@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, ScrollView, Animated, Pressable, ActivityIndicator, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Animated, Pressable, ActivityIndicator, FlatList, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { imgUrl, fetchPersonDetails } from '@orion/shared/api';
 import { radii, spacing, fontSizes, fontFamilies } from '@orion/shared/tokens';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,21 +9,35 @@ import { BlurView } from 'expo-blur';
 import { MediaCard } from '../../src/components/MediaCard';
 import { useOrionTheme } from '../../src/context/ThemeContext';
 import { useResponsiveLayout } from '../../src/services/responsive';
+import { getRailRenderBudget } from '../../src/services/listPerformance';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { usePerformanceProfile } from '../../src/context/PerformanceContext';
+
+const BIO_PREVIEW_LINES = 6;
+
+if (Platform.OS === 'android') {
+  (UIManager as any).setLayoutAnimationEnabledExperimental?.(true);
+}
 
 export default function PersonDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { theme } = useOrionTheme();
-  const { isLandscape, isTablet } = useResponsiveLayout();
+  const { theme, preferences } = useOrionTheme();
+  const { width, isLandscape, isTablet } = useResponsiveLayout();
   const insets = useSafeAreaInsets();
+  const { resolvedProfile } = usePerformanceProfile();
   
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  
+  const [bioExpanded, setBioExpanded] = useState(false);
+  const [bioCanExpand, setBioCanExpand] = useState(false);
+
   const scrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    setBioExpanded(false);
+    setBioCanExpand(false);
+
     async function loadDetails() {
       try {
         const result = await fetchPersonDetails(id);
@@ -34,8 +48,40 @@ export default function PersonDetailScreen() {
         setLoading(false);
       }
     }
+
     loadDetails();
   }, [id]);
+
+  const filmographyRenderBudget = useMemo(
+    () => getRailRenderBudget(width, 140 + spacing[4] + spacing[4], resolvedProfile),
+    [resolvedProfile, width],
+  );
+
+  // Preserve first occurrence semantics while avoiding repeated scans/allocations.
+  const uniqueCredits = useMemo(() => {
+    const credits = data?.combined_credits?.cast || [];
+    const seenIds = new Set<string>();
+    const unique: any[] = [];
+    for (const credit of credits) {
+      const key = String(credit.id);
+      if (seenIds.has(key)) continue;
+      seenIds.add(key);
+      unique.push(credit);
+    }
+    return unique.sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0));
+  }, [data?.combined_credits?.cast]);
+
+  const measureBiography = useCallback((lineCount: number) => {
+    const canExpand = lineCount > BIO_PREVIEW_LINES;
+    setBioCanExpand((current) => current === canExpand ? current : canExpand);
+  }, []);
+
+  const toggleBiography = useCallback(() => {
+    if (!preferences.reducedMotion) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }
+    setBioExpanded((expanded) => !expanded);
+  }, [preferences.reducedMotion]);
 
   if (loading) {
     return (
@@ -54,17 +100,6 @@ export default function PersonDetailScreen() {
   }
 
   const profileImage = imgUrl(data.profile_path, 'h632');
-  
-  // Sort credits by popularity and remove duplicates
-  const credits = data.combined_credits?.cast || [];
-  const uniqueCredits = credits.reduce((acc: any[], current: any) => {
-    const x = acc.find(item => item.id === current.id);
-    if (!x) {
-      return acc.concat([current]);
-    } else {
-      return acc;
-    }
-  }, []).sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0));
 
   const headerTranslateY = scrollY.interpolate({
     inputRange: [-100, 0, 300],
@@ -147,7 +182,43 @@ export default function PersonDetailScreen() {
           {data.biography ? (
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: theme.text }]}>Biography</Text>
-              <Text style={[styles.bioText, { color: theme.textSecondary }]}>{data.biography}</Text>
+              <Text
+                style={[styles.bioText, styles.bioMeasure]}
+                onTextLayout={(event) => measureBiography(event.nativeEvent.lines.length)}
+                accessible={false}
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+                pointerEvents="none"
+              >
+                {data.biography}
+              </Text>
+              <Text
+                style={[styles.bioText, { color: theme.textSecondary }]}
+                numberOfLines={bioExpanded ? undefined : BIO_PREVIEW_LINES}
+                ellipsizeMode="tail"
+              >
+                {data.biography}
+              </Text>
+              {(bioCanExpand || bioExpanded) ? (
+                <Pressable
+                  style={styles.bioToggle}
+                  onPress={toggleBiography}
+                  accessibilityRole="button"
+                  accessibilityLabel={bioExpanded ? 'Show less biography' : 'Show more biography'}
+                  accessibilityHint={bioExpanded ? 'Collapses the biography preview' : 'Expands the full biography'}
+                  accessibilityState={{ expanded: bioExpanded }}
+                  hitSlop={4}
+                >
+                  <Text style={[styles.bioToggleText, { color: theme.accent }]}>
+                    {bioExpanded ? 'Show less' : 'Show more'}
+                  </Text>
+                  <Ionicons
+                    name={bioExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color={theme.accent}
+                  />
+                </Pressable>
+              ) : null}
             </View>
           ) : null}
 
@@ -160,6 +231,9 @@ export default function PersonDetailScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ gap: spacing[4], paddingBottom: spacing[6] }}
               keyExtractor={(item, idx) => `${item.id}-${idx}`}
+              initialNumToRender={filmographyRenderBudget.initialNumToRender}
+              maxToRenderPerBatch={filmographyRenderBudget.maxToRenderPerBatch}
+              windowSize={filmographyRenderBudget.windowSize}
               renderItem={({ item }) => (
                 <MediaCard 
                   item={item} 
@@ -201,6 +275,9 @@ const styles = StyleSheet.create({
   headerContainer: {
     width: '100%',
     height: 500,
+    // Keep the transformed parallax portrait inside the hero so it cannot
+    // bleed behind Biography/Filmography as the user scrolls.
+    overflow: 'hidden',
   },
   headerContainerLandscape: { height: 300 },
   headerContainerTablet: { height: 440 },
@@ -259,5 +336,24 @@ const styles = StyleSheet.create({
   bioText: {
     fontSize: 15,
     lineHeight: 24,
+  },
+  bioMeasure: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    opacity: 0,
+  },
+  bioToggle: {
+    minHeight: 44,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    marginTop: spacing[1],
+  },
+  bioToggleText: {
+    fontSize: fontSizes.sm,
+    fontFamily: fontFamilies.body,
+    fontWeight: '700',
   },
 });

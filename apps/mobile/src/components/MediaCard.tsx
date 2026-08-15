@@ -5,7 +5,7 @@ import { TmdbMediaItem } from '@orion/shared/types';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLibrary } from '../context/LibraryContext';
+import { useLibraryVisual } from '../context/LibraryContext';
 import { useOrionTheme } from '../context/ThemeContext';
 
 interface MediaCardProps {
@@ -14,10 +14,13 @@ interface MediaCardProps {
   width?: number;
   height?: number;
   style?: StyleProp<ViewStyle>;
+  watched?: boolean;
+  disabled?: boolean;
+  contextLabel?: string;
 }
 
-export function MediaCard({ item, onPress, width = 140, height = 210, style }: MediaCardProps) {
-  const { isSaved, toggleSave } = useLibrary();
+export function MediaCard({ item, onPress, width = 140, height = 210, style, watched, disabled = false, contextLabel }: MediaCardProps) {
+  const { isSaved, toggleSave, isItemFullyWatched } = useLibraryVisual();
   const { theme } = useOrionTheme();
   const isMovie = item.media_type === 'movie' || !item.name;
   const title = isMovie ? item.title : item.name;
@@ -27,6 +30,16 @@ export function MediaCard({ item, onPress, width = 140, height = 210, style }: M
 
   const poster = imgUrl(item.poster_path, 'w500');
   const typeBadgeText = isMovie ? 'HD' : 'TV';
+  const itemWatched = watched ?? isItemFullyWatched(item);
+  const itemSaved = isSaved(item);
+  const accessibilitySummary = [
+    title || 'Untitled',
+    isMovie ? 'Movie' : 'TV series',
+    year || undefined,
+    itemWatched ? 'Watched' : undefined,
+    itemSaved ? 'In My List' : undefined,
+    contextLabel || undefined,
+  ].filter(Boolean).join(', ');
 
   return (
     <Pressable
@@ -36,15 +49,27 @@ export function MediaCard({ item, onPress, width = 140, height = 210, style }: M
         style,
         pressed && styles.pressedCard
       ]}
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={accessibilitySummary}
+      accessibilityHint={disabled ? `${contextLabel || 'This item'} is already open.` : `Opens details. Long press to ${itemSaved ? 'remove from' : 'add to'} My List.`}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      accessibilityActions={[
+        { name: 'longpress', label: itemSaved ? 'Remove from My List' : 'Add to My List' },
+      ]}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === 'longpress') toggleSave(item);
+      }}
       onPress={onPress}
-      onLongPress={() => toggleSave(item)}
+      onLongPress={disabled ? undefined : () => toggleSave(item)}
       delayLongPress={300}
     >
       {({ pressed }) => (
         <>
           <View style={[styles.imageContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             {poster ? (
-              <Image source={{ uri: poster }} style={styles.image} />
+              <Image accessible={false} source={{ uri: poster }} style={styles.image} />
             ) : (
               <View style={[styles.image, styles.placeholder]}>
                 <Ionicons name="film-outline" size={40} color={theme.textMuted} />
@@ -65,10 +90,26 @@ export function MediaCard({ item, onPress, width = 140, height = 210, style }: M
               <Text style={[styles.typeBadgeText, { color: theme.onAccent }]}>{typeBadgeText}</Text>
             </View>
 
+            {contextLabel && (
+              <View pointerEvents="none" style={[styles.contextBadge, { backgroundColor: theme.elevated, borderColor: theme.accent }]}>
+                <Text style={[styles.contextBadgeText, { color: theme.accent }]}>{contextLabel}</Text>
+              </View>
+            )}
+
             {/* Saved Bookmark Badge */}
-            {isSaved(item) && (
+            {itemSaved && (
               <View pointerEvents="none" style={[styles.savedBadge, { backgroundColor: theme.elevated }]}>
                 <Ionicons name="bookmark" size={14} color={theme.accent} />
+              </View>
+            )}
+
+            {/* Fully Watched Badge */}
+            {itemWatched && (
+              <View
+                pointerEvents="none"
+                style={[styles.watchedBadge, { backgroundColor: theme.elevated, borderColor: theme.success }]}
+              >
+                <Ionicons name="checkmark" size={15} color={theme.success} />
               </View>
             )}
             
@@ -145,6 +186,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
+  contextBadge: {
+    position: 'absolute',
+    top: 38,
+    left: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    elevation: 3,
+  },
+  contextBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
   savedBadge: {
     position: 'absolute',
     top: 8,
@@ -156,6 +213,22 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.5,
     shadowRadius: 4,
+  },
+  watchedBadge: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.45,
+    shadowRadius: 4,
+    elevation: 3,
   },
   playOverlay: {
     ...StyleSheet.absoluteFill,

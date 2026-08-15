@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ImageBackground, Pressable, Platform, FlatList, Dimensions, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ImageBackground, Pressable, Platform, FlatList, Dimensions, useWindowDimensions, AppState } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { spacing, fontFamilies, semantic } from '@orion/shared/tokens';
 import { imgUrl } from '@orion/shared/api';
@@ -6,7 +6,8 @@ import { TmdbMediaItem } from '@orion/shared/types';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { useLibrary } from '../context/LibraryContext';
+import { usePathname } from 'expo-router';
+import { useLibraryVisual } from '../context/LibraryContext';
 import { useOrionTheme } from '../context/ThemeContext';
 
 interface HeroBillboardProps {
@@ -26,7 +27,7 @@ function HeroSlide({ item, onPlay, onInfo, onPress, width }: {
   onPress?: () => void;
   width: number;
 }) {
-  const { isSaved, toggleSave } = useLibrary();
+  const { isSaved, toggleSave } = useLibraryVisual();
   const { theme } = useOrionTheme();
   const isMovie = item.media_type === 'movie' || !item.name;
   const title = isMovie ? item.title : item.name;
@@ -122,6 +123,9 @@ function HeroSlide({ item, onPlay, onInfo, onPress, width }: {
 
 export function HeroBillboard({ items, onPlay, onInfo, onPress }: HeroBillboardProps) {
   const { theme, preferences } = useOrionTheme();
+  const pathname = usePathname();
+  const [appState, setAppState] = useState(AppState.currentState);
+  const heroActive = (pathname === '/' || pathname === '/index') && appState === 'active';
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isPhoneLandscape = windowWidth > windowHeight && Math.min(windowWidth, windowHeight) < 600;
   const heroHeight = isPhoneLandscape ? Math.max(240, Math.min(300, windowHeight - 24)) : 380;
@@ -146,10 +150,15 @@ export function HeroBillboard({ items, onPlay, onInfo, onPress }: HeroBillboardP
   const flatListRef = useRef<FlatList>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', setAppState);
+    return () => subscription.remove();
+  }, []);
+
   // Smooth continuous forward auto-rotation
   const startTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
-    if (baseCount <= 1 || loopItems.length === 0 || preferences.reducedMotion) return;
+    if (baseCount <= 1 || loopItems.length === 0 || preferences.reducedMotion || !heroActive) return;
 
     timerRef.current = setInterval(() => {
       let nextIndex = flatIndexRef.current + 1;
@@ -167,7 +176,7 @@ export function HeroBillboard({ items, onPlay, onInfo, onPress }: HeroBillboardP
       flatIndexRef.current = nextIndex;
       setActiveDotIndex(nextIndex % baseCount);
     }, AUTO_ROTATE_INTERVAL);
-  }, [baseCount, loopItems.length, preferences.reducedMotion]);
+  }, [baseCount, heroActive, loopItems.length, preferences.reducedMotion]);
 
   useEffect(() => {
     startTimer();
@@ -213,6 +222,9 @@ export function HeroBillboard({ items, onPlay, onInfo, onPress }: HeroBillboardP
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         initialScrollIndex={initialIndex}
+        initialNumToRender={3}
+        maxToRenderPerBatch={3}
+        windowSize={5}
         keyExtractor={(item) => item.uniqueKey}
         onMomentumScrollEnd={handleMomentumScrollEnd}
         onScrollBeginDrag={handleScrollBeginDrag}

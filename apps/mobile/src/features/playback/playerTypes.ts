@@ -30,5 +30,6 @@ export interface PlaybackSurfaceProps {
   ) => boolean;
   onAutomaticFailover: (verifiedSnapshot: VerifiedPlaybackSnapshot | null) => boolean;
   onPlaybackSnapshot?: (snapshot: VerifiedPlaybackSnapshot) => void;
+  onVerifiedPlaybackCompletion?: (snapshot: VerifiedPlaybackSnapshot) => void;
   activeHandoffId?: string | null;
 }

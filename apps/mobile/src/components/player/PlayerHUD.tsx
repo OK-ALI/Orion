@@ -9,6 +9,8 @@ import * as Brightness from 'expo-brightness';
 import { VolumeManager } from 'react-native-volume-manager';
 import { spacing, fontSizes } from '@orion/shared/tokens';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PlayerChromeHandle } from './PlayerChromeHandle';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -17,11 +19,30 @@ interface PlayerHUDProps {
   title: string;
   onBack: () => void;
   onOpenSources?: () => void;
+  onOpenSubtitles?: () => void;
+  onOpenPresentation?: () => void;
+  controlsVisible?: boolean;
+  onReveal?: () => void;
+  onDismiss?: () => void;
+  onToggle?: () => void;
 }
 
-export function PlayerHUD({ player, title, onBack, onOpenSources }: PlayerHUDProps) {
+export function PlayerHUD({
+  player,
+  title,
+  onBack,
+  onOpenSources,
+  onOpenSubtitles,
+  onOpenPresentation,
+  controlsVisible: controlledVisible,
+  onReveal,
+  onDismiss,
+  onToggle,
+}: PlayerHUDProps) {
   const { theme } = useOrionTheme();
-  const [controlsVisible, setControlsVisible] = useState(true);
+  const insets = useSafeAreaInsets();
+  const [localControlsVisible, setLocalControlsVisible] = useState(true);
+  const controlsVisible = controlledVisible ?? localControlsVisible;
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrubberWidth = useRef(1);
   
@@ -68,18 +89,35 @@ export function PlayerHUD({ player, title, onBack, onOpenSources }: PlayerHUDPro
   // Interaction logic
   const resetHideTimer = () => {
     if (hideTimeout.current) clearTimeout(hideTimeout.current);
-    setControlsVisible(true);
+    if (onReveal) onReveal();
+    else setLocalControlsVisible(true);
     if (isPlaying && status.status !== 'loading' && status.status !== 'error') {
-      hideTimeout.current = setTimeout(() => setControlsVisible(false), 4000);
+      if (!onDismiss) hideTimeout.current = setTimeout(() => setLocalControlsVisible(false), 4000);
     }
   };
 
-  useEffect(() => {
+  const toggleControls = () => {
+    if (onToggle) {
+      onToggle();
+      return;
+    }
+    if (controlsVisible) {
+      if (hideTimeout.current) clearTimeout(hideTimeout.current);
+      if (onDismiss) onDismiss();
+      else setLocalControlsVisible(false);
+      return;
+    }
     resetHideTimer();
+  };
+
+  useEffect(() => {
+    // The shared player controller owns controlled chrome visibility. Native
+    // status/playing events may update playback truth, but must not reopen it.
+    if (controlledVisible === undefined) resetHideTimer();
     return () => {
       if (hideTimeout.current) clearTimeout(hideTimeout.current);
     };
-  }, [isPlaying, status.status]);
+  }, [controlledVisible, isPlaying, status.status]);
 
   // System Volume & Brightness integration
   const [hasPermissions, setHasPermissions] = useState(false);
@@ -135,7 +173,7 @@ export function PlayerHUD({ player, title, onBack, onOpenSources }: PlayerHUDPro
 
   // Gestures
   const singleTap = Gesture.Tap().onEnd(() => {
-    runOnJS(resetHideTimer)();
+    runOnJS(toggleControls)();
   });
 
   const doubleTapLeft = Gesture.Tap().numberOfTaps(2).onEnd(() => {
@@ -214,20 +252,11 @@ export function PlayerHUD({ player, title, onBack, onOpenSources }: PlayerHUDPro
       )}
 
       {/* Control Overlay */}
-      {!controlsVisible && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Show player controls"
-          onPress={resetHideTimer}
-          style={styles.revealHandle}
-        >
-          <View style={styles.revealHandleBar} />
-        </Pressable>
-      )}
+      <PlayerChromeHandle controlsVisible={controlsVisible} onPress={toggleControls} />
       {controlsVisible && (
         <View style={styles.controlsOverlay}>
           {/* Top Bar */}
-          <BlurView intensity={50} tint="dark" style={[styles.topBar, isLandscape && styles.topBarLandscape]}>
+          <BlurView intensity={50} tint="dark" style={[styles.topBar, isLandscape && styles.topBarLandscape, { paddingTop: Math.max(insets.top, isLandscape ? 8 : 12) + 44 }]}>
             <Pressable onPress={onBack} style={styles.iconButton}>
               <Ionicons name="chevron-back" size={28} color={theme.onAccent} />
             </Pressable>
@@ -258,7 +287,7 @@ export function PlayerHUD({ player, title, onBack, onOpenSources }: PlayerHUDPro
           </View>
 
           {/* Bottom Bar (Scrubber) */}
-          <BlurView intensity={60} tint="dark" style={[styles.bottomBar, isLandscape && styles.bottomBarLandscape]}>
+          <BlurView intensity={60} tint="dark" style={[styles.bottomBar, isLandscape && styles.bottomBarLandscape, { paddingBottom: Math.max(insets.bottom, 12) }]}>
             <View style={styles.scrubberRow}>
               <Text style={[styles.timeText, { color: theme.textSecondary }]}>{formatTime(currentTime)}</Text>
               <Pressable
@@ -292,6 +321,18 @@ export function PlayerHUD({ player, title, onBack, onOpenSources }: PlayerHUDPro
               <Text style={[styles.timeText, { color: theme.textSecondary }]}>{formatTime(duration)}</Text>
             </View>
             <View style={styles.bottomActions}>
+              {onOpenPresentation && (
+                <Pressable style={[styles.sourceButton, { backgroundColor: theme.surface }]} onPress={onOpenPresentation}>
+                  <Ionicons name="scan-outline" size={18} color={theme.textSecondary} />
+                  <Text style={[styles.sourceText, { color: theme.textSecondary }]}>Display</Text>
+                </Pressable>
+              )}
+              {onOpenSubtitles && (
+                <Pressable style={[styles.sourceButton, { backgroundColor: theme.surface }]} onPress={onOpenSubtitles}>
+                  <Ionicons name="chatbox-ellipses-outline" size={18} color={theme.textSecondary} />
+                  <Text style={[styles.sourceText, { color: theme.textSecondary }]}>Subtitles</Text>
+                </Pressable>
+              )}
               <Pressable style={[styles.sourceButton, { backgroundColor: theme.surface }]} onPress={onOpenSources}>
                 <Ionicons name="server-outline" size={18} color={theme.textSecondary} />
                 <Text style={[styles.sourceText, { color: theme.textSecondary }]}>Source</Text>
@@ -365,22 +406,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[3],
     paddingBottom: spacing[3],
   },
-  revealHandle: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 38 : 14,
-    alignSelf: 'center',
-    zIndex: 30,
-    width: 72,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  revealHandleBar: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.68)',
-  },
   scrubberRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -424,6 +449,8 @@ const styles = StyleSheet.create({
   bottomActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: spacing[2],
     marginTop: spacing[3],
   },
   sourceButton: {

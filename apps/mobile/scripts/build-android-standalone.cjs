@@ -60,6 +60,7 @@ const cinemaNativeFiles = [
   "OrionCinemaWebChromeClient.kt",
   "OrionCinemaWebViewManager.kt",
   "OrionCinemaWebViewPackage.kt",
+  "OrionPlayerSystemUiModule.kt",
 ];
 
 function syncCinemaNativeSources() {

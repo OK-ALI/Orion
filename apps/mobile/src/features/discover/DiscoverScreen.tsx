@@ -1,5 +1,5 @@
-import { View, Text, StyleSheet, TextInput, FlatList, ActivityIndicator, ScrollView, Pressable, Modal } from 'react-native';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Animated, View, Text, StyleSheet, TextInput, FlatList, ActivityIndicator, ScrollView, Pressable, Modal } from 'react-native';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { spacing } from '@orion/shared/tokens';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,7 @@ import { MediaCard } from '../../components/MediaCard';
 import { PersonCard } from '../../components/PersonCard';
 import { MobilePageHeader } from '../../components/MobilePageHeader';
 import { useOrionTheme } from '../../context/ThemeContext';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   getRegionQueryParams,
   MEDIA_FILTERS,
@@ -24,11 +24,18 @@ import {
 } from './discoverCatalog';
 import { createDiscoverStyles } from './discoverStyles';
 import { useResponsiveLayout } from '../../services/responsive';
+import { getGridRenderBudget, getRailRenderBudget } from '../../services/listPerformance';
+import { usePerformanceProfile } from '../../context/PerformanceContext';
 
 export default function DiscoverScreen() {
-  const { theme } = useOrionTheme();
+  const { theme, preferences } = useOrionTheme();
+  const { resolvedProfile } = usePerformanceProfile();
   const styles = useMemo(() => createDiscoverStyles(theme), [theme]);
   const [query, setQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
+  const searchArrival = useRef(new Animated.Value(1)).current;
+  const params = useLocalSearchParams<{ focusSearch?: string }>();
   const [results, setResults] = useState<TmdbMediaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -61,6 +68,37 @@ export default function DiscoverScreen() {
   const genreGaps = spacing[3] * (GENRE_COLS - 1);
   const genreCardWidth = containerWidth > 0 ? (containerWidth - padding - genreGaps) / GENRE_COLS : 160;
   const genres = genreType === 'tv' ? TV_GENRES : MOVIE_GENRES;
+  const gridRenderBudget = useMemo(() => getGridRenderBudget(COLUMN_COUNT, resolvedProfile), [COLUMN_COUNT, resolvedProfile]);
+  const regionRailRenderBudget = useMemo(
+    () => getRailRenderBudget(containerWidth, 140 + spacing[4] + spacing[3], resolvedProfile),
+    [containerWidth, resolvedProfile],
+  );
+  const filteredSearchResults = useMemo(() => results.filter((result) => {
+    const mediaType = (result as any).media_type;
+    if (mediaType !== 'movie' && mediaType !== 'tv' && mediaType !== 'person' && !!mediaType) return false;
+    if (activeFilter === 'all') return true;
+    if (activeFilter === 'anime') return mediaType !== 'person' && isAnimeContent(result);
+    return mediaType === activeFilter;
+  }), [activeFilter, results]);
+  const searchArrivalStyle = {
+    opacity: searchArrival.interpolate({ inputRange: [0, 1], outputRange: [0.84, 1] }),
+    transform: [{ scale: searchArrival.interpolate({ inputRange: [0, 1], outputRange: [0.985, 1] }) }],
+  };
+
+  useEffect(() => {
+    const request = Number(params.focusSearch || 0);
+    if (!Number.isFinite(request) || request <= 0) return;
+    setSelectedGenre(null);
+    setGenreResults([]);
+    searchArrival.setValue(preferences.reducedMotion ? 1 : 0);
+    requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      if (!preferences.reducedMotion) {
+        Animated.timing(searchArrival, { toValue: 1, duration: 190, useNativeDriver: true }).start();
+      }
+      router.setParams({ focusSearch: '0' });
+    });
+  }, [params.focusSearch, preferences.reducedMotion, router, searchArrival]);
   useEffect(() => {
     if (!query.trim()) {
       setResults([]);
@@ -117,10 +155,18 @@ export default function DiscoverScreen() {
       if (pageNum === 1) {
         setGenreResults(merged as any);
       } else {
-        setGenreResults((prev: any) => [
-          ...prev,
-          ...merged.filter((item) => !prev.some((old: any) => old.id === item.id && old.media_type === item.media_type)),
-        ] as any);
+        setGenreResults((prev: any) => {
+          const existingKeys = new Set(
+            prev.map((item: any) => `${item.media_type}_${item.id}`)
+          );
+          const additions = merged.filter((item) => {
+            const key = `${item.media_type}_${item.id}`;
+            if (existingKeys.has(key)) return false;
+            existingKeys.add(key);
+            return true;
+          });
+          return [...prev, ...additions] as any;
+        });
       }
     } catch (err) {
       console.error('Discover fetch failed:', err);
@@ -184,29 +230,50 @@ export default function DiscoverScreen() {
         end={{ x: 1, y: 0 }}
         style={StyleSheet.absoluteFill}
       />
-      <MobilePageHeader eyebrow="EXPLORE" title="Discover" subtitle="Search, filter and explore every corner of Orion." />
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={theme.textMuted} style={styles.searchIcon} />
+      <MobilePageHeader
+        eyebrow="EXPLORE"
+        title="Discover"
+        subtitle="Search, filter and explore every corner of Orion."
+        reserveFloatingTriggerInLandscape
+      />
+      <Animated.View
+        style={[
+          styles.searchContainer,
+          searchFocused && styles.searchContainerFocused,
+          searchFocused && { borderColor: theme.accent, shadowColor: theme.accent },
+          searchArrivalStyle,
+        ]}
+      >
+        <View accessible={false} importantForAccessibility="no">
+          <Ionicons name="search" size={20} color={searchFocused ? theme.accent : theme.textMuted} style={styles.searchIcon} />
+        </View>
         <TextInput
+          ref={searchInputRef}
+          accessibilityLabel="Search Orion"
+          accessibilityHint="Search movies, shows, or people"
           style={styles.searchInput}
           placeholder="Search movies, shows, or actors..."
           placeholderTextColor={theme.textMuted}
           value={query}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
           onChangeText={(t) => { setQuery(t); if (t.trim()) setSelectedGenre(null); }}
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
         />
         {query.length > 0 && (
-          <Ionicons 
-            name="close-circle" 
-            size={20} 
-            color={theme.textSecondary}
-            style={styles.clearIcon}
-            onPress={() => setQuery('')}
-          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            hitSlop={4}
+            style={styles.clearButton}
+            onPress={() => { setQuery(''); searchInputRef.current?.focus(); }}
+          >
+            <Ionicons name="close-circle" size={20} color={theme.textSecondary} />
+          </Pressable>
         )}
-      </View>
+      </Animated.View>
       {isSearching ? (
         /* ── Search Results Mode ── */
         <>
@@ -215,6 +282,9 @@ export default function DiscoverScreen() {
               {MEDIA_FILTERS.map((filter) => (
                 <Pressable
                   key={filter.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Filter search results by ${filter.name}`}
+                  accessibilityState={{ selected: activeFilter === filter.id }}
                   style={[styles.filterPill, activeFilter === filter.id && styles.filterPillActive]}
                   onPress={() => setActiveFilter(filter.id)}
                 >
@@ -233,13 +303,10 @@ export default function DiscoverScreen() {
             containerWidth > 0 && (
               <FlatList
                 key={`search-${COLUMN_COUNT}`}
-                data={results.filter(r => {
-                  const mt = (r as any).media_type;
-                  if (mt !== 'movie' && mt !== 'tv' && mt !== 'person' && !!mt) return false;
-                  if (activeFilter === 'all') return true;
-                  if (activeFilter === 'anime') return mt !== 'person' && isAnimeContent(r);
-                  return mt === activeFilter;
-                })}
+                data={filteredSearchResults}
+                initialNumToRender={gridRenderBudget.initialNumToRender}
+                maxToRenderPerBatch={gridRenderBudget.maxToRenderPerBatch}
+                windowSize={gridRenderBudget.windowSize}
                 keyExtractor={(item) => item.id.toString()}
                 numColumns={COLUMN_COUNT}
                 contentContainerStyle={styles.gridContainer}
@@ -283,8 +350,10 @@ export default function DiscoverScreen() {
         /* ── Genre & Explore All Results Mode ── */
         <>
           <View style={styles.genreHeader}>
-            <Pressable 
-              style={({ pressed }) => [styles.backPill, pressed && { opacity: 0.7 }]} 
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to genres"
+              style={({ pressed }) => [styles.backPill, pressed && { opacity: 0.7 }]}
               onPress={() => { setSelectedGenre(null); setGenreResults([]); setPage(1); }}
             >
               <Ionicons name="chevron-back" size={18} color={theme.text} />
@@ -297,6 +366,8 @@ export default function DiscoverScreen() {
           <View style={styles.filterControlsBar}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Media type filter, ${TYPE_FILTERS.find(t => t.id === genreType)?.name}`}
                 style={[styles.dropdownPill, genreType !== 'all' && styles.dropdownPillActive]}
                 onPress={() => setActiveModal('type')}
               >
@@ -306,6 +377,8 @@ export default function DiscoverScreen() {
                 <Ionicons name="chevron-down" size={14} color={genreType !== 'all' ? theme.onAccent : theme.textSecondary} />
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Region filter, ${REGION_PRESETS[region as keyof typeof REGION_PRESETS]?.name}`}
                 style={[styles.dropdownPill, region !== 'all' && styles.dropdownPillActive]}
                 onPress={() => setActiveModal('region')}
               >
@@ -316,6 +389,8 @@ export default function DiscoverScreen() {
               </Pressable>
               {region !== 'all' && SUBFILTER_PRESETS[region as keyof typeof SUBFILTER_PRESETS] && (
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Sub-region filter"
                   style={[styles.dropdownPill, subfilter !== 'all' && styles.dropdownPillActive]}
                   onPress={() => setActiveModal('subfilter')}
                 >
@@ -326,6 +401,8 @@ export default function DiscoverScreen() {
                 </Pressable>
               )}
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Sort titles by ${SORT_OPTIONS.find(s => s.id === sortBy)?.label}`}
                 style={[styles.dropdownPill, sortBy !== 'popularity.desc' && styles.dropdownPillActive]}
                 onPress={() => setActiveModal('sort')}
               >
@@ -335,6 +412,8 @@ export default function DiscoverScreen() {
                 <Ionicons name="chevron-down" size={14} color={sortBy !== 'popularity.desc' ? theme.onAccent : theme.textSecondary} />
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={minRating === '0' ? 'Minimum rating, any' : `Minimum rating, ${minRating} and above`}
                 style={[styles.dropdownPill, minRating !== '0' && styles.dropdownPillActive]}
                 onPress={() => setActiveModal('rating')}
               >
@@ -344,6 +423,8 @@ export default function DiscoverScreen() {
                 <Ionicons name="chevron-down" size={14} color={minRating !== '0' ? theme.onAccent : theme.textSecondary} />
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={year ? `Release year, ${year}` : 'Release year, all'}
                 style={[styles.dropdownPill, year !== '' && styles.dropdownPillActive]}
                 onPress={() => setActiveModal('year')}
               >
@@ -363,6 +444,9 @@ export default function DiscoverScreen() {
               <FlatList
                 key={`genre-${COLUMN_COUNT}`}
                 data={genreResults}
+                initialNumToRender={gridRenderBudget.initialNumToRender}
+                maxToRenderPerBatch={gridRenderBudget.maxToRenderPerBatch}
+                windowSize={gridRenderBudget.windowSize}
                 keyExtractor={(item, idx) => `${item.id}_${item.media_type}_${idx}`}
                 numColumns={COLUMN_COUNT}
                 contentContainerStyle={styles.gridContainer}
@@ -385,7 +469,9 @@ export default function DiscoverScreen() {
                 ListFooterComponent={
                   <View style={styles.loadMoreFooter}>
                     {page < totalPages && (
-                      <Pressable 
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Load more titles"
                         style={({ pressed }) => [styles.loadMoreButton, pressed && { opacity: 0.8 }]}
                         onPress={handleLoadMore}
                         disabled={loadingMore}
@@ -411,6 +497,9 @@ export default function DiscoverScreen() {
             {TYPE_FILTERS.map((f) => (
               <Pressable
                 key={f.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Browse ${f.name}`}
+                accessibilityState={{ selected: genreType === f.id }}
                 style={[styles.typePill, genreType === f.id && styles.typePillActive]}
                 onPress={() => setGenreType(f.id as any)}
               >
@@ -425,6 +514,9 @@ export default function DiscoverScreen() {
               {Object.entries(REGION_PRESETS).map(([id, preset]) => (
                 <Pressable
                   key={id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Region ${preset.name}`}
+                  accessibilityState={{ selected: region === id }}
                   style={[styles.regionPill, region === id && styles.regionPillActive]}
                   onPress={() => { setRegion(id); setSubfilter('all'); }}
                 >
@@ -441,6 +533,9 @@ export default function DiscoverScreen() {
                 {SUBFILTER_PRESETS[region as keyof typeof SUBFILTER_PRESETS].map((sf) => (
                   <Pressable
                     key={sf.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Sub-region ${sf.name}`}
+                    accessibilityState={{ selected: subfilter === sf.id }}
                     style={[styles.subfilterPill, subfilter === sf.id && styles.subfilterPillActive]}
                     onPress={() => setSubfilter(sf.id)}
                   >
@@ -459,6 +554,8 @@ export default function DiscoverScreen() {
                   Popular in <Text style={{ color: theme.accent }}>{activeRegionName}</Text>
                 </Text>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Explore all titles in ${activeRegionName}`}
                   style={({ pressed }) => [styles.browseAllBtn, pressed && { opacity: 0.7 }]}
                   onPress={() => setSelectedGenre({ id: 'all' as any, name: 'All ' + activeRegionName })}
                 >
@@ -472,6 +569,9 @@ export default function DiscoverScreen() {
                 <FlatList
                   data={regionResults}
                   horizontal
+                  initialNumToRender={regionRailRenderBudget.initialNumToRender}
+                  maxToRenderPerBatch={regionRailRenderBudget.maxToRenderPerBatch}
+                  windowSize={regionRailRenderBudget.windowSize}
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={{ gap: spacing[3], paddingHorizontal: spacing[4] }}
                   keyExtractor={(item) => item.id.toString()}
@@ -490,6 +590,8 @@ export default function DiscoverScreen() {
             {genres.map((genre) => (
               <Pressable
                 key={genre.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Browse ${genre.name}`}
                 style={({ pressed }) => [{ width: genreCardWidth }, pressed && { opacity: 0.8, transform: [{ scale: 0.97 }] }]}
                 onPress={() => setSelectedGenre(genre)}
               >
@@ -519,7 +621,7 @@ export default function DiscoverScreen() {
         onRequestClose={() => setActiveModal(null)}
       >
         <Pressable style={styles.modalOverlay} onPress={() => setActiveModal(null)}>
-          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+          <View accessibilityViewIsModal style={styles.modalContent} onStartShouldSetResponder={() => true}>
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
@@ -530,7 +632,13 @@ export default function DiscoverScreen() {
                 {activeModal === 'rating' && 'Minimum TMDB Rating'}
                 {activeModal === 'year' && 'Release Year'}
               </Text>
-              <Pressable onPress={() => setActiveModal(null)} style={styles.modalCloseBtn}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close filter options"
+                hitSlop={4}
+                onPress={() => setActiveModal(null)}
+                style={styles.modalCloseBtn}
+              >
                 <Ionicons name="close" size={20} color={theme.text} />
               </Pressable>
             </View>
@@ -538,6 +646,8 @@ export default function DiscoverScreen() {
               {activeModal === 'type' && TYPE_FILTERS.map((item) => (
                 <Pressable
                   key={item.id}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: genreType === item.id }}
                   style={[styles.modalOption, genreType === item.id && styles.modalOptionActive]}
                   onPress={() => { setGenreType(item.id as any); setActiveModal(null); }}
                 >
@@ -550,6 +660,8 @@ export default function DiscoverScreen() {
               {activeModal === 'region' && Object.entries(REGION_PRESETS).map(([id, preset]) => (
                 <Pressable
                   key={id}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: region === id }}
                   style={[styles.modalOption, region === id && styles.modalOptionActive]}
                   onPress={() => { setRegion(id); setSubfilter('all'); setActiveModal(null); }}
                 >
@@ -562,6 +674,8 @@ export default function DiscoverScreen() {
               {activeModal === 'subfilter' && region !== 'all' && SUBFILTER_PRESETS[region as keyof typeof SUBFILTER_PRESETS]?.map((sf) => (
                 <Pressable
                   key={sf.id}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: subfilter === sf.id }}
                   style={[styles.modalOption, subfilter === sf.id && styles.modalOptionActive]}
                   onPress={() => { setSubfilter(sf.id); setActiveModal(null); }}
                 >
@@ -574,6 +688,8 @@ export default function DiscoverScreen() {
               {activeModal === 'sort' && SORT_OPTIONS.map((item) => (
                 <Pressable
                   key={item.id}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: sortBy === item.id }}
                   style={[styles.modalOption, sortBy === item.id && styles.modalOptionActive]}
                   onPress={() => { setSortBy(item.id); setActiveModal(null); }}
                 >
@@ -586,6 +702,8 @@ export default function DiscoverScreen() {
               {activeModal === 'rating' && RATING_OPTIONS.map((item) => (
                 <Pressable
                   key={item.id}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: minRating === item.id }}
                   style={[styles.modalOption, minRating === item.id && styles.modalOptionActive]}
                   onPress={() => { setMinRating(item.id); setActiveModal(null); }}
                 >
@@ -598,6 +716,8 @@ export default function DiscoverScreen() {
               {activeModal === 'year' && YEAR_OPTIONS.map((y) => (
                 <Pressable
                   key={y || 'all_years'}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: year === y }}
                   style={[styles.modalOption, year === y && styles.modalOptionActive]}
                   onPress={() => { setYear(y); setActiveModal(null); }}
                 >

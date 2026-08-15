@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  AccessibilityInfo,
   FlatList,
   Pressable,
   StyleSheet,
@@ -19,9 +20,13 @@ import { OrionDialog } from '../../components/OrionDialog';
 import { ContinueWatchingCard } from './ContinueWatchingCard';
 import { HistoryRow } from './HistoryRow';
 import { historyEntryKey, selectLatestHistory } from './playbackLibrary';
+import { savedItemWatchState } from './watchedState';
 import { useResponsiveLayout } from '../../services/responsive';
+import { getGridRenderBudget, getStackListRenderBudget } from '../../services/listPerformance';
+import { usePerformanceProfile } from '../../context/PerformanceContext';
 
 type LibraryTab = 'saved' | 'continue' | 'history';
+type SavedFilter = 'all' | 'unwatched' | 'watched';
 
 export interface LibraryPagerState {
   activeTab: LibraryTab;
@@ -31,6 +36,12 @@ export interface LibraryPagerState {
 }
 
 type LibraryDialogState = { type: 'clear' } | { type: 'remove'; historyKey: string } | null;
+
+const SAVED_FILTERS: Array<{ id: SavedFilter; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'unwatched', label: 'Unwatched' },
+  { id: 'watched', label: 'Watched' },
+];
 
 const TABS: Array<{ id: LibraryTab; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { id: 'saved', label: 'My List', icon: 'bookmark' },
@@ -42,17 +53,23 @@ function validTab(value: string | undefined): LibraryTab {
   return value === 'continue' || value === 'history' ? value : 'saved';
 }
 
+function savedItemKey(item: any) {
+  return `${item.media_type || 'movie'}_${item.id}`;
+}
+
 export default function LibraryScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
   const { width, shortestEdge, isLandscape, isTablet } = useResponsiveLayout();
   const { theme, preferences } = useOrionTheme();
+  const { resolvedProfile } = usePerformanceProfile();
   const {
     saved, savedOrder, history, progress, watched,
     clearHistory, removeHistoryEntry, removeProgress, markProgressWatched,
     getContinueWatching, enrichPlaybackMetadata,
   } = useLibrary();
   const [activeTab, setActiveTab] = useState<LibraryTab>(() => validTab(params.tab));
+  const [savedFilter, setSavedFilter] = useState<SavedFilter>('all');
   const [dialog, setDialog] = useState<LibraryDialogState>(null);
 
   useEffect(() => setActiveTab(validTab(params.tab)), [params.tab]);
@@ -60,6 +77,28 @@ export default function LibraryScreen() {
   const savedItems = useMemo(
     () => savedOrder.map((key) => saved[key]).filter(Boolean),
     [saved, savedOrder],
+  );
+  const savedWatchRows = useMemo(
+    () => savedItems.map((item) => ({ item, state: savedItemWatchState(watched, item) })),
+    [savedItems, watched],
+  );
+  const savedFilterCounts = useMemo(() => {
+    const watchedCount = savedWatchRows.filter((entry) => entry.state === 'watched').length;
+    return {
+      all: savedWatchRows.length,
+      unwatched: savedWatchRows.length - watchedCount,
+      watched: watchedCount,
+    } satisfies Record<SavedFilter, number>;
+  }, [savedWatchRows]);
+  const watchedSavedKeys = useMemo(
+    () => new Set(savedWatchRows.filter((entry) => entry.state === 'watched').map((entry) => savedItemKey(entry.item))),
+    [savedWatchRows],
+  );
+  const filteredSavedItems = useMemo(
+    () => savedFilter === 'all'
+      ? savedItems
+      : savedWatchRows.filter((entry) => entry.state === savedFilter).map((entry) => entry.item),
+    [savedFilter, savedItems, savedWatchRows],
   );
   const continueItems = useMemo(
     () => getContinueWatching(),
@@ -86,6 +125,8 @@ export default function LibraryScreen() {
     : (isLandscape ? 3 : width >= 390 ? 3 : 2);
   const gridGap = shortestEdge < 360 ? 8 : 12;
   const cardWidth = Math.max(112, (width - horizontalPadding * 2 - gridGap * (columnCount - 1)) / columnCount);
+  const savedGridRenderBudget = useMemo(() => getGridRenderBudget(columnCount, resolvedProfile), [columnCount, resolvedProfile]);
+  const stackListRenderBudget = useMemo(() => getStackListRenderBudget(resolvedProfile), [resolvedProfile]);
 
   const openDetails = (id: string | number, mediaType: 'movie' | 'tv') => {
     router.push({ pathname: '/media/[id]', params: { id: String(id), type: mediaType } });
@@ -133,7 +174,7 @@ export default function LibraryScreen() {
       <View style={[styles.emptyIcon, { backgroundColor: theme.surface }]}>
         <Ionicons name={icon} size={30} color={theme.textMuted} />
       </View>
-      <Text style={[styles.emptyTitle, { color: theme.text }]}>{title}</Text>
+      <Text accessibilityRole="header" style={[styles.emptyTitle, { color: theme.text }]}>{title}</Text>
       <Text style={[styles.emptyMessage, { color: theme.textSecondary }]}>{message}</Text>
     </View>
   );
@@ -198,6 +239,8 @@ export default function LibraryScreen() {
               <Pressable
                 key={tab.id}
                 accessibilityRole="tab"
+                accessibilityLabel={`${tab.label}, ${counts[tab.id]} items`}
+                accessibilityHint={`Shows ${tab.label.toLowerCase()} in Library`}
                 accessibilityState={{ selected: active }}
                 onPress={() => changeTab(index)}
                 style={({ pressed }) => [
@@ -221,14 +264,69 @@ export default function LibraryScreen() {
             <View style={[styles.page, { width }]}>
               <FlatList
                 key={`saved-${columnCount}`}
-                data={savedItems}
+                data={filteredSavedItems}
                 numColumns={columnCount}
-                keyExtractor={(item) => `${item.media_type || 'movie'}_${item.id}`}
+                keyExtractor={savedItemKey}
+                initialNumToRender={savedGridRenderBudget.initialNumToRender}
+                maxToRenderPerBatch={savedGridRenderBudget.maxToRenderPerBatch}
+                windowSize={savedGridRenderBudget.windowSize}
                 contentContainerStyle={[styles.listContent, { paddingHorizontal: horizontalPadding }]}
                 columnWrapperStyle={{ gap: gridGap }}
-                ListEmptyComponent={emptyState('bookmark-outline', 'Your list is ready for its first story', 'Save a movie or series and it will appear here.')}
+                ListHeaderComponent={(
+                  <View style={styles.savedFilterFrame}>
+                    <View
+                      style={[styles.savedFilters, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                    >
+                      {SAVED_FILTERS.map((filter) => {
+                        const active = savedFilter === filter.id;
+                        return (
+                          <Pressable
+                            key={filter.id}
+                            accessibilityRole="tab"
+                            accessibilityLabel={`${filter.label} My List filter, ${savedFilterCounts[filter.id]} titles`}
+                            accessibilityHint={`Shows ${filter.label.toLowerCase()} titles in My List`}
+                            accessibilityState={{ selected: active }}
+                            onPress={() => {
+                              setSavedFilter(filter.id);
+                              AccessibilityInfo.announceForAccessibility(`${filter.label} My List filter, ${savedFilterCounts[filter.id]} titles`);
+                            }}
+                            style={({ pressed }) => [
+                              styles.savedFilter,
+                              {
+                                backgroundColor: active ? theme.accentSoft : 'transparent',
+                                borderColor: active ? theme.accent : 'transparent',
+                              },
+                              pressed && styles.pressed,
+                            ]}
+                          >
+                            <Text style={[styles.savedFilterLabel, { color: active ? theme.text : theme.textSecondary }]}>
+                              {filter.label}
+                            </Text>
+                            <Text style={[styles.savedFilterCount, { color: active ? theme.accent : theme.textMuted }]}>
+                              {savedFilterCounts[filter.id]}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+                ListEmptyComponent={
+                  savedFilter === 'all'
+                    ? emptyState('bookmark-outline', 'Your list is ready for its first story', 'Save a movie or series and it will appear here.')
+                    : savedFilter === 'watched'
+                      ? emptyState('checkmark-circle-outline', 'No watched titles in My List yet', 'Titles move here when Orion can verify they are fully watched.')
+                      : emptyState('sparkles-outline', 'Nothing left in Unwatched', 'Every title Orion can evaluate in My List is currently complete.')
+                }
                 renderItem={({ item }) => (
-                  <MediaCard item={item} width={cardWidth} height={cardWidth * 1.52} style={{ marginRight: 0, marginBottom: 18 }} onPress={() => openDetails(item.id, item.media_type === 'tv' ? 'tv' : 'movie')} />
+                  <MediaCard
+                    item={item}
+                    watched={watchedSavedKeys.has(savedItemKey(item))}
+                    width={cardWidth}
+                    height={cardWidth * 1.52}
+                    style={{ marginRight: 0, marginBottom: 18 }}
+                    onPress={() => openDetails(item.id, item.media_type === 'tv' ? 'tv' : 'movie')}
+                  />
                 )}
               />
             </View>
@@ -236,6 +334,9 @@ export default function LibraryScreen() {
               <FlatList
                 data={continueItems}
                 keyExtractor={(entry) => entry.key}
+                initialNumToRender={stackListRenderBudget.initialNumToRender}
+                maxToRenderPerBatch={stackListRenderBudget.maxToRenderPerBatch}
+                windowSize={stackListRenderBudget.windowSize}
                 contentContainerStyle={[styles.listContent, styles.continueList, { paddingHorizontal: horizontalPadding }]}
                 ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
                 ListEmptyComponent={emptyState('play-circle-outline', 'Nothing waiting to resume', 'Verified playback appears here after 30 seconds.')}
@@ -255,6 +356,9 @@ export default function LibraryScreen() {
               <FlatList
                 data={historyItems}
                 keyExtractor={(item) => item._key}
+                initialNumToRender={stackListRenderBudget.initialNumToRender}
+                maxToRenderPerBatch={stackListRenderBudget.maxToRenderPerBatch}
+                windowSize={stackListRenderBudget.windowSize}
                 contentContainerStyle={[styles.listContent, styles.historyList, { paddingHorizontal: horizontalPadding }]}
                 ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
                 ListEmptyComponent={emptyState('time-outline', 'No verified watch history', 'Movies and episodes enter History after Orion confirms advancing playback.')}
@@ -312,6 +416,11 @@ const styles = StyleSheet.create({
   pagerStrip: { flex: 1, flexDirection: 'row' },
   page: { flex: 1 },
   listContent: { paddingTop: 12, paddingBottom: 96, flexGrow: 1 },
+  savedFilterFrame: { width: '100%', marginBottom: 14 },
+  savedFilters: { width: '100%', maxWidth: 620, alignSelf: 'center', minHeight: 48, borderWidth: 1, borderRadius: 24, padding: 3, flexDirection: 'row', gap: 3 },
+  savedFilter: { flex: 1, minHeight: 42, borderWidth: 1, borderRadius: 21, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+  savedFilterLabel: { fontSize: 13, fontWeight: '800' },
+  savedFilterCount: { minWidth: 14, fontSize: 11, fontWeight: '900', textAlign: 'center' },
   continueList: { width: '100%', maxWidth: 880, alignSelf: 'center' },
   historyList: { width: '100%', maxWidth: 980, alignSelf: 'center' },
   emptyState: { minHeight: 300, paddingHorizontal: 28, alignItems: 'center', justifyContent: 'center' },

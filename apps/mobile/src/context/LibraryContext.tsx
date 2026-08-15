@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { mmkvStorageAdapter } from '../services/storageAdapter';
 import {
   TmdbMediaItem,
@@ -18,6 +18,15 @@ import {
   withoutHistoryEntry,
   withoutProgressRecord,
 } from '../features/library/playbackLibrary';
+import {
+  isEpisodeWatchedRecord,
+  isSavedItemFullyWatched,
+  isSeasonWatchedCollection,
+  withSeasonWatched,
+  withSeriesWatchedSummary,
+  withoutEpisodeWatched,
+  withoutSeasonWatched,
+} from '../features/library/watchedState';
 
 function getLibraryMediaType(item: any = {}) {
   return item.media_type || (item.first_air_date || item.name ? "tv" : "movie");
@@ -68,6 +77,11 @@ interface LibraryContextType {
   markWatched: (item: TmdbMediaItem, options?: { isEpisode?: boolean, seriesId?: number | string }) => void;
   markUnwatched: (item: TmdbMediaItem, options?: { isEpisode?: boolean, seriesId?: number | string }) => void;
   isWatched: (item: TmdbMediaItem, options?: { isEpisode?: boolean, seriesId?: number | string }) => boolean;
+  isItemFullyWatched: (item: TmdbMediaItem) => boolean;
+  reconcileSeriesWatched: (series: TmdbMediaItem) => void;
+  markSeasonWatched: (series: TmdbMediaItem, seasonNumber: number, episodes: any[]) => void;
+  markSeasonUnwatched: (seriesId: number | string, seasonNumber: number, episodes: any[]) => void;
+  isSeasonWatched: (seriesId: number | string, seasonNumber: number, episodes: any[]) => boolean;
   clearHistory: () => void;
   removeHistoryEntry: (key: string) => void;
   removeProgress: (key: string) => void;
@@ -84,11 +98,36 @@ interface LibraryContextType {
     episode?: number | null;
     evidence?: MobilePlaybackEvidence | null;
     sessionId?: string | null;
+    completionVerified?: boolean;
   }) => void;
   getPlaybackProgress: (mediaType: 'movie' | 'tv', id: string | number, season?: number | null, episode?: number | null) => PlaybackProgressV3 | null;
 }
 
 const LibraryContext = createContext<LibraryContextType | null>(null);
+
+type LibraryVisualContextType = Pick<
+  LibraryContextType,
+  | 'saved'
+  | 'watched'
+  | 'toggleSave'
+  | 'isSaved'
+  | 'markWatched'
+  | 'markUnwatched'
+  | 'isWatched'
+  | 'isItemFullyWatched'
+  | 'reconcileSeriesWatched'
+  | 'markSeasonWatched'
+  | 'markSeasonUnwatched'
+  | 'isSeasonWatched'
+>;
+
+type LibraryPlaybackActionsContextType = Pick<
+  LibraryContextType,
+  'recordPlayback' | 'getPlaybackProgress'
+>;
+
+const LibraryVisualContext = createContext<LibraryVisualContextType | null>(null);
+const LibraryPlaybackActionsContext = createContext<LibraryPlaybackActionsContextType | null>(null);
 
 function safeParse(str: string | null, fallback: any) {
   if (!str) return fallback;
@@ -175,18 +214,60 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, [getWatchedKey, getMediaType]);
 
   const markUnwatched = useCallback((item: any, options?: { isEpisode?: boolean, seriesId?: number | string }) => {
-    const key = getWatchedKey(item, options);
-    const next = { ...watchedRef.current };
-    delete next[key];
+    const next = options?.isEpisode && options.seriesId
+      ? withoutEpisodeWatched(watchedRef.current, options.seriesId, item)
+      : (() => {
+          const key = getWatchedKey(item, options);
+          const copy = { ...watchedRef.current };
+          delete copy[key];
+          return copy;
+        })();
+    if (next === watchedRef.current) return;
     watchedRef.current = next;
     setWatched(next);
     mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
   }, [getWatchedKey]);
 
   const isWatched = useCallback((item: any, options?: { isEpisode?: boolean, seriesId?: number | string }) => {
+    if (options?.isEpisode && options.seriesId) {
+      return isEpisodeWatchedRecord(watchedRef.current, options.seriesId, item);
+    }
     const key = getWatchedKey(item, options);
     return !!watchedRef.current[key];
   }, [getWatchedKey]);
+
+  const isItemFullyWatched = useCallback((item: any) => (
+    isSavedItemFullyWatched(watchedRef.current, item)
+  ), []);
+
+  const reconcileSeriesWatched = useCallback((series: any) => {
+    if (!series || series.id == null) return;
+    const next = withSeriesWatchedSummary(watchedRef.current, series);
+    if (next === watchedRef.current) return;
+    watchedRef.current = next;
+    setWatched(next);
+    mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
+  }, []);
+
+  const markSeasonWatched = useCallback((series: any, seasonNumber: number, episodes: any[]) => {
+    const next = withSeasonWatched(watchedRef.current, series, seasonNumber, episodes);
+    if (next === watchedRef.current) return;
+    watchedRef.current = next;
+    setWatched(next);
+    mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
+  }, []);
+
+  const markSeasonUnwatched = useCallback((seriesId: number | string, seasonNumber: number, episodes: any[]) => {
+    const next = withoutSeasonWatched(watchedRef.current, seriesId, seasonNumber, episodes);
+    if (next === watchedRef.current) return;
+    watchedRef.current = next;
+    setWatched(next);
+    mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
+  }, []);
+
+  const isSeasonWatched = useCallback((seriesId: number | string, seasonNumber: number, episodes: any[]) => (
+    isSeasonWatchedCollection(watchedRef.current, seriesId, seasonNumber, episodes)
+  ), []);
 
   const clearHistory = useCallback(() => {
     historyRef.current = [];
@@ -244,6 +325,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     episode = null,
     evidence = null,
     sessionId = null,
+    completionVerified = false,
   }: {
     item: any;
     mediaType: 'movie' | 'tv';
@@ -254,6 +336,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     episode?: number | null;
     evidence?: MobilePlaybackEvidence | null;
     sessionId?: string | null;
+    completionVerified?: boolean;
   }) => {
     const id = item?.id;
     if (id == null || !canPersistVerifiedPlayback(evidence, sessionId)) return;
@@ -291,9 +374,28 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       lastPlayedAt: updatedAt,
     };
     const nextProgress = { ...progressRef.current, [key]: progressRecord };
-    progressRef.current = nextProgress;
-    setProgress(nextProgress);
-    mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(nextProgress));
+    if (completionVerified) {
+      if (watchedRef.current[key]) {
+        const completedProgress = withoutProgressRecord(nextProgress, key);
+        progressRef.current = completedProgress;
+        setProgress(completedProgress);
+        mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(completedProgress));
+      } else {
+        const completed = markProgressRecordWatched(nextProgress, watchedRef.current, key, updatedAt);
+        if (completed) {
+          watchedRef.current = completed.watched;
+          progressRef.current = completed.progress;
+          setWatched(completed.watched);
+          setProgress(completed.progress);
+          mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(completed.watched));
+          mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(completed.progress));
+        }
+      }
+    } else {
+      progressRef.current = nextProgress;
+      setProgress(nextProgress);
+      mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(nextProgress));
+    }
     updateMobileDiagnostics({ lastProgressPersistedAt: updatedAt });
 
     const historyRecord = {
@@ -401,6 +503,44 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     return task;
   }, []);
 
+  // Browsing surfaces only subscribe to collection state. Playback progress/history writes
+  // must not wake every MediaCard, Hero slide, or Media Detail watched control.
+  const visualValue = useMemo<LibraryVisualContextType>(() => ({
+    saved,
+    watched,
+    toggleSave,
+    isSaved,
+    markWatched,
+    markUnwatched,
+    isWatched,
+    isItemFullyWatched,
+    reconcileSeriesWatched,
+    markSeasonWatched,
+    markSeasonUnwatched,
+    isSeasonWatched,
+  }), [
+    saved,
+    watched,
+    toggleSave,
+    isSaved,
+    markWatched,
+    markUnwatched,
+    isWatched,
+    isItemFullyWatched,
+    reconcileSeriesWatched,
+    markSeasonWatched,
+    markSeasonUnwatched,
+    isSeasonWatched,
+  ]);
+
+  // Player surfaces only need stable ref-backed actions. Keeping these in their own
+  // context prevents recordPlayback() from causing the active player to re-render
+  // merely because it just persisted progress/history.
+  const playbackActionsValue = useMemo<LibraryPlaybackActionsContextType>(() => ({
+    recordPlayback,
+    getPlaybackProgress,
+  }), [recordPlayback, getPlaybackProgress]);
+
   const value = {
     saved,
     savedOrder,
@@ -412,6 +552,11 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     markWatched,
     markUnwatched,
     isWatched,
+    isItemFullyWatched,
+    reconcileSeriesWatched,
+    markSeasonWatched,
+    markSeasonUnwatched,
+    isSeasonWatched,
     clearHistory,
     removeHistoryEntry,
     removeProgress,
@@ -422,11 +567,29 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     getPlaybackProgress,
   };
 
-  return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;
+  return (
+    <LibraryVisualContext.Provider value={visualValue}>
+      <LibraryPlaybackActionsContext.Provider value={playbackActionsValue}>
+        <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>
+      </LibraryPlaybackActionsContext.Provider>
+    </LibraryVisualContext.Provider>
+  );
 }
 
 export function useLibrary() {
   const context = useContext(LibraryContext);
   if (!context) throw new Error('useLibrary must be used within a LibraryProvider');
+  return context;
+}
+
+export function useLibraryVisual() {
+  const context = useContext(LibraryVisualContext);
+  if (!context) throw new Error('useLibraryVisual must be used within a LibraryProvider');
+  return context;
+}
+
+export function useLibraryPlaybackActions() {
+  const context = useContext(LibraryPlaybackActionsContext);
+  if (!context) throw new Error('useLibraryPlaybackActions must be used within a LibraryProvider');
   return context;
 }

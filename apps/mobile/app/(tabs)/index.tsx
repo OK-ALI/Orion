@@ -1,4 +1,4 @@
-import { View, ScrollView, StyleSheet, ActivityIndicator, FlatList, Text } from 'react-native';
+import { View, ScrollView, StyleSheet, ActivityIndicator, FlatList, Text, useWindowDimensions } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { spacing, fontFamilies } from '@orion/shared/tokens';
@@ -9,6 +9,8 @@ import { HeroBillboard } from '../../src/components/HeroBillboard';
 import { MediaCard } from '../../src/components/MediaCard';
 import { HomeContinueWatching } from '../../src/features/library/HomeContinueWatching';
 import { useOrionTheme } from '../../src/context/ThemeContext';
+import { getRailRenderBudget } from '../../src/services/listPerformance';
+import { usePerformanceProfile } from '../../src/context/PerformanceContext';
 
 // ── Desktop Replica Section Header ─────────────────────────────────────────
 function SectionTitle({ title, highlight }: { title: string; highlight: string }) {
@@ -24,6 +26,9 @@ function SectionTitle({ title, highlight }: { title: string; highlight: string }
 
 // ── Horizontal Media Row ───────────────────────────────────────────────────
 function MediaRow({ items, onPress }: { items: TmdbMediaItem[]; onPress: (item: TmdbMediaItem) => void }) {
+  const { width } = useWindowDimensions();
+  const { resolvedProfile } = usePerformanceProfile();
+  const renderBudget = getRailRenderBudget(width, 140 + spacing[4], resolvedProfile);
   if (!items || items.length === 0) return null;
 
   return (
@@ -33,6 +38,9 @@ function MediaRow({ items, onPress }: { items: TmdbMediaItem[]; onPress: (item: 
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.rowContent}
       keyExtractor={(item, index) => `${item.id}_${index}`}
+      initialNumToRender={renderBudget.initialNumToRender}
+      maxToRenderPerBatch={renderBudget.maxToRenderPerBatch}
+      windowSize={renderBudget.windowSize}
       renderItem={({ item }) => (
         <MediaCard
           item={item}

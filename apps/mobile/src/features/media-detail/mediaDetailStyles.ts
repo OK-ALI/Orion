@@ -13,8 +13,10 @@ export const styles = StyleSheet.create({
   retryButton: { minHeight: 44, marginTop: spacing[4], paddingHorizontal: spacing[5], borderRadius: radii.xl, backgroundColor: accent.primary, flexDirection: 'row', gap: 8, alignItems: 'center' },
   retryButtonText: { color: '#fff', fontWeight: '800' },
   primaryWatchAction: { width: '100%' },
-  secondaryActions: { flexDirection: 'row', gap: spacing[2], flexWrap: 'wrap', flex: 1 },
-  actionRowTablet: { maxWidth: 720 },
+  actionStack: { width: '100%', gap: spacing[2], marginTop: spacing[3] },
+  secondaryActionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  secondaryActionButton: { flex: 1, justifyContent: 'center' },
+  actionRowTablet: { maxWidth: 720, alignSelf: 'center' },
   moreOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' },
   moreSheet: { backgroundColor: backgrounds.elevated, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing[5], paddingBottom: Platform.OS === 'ios' ? 38 : 24, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
   moreHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing[3] },
@@ -58,7 +60,7 @@ export const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     gap: spacing[4],
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
   },
   posterImage: {
     width: 105,
@@ -69,8 +71,9 @@ export const styles = StyleSheet.create({
   },
   headerMeta: {
     flex: 1,
-    justifyContent: 'flex-end',
-    paddingBottom: spacing[1],
+    minHeight: 155,
+    justifyContent: 'center',
+    paddingVertical: spacing[1],
   },
   titleText: {
     color: '#ffffff',
@@ -124,6 +127,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginTop: spacing[1],
+    marginBottom: spacing[1],
   },
   genreInlineText: {
     color: '#f87171',
@@ -135,17 +139,11 @@ export const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    marginTop: spacing[3],
-  },
   pressed: {
     transform: [{ scale: 0.97 }],
   },
   playWrapper: {
-    flex: 1,
+    width: '100%',
     position: 'relative',
   },
   playButtonGlow: {
@@ -271,6 +269,8 @@ export const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255, 255, 255, 0.08)',
   },
   tabPill: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: radii.full,
@@ -352,6 +352,8 @@ export const styles = StyleSheet.create({
     paddingVertical: spacing[4],
   },
   seasonPill: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
     borderRadius: radii.full,
@@ -397,6 +399,19 @@ export const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  episodeProgressTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 3,
+    overflow: 'hidden',
+  },
+  episodeProgressFill: {
+    height: '100%',
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
+  },
   emptyThumb: {
     backgroundColor: 'rgba(255,255,255,0.05)',
     justifyContent: 'center',
@@ -420,6 +435,7 @@ export const styles = StyleSheet.create({
   epMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 6,
     marginBottom: 2,
   },
@@ -452,6 +468,7 @@ export const styles = StyleSheet.create({
   episodeListDate: {
     color: text.muted,
     fontSize: 10,
+    marginBottom: 2,
   },
   episodeListName: {
     color: '#fff',
@@ -460,22 +477,47 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 3,
   },
+  episodeOverviewBlock: {
+    position: 'relative',
+    marginBottom: 6,
+  },
   episodeOverviewText: {
     color: 'rgba(255, 255, 255, 0.65)',
     fontSize: 11,
     lineHeight: 15,
-    marginBottom: 6,
+  },
+  episodeOverviewMeasure: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    opacity: 0,
+  },
+  episodeOverviewToggle: {
+    alignSelf: 'flex-start',
+    minHeight: 22,
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  episodeOverviewToggleText: {
+    fontSize: 10,
+    fontFamily: fontFamilies.heading,
+    fontWeight: '800',
   },
   epActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'nowrap',
+    gap: 4,
   },
   epDownloadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
+    minWidth: 0,
     gap: 4,
     backgroundColor: 'rgba(229, 9, 20, 0.12)',
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: radii.full,
     borderWidth: 1,
@@ -483,8 +525,88 @@ export const styles = StyleSheet.create({
   },
   epDownloadBtnText: {
     color: accent.primary,
+    flexShrink: 1,
     fontSize: 10,
     fontFamily: fontFamilies.heading,
     fontWeight: '800',
+  },
+
+  watchedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+    borderWidth: 1,
+  },
+  watchedBadgeText: {
+    fontSize: 10,
+    fontFamily: fontFamilies.heading,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  movieWatchedStatus: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    paddingVertical: 2,
+  },
+  movieWatchedStatusText: {
+    fontSize: 10,
+    fontFamily: fontFamilies.heading,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  seasonWatchedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: spacing[3],
+  },
+  seasonWatchedAction: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 14,
+    borderRadius: radii.full,
+    borderWidth: 1,
+  },
+  seasonWatchedActionText: {
+    fontSize: 11,
+    fontFamily: fontFamilies.heading,
+    fontWeight: '900',
+  },
+  seasonWatchedBadge: {
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    borderRadius: radii.full,
+    borderWidth: 1,
+  },
+  seasonWatchedBadgeText: {
+    fontSize: 10,
+    fontFamily: fontFamilies.heading,
+    fontWeight: '800',
+  },
+  episodeWatchedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: radii.full,
+    borderWidth: 1,
+  },
+  episodeWatchedBadgeText: {
+    fontSize: 9,
+    fontFamily: fontFamilies.heading,
+    fontWeight: '900',
   },
 });

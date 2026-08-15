@@ -27,6 +27,9 @@ test("Cinema shield stays native-only, compatibility-first, and redacted", () =>
   assert.match(client, /artworkOrigins/);
   assert.match(client, /subtitleOrigins/);
   assert.match(client, /redacted evidence/);
+  assert.match(client, /reportedRoutineEvidence/);
+  assert.match(client, /routine redacted evidence once per page/);
+  assert.match(client, /else null/);
   assert.match(client, /scheme-deny/);
   assert.match(client, /hostless-deny/);
   assert.match(chromeClient, /onCreateWindow/);
@@ -106,10 +109,31 @@ test("AutoEmbed stays registered but is quarantined from Mobile selection after 
   assert.match(mobileSources, /autoembed:\s*Object\.freeze/);
 });
 
+test("VidSrc stays manually selectable while Orion discloses external-browser advertising risk", () => {
+  const mobileSources = read("apps", "mobile", "src", "features", "playback", "mobileSources.ts");
+  const sheet = read("apps", "mobile", "src", "components", "player", "SourcesSheet.tsx");
+
+  assert.match(mobileSources, /new Set\(\['autoembed'\]\)/);
+  assert.match(mobileSources, /vidsrc:\s*Object\.freeze\(\{[\s\S]*?mode: 'outgoing-only'[\s\S]*?automaticTarget: false/);
+  assert.match(mobileSources, /SAFETY_NOTICES[\s\S]*?vidsrc:[\s\S]*?External browser ads observed[\s\S]*?External Ads/);
+  assert.match(mobileSources, /requiresSelectionConfirmation: true/);
+  assert.match(sheet, /getMobileSourceSafetyNotice/);
+  assert.match(sheet, /pendingSourceId/);
+  assert.match(sheet, /OrionDialog/);
+  assert.match(sheet, /Continue with \${pendingSourceName}/);
+  assert.match(sheet, /onSelect\(sourceId\)/);
+});
+
 test("Cinema cleanup blocks popup links without permanent polling", () => {
   const blocker = read("apps", "mobile", "src", "features", "playback", "mobileAdBlocker.ts");
   assert.match(blocker, /window\.open/);
   assert.match(blocker, /MutationObserver/);
+  assert.match(blocker, /mutation\.addedNodes/);
+  assert.match(blocker, /removeAds\(node\)/);
+  assert.doesNotMatch(blocker, /attributes:\s*true/);
+  assert.match(blocker, /ORION_COSMETIC_BLOCK/);
+  assert.match(blocker, /cosmeticFlushes\s*<\s*12/);
+  assert.match(blocker, /setTimeout\(flushCosmeticEvidence, 900\)/);
   assert.match(blocker, /gsbdom\.click/);
   assert.doesNotMatch(blocker, /setInterval/);
   assert.match(blocker, /ORION_SUBTITLE_TRACK/);
@@ -129,14 +153,19 @@ test("Streaming Servers keeps source selection primary and details expandable", 
 
 test("player HUD exposes native shield status and a blocked-request counter", () => {
   const surface = read("apps", "mobile", "src", "features", "playback", "EmbedPlayerSurface.tsx");
+  const hud = read("apps", "mobile", "src", "features", "playback", "EmbeddedPlayerHud.tsx");
   assert.match(surface, /surfaceLoaded\.current/);
   assert.match(surface, /nativeProtectionVerified/);
   assert.match(surface, /nativeShieldObserved/);
+  assert.match(surface, /nativeBlockObserved/);
+  assert.match(hud, /blockedRequests > 0/);
+  assert.match(surface, /ORION_COSMETIC_BLOCK/);
+  assert.match(surface, /cosmeticTotal/);
   assert.match(surface, /nativeSessionObserved/);
   assert.match(surface, /ORION_SUBTITLE_TRACK/);
-  assert.match(surface, /styles\.shieldCounter/);
-  assert.match(surface, /\{blockedRequests\}/);
-  assert.match(surface, /'Protected'/);
+  assert.match(hud, /styles\.shieldCounter/);
+  assert.match(hud, /props\.blockedRequests/);
+  assert.match(hud, /'Protected'/);
 });
 
 test("subtitle references remain opaque and external fallback validates outcomes", () => {

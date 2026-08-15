@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, Text, useWindowDimensions, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import type { WebView as WebViewType } from 'react-native-webview';
 import type {
   EmbeddedSubtitleTrackV1,
   MobileShieldEvidenceV1,
-  MobilePlayerHudState,
+  MobilePlayerPresentation,
+  MobilePlayerSurfaceAdapter,
   ShieldVerificationState,
   SubtitleDiscoveryState,
 } from '@orion/shared/types';
@@ -17,7 +16,7 @@ import {
 } from '@orion/shared/sources';
 import { SourcesSheet } from '../../components/player/SourcesSheet';
 import { WatchdogWarning } from '../../components/player/WatchdogWarning';
-import { useLibrary } from '../../context/LibraryContext';
+import { useLibraryPlaybackActions } from '../../context/LibraryContext';
 import {
   clearMobileDiagnosticError,
   reportMobileDiagnosticError,
@@ -31,7 +30,11 @@ import {
   createEmbeddedTelemetryScript,
   parseEmbeddedTelemetryMessage,
 } from './embeddedTelemetry';
-import { createVerifiedResumeScript, mobileAdBlockerScript } from './mobileAdBlocker';
+import {
+  createProviderPresentationScript,
+  createVerifiedResumeScript,
+  mobileAdBlockerScript,
+} from './mobileAdBlocker';
 import { OrionCinemaWebView } from './OrionCinemaWebView';
 import { classifyCinemaSourceFailure } from './sourceFailure';
 import {
@@ -50,6 +53,13 @@ import {
   type MobileContinuityMode,
 } from './mobileSources';
 import { usePlaybackTelemetryController } from './usePlaybackTelemetryController';
+import { useMobilePlayerController } from './MobilePlayerController';
+import { getEmbeddedPresentationModes, getPresentationPreference, savePresentationPreference } from './presentationPreferences';
+import { usePlayerImmersiveSystemUi } from './immersiveSystemUi';
+import { PresentationSheet } from '../../components/player/PresentationSheet';
+import { EmbeddedPlayerHud } from './EmbeddedPlayerHud';
+import { mergeShieldEvidence, parseShieldEvidenceEnvelope } from './shieldEvidenceEnvelope';
+import { PlayerStateOverlay } from '../../components/player/PlayerStateOverlay';
 
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
   embedUrl: string;
@@ -95,16 +105,15 @@ export function EmbedPlayerSurface({
   onSourceChange,
   onAutomaticFailover,
   onPlaybackSnapshot,
+  onVerifiedPlaybackCompletion,
   activeHandoffId,
   onResumeAttempt,
 }: EmbedPlayerSurfaceProps) {
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
-  const { recordPlayback } = useLibrary();
-  const [showSources, setShowSources] = useState(false);
-  const [showControls, setShowControls] = useState(true);
+  const { recordPlayback } = useLibraryPlaybackActions();
+  const controller = useMobilePlayerController();
   const [isBuffering, setIsBuffering] = useState(true);
-  const [hudState, setHudState] = useState<MobilePlayerHudState>('buffering');
   const [shieldState, setShieldState] = useState<ShieldVerificationState>(
     Platform.OS === 'android' ? 'limited' : 'unavailable',
   );
@@ -124,15 +133,16 @@ export function EmbedPlayerSurface({
     savedTime: number;
     continuityMode: MobileContinuityMode;
   } | null>(null);
-  const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const observationTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadStartedAt = useRef(Date.now());
   const bridgeSequence = useRef(0);
+  const nativeShieldSequence = useRef(0);
   const resumeRequested = useRef(false);
   const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sourceTransitionPending = useRef(false);
   const healthRecorded = useRef(false);
   const nativeShieldObserved = useRef(false);
+  const nativeBlockObserved = useRef(false);
   const shieldFailureObserved = useRef(false);
   const surfaceLoaded = useRef(false);
   const webViewRef = useRef<WebViewType>(null);
@@ -184,33 +194,48 @@ export function EmbedPlayerSurface({
     sourceId,
     surface: 'embed',
     recordPlayback,
+    onVerifiedCompletion: onVerifiedPlaybackCompletion,
   });
+  const sourceSheetOverlay = ['sources', 'subtitles', 'shield', 'diagnostics'].includes(controller.state.overlay);
+  const showControls = controller.state.hudState !== 'hidden';
+  const presentation = controller.state.presentation;
+  const presentationModes = getEmbeddedPresentationModes(sourceId);
+  const setShowSources = (visible: boolean) => {
+    if (visible) controller.openOverlay('sources');
+    else if (sourceSheetOverlay) controller.closeOverlay();
+  };
   const telemetryScript = useMemo(() => createEmbeddedTelemetryScript({
     sessionId: telemetry.getSession().id,
     sourceId,
     strategy: source?.progressStrategy || 'none',
     expectedOrigins: telemetryExpectedOrigins,
   }), [sourceId]);
-  const injectedScript = `${mobileAdBlockerScript}\n${telemetryScript}`;
+  const providerPresentationScript = useMemo(
+    () => createProviderPresentationScript(sourceId),
+    [sourceId],
+  );
+  const injectedScript = `${mobileAdBlockerScript}\n${providerPresentationScript}\n${telemetryScript}`;
 
   useEffect(() => {
-    if (Platform.OS !== 'web') {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
-    }
+    let previousLock: ScreenOrientation.OrientationLock | null = null;
+    if (Platform.OS !== 'web') ScreenOrientation.getOrientationLockAsync()
+      .then((lock) => {
+        previousLock = lock;
+        return ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+      })
+      .catch(() => {});
     return () => {
-      if (Platform.OS !== 'web') {
-        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
-      }
+      if (Platform.OS !== 'web' && previousLock != null) ScreenOrientation.lockAsync(previousLock).catch(() => {});
     };
   }, []);
 
   useEffect(() => {
     loadStartedAt.current = Date.now();
     bridgeSequence.current = 0;
+    nativeShieldSequence.current = 0;
     resumeRequested.current = false;
     setIsBuffering(true);
-    setHudState('buffering');
-    setShowControls(true);
+    controller.setLoading('preparing');
     setShieldState(Platform.OS === 'android' ? 'limited' : 'unavailable');
     setBlockedRequests(0);
     setAllowedDependencies(0);
@@ -220,6 +245,7 @@ export function EmbedPlayerSurface({
     setSelectedSubtitleId(null);
     healthRecorded.current = false;
     nativeShieldObserved.current = false;
+    nativeBlockObserved.current = false;
     shieldFailureObserved.current = false;
     surfaceLoaded.current = false;
     setWatchdogDismissed(false);
@@ -231,6 +257,32 @@ export function EmbedPlayerSurface({
     };
   }, [embedUrl, sourceId, surfaceRetryKey]);
 
+  useEffect(() => {
+    const command = (expression: string) => webViewRef.current?.injectJavaScript(`(() => { const media = document.querySelector('video'); if (media) { ${expression}; return true; } return false; })(); true;`);
+    const adapter: MobilePlayerSurfaceAdapter = {
+      surface: 'embed',
+      sessionId: telemetry.getSession().id,
+      getSnapshot: () => controller.state.playback,
+      play: () => command('media.play().catch(() => {})'),
+      pause: () => command('media.pause()'),
+      seek: (seconds) => command(`media.currentTime = ${Math.max(0, Number(seconds) || 0)}`),
+      seekBy: (seconds) => command(`media.currentTime = Math.max(0, media.currentTime + ${Number(seconds) || 0})`),
+      setPresentation: (mode) => presentationModes.includes(mode),
+    };
+    return controller.registerSurface(adapter, {
+      canPlay: true,
+      canPause: true,
+      canSeek: source?.progressStrategy !== 'none',
+      canSourceSwitch: true,
+      canSubtitles: true,
+      canShield: true,
+      canFullscreen: true,
+      canPresentation: presentationModes.length > 1,
+    }, getPresentationPreference('embed', sourceId));
+  }, [sourceId, surfaceRetryKey]);
+
+  usePlayerImmersiveSystemUi(true, controller.state.playback.playing, !showControls);
+
   const toggleOrientation = async () => {
     if (Platform.OS === 'web') return;
     const next = isLandscape
@@ -240,35 +292,6 @@ export function EmbedPlayerSurface({
       await ScreenOrientation.lockAsync(next);
       setIsLandscape(!isLandscape);
     } catch {}
-  };
-
-  const resetHideTimer = () => {
-    if (hideTimeout.current) clearTimeout(hideTimeout.current);
-    setShowControls(true);
-    if (!isBuffering && !showSources && hudState !== 'error') {
-      hideTimeout.current = setTimeout(() => {
-        setShowControls(false);
-        setHudState('hidden');
-      }, 4000);
-    }
-  };
-
-  useEffect(() => {
-    resetHideTimer();
-    return () => {
-      if (hideTimeout.current) clearTimeout(hideTimeout.current);
-    };
-  }, [isBuffering, showSources, hudState]);
-
-  const handleScreenTap = () => {
-    if (!showControls) {
-      setHudState('visible');
-      resetHideTimer();
-    } else {
-      if (hideTimeout.current) clearTimeout(hideTimeout.current);
-      setShowControls(false);
-      setHudState('hidden');
-    }
   };
 
   const releaseSurfaceThen = (
@@ -305,8 +328,6 @@ export function EmbedPlayerSurface({
         savedTime,
         continuityMode: capability.mode,
       });
-      setHudState('sheet-open');
-      setShowControls(true);
       return;
     }
     releaseSurfaceThen((latestSnapshot) => (
@@ -333,7 +354,7 @@ export function EmbedPlayerSurface({
     telemetry.flush();
     setShowSources(false);
     setSurfaceReleased(true);
-    setHudState('buffering');
+    controller.setLoading('switching');
     setIsBuffering(true);
     setTimeout(() => {
       setSurfaceRetryKey((value) => value + 1);
@@ -367,10 +388,12 @@ export function EmbedPlayerSurface({
     webViewRef.current?.injectJavaScript(injectedScript);
     surfaceLoaded.current = true;
     setIsBuffering(false);
-    setHudState('visible');
-    resetHideTimer();
+    controller.setLoading(null);
+    // A native session proves that interception is active. "Protected" is
+    // reserved for a loaded session that actually blocked unwanted traffic.
     if (source?.requestManifest?.mode === 'enforce'
       && nativeShieldObserved.current
+      && nativeBlockObserved.current
       && !shieldFailureObserved.current) {
       setShieldState('verified');
     }
@@ -385,8 +408,7 @@ export function EmbedPlayerSurface({
 
   const markFailed = (message: string) => {
     setIsBuffering(false);
-    setHudState('error');
-    setShowControls(true);
+    controller.setLoading('failed');
     telemetry.emitTelemetry({ evidence: 'provider-message', state: 'error' });
     const failure = classifyCinemaSourceFailure(message, {
       superseded: sourceTransitionPending.current || surfaceReleased,
@@ -397,53 +419,23 @@ export function EmbedPlayerSurface({
     reportMobileDiagnosticError({ area: 'playback', code: 'SOURCE_FAILED', message });
   };
 
-  const handleMessage = (raw: string) => {
-    let envelope: any = null;
-    try { envelope = JSON.parse(raw); } catch {}
-    if (envelope?.kind === 'orion-shield') {
-      const decision = String(envelope.decision || 'unknown');
-      const counts = envelope?.counts && typeof envelope.counts === 'object' ? envelope.counts : {};
-      const blockedCount = Object.entries(counts)
-        .filter(([key]) => key === 'blocked' || key.startsWith('blocked-'))
-        .reduce((total, [, value]) => total + Math.max(0, Number(value) || 0), 0);
-      const dependencyCount = Math.max(0, Number(counts['required-dependency']) || 0);
-      const classifications = envelope?.classifications && typeof envelope.classifications === 'object'
-        ? envelope.classifications : {};
-      const popupCount = Math.max(0, Number(classifications.popup) || 0);
-      const navigationCount = Math.max(0, Number(classifications['unsafe-navigation']) || 0);
-      const advertisementCount = Math.max(0, Number(classifications.advertisement) || 0);
-      const trackerCount = Math.max(0, Number(classifications.tracker) || 0);
-      const mediaCount = Math.max(0, Number(counts['observed-media']) || 0);
-      const subtitleCount = Math.max(0, Number(counts['observed-subtitle']) || 0);
-      const nativeSessionCount = Math.max(0, Number(counts.active) || 0);
-      const nativeEvidenceSeen = nativeSessionCount > 0 || decision === 'active';
-      if (nativeEvidenceSeen) nativeShieldObserved.current = true;
-      const safeRuleId = typeof envelope.ruleId === 'string'
-        ? envelope.ruleId.replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 64) || null
-        : null;
-      setShieldEvidence((current) => ({
-        nativeSessionObserved: current.nativeSessionObserved || nativeEvidenceSeen,
-        blockedRequests: current.blockedRequests + blockedCount,
-        blockedPopups: current.blockedPopups + popupCount,
-        blockedNavigations: current.blockedNavigations + navigationCount,
-        blockedAdvertisements: current.blockedAdvertisements + advertisementCount,
-        blockedTrackers: current.blockedTrackers + trackerCount,
-        allowedPlaybackDependencies: current.allowedPlaybackDependencies + dependencyCount,
-        observedMediaRequests: current.observedMediaRequests + mediaCount,
-        observedSubtitleRequests: current.observedSubtitleRequests + subtitleCount,
-        lastRuleId: safeRuleId || current.lastRuleId,
-      }));
-      if (blockedCount > 0) {
-        setBlockedRequests((value) => value + blockedCount);
+  const applyShieldEnvelope = useCallback((envelope: any) => {
+      const parsed = parseShieldEvidenceEnvelope(envelope);
+      if (!parsed) return;
+      if (parsed.nativeEvidenceSeen) nativeShieldObserved.current = true;
+      setShieldEvidence((current) => mergeShieldEvidence(current, parsed));
+      if (parsed.blockedCount > 0) {
+        nativeBlockObserved.current = true;
+        setBlockedRequests((value) => value + parsed.blockedCount);
       }
-      if (dependencyCount > 0) {
-        setAllowedDependencies((value) => value + dependencyCount);
+      if (parsed.dependencyCount > 0) {
+        setAllowedDependencies((value) => value + parsed.dependencyCount);
         if (!nativeShieldObserved.current) setShieldState('dependency-allowed');
       }
-      if (decision === 'rule-failure') {
+      if (parsed.decision === 'rule-failure') {
         shieldFailureObserved.current = true;
         setShieldState('failed');
-      } else if (decision === 'observed-subtitle') {
+      } else if (parsed.decision === 'observed-subtitle') {
         const track = createObservedSubtitleTrack(telemetry.getSession().id, {
           provider: sourceId,
           method: 'request-capture',
@@ -454,13 +446,54 @@ export function EmbedPlayerSurface({
         const nativeProtectionVerified = source?.requestManifest?.mode === 'enforce'
           && surfaceLoaded.current
           && nativeShieldObserved.current
+          && nativeBlockObserved.current
           && !shieldFailureObserved.current;
-        setShieldState(nativeProtectionVerified ? 'verified' : dependencyCount > 0 ? 'dependency-allowed' : 'limited');
+        setShieldState(nativeProtectionVerified ? 'verified' : parsed.dependencyCount > 0 ? 'dependency-allowed' : 'limited');
       }
+  }, [source?.requestManifest?.mode, sourceId, telemetry]);
+
+  const handleNativeShieldEvidence = useCallback((raw: string) => {
+    try {
+      const envelope = JSON.parse(raw);
+      const sequence = Number(envelope.sequence);
+      if (!Number.isInteger(sequence) || sequence <= nativeShieldSequence.current) return;
+      if (envelope.sessionId !== telemetry.getSession().id || envelope.sourceId !== sourceId) return;
+      nativeShieldSequence.current = sequence;
+      applyShieldEnvelope(envelope);
+    } catch {}
+  }, [applyShieldEnvelope, sourceId, telemetry]);
+
+  const handleMessage = (raw: string) => {
+    let envelope: any = null;
+    try { envelope = JSON.parse(raw); } catch {}
+    if (envelope?.kind === 'orion-shield') {
+      // Android shield truth arrives through the typed native-view event. The
+      // page bridge remains for web/dev compatibility only.
+      if (Platform.OS !== 'android') applyShieldEnvelope(envelope);
       return;
     }
-    if (envelope?.type === 'TAP') {
-      handleScreenTap();
+    if (envelope?.type === 'ORION_COSMETIC_BLOCK') {
+      const counts = envelope?.counts && typeof envelope.counts === 'object' ? envelope.counts : {};
+      const popupCount = Math.min(100, Math.max(0, Math.floor(Number(counts.popup) || 0)));
+      const navigationCount = Math.min(100, Math.max(0, Math.floor(Number(counts.navigation) || 0)));
+      const advertisementCount = Math.min(100, Math.max(0, Math.floor(Number(counts.advertisement) || 0)));
+      const cosmeticTotal = popupCount + navigationCount + advertisementCount;
+      if (cosmeticTotal <= 0) return;
+      nativeBlockObserved.current = true;
+      setBlockedRequests((value) => value + cosmeticTotal);
+      setShieldEvidence((current) => ({
+        ...current,
+        blockedRequests: current.blockedRequests + cosmeticTotal,
+        blockedPopups: current.blockedPopups + popupCount,
+        blockedNavigations: current.blockedNavigations + navigationCount,
+        blockedAdvertisements: current.blockedAdvertisements + advertisementCount,
+        lastRuleId: 'cosmetic-cleanup',
+      }));
+      const protectionVerified = source?.requestManifest?.mode === 'enforce'
+        && surfaceLoaded.current
+        && nativeShieldObserved.current
+        && !shieldFailureObserved.current;
+      setShieldState(protectionVerified ? 'verified' : 'limited');
       return;
     }
     if (envelope?.type === 'ORION_SUBTITLE_TRACK') {
@@ -519,12 +552,20 @@ export function EmbedPlayerSurface({
       return;
     }
     setIsBuffering(parsed.input.state === 'buffering');
-    setHudState(parsed.input.state === 'buffering' ? 'buffering' : 'visible');
+    controller.updatePlayback({
+      state: parsed.input.state,
+      playing: parsed.input.state === 'playing',
+      currentTime: parsed.input.currentTime ?? null,
+      duration: parsed.input.duration ?? null,
+      bufferedPosition: parsed.input.bufferedPosition ?? null,
+      observable: decision.state.session.verified,
+    }, telemetry.getSession().id);
     if (decision.state.session.verified) {
       if (observationTimeout.current) clearTimeout(observationTimeout.current);
       const startupMs = Date.now() - loadStartedAt.current;
       const protectionVerified = source?.requestManifest?.mode === 'enforce'
         && nativeShieldObserved.current
+        && nativeBlockObserved.current
         && !shieldFailureObserved.current;
       setShieldState(protectionVerified ? 'verified' : shieldFailureObserved.current ? 'failed' : 'limited');
       if (!healthRecorded.current) {
@@ -560,6 +601,13 @@ export function EmbedPlayerSurface({
   };
 
   const compact = windowWidth < 480;
+  const presentationStyle = presentation === 'fit'
+    ? { width: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 }
+    : presentation === 'fill'
+      ? { width: '118%' as const, height: '118%' as const, alignSelf: 'center' as const, flex: 0 }
+      : presentation === 'stretch'
+        ? { width: '100%' as const, height: '100%' as const, flex: 0 }
+        : undefined;
   return (
     <View style={styles.container}>
       <View style={styles.videoBoxWrapper}>
@@ -589,6 +637,9 @@ export function EmbedPlayerSurface({
             popupPolicy: 'block',
             rules: [],
           }}
+            shieldSessionId={telemetry.getSession().id}
+            onNativeShieldEvidence={handleNativeShieldEvidence}
+            onNativeSingleTap={controller.toggleChromeFromUserTap}
             source={{ uri: shieldedEmbedUrl }}
             javaScriptEnabled
             domStorageEnabled
@@ -596,12 +647,12 @@ export function EmbedPlayerSurface({
             mediaPlaybackRequiresUserAction={false}
             injectedJavaScript={injectedScript}
             onShouldStartLoadWithRequest={handleShouldStartLoad}
-            style={styles.webVideo}
+            style={[styles.webVideo, presentationStyle]}
             userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             onLoadStart={() => {
               surfaceLoaded.current = false;
               setIsBuffering(true);
-              setHudState('buffering');
+              controller.setLoading('waiting');
             }}
             onLoadEnd={markSurfaceLoaded}
             onError={({ nativeEvent }) => markFailed(nativeEvent.description || 'Provider failed to load')}
@@ -613,87 +664,30 @@ export function EmbedPlayerSurface({
         )}
       </View>
 
-      {!showControls && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Show player controls"
-          onPress={() => {
-            setHudState('visible');
-            resetHideTimer();
-          }}
-          style={styles.embedRevealHandle}
-        >
-          <View style={styles.embedRevealBar} />
-        </Pressable>
-      )}
+      <PlayerStateOverlay
+        state={controller.state.loadingState}
+        onRetry={retryCurrentSource}
+        onSwitchSource={() => controller.openOverlay('sources')}
+      />
 
-      {showControls && (
-        <LinearGradient
-          colors={['rgba(0, 0, 0, 0.95)', 'rgba(0, 0, 0, 0.65)', 'transparent']}
-          style={styles.fullWidthHeaderGradient}
-          pointerEvents="box-none"
-        >
-          <Pressable onPress={() => router.back()} style={styles.floatingGlassBackBtn}>
-            <Ionicons name="arrow-back" size={18} color="#fff" />
-          </Pressable>
-          <View style={styles.headerTitleWrapper}>
-            <Text style={styles.framelessTitle} numberOfLines={1}>{title || 'Orion Stream'}</Text>
-          </View>
-          <View style={styles.headerActions}>
-            <View style={[
-              styles.shieldBadge,
-              shieldState === 'verified'
-                ? styles.shieldBadgeVerified
-                : shieldState === 'failed'
-                  ? styles.shieldBadgeFailed
-                  : styles.shieldBadgeLimited,
-            ]}>
-              <Ionicons
-                name={shieldState === 'failed' ? 'shield-outline' : 'shield-checkmark'}
-                size={12}
-                color={shieldState === 'verified' ? '#4ade80' : shieldState === 'failed' ? '#fb7185' : '#fbbf24'}
-              />
-              <Text style={[
-                styles.shieldCounter,
-                shieldState === 'verified'
-                  ? styles.shieldCounterVerified
-                  : shieldState === 'failed'
-                    ? styles.shieldCounterFailed
-                    : styles.shieldCounterLimited,
-              ]}>
-                {blockedRequests}
-              </Text>
-              {!compact && (
-                <Text style={[styles.shieldText, shieldState !== 'verified' && styles.shieldTextLimited]}>
-                  {shieldState === 'verified'
-                    ? 'Protected'
-                    : shieldState === 'failed'
-                      ? 'Protection issue'
-                      : shieldState === 'unavailable'
-                        ? 'Protection unavailable'
-                        : shieldState === 'dependency-allowed'
-                          ? 'Protection active'
-                          : 'Protection limited'}
-                </Text>
-              )}
-            </View>
-            <Pressable onPress={toggleOrientation} style={styles.floatingGlassBackBtn}>
-              <Ionicons name={isLandscape ? 'refresh-outline' : 'expand-outline'} size={16} color="#fff" />
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                setShowSources(true);
-                setHudState('sheet-open');
-                setShowControls(true);
-              }}
-              style={styles.floatingGlassSourceChip}
-            >
-              <Ionicons name="hardware-chip-outline" size={14} color="#f87171" />
-              {!compact && <Text style={styles.sourceChipText} numberOfLines={1}>{sourceLabel}</Text>}
-            </Pressable>
-          </View>
-        </LinearGradient>
-      )}
+      <EmbeddedPlayerHud
+        visible={showControls}
+        compact={compact}
+        title={title || 'Orion Stream'}
+        sourceLabel={sourceLabel}
+        shieldState={shieldState}
+        blockedRequests={blockedRequests}
+        nativeShieldObserved={nativeShieldObserved.current}
+        landscape={isLandscape}
+        onReveal={controller.reveal}
+        onCollapse={controller.dismiss}
+        onBack={() => router.back()}
+        onPresentation={() => controller.openOverlay('presentation')}
+        onShield={() => controller.openOverlay('shield')}
+        onSubtitles={() => controller.openOverlay('subtitles')}
+        onRotate={toggleOrientation}
+        onSources={() => setShowSources(true)}
+      />
 
       {!watchdogDismissed && (
         <WatchdogWarning
@@ -703,7 +697,7 @@ export function EmbedPlayerSurface({
           onDismiss={() => setWatchdogDismissed(true)}
         />
       )}
-      {showSources && (
+      {sourceSheetOverlay && (
         <SourcesSheet
           currentSourceId={sourceId}
           onSelect={selectSource}
@@ -723,13 +717,28 @@ export function EmbedPlayerSurface({
             setShowSources(false);
           }}
           onFindExternalSubtitles={source?.supportsExternalSubtitles ? findExternalSubtitles : undefined}
+          section={controller.state.overlay === 'subtitles' || controller.state.overlay === 'shield' || controller.state.overlay === 'diagnostics'
+            ? controller.state.overlay
+            : 'sources'}
           onClose={() => {
             setShowSources(false);
-            setHudState('visible');
-            resetHideTimer();
           }}
         />
       )}
+      <PresentationSheet
+        visible={controller.state.overlay === 'presentation'}
+        value={presentation}
+        capability={{
+          supported: presentationModes,
+          unsupportedReason: 'This provider only supports its original player layout.',
+        }}
+        onChange={(mode: MobilePlayerPresentation) => {
+          if (!presentationModes.includes(mode)) return;
+          savePresentationPreference('embed', sourceId, mode);
+          controller.setPresentation(mode);
+        }}
+        onClose={controller.closeOverlay}
+      />
       {pendingManualSource && (
         <ResumePlaybackPrompt
           title={title || 'this title'}
@@ -739,8 +748,6 @@ export function EmbedPlayerSurface({
           onChoose={completeManualSourceChoice}
           onCancel={() => {
             setPendingManualSource(null);
-            setHudState('visible');
-            resetHideTimer();
           }}
         />
       )}

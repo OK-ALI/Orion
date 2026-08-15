@@ -41,6 +41,7 @@ function withCinemaSources(config) {
       'OrionCinemaWebChromeClient.kt',
       'OrionCinemaWebViewManager.kt',
       'OrionCinemaWebViewPackage.kt',
+      'OrionPlayerSystemUiModule.kt',
     ]) {
       fs.copyFileSync(path.join(NATIVE_SOURCE, name), path.join(packageRoot, name));
     }

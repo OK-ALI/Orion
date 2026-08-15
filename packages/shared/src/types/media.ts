@@ -28,12 +28,93 @@ export interface PlaybackSession {
 
 export type MobilePlayerSurface = "native" | "embed";
 export type MobilePlayerHudState =
-  | "visible"
+  | "initial"
+  | "visible-explicit"
   | "hidden"
-  | "pinned"
-  | "sheet-open"
-  | "buffering"
+  | "pinned-by-sheet"
+  | "recovery";
+
+export type MobilePlayerOverlay =
+  | "none"
+  | "sources"
+  | "subtitles"
+  | "shield"
+  | "diagnostics"
+  | "presentation"
   | "error";
+
+export type MobilePlayerPresentation = "fit" | "fill" | "stretch" | "provider";
+
+export interface MobilePresentationCapability {
+  supported: MobilePlayerPresentation[];
+  unsupportedReason?: string | null;
+}
+
+export type MobilePlayerLoadingState =
+  | "preparing"
+  | "waiting"
+  | "buffering"
+  | "switching"
+  | "offline"
+  | "failed"
+  | null;
+
+export interface MobilePlayerPlaybackSnapshot {
+  state: MobilePlaybackState;
+  playing: boolean;
+  currentTime: number | null;
+  duration: number | null;
+  bufferedPosition: number | null;
+  observable: boolean;
+}
+
+export interface MobilePlayerSurfaceAdapter {
+  surface: MobilePlayerSurface;
+  sessionId: string;
+  getSnapshot(): MobilePlayerPlaybackSnapshot;
+  play(): void | Promise<void>;
+  pause(): void | Promise<void>;
+  seek?(seconds: number): void | Promise<void>;
+  seekBy?(seconds: number): void | Promise<void>;
+  setPresentation?(mode: MobilePlayerPresentation): boolean | Promise<boolean>;
+}
+
+export interface MobilePlayerCapabilities {
+  canPlay: boolean;
+  canPause: boolean;
+  canSeek: boolean;
+  canSourceSwitch: boolean;
+  canSubtitles: boolean;
+  canShield: boolean;
+  canFullscreen: boolean;
+  canPresentation: boolean;
+}
+
+export interface MobilePlayerControllerV1 {
+  activeSurface: MobilePlayerSurface | null;
+  hudState: MobilePlayerHudState;
+  overlay: MobilePlayerOverlay;
+  playback: MobilePlayerPlaybackSnapshot;
+  capabilities: MobilePlayerCapabilities;
+  presentation: MobilePlayerPresentation;
+  loadingState: MobilePlayerLoadingState;
+}
+
+export interface MobileImmersiveUiState {
+  owned: boolean;
+  barsVisible: boolean;
+  temporarilyRevealed: boolean;
+  orientation: "portrait" | "landscape" | "unknown";
+  restorationState: "idle" | "restoring" | "restored" | "failed";
+}
+
+export interface OrionSubtitleGrantV1 {
+  id: string;
+  sessionId: string;
+  label: string;
+  language: string;
+  availability: "available" | "unavailable" | "expired";
+}
 
 /** @deprecated Compatibility shape retained for pre-v3 callers. */
 export interface MobilePlaybackSessionV1 {

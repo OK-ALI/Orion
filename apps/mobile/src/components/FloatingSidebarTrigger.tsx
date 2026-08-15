@@ -17,6 +17,10 @@ export function FloatingSidebarTrigger() {
     <>
       <View style={[styles.triggerContainer, { top: (insets.top || 12) + 8 }]}>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open navigation"
+          accessibilityHint="Opens the Orion navigation drawer"
+          hitSlop={4}
           style={({ pressed }) => [styles.button, pressed && styles.pressed]}
           onPress={() => setDrawerOpen(true)}
         >

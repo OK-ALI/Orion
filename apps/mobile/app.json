@@ -27,7 +27,15 @@
       "expo-status-bar",
       "expo-asset",
       "expo-font",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#07070C",
+          "image": "./assets/brand-mark.png",
+          "imageWidth": 96,
+          "resizeMode": "contain"
+        }
+      ],
       [
         "expo-camera",
         {

@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, useWindowDimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { BackHandler, View, Text, StyleSheet, Pressable, ScrollView, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { radii, spacing } from '@orion/shared/tokens';
 import { getMobileSourceHealthV2 } from '../../services/sourceHealth';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { OrionDialog } from '../OrionDialog';
 import {
   MOBILE_PLAYER_SOURCES,
   getMobileSourceContinuityCapability,
+  getMobileSourceSafetyNotice,
 } from '../../features/playback/mobileSources';
 import type { EmbeddedSubtitleTrackV1, MobileShieldEvidenceV1, ShieldVerificationState, SubtitleDiscoveryState } from '@orion/shared/types';
 
@@ -27,6 +29,7 @@ interface SourcesSheetProps {
   selectedSubtitleId?: string | null;
   onSelectSubtitle?: (trackId: string) => void;
   onFindExternalSubtitles?: () => void;
+  section?: 'sources' | 'subtitles' | 'shield' | 'diagnostics';
 }
 
 const DISPLAY_NAMES: Record<string, string> = {
@@ -55,17 +58,31 @@ export function SourcesSheet(props: SourcesSheetProps) {
   const {
     currentSourceId, onSelect, onRetry, onClose, mediaType = 'movie', shieldState = 'limited',
     blockedRequests = 0, allowedDependencies = 0, shieldEvidence, subtitleState = 'idle', subtitleCount = 0,
-    subtitleTracks = [], selectedSubtitleId = null, onSelectSubtitle, onFindExternalSubtitles,
+    subtitleTracks = [], selectedSubtitleId = null, onSelectSubtitle, onFindExternalSubtitles, section = 'sources',
   } = props;
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { theme } = useOrionTheme();
   const wide = width >= 700 || width > height;
-  const [detailsOpen, setDetailsOpen] = useState(wide);
+  const [detailsOpen, setDetailsOpen] = useState(wide || section !== 'sources');
+  const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
+  useEffect(() => setDetailsOpen(wide || section !== 'sources'), [section, wide]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [onClose]);
   const active = MOBILE_PLAYER_SOURCES.find((source) => source.id === currentSourceId);
   const health = getMobileSourceHealthV2(currentSourceId, mediaType);
   const sourceName = DISPLAY_NAMES[currentSourceId] || active?.label || 'Selected source';
   const activeContinuity = getMobileSourceContinuityCapability(currentSourceId);
+  const activeSafety = getMobileSourceSafetyNotice(currentSourceId);
+  const pendingSafety = pendingSourceId ? getMobileSourceSafetyNotice(pendingSourceId) : null;
+  const pendingSourceName = pendingSourceId
+    ? DISPLAY_NAMES[pendingSourceId] || MOBILE_PLAYER_SOURCES.find((source) => source.id === pendingSourceId)?.label || 'this source'
+    : 'this source';
   const healthLabel = playbackStatusLabel(health?.state);
   const subtitleLabel = health?.subtitleSupport === 'available' || subtitleCount > 0
     ? 'Subtitles available'
@@ -83,6 +100,7 @@ export function SourcesSheet(props: SourcesSheetProps) {
         const cooling = Boolean(runtime?.cooldownUntil && runtime.cooldownUntil > Date.now());
         const status = playbackStatusLabel(runtime?.state, cooling);
         const continuity = getMobileSourceContinuityCapability(source.id);
+        const safety = getMobileSourceSafetyNotice(source.id);
         const continuityTone = continuity.mode === 'seamless'
           ? theme.success
           : continuity.mode === 'outgoing-only' || continuity.mode === 'limited-resume' || continuity.mode === 'unpredictable'
@@ -93,10 +111,17 @@ export function SourcesSheet(props: SourcesSheetProps) {
             key={source.id}
             disabled={!supported}
             accessibilityRole="button"
-            accessibilityLabel={`${DISPLAY_NAMES[source.id] || source.label}. ${continuity.label}. ${status}.`}
-            accessibilityHint={continuity.description}
+            accessibilityLabel={`${DISPLAY_NAMES[source.id] || source.label}. ${continuity.label}. ${safety ? `${safety.shortLabel}. ` : ''}${status}.`}
+            accessibilityHint={safety ? `${continuity.description} ${safety.description}` : continuity.description}
             accessibilityState={{ selected, disabled: !supported }}
-            onPress={() => { onSelect(source.id); onClose(); }}
+            onPress={() => {
+              if (safety?.requiresSelectionConfirmation) {
+                setPendingSourceId(source.id);
+                return;
+              }
+              onSelect(source.id);
+              onClose();
+            }}
             style={({ pressed }) => [
               styles.sourceRow,
               { backgroundColor: selected ? theme.accentSoft : theme.surface, borderColor: selected ? theme.accent : theme.border },
@@ -114,7 +139,9 @@ export function SourcesSheet(props: SourcesSheetProps) {
                   <Text numberOfLines={1} style={[styles.continuityBadgeText, { color: continuityTone }]}>{continuity.shortLabel}</Text>
                 </View>
               </View>
-              <Text numberOfLines={1} style={[styles.sourceStatus, { color: runtime?.state === 'failed' ? theme.danger : theme.textSecondary }]}>{status}</Text>
+              <Text numberOfLines={1} style={[styles.sourceStatus, { color: safety ? theme.warning : runtime?.state === 'failed' ? theme.danger : theme.textSecondary }]}>
+                {safety ? `${status} · ${safety.shortLabel}` : status}
+              </Text>
             </View>
             <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={21} color={selected ? theme.accent : theme.textSecondary} />
           </Pressable>
@@ -141,6 +168,12 @@ export function SourcesSheet(props: SourcesSheetProps) {
           <Text style={[styles.detailText, { color: theme.textSecondary }]}>Subtitle requests detected: {shieldEvidence.observedSubtitleRequests}</Text>
         ) : null}
       </View>
+      {activeSafety && (
+        <View style={[styles.detailCard, { backgroundColor: theme.surface, borderColor: theme.warning }]}>
+          <Text style={[styles.detailTitle, { color: theme.warning }]}>{activeSafety.label}</Text>
+          <Text style={[styles.detailText, { color: theme.textSecondary }]}>{activeSafety.description}</Text>
+        </View>
+      )}
       <View style={[styles.detailCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <Text style={[styles.detailTitle, { color: theme.text }]}>Resume & progress</Text>
         <Text style={[
@@ -221,10 +254,31 @@ export function SourcesSheet(props: SourcesSheetProps) {
           </Pressable>
         )}
         <View style={[styles.content, wide && styles.contentWide]}>
-          <View style={[styles.listPane, wide && { borderRightColor: theme.border }]}>{sourceList}</View>
+          {(wide || section === 'sources') && <View style={[styles.listPane, wide && { borderRightColor: theme.border }]}>{sourceList}</View>}
           {(wide || detailsOpen) && <View style={[styles.detailsPane, !wide && styles.detailsPanePhone]}>{details}</View>}
         </View>
       </View>
+      <OrionDialog
+        visible={Boolean(pendingSourceId && pendingSafety)}
+        title={`Continue with ${pendingSourceName}?`}
+        message={pendingSafety?.selectionMessage}
+        icon="warning-outline"
+        onDismiss={() => setPendingSourceId(null)}
+        actions={[
+          { label: 'Cancel', role: 'cancel', onPress: () => setPendingSourceId(null) },
+          {
+            label: 'Continue',
+            role: 'primary',
+            onPress: () => {
+              const sourceId = pendingSourceId;
+              setPendingSourceId(null);
+              if (!sourceId) return;
+              onSelect(sourceId);
+              onClose();
+            },
+          },
+        ]}
+      />
     </View>
   );
 }

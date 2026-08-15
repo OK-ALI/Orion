@@ -6,14 +6,20 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { ALL_CINEMA_SOURCES } from '@orion/shared/sources';
 import { PlayerHUD } from '../../components/player/PlayerHUD';
 import { SourcesSheet } from '../../components/player/SourcesSheet';
+import { PresentationSheet } from '../../components/player/PresentationSheet';
+import { PlayerStateOverlay } from '../../components/player/PlayerStateOverlay';
 import { WatchdogWarning } from '../../components/player/WatchdogWarning';
-import { useLibrary } from '../../context/LibraryContext';
+import { useLibraryPlaybackActions } from '../../context/LibraryContext';
 import { usePlaybackTelemetryController } from './usePlaybackTelemetryController';
 import { playerStyles as styles } from './playerStyles';
 import type { PlaybackSurfaceProps } from './playerTypes';
 import { ResumePlaybackPrompt } from './ResumePlaybackPrompt';
 import { resolveResumeChoiceTime, type ResumePlaybackChoice } from './resumeChoice';
 import { getMobileSourceContinuityCapability } from './mobileSources';
+import { useMobilePlayerController } from './MobilePlayerController';
+import { getPresentationPreference, savePresentationPreference } from './presentationPreferences';
+import { usePlayerImmersiveSystemUi } from './immersiveSystemUi';
+import type { MobilePlayerPresentation, MobilePlayerSurfaceAdapter } from '@orion/shared/types';
 
 interface NativePlayerSurfaceProps extends PlaybackSurfaceProps {
   streamUrl: string;
@@ -36,10 +42,11 @@ export function NativePlayerSurface({
   onSourceChange,
   onAutomaticFailover,
   onPlaybackSnapshot,
+  onVerifiedPlaybackCompletion,
 }: NativePlayerSurfaceProps) {
   const router = useRouter();
-  const { recordPlayback } = useLibrary();
-  const [showSources, setShowSources] = useState(false);
+  const { recordPlayback } = useLibraryPlaybackActions();
+  const controller = useMobilePlayerController();
   const [watchdogDismissed, setWatchdogDismissed] = useState(false);
   const [pendingManualSource, setPendingManualSource] = useState<{
     id: string;
@@ -76,6 +83,7 @@ export function NativePlayerSurface({
     sourceId,
     surface: 'native',
     recordPlayback,
+    onVerifiedCompletion: onVerifiedPlaybackCompletion,
   });
 
   const player = useVideoPlayer(streamUrl, (instance) => {
@@ -91,6 +99,40 @@ export function NativePlayerSurface({
     currentLiveTimestamp: null,
     currentOffsetFromLive: null,
   });
+  const presentation = controller.state.presentation;
+  const contentFit = presentation === 'fill' ? 'cover' : presentation === 'stretch' ? 'fill' : 'contain';
+  const controlsVisible = controller.state.hudState !== 'hidden';
+  usePlayerImmersiveSystemUi(true, playingEvent.isPlaying, !controlsVisible);
+
+  useEffect(() => {
+    const adapter: MobilePlayerSurfaceAdapter = {
+      surface: 'native',
+      sessionId: telemetry.getSession().id,
+      getSnapshot: () => ({
+        state: player.status === 'loading' ? 'buffering' : player.status === 'error' ? 'error' : player.playing ? 'playing' : 'paused',
+        playing: Boolean(player.playing),
+        currentTime: Number.isFinite(Number(player.currentTime)) ? Number(player.currentTime) : null,
+        duration: Number(player.duration) > 0 ? Number(player.duration) : null,
+        bufferedPosition: Number.isFinite(Number(player.bufferedPosition)) ? Number(player.bufferedPosition) : null,
+        observable: true,
+      }),
+      play: () => player.play(),
+      pause: () => player.pause(),
+      seek: (seconds) => { player.currentTime = Math.max(0, seconds); },
+      seekBy: (seconds) => player.seekBy(seconds),
+      setPresentation: () => true,
+    };
+    return controller.registerSurface(adapter, {
+      canPlay: true,
+      canPause: true,
+      canSeek: true,
+      canSourceSwitch: true,
+      canSubtitles: false,
+      canShield: false,
+      canFullscreen: true,
+      canPresentation: true,
+    }, getPresentationPreference('native', sourceId));
+  }, [player, sourceId]);
 
   useEventListener(player, 'playToEnd', () => {
     telemetry.emitTelemetry({
@@ -117,13 +159,25 @@ export function NativePlayerSurface({
       const snapshot = telemetry.getVerifiedSnapshot();
       if (snapshot) onPlaybackSnapshot?.(snapshot);
     }
+    controller.updatePlayback({
+      state: jumped ? 'seeking' : playingEvent.isPlaying ? 'playing' : 'paused',
+      playing: playingEvent.isPlaying,
+      currentTime,
+      duration: Number(player.duration) > 0 ? Number(player.duration) : null,
+      bufferedPosition: Number(timeEvent.bufferedPosition) || null,
+      observable: true,
+    }, telemetry.getSession().id);
   }, [timeEvent.currentTime, timeEvent.bufferedPosition, playingEvent.isPlaying, player.duration]);
 
   useEffect(() => {
     if (statusEvent.status === 'loading') {
+      controller.setLoading('buffering');
       telemetry.emitTelemetry({ evidence: 'native-video-event', state: 'buffering' });
     } else if (statusEvent.status === 'error') {
+      controller.setLoading('failed');
       telemetry.emitTelemetry({ evidence: 'native-video-event', state: 'error' });
+    } else {
+      controller.setLoading(null);
     }
   }, [statusEvent.status]);
 
@@ -143,7 +197,7 @@ export function NativePlayerSurface({
     telemetry.flush();
     const snapshot = telemetry.getVerifiedSnapshot();
     const savedTime = Math.max(0, Number(snapshot?.currentTime) || 0);
-    setShowSources(false);
+    controller.closeOverlay();
     if (savedTime > 30) {
       resumeAfterPromptRef.current = player.playing;
       player.pause();
@@ -172,26 +226,47 @@ export function NativePlayerSurface({
 
   return (
     <View style={styles.container}>
-      <VideoView player={player} style={styles.video} contentFit="contain" nativeControls={false} />
+      <VideoView player={player} style={styles.video} contentFit={contentFit} nativeControls={false} />
+      <PlayerStateOverlay
+        state={controller.state.loadingState}
+        onRetry={() => player.play()}
+        onSwitchSource={() => controller.openOverlay('sources')}
+      />
       <PlayerHUD
         player={player}
         title={title || 'Playing Video'}
         onBack={() => router.back()}
-        onOpenSources={() => setShowSources(true)}
+        controlsVisible={controlsVisible}
+        onReveal={controller.reveal}
+        onDismiss={controller.dismiss}
+        onToggle={controller.toggleChromeFromUserTap}
+        onOpenSources={() => controller.openOverlay('sources')}
+        onOpenPresentation={() => controller.openOverlay('presentation')}
       />
-      {showSources && (
+      {controller.state.overlay === 'sources' && (
         <SourcesSheet
           currentSourceId={sourceId}
           onSelect={selectSource}
           mediaType={type}
-          onClose={() => setShowSources(false)}
+          section="sources"
+          onClose={controller.closeOverlay}
         />
       )}
+      <PresentationSheet
+        visible={controller.state.overlay === 'presentation'}
+        value={presentation}
+        capability={{ supported: ['fit', 'fill', 'stretch', 'provider'] }}
+        onChange={(mode: MobilePlayerPresentation) => {
+          savePresentationPreference('native', sourceId, mode);
+          controller.setPresentation(mode);
+        }}
+        onClose={controller.closeOverlay}
+      />
       {!watchdogDismissed && (
         <WatchdogWarning
           isBuffering={statusEvent.status === 'loading'}
           onFailover={handleFailover}
-          onSelectSource={() => setShowSources(true)}
+          onSelectSource={() => controller.openOverlay('sources')}
           onDismiss={() => setWatchdogDismissed(true)}
         />
       )}

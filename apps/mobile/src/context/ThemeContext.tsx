@@ -25,6 +25,37 @@ export interface MobileThemeTokens {
 }
 
 const THEME_STORAGE_KEY = "mobileThemePreferencesV1";
+const DEFAULT_CUSTOM_ACCENT = "#E50914";
+
+function normalizeAccent(value: string): string {
+  return value.toUpperCase();
+}
+
+function accentChannels(value: string): [number, number, number] {
+  const normalized = normalizeAccent(value);
+  return [
+    Number.parseInt(normalized.slice(1, 3), 16),
+    Number.parseInt(normalized.slice(3, 5), 16),
+    Number.parseInt(normalized.slice(5, 7), 16),
+  ];
+}
+
+function accentSoft(value: string): string {
+  const [red, green, blue] = accentChannels(value);
+  return `rgba(${red},${green},${blue},0.16)`;
+}
+
+function onAccent(value: string): string {
+  const [red, green, blue] = accentChannels(value);
+  const channel = (component: number) => {
+    const srgb = component / 255;
+    return srgb <= 0.04045 ? srgb / 12.92 : Math.pow((srgb + 0.055) / 1.055, 2.4);
+  };
+  const luminance = 0.2126 * channel(red) + 0.7152 * channel(green) + 0.0722 * channel(blue);
+  const whiteContrast = 1.05 / (luminance + 0.05);
+  const blackContrast = (luminance + 0.05) / 0.05;
+  return blackContrast > whiteContrast ? "#000000" : "#ffffff";
+}
 
 const THEMES: Record<OrionThemeId, MobileThemeTokens> = {
   "midnight-premiere": {
@@ -65,7 +96,7 @@ const THEMES: Record<OrionThemeId, MobileThemeTokens> = {
   custom: {
     id: "custom", dark: true, background: "#09090d", elevated: "#111118", surface: "#191923",
     surfaceHover: "#242432", input: "#14141d", text: "#f4f4f7", textSecondary: "#b2b2bd",
-    textMuted: "#747482", border: "rgba(255,255,255,0.10)", accent: "#E50914",
+    textMuted: "#747482", border: "rgba(255,255,255,0.10)", accent: DEFAULT_CUSTOM_ACCENT,
     accentSoft: "rgba(229,9,20,0.16)", onAccent: "#ffffff", mediaScrim: "rgba(3,3,8,0.78)",
     success: "#48c774", warning: "#ffb845", danger: "#ff4757",
   },
@@ -117,7 +148,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [persist, preferences, systemScheme]);
   const setCustomAccent = useCallback((value: string | null) => {
     if (value !== null && !/^#[0-9a-f]{6}$/i.test(value)) return false;
-    persist({ ...preferences, theme: "custom", followSystem: false, customAccent: value });
+    const customAccent = value === null ? null : normalizeAccent(value);
+    persist({ ...preferences, theme: "custom", followSystem: false, customAccent });
     return true;
   }, [persist, preferences]);
   React.useEffect(() => {
@@ -140,7 +172,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useMemo(() => {
     const base = THEMES[preferences.theme] || THEMES["midnight-premiere"];
     if (preferences.theme !== "custom" || !preferences.customAccent) return base;
-    return { ...base, accent: preferences.customAccent };
+    const accent = normalizeAccent(preferences.customAccent);
+    return {
+      ...base,
+      accent,
+      accentSoft: accentSoft(accent),
+      onAccent: onAccent(accent),
+    };
   }, [preferences]);
 
   return (

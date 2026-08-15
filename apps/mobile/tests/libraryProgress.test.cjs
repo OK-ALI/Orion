@@ -13,6 +13,16 @@ const {
   withoutProgressRecord,
 } = require("../src/features/library/playbackLibrary.ts");
 
+const {
+  isEpisodeWatchedRecord,
+  isSeasonWatchedCollection,
+  withSeasonWatched,
+  withSeriesWatchedSummary,
+  withoutSeasonWatched,
+  isSavedItemFullyWatched,
+  savedItemWatchState,
+} = require("../src/features/library/watchedState.ts");
+
 function record(overrides = {}) {
   return {
     schemaVersion: 2,
@@ -87,6 +97,35 @@ test("library mutations preserve independent collections", () => {
   assert.equal(history.length, 2);
 });
 
+
+test("season watched batches preserve unrelated collections and recognize legacy episode watched records", () => {
+  const series = { id: 77, name: "Series 77", poster_path: "/poster.jpg", backdrop_path: "/backdrop.jpg" };
+  const episodes = [
+    { id: 701, season_number: 1, episode_number: 1, name: "One" },
+    { id: 702, season_number: 1, episode_number: 2, name: "Two" },
+  ];
+  const watched = {
+    movie_9: { id: 9, media_type: "movie" },
+    tv_77_s1_e1: { id: 77, media_type: "tv", is_episode: true, series_id: 77, season: 1, episode: 1 },
+  };
+
+  assert.equal(isEpisodeWatchedRecord(watched, 77, episodes[0], 1), true);
+  assert.equal(isSeasonWatchedCollection(watched, 77, 1, episodes), false);
+
+  const marked = withSeasonWatched(watched, series, 1, episodes, 1234);
+  assert.equal(isSeasonWatchedCollection(marked, 77, 1, episodes), true);
+  assert.equal(marked.movie_9.id, 9);
+  assert.equal(marked.tv_77_episode_702.timestamp, 1234);
+  assert.equal(marked.tv_77_episode_702.series_id, 77);
+  assert.equal(marked.tv_77_episode_702.season, 1);
+  assert.equal(marked.tv_77_episode_702.episode, 2);
+
+  const unmarked = withoutSeasonWatched(marked, 77, 1, episodes);
+  assert.equal(isSeasonWatchedCollection(unmarked, 77, 1, episodes), false);
+  assert.equal(unmarked.movie_9.id, 9);
+  assert.equal(Object.values(unmarked).some((value) => value?.series_id === 77), false);
+});
+
 test("Home and Phase 2 presentation consume the live Orion theme", () => {
   const files = [
     "../app/(tabs)/index.tsx",
@@ -102,4 +141,129 @@ test("Home and Phase 2 presentation consume the live Orion theme", () => {
     assert.match(source, /useOrionTheme/);
     assert.doesNotMatch(source, /backgrounds\.base|colors\.accent/);
   }
+});
+
+test("My List watched detection is derived from watched truth and ignores future TV episodes", () => {
+  const movie = { id: 5, media_type: "movie", title: "Five" };
+  const show = {
+    id: 77,
+    media_type: "tv",
+    name: "Series 77",
+    status: "Returning Series",
+    seasons: [
+      { season_number: 0, episode_count: 3, air_date: "2020-01-01" },
+      { season_number: 1, episode_count: 2, air_date: "2024-01-01" },
+      { season_number: 2, episode_count: 3, air_date: "2026-01-01" },
+    ],
+    last_episode_to_air: { season_number: 2, episode_number: 2 },
+    next_episode_to_air: { season_number: 2, episode_number: 3 },
+  };
+  const watched = {
+    movie_5: { id: 5, media_type: "movie" },
+    tv_77_s1_e1: { series_id: 77, season: 1, episode: 1 },
+    tv_77_s1_e2: { series_id: 77, season: 1, episode: 2 },
+    tv_77_s2_e1: { series_id: 77, season: 2, episode: 1 },
+    tv_77_s2_e2: { series_id: 77, season: 2, episode: 2 },
+  };
+
+  assert.equal(savedItemWatchState(watched, movie), "watched");
+  assert.equal(isSavedItemFullyWatched(watched, show), true);
+
+  const partial = { ...watched };
+  delete partial.tv_77_s2_e2;
+  assert.equal(savedItemWatchState(partial, show), "unwatched");
+  assert.equal(savedItemWatchState({}, movie), "unwatched");
+});
+
+
+
+test("TV completion summary lets lightweight cards inherit full-show watched truth", () => {
+  const series = {
+    id: 88,
+    media_type: "tv",
+    name: "Series 88",
+    status: "Ended",
+    seasons: [{ season_number: 1, episode_count: 2, air_date: "2025-01-01" }],
+    number_of_episodes: 2,
+  };
+  const episodes = [
+    { id: 8801, season_number: 1, episode_number: 1, name: "One" },
+    { id: 8802, season_number: 1, episode_number: 2, name: "Two" },
+  ];
+
+  const marked = withSeasonWatched({}, series, 1, episodes, 1234);
+  assert.equal(marked.tv_88.is_series_summary, true);
+  assert.equal(marked.tv_88.derived_from_episodes, true);
+  assert.equal(isSavedItemFullyWatched(marked, { id: 88, media_type: "tv", name: "Series 88" }), true);
+
+  const unmarked = withoutSeasonWatched(marked, 88, 1, episodes);
+  assert.equal(unmarked.tv_88, undefined);
+  assert.equal(isSavedItemFullyWatched(unmarked, { id: 88, media_type: "tv", name: "Series 88" }), false);
+});
+
+test("derived TV summary expires conservatively when the next episode boundary is reached", () => {
+  const series = {
+    id: 99,
+    media_type: "tv",
+    name: "Series 99",
+    status: "Returning Series",
+    seasons: [{ season_number: 1, episode_count: 3, air_date: "2025-01-01" }],
+    next_episode_to_air: { season_number: 1, episode_number: 3, air_date: "2099-01-01" },
+    last_episode_to_air: { season_number: 1, episode_number: 2 },
+  };
+  const watchedEpisodes = {
+    tv_99_s1_e1: { series_id: 99, season: 1, episode: 1 },
+    tv_99_s1_e2: { series_id: 99, season: 1, episode: 2 },
+  };
+  const summarized = withSeriesWatchedSummary(watchedEpisodes, series, 1234);
+  const lightweight = { id: 99, media_type: "tv", name: "Series 99" };
+  assert.equal(isSavedItemFullyWatched(summarized, lightweight), true);
+
+  const expired = {
+    ...summarized,
+    tv_99: { ...summarized.tv_99, valid_until: Date.now() - 1 },
+  };
+  assert.equal(isSavedItemFullyWatched(expired, lightweight), false);
+});
+
+
+test("TV card badges ignore stale direct series markers and reconcile from episode truth", () => {
+  const lightweight = { id: 123, media_type: "tv", name: "Series 123" };
+  const series = {
+    ...lightweight,
+    status: "Ended",
+    seasons: [{ season_number: 1, episode_count: 2, air_date: "2025-01-01" }],
+    number_of_episodes: 2,
+  };
+  const staleDirect = {
+    tv_123: { id: 123, media_type: "tv", name: "Series 123", timestamp: 1 },
+    tv_123_s1_e1: { id: 123, media_type: "tv", is_episode: true, series_id: 123, season: 1, episode: 1 },
+  };
+
+  assert.equal(isSavedItemFullyWatched(staleDirect, lightweight), false);
+
+  const reconciledIncomplete = withSeriesWatchedSummary(staleDirect, series, 1234);
+  assert.equal(reconciledIncomplete.tv_123, undefined);
+  assert.equal(isSavedItemFullyWatched(reconciledIncomplete, lightweight), false);
+
+  const completeEpisodes = {
+    ...staleDirect,
+    tv_123_s1_e2: { id: 123, media_type: "tv", is_episode: true, series_id: 123, season: 1, episode: 2 },
+  };
+  const reconciledComplete = withSeriesWatchedSummary(completeEpisodes, series, 1234);
+  assert.equal(reconciledComplete.tv_123.is_series_summary, true);
+  assert.equal(reconciledComplete.tv_123.derived_from_episodes, true);
+  assert.equal(isSavedItemFullyWatched(reconciledComplete, lightweight), true);
+});
+
+
+test("Post-P7.2 series summary reconciliation follows live season watched truth", () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, "../src/features/media-detail/useMediaDetailWatched.ts"),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /\[data, reconcileSeriesWatched, seasonWatched, type\]/,
+  );
 });

@@ -37,6 +37,28 @@ export interface MobileSourceContinuityCapability {
   automaticTarget: boolean;
 }
 
+export interface MobileSourceSafetyNotice {
+  label: string;
+  shortLabel: string;
+  description: string;
+  selectionMessage: string;
+  requiresSelectionConfirmation: boolean;
+}
+
+const SAFETY_NOTICES: Readonly<Record<string, MobileSourceSafetyNotice>> = Object.freeze({
+  vidsrc: Object.freeze({
+    label: 'External browser ads observed',
+    shortLabel: 'External Ads',
+    description: 'VidSrc currently plays, but an interaction may open advertising in your external browser. Orion Shield cannot fully contain this provider behavior.',
+    selectionMessage: 'VidSrc currently plays, but an interaction may open advertising outside Orion in your external browser. Orion Shield cannot fully contain this provider behavior. Do you want to continue?',
+    requiresSelectionConfirmation: true,
+  }),
+});
+
+export function getMobileSourceSafetyNotice(sourceId: string): MobileSourceSafetyNotice | null {
+  return SAFETY_NOTICES[sourceId] || null;
+}
+
 const CAPABILITIES: Readonly<Record<string, MobileSourceContinuityCapability>> = Object.freeze({
   videasy: Object.freeze({
     mode: 'seamless',

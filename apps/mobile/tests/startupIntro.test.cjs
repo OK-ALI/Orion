@@ -27,3 +27,33 @@ test("mobile startup uses the saved live theme and unmounts after completion", (
   assert.match(layout, /showStartup &&/);
   assert.match(layout, /onComplete=\{\(\) => setShowStartup\(false\)\}/);
 });
+
+test("Phase 7.9.1c native Android launch surface uses Orion branding instead of the legacy grid bitmap", () => {
+  const styles = read("android/app/src/main/res/values/styles.xml");
+  const colors = read("android/app/src/main/res/values/colors.xml");
+  const launchBackground = read("android/app/src/main/res/drawable/orion_launch_background.xml");
+  const appConfig = JSON.parse(read("app.json"));
+  const splashPlugin = appConfig.expo.plugins.find(
+    (plugin) => Array.isArray(plugin) && plugin[0] === "expo-splash-screen",
+  );
+
+  assert.match(styles, /android:windowBackground\">@drawable\/orion_launch_background/);
+  assert.doesNotMatch(styles, /android:windowBackground\">@drawable\/splashscreen_logo/);
+  assert.match(colors, /<color name="splashscreen_background">#07070C<\/color>/);
+  assert.match(launchBackground, /@color\/splashscreen_background/);
+  assert.match(launchBackground, /@drawable\/orion_splash_mark/);
+
+  for (const density of ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"]) {
+    assert.equal(
+      fs.existsSync(path.join(mobileRoot, `android/app/src/main/res/drawable-${density}/orion_splash_mark.png`)),
+      true,
+      `missing ${density} Orion splash mark`,
+    );
+  }
+
+  assert.ok(splashPlugin, "expo-splash-screen must remain explicitly configured");
+  assert.equal(splashPlugin[1].backgroundColor, "#07070C");
+  assert.equal(splashPlugin[1].image, "./assets/brand-mark.png");
+  assert.equal(splashPlugin[1].imageWidth, 96);
+  assert.equal(splashPlugin[1].resizeMode, "contain");
+});

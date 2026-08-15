@@ -18,12 +18,25 @@ export const createDiscoverStyles = (theme: MobileThemeTokens) => StyleSheet.cre
     borderColor: theme.border,
     height: 46,
     paddingHorizontal: spacing[4],
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+  },
+  searchContainerFocused: {
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 4,
   },
   searchIcon: {
     marginRight: spacing[2],
   },
-  clearIcon: {
-    marginLeft: spacing[2],
+  clearButton: {
+    width: 40,
+    height: 40,
+    marginRight: -8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
   },
   searchInput: {
     flex: 1,
@@ -41,6 +54,8 @@ export const createDiscoverStyles = (theme: MobileThemeTokens) => StyleSheet.cre
     gap: spacing[2],
   },
   filterPill: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
     borderRadius: radii.full,
@@ -89,6 +104,8 @@ export const createDiscoverStyles = (theme: MobileThemeTokens) => StyleSheet.cre
     marginBottom: spacing[4],
   },
   typePill: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingHorizontal: spacing[5],
     paddingVertical: spacing[2],
     borderRadius: radii.full,
@@ -114,6 +131,8 @@ export const createDiscoverStyles = (theme: MobileThemeTokens) => StyleSheet.cre
     marginBottom: spacing[3],
   },
   regionPill: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
     borderRadius: radii.full,
@@ -143,6 +162,8 @@ export const createDiscoverStyles = (theme: MobileThemeTokens) => StyleSheet.cre
     gap: spacing[2],
   },
   subfilterPill: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[1.5],
     borderRadius: radii.full,
@@ -239,6 +260,8 @@ export const createDiscoverStyles = (theme: MobileThemeTokens) => StyleSheet.cre
     gap: spacing[3],
   },
   backPill: {
+    minHeight: 44,
+    justifyContent: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.surface,
@@ -267,6 +290,8 @@ export const createDiscoverStyles = (theme: MobileThemeTokens) => StyleSheet.cre
     marginBottom: spacing[4],
   },
   dropdownPill: {
+    minHeight: 44,
+    justifyContent: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.surface,
@@ -299,6 +324,8 @@ export const createDiscoverStyles = (theme: MobileThemeTokens) => StyleSheet.cre
     marginBottom: spacing[3],
   },
   browseAllBtn: {
+    minHeight: 44,
+    justifyContent: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -320,6 +347,8 @@ export const createDiscoverStyles = (theme: MobileThemeTokens) => StyleSheet.cre
     marginVertical: spacing[4],
   },
   loadMoreButton: {
+    minHeight: 44,
+    justifyContent: 'center',
     backgroundColor: theme.surface,
     paddingHorizontal: spacing[6],
     paddingVertical: spacing[3],
@@ -369,9 +398,15 @@ export const createDiscoverStyles = (theme: MobileThemeTokens) => StyleSheet.cre
     fontWeight: '700',
   },
   modalCloseBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 4,
   },
   modalOption: {
+    minHeight: 44,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
