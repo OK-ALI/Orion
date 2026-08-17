@@ -24,6 +24,7 @@ import {
   type MobileSettingsSectionId,
 } from "../../src/features/settings/settingsArchitecture";
 import { SettingsSectionNavigator } from "../../src/features/settings/SettingsSectionNavigator";
+import { AccountSettingsContent } from "../../src/features/settings/AccountSettingsContent";
 import {
   PERFORMANCE_PROFILE_LABELS,
   PERFORMANCE_PROFILE_OPTIONS,
@@ -83,12 +84,13 @@ export default function MobileSettingsScreen() {
   const { theme, preferences, setTheme, setReducedMotion, setFollowSystem, setCustomAccent } = useOrionTheme();
   const { selection, resolvedProfile, setSelection } = usePerformanceProfile();
   const { isTablet } = useResponsiveLayout();
+  const account = MOBILE_SETTINGS_SECTION_BY_ID.account;
   const appearance = MOBILE_SETTINGS_SECTION_BY_ID.appearance;
   const performance = MOBILE_SETTINGS_SECTION_BY_ID.performance;
   const accessibility = MOBILE_SETTINGS_SECTION_BY_ID.accessibility;
   const scrollRef = React.useRef<ScrollView>(null);
   const sectionOffsets = React.useRef<Partial<Record<MobileSettingsSectionId, number>>>({});
-  const [currentSectionId, setCurrentSectionId] = React.useState<MobileSettingsSectionId>('appearance');
+  const [currentSectionId, setCurrentSectionId] = React.useState<MobileSettingsSectionId>('account');
 
   const recordSectionLayout = React.useCallback((sectionId: MobileSettingsSectionId) => (event: LayoutChangeEvent) => {
     sectionOffsets.current[sectionId] = event.nativeEvent.layout.y;
@@ -132,6 +134,17 @@ export default function MobileSettingsScreen() {
         onScroll={handleScroll}
         scrollEventThrottle={32}
       >
+        <SettingsSection
+          sectionId="account"
+          icon="person-circle-outline"
+          title={account.label}
+          description="Your Orion identity and account connection."
+          theme={theme}
+          onLayout={recordSectionLayout('account')}
+        >
+          <AccountSettingsContent />
+        </SettingsSection>
+
         <SettingsSection
           sectionId="appearance"
           icon="color-palette-outline"

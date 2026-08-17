@@ -14,6 +14,9 @@ import { LibraryProvider } from '../src/context/LibraryContext';
 import { ThemeProvider, useOrionTheme } from '../src/context/ThemeContext';
 import { PerformanceProvider } from '../src/context/PerformanceContext';
 import { NetworkProvider } from '../src/context/NetworkContext';
+import { AccountProvider } from '../src/context/AccountContext';
+import { MyListSteadyStateSyncProvider } from '../src/features/account/MyListSteadyStateSync';
+import { OrionSyncPolicyProvider } from '../src/features/account/SyncPolicyContext';
 import { OfflineBanner } from '../src/components/OfflineBanner';
 import { StorageUnavailableScreen } from '../src/components/StorageUnavailableScreen';
 import { MobileDiagnosticsBridge } from '../src/components/MobileDiagnosticsBridge';
@@ -63,7 +66,11 @@ export default function RootLayout() {
       <ThemeProvider>
         <PerformanceProvider>
           <NetworkProvider>
-            <ThemedApplication />
+            <AccountProvider>
+              <OrionSyncPolicyProvider>
+                <ThemedApplication />
+              </OrionSyncPolicyProvider>
+            </AccountProvider>
           </NetworkProvider>
         </PerformanceProvider>
       </ThemeProvider>
@@ -93,22 +100,24 @@ function ThemedApplication() {
     ? <StorageUnavailableScreen errorCode={storageHealth.errorCode} />
     : (
       <LibraryProvider>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <View style={[styles.container, { backgroundColor: theme.background }]}>
-            <MobileDiagnosticsBridge />
-            <StatusBar style={theme.dark ? 'light' : 'dark'} />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: 'transparent' },
-              }}
-            >
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            </Stack>
-            <GlobalSearchShortcut />
-            <OfflineBanner />
-          </View>
-        </GestureHandlerRootView>
+        <MyListSteadyStateSyncProvider>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <View style={[styles.container, { backgroundColor: theme.background }]}>
+              <MobileDiagnosticsBridge />
+              <StatusBar style={theme.dark ? 'light' : 'dark'} />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: 'transparent' },
+                }}
+              >
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              </Stack>
+              <GlobalSearchShortcut />
+              <OfflineBanner />
+            </View>
+          </GestureHandlerRootView>
+        </MyListSteadyStateSyncProvider>
       </LibraryProvider>
     );
 

@@ -45,6 +45,8 @@
       "expo-video",
       "./plugins/withOrionNsd",
       "./plugins/withOrionCinemaWebView",
+      "./plugins/withOrionGoogleIdentity",
+      "./plugins/withOrionGoogleDriveAuthorization",
       [
         "expo-build-properties",
         {

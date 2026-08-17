@@ -22,3 +22,9 @@ export {
   fetchAnilistData,
   buildAnilistSeasons,
 } from "./anilist";
+export {
+  type CloudProfileReadResult,
+  type CloudProfileWriteRequest,
+  type CloudProfileWriteResult,
+  type CloudProfileStore,
+} from "./cloudProfileStore";

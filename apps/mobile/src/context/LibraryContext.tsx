@@ -73,6 +73,7 @@ interface LibraryContextType {
   watched: Record<string, any>;
   progress: Record<string, any>;
   toggleSave: (item: TmdbMediaItem) => void;
+  replaceMyListFromSync: (saved: Record<string, any>, savedOrder: string[]) => void;
   isSaved: (item: TmdbMediaItem) => boolean;
   markWatched: (item: TmdbMediaItem, options?: { isEpisode?: boolean, seriesId?: number | string }) => void;
   markUnwatched: (item: TmdbMediaItem, options?: { isEpisode?: boolean, seriesId?: number | string }) => void;
@@ -180,6 +181,30 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     setSaved(next);
     mmkvStorageAdapter.set(STORAGE_KEYS.SAVED, JSON.stringify(next));
   }, [getMediaType]);
+
+  const replaceMyListFromSync = useCallback((nextSaved: Record<string, any>, nextSavedOrder: string[]) => {
+    const previousSaved = mmkvStorageAdapter.get(STORAGE_KEYS.SAVED);
+    const previousOrder = mmkvStorageAdapter.get(STORAGE_KEYS.SAVED_ORDER);
+    try {
+      mmkvStorageAdapter.set(STORAGE_KEYS.SAVED, JSON.stringify(nextSaved));
+      mmkvStorageAdapter.set(STORAGE_KEYS.SAVED_ORDER, JSON.stringify(nextSavedOrder));
+    } catch (error) {
+      try {
+        if (previousSaved == null) mmkvStorageAdapter.remove(STORAGE_KEYS.SAVED);
+        else mmkvStorageAdapter.set(STORAGE_KEYS.SAVED, previousSaved);
+        if (previousOrder == null) mmkvStorageAdapter.remove(STORAGE_KEYS.SAVED_ORDER);
+        else mmkvStorageAdapter.set(STORAGE_KEYS.SAVED_ORDER, previousOrder);
+      } catch {
+        // Storage health will surface a persistent backend failure. Do not
+        // mutate React state if the local My List replacement was incomplete.
+      }
+      throw error;
+    }
+
+    savedRef.current = nextSaved;
+    setSaved(nextSaved);
+    setSavedOrder([...nextSavedOrder]);
+  }, []);
 
   const isSaved = useCallback((item: TmdbMediaItem) => {
     const key = `${getMediaType(item)}_${item.id}`;
@@ -548,6 +573,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     watched,
     progress,
     toggleSave,
+    replaceMyListFromSync,
     isSaved,
     markWatched,
     markUnwatched,

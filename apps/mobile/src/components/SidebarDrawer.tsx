@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, Platform, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, usePathname } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { accent, fontFamilies, fontSizes, radii, spacing, text } from '@orion/shared/tokens';
 import { useOrionTheme } from '../context/ThemeContext';
 import { useNetworkStatus } from '../context/NetworkContext';
+import { useOrionAccount } from '../context/AccountContext';
 
 interface SidebarDrawerProps {
   visible: boolean;
@@ -50,6 +51,23 @@ export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarD
   const router = useRouter();
   const pathname = usePathname();
   const { theme } = useOrionTheme();
+  const { state: accountState } = useOrionAccount();
+
+  const accountProfile = accountState.profile;
+  const accountName = accountState.phase === 'restoring'
+    ? 'Orion profile'
+    : accountProfile?.displayName?.trim()
+      || accountProfile?.givenName?.trim()
+      || (accountProfile ? accountProfile.email : 'Local profile');
+  const accountStatus = accountState.phase === 'restoring'
+    ? 'Checking connection...'
+    : accountState.phase === 'signing-in'
+      ? 'Connecting Google...'
+      : accountState.phase === 'signing-out'
+        ? 'Disconnecting Google...'
+        : accountProfile
+          ? 'Google connected'
+          : 'Google not connected';
 
   const network = useNetworkStatus();
   const isOnline = network.online && network.internetReachable !== false;
@@ -114,6 +132,30 @@ export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarD
               </View>
             ))}
           </ScrollView>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${accountName}. ${accountStatus}. Open Account settings`}
+            accessibilityHint="Opens Orion Account settings"
+            onPress={() => handleNavigate('/settings')}
+            style={({ pressed }) => [
+              styles.accountCard,
+              { backgroundColor: theme.elevated, borderColor: theme.border },
+              pressed && { backgroundColor: theme.surfaceHover },
+            ]}
+          >
+            <View style={[styles.accountAvatarShell, { backgroundColor: theme.accentSoft, borderColor: theme.border }]}>
+              {accountProfile?.avatarUrl ? (
+                <Image source={{ uri: accountProfile.avatarUrl }} style={styles.accountAvatarImage} />
+              ) : (
+                <Ionicons name="person-circle-outline" size={28} color={theme.accent} />
+              )}
+            </View>
+            <View style={styles.accountCopy}>
+              <Text numberOfLines={2} style={[styles.accountName, { color: theme.text }]}>{accountName}</Text>
+              <Text numberOfLines={2} style={[styles.accountStatus, { color: theme.textMuted }]}>{accountStatus}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={theme.textMuted} />
+          </Pressable>
           <View style={[styles.footerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.statusRow}>
               <View style={[styles.statusDot, { backgroundColor: isOnline ? '#10b981' : '#ef4444' }]} />
@@ -295,6 +337,46 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.9,
     shadowRadius: 6,
   },
+  accountCard: {
+    minHeight: 60,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: spacing[3],
+  },
+  accountAvatarShell: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  accountAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  accountCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  accountName: {
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 16,
+  },
+  accountStatus: {
+    fontSize: 10.5,
+    fontWeight: '500',
+    lineHeight: 14,
+    marginTop: 1,
+  },
   footerCard: {
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -303,7 +385,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
     marginBottom: Platform.OS === 'ios' ? 30 : 20,
-    marginTop: spacing[3],
+    marginTop: spacing[2],
   },
   statusRow: {
     flexDirection: 'row',

@@ -21,7 +21,7 @@ export interface MobileSettingsSectionDefinition {
 // exposing controls before their owning feature is ready. A reserved section
 // becomes visible only when its real implementation lands.
 export const MOBILE_SETTINGS_SECTIONS: readonly MobileSettingsSectionDefinition[] = [
-  { id: 'account', label: 'Account', status: 'reserved' },
+  { id: 'account', label: 'Account', status: 'active' },
   { id: 'appearance', label: 'Appearance', status: 'active' },
   { id: 'performance', label: 'Performance', status: 'active' },
   { id: 'sync', label: 'Sync', status: 'reserved' },

@@ -116,7 +116,13 @@ test("Phase 7 drawer keeps destinations grouped without expanding Connect functi
   assert.match(drawer, /name: 'Smart Remote'/);
   assert.match(drawer, /name: 'Settings'/);
   assert.match(drawer, /backgroundColor: theme\.accent, borderColor: theme\.accent, shadowColor: theme\.accent/);
-  assert.doesNotMatch(drawer, /Account|Notifications|Updates|Privacy & Data/);
+
+  const navStart = drawer.indexOf("const NAV_SECTIONS = [");
+  const navEnd = drawer.indexOf("] as const;", navStart);
+  assert.ok(navStart >= 0 && navEnd > navStart, "SidebarDrawer NAV_SECTIONS declaration should remain present");
+
+  const navDefinition = drawer.slice(navStart, navEnd + "] as const;".length);
+  assert.doesNotMatch(navDefinition, /name: '(?:Account|Notifications|Updates|Privacy & Data)'/);
 });
 
 test("Phase 7 Settings uses a scalable active-only section architecture", () => {
@@ -126,12 +132,15 @@ test("Phase 7 Settings uses a scalable active-only section architecture", () => 
   for (const id of ["account", "appearance", "sync", "playback", "accessibility", "updates", "connect", "downloads"]) {
     assert.match(architecture, new RegExp(`id: '${id}'`));
   }
+  assert.match(architecture, /id: 'account', label: 'Account', status: 'active'/);
   assert.match(architecture, /id: 'appearance', label: 'Appearance', status: 'active'/);
   assert.match(architecture, /id: 'accessibility', label: 'Accessibility', status: 'active'/);
-  for (const id of ["account", "sync", "playback", "updates", "connect", "downloads"]) {
+  for (const id of ["sync", "playback", "updates", "connect", "downloads"]) {
     assert.match(architecture, new RegExp(`id: '${id}', label: '[^']+', status: 'reserved'`));
   }
 
+  assert.match(settings, /MOBILE_SETTINGS_SECTION_BY_ID\.account/);
+  assert.match(settings, /<AccountSettingsContent \/>/);
   assert.match(settings, /MOBILE_SETTINGS_SECTION_BY_ID\.appearance/);
   assert.match(settings, /MOBILE_SETTINGS_SECTION_BY_ID\.accessibility/);
   assert.match(settings, /Follow system appearance/);

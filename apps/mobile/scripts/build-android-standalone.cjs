@@ -63,6 +63,71 @@ const cinemaNativeFiles = [
   "OrionPlayerSystemUiModule.kt",
 ];
 
+const googleIdentityNativeSourceDirectory = path.join(
+  projectDirectory,
+  "plugins",
+  "orion-google-identity-native",
+);
+const googleIdentityNativeTargetDirectory = path.join(
+  androidDirectory,
+  "app",
+  "src",
+  "main",
+  "java",
+  "com",
+  "okali",
+  "orion",
+  "identity",
+);
+const googleIdentityNativeFiles = [
+  "OrionGoogleIdentityModule.kt",
+  "OrionGoogleIdentityPackage.kt",
+];
+const androidAppBuildGradle = path.join(androidDirectory, "app", "build.gradle");
+const androidMainApplication = path.join(
+  androidDirectory,
+  "app",
+  "src",
+  "main",
+  "java",
+  "com",
+  "okali",
+  "orion",
+  "MainApplication.kt",
+);
+const googleIdentityDependencyMarker = "// ORION_GOOGLE_IDENTITY_DEPENDENCIES";
+const googleIdentityDependencies = [
+  'implementation "androidx.credentials:credentials:1.6.0"',
+  'implementation "androidx.credentials:credentials-play-services-auth:1.6.0"',
+  'implementation "com.google.android.libraries.identity.googleid:googleid:1.2.0"',
+];
+
+const googleDriveAuthorizationNativeSourceDirectory = path.join(
+  projectDirectory,
+  "plugins",
+  "orion-google-drive-authorization-native",
+);
+const googleDriveAuthorizationNativeTargetDirectory = path.join(
+  androidDirectory,
+  "app",
+  "src",
+  "main",
+  "java",
+  "com",
+  "okali",
+  "orion",
+  "cloud",
+);
+const googleDriveAuthorizationNativeFiles = [
+  "OrionGoogleDriveAuthorizationModule.kt",
+  "OrionGoogleDriveProfileStoreModule.kt",
+  "OrionGoogleDriveAuthorizationPackage.kt",
+];
+const googleDriveAuthorizationDependencyMarker = "// ORION_GOOGLE_DRIVE_AUTHORIZATION_DEPENDENCIES";
+const googleDriveAuthorizationDependencies = [
+  'implementation "com.google.android.gms:play-services-auth:21.6.0"',
+];
+
 function syncCinemaNativeSources() {
   fs.mkdirSync(cinemaNativeTargetDirectory, { recursive: true });
   for (const fileName of cinemaNativeFiles) {
@@ -79,8 +144,158 @@ function syncCinemaNativeSources() {
   console.log(`[Android] Synchronized ${cinemaNativeFiles.length} Cinema shield sources.`);
 }
 
+function syncGoogleIdentityNativeSources() {
+  fs.mkdirSync(googleIdentityNativeTargetDirectory, { recursive: true });
+  for (const fileName of googleIdentityNativeFiles) {
+    const source = path.join(googleIdentityNativeSourceDirectory, fileName);
+    const target = path.join(googleIdentityNativeTargetDirectory, fileName);
+    if (!fs.existsSync(source)) {
+      throw new Error(`Missing authoritative Google Identity native source: ${source}`);
+    }
+    fs.copyFileSync(source, target);
+    if (!fs.readFileSync(source).equals(fs.readFileSync(target))) {
+      throw new Error(`Google Identity native source did not synchronize: ${fileName}`);
+    }
+  }
+  console.log(`[Android] Synchronized ${googleIdentityNativeFiles.length} Google Identity sources.`);
+}
+
+function ensureGoogleIdentityGradleDependencies() {
+  let contents = fs.readFileSync(androidAppBuildGradle, "utf8");
+  if (!contents.includes(googleIdentityDependencyMarker)) {
+    const dependencyMatch = /dependencies\s*\{/;
+    if (!dependencyMatch.test(contents)) {
+      throw new Error(`Unable to locate Android app dependencies block: ${androidAppBuildGradle}`);
+    }
+    const block = [
+      googleIdentityDependencyMarker,
+      ...googleIdentityDependencies,
+    ].map((line) => `    ${line}`).join("\n");
+    contents = contents.replace(dependencyMatch, (match) => `${match}\n${block}`);
+    fs.writeFileSync(androidAppBuildGradle, contents, "utf8");
+  }
+
+  const verified = fs.readFileSync(androidAppBuildGradle, "utf8");
+  for (const dependency of googleIdentityDependencies) {
+    if (!verified.includes(dependency)) {
+      throw new Error(`Google Identity Android dependency is missing: ${dependency}`);
+    }
+  }
+  console.log("[Android] Google Identity Gradle dependencies verified.");
+}
+
+function syncGoogleDriveAuthorizationNativeSources() {
+  fs.mkdirSync(googleDriveAuthorizationNativeTargetDirectory, { recursive: true });
+  for (const fileName of googleDriveAuthorizationNativeFiles) {
+    const source = path.join(googleDriveAuthorizationNativeSourceDirectory, fileName);
+    const target = path.join(googleDriveAuthorizationNativeTargetDirectory, fileName);
+    if (!fs.existsSync(source)) {
+      throw new Error(`Missing authoritative Google Drive authorization native source: ${source}`);
+    }
+    fs.copyFileSync(source, target);
+    if (!fs.readFileSync(source).equals(fs.readFileSync(target))) {
+      throw new Error(`Google Drive authorization native source did not synchronize: ${fileName}`);
+    }
+  }
+  console.log(`[Android] Synchronized ${googleDriveAuthorizationNativeFiles.length} Google Drive authorization sources.`);
+}
+
+function ensureGoogleDriveAuthorizationGradleDependencies() {
+  let contents = fs.readFileSync(androidAppBuildGradle, "utf8");
+  if (!contents.includes(googleDriveAuthorizationDependencyMarker)) {
+    const dependencyMatch = /dependencies\s*\{/;
+    if (!dependencyMatch.test(contents)) {
+      throw new Error(`Unable to locate Android app dependencies block: ${androidAppBuildGradle}`);
+    }
+    const block = [
+      googleDriveAuthorizationDependencyMarker,
+      ...googleDriveAuthorizationDependencies,
+    ].map((line) => `    ${line}`).join("\n");
+    contents = contents.replace(dependencyMatch, (match) => `${match}\n${block}`);
+    fs.writeFileSync(androidAppBuildGradle, contents, "utf8");
+  }
+
+  const verified = fs.readFileSync(androidAppBuildGradle, "utf8");
+  for (const dependency of googleDriveAuthorizationDependencies) {
+    if (!verified.includes(dependency)) {
+      throw new Error(`Google Drive authorization Android dependency is missing: ${dependency}`);
+    }
+  }
+  console.log("[Android] Google Drive authorization Gradle dependencies verified.");
+}
+
+function ensureGoogleDriveAuthorizationPackageRegistration() {
+  let contents = fs.readFileSync(androidMainApplication, "utf8");
+  const packageImport = "import com.okali.orion.cloud.OrionGoogleDriveAuthorizationPackage";
+  const packageRegistration = "add(OrionGoogleDriveAuthorizationPackage())";
+
+  if (!contents.includes(packageImport)) {
+    const firstImport = contents.indexOf("import ");
+    if (firstImport < 0) {
+      throw new Error(`Unable to locate MainApplication imports: ${androidMainApplication}`);
+    }
+    contents = `${contents.slice(0, firstImport)}${packageImport}\n${contents.slice(firstImport)}`;
+  }
+
+  if (!contents.includes(packageRegistration)) {
+    const packageApply = /PackageList\(this\)\.packages\.apply\s*\{/;
+    if (!packageApply.test(contents)) {
+      throw new Error(`Unable to locate React Native package list: ${androidMainApplication}`);
+    }
+    contents = contents.replace(
+      packageApply,
+      (match) => `${match}\n          ${packageRegistration}`,
+    );
+  }
+
+  fs.writeFileSync(androidMainApplication, contents, "utf8");
+  const verified = fs.readFileSync(androidMainApplication, "utf8");
+  if (!verified.includes(packageImport) || !verified.includes(packageRegistration)) {
+    throw new Error("Google Drive authorization native package registration did not persist.");
+  }
+  console.log("[Android] Google Drive authorization package registration verified.");
+}
+
+function ensureGoogleIdentityPackageRegistration() {
+  let contents = fs.readFileSync(androidMainApplication, "utf8");
+  const packageImport = "import com.okali.orion.identity.OrionGoogleIdentityPackage";
+  const packageRegistration = "add(OrionGoogleIdentityPackage())";
+
+  if (!contents.includes(packageImport)) {
+    const firstImport = contents.indexOf("import ");
+    if (firstImport < 0) {
+      throw new Error(`Unable to locate MainApplication imports: ${androidMainApplication}`);
+    }
+    contents = `${contents.slice(0, firstImport)}${packageImport}\n${contents.slice(firstImport)}`;
+  }
+
+  if (!contents.includes(packageRegistration)) {
+    const packageApply = /PackageList\(this\)\.packages\.apply\s*\{/;
+    if (!packageApply.test(contents)) {
+      throw new Error(`Unable to locate React Native package list: ${androidMainApplication}`);
+    }
+    contents = contents.replace(
+      packageApply,
+      (match) => `${match}\n          ${packageRegistration}`,
+    );
+  }
+
+  fs.writeFileSync(androidMainApplication, contents, "utf8");
+  const verified = fs.readFileSync(androidMainApplication, "utf8");
+  if (!verified.includes(packageImport) || !verified.includes(packageRegistration)) {
+    throw new Error("Google Identity native package registration did not persist.");
+  }
+  console.log("[Android] Google Identity package registration verified.");
+}
+
 try {
   syncCinemaNativeSources();
+  syncGoogleIdentityNativeSources();
+  syncGoogleDriveAuthorizationNativeSources();
+  ensureGoogleIdentityGradleDependencies();
+  ensureGoogleDriveAuthorizationGradleDependencies();
+  ensureGoogleIdentityPackageRegistration();
+  ensureGoogleDriveAuthorizationPackageRegistration();
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
