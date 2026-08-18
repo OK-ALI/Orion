@@ -54,6 +54,7 @@ const allmangaIpc = require("./player/allmanga/ipc");
 const playerIpc = require("./player/ipc");
 const diagnosticsIpc = require("./ipc/diagnosticsIpc");
 const googleAuthIpc = require("./ipc/googleAuthIpc");
+const portableProfileIpc = require("./ipc/portableProfileIpc");
 const { createTrayController } = require("./app/tray");
 const { registerNotifications } = require("./app/notifications");
 const { createPopoutWindowController } = require("./player/popoutWindow");
@@ -419,6 +420,7 @@ function createWindow() {
 // ── Register all IPC modules ──────────────────────────────────────────────────
 storageIpc.register();
 googleAuthIpc.register();
+portableProfileIpc.register({ driveRequest: googleAuthIpc.googleDriveRequest });
 downloadsIpc.register(getMainWindow, {
   resetSettingsData: storageIpc.resetStoredSettings,
 });

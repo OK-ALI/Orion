@@ -490,3 +490,32 @@ Next: **P8.4 Candidate 3 — controlled Desktop ↔ Mobile viewing-state synchro
 Candidate 3 must reuse the P8.3 synchronization architecture and must not invent another sync engine.
 
 Candidate 3 does not inherit permission to casually modify locked Desktop subsystems. Any genuinely necessary locked-owner change follows the post-lock amendment process.
+
+---
+
+## Post-lock amendment — P8.4 C3-A
+
+**Date:** 2026-08-19  
+**Reason:** Phase 8 required Desktop to inspect the same PortableProfileV3 cloud document used by Mobile before cross-platform viewing-state synchronization could begin.
+
+The C2 lock was not weakened.
+
+A new, separate, read-only PortableProfileV3 bridge was added through:
+
+- `portable-profile:read`
+- `readPortableProfile`
+
+The existing legacy Google backup path remains unchanged and continues to use:
+
+- `orion-sync-manifest.json`
+- the C2 legacy viewing-state fence
+
+C3-A creates, writes, migrates, and deletes no cloud data.
+
+Focused tests, the full Desktop gate, production build, and physical same-account PortableProfileV3 visibility/identity validation passed.
+
+Canonical C3-A audit:
+
+`apps\desktop\docs\audits\ORION-P8.4-C3A-PORTABLE-PROFILE-BRIDGE-AUDIT.md`
+
+**C2 remains COMPLETE & LOCKED.**

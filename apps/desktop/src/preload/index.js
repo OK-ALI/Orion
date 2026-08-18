@@ -11,6 +11,7 @@ const electronApi = {
   ...require("./api/tray")(dependencies),
   ...require("./api/music")(dependencies),
   ...require("./api/googleAuth")(dependencies),
+  ...require("./api/portableProfile")(dependencies),
   ...require("./api/smartConnect")(dependencies),
 };
 

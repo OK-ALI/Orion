@@ -6,6 +6,7 @@ import { checkForUpdates } from "../../../shared/utils/updates";
 import { HOME_ROWS, loadHomeLayout, loadHomeViewMode, saveHomeViewMode } from "../../../shared/utils/homeLayout";
 import { collectCompleteBackupData, collectLegacyCloudSyncData, restoreCompleteBackupData, restoreLegacyCloudSyncData } from "../../../services/backup";
 import { SettingsSelect, Toggle } from "../components/SettingsControls";
+import PortableProfileProbeCard from "../components/PortableProfileProbeCard";
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
@@ -959,6 +960,8 @@ export function GoogleAuthSection({ secGoogle }) {
               Sign Out
             </button>
           </div>
+
+          <PortableProfileProbeCard googleProfile={profile} />
 
           {/* Sync Controls Section */}
           <div

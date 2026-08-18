@@ -251,3 +251,38 @@ The goal is coherent cross-platform behavior with explicit ownership, durable st
 Use this context:
 
 > Orion Mobile Phase 8 was intentionally frozen because Desktop-side instability was discovered while implementing cross-platform benefits involving Desktop integration, Google authentication, and Google Drive architecture. Desktop stabilization was then completed in dedicated Cinema and Music Planet workstreams. Music Planet is now LOCKED and has a canonical subsystem audit; Cinema is producing its own audit. These subsystem audits are being used to update the Desktop V3 audit. Once that audit state is current, resume the original Mobile Phase 8 roadmap from its last validated checkpoint. Do not restart earlier Mobile work. Preserve locked Mobile and Desktop boundaries, use controlled post-lock amendments when cross-platform requirements truly require them, audit every P8.x subphase, and perform a full cross-platform audit at P8.7 before Phase 8 can lock.
+
+---
+
+## P8.4 C3-A lock checkpoint
+
+**Status:** COMPLETE & LOCKED
+
+P8.4 C3-A established a read-only Desktop bridge to the same PortableProfileV3 used by Orion Mobile.
+
+Physical validation proved:
+
+- PortableProfileV3 is visible through the Desktop Google connection,
+- Desktop Google stable subject identity matches `PortableProfileV3.profileId`,
+- Drive revision-token evidence is available,
+- the legacy Desktop `orion-sync-manifest.json` backup remains separate and untouched.
+
+C3-A introduced no PortableProfileV3 write capability.
+
+Canonical audit:
+
+`apps\desktop\docs\audits\ORION-P8.4-C3A-PORTABLE-PROFILE-BRIDGE-AUDIT.md`
+
+Current Phase 8 board:
+
+- P8.0 — COMPLETE
+- P8.1 — LOCKED
+- P8.2 — LOCKED
+- P8.3 — COMPLETE & LOCKED
+- P8.4 C1 — COMPLETE & LOCKED
+- P8.4 C2 — COMPLETE & LOCKED
+- P8.4 C3-A — COMPLETE & LOCKED
+- P8.4 C3-B — NEXT
+- Phase 8 overall — NOT LOCKED
+
+C3-B begins Watched namespace machinery. It must reuse the P8.3 synchronization architecture rather than introduce a second sync engine.
