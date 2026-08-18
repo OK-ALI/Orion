@@ -60,6 +60,7 @@ import {
   getAgeLimitSetting,
   getRatingCountry,
 } from "../../../shared/utils/ageRating";
+import { resetViewingToNotStarted } from "../../player/services/viewingReset";
 
 export default function MovieDetails({ model }) {
   const { d, displayGenres, displayOverview, displayPct, displayScore, handlePlay, hasProgress, isSaved, isUnreleased, isWatched, movieDownload, onBack, onGoToDownloads, onMarkUnwatched, onMarkWatched, onSave, playing, progressKey, progressLabel, rating, restricted, saveProgress, setShowDownload, setShowTrailer, title, trailerKey } = model;
@@ -236,10 +237,9 @@ export default function MovieDetails({ model }) {
                       <button
                         className="btn btn-ghost"
                         style={{ fontSize: 13 }}
-                        onClick={() => {
-                          saveProgress(progressKey, 0);
-                          storage.set("dlTime_" + progressKey, null);
-                        }}
+                        onClick={() =>
+                          resetViewingToNotStarted(progressKey, { saveProgress })
+                        }
                       >
                         ⊘ Not Started
                       </button>

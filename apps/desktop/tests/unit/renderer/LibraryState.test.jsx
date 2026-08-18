@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({ tmdbFetch: vi.fn() }));
 vi.mock("../../../src/renderer/services/tmdb", () => ({ tmdbFetch: mocks.tmdbFetch }));
 import { useLibraryState } from "../../../src/renderer/app/hooks/useLibraryState";
 import { storage, STORAGE_KEYS } from "../../../src/renderer/services/settingsStore";
+import { markHistoryPlaybackVerified } from "../../../src/renderer/services/viewingStateVerification";
 
 describe("library privacy behavior", () => {
   beforeEach(() => mocks.tmdbFetch.mockReset());
@@ -42,6 +43,28 @@ describe("library privacy behavior", () => {
     });
     expect(result.current.history).toHaveLength(1);
     expect(result.current.progress.movie_42).toBe(50);
+  });
+
+  it("keeps opened-only history local until playback evidence verifies it", () => {
+    const { result } = renderHook(() =>
+      useLibraryState({ librarySort: "manual", setToast: vi.fn() }),
+    );
+
+    act(() => result.current.addHistory({ id: 42, title: "Forty Two", media_type: "movie" }));
+    expect(result.current.history[0].playbackVerified).not.toBe(true);
+
+    act(() => markHistoryPlaybackVerified("movie_42", 5_000));
+    expect(result.current.history[0]).toEqual(expect.objectContaining({
+      playbackVerified: true,
+      playbackVerifiedAt: 5_000,
+      lastPlayedAt: 5_000,
+    }));
+
+    act(() => result.current.addHistory({ id: 42, title: "Forty Two", media_type: "movie" }));
+    expect(result.current.history[0]).toEqual(expect.objectContaining({
+      playbackVerified: true,
+      lastPlayedAt: 5_000,
+    }));
   });
 
   it("hydrates legacy saved records and persists repaired metadata", async () => {

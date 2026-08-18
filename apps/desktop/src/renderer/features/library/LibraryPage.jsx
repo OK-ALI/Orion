@@ -7,6 +7,7 @@ import { isRestricted } from "../../shared/utils/ageRating";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
 import ConfirmModal from "../../components/common/ConfirmModal";
 import LocalPlayer from "../downloads/components/LocalPlayer";
+import { resetViewingToNotStarted } from "../player/services/viewingReset";
 
 export default function LibraryPage({
   history,
@@ -280,12 +281,16 @@ export default function LibraryPage({
                     <strong>{item.title || item.name}</strong>
                     <span>{item.media_type === "tv" ? `S${item.season}E${item.episode}${item.episodeName ? ` · ${item.episodeName}` : ""}` : "Movie"}</span>
                     <small>{Math.round(pct)}% watched{remaining ? ` · ${remaining} min remaining` : ""}</small>
-                    <div><button className="btn btn-primary btn--sm" onClick={() => onSelect({ ...item, autoplay: true })}>Resume</button><button className="btn btn-ghost btn--sm" onClick={() => {
-                      storage.remove("dlTime_" + pk);
-                      const details = storage.get(STORAGE_KEYS.PROGRESS_DETAILS) || {};
-                      delete details[pk]; storage.set(STORAGE_KEYS.PROGRESS_DETAILS, details);
-                      onSaveProgress?.(pk, 0);
-                    }}>Remove</button><button className="btn btn-ghost btn--sm" onClick={() => onMarkWatched?.(pk)}>Mark watched</button></div>
+                    <div><button className="btn btn-primary btn--sm" onClick={() => onSelect({ ...item, autoplay: true })}>Resume</button><button
+                      className="btn btn-ghost btn--sm"
+                      onClick={() =>
+                        resetViewingToNotStarted(pk, {
+                          saveProgress: onSaveProgress,
+                        })
+                      }
+                    >
+                      Remove
+                    </button><button className="btn btn-ghost btn--sm" onClick={() => onMarkWatched?.(pk)}>Mark watched</button></div>
                   </div>
                 </article>
               );

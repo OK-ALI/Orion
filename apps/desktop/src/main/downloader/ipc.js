@@ -16,6 +16,7 @@ const {
   getPlayerUserAgent,
 } = require("./hlsProxy");
 const downloadStore = require("./store");
+const { cleanupDownloadTask } = require("./taskCleanup");
 const { preflightCandidate } = require("./preflight");
 const { exportSessionCookies } = require("./requestContext");
 const { downloadSubtitleFile } = require("./subtitleAsset");
@@ -39,31 +40,6 @@ const { killProcessTree, trackProcess } = require("./processRunner");
 
 
 let _getMainWindow = () => null;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 function sendProgress(update) {
@@ -96,8 +72,8 @@ function saveDownloads() {
   downloadStore.save(downloads);
 }
 
-function cleanupTempFiles(downloadPath) {
-  downloadStore.cleanupTempFiles(downloadPath);
+function cleanupTempFiles(downloadPath, outputStem) {
+  downloadStore.cleanupTempFiles(downloadPath, outputStem);
 }
 
 function killAllDownloads() {
@@ -159,9 +135,6 @@ function pauseAllDownloads(message = "Paused from the system tray") {
 }
 
 
-
-
-
 function register(getMainWindow, { resetSettingsData } = {}) {
   _getMainWindow = getMainWindow;
   toolManager.configure(getMainWindow);
@@ -199,6 +172,151 @@ function register(getMainWindow, { resetSettingsData } = {}) {
     toolManager.checkHelper(folderPath),
   );
 
+
+  async function resumeDownloadTask(id, { automatic = false } = {}) {
+    try {
+      const status = await toolManager.getStatus();
+      if (!status.exists) {
+        return {
+          ok: false,
+          error: "yt-dlp and ffmpeg are not ready. Install downloader tools, then retry.",
+          status,
+        };
+      }
+      const idx = downloads.findIndex((d) => d.id === id);
+      if (idx === -1) return { ok: false, error: "Download not found" };
+
+      const entry = downloads[idx];
+      entry.status = "downloading";
+      entry.lastMessage = automatic
+        ? "Finalizing stream… rechecking completed fragments."
+        : "Resuming…";
+      sendProgress({
+        id,
+        status: "downloading",
+        lastMessage: entry.lastMessage,
+        finalizationRecoveryCount: Number(entry.finalizationRecoveryCount) || 0,
+      });
+
+      if (!entry.logPath) {
+        entry.logPath = path.join(os.tmpdir(), `orion_dl_${id}.log`);
+      }
+      try {
+        fs.appendFileSync(
+          entry.logPath,
+          `\n${"─".repeat(60)}\n${automatic ? "Automatic finalization recovery" : "Resumed"}: ${new Date().toISOString()}\nSource: ${safeSourceLabel(entry.m3u8Url)}\n${"─".repeat(60)}\n`,
+          "utf8",
+        );
+      } catch {}
+
+      let cookiePath = null;
+      if (entry.m3u8Url && entry.m3u8Url.startsWith("http")) {
+        try {
+          cookiePath = path.join(os.tmpdir(), `orion_cookies_${id}.txt`);
+          const ok = await exportSessionCookies(entry.m3u8Url, cookiePath);
+          if (!ok) cookiePath = null;
+        } catch {
+          cookiePath = null;
+        }
+      }
+      entry.cookiePath = cookiePath;
+      const userAgent = getPlayerUserAgent();
+      const outputTemplate = path.join(
+        entry.downloadPath,
+        `${entry.outputStem || safeFileName(entry.name)}.%(ext)s`,
+      );
+
+      let hlsProxy = null;
+      let downloadUrl = entry.m3u8Url;
+      if (
+        (entry.sourceKind || "hls") === "hls" &&
+        entry.strategy === "electron-session-proxy" &&
+        entry.m3u8Url &&
+        /^https?:\/\//i.test(entry.m3u8Url)
+      ) {
+        try {
+          hlsProxy = await createHlsProxy(entry.m3u8Url, entry.m3u8Context);
+          downloadUrl = hlsProxy.url;
+          try {
+            fs.appendFileSync(entry.logPath, `Using local HLS proxy: ${downloadUrl}\n`, "utf8");
+          } catch {}
+        } catch (proxyError) {
+          try {
+            fs.appendFileSync(
+              entry.logPath,
+              `Local HLS proxy unavailable: ${proxyError.message}\n`,
+              "utf8",
+            );
+          } catch {}
+        }
+      }
+
+      const downloadHeaders = buildDownloadHeaders(entry.m3u8Context, userAgent);
+      const args = [
+        "--newline",
+        "--no-playlist",
+        "--continue",
+        "--retries",
+        "10",
+        "--fragment-retries",
+        "12",
+        "--concurrent-fragments",
+        String(entry.fragmentConcurrency || 6),
+        "--retry-sleep",
+        "fragment:exp=1:15",
+        "--socket-timeout",
+        "30",
+        "--skip-unavailable-fragments",
+        "--ffmpeg-location",
+        path.dirname(status.ffmpeg.path),
+        "--merge-output-format",
+        "mp4",
+        "-f",
+        qualityFormat(entry.qualityPreset || "best"),
+      ];
+
+      if (cookiePath) args.push("--cookies", cookiePath);
+      if (userAgent) args.push("--user-agent", userAgent);
+      for (const [header, value] of downloadHeaders) {
+        if (header.toLowerCase() === "user-agent") continue;
+        args.push("--add-headers", `${header}:${value}`);
+      }
+      args.push("-o", outputTemplate, downloadUrl);
+
+      const env = { ...process.env };
+      const ffmpegDir = path.dirname(status.ffmpeg.path);
+      const pathKey = process.platform === "win32" ? "Path" : "PATH";
+      env[pathKey] = `${ffmpegDir}${path.delimiter}${env[pathKey] || ""}`;
+
+      const proc = spawn(status.ytDlp.path, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+        env,
+      });
+      proc.__orionCleanup = () => hlsProxy?.close();
+      activeProcs.set(id, proc);
+
+      trackProcess(
+        processContext,
+        id,
+        proc,
+        entry.name,
+        entry.downloadPath,
+        entry.logPath,
+        cookiePath,
+        proc.__orionCleanup,
+        {
+          ffmpegPath: status.ffmpeg?.path || null,
+          recoverTerminalStall: () => resumeDownloadTask(id, { automatic: true }),
+        },
+      );
+      saveDownloads();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  }
+
   ipcMain.handle(
     "run-download",
     async (
@@ -216,6 +334,8 @@ function register(getMainWindow, { resetSettingsData } = {}) {
         posterPath,
         tmdbId,
         subtitles,
+        expectedDurationSeconds,
+        expectedDurationConfidence = "exact",
         downloaderEngine = "auto",
         helperToken,
         qualityPreset = "best",
@@ -231,6 +351,14 @@ function register(getMainWindow, { resetSettingsData } = {}) {
         if (!resolvedM3u8Url) {
           return { ok: false, error: "No active stream was captured. Start playback and try again." };
         }
+        const preflight = capturedCandidate
+          ? await preflightCandidate(candidateId)
+          : { ok: true, kind: resolvedM3u8Context?.kind || "hls", strategy: downloadStrategy === "direct" ? "direct" : "hls-proxy" };
+        if (!preflight?.ok) {
+          return { ok: false, code: preflight?.code || "preflight_failed", error: preflight?.error || "The selected stream is not downloadable." };
+        }
+        const sourceKind = capturedCandidate?.kind || preflight.kind || resolvedM3u8Context?.kind || "hls";
+        const resolvedStrategy = preflight.strategy || (sourceKind === "hls" ? "hls-proxy" : "direct");
         const helperPath = helperToken ? toolManager.getTrustedBinaryPath(helperToken) : null;
         const directStatus = await toolManager.getStatus();
         const useHelper =
@@ -275,7 +403,7 @@ function register(getMainWindow, { resetSettingsData } = {}) {
 
         const entry = {
           id,
-          schemaVersion: 3,
+          schemaVersion: 4,
           name,
           candidateId: candidateId || null,
           m3u8Url: resolvedM3u8Url,
@@ -304,14 +432,20 @@ function register(getMainWindow, { resetSettingsData } = {}) {
           tmdbId: tmdbId || mediaId || null,
           subtitles: Array.isArray(subtitles) ? subtitles : [],
           subtitlePaths: [],
+          expectedDurationSeconds: Number(expectedDurationSeconds) > 0 ? Number(expectedDurationSeconds) : null,
+          expectedDurationConfidence: expectedDurationConfidence === "approximate" ? "approximate" : "exact",
+          sourceKind,
+          outputStem: safeFileName(`${name} [orion-${id.slice(0, 8)}]`),
+          verification: null,
+          finalizationRecoveryCount: 0,
           logPath,
           cookiePath,
           downloaderEngine: useHelper ? "ext-helper" : "yt-dlp",
           strategy: useHelper
             ? "external-helper"
-            : downloadStrategy === "direct"
-              ? "direct-captured-context"
-              : "electron-session-proxy",
+            : sourceKind === "hls" && resolvedStrategy === "hls-proxy"
+              ? "electron-session-proxy"
+              : "direct-captured-context",
           qualityPreset,
           fragmentConcurrency: Math.max(1, Math.min(12, Number(fragmentConcurrency) || 6)),
           sourceHost: capturedCandidate ? new URL(capturedCandidate.url).host : "",
@@ -320,7 +454,7 @@ function register(getMainWindow, { resetSettingsData } = {}) {
         try {
           fs.writeFileSync(
             logPath,
-            `Orion Download Log\nName: ${name}\nSource: ${safeSourceLabel(resolvedM3u8Url)}\nStarted: ${new Date().toISOString()}\n${"─".repeat(60)}\n`,
+            `Orion Download Log\nName: ${name}\nSource: ${safeSourceLabel(resolvedM3u8Url)}\nKind: ${sourceKind.toUpperCase()}\nPreflight: ${preflight.verified === false ? "fallback / final verification required" : "passed"}${preflight.warning ? `\nWarning: ${preflight.warning}` : ""}\nStarted: ${new Date().toISOString()}\n${"─".repeat(60)}\n`,
             "utf8",
           );
         } catch {}
@@ -334,9 +468,7 @@ function register(getMainWindow, { resetSettingsData } = {}) {
         const duplicate = downloads.find(isSameMedia);
         if (duplicate) {
           if (["failed", "error", "paused", "interrupted", "cancelled"].includes(duplicate.status)) {
-            try { if (duplicate.cookiePath && fs.existsSync(duplicate.cookiePath)) fs.unlinkSync(duplicate.cookiePath); } catch {}
-            try { if (duplicate.logPath && fs.existsSync(duplicate.logPath)) fs.unlinkSync(duplicate.logPath); } catch {}
-            cleanupTempFiles(duplicate.downloadPath);
+            cleanupDownloadTask(duplicate, { activeProcs, killProcessTree, cleanupTempFiles });
             downloads = downloads.filter((item) => item.id !== duplicate.id);
           } else {
             try { if (cookiePath && fs.existsSync(cookiePath)) fs.unlinkSync(cookiePath); } catch {}
@@ -360,7 +492,7 @@ function register(getMainWindow, { resetSettingsData } = {}) {
         sendProgress({ id, name, status: entry.status, lastMessage: entry.lastMessage });
         let hlsProxy = null;
         let downloadUrl = resolvedM3u8Url;
-        if (!useHelper && downloadStrategy !== "direct" && resolvedM3u8Url && /^https?:\/\//i.test(resolvedM3u8Url)) {
+        if (!useHelper && sourceKind === "hls" && resolvedStrategy === "hls-proxy" && resolvedM3u8Url && /^https?:\/\//i.test(resolvedM3u8Url)) {
           try {
             hlsProxy = await createHlsProxy(resolvedM3u8Url, resolvedM3u8Context);
             downloadUrl = hlsProxy.url;
@@ -382,7 +514,7 @@ function register(getMainWindow, { resetSettingsData } = {}) {
           }
         }
 
-        const outputTemplate = path.join(targetDir, `${safeFileName(name)}.%(ext)s`);
+        const outputTemplate = path.join(targetDir, `${entry.outputStem}.%(ext)s`);
         const ffmpegDir = directStatus.ffmpeg?.path ? path.dirname(directStatus.ffmpeg.path) : null;
         const downloadHeaders = buildDownloadHeaders(resolvedM3u8Context, userAgent);
         const args = useHelper
@@ -396,13 +528,14 @@ function register(getMainWindow, { resetSettingsData } = {}) {
               "-b",
               "320",
               "-n",
-              name,
+              entry.outputStem,
               "-d",
               targetDir,
             ]
           : [
               "--newline",
               "--no-playlist",
+              "--continue",
               "--retries",
               "10",
               "--fragment-retries",
@@ -450,7 +583,10 @@ function register(getMainWindow, { resetSettingsData } = {}) {
         proc.__orionCleanup = () => hlsProxy?.close();
         activeProcs.set(id, proc);
 
-        trackProcess(processContext, id, proc, name, targetDir, logPath, cookiePath, proc.__orionCleanup);
+        trackProcess(processContext, id, proc, name, targetDir, logPath, cookiePath, proc.__orionCleanup, {
+          ffmpegPath: directStatus.ffmpeg?.path || null,
+          recoverTerminalStall: () => resumeDownloadTask(id, { automatic: true }),
+        });
         saveDownloads();
         };
 
@@ -492,175 +628,23 @@ function register(getMainWindow, { resetSettingsData } = {}) {
 
   ipcMain.handle("pause-download", (_, id) => pauseDownload(id));
 
-  ipcMain.handle("resume-download", async (_, { id }) => {
-    try {
-      const status = await toolManager.getStatus();
-      if (!status.exists) {
-        return {
-          ok: false,
-          error:
-            "yt-dlp and ffmpeg are not ready. Install downloader tools, then retry.",
-          status,
-        };
-      }
-      const idx = downloads.findIndex((d) => d.id === id);
-      if (idx === -1) return { ok: false, error: "Download not found" };
-
-      const entry = downloads[idx];
-      entry.status = "downloading";
-      entry.lastMessage = "Resuming…";
-      sendProgress({ id, status: "downloading", lastMessage: "Resuming…" });
-
-      if (!entry.logPath) {
-        entry.logPath = path.join(os.tmpdir(), `orion_dl_${id}.log`);
-      }
-      try {
-        fs.appendFileSync(
-          entry.logPath,
-          `\n${"─".repeat(60)}\nResumed: ${new Date().toISOString()}\nSource: ${safeSourceLabel(entry.m3u8Url)}\n${"─".repeat(60)}\n`,
-          "utf8",
-        );
-      } catch {}
-
-      let cookiePath = null;
-      if (entry.m3u8Url && entry.m3u8Url.startsWith("http")) {
-        try {
-          cookiePath = path.join(os.tmpdir(), `orion_cookies_${id}.txt`);
-          const ok = await exportSessionCookies(entry.m3u8Url, cookiePath);
-          if (!ok) {
-            cookiePath = null;
-          }
-        } catch {
-          cookiePath = null;
-        }
-      }
-      entry.cookiePath = cookiePath;
-      const userAgent = getPlayerUserAgent();
-
-      const outputTemplate = path.join(
-        entry.downloadPath,
-        `${safeFileName(entry.name)}.%(ext)s`,
-      );
-      let hlsProxy = null;
-      let downloadUrl = entry.m3u8Url;
-      if (
-        entry.strategy !== "direct-captured-context" &&
-        entry.m3u8Url &&
-        /^https?:\/\//i.test(entry.m3u8Url)
-      ) {
-        try {
-          hlsProxy = await createHlsProxy(entry.m3u8Url, entry.m3u8Context);
-          downloadUrl = hlsProxy.url;
-          try {
-            fs.appendFileSync(
-              entry.logPath,
-              `Using local HLS proxy: ${downloadUrl}\n`,
-              "utf8",
-            );
-          } catch {}
-        } catch (proxyError) {
-          try {
-            fs.appendFileSync(
-              entry.logPath,
-              `Local HLS proxy unavailable: ${proxyError.message}\n`,
-              "utf8",
-            );
-          } catch {}
-        }
-      }
-      const downloadHeaders = buildDownloadHeaders(entry.m3u8Context, userAgent);
-      const args = [
-        "--newline",
-        "--no-playlist",
-          "--retries",
-          "10",
-        "--fragment-retries",
-        "12",
-        "--concurrent-fragments",
-        String(entry.fragmentConcurrency || 6),
-        "--retry-sleep",
-        "fragment:exp=1:15",
-        "--socket-timeout",
-        "30",
-        "--skip-unavailable-fragments",
-        "--ffmpeg-location",
-        path.dirname(status.ffmpeg.path),
-        "--merge-output-format",
-        "mp4",
-        "-f",
-        qualityFormat(entry.qualityPreset || "best"),
-      ];
-
-      if (cookiePath) {
-        args.push("--cookies", cookiePath);
-      }
-      if (userAgent) {
-        args.push("--user-agent", userAgent);
-      }
-      for (const [header, value] of downloadHeaders) {
-        if (header.toLowerCase() === "user-agent") continue;
-        args.push("--add-headers", `${header}:${value}`);
-      }
-      args.push("-o", outputTemplate, downloadUrl);
-
-      const proc = spawn(status.ytDlp.path, args, {
-        stdio: ["ignore", "pipe", "pipe"],
-        windowsHide: true,
-      });
-      proc.__orionCleanup = () => hlsProxy?.close();
-      activeProcs.set(id, proc);
-
-      trackProcess(processContext, 
-        id,
-        proc,
-        entry.name,
-        entry.downloadPath,
-        entry.logPath,
-        cookiePath,
-        proc.__orionCleanup,
-      );
-
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: e.message };
-    }
-  });
+  ipcMain.handle("resume-download", async (_, { id }) =>
+    resumeDownloadTask(id),
+  );
 
   ipcMain.handle("get-downloads", () => downloads.map(publicDownload));
 
-  ipcMain.handle("delete-download", (_, { id, filePath }) => {
+  ipcMain.handle("delete-download", (_, { id }) => {
     try {
-      const dlEntry = downloads.find((d) => d.id === id);
-      if (activeProcs.has(id)) {
-        try {
-          killProcessTree(activeProcs.get(id));
-        } catch {}
-        activeProcs.delete(id);
-      }
-      if (dlEntry?.cookiePath) {
-        try {
-          if (fs.existsSync(dlEntry.cookiePath)) fs.unlinkSync(dlEntry.cookiePath);
-        } catch {}
-      }
-      if (filePath) {
-        try {
-          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        } catch {}
-      }
-      for (const sp of dlEntry?.subtitlePaths || []) {
-        try {
-          if (sp?.path && fs.existsSync(sp.path)) fs.unlinkSync(sp.path);
-        } catch {}
-      }
-      const dlPath = dlEntry?.downloadPath;
-      if (dlPath) cleanupTempFiles(dlPath);
-      if (dlEntry?.driveFileId) {
+      const entry = downloads.find((item) => item.id === id);
+      cleanupDownloadTask(entry, { activeProcs, killProcessTree, cleanupTempFiles });
+      if (entry?.driveFileId) {
         try {
           const { googleDriveRequest } = require("../ipc/googleAuthIpc");
-          googleDriveRequest(`https://www.googleapis.com/drive/v3/files/${dlEntry.driveFileId}`, { method: "DELETE" }).catch(() => {});
+          googleDriveRequest(`https://www.googleapis.com/drive/v3/files/${entry.driveFileId}`, { method: "DELETE" }).catch(() => {});
         } catch {}
       }
-      downloads = downloads.filter((d) => d.id !== id);
+      downloads = downloads.filter((item) => item.id !== id);
       saveDownloads();
       return { ok: true };
     } catch (e) {
@@ -670,24 +654,12 @@ function register(getMainWindow, { resetSettingsData } = {}) {
 
   ipcMain.handle("delete-all-downloads", async () => {
     try {
-      let deleted = 0,
-        errors = 0;
-      for (const dl of downloads) {
-        if (dl.filePath) {
-          try {
-            if (fs.existsSync(dl.filePath)) {
-              fs.unlinkSync(dl.filePath);
-              deleted++;
-            }
-          } catch {
-            errors++;
-          }
-        }
-        for (const sp of dl.subtitlePaths || []) {
-          try {
-            if (sp?.path && fs.existsSync(sp.path)) fs.unlinkSync(sp.path);
-          } catch {}
-        }
+      let deleted = 0;
+      let errors = 0;
+      for (const entry of downloads) {
+        const result = cleanupDownloadTask(entry, { activeProcs, killProcessTree, cleanupTempFiles });
+        deleted += result.deleted;
+        errors += result.errors;
       }
       downloads = [];
       saveDownloads();

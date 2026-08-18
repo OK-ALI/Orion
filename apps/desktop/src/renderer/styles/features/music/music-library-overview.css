@@ -1,0 +1,158 @@
+/* MUSIC-UI C5.4: Library preview continuation + transient scan lifecycle.
+   Overview is a dashboard preview, never a silent truncation of the collection. */
+
+.music-library-preview-actions,
+.music-library-lane-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.music-library-preview-actions small,
+.music-library-lane-actions small {
+  color: var(--mp-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.music-library-preview-actions button,
+.music-library-lane-actions button {
+  min-height: 30px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--music-highlight) 34%, transparent);
+  border-radius: 0;
+  padding: 0 2px;
+  color: var(--music-highlight);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.music-library-preview-actions button:hover,
+.music-library-preview-actions button:focus-visible,
+.music-library-lane-actions button:hover,
+.music-library-lane-actions button:focus-visible {
+  border-bottom-color: var(--music-highlight);
+}
+
+.music-library-page .music-library-overview {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(30px, 3.6vw, 52px);
+}
+
+.music-library-preview-lane {
+  min-width: 0;
+}
+
+.music-library-preview-lane .music-track-list {
+  max-height: 500px;
+}
+
+.music-library-page .music-scan-status {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 34%) auto;
+  gap: 16px;
+  min-height: 58px;
+  align-items: center;
+  margin: 0 0 22px;
+  border: 1px solid var(--music-glass-line-soft);
+  border-radius: 14px;
+  padding: 10px 12px 10px 15px;
+  background: var(--music-hover-glass);
+  box-shadow: none;
+}
+
+.music-scan-status-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.music-scan-status-copy > span {
+  color: var(--mp-text);
+  font-weight: 700;
+}
+
+.music-scan-status-copy > small {
+  overflow: hidden;
+  color: var(--mp-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-library-page .music-scan-status progress {
+  width: 100%;
+  min-width: 0;
+}
+
+.music-library-page .music-scan-status.is-complete {
+  border-color: color-mix(in srgb, var(--music-source-ok) 28%, var(--music-glass-line-soft));
+}
+
+.music-library-page .music-scan-status.is-cancelled {
+  border-color: color-mix(in srgb, var(--music-source-warn) 30%, var(--music-glass-line-soft));
+}
+
+.music-scan-dismiss {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--music-glass-line-soft);
+  border-radius: 50%;
+  padding: 0;
+  color: var(--mp-muted);
+  background: transparent;
+  font-size: 18px;
+}
+
+.music-scan-dismiss:hover,
+.music-scan-dismiss:focus-visible {
+  color: var(--mp-text);
+  background: var(--music-hover-glass);
+}
+
+.music-library-page .music-scan-errors {
+  margin-top: -12px;
+  margin-bottom: 22px;
+}
+
+@media (max-width: 980px) {
+  .music-library-page .music-library-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .music-library-page .music-scan-status {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .music-library-page .music-scan-status progress {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .music-scan-dismiss {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+@media (max-width: 620px) {
+  .music-library-preview-actions,
+  .music-library-lane-actions {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .music-library-page .music-scan-status {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .music-scan-status-copy > small {
+    white-space: normal;
+  }
+}

@@ -31,3 +31,33 @@ export function isAdvancingPlayback(previousTime, progress, minimumAdvance = 0.2
   if (!Number.isFinite(previousTime)) return false;
   return progress.currentTime > previousTime + minimumAdvance;
 }
+
+/**
+ * Mutates Orion's small playback-evidence accumulator and reports only the
+ * transition into verified playback. Two advancing observations are required,
+ * matching the existing Cinema source-health contract.
+ */
+export function observePlaybackEvidence(evidence, progress, minimumAdvance = 0.2) {
+  if (!evidence || !progress || !Number.isFinite(Number(progress.currentTime))) {
+    return { ready: Boolean(evidence?.ready), becameReady: false };
+  }
+
+  const wasReady = evidence.ready === true;
+  if (!wasReady) {
+    if (isAdvancingPlayback(evidence.lastTime, progress, minimumAdvance)) {
+      evidence.advances = (Number(evidence.advances) || 0) + 1;
+    } else if (!progress.paused && !progress.buffering && evidence.lastTime != null) {
+      evidence.advances = 0;
+    }
+  }
+  evidence.lastTime = Number(progress.currentTime);
+
+  if (!wasReady && (Number(evidence.advances) || 0) >= 2) {
+    evidence.ready = true;
+  }
+
+  return {
+    ready: evidence.ready === true,
+    becameReady: !wasReady && evidence.ready === true,
+  };
+}

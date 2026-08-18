@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { favoriteIdentity } from "../utils/favorites";
 
 const listeners = new Set();
 let globalFavorites = { tracks: [], albums: [], artists: [], loaded: false };
@@ -29,7 +30,7 @@ export const favoritesStore = {
   async toggleFavorite(kind, ref, payload) {
     if (!window.electron?.musicToggleFavorite) return;
     try {
-      const identity = ref.identity || `${ref.provider || ref.source?.provider || 'unknown'}:${ref.id}`;
+      const identity = favoriteIdentity(ref);
       const result = await window.electron.musicToggleFavorite(kind, identity, payload || ref);
       
       // Reload favorites after toggling
@@ -49,8 +50,8 @@ export const favoritesStore = {
   },
 
   isTrackFavorite(source) {
-    const identity = `${source.provider}:${source.id}`;
-    return globalFavorites.tracks.some(t => t.identity === identity);
+    const identity = favoriteIdentity(source);
+    return Boolean(identity) && globalFavorites.tracks.some((item) => item.identity === identity);
   },
 
   async addAlbum(album) {
@@ -62,8 +63,8 @@ export const favoritesStore = {
   },
 
   isAlbumFavorite(source) {
-    const identity = `${source.provider}:${source.id}`;
-    return globalFavorites.albums.some(a => a.identity === identity);
+    const identity = favoriteIdentity(source);
+    return Boolean(identity) && globalFavorites.albums.some((item) => item.identity === identity);
   },
 
   async addArtist(artist) {
@@ -75,8 +76,8 @@ export const favoritesStore = {
   },
 
   isArtistFavorite(source) {
-    const identity = `${source.provider}:${source.id}`;
-    return globalFavorites.artists.some(art => art.identity === identity);
+    const identity = favoriteIdentity(source);
+    return Boolean(identity) && globalFavorites.artists.some((item) => item.identity === identity);
   }
 };
 
@@ -101,6 +102,7 @@ export function useFavoritesStore() {
 
   return {
     ...state,
+    toggleFavorite: useCallback((kind, ref, payload) => favoritesStore.toggleFavorite(kind, ref, payload), []),
     addTrack: useCallback((track) => favoritesStore.addTrack(track), []),
     removeTrack: useCallback((source) => favoritesStore.removeTrack(source), []),
     isTrackFavorite: useCallback((source) => favoritesStore.isTrackFavorite(source), []),

@@ -1,0 +1,287 @@
+/* MUSIC-UI C6.2: Final responsive, theme and overlay coherence.
+   This is a late contract layer. It does not redesign locked Music surfaces. */
+
+:root {
+  --music-layer-header: 80;
+  --music-layer-floating: 90;
+  --music-layer-detail: 100;
+  --music-layer-suggestions: 160;
+  --music-layer-sidebar: 240;
+  --music-layer-menu: 1260;
+  --music-layer-dialog: 1280;
+  --music-layer-modal: 5000;
+  --music-layer-cursor: 9999;
+}
+
+/* One documented overlay stack. */
+.music-planet-container > .music-header { z-index: var(--music-layer-header); }
+.music-planet-floating-panel { z-index: var(--music-layer-floating); }
+.music-planet-detail-overlay { z-index: var(--music-layer-detail); }
+.music-search-suggestions { z-index: var(--music-layer-suggestions); }
+.app-shell.music-world .sidebar { z-index: var(--music-layer-sidebar); }
+.music-track-menu.music-track-menu-portal { z-index: var(--music-layer-menu); }
+.music-dialog-backdrop,
+.music-playlists-page .music-dialog-backdrop { z-index: var(--music-layer-dialog); }
+.music-plugin-dialog { z-index: var(--music-layer-modal); }
+.music-planet-cursor { z-index: var(--music-layer-cursor); }
+
+/* Prevent fixed/min-content descendants from forcing horizontal Music overflow. */
+.music-planet-container,
+.music-planet-scroll-area,
+.music-planet-detail-overlay,
+.music-planet-detail-overlay .music-page,
+.music-search-page,
+.music-settings-page,
+.music-core-page,
+.music-signal-page,
+.music-orbital-stage,
+.music-stage-lens,
+.music-library-galaxy,
+.music-library-overview,
+.music-playlist-layout,
+.music-playlist-workspace,
+.music-playlist-detail-header,
+.music-track-list,
+.music-toolbar,
+.music-search-deck,
+.music-search-feature,
+.music-header,
+.music-header-search-form,
+.music-header-search-input-wrapper {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.music-planet-scroll-area,
+.music-planet-detail-overlay {
+  max-width: 100%;
+}
+
+.music-planet-detail-overlay {
+  padding:
+    clamp(78px, 9vh, 96px)
+    clamp(18px, 4vw, 64px)
+    clamp(120px, 16vh, 160px);
+}
+
+.music-planet-detail-overlay .music-page,
+.music-search-page,
+.music-settings-page,
+.music-core-page,
+.music-signal-page {
+  width: min(1440px, 100%);
+  max-width: 100%;
+  margin-inline: auto;
+}
+
+.music-header-search-form {
+  width: min(400px, 100%);
+}
+
+.music-header-search-input-wrapper input,
+.music-toolbar input,
+.music-toolbar select,
+.music-library-toolbar label,
+.music-library-toolbar input,
+.music-library-toolbar select {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.music-search-deck,
+.music-filter-pills,
+.music-library-tabs {
+  max-width: 100%;
+}
+
+.music-filter-pills,
+.music-library-tabs {
+  scrollbar-width: thin;
+}
+
+.music-dialog,
+.music-plugin-dialog > section {
+  max-width: calc(100vw - 32px);
+}
+
+/* Light and custom appearances inherit semantic surfaces in the final layer. */
+[data-theme="light"] .music-plugin-stage-card {
+  border-color: var(--border);
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--music-violet) 5%, transparent), transparent 48%),
+    color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+}
+
+[data-theme="light"] .music-plugin-stage-toggle {
+  border-color: var(--border);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+[data-theme="light"] .music-plugin-stage-toggle.is-enabled {
+  border-color: color-mix(in srgb, var(--music-source-ok) 34%, var(--border));
+  color: color-mix(in srgb, var(--music-source-ok) 72%, var(--text-primary));
+  background: color-mix(in srgb, var(--music-source-ok) 8%, var(--bg-elevated));
+}
+
+/* Tablet / narrow-desktop contract. */
+@media (max-width: 1040px) {
+  .music-planet-detail-overlay {
+    padding-inline: clamp(16px, 3vw, 30px);
+  }
+
+  .music-search-feature,
+  .music-listening-orbit {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .music-source-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  }
+
+  .music-playlist-detail-header {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .music-playlist-detail-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* Compact desktop contract. */
+@media (max-width: 820px) {
+  .music-header {
+    gap: 8px;
+    padding-inline: 12px;
+  }
+
+  .music-header-search-form {
+    flex: 1 1 auto;
+    width: auto;
+    margin-inline: 8px;
+  }
+
+  .music-header-search-input-wrapper {
+    padding-inline: 11px;
+  }
+
+  .music-planet-detail-overlay {
+    padding:
+      76px
+      16px
+      clamp(112px, 16vh, 144px);
+  }
+
+  .music-planet-detail-overlay .music-page,
+  .music-search-page,
+  .music-settings-page,
+  .music-core-page,
+  .music-signal-page {
+    border-radius: 26px;
+    padding: clamp(20px, 4vw, 30px);
+  }
+
+  .music-toolbar,
+  .music-library-toolbar {
+    align-items: stretch;
+  }
+
+  .music-library-toolbar .music-library-search {
+    flex-basis: 100%;
+  }
+
+  .music-library-maintenance {
+    margin-left: 0;
+  }
+
+  .music-section-heading,
+  .music-page-header.compact {
+    gap: 14px;
+  }
+}
+
+/* Small-window contract. Orion remains usable when the desktop window is narrow. */
+@media (max-width: 680px) {
+  .music-header-title > span:last-child {
+    display: none;
+  }
+
+  .music-header-search-form {
+    margin-inline: 4px;
+  }
+
+  .music-header-controls {
+    gap: 4px;
+  }
+
+  .music-planet-detail-overlay .music-page,
+  .music-search-page,
+  .music-settings-page,
+  .music-core-page,
+  .music-signal-page {
+    border-radius: 20px;
+    padding: 18px;
+  }
+
+  .music-toolbar,
+  .music-library-toolbar,
+  .music-library-maintenance,
+  .music-playlist-detail-actions {
+    width: 100%;
+  }
+
+  .music-library-toolbar {
+    flex-direction: column;
+  }
+
+  .music-library-toolbar .music-library-sort {
+    width: 100%;
+    min-width: 0;
+    flex-basis: auto;
+  }
+
+  .music-library-maintenance {
+    flex-wrap: wrap;
+  }
+
+  .music-library-maintenance button,
+  .music-playlist-detail-actions > button,
+  .music-playlist-more {
+    flex: 1 1 auto;
+  }
+
+  .music-filter-pills,
+  .music-library-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  .music-filter-pills button,
+  .music-library-tabs button {
+    flex: 0 0 auto;
+  }
+
+  .music-source-grid,
+  .planet-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .music-plugin-dialog {
+    padding: 10px;
+  }
+
+  .music-plugin-dialog > section,
+  .music-dialog {
+    border-radius: 18px;
+    padding: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .music-plugin-stage-toggle,
+  .music-plugin-stage-card {
+    transition: none;
+  }
+}

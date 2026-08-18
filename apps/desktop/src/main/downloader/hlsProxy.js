@@ -91,16 +91,38 @@ function fetchViaPlayerSession(url, m3u8Context, options = {}) {
       }
       request.on("response", (response) => {
         const chunks = [];
-        response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-        response.on("end", () => {
+        const maxBytes = Number(options.maxBytes) > 0 ? Number(options.maxBytes) : 0;
+        let totalBytes = 0;
+        let settled = false;
+        const finish = (truncated = false) => {
+          if (settled) return;
+          settled = true;
+          const body = Buffer.concat(chunks);
           resolve({
             statusCode: response.statusCode || 200,
             headers: response.headers || {},
-            body: Buffer.concat(chunks),
+            body: maxBytes ? body.subarray(0, maxBytes) : body,
+            truncated,
           });
+        };
+        response.on("data", (chunk) => {
+          if (settled) return;
+          const buffer = Buffer.from(chunk);
+          chunks.push(buffer);
+          totalBytes += buffer.length;
+          if (maxBytes && totalBytes >= maxBytes) {
+            finish(true);
+            try { request.abort(); } catch {}
+          }
+        });
+        response.on("end", () => finish(false));
+        response.on("error", (error) => {
+          if (!settled) reject(error);
         });
       });
-      request.on("error", reject);
+      request.on("error", (error) => {
+        if (!request.aborted) reject(error);
+      });
       request.end();
     } catch (error) {
       reject(error);

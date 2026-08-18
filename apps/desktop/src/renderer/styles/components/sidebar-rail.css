@@ -61,3 +61,13 @@
 @keyframes sidebar-rail-reveal {
   from { opacity: 0; transform: translateX(-7px); }
 }
+
+/* DUX-1: the rail is the canonical resting state; hover/focus reveals the full panel. */
+.sidebar-rail-expand-icon {
+  transform: none;
+}
+
+.sidebar-collapsed-rail:hover .sidebar-rail-expand-icon,
+.sidebar-collapsed-rail:focus-visible .sidebar-rail-expand-icon {
+  transform: translateX(2px);
+}

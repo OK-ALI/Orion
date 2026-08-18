@@ -393,12 +393,114 @@ export function PinIcon({ size = 20, ...props }) {
 
 export function MusicPlanetIcon({ size = 20, ...props }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <circle cx="12" cy="12" r="6.25" />
-      <circle cx="12" cy="12" r="1.45" fill="currentColor" stroke="none" />
-      <path d="M3.1 14.35c2.15 2.9 6.3 4.32 10.63 3.62 3.73-.6 6.4-2.46 6.5-4.46.08-1.55-1.36-2.7-3.46-3.12" />
-      <path d="M7.35 10.25c.78-1.15 1.98-1.92 3.38-2.17M7.35 13.75c.78 1.15 1.98 1.92 3.38 2.17" opacity=".72" />
-      <path d="M18.4 4.2v2.25m-1.13-1.12h2.26" strokeWidth="1.35" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="12" r="5.4" />
+      <path d="M4 14.7c2.6 2.15 7.35 2.3 11.45.35 4.05-1.92 6.1-4.8 4.55-6.35-1.2-1.2-3.9-.72-6.65.67" />
+      <circle cx="17.8" cy="6.1" r="1.15" fill="currentColor" stroke="none" />
+      <path d="M9.4 10.2c.75-.72 1.72-1.08 2.74-1.08M9.25 13.65c.83.83 1.95 1.25 3.1 1.18" opacity=".72" />
+    </svg>
+  );
+}
+
+export function CinemaIcon({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="3.25" y="5" width="17.5" height="13.2" rx="2.25" />
+      <path d="m10.1 9 5.1 2.6-5.1 2.6z" fill="currentColor" stroke="none" />
+      <path d="M7 21h10M9 18.2 8.2 21M15 18.2l.8 2.8" />
+      <path d="M5.8 5 8 2.8M12 5l2.2-2.2M18.2 5l2.05-2.05" opacity=".78" />
+    </svg>
+  );
+}
+
+// ── Sidebar semantic icons ───────────────────────────────────────────────────
+// Kept distinct so navigation destinations never reuse another feature's mark.
+
+export function ConnectIcon({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="3" y="5" width="12" height="9" rx="2" />
+      <path d="M7 18h4M9 14v4" />
+      <rect x="17" y="9" width="4" height="8" rx="1.2" />
+      <path d="M15.2 7.2c1.2-1.1 2.9-1.4 4.4-.8M14.3 4.6c2.1-1.5 4.8-1.8 7.2-.7" />
+    </svg>
+  );
+}
+
+export function NowPlayingIcon({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="m10 8.8 5.2 3.2-5.2 3.2z" fill="currentColor" stroke="none" />
+      <path d="M4 12H2M22 12h-2" opacity=".72" />
+    </svg>
+  );
+}
+
+export function AlbumIcon({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="3" y="3" width="18" height="18" rx="2.5" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1.35" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function ArtistsIcon({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3.5 19c.4-3.2 2.3-5 5.5-5s5.1 1.8 5.5 5" />
+      <circle cx="17.2" cy="9" r="2.2" />
+      <path d="M15.8 14.5c2.7-.5 4.4.8 4.8 3.5" />
+    </svg>
+  );
+}
+
+export function SignalSourcesIcon({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="13" r="1.6" fill="currentColor" stroke="none" />
+      <path d="M8.3 9.3a5.2 5.2 0 0 0 0 7.4M15.7 9.3a5.2 5.2 0 0 1 0 7.4" />
+      <path d="M5.3 6.3a9.4 9.4 0 0 0 0 13.4M18.7 6.3a9.4 9.4 0 0 1 0 13.4" />
+    </svg>
+  );
+}
+
+export function PlaylistIcon({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 6h10M4 10h10M4 14h7" />
+      <path d="M16 9v8.2a2.5 2.5 0 1 1-1.5-2.3" />
+      <path d="M16 9l4-1.2v3.5" />
+    </svg>
+  );
+}
+
+export function HeartIcon({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M20.8 5.8c-2-2-5.1-1.8-6.8.3L12 8.5 10 6.1C8.3 4 5.2 3.8 3.2 5.8 1 8 1.3 11.4 3.5 13.6L12 21l8.5-7.4c2.2-2.2 2.5-5.6.3-7.8Z" />
+    </svg>
+  );
+}
+
+export function KeyboardIcon({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" />
+      <path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M6 13.5h.01M9.5 13.5h.01M13 13.5h5M6 16.5h8" />
+    </svg>
+  );
+}
+
+export function SidebarDockIcon({ size = 18, collapse = false, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2.4" />
+      <path d="M8.5 4v16" />
+      {collapse ? <path d="m15 9-3 3 3 3" /> : <path d="m12 9 3 3-3 3" />}
     </svg>
   );
 }

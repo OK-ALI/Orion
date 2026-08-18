@@ -4,6 +4,7 @@ import PlanetGrid from "../components/PlanetGrid";
 import StarGrid from "../components/StarGrid";
 import MusicArtwork from "../components/MusicArtwork";
 import { useMusic } from "../context/MusicProvider";
+import "../../../styles/features/music/music-search-controls.css";
 
 function mergeResults(groups, key) {
   const map = new Map();
@@ -18,14 +19,15 @@ function mergeResults(groups, key) {
 export default function MusicSearch({ selected, onNavigate }) {
   const music = useMusic();
   const [query, setQuery] = useState(() => String(selected?.query || ""));
-  const [scope, setScope] = useState("all");
+  const [scope, setScope] = useState(() => ["all", "tracks", "albums", "artists", "playlists"].includes(selected?.scope) ? selected.scope : "all");
   const [response, setResponse] = useState({ results: [], errors: [] });
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     if (selected?.query != null) setQuery(String(selected.query));
-  }, [selected?.query]);
+    if (["all", "tracks", "albums", "artists", "playlists"].includes(selected?.scope)) setScope(selected.scope);
+  }, [selected?.query, selected?.scope]);
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -82,6 +84,14 @@ export default function MusicSearch({ selected, onNavigate }) {
     setLoadingMore(false);
   };
 
+  const navigateResult = (targetPage, targetData) => onNavigate(targetPage, {
+    ...(targetData || {}),
+    musicReturn: {
+      page: "music-search",
+      selected: { query, scope, musicReturn: selected?.musicReturn || null },
+    },
+  });
+
   return (
     <div className="music-page music-search-page">
       <header className="music-page-header compact">
@@ -90,10 +100,10 @@ export default function MusicSearch({ selected, onNavigate }) {
         <p>Explore songs, albums, artists and playlists from one place.</p>
       </header>
       <div className="music-search-deck">
-        <div className="planet-search-box music-orbital-search">
+        <div className={`planet-search-box music-orbital-search${query ? " has-query" : ""}${loading ? " is-loading" : ""}`}>
           <svg className="music-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m16 16 5 5" /></svg>
           <input autoFocus aria-label="Search artists, albums and tracks" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Artists, albums and tracks" />
-          {query && <button className="music-search-clear" onClick={() => setQuery("")} aria-label="Clear search">×</button>}
+          {query && <button className="music-search-clear" data-music-cursor="precision" onClick={() => setQuery("")} aria-label="Clear search">×</button>}
           {loading && <span className="music-control-loader" role="status" aria-label="Searching Music Planet"><i aria-hidden="true" /></span>}
         </div>
         <div className="music-filter-pills" aria-label="Search result type">
@@ -107,17 +117,17 @@ export default function MusicSearch({ selected, onNavigate }) {
       {!loading && resultCount > 0 && <div className="music-result-summary"><strong>{resultCount}</strong><span>{query.trim().length >= 2 ? "matches from active signals" : "signals ready to explore"}</span></div>}
       {scope === "all" && topResult && (
         <section className="music-search-feature">
-          <button className={artists[0] ? "star-card top-result" : "planet-card top-result"} onClick={() => onNavigate(artists[0] ? "music-artist" : "music-album", topResult)}>
+          <button className={artists[0] ? "star-card top-result" : "planet-card top-result"} onClick={() => navigateResult(artists[0] ? "music-artist" : "music-album", topResult)}>
             <MusicArtwork variant={artists[0] ? "artist" : "album"} className="art-container" track={{ ...topResult, artworkUrl: topResult.profileImageUrl || topResult.artworkUrl }} label={`Artwork for ${topResult.name || topResult.title || "top result"}`} />
             <span className="music-eyebrow">Top result</span>
             <h2>{topResult.name || topResult.title}</h2>
             <p className="music-muted">{artists[0] ? "Artist" : topResult.artistName || "Album"}</p>
           </button>
-          {tracks.length > 0 && <div className="music-search-quick-play"><span className="music-eyebrow">Quick play</span><MusicTrackList tracks={tracks.slice(0, 5)} layout="list" /></div>}
+          {tracks.length > 0 && <div className="music-search-quick-play"><span className="music-eyebrow">Quick play</span><MusicTrackList tracks={tracks.slice(0, 5)} layout="list" compact /></div>}
         </section>
       )}
-      {(scope === "all" || scope === "artists") && artists.length > 0 && <section className="music-section"><div className="music-section-heading"><div><span>Profiles</span><h2>Artists</h2></div></div><StarGrid items={artists.slice(0, 10)} onNavigate={onNavigate} /></section>}
-      {(scope === "all" || scope === "albums") && albums.length > 0 && <section className="music-section"><div className="music-section-heading"><div><span>Releases</span><h2>Albums</h2></div></div><PlanetGrid items={albums.slice(0, 10)} onNavigate={onNavigate} /></section>}
+      {(scope === "all" || scope === "artists") && artists.length > 0 && <section className="music-section"><div className="music-section-heading"><div><span>Profiles</span><h2>Artists</h2></div></div><StarGrid items={artists.slice(0, 10)} onNavigate={navigateResult} /></section>}
+      {(scope === "all" || scope === "albums") && albums.length > 0 && <section className="music-section"><div className="music-section-heading"><div><span>Releases</span><h2>Albums</h2></div></div><PlanetGrid items={albums.slice(0, 10)} onNavigate={navigateResult} /></section>}
       {(scope === "all" || scope === "playlists") && playlists.length > 0 && <section className="music-section"><div className="music-section-heading"><div><span>Collections</span><h2>Playlists</h2></div></div><div className="music-open-list">{playlists.map((playlist) => <button key={playlist.id} onClick={async () => { const result = await window.electron?.musicGetDetails?.("playlist", playlist); const values = result?.value?.tracks || []; if (values.length) music.playTrack(values[0], values); }}><strong>{playlist.title}</strong><small>Open and play</small></button>)}</div></section>}
       {(scope === "all" || scope === "tracks") && tracks.length > 0 && <section className="music-section"><div className="music-section-heading"><div><span>Playable now</span><h2>Tracks</h2></div></div><MusicTrackList tracks={tracks} layout="list" /></section>}
       {continuation && <div className="music-load-more"><button onClick={loadMore} disabled={loadingMore}>{loadingMore ? <><span className="music-button-loader"><i /></span>Loading more…</> : "Load more"}</button></div>}

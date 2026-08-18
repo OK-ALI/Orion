@@ -37,6 +37,7 @@ import { SectionGroupHeader, Divider, SystemCheckSection, DownloaderToolsSection
 import { SettingsTopBar } from "./SettingsTopBar";
 import { AGE_LIMIT_OPTIONS } from "./settingsConstants";
 import SettingsContent from "./SettingsContent";
+import { clearAllViewingState } from "../player/services/viewingReset";
 
 // ── Custom Select ─────────────────────────────────────────────────────────────
 
@@ -323,9 +324,7 @@ export default function SettingsPage({
   };
 
   const handleClearWatchProgress = async () => {
-    storage.remove(STORAGE_KEYS.WATCH_PROGRESS);
-    storage.remove(STORAGE_KEYS.HISTORY);
-    storage.remove(STORAGE_KEYS.WATCHED);
+    clearAllViewingState();
     if (isElectron) await window.electron.clearWatchData();
     setTimeout(() => window.location.reload(), 800);
     return { msg: "✓ Watch data cleared" };

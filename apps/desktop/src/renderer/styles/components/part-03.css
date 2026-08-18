@@ -557,6 +557,13 @@
     font-size: 14px;
 }
 
+.resume-prompt-note {
+    margin: -6px 0 16px !important;
+    color: var(--text3);
+    font-size: 12px !important;
+    line-height: 1.5 !important;
+}
+
 .resume-prompt-actions {
     display: flex;
     justify-content: center;

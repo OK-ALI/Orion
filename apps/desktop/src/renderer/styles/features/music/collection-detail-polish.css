@@ -1,0 +1,39 @@
+/* MUSIC-UI C5.3: collection detail specificity repairs. */
+
+/* Projector Silver must not turn Favorites filters into a raw rectangular slab. */
+[data-theme="light"] .music-planet-container .music-favorites-page .music-filter-pills {
+  border: 0;
+  background: transparent;
+}
+
+/* The old generic detail rule targets .music-page-header > div and wins over
+   lower-specificity stats declarations. Give the Library totals their true owner. */
+.music-planet-detail-overlay .music-library-page .music-library-heading > .music-library-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(92px, auto));
+  align-items: stretch;
+  justify-content: end;
+  gap: 0;
+}
+
+.music-planet-detail-overlay .music-library-page .music-library-heading > .music-library-stats > span {
+  min-width: 108px;
+  justify-content: center;
+}
+
+@media (max-width: 1040px) {
+  .music-planet-detail-overlay .music-library-page .music-library-heading > .music-library-stats {
+    justify-content: start;
+  }
+}
+
+@media (max-width: 620px) {
+  .music-planet-detail-overlay .music-library-page .music-library-heading > .music-library-stats {
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .music-planet-detail-overlay .music-library-page .music-library-heading > .music-library-stats > span {
+    min-width: 0;
+  }
+}

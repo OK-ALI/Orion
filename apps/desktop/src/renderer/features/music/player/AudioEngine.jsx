@@ -197,7 +197,8 @@ export default function AudioEngine({ controller }) {
       } else analyserRef.current?.setOutputGain?.(outputGain);
       if (visualPreferences.atmosphere !== "off") analyserRef.current?.start?.();
       window.dispatchEvent(new CustomEvent("orion:music-playback-start")); window.electron?.musicAddHistory?.(current, 0); }}
-    onPause={() => { analyserRef.current?.pause?.(); if (current && playbackStatus !== "error") setPlaybackStatus("paused"); }}
+    onPause={() => { analyserRef.current?.pause?.();
+      if (current && !["error", "loading", "buffering"].includes(playbackStatus)) setPlaybackStatus("paused"); }}
     onError={() => {
       if (current && recoveryAttemptsRef.current < 2) {
         recoveryAttemptsRef.current += 1;

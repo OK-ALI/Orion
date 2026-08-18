@@ -1,0 +1,132 @@
+/* MUSIC-UI C6.1: Context Cursor
+   One cursor owner, semantic interaction states, and no oversized ring over
+   precision controls such as Search clear / dialog close buttons. */
+
+.music-planet-cursor {
+  --music-cursor-scale: 1;
+  position: fixed;
+  z-index: 9999;
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  display: none;
+  border: 0;
+  border-radius: 50%;
+  color: var(--mp-text);
+  background: var(--mp-text);
+  mix-blend-mode: difference;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  will-change: transform, width, height;
+  transition:
+    width 150ms var(--ease-out),
+    height 150ms var(--ease-out),
+    border-radius 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    background 150ms var(--ease-out),
+    opacity 100ms var(--ease-out);
+}
+
+.music-planet-cursor.is-ready {
+  opacity: 1;
+}
+
+.music-planet-cursor[data-context="action"] {
+  width: 28px;
+  height: 28px;
+  border: 1px solid currentColor;
+  background: transparent;
+}
+
+.music-planet-cursor[data-context="precision"] {
+  width: 18px;
+  height: 18px;
+  border: 1px solid currentColor;
+  background: transparent;
+}
+
+.music-planet-cursor[data-context="text"] {
+  width: 2px;
+  height: 22px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.music-planet-cursor[data-context="adjust"] {
+  width: 16px;
+  height: 16px;
+  border: 1px solid currentColor;
+  background: transparent;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 9%, transparent);
+}
+
+.music-planet-cursor[data-context="drag"] {
+  width: 30px;
+  height: 16px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.music-planet-cursor[data-context="blocked"] {
+  width: 20px;
+  height: 20px;
+  border: 1px solid currentColor;
+  background:
+    linear-gradient(
+      135deg,
+      transparent 45%,
+      currentColor 46%,
+      currentColor 54%,
+      transparent 55%
+    );
+  opacity: .58;
+}
+
+.music-planet-cursor.is-pressed {
+  --music-cursor-scale: .82;
+}
+
+/* Native cursor remains authoritative whenever the custom cursor is not active. */
+.music-planet-container {
+  cursor: auto;
+}
+
+.music-planet-container :is(a[href], button:not(:disabled), select, summary, [role="button"], [role="option"]) {
+  cursor: pointer;
+}
+
+.music-planet-container :is(input, textarea) {
+  cursor: text;
+}
+
+.music-planet-container input[type="range"],
+.music-planet-container [draggable="true"],
+.music-player-drag-handle {
+  cursor: grab;
+}
+
+.music-planet-container :is(button, input, textarea, select):disabled {
+  cursor: not-allowed;
+}
+
+@media (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .music-planet-cursor {
+    display: block;
+  }
+
+  .music-custom-cursor-active .music-planet-container,
+  .music-custom-cursor-active .music-planet-container *,
+  .music-custom-cursor-active .music-track-menu-portal,
+  .music-custom-cursor-active .music-track-menu-portal * {
+    cursor: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .music-planet-cursor {
+    display: none !important;
+  }
+}

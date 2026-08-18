@@ -80,3 +80,23 @@ test("deduplicates repeated captures without losing the opaque id", () => {
   assert.equal(first.id, second.id);
   assert.equal(listCandidates().length, 1);
 });
+
+
+test("ignores obvious streaming media segments even when typed as video", () => {
+  assert.equal(
+    classifyStream(
+      "https://steelatom.top/vd/token/seg-509-s1080p-v1-a1.m4s",
+      { "content-type": ["video/mp4"] },
+      "media",
+    ),
+    null,
+  );
+  assert.equal(
+    addCandidate({
+      url: "https://cdn.test/chunks/chunk-42.ts",
+      responseHeaders: { "content-type": ["video/mp2t"] },
+      resourceType: "media",
+    }),
+    null,
+  );
+});

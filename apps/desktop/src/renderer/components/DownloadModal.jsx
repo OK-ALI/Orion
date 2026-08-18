@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CloseIcon, DownloadIcon, SettingsIcon, SubtitlesIcon } from "./common/Icons";
 import { storage, STORAGE_KEYS, secureStorage } from "../services/settingsStore";
 import { LANG_LABEL } from "../shared/utils/subtitles";
+import { candidateReadinessTitle, preferredDownloadCandidate } from "../features/downloads/services/downloadCandidatePreference";
 
 const QUALITY_OPTIONS = [
   ["best", "Best available"],
@@ -45,6 +46,8 @@ export default function DownloadModal({
   episode,
   posterPath,
   tmdbId,
+  expectedDurationSeconds,
+  expectedDurationConfidence = "exact",
 }) {
   const [candidates, setCandidates] = useState([]);
   const [candidateId, setCandidateId] = useState(m3u8Context?.candidateId || m3u8Context?.id || "");
@@ -63,11 +66,24 @@ export default function DownloadModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [detectingSeconds, setDetectingSeconds] = useState(0);
+  const manualCandidateSelectionRef = useRef(false);
 
-  const selectedCandidate = useMemo(
-    () => candidates.find((item) => item.id === candidateId) || candidates[0] || null,
-    [candidates, candidateId],
+  const recommendedCandidate = useMemo(
+    () => preferredDownloadCandidate(candidates),
+    [candidates],
   );
+  const selectedCandidate = useMemo(
+    () => candidates.find((item) => item.id === candidateId) || recommendedCandidate || null,
+    [candidates, candidateId, recommendedCandidate],
+  );
+
+  const syncCandidateSelection = (next) => {
+    setCandidateId((current) => {
+      const currentStillExists = next.some((item) => item.id === current);
+      if (manualCandidateSelectionRef.current && currentStillExists) return current;
+      return preferredDownloadCandidate(next)?.id || (currentStillExists ? current : "");
+    });
+  };
 
   const refresh = async () => {
     if (!window.electron) return;
@@ -77,11 +93,12 @@ export default function DownloadModal({
     ]);
     const next = Array.isArray(streams) ? streams : [];
     setCandidates(next);
-    setCandidateId((current) => current || m3u8Context?.candidateId || m3u8Context?.id || next[0]?.id || "");
+    syncCandidateSelection(next);
     setToolStatus(status);
   };
 
   useEffect(() => {
+    manualCandidateSelectionRef.current = false;
     refresh();
   }, [captureSessionId, m3u8Context?.candidateId, m3u8Context?.id]);
 
@@ -93,7 +110,7 @@ export default function DownloadModal({
       });
       const next = Array.isArray(streams) ? streams : [];
       setCandidates(next);
-      setCandidateId((current) => current || next[0]?.id || "");
+      syncCandidateSelection(next);
       setDetectingSeconds(Math.floor((Date.now() - startedAt) / 1000));
     };
     const timer = window.setInterval(refreshCandidates, 1000);
@@ -238,15 +255,13 @@ export default function DownloadModal({
     setBusy(true);
     setError("");
     let preflight = null;
-    if (selectedCandidate?.kind === "hls") {
+    if (selectedCandidate) {
       preflight = await window.electron.preflightStream(selectedCandidate.id);
       if (!preflight?.ok) {
         setBusy(false);
         setError(preflight?.error || "The selected stream is not downloadable.");
         return;
       }
-    } else if (selectedCandidate) {
-      preflight = { ok: true, strategy: "direct" };
     }
     storage.set(STORAGE_KEYS.DOWNLOAD_QUALITY, quality);
     const result = await window.electron.runDownload({
@@ -261,6 +276,8 @@ export default function DownloadModal({
       episode,
       posterPath,
       tmdbId,
+      expectedDurationSeconds: Number(expectedDurationSeconds) > 0 ? Number(expectedDurationSeconds) : null,
+      expectedDurationConfidence,
       qualityPreset: quality,
       concurrency: storage.get(STORAGE_KEYS.DOWNLOAD_CONCURRENCY) || 2,
       fragmentConcurrency: storage.get(STORAGE_KEYS.DOWNLOAD_FRAGMENT_CONCURRENCY) || 6,
@@ -299,7 +316,7 @@ export default function DownloadModal({
         </div>
 
         <div className={`download-readiness ${selectedCandidate ? "ready" : "waiting"}`}>
-          <strong>{selectedCandidate ? `${selectedCandidate.kind.toUpperCase()} source ready` : detectingSeconds >= 10 ? "Still detecting playback" : "Detecting a downloadable stream"}</strong>
+          <strong>{selectedCandidate ? candidateReadinessTitle(selectedCandidate, recommendedCandidate?.id) : detectingSeconds >= 10 ? "Still detecting playback" : "Detecting a downloadable stream"}</strong>
           <span>{selectedCandidate
             ? `${selectedCandidate.host} · ${selectedCandidate.rankReason}`
             : detectingSeconds >= 30
@@ -318,9 +335,9 @@ export default function DownloadModal({
               {advanced ? "Hide" : "Choose"} captured source ({candidates.length})
             </button>
             {advanced && (
-              <select value={selectedCandidate?.id || ""} onChange={(event) => setCandidateId(event.target.value)}>
+              <select value={selectedCandidate?.id || ""} onChange={(event) => { manualCandidateSelectionRef.current = true; setCandidateId(event.target.value); }}>
                 {candidates.map((candidate, index) => (
-                  <option key={candidate.id} value={candidate.id}>#{index + 1} {candidate.host} — {candidate.rankReason}</option>
+                  <option key={candidate.id} value={candidate.id}>#{index + 1} {candidate.host} — {candidate.rankReason}{candidate.id === recommendedCandidate?.id ? " (Recommended)" : ""}</option>
                 ))}
               </select>
             )}

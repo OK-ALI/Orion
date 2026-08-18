@@ -1,4 +1,5 @@
 import MusicOrbitalStage from "../components/MusicOrbitalStage";
+import PlaylistArtwork from "../components/PlaylistArtwork";
 
 export default function PlaylistsSection({ playlists = [], onNavigate }) {
   const items = playlists.filter((item) => item?.id && item?.name).slice(0, 6);
@@ -10,7 +11,7 @@ export default function PlaylistsSection({ playlists = [], onNavigate }) {
     stateActions={<button onClick={() => onNavigate?.("music-playlists")}>Create Playlist</button>}>
     <div className="music-stage-playlist-rail">
       {items.map((playlist) => <button key={playlist.id} onClick={() => onNavigate?.("music-playlists", { playlistId: playlist.id })}
-        className="music-stage-playlist"><span className="music-stage-playlist-art" aria-hidden="true"><i /><i /><i /></span>
+        className="music-stage-playlist"><PlaylistArtwork playlist={playlist} />
         <strong>{playlist.name}</strong><small>{playlist.items?.length || 0} tracks</small></button>)}
     </div>
   </MusicOrbitalStage>;

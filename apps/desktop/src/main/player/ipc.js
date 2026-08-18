@@ -7,6 +7,12 @@ const fs = require("fs");
 const https = require("https");
 const http = require("http");
 const os = require("os");
+const {
+  collectFrames,
+  executeOnVideo,
+  findPrimaryVideo,
+  qualifyUserSeek,
+} = require("./videoTargeting");
 
 let _updateAbortController = null;
 
@@ -453,54 +459,29 @@ function register(getMainWindow, { writeSecretMigration }) {
   ipcMain.handle("query-video-progress", async (_, webContentsId) => {
     try {
       const { webContents } = require("electron");
-      const wc = webContents.fromId(webContentsId);
+      const wc = webContents.fromId(Number(webContentsId));
       if (!wc || wc.isDestroyed()) return null;
 
-      const allFrames = [];
-      const collect = (frame) => {
-        allFrames.push(frame);
-        for (const child of frame.frames || []) collect(child);
+      const primary = await findPrimaryVideo(collectFrames(wc.mainFrame), {
+        requireFiniteDuration: true,
+      });
+      if (!primary) return null;
+
+      const userSeek = qualifyUserSeek(primary);
+      return {
+        currentTime: primary.currentTime,
+        duration: primary.duration,
+        paused: primary.paused,
+        muted: primary.muted,
+        volume: primary.volume,
+        readyState: primary.readyState,
+        networkState: primary.networkState,
+        bufferedAhead: primary.bufferedAhead,
+        droppedFrames: primary.droppedFrames,
+        recentUserSeek: userSeek.recentUserSeek,
+        lastUserSeekTo: userSeek.lastUserSeekTo,
+        lastPlaybackGestureAt: Number(primary.lastPlaybackGestureAt) || 0,
       };
-      collect(wc.mainFrame);
-
-      const JS = `
-        (() => {
-          const v = document.querySelector('video');
-          if (!v) return null;
-          if (!v._seekTracked) {
-            v._seekTracked = true;
-            v.addEventListener('seeked', () => {
-              v._lastUserSeek = Date.now();
-              v._lastUserSeekTo = v.currentTime;
-            });
-          }
-          return {
-            currentTime: v.currentTime,
-            duration: v.duration || 0,
-            paused: v.paused,
-            muted: v.muted,
-            volume: v.volume,
-            readyState: v.readyState,
-            networkState: v.networkState,
-            bufferedAhead: v.buffered && v.buffered.length
-              ? Math.max(0, v.buffered.end(v.buffered.length - 1) - v.currentTime)
-              : 0,
-            droppedFrames: v.getVideoPlaybackQuality
-              ? v.getVideoPlaybackQuality().droppedVideoFrames
-              : 0,
-            recentUserSeek: v._lastUserSeek ? (Date.now() - v._lastUserSeek < 6000) : false,
-            lastUserSeekTo: v._lastUserSeekTo ?? null,
-          };
-        })()
-      `;
-
-      for (const frame of allFrames) {
-        try {
-          const result = await frame.executeJavaScript(JS);
-          if (result && result.duration > 0 && result.duration !== Infinity) return result;
-        } catch {}
-      }
-      return null;
     } catch {
       return null;
     }
@@ -516,9 +497,9 @@ function register(getMainWindow, { writeSecretMigration }) {
       toggleMute: `v.muted = !v.muted;`,
       volumeUp: `v.muted = false; v.volume = Math.min(1, v.volume + 0.05);`,
       volumeDown: `v.volume = Math.max(0, v.volume - 0.05);`,
-      seekBackward: `v.currentTime = Math.max(0, (v.currentTime || 0) - 10);`,
-      seekForward: `v.currentTime = Math.min(Number.isFinite(v.duration) ? v.duration : Infinity, (v.currentTime || 0) + 10);`,
-      restart: `v.currentTime = 0; await v.play();`,
+      seekBackward: `v._orionProgrammaticSeekUntil = Date.now() + 1500; v._orionProgrammaticSeekTarget = Math.max(0, (v.currentTime || 0) - 10); v.currentTime = v._orionProgrammaticSeekTarget; v._orionLastInteractiveSeekAt = Date.now(); v._orionLastInteractiveSeekTo = v.currentTime;`,
+      seekForward: `v._orionProgrammaticSeekUntil = Date.now() + 1500; v._orionProgrammaticSeekTarget = Math.min(Number.isFinite(v.duration) ? v.duration : Infinity, (v.currentTime || 0) + 10); v.currentTime = v._orionProgrammaticSeekTarget; v._orionLastInteractiveSeekAt = Date.now(); v._orionLastInteractiveSeekTo = v.currentTime;`,
+      restart: `v._orionProgrammaticSeekUntil = Date.now() + 1500; v._orionProgrammaticSeekTarget = 0; v.currentTime = 0; v._orionLastInteractiveSeekAt = Date.now(); v._orionLastInteractiveSeekTo = 0; await v.play();`,
       toggleSubtitles: `
         if (v.textTracks && v.textTracks.length) {
           const visible = Array.from(v.textTracks).some((track) => track.mode === 'showing');
@@ -528,54 +509,47 @@ function register(getMainWindow, { writeSecretMigration }) {
         }
       `,
     };
+
     let selectedScript = scripts[action];
-    if (String(action).startsWith("seek:")) {
+    if (String(action).startsWith("intentSeek:")) {
+      const seconds = Number(String(action).slice(11));
+      if (Number.isFinite(seconds)) {
+        selectedScript = `v._orionProgrammaticSeekUntil = Date.now() + 1500; v._orionProgrammaticSeekTarget = Math.max(0, Math.min(Number.isFinite(v.duration) ? v.duration : ${seconds}, ${seconds})); v.currentTime = v._orionProgrammaticSeekTarget;`;
+      }
+    } else if (String(action).startsWith("seek:")) {
       const seconds = Number(String(action).slice(5));
-      if (Number.isFinite(seconds)) selectedScript = `v.currentTime = Math.max(0, ${seconds});`;
+      if (Number.isFinite(seconds)) {
+        selectedScript = `v._orionProgrammaticSeekUntil = Date.now() + 1500; v._orionProgrammaticSeekTarget = Math.max(0, Math.min(Number.isFinite(v.duration) ? v.duration : ${seconds}, ${seconds})); v.currentTime = v._orionProgrammaticSeekTarget; v._orionLastInteractiveSeekAt = Date.now(); v._orionLastInteractiveSeekTo = v.currentTime;`;
+      }
     }
     if (String(action).startsWith("speed:")) {
       const rate = Number(String(action).slice(6));
-      if (Number.isFinite(rate) && rate >= 0.25 && rate <= 4) selectedScript = `v.playbackRate = ${rate};`;
+      if (Number.isFinite(rate) && rate >= 0.25 && rate <= 4) {
+        selectedScript = `v.playbackRate = ${rate};`;
+      }
     }
     if (!selectedScript) {
       return { ok: false, error: "Unsupported player action" };
     }
+
     try {
       const { webContents } = require("electron");
-      const wc = webContents.fromId(webContentsId);
+      const wc = webContents.fromId(Number(webContentsId));
       if (!wc || wc.isDestroyed()) {
-        return { ok: false, error: "The mini-player is no longer available." };
+        return { ok: false, error: "The player is no longer available." };
       }
 
-      const frames = [];
-      const collect = (frame) => {
-        frames.push(frame);
-        for (const child of frame.frames || []) collect(child);
-      };
-      collect(wc.mainFrame);
-
-      const script = `
-        (async () => {
-          const v = document.querySelector('video');
-          if (!v) return null;
-          ${selectedScript}
-          return {
-            paused: v.paused,
-            muted: v.muted,
-            volume: v.volume,
-            playbackRate: v.playbackRate,
-            currentTime: v.currentTime || 0,
-            duration: v.duration || 0,
-          };
-        })()
-      `;
-      for (const frame of frames) {
-        try {
-          const result = await frame.executeJavaScript(script);
-          if (result) return { ok: true, ...result };
-        } catch {}
+      const frames = collectFrames(wc.mainFrame);
+      const primary = await findPrimaryVideo(frames);
+      if (!primary) {
+        return { ok: false, error: "No active video was found yet." };
       }
-      return { ok: false, error: "No active video was found yet." };
+
+      const result = await executeOnVideo(primary, selectedScript);
+      if (!result) {
+        return { ok: false, error: "The active video changed while applying the command." };
+      }
+      return { ok: true, ...result };
     } catch (error) {
       return { ok: false, error: error.message };
     }
@@ -588,6 +562,7 @@ function register(getMainWindow, { writeSecretMigration }) {
       if (!wc || wc.isDestroyed()) {
         return { ok: false, error: "The player is no longer available." };
       }
+
       const safeState = {
         currentTime: Number.isFinite(Number(state.currentTime))
           ? Math.max(0, Number(state.currentTime))
@@ -598,39 +573,31 @@ function register(getMainWindow, { writeSecretMigration }) {
         muted: typeof state.muted === "boolean" ? state.muted : null,
         paused: typeof state.paused === "boolean" ? state.paused : null,
       };
-      const frames = [];
-      const collect = (frame) => {
-        frames.push(frame);
-        for (const child of frame.frames || []) collect(child);
-      };
-      collect(wc.mainFrame);
       const serialized = JSON.stringify(safeState);
-      const script = `
-        (() => {
-          const v = document.querySelector('video');
-          if (!v) return null;
-          const state = ${serialized};
-          const apply = () => {
-            if (state.currentTime !== null && Math.abs((v.currentTime || 0) - state.currentTime) > 1) {
-              try { v.currentTime = Math.min(state.currentTime, Number.isFinite(v.duration) ? v.duration : state.currentTime); } catch {}
-            }
-            if (state.volume !== null) v.volume = state.volume;
-            if (state.muted !== null) v.muted = state.muted;
-            if (state.paused === false) v.play().catch(() => {});
-            if (state.paused === true) v.pause();
-          };
-          if (v.readyState >= 1) apply();
-          else v.addEventListener('loadedmetadata', apply, { once: true });
-          return { currentTime: v.currentTime || 0, duration: v.duration || 0, paused: v.paused, muted: v.muted, volume: v.volume };
-        })()
-      `;
-      for (const frame of frames) {
-        try {
-          const result = await frame.executeJavaScript(script);
-          if (result) return { ok: true, ...result };
-        } catch {}
+      const primary = await findPrimaryVideo(collectFrames(wc.mainFrame));
+      if (!primary) {
+        return { ok: false, error: "No active video was found yet." };
       }
-      return { ok: false, error: "No active video was found yet." };
+
+      const result = await executeOnVideo(primary, `
+        const state = ${serialized};
+        const apply = () => {
+          if (state.currentTime !== null && Math.abs((v.currentTime || 0) - state.currentTime) > 1) {
+            v._orionProgrammaticSeekUntil = Date.now() + 1500;
+            v._orionProgrammaticSeekTarget = Math.min(state.currentTime, Number.isFinite(v.duration) ? v.duration : state.currentTime);
+            try { v.currentTime = v._orionProgrammaticSeekTarget; } catch {}
+          }
+          if (state.volume !== null) v.volume = state.volume;
+          if (state.muted !== null) v.muted = state.muted;
+          if (state.paused === false) v.play().catch(() => {});
+          if (state.paused === true) v.pause();
+        };
+        if (v.readyState >= 1) apply();
+        else v.addEventListener("loadedmetadata", apply, { once: true });
+      `);
+      return result
+        ? { ok: true, ...result }
+        : { ok: false, error: "The active video changed while restoring state." };
     } catch (error) {
       return { ok: false, error: error.message };
     }
@@ -670,32 +637,12 @@ function register(getMainWindow, { writeSecretMigration }) {
   ipcMain.handle("resume-video", async (_, webContentsId) => {
     try {
       const { webContents } = require("electron");
-      const wc = webContents.fromId(webContentsId);
+      const wc = webContents.fromId(Number(webContentsId));
       if (!wc || wc.isDestroyed()) return false;
 
-      const allFrames = [];
-      const collect = (frame) => {
-        allFrames.push(frame);
-        for (const child of frame.frames || []) collect(child);
-      };
-      collect(wc.mainFrame);
-
-      for (const frame of allFrames) {
-        try {
-          const res = await frame.executeJavaScript(`
-            (() => {
-              const v = document.querySelector('video');
-              if (v) {
-                v.play().catch(() => {});
-                return true;
-              }
-              return false;
-            })()
-          `);
-          if (res) return true;
-        } catch {}
-      }
-      return false;
+      const primary = await findPrimaryVideo(collectFrames(wc.mainFrame));
+      if (!primary) return false;
+      return Boolean(await executeOnVideo(primary, `v.play().catch(() => {});`));
     } catch {
       return false;
     }

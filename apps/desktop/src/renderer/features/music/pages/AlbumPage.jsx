@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import MusicArtwork from "../components/MusicArtwork";
+import MusicEntityHero from "../components/MusicEntityHero";
 import MusicTrackList from "../components/MusicTrackList";
 import { useMusic } from "../context/MusicProvider";
 
@@ -25,7 +25,21 @@ export default function AlbumPage({ selected, onNavigate }) {
     window.electron?.musicListFavorites?.().then((items) => setSaved((items || []).some((item) => item.kind === "album" && item.identity === identity))).catch(() => {}); }, [selected?.id]);
 
   if (!details.album) return <div className="music-page"><div className="music-empty"><h2>Signal lost</h2><p>The album data is unavailable.</p></div></div>;
-  return <div className="music-page music-album-page"><header className="music-page-header"><div><span className="music-eyebrow">{details.album.provider || "Library"}</span><h1>{details.album.title || details.album.name}</h1><p>{details.album.artistName}</p><p className="music-muted">{details.album.year || ""}</p><div className="music-actions"><button className="primary" disabled={!tracks.length} onClick={() => music.playTrack(tracks[0], tracks)}>Play</button><button disabled={!tracks.length} onClick={() => { const values = tracks.slice().sort(() => Math.random() - .5); music.playTrack(values[0], values); }}>Shuffle</button><button onClick={() => music.startRadio(details.album)}>Radio</button><button className={saved ? "active" : ""} onClick={async () => { const identity = `${details.album.source?.provider || details.album.provider || "unknown"}:${details.album.id}`; const result = await window.electron?.musicToggleFavorite?.("album", identity, details.album); setSaved(result?.favorite === true); }}>{saved ? "Saved" : "Save"}</button></div></div><MusicArtwork variant="album" className="music-album-art" track={details.album} label={`Artwork for ${details.album.title}`} /></header>
+  const album = details.album;
+  const title = album.title || album.name;
+  return <div className="music-page music-entity-page music-album-page">
+    <MusicEntityHero
+      eyebrow={album.provider || "Library"}
+      title={title}
+      subtitle={album.artistName}
+      facts={[album.year ? String(album.year) : "", tracks.length ? `${tracks.length} ${tracks.length === 1 ? "track" : "tracks"}` : ""]}
+      variant="album"
+      artworkTrack={album}
+      artworkLabel={`Artwork for ${title}`}
+    >
+      <div className="music-actions"><button className="primary" disabled={!tracks.length} onClick={() => music.playTrack(tracks[0], tracks)}>Play</button><button disabled={!tracks.length} onClick={() => { const values = tracks.slice().sort(() => Math.random() - .5); music.playTrack(values[0], values); }}>Shuffle</button><button onClick={() => music.startRadio(album)}>Radio</button><button className={saved ? "active" : ""} onClick={async () => { const identity = `${album.source?.provider || album.provider || "unknown"}:${album.id}`; const result = await window.electron?.musicToggleFavorite?.("album", identity, album); setSaved(result?.favorite === true); }}>{saved ? "Saved" : "Save"}</button></div>
+    </MusicEntityHero>
     {details.status === "error" && <div className="music-provider-warning">{details.error}</div>}
-    <section className="music-section"><div className="music-section-heading"><div><span>{tracks.length || 0} tracks</span><h2>Tracklist</h2></div></div><MusicTrackList tracks={tracks} layout="list" empty={details.status === "loading" ? "Mapping this release…" : "This source has not returned an album tracklist yet."} /></section></div>;
+    <section className="music-section"><div className="music-section-heading"><div><span>{tracks.length || 0} tracks</span><h2>Tracklist</h2></div></div><MusicTrackList tracks={tracks} layout="list" empty={details.status === "loading" ? "Mapping this release…" : "This source has not returned an album tracklist yet."} /></section>
+  </div>;
 }

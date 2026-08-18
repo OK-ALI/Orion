@@ -1,0 +1,16 @@
+/* MUSIC-UI C5.3: track actions live above scroll lenses.
+   A row menu must never expand or scroll the collection card that launched it. */
+
+.music-track-menu.music-track-menu-portal {
+  position: fixed;
+  z-index: 1260;
+  top: 0;
+  right: auto;
+  min-width: 190px;
+  max-width: min(240px, calc(100vw - 20px));
+  visibility: hidden;
+}
+
+.music-track-menu.music-track-menu-portal[data-positioned="true"] {
+  visibility: visible;
+}

@@ -46,32 +46,38 @@ export default function NowPlayingSection({ music, onNavigate }) {
         <h3>{music.current.title}</h3>
         <p>{music.current.artistName || "Unknown artist"}{music.current.albumTitle ? ` · ${music.current.albumTitle}` : ""}</p>
         <div className="music-listening-controls" aria-label="Listening Core controls">
-          <button onClick={() => music.setShuffle(!music.shuffle)} className={music.shuffle ? "active" : ""} aria-pressed={music.shuffle}>Shuffle</button>
-          <button className="icon" onClick={music.playPrevious} aria-label="Previous track"><CoreIcon name="previous" /></button>
-          <button className="icon primary" onClick={music.togglePlaying} aria-label={music.playing ? "Pause" : "Play"}>
-            {(music.playbackStatus === "loading" || music.playbackStatus === "buffering")
-              ? <span className="music-button-loader"><i /></span> : <CoreIcon name={music.playing ? "pause" : "play"} />}
-          </button>
-          <button className="icon" onClick={music.playNext} aria-label="Next track"><CoreIcon name="next" /></button>
-          <button onClick={() => music.setRepeat(music.repeat === "off" ? "all" : music.repeat === "all" ? "one" : "off")}
-            className={music.repeat !== "off" ? "active" : ""}>Repeat {music.repeat === "one" ? "1" : music.repeat === "all" ? "all" : "off"}</button>
-          <button onClick={toggleFavorite} className={favorite ? "active" : ""} aria-pressed={favorite}>{favorite ? "Liked" : "Like"}</button>
+          <div className="music-listening-transport" aria-label="Playback controls">
+            <button className="icon" onClick={music.playPrevious} aria-label="Previous track"><CoreIcon name="previous" /></button>
+            <button className="icon primary" onClick={music.togglePlaying} aria-label={music.playing ? "Pause" : "Play"}>
+              {(music.playbackStatus === "loading" || music.playbackStatus === "buffering")
+                ? <span className="music-button-loader"><i /></span> : <CoreIcon name={music.playing ? "pause" : "play"} />}
+            </button>
+            <button className="icon" onClick={music.playNext} aria-label="Next track"><CoreIcon name="next" /></button>
+          </div>
+          <div className="music-listening-modes" aria-label="Playback options">
+            <button onClick={() => music.setShuffle(!music.shuffle)} className={music.shuffle ? "active" : ""} aria-pressed={music.shuffle}>Shuffle</button>
+            <button onClick={() => music.setRepeat(music.repeat === "off" ? "all" : music.repeat === "all" ? "one" : "off")}
+              className={music.repeat !== "off" ? "active" : ""}>Repeat {music.repeat === "one" ? "1" : music.repeat === "all" ? "all" : "off"}</button>
+            <button onClick={toggleFavorite} className={favorite ? "active" : ""} aria-pressed={favorite}>{favorite ? "Liked" : "Like"}</button>
+          </div>
         </div>
         <div className={`music-listening-timeline${duration ? "" : " is-indeterminate"}`}>
-          <span>{time(currentTime)}</span>
+          <span className="music-listening-time is-current">{time(currentTime)}</span>
           <div className="music-progress-track" style={{ "--music-played": `${played * 100}%`, "--music-buffered": `${music.buffered * 100}%` }}>
             <i className="music-progress-buffered" /><i className="music-progress-played" />
             <MusicVisualizer variant="timeline" className="music-progress-wave" />
             <input aria-label="Seek music" type="range" min="0" max={duration || 1} step="0.1" value={currentTime}
               disabled={!duration} onChange={(event) => music.seekTo(Number(event.target.value))} />
           </div>
-          <span>{duration ? `-${time(remaining)}` : "Live"}</span>
+          <span className="music-listening-time is-remaining">{duration ? `-${time(remaining)}` : "Live"}</span>
         </div>
-        <div className="music-listening-footer">
-          <p>{activeLyric || "The waveform will carry lyrics here when they are available."}</p>
-          <div><button onClick={() => { music.setPanel("queue"); }}>Queue</button>
+        <div className={`music-listening-footer${activeLyric ? " has-lyric" : ""}`}>
+          {activeLyric && <p className="music-listening-active-lyric">{activeLyric}</p>}
+          <nav className="music-listening-secondary-actions" aria-label="Now Playing views">
+            <button onClick={() => { music.setPanel("queue"); }}>Queue</button>
             <button onClick={() => { music.setPanel("lyrics"); music.loadLyrics(); }}>Lyrics</button>
-            <button onClick={() => onNavigate("music-now-playing", music.current)}>Open Observatory</button></div>
+            <button className="observatory" onClick={() => onNavigate("music-now-playing", music.current)}>Open Observatory</button>
+          </nav>
         </div>
       </div>
     </div>}

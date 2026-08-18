@@ -1,0 +1,218 @@
+/* MUSIC-UI C5.3: playlist artwork system.
+   Default = smart track mosaic; empty/explicit presets = Orion compositions;
+   custom images are bounded and cropped before persistence. */
+
+.music-playlist-artwork {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 1;
+  border: 1px solid var(--music-glass-line-soft);
+  border-radius: 22px;
+  background: var(--music-active-surface);
+  background-position: center;
+  background-size: cover;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--music-highlight) 10%, transparent);
+}
+
+.music-playlist-artwork.is-mosaic {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+
+.music-playlist-artwork.is-mosaic > .music-artwork,
+.music-playlist-artwork-fill {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.music-playlist-artwork-fill,
+.music-playlist-artwork.is-preset {
+  background:
+    radial-gradient(circle at 28% 24%, var(--playlist-art-a, var(--music-highlight-soft)), transparent 34%),
+    radial-gradient(circle at 74% 66%, var(--playlist-art-b, var(--music-orbital-glow)), transparent 38%),
+    linear-gradient(145deg, var(--playlist-art-c, var(--music-active-surface)), var(--mp-bg));
+}
+
+.music-playlist-artwork.is-preset > i,
+.music-playlist-artwork.is-preset > b,
+.music-playlist-artwork.is-preset > em {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--music-highlight) 34%, transparent);
+  border-radius: 50%;
+}
+
+.music-playlist-artwork.is-preset > i {
+  width: 54%;
+  height: 54%;
+  left: 23%;
+  top: 23%;
+  box-shadow: 0 0 38px var(--music-orbital-glow-soft);
+}
+
+.music-playlist-artwork.is-preset > b {
+  width: 68%;
+  height: 28%;
+  left: 16%;
+  top: 36%;
+  transform: rotate(-24deg);
+}
+
+.music-playlist-artwork.is-preset > em {
+  width: 12%;
+  height: 12%;
+  right: 18%;
+  top: 18%;
+  border: 0;
+  background: var(--music-highlight);
+  box-shadow: 0 0 24px var(--music-highlight);
+}
+
+.music-playlist-artwork.is-orion-glow {
+  --playlist-art-a: var(--music-highlight-soft);
+  --playlist-art-b: var(--music-orbital-glow);
+  --playlist-art-c: var(--music-active-surface);
+}
+
+.music-playlist-artwork.is-velvet-orbit {
+  --playlist-art-a: color-mix(in srgb, var(--music-violet) 36%, transparent);
+  --playlist-art-b: color-mix(in srgb, var(--music-magenta) 28%, transparent);
+  --playlist-art-c: var(--music-glass-panel-strong);
+}
+
+.music-playlist-artwork.is-signal-bloom {
+  --playlist-art-a: color-mix(in srgb, var(--music-source-ok) 30%, transparent);
+  --playlist-art-b: color-mix(in srgb, var(--music-highlight) 24%, transparent);
+  --playlist-art-c: var(--music-active-surface);
+}
+
+.music-playlist-artwork.is-night-drive {
+  --playlist-art-a: color-mix(in srgb, var(--music-violet) 30%, transparent);
+  --playlist-art-b: color-mix(in srgb, var(--music-highlight) 18%, transparent);
+  --playlist-art-c: var(--mp-bg);
+}
+
+.music-playlist-artwork.is-solar-dust {
+  --playlist-art-a: color-mix(in srgb, var(--music-source-warn) 28%, transparent);
+  --playlist-art-b: color-mix(in srgb, var(--music-highlight) 18%, transparent);
+  --playlist-art-c: var(--music-glass-panel-strong);
+}
+
+.music-playlist-artwork.is-monochrome {
+  --playlist-art-a: color-mix(in srgb, var(--mp-muted) 24%, transparent);
+  --playlist-art-b: color-mix(in srgb, var(--mp-text) 12%, transparent);
+  --playlist-art-c: var(--mp-bg);
+}
+
+.music-stage-playlist-rail {
+  grid-auto-columns: clamp(164px, 20vw, 216px);
+}
+
+.music-stage-playlist .music-playlist-artwork {
+  width: 100%;
+  aspect-ratio: 1.22;
+  border-radius: 18px;
+}
+
+.music-stage-playlist-rail strong {
+  margin-top: 10px;
+}
+
+.music-playlist-detail-identity {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.music-playlist-detail-identity > .music-playlist-artwork {
+  width: 92px;
+  border-radius: 18px;
+}
+
+.music-playlist-artwork-editor {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.music-playlist-artwork-editor > .music-playlist-artwork {
+  width: 116px;
+  border-radius: 18px;
+}
+
+.music-playlist-artwork-controls {
+  min-width: 0;
+}
+
+.music-playlist-artwork-controls > span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--mp-muted);
+  font-size: 11px;
+}
+
+.music-playlist-artwork-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.music-playlist-artwork-presets button,
+.music-playlist-custom-upload {
+  min-height: 36px;
+  border: 1px solid var(--music-glass-line-soft);
+  border-radius: 9px;
+  padding: 0 9px;
+  color: var(--mp-text);
+  background: var(--music-hover-glass);
+  font-size: 11px;
+}
+
+.music-playlist-artwork-presets button.active {
+  border-color: var(--music-glass-edge);
+  background: var(--music-highlight-soft);
+  box-shadow: inset 3px 0 0 var(--music-highlight);
+}
+
+.music-playlist-custom-upload {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 8px;
+  cursor: pointer;
+}
+
+.music-playlist-custom-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.music-playlist-artwork-error {
+  margin: 7px 0 0;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .music-playlist-artwork-editor {
+    grid-template-columns: 86px minmax(0, 1fr);
+  }
+
+  .music-playlist-artwork-editor > .music-playlist-artwork {
+    width: 86px;
+  }
+
+  .music-playlist-artwork-presets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

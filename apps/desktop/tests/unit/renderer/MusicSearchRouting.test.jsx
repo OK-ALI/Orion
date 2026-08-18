@@ -27,8 +27,24 @@ describe("Music Search provider routing", () => {
   it("prefills a shell query and searches exclusively through the preload API", async () => {
     render(<MusicSearch selected={{ query: "Real Signal" }} onNavigate={() => {}} />);
     expect(screen.getByRole("textbox", { name: /artists, albums and tracks/i })).toHaveValue("Real Signal");
+    expect(screen.getByRole("button", { name: "Clear search" })).toHaveAttribute("data-music-cursor", "precision");
     await waitFor(() => expect(window.electron.musicSearch).toHaveBeenCalledWith("Real Signal"), { timeout: 1500 });
     expect((await screen.findAllByText("Orion Artist")).length).toBeGreaterThan(0);
     expect(screen.getAllByTestId("music-track-list").some((element) => element.textContent.includes("Real Signal"))).toBe(true);
   });
+
+
+  it("separates the loading slot from the clear-control slot while a query is active", async () => {
+    window.electron.musicSearch = vi.fn(() => new Promise(() => {}));
+
+    const { container } = render(<MusicSearch selected={{ query: "Loading Signal" }} onNavigate={() => {}} />);
+
+    await waitFor(() => expect(window.electron.musicSearch).toHaveBeenCalledWith("Loading Signal"), { timeout: 1500 });
+
+    const searchBox = container.querySelector(".music-orbital-search");
+    expect(searchBox).toHaveClass("has-query", "is-loading");
+    expect(screen.getByRole("button", { name: "Clear search" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Searching Music Planet" })).toBeInTheDocument();
+  });
+
 });

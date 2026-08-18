@@ -1,0 +1,22 @@
+/* MUSIC-UI C6.1.1: Search control geometry
+   The absolute clear control must preserve its centering transform on hover,
+   and the active search spinner must never occupy the same slot. */
+
+.music-search-page .music-orbital-search .music-search-clear,
+.music-search-page .music-orbital-search .music-search-clear:hover,
+.music-search-page .music-orbital-search .music-search-clear:focus-visible {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.music-search-page .music-orbital-search.has-query.is-loading input {
+  padding-right: 100px;
+}
+
+.music-search-page .music-orbital-search.has-query .music-control-loader {
+  right: 62px;
+}
+
+.music-search-page .music-orbital-search:not(.has-query) .music-control-loader {
+  right: 20px;
+}

@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { getReadyWebContentsId } from "../../../src/renderer/features/player/services/webviewLifecycle";
+import {
+  getReadyWebContentsId,
+  isExpectedWebviewNavigationAbort,
+  shouldHandleWebviewLoadFailure,
+} from "../../../src/renderer/features/player/services/webviewLifecycle";
 
 describe("webview lifecycle guard", () => {
   it("returns null instead of throwing before dom-ready", () => {
@@ -13,4 +17,27 @@ describe("webview lifecycle guard", () => {
   it("returns a valid id after the webview is ready", () => {
     expect(getReadyWebContentsId({ isConnected: true, getWebContentsId: () => 42 })).toBe(42);
   });
+
+  it("classifies superseded ERR_ABORTED navigation as expected", () => {
+    expect(isExpectedWebviewNavigationAbort({ errorCode: -3 })).toBe(true);
+    expect(isExpectedWebviewNavigationAbort({ code: "ERR_ABORTED" })).toBe(true);
+    expect(
+      isExpectedWebviewNavigationAbort({
+        message: "Error: ERR_ABORTED (-3) loading 'https://provider.example'",
+      }),
+    ).toBe(true);
+  });
+
+  it("reports only real main-frame load failures", () => {
+    expect(shouldHandleWebviewLoadFailure({ isMainFrame: true, errorCode: -3 })).toBe(false);
+    expect(shouldHandleWebviewLoadFailure({ isMainFrame: false, errorCode: -105 })).toBe(false);
+    expect(
+      shouldHandleWebviewLoadFailure({
+        isMainFrame: true,
+        errorCode: -105,
+        errorDescription: "NAME_NOT_RESOLVED",
+      }),
+    ).toBe(true);
+  });
+
 });

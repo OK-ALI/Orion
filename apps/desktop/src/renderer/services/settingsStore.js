@@ -83,6 +83,7 @@ export const STORAGE_KEYS = {
   EPISODE_RELEASE_CACHE: "episodeReleaseCache",
   // Failover cache
   SOURCE_FAILOVER_CACHE: "sourceFailoverCache",
+  PLAYBACK_RESET_PENDING: "playbackResetPending",
   // Sidebar collapsed/expanded state
   SIDEBAR_EXPANDED: "sidebarExpanded",
   CLOSE_TO_TRAY: "closeToTray",
@@ -120,6 +121,8 @@ export const STORAGE_KEYS = {
   MUSIC_PLAYER_DOCK_GEOMETRY: "musicPlayerDockGeometry",
   MUSIC_SEARCH_HISTORY: "musicSearchHistory",
   TOAST_POSITION: "toastPosition",
+  SEARCH_ORB_POSITION: "searchOrbPosition",
+  SEARCH_ORB_ENABLED: "searchOrbEnabled",
 };
 
 export const storage = {
@@ -154,6 +157,36 @@ export const storage = {
 };
 
 export const getApiKey = () => storage.get(STORAGE_KEYS.API_KEY);
+
+const PLAYBACK_RESET_MAX = 300;
+
+export const requestPlaybackReset = (key) => {
+  if (!key) return;
+  const pending = storage.get(STORAGE_KEYS.PLAYBACK_RESET_PENDING) || {};
+  const next = { ...pending, [key]: Date.now() };
+  const entries = Object.entries(next)
+    .sort(([, a], [, b]) => Number(b) - Number(a))
+    .slice(0, PLAYBACK_RESET_MAX);
+  storage.set(STORAGE_KEYS.PLAYBACK_RESET_PENDING, Object.fromEntries(entries));
+};
+
+export const hasPlaybackReset = (key) => {
+  if (!key) return false;
+  const pending = storage.get(STORAGE_KEYS.PLAYBACK_RESET_PENDING) || {};
+  return pending[key] !== undefined;
+};
+
+export const clearPlaybackReset = (key) => {
+  if (!key) return;
+  const pending = storage.get(STORAGE_KEYS.PLAYBACK_RESET_PENDING) || {};
+  if (pending[key] === undefined) return;
+  delete pending[key];
+  if (Object.keys(pending).length) {
+    storage.set(STORAGE_KEYS.PLAYBACK_RESET_PENDING, pending);
+  } else {
+    storage.remove(STORAGE_KEYS.PLAYBACK_RESET_PENDING);
+  }
+};
 
 // ── Source failover cache ────────────────────────────────────────────────────
 const FAILOVER_CACHE_MAX = 200;

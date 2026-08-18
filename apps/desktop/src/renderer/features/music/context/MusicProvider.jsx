@@ -382,8 +382,12 @@ export function MusicProvider({ children }) {
   return <MusicContext.Provider value={value}>{children}<AudioEngine controller={value} /></MusicContext.Provider>;
 }
 
+export function useOptionalMusic() {
+  return useContext(MusicContext);
+}
+
 export function useMusic() {
-  const value = useContext(MusicContext);
+  const value = useOptionalMusic();
   if (!value) throw new Error("useMusic must be used inside MusicProvider.");
   return value;
 }

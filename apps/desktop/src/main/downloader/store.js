@@ -64,12 +64,14 @@ function normalize(records) {
   });
 }
 
-function cleanupTempFiles(downloadPath) {
-  if (!downloadPath) return;
+function cleanupTempFiles(downloadPath, outputStem) {
+  if (!downloadPath || !outputStem) return;
   try {
     const patterns = [/\.part$/, /\.part\.\d+$/, /\.part\.tmp$/, /\.tmp$/, /\.ytdl$/, /\.part-Frag\d+$/];
     if (!fs.existsSync(downloadPath)) return;
+    const prefix = `${String(outputStem).toLowerCase()}.`;
     for (const name of fs.readdirSync(downloadPath)) {
+      if (!name.toLowerCase().startsWith(prefix)) continue;
       if (patterns.some((pattern) => pattern.test(name))) {
         try { fs.unlinkSync(path.join(downloadPath, name)); } catch {}
       }

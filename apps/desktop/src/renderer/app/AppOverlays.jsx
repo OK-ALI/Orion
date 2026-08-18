@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import KeyboardShortcutsModal from "../components/KeyboardShortcutsModal";
 import SearchModal from "../components/modals/SearchModal";
 import SmartConnectModal from "../components/modals/SmartConnectModal";
@@ -6,6 +6,8 @@ import UpdateModal from "../components/UpdateModal";
 import MiniPlayer from "../components/MiniPlayer";
 import LocalPlayer from "../features/downloads/components/LocalPlayer";
 import { storage, STORAGE_KEYS } from "../services/settingsStore";
+import { observePlaybackEvidence } from "../features/player/services/playerEventProgress";
+import { markHistoryPlaybackVerified, persistPlaybackProgressDetails } from "../services/viewingStateVerification";
 import { imgUrl } from "../services/tmdb";
 
 export default function AppOverlays({ model }) {
@@ -13,8 +15,8 @@ export default function AppOverlays({ model }) {
     activeDownloadCount, apiKey, episodeCheckStatus, episodeDismissTimerRef,
     handleExpandMiniPlayer, handleSelectResult, hasCustomTitlebar, miniPlayer,
     handleMiniReady, miniTransition,
-    navigate, offline, openMiniPlayer, setEpisodeCheckStatus, setMiniPlayer, setShowSearch,
-    setShowShortcuts, setShowUpdateModal, setUpdateBanner, showSearch,
+    navigate, offline, openMiniPlayer, setEpisodeCheckStatus, setMiniPlayer,
+    setShowShortcuts, setShowUpdateModal, setUpdateBanner, showSearch, searchAnchorRect, searchWorld, closeSearch,
     showShortcuts, showUpdateModal, toast, updateBanner, saveProgress, markWatched,
     expandedLocalDownload, setExpandedLocalDownload, addHistory, handleDeleteDownload,
   } = model;
@@ -22,6 +24,8 @@ export default function AppOverlays({ model }) {
   const [toastPosition, setToastPosition] = useState(
     () => storage.get(STORAGE_KEYS.TOAST_POSITION) || "bottom-left"
   );
+
+  const miniPlaybackEvidenceRef = useRef({ key: null, lastTime: null, advances: 0, ready: false });
 
   useEffect(() => {
     const handleSettingsChanged = () => {
@@ -38,10 +42,13 @@ export default function AppOverlays({ model }) {
         <SearchModal
           isOpen={showSearch}
           apiKey={apiKey}
+          searchWorld={searchWorld}
           onSelect={handleSelectResult}
-          onViewAll={(query) => navigate("search", query)}
-          onClose={() => setShowSearch(false)}
+          onMusicNavigate={navigate}
+          onViewAll={(query) => navigate(searchWorld === "music" ? "music-search" : "search", searchWorld === "music" ? { query } : query)}
+          onClose={closeSearch}
           offline={offline}
+          anchorRect={searchAnchorRect}
         />
         {updateBanner && (
           <div
@@ -331,13 +338,24 @@ export default function AppOverlays({ model }) {
               const key = miniPlayer.mediaType === "tv"
                 ? `tv_${miniPlayer.mediaId}_s${miniPlayer.season}e${miniPlayer.episode}`
                 : `movie_${miniPlayer.mediaId}`;
+              if (miniPlaybackEvidenceRef.current.key !== key) {
+                miniPlaybackEvidenceRef.current = { key, lastTime: null, advances: 0, ready: false };
+              }
+              const transition = observePlaybackEvidence(miniPlaybackEvidenceRef.current, {
+                currentTime: Number(state.currentTime) || 0,
+                paused: Boolean(state.paused),
+                buffering: false,
+              });
+              if (transition.becameReady) markHistoryPlaybackVerified(key);
               const percent = state.duration > 0 ? Math.max(0, Math.min(100, state.currentTime / state.duration * 100)) : 0;
               storage.set("dlTime_" + key, state.currentTime);
-              const details = storage.get(STORAGE_KEYS.PROGRESS_DETAILS) || {};
-              details[key] = { currentTime: state.currentTime, duration: state.duration, percent, updatedAt: Date.now() };
-              storage.set(STORAGE_KEYS.PROGRESS_DETAILS, details);
+              persistPlaybackProgressDetails(key, {
+                currentTime: state.currentTime,
+                duration: state.duration,
+                percent,
+              }, { verified: transition.ready });
               saveProgress?.(key, percent);
-              if (state.duration - state.currentTime <= 20 && state.currentTime > 0) markWatched?.(key);
+              if (transition.ready && state.duration - state.currentTime <= 20 && state.currentTime > 0) markWatched?.(key);
             }}
             onClose={() => setMiniPlayer(null)}
             onExpand={handleExpandMiniPlayer}

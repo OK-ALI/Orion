@@ -60,6 +60,8 @@ import {
   getFailoverSource,
   setFailoverSource,
   clearFailoverSource,
+  hasPlaybackReset,
+  clearPlaybackReset,
 } from "../../../services/settingsStore";
 import { useAutoplay } from "../../../shared/utils/useAutoplay";
 import { fetchAniSkipTimings } from "../../../shared/utils/aniSkip";
@@ -70,27 +72,34 @@ import {
   getRatingCountry,
 } from "../../../shared/utils/ageRating";
 import { INJECT_SKIP_CONTROLS } from "../../player/webviewScripts/skipControls";
-import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
+import {
+  getReadyWebContentsId,
+  seekWebviewToPosition,
+  shouldHandleWebviewLoadFailure,
+} from "../../player/services/webviewLifecycle";
+import {
+  PLAYBACK_INTENT,
+  createStartPlaybackIntent,
+  getPlaybackIntentTarget,
+} from "../../player/services/playbackIntent";
 import { normalizePlayerEventProgress } from "../../player/services/playerEventProgress";
 import { useCinemaPlaybackEvidence } from "../../player/hooks/useCinemaPlaybackEvidence";
-
+import { persistPlaybackProgressDetails } from "../../../services/viewingStateVerification";
 export function useTVWebview(context) {
-  const { anilistData, autoMarkedRef, d, downloadsByEpisodeKey, dubMode, durationRef, failoverTimeoutRef, initialSeekDoneRef, introSkipMode, isAnime, isAsync, item, lastKnownTimeRef, localCountdownStartedRef, onHistory, onMarkWatchedRef, onPlay, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressViaFrames, resetAutoplayRef, resolvedPlayerUrlRef, resolvingUrlRef, saveProgressRef, seekBackCooldownRef, selectedEp, selectedSeason, setCountdownStartedRef, setInterceptedSubs, setM3u8Url, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSelectedEp, setShowFailoverPrompt, setShowResumePrompt, setSkipPrompt, setSkipTimings, setWebviewLoading, skipPrompt, skipTimings, switchingToMiniPlayerRef, triggerAutoplayRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef } = context;
+  const { anilistData, autoMarkedRef, d, downloadsByEpisodeKey, dubMode, durationRef, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, introSkipMode, isAnime, isAsync, item, lastKnownTimeRef, localCountdownStartedRef, onHistory, onMarkWatchedRef, onPlay, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressViaFrames, resetAutoplayRef, resolvedPlayerUrlRef, resolvingUrlRef, saveProgressRef, seekBackCooldownRef, selectedEp, selectedSeason, setCountdownStartedRef, setInterceptedSubs, setM3u8Url, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSelectedEp, setShowFailoverPrompt, setShowResumePrompt, setSkipPrompt, setSkipTimings, setWebviewLoading, skipPrompt, skipTimings, switchingToMiniPlayerRef, triggerAutoplayRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef } = context;
   const currentProgressKey = selectedEp
     ? `tv_${item.id}_s${selectedSeason}e${selectedEp.episode_number}`
     : null;
-  const { healthEvidenceRef, playerEventProgressRef, attemptedSourcesRef, reportSourceHealth } = useCinemaPlaybackEvidence({
-    playing, sourceId: playerSource, mediaType: isAnime ? "anime" : "tv", resetKey: currentProgressKey,
+  const { healthEvidenceRef, playerEventProgressRef, attemptedSourcesRef, observePlaybackProgress, reportSourceHealth } = useCinemaPlaybackEvidence({
+    playing, sourceId: playerSource, mediaType: isAnime ? "anime" : "tv", resetKey: currentProgressKey, viewingKey: currentProgressKey,
     webviewRef, durationRef, lastKnownTimeRef, setWebviewLoading, setShowFailoverPrompt,
   });
-
   // Check if currently-playing episode is already downloaded or downloading
   const currentEpDownload = selectedEp
     ? (downloadsByEpisodeKey.get(
         `s${selectedSeason}e${selectedEp.episode_number}`,
       ) ?? null)
     : null;
-
   // Reset auto-mark guard and autoplay when episode changes
   useEffect(() => {
     autoMarkedRef.current = false;
@@ -101,7 +110,6 @@ export function useTVWebview(context) {
     initialSeekDoneRef.current = false; // Reset initial seek!
     resetAutoplayRef.current?.();
   }, [currentProgressKey]);
-
   // Auto-failover detection effect
   useEffect(() => {
     if (!playing) {
@@ -109,20 +117,16 @@ export function useTVWebview(context) {
       clearTimeout(failoverTimeoutRef.current);
       return;
     }
-
     setShowFailoverPrompt(false);
     clearTimeout(failoverTimeoutRef.current);
-
     failoverTimeoutRef.current = setTimeout(() => {
       if (lastKnownTimeRef.current === 0) {
         setShowFailoverPrompt(true);
         reportSourceHealth("slow", "startup-timeout", "Playback has not advanced after 15 seconds.");
       }
     }, 15000);
-
     return () => clearTimeout(failoverTimeoutRef.current);
   }, [playing, playerSource, selectedEp?.episode_number, reportSourceHealth]);
-
   const handleFailoverNextSource = useCallback(() => {
     reportSourceHealth("degraded", "playback-stalled", "The user switched after playback stalled.");
     attemptedSourcesRef.current = [...new Set([...attemptedSourcesRef.current, playerSource])];
@@ -137,12 +141,10 @@ export function useTVWebview(context) {
       setShowFailoverPrompt(false);
     }
   }, [playerSource, item.id, selectedSeason, selectedEp, dubMode, isAnime, reportSourceHealth]);
-
   // Show loader instantly when playback starts
   useEffect(() => {
     if (playing) setWebviewLoading(true);
   }, [playing]);
-
   // ── Webview memory cleanup ────────────────────────────────────────────────
   // useLayoutEffect fires synchronously BEFORE React mutates the DOM, so the
   // webview is still attached when we navigate it to about:blank.
@@ -156,10 +158,8 @@ export function useTVWebview(context) {
       } catch {}
     }
   }, [playing]);
-
   // Removing the webview from the DOM disposes its guest WebContents. A global
   // cleanup here can race an automatic handoff and destroy the new mini-player.
-
   const applyVoiceBoost = useCallback(() => {
     const wv = webviewRef.current;
     if (!wv) return;
@@ -168,7 +168,6 @@ export function useTVWebview(context) {
         try {
           const v = document.querySelector('video');
           if (!v) return;
-          
           if (!${voiceBoost}) {
             if (window.__orionAudioNodes) {
               const { source, highpass, peaking, highshelf, compressor, gain, dest } = window.__orionAudioNodes;
@@ -339,7 +338,7 @@ export function useTVWebview(context) {
     if (!wv) return;
     const done = () => setWebviewLoading(false);
     const failed = (event) => {
-      if (event?.isMainFrame === false) return;
+      if (!shouldHandleWebviewLoadFailure(event)) return;
       setWebviewLoading(false);
       setShowFailoverPrompt(true);
       reportSourceHealth(
@@ -465,6 +464,7 @@ export function useTVWebview(context) {
           if (!wv) return;
 
           let result = normalizePlayerEventProgress(playerEventProgressRef.current);
+          let needsEvidenceObservation = !result;
           // When the pop-out window is open the main webview shows about:blank
           // -> query the pip window's webContents directly.
           if (!result &&
@@ -537,36 +537,28 @@ export function useTVWebview(context) {
           if (result && result.duration > 0 && result.duration !== Infinity) {
             durationRef.current = result.duration;
             const ct = result.currentTime;
-            const evidence = healthEvidenceRef.current;
-            if (!evidence.ready) {
-              const current = Number(ct) || 0;
-              if (evidence.lastTime != null && current > evidence.lastTime + 0.2 && !result.paused) evidence.advances += 1;
-              else if (evidence.lastTime != null && current <= evidence.lastTime && !result.paused) evidence.advances = 0;
-              evidence.lastTime = current;
-              if (evidence.advances >= 2) {
-                evidence.ready = true;
-                reportSourceHealth("ready");
-              }
-            }
+            const playbackVerified = needsEvidenceObservation
+              ? observePlaybackProgress(result)
+              : healthEvidenceRef.current.ready === true;
 
             // Clear failover prompt since video is playing
             setShowFailoverPrompt(false);
             clearTimeout(failoverTimeoutRef.current);
 
-            // Initial seek to resume playback time on load
+            // Apply the explicit playback intent once the real video exists.
             if (!initialSeekDoneRef.current) {
-              initialSeekDoneRef.current = true;
-              const startTime = storage.get("dlTime_" + currentProgressKey) || 0;
-              if (startTime > 10 && Math.abs(ct - startTime) > 5) {
-                try {
-                  await wv.executeJavaScript(`
-                    (() => {
-                      const v = document.querySelector('video');
-                      if (v) v.currentTime = ${startTime};
-                    })()
-                  `);
-                } catch {}
-                return;
+              const target = getPlaybackIntentTarget(playbackIntentRef.current);
+              const mustSeek = playbackIntentRef.current?.type === PLAYBACK_INTENT.START_FROM_ZERO ||
+                (target !== null && Math.abs(ct - target) > 2);
+              if (target === null || !mustSeek) initialSeekDoneRef.current = true;
+              else {
+                initialSeekDoneRef.current = await seekWebviewToPosition(wv, target);
+                if (initialSeekDoneRef.current) {
+                  if (playbackIntentRef.current?.type === PLAYBACK_INTENT.START_FROM_ZERO) {
+                    clearPlaybackReset(currentProgressKey);
+                  }
+                  return;
+                }
               }
             }
 
@@ -605,16 +597,20 @@ export function useTVWebview(context) {
               lastKnownTimeRef.current = ct;
             }
             const p = Math.floor((ct / result.duration) * 100);
-            saveProgressRef.current(currentProgressKey, Math.min(p, 100));
-            const progressDetails = storage.get(STORAGE_KEYS.PROGRESS_DETAILS) || {};
-            progressDetails[currentProgressKey] = { currentTime: ct, duration: result.duration, percent: Math.min(p, 100), updatedAt: Date.now() };
-            storage.set(STORAGE_KEYS.PROGRESS_DETAILS, progressDetails);
+            const safePercent = Math.min(p, 100);
+            saveProgressRef.current(currentProgressKey, safePercent);
+            persistPlaybackProgressDetails(currentProgressKey, {
+              currentTime: ct,
+              duration: result.duration,
+              percent: safePercent,
+            }, { verified: playbackVerified });
             // Also persist actual seconds so DownloadsPage can show resume position
             storage.set("dlTime_" + currentProgressKey, Math.floor(ct));
 
-            // Auto-mark watched when remaining time ≤ threshold
+            // Auto-mark watched only after real playback advancement is proven.
             const remaining = result.duration - ct;
             if (
+              playbackVerified &&
               !autoMarkedRef.current &&
               remaining <= watchedThreshold &&
               remaining >= 0
@@ -650,6 +646,7 @@ export function useTVWebview(context) {
     currentProgressKey,
     watchedThreshold,
     progressViaFrames,
+    observePlaybackProgress,
     reportSourceHealth,
   ]);
 
@@ -754,7 +751,17 @@ export function useTVWebview(context) {
     };
   }, [playing, playerSource]);
 
-  const startPlayingEp = (ep, time) => {
+  const startPlayingEp = (ep, time = 0, intentType = null) => {
+    const epProgressKey = `tv_${item.id}_s${selectedSeason}e${ep.episode_number}`;
+    const forceReset = hasPlaybackReset(epProgressKey);
+    const nextIntent = createStartPlaybackIntent({ time, intentType, forceReset });
+    const safeTime = nextIntent.position;
+    playbackIntentRef.current = nextIntent;
+    initialSeekDoneRef.current = false;
+    // Seed runtime progress to the requested start position so the quality-change
+    // recovery guard cannot mistake an intentional Start Over seek for a provider reset.
+    lastKnownTimeRef.current = safeTime;
+    seekBackCooldownRef.current = 0;
     setShowResumePrompt(false);
     setM3u8Url(null);
     setInterceptedSubs([]);
@@ -764,8 +771,7 @@ export function useTVWebview(context) {
     setResolvingUrl(false);
     setResolveError(null);
     
-    const epProgressKey = `tv_${item.id}_s${selectedSeason}e${ep.episode_number}`;
-    storage.set("dlTime_" + epProgressKey, time);
+    storage.set("dlTime_" + epProgressKey, safeTime);
     
     setSelectedEp(ep);
     setPlaying(true);

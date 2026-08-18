@@ -6,6 +6,22 @@ const YTMUSIC_ORIGIN = "https://music.youtube.com";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0";
 
+const YOUTUBE_STREAMING_PLAYER_CLIENT = "android";
+
+function buildYoutubeMusicResolveArgs(videoId) {
+  return [
+    `https://music.youtube.com/watch?v=${videoId}`,
+    "--dump-single-json",
+    "--skip-download",
+    "--extractor-args",
+    `youtube:player_client=${YOUTUBE_STREAMING_PLAYER_CLIENT}`,
+    "--format",
+    "bestaudio[ext=m4a]/bestaudio/best",
+    "--no-playlist",
+    "--no-warnings",
+  ];
+}
+
 let visitorId = "";
 const streamUrlCache = new Map();
 
@@ -398,15 +414,10 @@ async function resolveVideo(videoId) {
   const cached = streamUrlCache.get(videoId);
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.resource;
   const binary = await binaryPath();
-  const output = await run(binary, [
-    `https://music.youtube.com/watch?v=${videoId}`,
-    "--dump-single-json",
-    "--skip-download",
-    "--format",
-    "bestaudio[ext=m4a]/bestaudio/best",
-    "--no-playlist",
-    "--no-warnings",
-  ], 35_000);
+  // Upstream compatibility policy: yt-dlp 2026.07.04 can currently resolve
+  // default android_vr Googlevideo URLs that later fail with HTTP 403.
+  // Keep the workaround isolated to Music streaming so Downloader behavior stays locked.
+  const output = await run(binary, buildYoutubeMusicResolveArgs(videoId), 35_000);
   const payload = JSON.parse(output);
   const selected = payload.requested_downloads?.[0] || payload;
   if (!selected?.url || !/^https?:\/\//i.test(selected.url)) {
@@ -545,6 +556,8 @@ function createYtMusicProviders() {
 }
 
 module.exports = {
+  YOUTUBE_STREAMING_PLAYER_CLIENT,
+  buildYoutubeMusicResolveArgs,
   collectCatalogSections,
   collectContinuationTokens,
   collectMusicItems,

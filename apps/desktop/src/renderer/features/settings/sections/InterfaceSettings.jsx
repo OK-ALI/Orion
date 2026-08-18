@@ -51,6 +51,7 @@ export function AppearanceSection({ sectionRef = null }) {
   );
   const [cinemaSidebarMode, setCinemaSidebarMode] = useState(() => readSidebarMode("cinema"));
   const [musicSidebarMode, setMusicSidebarMode] = useState(() => readSidebarMode("music"));
+  const [searchOrbEnabled, setSearchOrbEnabled] = useState(() => storage.get(STORAGE_KEYS.SEARCH_ORB_ENABLED) !== false);
   const [customVars, setCustomVars] = useState(
     () =>
       storage.get(STORAGE_KEYS.CUSTOM_THEME_VARS) || { ...DEFAULT_CUSTOM_VARS },
@@ -575,20 +576,41 @@ export function AppearanceSection({ sectionRef = null }) {
 
       <div className="orion-appearance-grid" style={{ marginBottom: 24 }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)", marginBottom: 8 }}>Cinema sidebar mode</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)", marginBottom: 8 }}>Cinema sidebar behavior</div>
           <SettingsSelect value={cinemaSidebarMode} onChange={(value) => {
             setCinemaSidebarMode(value);
             writeSidebarMode("cinema", value);
           }} options={SIDEBAR_MODE_OPTIONS} />
-          <small style={{ display: "block", marginTop: 6, color: "var(--text3)" }}>Choose full navigation, icons only, or the vertical Orion Cinema rail.</small>
+          <small style={{ display: "block", marginTop: 6, color: "var(--text3)" }}>Auto rail rests as ORION CINEMA and reveals the full navigation on hover. Keep open reserves the full sidebar width.</small>
         </div>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)", marginBottom: 8 }}>Music Planet sidebar mode</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)", marginBottom: 8 }}>Music Planet sidebar behavior</div>
           <SettingsSelect value={musicSidebarMode} onChange={(value) => {
             setMusicSidebarMode(value);
             writeSidebarMode("music", value);
           }} options={SIDEBAR_MODE_OPTIONS} />
-          <small style={{ display: "block", marginTop: 6, color: "var(--text3)" }}>Music remembers its navigation width independently from Cinema.</small>
+          <small style={{ display: "block", marginTop: 6, color: "var(--text3)" }}>Music keeps its Auto rail / Keep open preference independently from Cinema.</small>
+        </div>
+      </div>
+
+      <div className="orion-search-shortcut-setting" style={{ marginBottom: 24 }}>
+        <div className="orion-search-shortcut-copy">
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)", marginBottom: 4 }}>Search shortcut</div>
+          <small style={{ display: "block", color: "var(--text3)" }}>The floating Search Orb follows the active Orion world. Left-click opens full Search; right-click opens Quick Search; drag it to choose where it rests.</small>
+        </div>
+        <div className="orion-search-shortcut-actions">
+          <label className="orion-search-shortcut-toggle">
+            <Toggle value={searchOrbEnabled} onChange={(value) => {
+              setSearchOrbEnabled(value);
+              storage.set(STORAGE_KEYS.SEARCH_ORB_ENABLED, value);
+              window.dispatchEvent(new CustomEvent("orion:search-orb-visibility-changed"));
+            }} />
+            <span>{searchOrbEnabled ? "Shown" : "Hidden"}</span>
+          </label>
+          <button type="button" className="btn btn-secondary" disabled={!searchOrbEnabled}
+            onClick={() => window.dispatchEvent(new CustomEvent("orion:reset-search-orb"))}>
+            Reset position
+          </button>
         </div>
       </div>
 

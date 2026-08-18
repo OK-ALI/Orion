@@ -1,0 +1,78 @@
+/* MUSIC-UI C6.2: Plugin stage coherence.
+   Removes component-local raw styling and makes plugin cards theme-native. */
+
+.music-plugin-stage-grid {
+  align-items: stretch;
+}
+
+.music-plugin-stage-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: clamp(20px, 2.4vw, 32px);
+  text-align: center;
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--music-highlight) 6%, transparent), transparent 48%),
+    var(--music-glass-panel);
+}
+
+.music-plugin-stage-copy {
+  min-width: 0;
+}
+
+.music-plugin-stage-copy > strong {
+  color: var(--mp-text);
+  font-family: var(--music-display-font, var(--font-heading));
+  font-size: 17px;
+}
+
+.music-plugin-stage-meta {
+  margin: 8px 0 0;
+  color: var(--mp-muted);
+  font-size: 12px;
+}
+
+.music-plugin-stage-description {
+  max-width: 34ch;
+  margin: 9px auto 0;
+  color: var(--mp-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.music-plugin-stage-toggle {
+  min-width: 104px;
+  min-height: 38px;
+  border: 1px solid var(--music-glass-line-soft);
+  border-radius: 999px;
+  padding: 0 15px;
+  color: var(--mp-text);
+  background: var(--music-hover-glass);
+  font-weight: 700;
+}
+
+.music-plugin-stage-toggle.is-enabled {
+  border-color: color-mix(in srgb, var(--music-source-ok) 36%, var(--music-glass-line-soft));
+  color: var(--music-source-ok);
+  background: color-mix(in srgb, var(--music-source-ok) 10%, var(--music-glass-panel));
+}
+
+.music-plugin-stage-toggle:hover,
+.music-plugin-stage-toggle:focus-visible {
+  border-color: var(--music-glass-edge);
+  box-shadow: 0 0 22px var(--music-orbital-glow-soft);
+}
+
+@media (max-width: 720px) {
+  .music-plugin-stage-card {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .music-plugin-stage-description {
+    margin-inline: 0;
+  }
+}

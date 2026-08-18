@@ -1,4 +1,6 @@
 import MusicAppearanceSettings from "../../settings/sections/MusicAppearanceSettings";
+import MusicThemeQuickSwitch from "../components/MusicThemeQuickSwitch";
+import "../../../styles/features/music/music-settings-shortcuts.css";
 
 export default function MusicSettingsPage() {
   return (
@@ -8,6 +10,7 @@ export default function MusicSettingsPage() {
         <h1>Settings</h1>
         <p>Shape the living orb, visualizer, lyric motion, portal sound, cache and performance behavior without leaving Music Planet.</p>
       </header>
+      <MusicThemeQuickSwitch />
       <MusicAppearanceSettings />
     </div>
   );

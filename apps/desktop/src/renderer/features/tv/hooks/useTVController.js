@@ -119,6 +119,7 @@ const [details, setDetails] = useState(null);
   const [resumeTime, setResumeTime] = useState(0);
   const [pendingEpToPlay, setPendingEpToPlay] = useState(null);
   const initialSeekDoneRef = useRef(false);
+  const playbackIntentRef = useRef({ type: "fresh", position: 0 });
   const [showFailoverPrompt, setShowFailoverPrompt] = useState(false);
   const failoverTimeoutRef = useRef(null);
   const [loading, setLoading] = useState(true);
@@ -454,6 +455,7 @@ const [details, setDetails] = useState(null);
     resolvingUrlRef.current = false;
     setResolvingUrl(false);
     setResolveError(null);
+    initialSeekDoneRef.current = false;
     setWebviewLoading(true); // instantly blank the player on every source/episode switch
   }, [
     item.id,
@@ -662,7 +664,7 @@ const [details, setDetails] = useState(null);
   });
 
     const { currentEpDownload, currentProgressKey, handleFailoverNextSource, handleManualSkip, startPlayingEp } = useTVWebview({
-    anilistData, autoMarkedRef, d, downloadsByEpisodeKey, dubMode, durationRef, failoverTimeoutRef, initialSeekDoneRef, introSkipMode, isAnime, isAsync, item, lastKnownTimeRef, localCountdownStartedRef, onHistory, onMarkWatchedRef, onPlay, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressViaFrames, resetAutoplayRef, resolvedPlayerUrlRef, resolvingUrlRef, saveProgressRef, seekBackCooldownRef, selectedEp, selectedSeason, setCountdownStartedRef, setInterceptedSubs, setM3u8Url, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSelectedEp, setShowFailoverPrompt, setShowResumePrompt, setSkipPrompt, setSkipTimings, setWebviewLoading, skipPrompt, skipTimings, switchingToMiniPlayerRef, triggerAutoplayRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef
+    anilistData, autoMarkedRef, d, downloadsByEpisodeKey, dubMode, durationRef, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, introSkipMode, isAnime, isAsync, item, lastKnownTimeRef, localCountdownStartedRef, onHistory, onMarkWatchedRef, onPlay, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressViaFrames, resetAutoplayRef, resolvedPlayerUrlRef, resolvingUrlRef, saveProgressRef, seekBackCooldownRef, selectedEp, selectedSeason, setCountdownStartedRef, setInterceptedSubs, setM3u8Url, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSelectedEp, setShowFailoverPrompt, setShowResumePrompt, setSkipPrompt, setSkipTimings, setWebviewLoading, skipPrompt, skipTimings, switchingToMiniPlayerRef, triggerAutoplayRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef
   });
 
 

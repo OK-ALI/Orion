@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { isObviousMediaSegmentUrl } = require("./mediaSegments");
 
 const MAX_CANDIDATES = 60;
 const MAX_AGE_MS = 15 * 60 * 1000;
@@ -22,6 +23,7 @@ function classifyStream(url, responseHeaders = {}, resourceType = "") {
   const value = String(url || "").toLowerCase();
   const contentType = headerValue(responseHeaders, "content-type").toLowerCase();
   const disposition = headerValue(responseHeaders, "content-disposition").toLowerCase();
+  if (isObviousMediaSegmentUrl(url)) return null;
   const hlsUrl = /(?:\.m3u8|\/m3u8)(?:$|[/?#&])/.test(value) ||
     /[?&](?:format|type|ext)=m3u8(?:&|$)/.test(value);
   const dashUrl = /(?:\.mpd|\/mpd)(?:$|[/?#&])/.test(value) ||

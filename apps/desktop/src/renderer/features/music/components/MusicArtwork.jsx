@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { deterministicPalette } from "../visual/artworkPalette";
+import "../../../styles/features/music/artwork-fallback.css";
 
 export default function MusicArtwork({ track, currentArtwork, className = "", label = "", children, variant = "track", fit = "cover" }) {
   const [url, setUrl] = useState(currentArtwork?.url || "");
@@ -21,6 +22,6 @@ export default function MusicArtwork({ track, currentArtwork, className = "", la
     style={{ "--art-base": palette.base, "--art-primary": palette.primary, "--art-spectral": palette.spectral,
       ...(url ? { backgroundImage: `url(${url})` } : {}) }}>
     {!url && status === "loading" && <span className="music-artwork-shimmer" aria-hidden="true" />}
-    {!url && status === "error" && <span className="music-generated-stars" aria-hidden="true"><i /><i /><i /><i /></span>}{children}
+    {!url && status === "error" && <span className="music-generated-art" aria-hidden="true"><i /></span>}{children}
   </span>;
 }

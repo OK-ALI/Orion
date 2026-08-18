@@ -158,25 +158,41 @@ test("Smart Connect reports live transport and applies pointer commands", async 
         sentAt: Date.now(),
       },
     }));
-    const acknowledgement = await waitForEnvelope(
-      socket,
-      (message) => message.type === "ack" && message.payload?.id === commandId,
-    );
-    expect(acknowledgement.payload.ok).toBe(true);
-    expect(acknowledgement.payload.pointer).toEqual({ x: 0.25, y: 0.4 });
-
+    // cursor_move is realtime/droppable by protocol design and is intentionally
+    // not ACKed. Validate application through the rendered cursor instead.
     const cursor = page.locator(".orion-virtual-cursor");
     await expect(cursor).toBeVisible();
-    const cursorPosition = await cursor.evaluate((element) => ({
-      left: Number.parseFloat(element.style.left),
-      top: Number.parseFloat(element.style.top),
-      width: window.innerWidth,
-      height: window.innerHeight,
-    }));
-    expect(cursorPosition.left / cursorPosition.width).toBeCloseTo(0.25, 1);
-    expect(cursorPosition.top / cursorPosition.height).toBeCloseTo(0.4, 1);
+    await expect.poll(
+      () => cursor.evaluate((element) => Number(element.dataset.x) / window.innerWidth),
+    ).toBeCloseTo(0.25, 1);
+    await expect.poll(
+      () => cursor.evaluate((element) => Number(element.dataset.y) / window.innerHeight),
+    ).toBeCloseTo(0.4, 1);
 
-    await expect(cursor).toHaveCount(0, { timeout: 5_000 });
+    // Reliable commands still use the ACK contract. Keep explicit E2E coverage
+    // for that path without imposing ACK semantics on realtime pointer traffic.
+    const reliableCommandId = "reliable-home-test";
+    socket.send(JSON.stringify({
+      version: 3,
+      type: "command",
+      deviceId: "electron-test-mobile",
+      connectionId: ticketResponse.value.connectionId,
+      sequence: 2,
+      commandId: reliableCommandId,
+      payload: {
+        id: reliableCommandId,
+        sequence: 2,
+        action: "home",
+        sentAt: Date.now(),
+      },
+    }));
+    const reliableAcknowledgement = await waitForEnvelope(
+      socket,
+      (message) => message.type === "ack" && message.payload?.id === reliableCommandId,
+    );
+    expect(reliableAcknowledgement.payload.ok).toBe(true);
+
+    await expect(cursor).toHaveCSS("opacity", "0", { timeout: 5_000 });
 
     const restoreCommandId = "pointer-test-2";
     socket.send(JSON.stringify({
@@ -184,32 +200,64 @@ test("Smart Connect reports live transport and applies pointer commands", async 
       type: "command",
       deviceId: "electron-test-mobile",
       connectionId: ticketResponse.value.connectionId,
-      sequence: 2,
+      sequence: 3,
       commandId: restoreCommandId,
       payload: {
         id: restoreCommandId,
-        sequence: 2,
+        sequence: 3,
         action: "cursor_move",
         pointer: { x: 0.3, y: 0.45 },
         sentAt: Date.now(),
       },
     }));
-    await waitForEnvelope(
-      socket,
-      (message) => message.type === "ack" && message.payload?.id === restoreCommandId,
-    );
     await expect(cursor).toBeVisible();
 
-    await cursor.evaluate((element) => {
-      element.classList.add("spatial-remote-focused");
+    // Exercise real remote-hover ownership instead of attaching the focus class
+    // to the virtual cursor. Production only assigns spatial-remote-focused to
+    // interactive UI elements beneath the remote pointer.
+    await page.evaluate(() => {
+      const target = document.createElement("button");
+      target.id = "e2e-smartconnect-hover-target";
+      target.type = "button";
+      target.textContent = "Smart Connect E2E hover target";
+      Object.assign(target.style, {
+        position: "fixed",
+        left: "calc(30vw - 30px)",
+        top: "calc(45vh - 30px)",
+        width: "60px",
+        height: "60px",
+        zIndex: "2147483646",
+        opacity: "0.01",
+        pointerEvents: "auto",
+      });
+      document.body.appendChild(target);
     });
+
+    const hoverTarget = page.locator("#e2e-smartconnect-hover-target");
+    const hoverCommandId = "pointer-hover-test";
+    socket.send(JSON.stringify({
+      version: 3,
+      type: "command",
+      deviceId: "electron-test-mobile",
+      connectionId: ticketResponse.value.connectionId,
+      sequence: 4,
+      commandId: hoverCommandId,
+      payload: {
+        id: hoverCommandId,
+        sequence: 4,
+        action: "cursor_move",
+        pointer: { x: 0.3, y: 0.45 },
+        sentAt: Date.now(),
+      },
+    }));
+    await expect(hoverTarget).toHaveClass(/spatial-remote-focused/);
 
     socket.close();
     await expect.poll(
       () => page.evaluate(() => window.electron.getSmartConnectInfo().then((value) => value.connected)),
     ).toBe(false);
-    await expect(cursor).toHaveCount(0);
-    await expect(page.locator(".spatial-remote-focused")).toHaveCount(0);
+    await expect(cursor).toHaveCSS("opacity", "0");
+    await expect(hoverTarget).not.toHaveClass(/spatial-remote-focused/);
   } finally {
     try { socket?.close(); } catch {}
     await app.close();

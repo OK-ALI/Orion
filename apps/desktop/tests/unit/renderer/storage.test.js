@@ -2,9 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { STORAGE_KEYS, formatBytes, storage } from "../../../src/renderer/services/settingsStore";
 import {
   BACKUP_KEYS,
+  LEGACY_CLOUD_VIEWING_FENCE_MARKER,
+  LEGACY_CLOUD_VIEWING_STATE_KEYS,
   collectBackupData,
   collectCompleteBackupData,
+  collectLegacyCloudSyncData,
   restoreCompleteBackupData,
+  restoreLegacyCloudSyncData,
 } from "../../../src/renderer/services/backup";
 
 describe("v1.0.7 renderer storage compatibility", () => {
@@ -63,6 +67,37 @@ describe("v1.0.7 renderer storage compatibility", () => {
     expect(BACKUP_KEYS).not.toContain(STORAGE_KEYS.SUBDL_API_KEY);
     expect(BACKUP_KEYS).not.toContain(STORAGE_KEYS.WYZIE_API_KEY);
     expect(BACKUP_KEYS).not.toContain(STORAGE_KEYS.API_KEY);
+  });
+
+  it("fences viewing state out of the legacy Google cloud backup without weakening file backups", async () => {
+    storage.set(STORAGE_KEYS.SAVED, { movie_1: { id: 1 } });
+    storage.set(STORAGE_KEYS.HISTORY, [{ id: 1, media_type: "movie", playbackVerified: true }]);
+    storage.set(STORAGE_KEYS.WATCH_PROGRESS, { movie_1: 44 });
+    storage.set(STORAGE_KEYS.PROGRESS_DETAILS, { movie_1: { currentTime: 44, duration: 100, playbackVerified: true } });
+    storage.set(STORAGE_KEYS.WATCHED, { movie_1: true });
+
+    const fileBackup = collectBackupData();
+    expect(fileBackup.history).toHaveLength(1);
+    expect(fileBackup.progress.movie_1).toBe(44);
+    expect(fileBackup.watched.movie_1).toBe(true);
+
+    const cloudBackup = await collectLegacyCloudSyncData();
+    for (const key of LEGACY_CLOUD_VIEWING_STATE_KEYS) expect(cloudBackup[key]).toBeUndefined();
+    expect(cloudBackup[LEGACY_CLOUD_VIEWING_FENCE_MARKER]).toBe(true);
+    expect(cloudBackup.saved.movie_1.id).toBe(1);
+
+    await restoreLegacyCloudSyncData({
+      history: [{ id: 99, media_type: "movie" }],
+      progress: { movie_99: 90 },
+      progressDetails: { movie_99: { currentTime: 90, duration: 100 } },
+      watched: { movie_99: true },
+      saved: { movie_2: { id: 2 } },
+    });
+
+    expect(storage.get(STORAGE_KEYS.HISTORY)[0].id).toBe(1);
+    expect(storage.get(STORAGE_KEYS.WATCH_PROGRESS)).toEqual({ movie_1: 44 });
+    expect(storage.get(STORAGE_KEYS.WATCHED)).toEqual({ movie_1: true });
+    expect(storage.get(STORAGE_KEYS.SAVED)).toEqual({ movie_2: { id: 2 } });
   });
 
   it("includes portable SQLite Music state without placing credentials in renderer storage", async () => {

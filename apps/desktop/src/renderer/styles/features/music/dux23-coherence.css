@@ -1,0 +1,483 @@
+/* DUX-2.3 Music coherence: sidebar layering, shared icon identity, Projector Silver bridge. */
+.app-shell.music-world .sidebar { z-index: 240; }
+.music-planet-container > .music-header { z-index: 80; }
+.music-planet-floating-panel { z-index: 90; }
+
+.music-header-planet {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 0;
+  color: var(--music-highlight);
+  background: transparent;
+  box-shadow: none;
+}
+.music-header-planet svg {
+  width: 25px;
+  height: 25px;
+  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--music-highlight) 28%, transparent));
+}
+.music-header-planet i { display: none; }
+
+[data-theme="light"] .music-planet-container {
+  --mp-bg: var(--music-scene-base, var(--bg-base));
+  --mp-text: var(--music-scene-text, var(--text-primary));
+  --mp-muted: var(--music-scene-muted, var(--text-secondary));
+  --mp-line: var(--music-scene-line, var(--border));
+  --mp-surface: var(--music-scene-surface, var(--bg-elevated));
+  --mp-surface-active: var(--music-scene-surface-active, var(--bg-surface));
+  --music-glass-edge: color-mix(in srgb, var(--text-primary) 17%, transparent);
+  --music-hover-glass: color-mix(in srgb, var(--music-violet) 8%, var(--bg-elevated));
+  --music-active-surface: color-mix(in srgb, var(--music-violet) 10%, var(--bg-surface));
+  color: var(--mp-text);
+  background: var(--music-scene-base);
+}
+
+[data-theme="light"] .music-planet-canvas-container,
+[data-theme="light"] .music-planet-canvas-container[data-scene-style="aurora"],
+[data-theme="light"] .music-planet-canvas-container[data-scene-style="dust"],
+[data-theme="light"] .music-planet-canvas-container[data-scene-style="minimal"] {
+  background-color: var(--music-scene-base);
+  background-image:
+    radial-gradient(ellipse at 18% 20%, color-mix(in srgb, var(--music-violet) 15%, transparent), transparent 43%),
+    radial-gradient(ellipse at 78% 72%, color-mix(in srgb, var(--music-highlight) 9%, transparent), transparent 48%),
+    linear-gradient(145deg, color-mix(in srgb, var(--bg-base) 96%, #fff), var(--music-scene-base));
+}
+[data-theme="light"] .music-planet-canvas-container canvas {
+  opacity: .62;
+  mix-blend-mode: multiply;
+}
+
+[data-theme="light"] .music-planet-container > .music-header {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+  border-bottom-color: var(--border);
+  box-shadow: 0 10px 32px color-mix(in srgb, var(--shadow-color) 18%, transparent);
+  backdrop-filter: blur(20px) saturate(108%);
+  -webkit-backdrop-filter: blur(20px) saturate(108%);
+}
+[data-theme="light"] .music-header-title,
+[data-theme="light"] .music-header-title > span:last-child { color: var(--text-primary); }
+[data-theme="light"] .music-header-icon-btn { color: var(--text-secondary); }
+[data-theme="light"] .music-header-icon-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+[data-theme="light"] .music-header-search-input-wrapper {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  border-color: var(--border);
+}
+[data-theme="light"] .music-header-search-input-wrapper input { color: var(--text-primary); }
+[data-theme="light"] .music-header-search-input-wrapper input::placeholder { color: var(--text-muted); }
+
+[data-theme="light"] .music-planet-container .music-planet-detail-overlay {
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--music-violet) 11%, transparent), transparent 55%),
+    color-mix(in srgb, var(--bg-base) 88%, transparent);
+}
+[data-theme="light"] .music-planet-detail-overlay .music-page,
+[data-theme="light"] .music-signal-page,
+[data-theme="light"] .music-settings-page,
+[data-theme="light"] .music-search-page,
+[data-theme="light"] .music-core-page {
+  color: var(--text-primary);
+}
+[data-theme="light"] .music-settings-page .music-settings-section {
+  border-color: var(--border);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--bg-elevated) 94%, transparent), color-mix(in srgb, var(--bg-surface) 72%, transparent));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.72), 0 24px 66px color-mix(in srgb, var(--shadow-color) 22%, transparent);
+}
+[data-theme="light"] .music-settings-page .music-setting-row::after {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text-primary) 14%, transparent) 16%, color-mix(in srgb, var(--text-primary) 14%, transparent) 84%, transparent);
+}
+
+[data-theme="light"] .music-stage-lens,
+[data-theme="light"] .music-core-panel,
+[data-theme="light"] .music-open-list,
+[data-theme="light"] .music-right-panel {
+  color: var(--mp-text);
+  border-color: var(--music-scene-line);
+  background: color-mix(in srgb, var(--music-scene-glass-strong) 92%, transparent);
+  box-shadow: 0 22px 58px color-mix(in srgb, var(--shadow-color) 20%, transparent);
+}
+[data-theme="light"] .music-stage-heading button,
+[data-theme="light"] .music-stage-state-actions button,
+[data-theme="light"] .music-actions button,
+[data-theme="light"] .music-toolbar button,
+[data-theme="light"] .music-section-heading button,
+[data-theme="light"] .music-empty button,
+[data-theme="light"] .music-load-more button {
+  color: var(--text-primary);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+}
+[data-theme="light"] .music-stage-heading button:hover,
+[data-theme="light"] .music-stage-state-actions button:hover,
+[data-theme="light"] .music-empty button:hover,
+[data-theme="light"] .music-load-more button:hover {
+  border-color: color-mix(in srgb, var(--music-violet) 36%, var(--border));
+  background: color-mix(in srgb, var(--music-violet) 9%, var(--bg-elevated));
+}
+[data-theme="light"] .music-filter-pills button { color: var(--text-secondary); }
+[data-theme="light"] .music-filter-pills button.active {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--music-violet) 28%, var(--border));
+  background: color-mix(in srgb, var(--music-violet) 8%, var(--bg-elevated));
+}
+[data-theme="light"] .music-page-header p,
+[data-theme="light"] .music-stage-heading p,
+[data-theme="light"] .music-stage-state p,
+[data-theme="light"] .music-muted,
+[data-theme="light"] .music-setting-row small,
+[data-theme="light"] .music-track-copy small,
+[data-theme="light"] .music-track-duration { color: var(--mp-muted); }
+[data-theme="light"] .music-page-header h1,
+[data-theme="light"] .music-stage-heading h2,
+[data-theme="light"] .music-stage-state strong,
+[data-theme="light"] .music-section-heading h2,
+[data-theme="light"] .music-setting-row strong,
+[data-theme="light"] .music-track-copy strong,
+[data-theme="light"] .music-empty h2 { color: var(--mp-text); }
+[data-theme="light"] .music-eyebrow,
+[data-theme="light"] .music-stage-heading > span,
+[data-theme="light"] .music-section-heading span { color: var(--music-label); }
+
+[data-theme="light"] .detail-back-button {
+  color: var(--text-secondary);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+}
+[data-theme="light"] .detail-back-button:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="light"] .music-planet-canvas-container canvas { transition: none; }
+}
+
+/* Projector Silver keeps the Music identity, but the interaction plane must stay readable. */
+[data-theme="light"] .music-planet-container :is(
+  .music-search-deck,
+  .music-search-feature,
+  .music-search-quick-play,
+  .music-result-summary,
+  .music-provider-warning,
+  .music-loading-status,
+  .music-settings-preview,
+  .music-entity-hero,
+  .music-open-list > button,
+  .music-track-row,
+  .music-queue-row
+) {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .music-planet-container :is(
+  .music-search-deck,
+  .music-search-quick-play,
+  .music-settings-preview,
+  .music-open-list > button
+) {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+}
+
+/* C3.1: the shared entity hero is a layout primitive inside the rounded detail
+   surface, not an independent Projector Silver card. Preserve its own subtle
+   divider while preventing the old light-theme rectangle from resurfacing. */
+[data-theme="light"] .music-planet-container .music-entity-hero {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Layout primitives are not surfaces. Giving these wrappers a theme fill
+   creates the raw rectangular slabs visible inside otherwise rounded lenses. */
+[data-theme="light"] .music-planet-container :is(
+  .music-search-feature,
+  .music-listening-core
+) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-theme="light"] .music-planet-container :is(
+  .music-open-list > button small,
+  .music-track-row small,
+  .music-queue-row small,
+  .music-result-summary span,
+  .music-search-feature p
+) { color: var(--text-secondary); }
+
+[data-theme="light"] .music-planet-container :is(
+  .planet-search-box,
+  .music-orbital-search,
+  .music-search-suggestions
+) {
+  color: var(--text-primary);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+}
+[data-theme="light"] .music-planet-container :is(.planet-search-box input, .music-orbital-search input) {
+  color: var(--text-primary);
+}
+[data-theme="light"] .music-planet-container :is(.planet-search-box input, .music-orbital-search input)::placeholder {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .music-planet-container .music-filter-pills {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+}
+[data-theme="light"] .music-planet-container .music-filter-pills button:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+[data-theme="light"] .glass-music-player {
+  color: var(--text-primary);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 91%, transparent);
+  box-shadow: 0 18px 52px color-mix(in srgb, var(--shadow-color) 22%, transparent);
+}
+[data-theme="light"] .glass-music-player :is(.player-meta, .player-time, .player-btn, .player-utilities) {
+  color: var(--text-secondary);
+}
+[data-theme="light"] .glass-music-player .player-meta strong { color: var(--text-primary); }
+
+/* Projector Silver keeps the observatory atmospheric, but the home core must remain visibly alive. */
+[data-theme="light"] .music-planet-canvas-container canvas {
+  opacity: .48;
+  filter: saturate(1.02) contrast(1.01) brightness(1.01);
+  transition: opacity 260ms var(--ease-out), filter 260ms var(--ease-out);
+}
+[data-theme="light"] .music-planet-canvas-container[data-scene-state="idle-space"] canvas {
+  opacity: .62;
+  filter: saturate(1.18) contrast(1.06) brightness(.98);
+}
+[data-theme="light"] .music-planet-canvas-container[data-scene-state="idle-space"]::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(34vw, 460px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 42% 38%, color-mix(in srgb, var(--music-highlight) 16%, transparent), transparent 34%),
+    radial-gradient(circle, color-mix(in srgb, var(--music-violet) 16%, transparent), transparent 66%);
+  filter: blur(12px);
+  opacity: .72;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+[data-theme="light"] .music-planet-canvas-container[data-scene-state="idle-space"] > * {
+  position: relative;
+  z-index: 1;
+}
+/* DUX-2.3.5 physical-pass refinements. */
+[data-theme="light"] .music-header-planet {
+  color: color-mix(in srgb, var(--music-violet) 72%, var(--text-primary));
+  border: 1px solid color-mix(in srgb, var(--music-violet) 18%, var(--border));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--music-violet) 7%, var(--bg-elevated));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--music-violet) 5%, transparent);
+}
+[data-theme="light"] .music-header-planet svg {
+  opacity: 1;
+  filter: drop-shadow(0 1px 0 color-mix(in srgb, var(--text-primary) 16%, transparent))
+          drop-shadow(0 0 8px color-mix(in srgb, var(--music-violet) 20%, transparent));
+}
+
+/* Full Music Search uses one rounded deck. The pills no longer sit on a separate rectangular slab. */
+[data-theme="light"] .music-search-page .music-search-deck {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.66), 0 16px 42px color-mix(in srgb, var(--shadow-color) 12%, transparent);
+}
+[data-theme="light"] .music-search-page .music-filter-pills {
+  gap: 8px;
+  margin-top: 9px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+}
+[data-theme="light"] .music-search-page .music-filter-pills button {
+  min-height: 36px;
+  background: color-mix(in srgb, var(--bg-elevated) 74%, transparent);
+}
+[data-theme="light"] .music-search-page .music-filter-pills button.active {
+  border-color: color-mix(in srgb, var(--music-violet) 34%, var(--border));
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--music-violet) 9%, var(--bg-elevated));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--music-violet) 8%, transparent);
+}
+
+
+
+/* DUX-2.3.6 Projector Silver final polish.
+   Keep search geometry truly orbital, tighten result-count hierarchy, and give
+   the shared Music dock enough tonal separation to read as intentional glass. */
+[data-theme="light"] .music-planet-container :is(.music-hero-search, .music-search-page .music-orbital-search) {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-theme="light"] .music-planet-container :is(.music-hero-search, .music-search-page .music-orbital-search) > input {
+  border-color: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--music-violet) 3%, transparent), color-mix(in srgb, var(--music-highlight) 2%, transparent)),
+    color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .78),
+    0 12px 34px color-mix(in srgb, var(--shadow-color) 10%, transparent);
+}
+
+[data-theme="light"] .music-planet-container :is(.music-hero-search, .music-search-page .music-orbital-search) > input:focus {
+  border-color: color-mix(in srgb, var(--music-violet) 38%, var(--border));
+  background: color-mix(in srgb, var(--bg-elevated) 97%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .82),
+    0 0 0 3px color-mix(in srgb, var(--music-violet) 8%, transparent),
+    0 16px 36px color-mix(in srgb, var(--shadow-color) 12%, transparent);
+}
+
+[data-theme="light"] .music-search-page .music-result-summary {
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  margin: 10px 0 26px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+
+[data-theme="light"] .music-search-page .music-result-summary strong {
+  display: inline-grid;
+  min-width: 38px;
+  height: 38px;
+  place-items: center;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--music-violet) 20%, var(--border));
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--music-violet) 58%, var(--text-primary));
+  background: color-mix(in srgb, var(--music-violet) 7%, var(--bg-elevated));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.68);
+  font: 700 15px/1 var(--font-heading);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-theme="light"] .music-search-page .music-result-summary span {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .glass-music-player {
+  border-color: color-mix(in srgb, var(--text-primary) 17%, transparent);
+  background:
+    radial-gradient(circle at 18% 20%, color-mix(in srgb, var(--music-violet) 7%, transparent), transparent 38%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 97%, transparent), color-mix(in srgb, var(--bg-surface) 88%, transparent));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.82),
+    0 18px 50px color-mix(in srgb, var(--shadow-color) 20%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--music-violet) 4%, transparent);
+  backdrop-filter: blur(30px) saturate(108%);
+  -webkit-backdrop-filter: blur(30px) saturate(108%);
+}
+
+[data-theme="light"] .glass-music-player .player-glow-backdrop {
+  background: radial-gradient(circle at 32% 50%, color-mix(in srgb, var(--music-violet) 12%, transparent), transparent 58%);
+  opacity: .45;
+}
+
+[data-theme="light"] .glass-music-player .player-art-wrap {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text-primary) 14%, transparent),
+    0 8px 22px color-mix(in srgb, var(--shadow-color) 20%, transparent);
+}
+
+[data-theme="light"] .glass-music-player .player-art-ring {
+  border-color: color-mix(in srgb, var(--music-violet) 30%, transparent);
+}
+
+[data-theme="light"] .glass-music-player .player-meta strong {
+  color: var(--text-primary);
+  line-height: 1.22;
+  letter-spacing: -.01em;
+}
+
+[data-theme="light"] .glass-music-player .player-meta small,
+[data-theme="light"] .glass-music-player .time-text {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .glass-music-player .player-btn {
+  color: var(--text-secondary);
+  border-color: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 86%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.62);
+}
+
+[data-theme="light"] .glass-music-player .player-btn:hover,
+[data-theme="light"] .glass-music-player .player-btn.active {
+  color: color-mix(in srgb, var(--music-violet) 64%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--music-violet) 34%, var(--border));
+  background: color-mix(in srgb, var(--music-violet) 9%, var(--bg-elevated));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.68),
+    0 8px 18px color-mix(in srgb, var(--music-violet) 10%, transparent);
+}
+
+[data-theme="light"] .glass-music-player .player-play-btn {
+  color: color-mix(in srgb, var(--music-violet) 68%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--music-violet) 30%, var(--border));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--music-violet) 12%, var(--bg-elevated)), color-mix(in srgb, var(--music-violet) 5%, var(--bg-surface)));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.78),
+    0 8px 22px color-mix(in srgb, var(--music-violet) 14%, transparent);
+}
+
+[data-theme="light"] .glass-music-player .player-play-btn:hover {
+  color: color-mix(in srgb, var(--music-violet) 78%, var(--text-primary));
+  border-color: color-mix(in srgb, var(--music-violet) 46%, var(--border));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.82),
+    0 10px 28px color-mix(in srgb, var(--music-violet) 20%, transparent);
+}
+
+[data-theme="light"] .glass-music-player .timeline-track.music-progress-track::before {
+  background: color-mix(in srgb, var(--text-primary) 13%, var(--bg-surface));
+}
+
+[data-theme="light"] .glass-music-player .music-progress-wave-base {
+  stroke: color-mix(in srgb, var(--text-primary) 22%, var(--bg-surface));
+  opacity: .9;
+}
+
+[data-theme="light"] .glass-music-player .music-progress-wave-fill {
+  stroke: color-mix(in srgb, var(--music-violet) 66%, var(--text-primary));
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--music-violet) 18%, transparent));
+}
+
+[data-theme="light"] .glass-music-player .music-progress-wave-head {
+  border-color: color-mix(in srgb, var(--music-violet) 44%, var(--border));
+  background: color-mix(in srgb, var(--music-violet) 56%, var(--bg-elevated));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--music-violet) 8%, transparent);
+}
+
+[data-theme="light"] .glass-music-player .player-volume-slider {
+  height: 5px;
+  background: color-mix(in srgb, var(--text-primary) 14%, var(--bg-surface));
+  border-radius: 999px;
+}
+
+[data-theme="light"] .glass-music-player .player-volume-slider::-webkit-slider-thumb {
+  width: 13px;
+  height: 13px;
+  border: 2px solid color-mix(in srgb, var(--music-violet) 34%, var(--border));
+  background: color-mix(in srgb, var(--music-violet) 48%, var(--bg-elevated));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--music-violet) 7%, transparent);
+}

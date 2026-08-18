@@ -11,11 +11,8 @@ import {
   tmdbFetch,
   imgUrl,
   PLAYER_SOURCES,
-  getSourceUrl,
   sourceSupportsProgress,
   sourceProgressViaFrames,
-  sourceIsAsync,
-  getSourceResumeParams,
   fetchAnilistData,
   cleanAnilistDescription,
   isAnimeContent,
@@ -55,6 +52,8 @@ import {
   getFailoverSource,
   setFailoverSource,
   clearFailoverSource,
+  hasPlaybackReset,
+  clearPlaybackReset,
 } from "../../../services/settingsStore";
 import {
   fetchMovieRating,
@@ -63,14 +62,24 @@ import {
   getRatingCountry,
 } from "../../../shared/utils/ageRating";
 import { INJECT_SKIP_CONTROLS } from "../../player/webviewScripts/skipControls";
-import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
+import {
+  getReadyWebContentsId,
+  seekWebviewToPosition,
+  shouldHandleWebviewLoadFailure,
+} from "../../player/services/webviewLifecycle";
+import {
+  PLAYBACK_INTENT,
+  createStartPlaybackIntent,
+  getPlaybackIntentTarget,
+} from "../../player/services/playbackIntent";
 import { normalizePlayerEventProgress } from "../../player/services/playerEventProgress";
 import { useCinemaPlaybackEvidence } from "../../player/hooks/useCinemaPlaybackEvidence";
+import { persistPlaybackProgressDetails } from "../../../services/viewingStateVerification";
 
 export function useMovieWebview(context) {
-  const { autoMarkedRef, autoplayDoneRef, d, dubMode, failoverTimeoutRef, initialSeekDoneRef, isWatched, item, lastKnownTimeRef, loading, onHistory, onMarkWatchedRef, onPlay, pipOpen, pipUrlRef, pipWebContentsIdRef, playerAccentColor, playerSource, playerSubLang, playerWrapRef, playing, progressKey, progressViaFrames, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrlRef, saveProgress, saveProgressRef, seekBackCooldownRef, setInterceptedSubs, setM3u8Url, setPipOpen, setPlayerFullscreen, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setResumeTime, setShowFailoverPrompt, setShowResumePrompt, setWebviewLoading, switchingToMiniPlayerRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef } = context;
-  const { healthEvidenceRef, playerEventProgressRef, attemptedSourcesRef, reportSourceHealth } = useCinemaPlaybackEvidence({
-    playing, sourceId: playerSource, mediaType: "movie", resetKey: item.id, webviewRef,
+  const { autoMarkedRef, autoplayDoneRef, d, dubMode, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, isWatched, item, lastKnownTimeRef, loading, onHistory, onMarkWatchedRef, onPlay, pipUrlRef, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressKey, progressViaFrames, resolvedPlayerUrlRef, resolvingUrlRef, saveProgress, saveProgressRef, seekBackCooldownRef, setInterceptedSubs, setM3u8Url, setPipOpen, setPlayerFullscreen, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setResumeTime, setShowFailoverPrompt, setShowResumePrompt, setWebviewLoading, switchingToMiniPlayerRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef } = context;
+  const { healthEvidenceRef, playerEventProgressRef, attemptedSourcesRef, observePlaybackProgress, reportSourceHealth } = useCinemaPlaybackEvidence({
+    playing, sourceId: playerSource, mediaType: "movie", resetKey: item.id, viewingKey: progressKey, webviewRef,
     lastKnownTimeRef, setWebviewLoading, setShowFailoverPrompt,
   });
 
@@ -292,37 +301,6 @@ const applyVoiceBoost = useCallback(() => {
     return () => clearInterval(interval);
   }, [playing, playerSource, item.id, webviewLoading, reportSourceHealth]);
 
-  // Force manual navigation on source/URL change to prevent Electron webview from getting stuck
-  useEffect(() => {
-    if (!playing) return;
-    const wv = webviewRef.current;
-    if (!wv) return;
-    const targetUrl = pipOpen
-      ? "about:blank"
-      : sourceIsAsync(playerSource)
-        ? resolvedPlayerUrl || "about:blank"
-        : getSourceUrl(
-            playerSource,
-            "movie",
-            { tmdbId: item.id, imdbId: d.imdb_id },
-            null,
-            null,
-            getSourceResumeParams(playerSource, storage.get("dlTime_" + progressKey)),
-            playerAccentColor,
-            playerSubLang,
-          );
-    if (targetUrl) {
-      try {
-        wv.src = targetUrl;
-        if (targetUrl !== "about:blank" && typeof wv.loadURL === "function") {
-          wv.loadURL(targetUrl);
-        }
-      } catch (e) {
-        console.warn("Failed to manually navigate webview:", e);
-      }
-    }
-  }, [playing, pipOpen, playerSource, resolvedPlayerUrl, item.id, progressKey, playerAccentColor, playerSubLang]);
-
   const handleFailoverNextSource = useCallback(() => {
     reportSourceHealth("degraded", "playback-stalled", "The user switched after playback stalled.");
     attemptedSourcesRef.current = [...new Set([...attemptedSourcesRef.current, playerSource])];
@@ -367,47 +345,32 @@ const applyVoiceBoost = useCallback(() => {
     if (!playing) return;
     const wv = webviewRef.current;
     if (!wv) return;
+    let seekInFlight = false;
     const done = async () => {
       setWebviewLoading(false);
+      if (initialSeekDoneRef.current || seekInFlight) return;
 
-      if (initialSeekDoneRef.current) return;
-      initialSeekDoneRef.current = true;
+      const target = getPlaybackIntentTarget(playbackIntentRef.current);
+      if (target === null) {
+        initialSeekDoneRef.current = true;
+        return;
+      }
 
-      if (sourceIsAsync(playerSource)) return;
-      const startTime = Number(storage.get("dlTime_" + progressKey) || 0);
-      if (startTime <= 0) return;
-
+      seekInFlight = true;
       try {
-        await wv.executeJavaScript(`
-          (() => {
-            const seek = () => {
-              const video = document.querySelector('video');
-              if (!video) return false;
-              const target = ${Math.max(0, Math.floor(startTime))};
-              const apply = () => {
-                try {
-                  if (Number.isFinite(video.duration) && video.duration > target) {
-                    video.currentTime = target;
-                  }
-                } catch {}
-              };
-              if (video.readyState >= 1) apply();
-              else video.addEventListener('loadedmetadata', apply, { once: true });
-              return true;
-            };
-            if (seek()) return true;
-            let tries = 0;
-            const timer = setInterval(() => {
-              tries += 1;
-              if (seek() || tries > 20) clearInterval(timer);
-            }, 500);
-            return false;
-          })()
-        `);
-      } catch {}
+        initialSeekDoneRef.current = await seekWebviewToPosition(wv, target);
+        if (
+          initialSeekDoneRef.current &&
+          playbackIntentRef.current?.type === PLAYBACK_INTENT.START_FROM_ZERO
+        ) {
+          clearPlaybackReset(progressKey);
+        }
+      } finally {
+        seekInFlight = false;
+      }
     };
     const failed = (event) => {
-      if (event?.isMainFrame === false) return;
+      if (!shouldHandleWebviewLoadFailure(event)) return;
       setWebviewLoading(false);
       setShowFailoverPrompt(true);
       reportSourceHealth(
@@ -424,10 +387,12 @@ const applyVoiceBoost = useCallback(() => {
       }
     };
     wv.addEventListener("did-finish-load", done);
+    wv.addEventListener("did-frame-finish-load", done);
     wv.addEventListener("did-fail-load", failed);
     wv.addEventListener("will-navigate", handleWillNavigate);
     return () => {
       wv.removeEventListener("did-finish-load", done);
+      wv.removeEventListener("did-frame-finish-load", done);
       wv.removeEventListener("did-fail-load", failed);
       wv.removeEventListener("will-navigate", handleWillNavigate);
     };
@@ -443,6 +408,7 @@ const applyVoiceBoost = useCallback(() => {
           const wv = webviewRef.current;
           if (!wv) return;
           let result = normalizePlayerEventProgress(playerEventProgressRef.current);
+          let needsEvidenceObservation = !result;
           // When the pop-out window is open the main webview shows about:blank
           // -> query the pip window's webContents directly.
           if (!result &&
@@ -481,17 +447,9 @@ const applyVoiceBoost = useCallback(() => {
           }
 
           if (result && result.duration > 0 && result.duration !== Infinity) {
-            const evidence = healthEvidenceRef.current;
-            if (!evidence.ready) {
-              const current = Number(result.currentTime) || 0;
-              if (evidence.lastTime != null && current > evidence.lastTime + 0.2 && !result.paused) evidence.advances += 1;
-              else if (evidence.lastTime != null && current <= evidence.lastTime && !result.paused) evidence.advances = 0;
-              evidence.lastTime = current;
-              if (evidence.advances >= 2) {
-                evidence.ready = true;
-                reportSourceHealth("ready");
-              }
-            }
+            const playbackVerified = needsEvidenceObservation
+              ? observePlaybackProgress(result)
+              : healthEvidenceRef.current.ready === true;
             setShowFailoverPrompt(false);
             clearTimeout(failoverTimeoutRef.current);
             const ct = result.currentTime;
@@ -531,16 +489,20 @@ const applyVoiceBoost = useCallback(() => {
               lastKnownTimeRef.current = ct;
             }
             const p = Math.floor((ct / result.duration) * 100);
-            saveProgressRef.current(progressKey, Math.min(p, 100));
+            const safePercent = Math.min(p, 100);
+            saveProgressRef.current(progressKey, safePercent);
             // Also persist actual seconds so DownloadsPage can show resume position
             storage.set("dlTime_" + progressKey, Math.floor(ct));
-            const progressDetails = storage.get(STORAGE_KEYS.PROGRESS_DETAILS) || {};
-            progressDetails[progressKey] = { currentTime: ct, duration: result.duration, percent: Math.min(p, 100), updatedAt: Date.now() };
-            storage.set(STORAGE_KEYS.PROGRESS_DETAILS, progressDetails);
+            persistPlaybackProgressDetails(progressKey, {
+              currentTime: ct,
+              duration: result.duration,
+              percent: safePercent,
+            }, { verified: playbackVerified });
 
-            // Auto-mark watched when remaining time ≤ threshold
+            // Auto-mark watched only after real playback advancement is proven.
             const remaining = result.duration - ct;
             if (
+              playbackVerified &&
               !autoMarkedRef.current &&
               remaining <= watchedThreshold &&
               remaining >= 0
@@ -556,10 +518,13 @@ const applyVoiceBoost = useCallback(() => {
       clearTimeout(timer);
       clearInterval(interval);
     };
-  }, [playing, progressKey, watchedThreshold, playerSource, progressViaFrames, reportSourceHealth]);
+  }, [playing, progressKey, watchedThreshold, playerSource, progressViaFrames, observePlaybackProgress, reportSourceHealth]);
 
-  const startMoviePlayback = useCallback((time = 0) => {
-    const safeTime = Math.max(0, Math.floor(Number(time) || 0));
+  const startMoviePlayback = useCallback((time = 0, intentType = null) => {
+    const forceReset = hasPlaybackReset(progressKey);
+    const nextIntent = createStartPlaybackIntent({ time, intentType, forceReset });
+    const safeTime = nextIntent.position;
+    playbackIntentRef.current = nextIntent;
     setShowResumePrompt(false);
     setResumeTime(0);
     setM3u8Url(null);
@@ -570,6 +535,10 @@ const applyVoiceBoost = useCallback(() => {
     setResolvingUrl(false);
     setResolveError(null);
     initialSeekDoneRef.current = false;
+    // Seed runtime progress to the requested start position so the quality-change
+    // recovery guard cannot mistake an intentional Start Over seek for a provider reset.
+    lastKnownTimeRef.current = safeTime;
+    seekBackCooldownRef.current = 0;
     storage.set("dlTime_" + progressKey, safeTime);
     if (safeTime === 0) saveProgress?.(progressKey, 0);
     setPlaying(true);
@@ -587,7 +556,7 @@ const applyVoiceBoost = useCallback(() => {
 
   const handlePlay = useCallback(() => {
     if (playing) {
-      startMoviePlayback(0);
+      startMoviePlayback(0, PLAYBACK_INTENT.START_FROM_ZERO);
       return;
     }
     const savedTime = Number(storage.get("dlTime_" + progressKey) || 0);
@@ -602,7 +571,7 @@ const applyVoiceBoost = useCallback(() => {
   useEffect(() => {
     if (item.autoplay && !loading && !autoplayDoneRef.current) {
       autoplayDoneRef.current = true;
-      if (Number(item.handoffTime) > 0) startMoviePlayback(item.handoffTime);
+      if (Number(item.handoffTime) > 0) startMoviePlayback(item.handoffTime, PLAYBACK_INTENT.RESUME);
       else handlePlay();
     }
   }, [item.autoplay, item.handoffTime, loading, handlePlay, startMoviePlayback]);

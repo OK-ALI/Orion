@@ -2,6 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const { resolveSubtitleAsset } = require("../subtitles/ipc");
+const { verifyDownloadedArtifact } = require("./artifactVerifier");
+const { finalizationWatchdogAction } = require("./finalizationWatchdog");
 const DOWNLOAD_STALL_TIMEOUT_MS = 5 * 60 * 1000;
 const DOWNLOAD_STALL_CHECK_MS = 15 * 1000;
 
@@ -35,13 +37,14 @@ function killProcessTree(proc) {
   } catch {}
 }
 
-function trackProcess(context, id, proc, name, downloadPath, logPath, cookiePath, cleanup) {
+function trackProcess(context, id, proc, name, downloadPath, logPath, cookiePath, cleanup, verificationTools = {}) {
   const { activeProcs, killProcessTree, saveDownloads, sendProgress } = context;
   let lastProgressAt = Date.now();
   let lastProgressSignature = "";
   let stallTimer = null;
   let consecutiveFragmentFailures = 0;
   let lastPersistedAt = 0;
+  let terminalRecoveryRequested = false;
 
   const markProgressActivity = (entry, update) => {
     const signature = [
@@ -262,15 +265,57 @@ function trackProcess(context, id, proc, name, downloadPath, logPath, cookiePath
   stallTimer = setInterval(() => {
     const idx = context.downloads.findIndex((d) => d.id === id);
     if (idx === -1 || context.downloads[idx].status !== "downloading") return;
+    const entry = context.downloads[idx];
     const idleMs = Date.now() - lastProgressAt;
+    const finalizationAction = finalizationWatchdogAction(entry, idleMs);
+
+    if (finalizationAction === "recover") {
+      entry.finalizationRecoveryCount = (Number(entry.finalizationRecoveryCount) || 0) + 1;
+      entry.lastMessage = "Finalizing stream… Orion is rechecking the completed fragments.";
+      entry.speed = "0 MB/s";
+      entry.updatedAt = Date.now();
+      terminalRecoveryRequested = true;
+      appendLog(
+        `Automatic finalization recovery ${entry.finalizationRecoveryCount}: terminal fragment state stayed idle for ${Math.round(idleMs / 1000)}s. Restarting the same task with continuation enabled.`,
+      );
+      sendProgress({
+        id,
+        status: "downloading",
+        lastMessage: entry.lastMessage,
+        speed: entry.speed,
+        finalizationRecoveryCount: entry.finalizationRecoveryCount,
+      });
+      saveDownloads();
+      try {
+        killProcessTree(proc);
+      } catch {}
+      return;
+    }
+
+    if (finalizationAction === "fail") {
+      const msg =
+        "Download reached the end of its fragments, but stream finalization remained stalled after Orion's automatic recovery. Diagnostics were preserved.";
+      entry.status = "failed";
+      entry.completedAt = Date.now();
+      entry.lastMessage = msg;
+      entry.speed = "0 MB/s";
+      appendLog(msg);
+      sendProgress({ id, status: "failed", lastMessage: msg, speed: "0 MB/s" });
+      saveDownloads();
+      try {
+        killProcessTree(proc);
+      } catch {}
+      return;
+    }
+
     if (idleMs < DOWNLOAD_STALL_TIMEOUT_MS) return;
 
     const msg =
       "Download stalled: no fragment, byte, or retry activity for 5 minutes. The streaming source likely stopped responding.";
-    context.downloads[idx].status = "failed";
-    context.downloads[idx].completedAt = Date.now();
-    context.downloads[idx].lastMessage = msg;
-    context.downloads[idx].speed = "0 MB/s";
+    entry.status = "failed";
+    entry.completedAt = Date.now();
+    entry.lastMessage = msg;
+    entry.speed = "0 MB/s";
     appendLog(msg);
     sendProgress({
       id,
@@ -330,15 +375,11 @@ function trackProcess(context, id, proc, name, downloadPath, logPath, cookiePath
     saveDownloads();
   });
 
-  proc.on("close", (code) => {
+  proc.on("close", async (code) => {
     if (stallTimer) clearInterval(stallTimer);
-    try {
-      cleanup?.();
-    } catch {}
+    try { cleanup?.(); } catch {}
     if (cookiePath) {
-      try {
-        if (fs.existsSync(cookiePath)) fs.unlinkSync(cookiePath);
-      } catch {}
+      try { if (fs.existsSync(cookiePath)) fs.unlinkSync(cookiePath); } catch {}
     }
     activeProcs.delete(id);
     if (buf.trim()) {
@@ -347,164 +388,186 @@ function trackProcess(context, id, proc, name, downloadPath, logPath, cookiePath
     }
     const idx = context.downloads.findIndex((d) => d.id === id);
     if (idx === -1) return;
+    const entry = context.downloads[idx];
+    if (["interrupted", "paused"].includes(entry.status)) return;
 
-    if (["interrupted", "paused"].includes(context.downloads[idx].status)) {
-      return; // Paused explicitly, ignore close status update
-    }
-
-    const wasAlreadyError = context.downloads[idx].status === "failed";
-    const status = code === 0 ? "completed" : "failed";
-    context.downloads[idx].status = status;
-    context.downloads[idx].completedAt = Date.now();
-    if (code === 0) {
-      context.downloads[idx].progress = 100;
-      context.downloads[idx].logPath = null;
+    if (terminalRecoveryRequested) {
+      terminalRecoveryRequested = false;
+      appendLog(`${"─".repeat(60)}\nAutomatic finalization recovery restarting the same task.`);
       try {
-        fs.unlinkSync(logPath);
-      } catch {}
-    } else if (!wasAlreadyError) {
-      try {
-        fs.appendFileSync(
-          logPath,
-          `${"─".repeat(60)}\nFailed: exit code ${code}\nFinished: ${new Date().toISOString()}\n`,
-          "utf8",
-        );
-      } catch {}
-      const errorLine =
-        stderrBuf
-          .split(/\r\n|\r|\n/)
-          .map((l) => l.trim())
-          .filter(Boolean)
-          .reverse()
-          .find((l) => /error|failed|unable|cannot|denied/i.test(l)) ||
-        "";
-      const prev = context.downloads[idx].lastMessage || "";
-      const base = errorLine || prev;
-      context.downloads[idx].lastMessage = base
-        ? `${base} (exit ${code})`
-        : `Download failed (exit code ${code})`;
-    } else {
-      try {
-        fs.appendFileSync(
-          logPath,
-          `${"─".repeat(60)}\nStopped after prior error: exit code ${code}\nFinished: ${new Date().toISOString()}\n`,
-          "utf8",
-        );
-      } catch {}
-    }
-
-    if (code === 0 && !context.downloads[idx].filePath) {
-      try {
-        const VIDEO_EXTS = [
-          ".mp4",
-          ".mkv",
-          ".webm",
-          ".avi",
-          ".ts",
-          ".m4v",
-        ];
-        const match = fs
-          .readdirSync(downloadPath)
-          .filter((f) =>
-            VIDEO_EXTS.some((e) => f.toLowerCase().endsWith(e)),
-          )
-          .map((f) => ({
-            f,
-            mtime: fs.statSync(path.join(downloadPath, f)).mtimeMs,
-          }))
-          .sort((a, b) => b.mtime - a.mtime)[0];
-        if (match)
-          context.downloads[idx].filePath = path.join(downloadPath, match.f);
-      } catch {}
-    }
-
-    if (code === 0 && context.downloads[idx].filePath) {
-      try {
-        const ext = path.extname(context.downloads[idx].filePath) || ".mp4";
-        const safeName = name
-          .replace(/[<>:"/\\|?*\x00-\x1f]/g, "")
-          .replace(/\s+/g, " ")
-          .trim();
-        if (safeName) {
-          const newPath = path.join(downloadPath, safeName + ext);
-          if (newPath !== context.downloads[idx].filePath) {
-            fs.renameSync(context.downloads[idx].filePath, newPath);
-            context.downloads[idx].filePath = newPath;
-          }
+        const recovered = await verificationTools.recoverTerminalStall?.();
+        if (!recovered?.ok) {
+          throw new Error(recovered?.error || "Automatic finalization recovery could not restart the download.");
         }
-      } catch {}
-    }
-
-    if (context.downloads[idx].filePath) {
-      try {
-        const bytes = fs.statSync(context.downloads[idx].filePath).size;
-        context.downloads[idx].size =
-          bytes > 1e9
-            ? (bytes / 1e9).toFixed(2) + " GB"
-            : bytes > 1e6
-              ? (bytes / 1e6).toFixed(1) + " MB"
-              : bytes > 1e3
-                ? (bytes / 1e3).toFixed(1) + " KB"
-                : bytes + " B";
-      } catch {}
-    }
-
-    if (
-      code === 0 &&
-      context.downloads[idx].subtitles?.length > 0 &&
-      context.downloads[idx].filePath
-    ) {
-      const videoBase = context.downloads[idx].filePath.replace(/\.[^.]+$/, "");
-      const langCounter = {};
-      const subPromises = context.downloads[idx].subtitles.map(async (subtitle) => {
-          const lang = subtitle.language || subtitle.lang || "unknown";
-          const safeLang = lang.replace(/[^a-z0-9_-]/gi, "");
-          const lIdx = langCounter[safeLang] ?? 0;
-          langCounter[safeLang] = lIdx + 1;
-          const suffix = lIdx > 0 ? `.${lIdx}` : "";
-          try {
-            const asset = await resolveSubtitleAsset(subtitle);
-            const subDestPath = `${videoBase}.${safeLang}${suffix}.${asset.ext}`;
-            fs.writeFileSync(subDestPath, asset.data);
-            return {
-              lang,
-              path: subDestPath,
-              file_id: subtitle.file_id || null,
-              release: subtitle.release || subtitle.file_name || null,
-              source: subtitle.via_subdl ? "subdl" : subtitle.via_wyzie ? "wyzie" : "stream",
-            };
-          } catch (error) {
-            try { fs.appendFileSync(logPath, `Subtitle failed (${lang}): ${error.message}\n`, "utf8"); } catch {}
-            return null;
-          }
+      } catch (error) {
+        entry.status = "failed";
+        entry.completedAt = Date.now();
+        entry.lastMessage = error.message || "Automatic finalization recovery failed.";
+        appendLog(`Automatic finalization recovery FAILED: ${entry.lastMessage}`);
+        sendProgress({
+          id,
+          status: "failed",
+          lastMessage: entry.lastMessage,
+          completedAt: entry.completedAt,
+          logPath: entry.logPath,
         });
-      Promise.all(subPromises).then((results) => {
-        const i2 = context.downloads.findIndex((d) => d.id === id);
-        if (i2 !== -1) {
-          context.downloads[i2].subtitlePaths = results.filter(Boolean);
-          saveDownloads();
-          sendProgress({
-            id,
-            subtitlePaths: context.downloads[i2].subtitlePaths,
-          });
-        }
+        saveDownloads();
+      }
+      return;
+    }
+
+    if (entry.status === "failed") {
+      appendLog(`${"─".repeat(60)}\nStopped after prior error: exit code ${code}\nFinished: ${new Date().toISOString()}`);
+      saveDownloads();
+      return;
+    }
+
+    if (code !== 0) {
+      appendLog(`${"─".repeat(60)}\nFailed: exit code ${code}\nFinished: ${new Date().toISOString()}`);
+      const errorLine = stderrBuf
+        .split(/\r\n|\r|\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .reverse()
+        .find((line) => /error|failed|unable|cannot|denied/i.test(line)) || "";
+      entry.status = "failed";
+      entry.completedAt = Date.now();
+      entry.lastMessage = errorLine
+        ? `${errorLine} (exit ${code})`
+        : `Download failed (exit code ${code})`;
+      sendProgress({ id, status: "failed", lastMessage: entry.lastMessage, completedAt: entry.completedAt, logPath: entry.logPath });
+      saveDownloads();
+      return;
+    }
+
+    entry.status = "processing";
+    entry.progress = 99;
+    entry.lastMessage = "Verifying downloaded media…";
+    entry.completedAt = null;
+    sendProgress({ id, status: "processing", progress: 99, lastMessage: entry.lastMessage });
+    saveDownloads();
+    appendLog(`${"─".repeat(60)}\nDownloader process exited 0. Final media verification started.`);
+
+    let verification;
+    try {
+      verification = await verifyDownloadedArtifact(entry, {
+        ffmpegPath: verificationTools.ffmpegPath,
+        appendLog,
       });
+    } catch (error) {
+      verification = {
+        ok: false,
+        code: "verification_exception",
+        error: error.message || "Final media verification failed unexpectedly.",
+      };
+    }
+    entry.verification = {
+      ok: Boolean(verification.ok),
+      code: verification.code || null,
+      durationSeconds: Number(verification.durationSeconds) || null,
+      expectedDurationSeconds: Number(entry.expectedDurationSeconds) || null,
+      hasVideo: verification.hasVideo ?? null,
+      hasAudio: verification.hasAudio ?? null,
+    };
+
+    if (!verification.ok) {
+      entry.status = "failed";
+      entry.completedAt = Date.now();
+      entry.progress = Math.min(99, Number(entry.progress) || 99);
+      entry.filePath = verification.filePath || entry.filePath || null;
+      entry.lastMessage = verification.error || "Downloaded artifact failed media verification. Try another captured source.";
+      appendLog(`Verification FAILED [${verification.code || "unknown"}]: ${entry.lastMessage}`);
+      if (["invalid_container", "no_video", "no_audio", "no_duration", "duration_mismatch", "obvious_auxiliary", "artifact_empty", "media_segment"].includes(verification.code) && entry.filePath) {
+        try {
+          if (fs.existsSync(entry.filePath)) fs.unlinkSync(entry.filePath);
+          appendLog("Rejected task-owned artifact removed after failed verification.");
+          entry.filePath = null;
+        } catch (error) {
+          appendLog(`Could not remove rejected artifact: ${error.message}`);
+        }
+      }
+      sendProgress({
+        id,
+        status: "failed",
+        progress: entry.progress,
+        completedAt: entry.completedAt,
+        filePath: entry.filePath,
+        lastMessage: entry.lastMessage,
+        logPath: entry.logPath,
+        verification: entry.verification,
+      });
+      saveDownloads();
+      return;
+    }
+
+    entry.filePath = verification.filePath;
+    entry.status = "completed";
+    entry.completedAt = Date.now();
+    entry.progress = 100;
+    entry.lastMessage = "Verified media ready to watch";
+    try {
+      const bytes = fs.statSync(entry.filePath).size;
+      entry.downloadedBytes = bytes;
+      entry.totalBytes = bytes;
+      entry.size = bytes > 1e9
+        ? `${(bytes / 1e9).toFixed(2)} GB`
+        : bytes > 1e6
+          ? `${(bytes / 1e6).toFixed(1)} MB`
+          : bytes > 1e3
+            ? `${(bytes / 1e3).toFixed(1)} KB`
+            : `${bytes} B`;
+    } catch {}
+    appendLog(`Verification PASSED. Final file: ${entry.filePath}`);
+
+    if (entry.subtitles?.length > 0 && entry.filePath) {
+      const videoBase = entry.filePath.replace(/\.[^.]+$/, "");
+      const langCounter = {};
+      const results = await Promise.all(entry.subtitles.map(async (subtitle) => {
+        const lang = subtitle.language || subtitle.lang || "unknown";
+        const safeLang = lang.replace(/[^a-z0-9_-]/gi, "");
+        const lIdx = langCounter[safeLang] ?? 0;
+        langCounter[safeLang] = lIdx + 1;
+        const suffix = lIdx > 0 ? `.${lIdx}` : "";
+        try {
+          const asset = await resolveSubtitleAsset(subtitle);
+          const subDestPath = `${videoBase}.${safeLang}${suffix}.${asset.ext}`;
+          fs.writeFileSync(subDestPath, asset.data);
+          return {
+            lang,
+            path: subDestPath,
+            file_id: subtitle.file_id || null,
+            release: subtitle.release || subtitle.file_name || null,
+            source: subtitle.via_subdl ? "subdl" : subtitle.via_wyzie ? "wyzie" : "stream",
+          };
+        } catch (error) {
+          appendLog(`Subtitle failed (${lang}): ${error.message}`);
+          return null;
+        }
+      }));
+      entry.subtitlePaths = results.filter(Boolean);
     }
 
     sendProgress({
       id,
       name,
-      status: context.downloads[idx].status,
-      progress: context.downloads[idx].progress,
-      completedAt: context.downloads[idx].completedAt,
-      filePath: context.downloads[idx].filePath,
-      size: context.downloads[idx].size,
-      completedFragments: context.downloads[idx].completedFragments,
-      totalFragments: context.downloads[idx].totalFragments,
-      lastMessage: context.downloads[idx].lastMessage,
-      logPath: context.downloads[idx].logPath,
+      status: entry.status,
+      progress: entry.progress,
+      completedAt: entry.completedAt,
+      filePath: entry.filePath,
+      size: entry.size,
+      downloadedBytes: entry.downloadedBytes,
+      totalBytes: entry.totalBytes,
+      completedFragments: entry.completedFragments,
+      totalFragments: entry.totalFragments,
+      lastMessage: entry.lastMessage,
+      subtitlePaths: entry.subtitlePaths,
+      verification: entry.verification,
+      logPath: null,
     });
     saveDownloads();
+    entry.logPath = null;
+    saveDownloads();
+    try { fs.unlinkSync(logPath); } catch {}
   });
 }
 

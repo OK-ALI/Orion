@@ -105,6 +105,22 @@ const DIRECT_BACKUP_KEYS = [
   "orion.sidebar.music.openMode",
 ];
 
+export const LEGACY_CLOUD_VIEWING_FENCE_MARKER = "__orion_preserve_legacy_viewing_state";
+
+export const LEGACY_CLOUD_VIEWING_STATE_KEYS = Object.freeze([
+  "history",
+  "progress",
+  "progressDetails",
+  "watched",
+]);
+
+export function fenceLegacyCloudViewingState(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return {};
+  const safe = { ...data };
+  for (const key of LEGACY_CLOUD_VIEWING_STATE_KEYS) delete safe[key];
+  return safe;
+}
+
 export function collectBackupData() {
   const data = {};
   for (const key of BACKUP_KEYS) {
@@ -152,4 +168,15 @@ export async function restoreCompleteBackupData(data) {
   // so a cloud restore is visible now, rather than only after an app relaunch.
   window.dispatchEvent(new CustomEvent("orion:music-backup-restored"));
   return result || { ok: true };
+}
+
+export async function collectLegacyCloudSyncData() {
+  return {
+    ...fenceLegacyCloudViewingState(await collectCompleteBackupData()),
+    [LEGACY_CLOUD_VIEWING_FENCE_MARKER]: true,
+  };
+}
+
+export async function restoreLegacyCloudSyncData(data) {
+  return restoreCompleteBackupData(fenceLegacyCloudViewingState(data));
 }

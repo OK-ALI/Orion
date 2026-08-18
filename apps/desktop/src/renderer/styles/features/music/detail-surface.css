@@ -1,0 +1,159 @@
+/* MUSIC-UI C3: entity detail architecture.
+   Album/category and artist detail overlays share one composition owner.
+   The outer detail page is already the surface, so the hero is a layout primitive,
+   not another card nested inside it. */
+
+.music-page.music-entity-page {
+  width: min(1320px, calc(100% - 56px));
+}
+
+.music-page.music-entity-page .music-entity-hero {
+  width: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: clamp(190px, 20vw, 248px) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(28px, 4vw, 54px);
+  margin: 0;
+  padding: 6px 0 clamp(28px, 3vw, 38px);
+  border: 0;
+  border-bottom: 1px solid var(--music-glass-line-soft);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  text-align: left;
+}
+
+.music-page.music-entity-page .music-entity-artwork {
+  width: 100%;
+  max-width: 248px;
+  aspect-ratio: 1;
+  justify-self: start;
+  align-self: center;
+  border: 1px solid color-mix(in srgb, var(--music-glass-edge) 72%, transparent);
+  background-color: var(--music-glass-panel-strong);
+  box-shadow:
+    0 22px 48px color-mix(in srgb, var(--shadow-color) 42%, transparent),
+    0 0 34px color-mix(in srgb, var(--music-violet) 14%, transparent);
+}
+
+.music-page.music-entity-page .music-entity-hero.is-album .music-entity-artwork {
+  border-radius: 24px;
+}
+
+.music-page.music-entity-page .music-entity-hero.is-artist .music-entity-artwork {
+  border-radius: 50%;
+}
+
+.music-entity-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.music-entity-copy .music-eyebrow {
+  margin-bottom: 10px;
+}
+
+.music-entity-copy h1 {
+  max-width: 900px;
+  margin: 0;
+  color: var(--mp-text);
+  font: 700 clamp(36px, 4.8vw, 64px) / 1.02 var(--font-heading);
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+
+.music-entity-subtitle {
+  max-width: 760px;
+  margin: 12px 0 0;
+  color: var(--mp-muted);
+  font-size: clamp(17px, 1.7vw, 22px);
+  line-height: 1.4;
+}
+
+.music-entity-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  margin-top: 14px;
+  color: var(--mp-muted);
+  font-size: 13px;
+}
+
+.music-entity-facts span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.music-entity-facts span + span::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  margin: 0 10px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--music-highlight) 58%, var(--mp-muted));
+}
+
+.music-entity-copy .music-actions {
+  margin-top: 22px;
+  gap: 9px;
+}
+
+.music-entity-copy .music-actions button {
+  min-height: 42px;
+  border-radius: 12px;
+  padding-inline: 17px;
+}
+
+.music-page.music-entity-page > .music-provider-warning {
+  margin: 22px 0 0;
+}
+
+.music-page.music-entity-page > .music-section {
+  width: 100%;
+  max-width: none;
+  margin-top: clamp(28px, 3vw, 40px);
+}
+
+.music-page.music-entity-page > .music-section + .music-section {
+  margin-top: clamp(38px, 4vw, 54px);
+}
+
+.music-page.music-entity-page .music-section > h2,
+.music-page.music-entity-page .music-section-heading h2 {
+  margin-bottom: 18px;
+}
+
+@media (max-width: 860px) {
+  .music-page.music-entity-page {
+    width: min(100% - 34px, 1320px);
+  }
+
+  .music-page.music-entity-page .music-entity-hero {
+    grid-template-columns: 170px minmax(0, 1fr);
+    gap: 26px;
+  }
+
+  .music-entity-copy h1 {
+    font-size: clamp(32px, 6vw, 48px);
+  }
+}
+
+@media (max-width: 640px) {
+  .music-page.music-entity-page .music-entity-hero {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+
+  .music-page.music-entity-page .music-entity-artwork {
+    width: min(210px, 58vw);
+  }
+
+  .music-entity-copy .music-actions {
+    width: 100%;
+  }
+}

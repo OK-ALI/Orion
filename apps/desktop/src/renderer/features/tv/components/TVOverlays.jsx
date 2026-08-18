@@ -1,3 +1,4 @@
+import { PLAYBACK_INTENT } from "../../player/services/playbackIntent";
 import {
   useState,
   useEffect,
@@ -69,6 +70,7 @@ import {
   getRatingCountry,
 } from "../../../shared/utils/ageRating";
 import { ContextMenu, EpisodeDesc, PartialCircleIcon, VoiceBoostIcon } from "./EpisodeUi";
+import { resetViewingToNotStarted } from "../../player/services/viewingReset";
 
 export default function TVOverlays({ model }) {
   const { blockedAlltime, blockedSession, d, downloaderFolder, epMenu, getBlockedDomains, handleSetDownloaderFolder, interceptedSubs, isSeasonWatched, item, m3u8Context, m3u8Url, markSeasonUnwatched, markSeasonWatched, mediaName, onDownloadStarted, onMarkUnwatched, onMarkWatched, onSettings, pendingEpToPlay, progress, resumeTime, saveProgress, seasonMenu, selectedEp, selectedSeason, setEpMenu, setSeasonMenu, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowTrailer, showBlockedModal, showDownload, showResumePrompt, showTrailer, startPlayingEp, title, trailerKey, watched } = model;
@@ -95,21 +97,24 @@ export default function TVOverlays({ model }) {
                 })()
               }
             </div>
+            <p className="resume-prompt-note">
+              Start Over and Replay Last 30s may take a few seconds to sync before manual seeking responds normally.
+            </p>
             <div className="resume-prompt-actions">
-              <button className="btn btn-primary" onClick={() => startPlayingEp(pendingEpToPlay, resumeTime)}>
+              <button className="btn btn-primary" onClick={() => startPlayingEp(pendingEpToPlay, resumeTime, PLAYBACK_INTENT.RESUME)}>
                 Resume Playback
               </button>
               {resumeTime > 45 && (
                 <button
                   className="btn btn-secondary"
                   onClick={() =>
-                    startPlayingEp(pendingEpToPlay, Math.max(0, resumeTime - 30))
+                    startPlayingEp(pendingEpToPlay, Math.max(0, resumeTime - 30), PLAYBACK_INTENT.RESUME)
                   }
                 >
                   Replay Last 30s
                 </button>
               )}
-              <button className="btn btn-secondary" onClick={() => startPlayingEp(pendingEpToPlay, 0)}>
+              <button className="btn btn-secondary" onClick={() => startPlayingEp(pendingEpToPlay, 0, PLAYBACK_INTENT.START_FROM_ZERO)}>
                 Start Over
               </button>
               <button className="btn btn-ghost" onClick={() => setShowResumePrompt(false)}>
@@ -129,11 +134,12 @@ export default function TVOverlays({ model }) {
           unwatchedLabel="Mark as Unwatched"
           onMarkWatched={() => onMarkWatched?.(epMenu.pk)}
           onMarkUnwatched={() => onMarkUnwatched?.(epMenu.pk)}
-          onMarkNotStarted={() => {
-            onMarkUnwatched?.(epMenu.pk);
-            saveProgress?.(epMenu.pk, 0);
-            storage.set("dlTime_" + epMenu.pk, null);
-          }}
+          onMarkNotStarted={() =>
+            resetViewingToNotStarted(epMenu.pk, {
+              saveProgress,
+              markUnwatched: onMarkUnwatched,
+            })
+          }
           onClose={() => setEpMenu(null)}
         />
       )}
@@ -175,6 +181,14 @@ export default function TVOverlays({ model }) {
           episode={selectedEp?.episode_number}
           posterPath={d.poster_path}
           tmdbId={item.id}
+          expectedDurationSeconds={
+            Number(selectedEp?.runtime) > 0
+              ? Number(selectedEp.runtime) * 60
+              : Number(d?.episode_run_time?.[0]) > 0
+                ? Number(d.episode_run_time[0]) * 60
+                : null
+          }
+          expectedDurationConfidence={Number(selectedEp?.runtime) > 0 ? "exact" : "approximate"}
         />
       )}
 </>

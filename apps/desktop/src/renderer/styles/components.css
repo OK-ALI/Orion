@@ -1,5 +1,6 @@
 @import "./components/part-01.css";
 @import "./components/sidebar-rail.css";
+@import "./components/sidebar-dux1.css";
 @import "./components/part-02.css";
 @import "./components/part-03.css";
 @import "./components/part-04.css";
@@ -12,3 +13,6 @@
 @import "./components/part-11.css";
 @import "./features/music/planet.css";
 @import "./features/music/layout.css";
+
+@import "./components/dux2-visual-coherence.css";
+@import "./components/dux23-search-coherence.css";

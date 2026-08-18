@@ -552,7 +552,7 @@
 
 .glass-music-player {
   --mp-text: var(--music-scene-text);
-  --mp-muted: var(--music-scene-text-muted);
+  --mp-muted: var(--music-scene-muted);
   --music-label: color-mix(in srgb, var(--mp-text, var(--text-primary)) 92%, var(--music-violet));
   --music-glass-line: var(--music-glass-edge);
   --music-glass-line-soft: color-mix(in srgb, var(--music-violet) 18%, var(--border));

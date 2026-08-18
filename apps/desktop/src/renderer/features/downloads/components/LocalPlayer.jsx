@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CloseIcon, MiniPlayerIcon, PopOutIcon } from "../../../components/common/Icons";
 import { storage, STORAGE_KEYS } from "../../../services/settingsStore";
 import { handleNativePlayerKey } from "../../player/services/nativeKeyboard";
+import { observePlaybackEvidence } from "../../player/services/playerEventProgress";
+import { markHistoryPlaybackVerified, persistPlaybackProgressDetails } from "../../../services/viewingStateVerification";
 
 function progressKey(media) {
   if (media.mediaType === "tv") {
@@ -21,10 +23,16 @@ export default function LocalPlayer({
 }) {
   const videoRef = useRef(null);
   const lastSavedRef = useRef(0);
+  const playbackEvidenceRef = useRef({ lastTime: null, advances: 0, ready: false });
   const [media, setMedia] = useState(null);
   const [error, setError] = useState("");
   const [ambientColors, setAmbientColors] = useState(["#6d3bd1", "#168aa4"]);
   const key = useMemo(() => media ? progressKey(media) : null, [media]);
+
+  useEffect(() => {
+    playbackEvidenceRef.current = { lastTime: null, advances: 0, ready: false };
+  }, [key]);
+
 
   useEffect(() => {
     let mounted = true;
@@ -69,16 +77,19 @@ export default function LocalPlayer({
     if (!video || !key || !Number.isFinite(video.duration) || video.duration <= 0) return;
     if (!force && Date.now() - lastSavedRef.current < 1000) return;
     lastSavedRef.current = Date.now();
+    const transition = observePlaybackEvidence(playbackEvidenceRef.current, {
+      currentTime: video.currentTime,
+      paused: video.paused,
+      buffering: false,
+    });
+    if (transition.becameReady) markHistoryPlaybackVerified(key);
     const percent = Math.max(0, Math.min(100, video.currentTime / video.duration * 100));
     storage.set("dlTime_" + key, video.currentTime);
-    const details = storage.get(STORAGE_KEYS.PROGRESS_DETAILS) || {};
-    details[key] = {
+    persistPlaybackProgressDetails(key, {
       currentTime: video.currentTime,
       duration: video.duration,
       percent,
-      updatedAt: Date.now(),
-    };
-    storage.set(STORAGE_KEYS.PROGRESS_DETAILS, details);
+    }, { verified: transition.ready });
     onSaveProgress?.(key, percent);
   };
 
@@ -199,7 +210,7 @@ export default function LocalPlayer({
             onPause={() => savePosition(true)}
             onEnded={() => {
               savePosition(true);
-              onMarkWatched?.(progressKey(media));
+              if (playbackEvidenceRef.current.ready) onMarkWatched?.(progressKey(media));
             }}
           >
             {media.subtitles.map((subtitle, index) => (

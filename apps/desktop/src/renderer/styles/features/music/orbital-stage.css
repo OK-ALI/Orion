@@ -111,7 +111,8 @@
 .music-listening-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 20px; }
 .music-listening-controls button { min-height: 36px; border: 1px solid var(--music-glass-line-soft); border-radius: 11px; padding: 0 12px; color: var(--mp-text); background: var(--music-hover-glass); }
 .music-listening-controls button.icon { display: grid; width: 38px; padding: 0; place-items: center; border-radius: 50%; }
-.music-listening-controls button.primary { width: 48px; height: 48px; color: var(--bg-base); background: var(--music-highlight); }
+.music-listening-controls button.primary { width: 48px; height: 48px; color: var(--music-action-text, var(--bg-base)); background: var(--music-action-fill, var(--music-highlight)); }
+.music-listening-controls button.primary:not(:disabled):hover { background: var(--music-action-fill-hover, var(--music-action-fill, var(--music-highlight))); }
 .music-listening-controls button.active { border-color: var(--music-glass-edge); color: var(--music-highlight); }
 .music-listening-timeline { display: grid; grid-template-columns: 42px 1fr 48px; gap: 10px; align-items: center; margin-top: 20px; color: var(--mp-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .music-listening-footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--music-glass-line-soft); }
@@ -176,7 +177,8 @@
 .music-panel-error p { margin: 0 0 16px; color: var(--mp-text); line-height: 1.5; }
 .music-panel-error > div { display: flex; gap: 9px; }
 .music-panel-error button,.music-panel-state button { min-height: 38px; border: 1px solid var(--music-glass-edge); border-radius: 10px; padding: 0 13px; color: var(--mp-text); background: var(--music-hover-glass); }
-.music-panel-error button.primary { color: var(--bg-base); background: var(--music-highlight); }
+.music-panel-error button.primary { color: var(--music-action-text, var(--bg-base)); background: var(--music-action-fill, var(--music-highlight)); }
+.music-panel-error button.primary:not(:disabled):hover { background: var(--music-action-fill-hover, var(--music-action-fill, var(--music-highlight))); }
 .music-source-options > div { grid-template-columns: minmax(0, 1fr) auto; }
 .music-source-options > div > b { align-self: center; padding-right: 9px; color: var(--mp-muted); font-size: 10px; text-transform: uppercase; }
 .music-source-options > div.active > b { color: var(--success); }

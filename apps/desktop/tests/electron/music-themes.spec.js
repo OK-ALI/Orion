@@ -2,10 +2,13 @@ const path = require("path");
 const os = require("os");
 const { test, expect, _electron: electron } = require("@playwright/test");
 
-const THEMES = ["dark", "amoled", "mocha", "slate", "light", "custom"];
+const THEMES = ["dark", "amoled", "watchfree", "mocha", "slate", "light", "custom"];
 
 function luminance(rgb) {
-  const values = rgb.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number);
+  const srgb = String(rgb || "").match(/color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/i);
+  const values = srgb
+    ? srgb.slice(1, 4).map((value) => Number(value) * 255)
+    : String(rgb || "").match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number);
   if (!values || values.length !== 3) return null;
   const channels = values.map((channel) => {
     const value = channel / 255;
@@ -28,9 +31,23 @@ async function dismissOptionalOverlays(page) {
 }
 
 async function openMusic(page) {
+  const musicHeading = page.getByRole("heading", { name: "Music Planet" });
+  if (await musicHeading.count()) {
+    await expect(musicHeading).toBeVisible();
+    return;
+  }
+
   const enterMusic = page.getByRole("button", { name: "Enter Music Planet" });
-  if (await enterMusic.count()) await enterMusic.click();
-  await expect(page.getByRole("heading", { name: "Music Planet" })).toBeVisible();
+  if (!(await enterMusic.isVisible().catch(() => false))) {
+    const revealCinema = page.getByRole("button", { name: "Reveal Orion Cinema sidebar" });
+    await expect(revealCinema).toBeVisible();
+    await revealCinema.focus();
+    await expect(page.locator(".sidebar")).toHaveClass(/revealed/);
+  }
+
+  await expect(enterMusic).toBeVisible();
+  await enterMusic.click();
+  await expect(musicHeading).toBeVisible();
 }
 
 test("Music Planet keeps its readable orbital foreground in every supported theme", async ({}, testInfo) => {
@@ -63,12 +80,49 @@ test("Music Planet keeps its readable orbital foreground in every supported them
         subtitle: get(".music-planet-subtitle"),
         input: get(".music-hero-search input"),
         dock: get(".glass-music-player .player-meta"),
+        canvasOpacity: Number.parseFloat(getComputedStyle(document.querySelector(".music-planet-canvas-container canvas")).opacity || "0"),
+        heroSearchRadius: Number.parseFloat(getComputedStyle(document.querySelector(".music-hero-search")).borderTopLeftRadius || "0"),
+        ...(() => {
+          const root = document.querySelector(".music-planet-container");
+          const action = document.createElement("button");
+          action.style.color = "var(--music-action-text, var(--bg-base))";
+          action.style.background = "var(--music-action-fill, var(--music-highlight))";
+          const searchLayout = document.createElement("div");
+          searchLayout.className = "music-search-feature";
+          const listeningLayout = document.createElement("div");
+          listeningLayout.className = "music-listening-core";
+          root.append(action, searchLayout, listeningLayout);
+          const actionStyle = getComputedStyle(action);
+          const searchStyle = getComputedStyle(searchLayout);
+          const listeningStyle = getComputedStyle(listeningLayout);
+          const result = {
+            actionText: actionStyle.color,
+            actionBackground: actionStyle.backgroundColor,
+            searchLayoutBackground: searchStyle.backgroundColor,
+            searchLayoutImage: searchStyle.backgroundImage,
+            listeningLayoutBackground: listeningStyle.backgroundColor,
+            listeningLayoutImage: listeningStyle.backgroundImage,
+          };
+          action.remove();
+          searchLayout.remove();
+          listeningLayout.remove();
+          return result;
+        })(),
       };
     });
     expect(contrast(colors.title, colors.scene), `${theme} title contrast`).toBeGreaterThanOrEqual(4.5);
     expect(contrast(colors.subtitle, colors.scene), `${theme} subtitle contrast`).toBeGreaterThanOrEqual(3);
     expect(contrast(colors.input, colors.scene), `${theme} header input contrast`).toBeGreaterThanOrEqual(3);
     expect(contrast(colors.dock, colors.scene), `${theme} dock contrast`).toBeGreaterThanOrEqual(3);
+    expect(contrast(colors.actionText, colors.actionBackground), `${theme} Music primary-action contrast`).toBeGreaterThanOrEqual(4.5);
+    if (theme === "light") {
+      expect(colors.canvasOpacity, "light Music core visibility").toBeGreaterThanOrEqual(0.58);
+      expect(colors.heroSearchRadius, "light Music search shell radius").toBeGreaterThanOrEqual(30);
+      expect(colors.searchLayoutBackground, "light Music search layout stays transparent").toBe("rgba(0, 0, 0, 0)");
+      expect(colors.searchLayoutImage, "light Music search layout has no raw background image").toBe("none");
+      expect(colors.listeningLayoutBackground, "light Music listening layout stays transparent").toBe("rgba(0, 0, 0, 0)");
+      expect(colors.listeningLayoutImage, "light Music listening layout has no raw background image").toBe("none");
+    }
   }
   expect(errors).toEqual([]);
   await app.close();

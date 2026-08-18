@@ -12,12 +12,20 @@ import PlaylistsSection from "./planet-sections/PlaylistsSection";
 import FavoritesSection from "./planet-sections/FavoritesSection";
 import SourcesSection from "./planet-sections/SourcesSection";
 import { useMusic } from "./context/MusicProvider";
+import { favoriteTrackPreview } from "./utils/favorites";
+import { MUSIC_COLLECTIONS_CHANGED_EVENT } from "./utils/collections";
 import "../../styles/features/music/layout.css";
 import "../../styles/features/music/planet.css";
 import "../../styles/features/music/planet-v2.css";
 import "../../styles/features/music/planet-bridge.css";
 import "../../styles/features/music/planet-polish.css";
+import "../../styles/features/music/music-track-list.css";
 import "../../styles/features/music/orbital-stage.css";
+import "../../styles/features/music/dux23-coherence.css";
+import "../../styles/features/music/listening-console.css";
+import "../../styles/features/music/music-library-collections.css";
+import "../../styles/features/music/context-cursor.css";
+import "../../styles/features/music/final-coherence.css";
 
 const DETAIL_PAGES = new Set([
   "music-search", "music-library", "music-playlists", "music-favorites",
@@ -94,13 +102,20 @@ function useLocalMusicPreview() {
   const [playlists, setPlaylists] = useState([]);
   const [history, setHistory] = useState([]);
 
-  useEffect(() => {
-    window.electron?.musicListTracks?.({ limit: 24 }).then((value) => setTracks(value || [])).catch(() => {});
-    window.electron?.musicListPlaylists?.().then((value) => setPlaylists(value || [])).catch(() => {});
-    window.electron?.musicListHistory?.(24).then((value) => setHistory(value || [])).catch(() => {});
-  }, []);
+  const refresh = useCallback(() => Promise.all([
+    window.electron?.musicListTracks?.({ limit: 24 }).then((value) => setTracks(value || [])).catch(() => {}),
+    window.electron?.musicListPlaylists?.().then((value) => setPlaylists(value || [])).catch(() => {}),
+    window.electron?.musicListHistory?.(24).then((value) => setHistory(value || [])).catch(() => {}),
+  ]), []);
 
-  return { tracks, playlists, history };
+  useEffect(() => {
+    refresh();
+    const onCollectionsChanged = () => refresh();
+    window.addEventListener(MUSIC_COLLECTIONS_CHANGED_EVENT, onCollectionsChanged);
+    return () => window.removeEventListener(MUSIC_COLLECTIONS_CHANGED_EVENT, onCollectionsChanged);
+  }, [refresh]);
+
+  return { tracks, playlists, history, refresh };
 }
 
 function useSceneFromScroll(containerRef, defaultScene) {
@@ -161,12 +176,10 @@ export default function MusicPlanet({ page, selected, onNavigate }) {
     "data-music-glass-density": music.visualPreferences.glassDensity,
   };
 
-  const favoriteTracks = useMemo(() => {
-    const favorites = music.favorites?.tracks || [];
-    return favorites.map((item) => item.track || item)
-      .filter((item) => item?.id && item?.title && (item.artistName || item.albumTitle || item.provider))
-      .slice(0, 12);
-  }, [music.favorites?.tracks]);
+  const favoriteTracks = useMemo(
+    () => favoriteTrackPreview(music.favorites?.tracks || [], 6),
+    [music.favorites?.tracks],
+  );
 
   const scrollToChapter = useCallback((chapter, { instant = false } = {}) => {
     const container = scrollRef.current;
@@ -264,6 +277,12 @@ export default function MusicPlanet({ page, selected, onNavigate }) {
   }, [showDetail]);
 
   useEffect(() => {
+    if (!showDetail && sceneState === "favorites") {
+      music.favorites?.loadFromDisk?.();
+    }
+  }, [music.favorites?.loadFromDisk, sceneState, showDetail]);
+
+  useEffect(() => {
     if (showDetail || !selected?.musicChapter) return undefined;
     pendingHomeScrollRef.current = false;
     const restore = () => scrollToChapter(selected.musicChapter, { instant: true });
@@ -290,7 +309,35 @@ export default function MusicPlanet({ page, selected, onNavigate }) {
     setSceneState(sceneByPage[page] || "idle-space");
   }, [page, setSceneState, showDetail]);
 
-  const handleSearch = (query) => onNavigate("music-search", { query });
+  const navigateWithinMusic = useCallback((targetPage, targetData) => {
+    if (!DETAIL_PAGES.has(targetPage)) {
+      onNavigate(targetPage, targetData);
+      return;
+    }
+
+    if (!showDetail) {
+      savedHomeScrollRef.current = rememberMusicHomeScroll(scrollRef.current) || savedHomeScrollRef.current;
+    }
+
+    const data = targetData && typeof targetData === "object" ? { ...targetData } : {};
+    if (!data.musicReturn) {
+      data.musicReturn = showDetail
+        ? { page, selected: selected || null }
+        : { page: "music-home", selected: { restoreMusicScroll: true } };
+    }
+    onNavigate(targetPage, data);
+  }, [onNavigate, page, selected, showDetail]);
+
+  const navigateBack = useCallback(() => {
+    const previous = selected?.musicReturn;
+    if (previous?.page) {
+      onNavigate(previous.page, previous.selected || null);
+      return;
+    }
+    onNavigate("music-home", { restoreMusicScroll: true });
+  }, [onNavigate, selected]);
+
+  const handleSearch = (query) => navigateWithinMusic("music-search", { query });
 
   return (
     <div className="music-planet-container" {...musicAppearance}>
@@ -299,34 +346,25 @@ export default function MusicPlanet({ page, selected, onNavigate }) {
         sceneState={sceneState}
         visualPreferences={music.visualPreferences}
       />
-      <MusicHeader onNavigate={(targetPage, targetData) => onNavigate(
-        targetPage,
-        targetPage === "music-settings"
-          ? { ...(targetData || {}), returnChapter: activeHomeChapterRef.current || "home" }
-          : targetData,
-      )} showSearch={showDetail && page !== "music-search"} />
+      <MusicHeader onNavigate={navigateWithinMusic} showSearch={showDetail && page !== "music-search"} />
 
       {showDetail ? (
         <main className="music-planet-detail-overlay">
-          <button className="detail-back-button" onClick={() => {
-            onNavigate("music-home", {
-              musicChapter: selected?.returnChapter || activeHomeChapterRef.current || "home",
-            });
-          }} aria-label="Back to Music Planet">
-            ← Music Planet
+          <button className="detail-back-button" onClick={navigateBack} aria-label="Back in Music Planet">
+            ← Back
           </button>
-          <MusicRoutes page={page} selected={selected} onNavigate={onNavigate} />
+          <MusicRoutes page={page} selected={selected} onNavigate={navigateWithinMusic} />
         </main>
       ) : (
         <main ref={scrollRef} className="music-planet-scroll-area">
           <IntroSection onSearch={handleSearch} />
-          <NowPlayingSection music={music} onNavigate={onNavigate} />
-          <LibrarySection tracks={tracks} history={history} onNavigate={onNavigate} />
-          <AlbumsSection dashboard={dashboard} onNavigate={onNavigate} />
-          <ArtistsSection dashboard={dashboard} onNavigate={onNavigate} />
-          <PlaylistsSection playlists={playlists} onNavigate={onNavigate} />
-          <FavoritesSection tracks={favoriteTracks} onNavigate={onNavigate} />
-          <SourcesSection onNavigate={onNavigate} />
+          <NowPlayingSection music={music} onNavigate={navigateWithinMusic} />
+          <LibrarySection tracks={tracks} history={history} onNavigate={navigateWithinMusic} />
+          <AlbumsSection dashboard={dashboard} onNavigate={navigateWithinMusic} />
+          <ArtistsSection dashboard={dashboard} onNavigate={navigateWithinMusic} />
+          <PlaylistsSection playlists={playlists} onNavigate={navigateWithinMusic} />
+          <FavoritesSection tracks={favoriteTracks} onNavigate={navigateWithinMusic} />
+          <SourcesSection onNavigate={navigateWithinMusic} />
         </main>
       )}
 

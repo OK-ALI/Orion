@@ -1,7 +1,7 @@
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import { useMusic } from "../context/MusicProvider";
 import MusicArtwork from "../components/MusicArtwork";
-import { AddToPlaylistDialog } from "../components/MusicTrackList";
+import AddToPlaylistDialog from "../components/AddToPlaylistDialog";
 import { computeThemeTokens } from "../visual/musicThemeTokens";
 import { storage, STORAGE_KEYS } from "../../../services/settingsStore";
 import { chooseMusicOverlayPlacement, constrainMusicPlayerGeometry, snapMusicPlayerGeometry } from "../utils/playerGeometry";

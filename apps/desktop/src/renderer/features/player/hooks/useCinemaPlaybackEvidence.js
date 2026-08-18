@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
+import { markHistoryPlaybackVerified } from "../../../services/viewingStateVerification";
 import { updateCinemaSourceHealth } from "../sources/registry";
-import { isAdvancingPlayback, normalizePlayerEventProgress } from "../services/playerEventProgress";
+import {
+  normalizePlayerEventProgress,
+  observePlaybackEvidence,
+} from "../services/playerEventProgress";
 
 /**
  * Shared runtime evidence boundary for Movie and TV provider webviews.
@@ -11,6 +15,7 @@ export function useCinemaPlaybackEvidence({
   sourceId,
   mediaType,
   resetKey,
+  viewingKey = null,
   webviewRef,
   durationRef = null,
   lastKnownTimeRef,
@@ -21,6 +26,8 @@ export function useCinemaPlaybackEvidence({
   const healthEvidenceRef = useRef({ lastTime: null, advances: 0, ready: false });
   const playerEventProgressRef = useRef(null);
   const attemptedSourcesRef = useRef([]);
+  const viewingKeyRef = useRef(viewingKey);
+  viewingKeyRef.current = viewingKey;
 
   const reportSourceHealth = useCallback((state, reasonCode = null, message = "") => {
     window.electron?.recordCinemaSourceHealth?.({
@@ -32,6 +39,17 @@ export function useCinemaPlaybackEvidence({
       startupMs: state === "ready" ? Date.now() - healthStartedAtRef.current : undefined,
     }).catch(() => {});
   }, [sourceId, mediaType]);
+
+  const observePlaybackProgress = useCallback((progress) => {
+    if (!progress || progress.duration <= 0) return healthEvidenceRef.current.ready === true;
+    const transition = observePlaybackEvidence(healthEvidenceRef.current, progress);
+    if (transition.becameReady) {
+      const verifiedAt = Date.now();
+      reportSourceHealth("ready");
+      if (viewingKeyRef.current) markHistoryPlaybackVerified(viewingKeyRef.current, verifiedAt);
+    }
+    return transition.ready;
+  }, [reportSourceHealth]);
 
   useEffect(() => {
     healthStartedAtRef.current = Date.now();
@@ -62,14 +80,7 @@ export function useCinemaPlaybackEvidence({
       playerEventProgressRef.current = progress;
       if (progress.duration <= 0) return;
       if (durationRef) durationRef.current = progress.duration;
-      const evidence = healthEvidenceRef.current;
-      if (isAdvancingPlayback(evidence.lastTime, progress)) evidence.advances += 1;
-      else if (!progress.paused && !progress.buffering && evidence.lastTime != null) evidence.advances = 0;
-      evidence.lastTime = progress.currentTime;
-      if (evidence.advances >= 2 && !evidence.ready) {
-        evidence.ready = true;
-        reportSourceHealth("ready");
-      }
+      observePlaybackProgress(progress);
       if (!progress.paused && !progress.buffering) {
         lastKnownTimeRef.current = progress.currentTime;
         setWebviewLoading(false);
@@ -78,7 +89,13 @@ export function useCinemaPlaybackEvidence({
     };
     webview.addEventListener("ipc-message", handlePlayerEvent);
     return () => webview.removeEventListener("ipc-message", handlePlayerEvent);
-  }, [playing, sourceId, reportSourceHealth, durationRef, lastKnownTimeRef, setWebviewLoading, setShowFailoverPrompt, webviewRef]);
+  }, [playing, sourceId, durationRef, lastKnownTimeRef, observePlaybackProgress, setWebviewLoading, setShowFailoverPrompt, webviewRef]);
 
-  return { healthEvidenceRef, playerEventProgressRef, attemptedSourcesRef, reportSourceHealth };
+  return {
+    healthEvidenceRef,
+    playerEventProgressRef,
+    attemptedSourcesRef,
+    observePlaybackProgress,
+    reportSourceHealth,
+  };
 }

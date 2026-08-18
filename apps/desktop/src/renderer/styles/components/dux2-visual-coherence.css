@@ -1,0 +1,322 @@
+/* ── DUX-2 visual coherence ──────────────────────────────────────────────── */
+
+
+.app-content {
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 240ms var(--ease-out),
+    filter 220ms var(--ease-out);
+}
+
+.search-orb-routing .app-content {
+  opacity: .72;
+  transform: translateY(3px) scale(.997);
+  filter: blur(1px);
+}
+
+.sidebar.mode-auto .sidebar-body {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 6;
+  width: var(--sidebar-expanded-width);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-14px);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--text-primary) 2.5%, transparent), transparent 32%),
+    color-mix(in srgb, var(--bg-elevated) 97%, transparent);
+  border-right: 1px solid var(--border);
+  box-shadow: 18px 0 42px color-mix(in srgb, var(--shadow-color) 24%, transparent);
+  transition:
+    opacity 260ms var(--ease-out),
+    transform 260ms var(--ease-out),
+    visibility 0s linear 260ms,
+    border-color 180ms var(--ease-out),
+    background 180ms var(--ease-out);
+}
+
+.sidebar.mode-auto.revealed .sidebar-body {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0);
+  transition:
+    opacity 260ms var(--ease-out),
+    transform 260ms var(--ease-out),
+    visibility 0s linear 0s,
+    border-color 180ms var(--ease-out),
+    background 180ms var(--ease-out);
+  animation: none;
+}
+
+.sidebar.mode-pinned .sidebar-body {
+  position: relative;
+  inset: auto;
+  width: var(--sidebar-expanded-width);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition: opacity 260ms var(--ease-out), transform 260ms var(--ease-out);
+}
+
+.sidebar-collapsed-rail {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+  animation: none;
+  transition:
+    opacity 230ms var(--ease-out),
+    transform 260ms var(--ease-out),
+    visibility 0s linear 0s,
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.sidebar.revealed .sidebar-collapsed-rail,
+.sidebar.mode-pinned .sidebar-collapsed-rail {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-8px);
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 220ms var(--ease-out),
+    visibility 0s linear 220ms;
+}
+
+.sidebar-world-switch .sidebar-world-orbit {
+  transition: transform 220ms var(--ease-out), color 180ms var(--ease-out);
+}
+
+.sidebar-world-switch:hover .sidebar-world-orbit {
+  transform: translateY(-1px) rotate(-5deg) scale(1.04);
+}
+
+.search-orb {
+  position: fixed;
+  z-index: 4700;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--quick-search-border, var(--glass-border));
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--text-primary) 7%, transparent), transparent 55%),
+    color-mix(in srgb, var(--quick-search-glass-strong, var(--glass-bg)) 88%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 12%, transparent),
+    0 12px 30px color-mix(in srgb, var(--shadow-color) 34%, transparent);
+  backdrop-filter: blur(18px) saturate(112%);
+  -webkit-backdrop-filter: blur(18px) saturate(112%);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  transition:
+    left 230ms var(--ease-out),
+    top 230ms var(--ease-out),
+    transform 180ms var(--ease-out),
+    color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    background 180ms var(--ease-out),
+    box-shadow 180ms var(--ease-out);
+}
+
+.search-orb:hover {
+  color: var(--accent);
+  transform: scale(1.055);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--quick-search-border));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 58%),
+    color-mix(in srgb, var(--quick-search-glass-strong) 94%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 14%, transparent),
+    0 16px 36px color-mix(in srgb, var(--shadow-color) 38%, transparent),
+    0 0 18px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.search-orb:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.search-orb.is-dragging {
+  cursor: grabbing;
+  transform: scale(.94);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--quick-search-border));
+  background: var(--quick-search-glass-strong);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 14%, transparent),
+    0 8px 20px color-mix(in srgb, var(--shadow-color) 30%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--accent) 9%, transparent);
+  transition: transform 90ms ease, color 90ms ease, background 90ms ease, box-shadow 90ms ease;
+}
+
+.search-orb.is-dragging {
+  transition-property: transform, color, border-color, background, box-shadow;
+}
+
+.search-orb-glow {
+  position: absolute;
+  inset: 7px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(circle at 35% 25%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 68%);
+  opacity: .5;
+}
+
+.search-orb > svg {
+  position: relative;
+  z-index: 1;
+  stroke-width: 1.9;
+}
+
+.search-orb.is-launching::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 50%;
+  animation: search-orb-launch 180ms var(--ease-out) both;
+}
+
+@keyframes search-orb-launch {
+  from { opacity: .7; transform: scale(.82); }
+  to { opacity: 0; transform: scale(1.48); }
+}
+
+.quick-search-overlay.anchored {
+  z-index: 4600;
+  display: block;
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: opacity 180ms var(--ease-out);
+}
+
+.search-box.anchored {
+  position: fixed;
+  z-index: 1;
+  overflow: hidden;
+  border: 1px solid var(--quick-search-border);
+  border-radius: 16px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--text-primary) 4%, transparent), transparent 38%),
+    var(--quick-search-glass);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 9%, transparent),
+    0 22px 58px color-mix(in srgb, var(--shadow-color) 52%, transparent);
+  backdrop-filter: blur(22px) saturate(114%);
+  -webkit-backdrop-filter: blur(22px) saturate(114%);
+  transform: scale(.97) translateY(-4px);
+  transform-origin: top right;
+  transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out);
+}
+
+.search-box.anchored.opens-left { transform-origin: top right; }
+.search-box.anchored.opens-right { transform-origin: top left; }
+.search-box.anchored.opens-up { transform-origin: bottom center; }
+.search-box.anchored.entering,
+.search-box.anchored.entered { transform: scale(1) translateY(0); }
+.search-box.anchored.exiting { transform: scale(.97) translateY(-3px); }
+
+.search-box.anchored .search-input-wrap {
+  min-height: 58px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--quick-search-glass-strong) 76%, transparent);
+}
+
+.search-box.anchored .search-input {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.search-box.anchored .search-results {
+  max-height: min(410px, calc(var(--quick-search-panel-max-height, 470px) - 60px));
+}
+
+.search-box.anchored .quick-search-filter-stack {
+  gap: 6px;
+  padding: 9px 12px;
+  background: color-mix(in srgb, var(--quick-search-glass-strong) 92%, transparent);
+}
+
+.search-box.anchored .quick-search-filter-row {
+  grid-template-columns: 46px minmax(0, 1fr);
+}
+
+.search-box.anchored .quick-search-result-grid {
+  grid-template-columns: 1fr;
+}
+
+.search-box.anchored .quick-search-result-grid .search-result {
+  min-height: 78px;
+  padding: 8px 12px;
+  border-right: 0;
+}
+
+.search-box.anchored .search-result-image {
+  width: 42px;
+  height: 62px;
+}
+
+.search-box.anchored .search-result--person .search-result-image {
+  width: 46px;
+  height: 62px;
+}
+
+.search-box.anchored .search-history-item {
+  padding: 10px 14px;
+}
+
+.search-box.anchored .search-view-all {
+  margin: 8px 10px 10px;
+  width: calc(100% - 20px);
+  padding: 10px 12px;
+}
+
+.orion-search-shortcut-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-translucent);
+}
+
+[data-theme="light"] .search-orb {
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.48), transparent 55%),
+    color-mix(in srgb, var(--quick-search-glass-strong) 92%, transparent);
+}
+
+[data-theme="light"] .search-box.anchored {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.72),
+    0 22px 56px rgba(52,39,45,.2);
+}
+
+.no-anim .app-content,
+.no-anim .sidebar-body,
+.no-anim .sidebar-collapsed-rail,
+.no-anim .search-orb,
+.no-anim .search-box.anchored,
+.no-anim .quick-search-overlay.anchored {
+  transition-duration: 1ms !important;
+  animation-duration: 1ms !important;
+}
+
+@media (max-width: 720px) {
+  .orion-search-shortcut-setting { align-items: stretch; flex-direction: column; }
+  .search-box.anchored { max-width: calc(100vw - 24px); }
+}

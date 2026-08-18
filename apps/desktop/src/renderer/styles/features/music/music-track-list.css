@@ -1,0 +1,368 @@
+/* MUSIC-UI C2 shared track-row ownership.
+   Keep row geometry, action rails, compact density and row menus together
+   instead of growing the broader planet-polish surface beyond its source-size boundary. */
+
+/* C2.3 list rhythm:
+   MusicTrackList is one composed list surface. Individual tracks use separators and
+   state highlights instead of nested rounded cards, preserving breathing room without
+   turning dense music collections into a stack of tiles. */
+
+/* C2.2 global row geometry:
+   full-density Music lists use one stable identity -> metadata -> time -> actions grid.
+   This keeps Search, Album, Artist, Playlist and Library rows aligned instead of
+   letting wide pages stretch the metadata into arbitrary empty columns. */
+.music-track-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 168px;
+  align-items: stretch;
+  min-height: 70px;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--music-glass-line-soft);
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
+  transition:
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.music-track-row:last-child {
+  border-bottom: 0;
+}
+
+.music-track-main {
+  width: 100%;
+  min-width: 0;
+  min-height: 70px;
+  display: grid;
+  grid-template-columns: 30px 48px minmax(0, 1fr) minmax(150px, 240px) 58px;
+  align-items: center;
+  gap: 14px;
+  border: 0;
+  padding: 10px 10px 10px 14px;
+  color: var(--mp-text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.music-track-number {
+  justify-self: center;
+  min-width: 24px;
+  color: var(--mp-muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.music-track-art {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--shadow-color) 34%, transparent);
+}
+
+.music-track-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+}
+
+.music-track-copy strong {
+  color: var(--mp-text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.music-track-copy small {
+  color: var(--mp-muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.music-track-copy strong,
+.music-track-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-track-album {
+  min-width: 0;
+  padding-left: 8px;
+  color: var(--mp-muted);
+  font-size: 12px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-track-duration {
+  justify-self: end;
+  min-width: 54px;
+  padding-right: 4px;
+  color: var(--mp-muted);
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.music-track-row:hover,
+.music-track-row.active {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--music-highlight) 9%, transparent),
+    color-mix(in srgb, var(--music-hover-glass) 74%, transparent)
+  );
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--music-highlight) 62%, transparent);
+}
+
+.music-track-row:focus-within {
+  background: color-mix(in srgb, var(--music-hover-glass) 68%, transparent);
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--music-highlight) 72%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--music-highlight) 22%, transparent);
+}
+
+.music-track-main:focus-visible,
+.music-track-add-playlist:focus-visible,
+.music-track-more:focus-visible {
+  outline: none;
+}
+
+/* One shared action rail owns row chrome. It has a stable width so Playlist and
+   overflow controls line up vertically across every full-density Music list. */
+.music-track-actions {
+  position: relative;
+  z-index: 2;
+  width: 168px;
+  display: grid;
+  grid-template-columns: 112px 36px;
+  align-items: center;
+  justify-content: end;
+  gap: 8px;
+  padding: 0 8px 0 6px;
+  border-radius: 0;
+}
+
+.music-track-row:hover .music-track-actions,
+.music-track-row.active .music-track-actions,
+.music-track-row:focus-within .music-track-actions {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--music-glass-panel-strong) 18%, transparent)
+  );
+}
+
+.music-track-more {
+  width: 36px;
+  height: 36px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  padding: 0;
+  color: var(--mp-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.music-track-more-icon {
+  width: 19px;
+  height: 19px;
+  overflow: visible;
+  fill: currentColor;
+}
+
+.music-track-more:hover,
+.music-track-more:focus-visible,
+.music-track-more[aria-expanded="true"] {
+  color: var(--mp-text);
+  background: var(--music-highlight-soft);
+}
+
+.music-track-add-playlist {
+  width: 112px;
+  min-width: 112px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--music-glass-line-soft);
+  border-radius: 999px;
+  padding: 0 12px;
+  color: var(--mp-muted);
+  background: transparent;
+}
+
+.music-track-add-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  stroke: currentColor;
+  stroke-width: 1.55;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.music-track-add-playlist:hover,
+.music-track-add-playlist:focus-visible {
+  color: var(--mp-text);
+  background: var(--music-hover-glass);
+}
+
+/* Compact is a real density mode, not just a smaller Playlist button.
+   Library and Search Quick Play keep identity prominent and collapse secondary
+   metadata before title/artist text is forced into premature truncation. */
+.music-track-list.is-compact .music-track-row {
+  grid-template-columns: minmax(0, 1fr) 78px;
+  min-height: 64px;
+  margin: 0;
+  border-radius: 0;
+}
+
+.music-track-list.is-compact .music-track-main {
+  min-height: 64px;
+  grid-template-columns: 26px 44px minmax(0, 1fr);
+  gap: 10px;
+  padding: 7px 6px 7px 10px;
+}
+
+.music-track-list.is-compact .music-track-art {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+}
+
+.music-track-list.is-compact .music-track-album,
+.music-track-list.is-compact .music-track-duration {
+  display: none;
+}
+
+.music-track-list.is-compact .music-track-actions {
+  width: 78px;
+  grid-template-columns: 34px 34px;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.music-track-list.is-compact .music-track-add-playlist {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--mp-muted);
+  background: color-mix(in srgb, var(--music-glass-panel-strong) 62%, transparent);
+}
+
+.music-track-list.is-compact .music-track-add-playlist > span {
+  display: none;
+}
+
+.music-track-list.is-compact .music-track-add-playlist .music-track-add-icon {
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
+}
+
+.music-track-list.is-compact .music-track-more {
+  width: 34px;
+  height: 34px;
+}
+
+.music-search-quick-play .music-track-list {
+  margin-top: 8px;
+}
+
+.music-search-quick-play .music-track-row:first-child {
+  margin-top: 4px;
+}
+
+/* Responsive contraction follows the same global contract everywhere:
+   album first, then duration, then the Playlist label. */
+@media (max-width: 1100px) {
+  .music-track-main {
+    grid-template-columns: 30px 48px minmax(0, 1fr) 60px;
+  }
+
+  .music-track-album {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .music-track-row {
+    grid-template-columns: minmax(0, 1fr) 78px;
+  }
+
+  .music-track-main {
+    grid-template-columns: 26px 44px minmax(0, 1fr);
+    gap: 10px;
+    padding-left: 10px;
+  }
+
+  .music-track-duration {
+    display: none;
+  }
+
+  .music-track-actions {
+    width: 78px;
+    grid-template-columns: 34px 34px;
+    gap: 4px;
+    padding: 0 4px;
+  }
+
+  .music-track-add-playlist {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0;
+    border-radius: 50%;
+  }
+
+  .music-track-add-playlist > span {
+    display: none;
+  }
+}
+
+.music-track-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% - 4px);
+  right: 8px;
+  min-width: 180px;
+  display: grid;
+  padding: 6px;
+  border: 1px solid var(--music-glass-edge);
+  border-radius: 14px;
+  background: var(--music-glass-panel-strong);
+  box-shadow: 0 18px 48px var(--shadow-color);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.music-track-menu button,
+.music-dialog-list button {
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 11px;
+  color: var(--mp-text);
+  background: transparent;
+  text-align: left;
+}
+
+.music-track-menu button:hover,
+.music-dialog-list button:hover {
+  background: var(--music-hover-glass);
+}

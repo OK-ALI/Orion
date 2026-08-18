@@ -34,6 +34,9 @@ describe("Music artist and album details", () => {
     expect(await screen.findByRole("heading", { name: "Resolved Artist" })).toBeInTheDocument();
     expect(screen.getByTestId("detail-tracks")).toHaveTextContent("Resolved Signal");
     expect(screen.getByTestId("detail-albums")).toHaveTextContent("Resolved Orbit");
+    expect(screen.getByRole("heading", { name: "Resolved Artist" }).closest(".music-entity-copy")).toBeTruthy();
+    expect(screen.getByText("1 playable track")).toBeInTheDocument();
+    expect(screen.getByText("1 release")).toBeInTheDocument();
     expect(window.electron.musicGetDetails).toHaveBeenCalledWith("artist", expect.objectContaining({ id: "artist-1" }));
   });
 
@@ -48,7 +51,9 @@ describe("Music artist and album details", () => {
     expect(await screen.findByRole("heading", { name: "Resolved Orbit" })).toBeInTheDocument();
     expect(screen.getByText("Resolved Artist")).toBeInTheDocument();
     expect(screen.getByTestId("detail-tracks")).toHaveTextContent("First Signal, Second Signal");
-    expect(screen.getByText("2 tracks")).toBeInTheDocument();
+    expect(screen.getAllByText("2 tracks").length).toBeGreaterThan(0);
+    expect(screen.getByText("2026")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Resolved Orbit" }).closest(".music-entity-copy")).toBeTruthy();
   });
 
   it("keeps the selected profile visible and reports a provider failure", async () => {

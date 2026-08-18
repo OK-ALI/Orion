@@ -2,6 +2,33 @@ const path = require("path");
 const os = require("os");
 const { test, expect, _electron: electron } = require("@playwright/test");
 
+async function dismissOptionalOverlays(page) {
+  const skipSignIn = page.getByRole("button", { name: "Skip / Use Offline" });
+  if (await skipSignIn.count()) await skipSignIn.click();
+  const skipWhatsNew = page.getByRole("button", { name: "Continue to Cinema" });
+  if (await skipWhatsNew.count()) await skipWhatsNew.click();
+}
+
+async function openMusic(page) {
+  const musicHeading = page.getByRole("heading", { name: "Music Planet" });
+  if (await musicHeading.count()) {
+    await expect(musicHeading).toBeVisible();
+    return;
+  }
+
+  const enterMusic = page.getByRole("button", { name: "Enter Music Planet" });
+  if (!(await enterMusic.isVisible().catch(() => false))) {
+    const revealCinema = page.getByRole("button", { name: "Reveal Orion Cinema sidebar" });
+    await expect(revealCinema).toBeVisible();
+    await revealCinema.focus();
+    await expect(page.locator(".sidebar")).toHaveClass(/revealed/);
+  }
+
+  await expect(enterMusic).toBeVisible();
+  await enterMusic.click();
+  await expect(musicHeading).toBeVisible();
+}
+
 test("Music dock follows the sidebar and exposes complete transport controls", async ({}, testInfo) => {
   const userDataDir = path.join(os.tmpdir(), `orion-player-pw-${process.pid}-${testInfo.workerIndex}-${Date.now()}`);
   const app = await electron.launch({ args: [path.join(__dirname, "../.."), `--user-data-dir=${userDataDir}`, "--disable-gpu"] });
@@ -9,17 +36,13 @@ test("Music dock follows the sidebar and exposes complete transport controls", a
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.waitForTimeout(1000);
-  const skipSignIn = page.getByRole("button", { name: "Skip / Use Offline" });
-  if (await skipSignIn.count()) await skipSignIn.click();
-  const skipWhatsNew = page.getByRole("button", { name: "Continue to Cinema" });
-  if (await skipWhatsNew.count()) await skipWhatsNew.click();
+  await dismissOptionalOverlays(page);
   await page.evaluate(() => window.electron.musicSaveQueue({
     items: [{ id: "orion-player-test", provider: "test", title: "Orion Player Test", artistName: "Orion" }],
     index: 0, repeat: "off", shuffle: false,
   }));
   await page.reload();
-  if (await skipSignIn.count()) await skipSignIn.click();
-  if (await skipWhatsNew.count()) await skipWhatsNew.click();
+  await dismissOptionalOverlays(page);
   const dock = page.locator(".glass-music-player");
   await expect(dock).toBeVisible();
   await expect(dock).toHaveClass(/is-compact/);
@@ -27,8 +50,7 @@ test("Music dock follows the sidebar and exposes complete transport controls", a
   await expect(dock.getByRole("button", { name: "Play", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Next track" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Enter Music Planet" }).click();
-  await expect(page.getByRole("heading", { name: "Music Planet" })).toBeVisible();
+  await openMusic(page);
   await expect(dock).toBeVisible();
   await expect(dock).not.toHaveClass(/is-compact/);
   await expect(dock.getByRole("button", { name: "Shuffle" })).toBeVisible();

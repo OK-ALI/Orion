@@ -1,0 +1,226 @@
+/* DUX-2.3 Search coherence: one compact surface, context-aware results, calm motion. */
+.search-orb {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    left 230ms var(--ease-out),
+    top 230ms var(--ease-out),
+    opacity 180ms var(--ease-out),
+    visibility 0s linear 0s,
+    transform 180ms var(--ease-out),
+    color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    background 180ms var(--ease-out),
+    box-shadow 180ms var(--ease-out);
+}
+
+.search-orb.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: scale(.86);
+  transition:
+    opacity 170ms var(--ease-out),
+    transform 190ms var(--ease-out),
+    visibility 0s linear 190ms;
+}
+
+.quick-search-overlay.anchored {
+  opacity: 0;
+  transition: opacity 220ms var(--ease-out);
+}
+.quick-search-overlay.anchored.entering,
+.quick-search-overlay.anchored.entered { opacity: 1; }
+.quick-search-overlay.anchored.exiting { opacity: 0; }
+
+.search-box.anchored {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--text-primary) 3%, transparent), transparent 42%),
+    color-mix(in srgb, var(--quick-search-glass-strong) 92%, transparent);
+  transform: scale(.965) translateY(-5px);
+  transition: opacity 220ms var(--ease-out), transform 240ms var(--ease-out);
+}
+.search-box.anchored.entering,
+.search-box.anchored.entered { transform: scale(1) translateY(0); }
+.search-box.anchored.exiting { transform: scale(.975) translateY(-3px); }
+.search-box.anchored.opens-up.exiting { transform: scale(.975) translateY(3px); }
+
+.search-box.anchored .search-input-wrap {
+  min-height: 60px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--quick-search-border);
+  background: transparent;
+}
+.search-box.anchored .search-input { font-size: 15px; font-weight: 650; }
+.search-box.anchored .search-results {
+  max-height: min(420px, calc(var(--quick-search-panel-max-height, 480px) - 60px));
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: transparent;
+  scrollbar-gutter: stable;
+}
+
+.search-box.anchored .quick-search-filter-stack {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: grid;
+  gap: 10px;
+  padding: 11px 14px 12px;
+  border-bottom: 1px solid var(--quick-search-border);
+  background: color-mix(in srgb, var(--quick-search-glass-strong) 94%, transparent);
+  backdrop-filter: blur(18px) saturate(110%);
+  -webkit-backdrop-filter: blur(18px) saturate(110%);
+}
+.search-box.anchored .quick-search-filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+}
+.search-box.anchored .quick-search-filter-row > span {
+  padding-inline: 2px;
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.search-box.anchored .quick-search-filters {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 1px 2px 3px;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.search-box.anchored .quick-search-filters::-webkit-scrollbar { display: none; }
+.search-box.anchored .quick-search-filters button {
+  flex: 0 0 auto;
+  min-height: 29px;
+  padding-inline: 10px;
+  background: color-mix(in srgb, var(--bg-surface) 68%, transparent);
+}
+
+.search-box.anchored .quick-search-result-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+}
+.search-box.anchored .quick-search-result-grid .search-result {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) max-content;
+  width: 100%;
+  min-width: 0;
+  min-height: 72px;
+  gap: 11px;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--quick-search-border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.search-box.anchored .quick-search-result-grid .search-result:last-child { border-bottom: 0; }
+.search-box.anchored .quick-search-result-grid .search-result:hover,
+.search-box.anchored .quick-search-result-grid .search-result.active {
+  background: color-mix(in srgb, var(--interaction-hover) 7%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--interaction-hover) 62%, transparent);
+}
+.search-box.anchored .search-result-image { width: 40px; height: 56px; border-radius: 8px; }
+.search-box.anchored .search-result--person .search-result-image { width: 44px; height: 56px; }
+.search-box.anchored .search-result-title { font-size: 13px; }
+.search-box.anchored .search-result-supporting,
+.search-box.anchored .search-result-facts { font-size: 10.5px; }
+.search-box.anchored .search-result-type {
+  min-width: 0;
+  max-width: 78px;
+  margin-left: 0;
+  align-self: center;
+  justify-self: end;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-box.anchored .search-view-all {
+  width: calc(100% - 24px);
+  margin: 10px 12px 12px;
+  padding: 10px 12px;
+  border-color: var(--quick-search-border);
+  background: color-mix(in srgb, var(--bg-surface) 56%, transparent);
+}
+.search-box.anchored .search-history { padding: 4px 0 7px; }
+.search-box.anchored .search-history-header { padding: 10px 14px 7px; }
+.search-box.anchored .search-history-item { min-height: 44px; padding: 9px 14px; border-bottom-color: var(--quick-search-border); }
+
+.music-quick-search-art { overflow: hidden; }
+.music-quick-search-art.is-artist { border-radius: 50%; }
+.music-quick-search-art > .music-artwork {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background-position: center;
+  background-size: cover;
+}
+.type-music {
+  border: 1px solid color-mix(in srgb, var(--music-violet, var(--accent)) 30%, var(--border));
+  background: color-mix(in srgb, var(--music-violet, var(--accent)) 9%, var(--bg-elevated));
+  color: color-mix(in srgb, var(--music-violet, var(--accent)) 64%, var(--text-primary));
+}
+.type-music-track { border-color: color-mix(in srgb, var(--music-highlight, var(--accent)) 32%, var(--border)); }
+
+.orion-search-shortcut-setting { align-items: center; }
+.orion-search-shortcut-copy { min-width: 0; }
+.orion-search-shortcut-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.orion-search-shortcut-toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 11px; font-weight: 700; }
+.orion-search-shortcut-actions .btn:disabled { opacity: .48; cursor: default; }
+
+.no-anim .search-orb.is-hidden,
+.no-anim .quick-search-overlay.anchored,
+.no-anim .search-box.anchored { transition-duration: 1ms !important; }
+
+@media (max-width: 720px) {
+  .orion-search-shortcut-actions { justify-content: space-between; width: 100%; }
+}
+
+/* Keep the floating control out of page geometry and avoid full-search route flashes. */
+.search-orb { isolation: isolate; }
+.search-orb-routing .search-orb { opacity: 0; transform: scale(.9); pointer-events: none; }
+
+/* The filter deck and results are one visual instrument, not stacked cards. */
+.search-box.anchored .search-results > :first-child { border-top: 0; }
+.search-box.anchored .quick-search-filter-stack + .quick-search-result-grid { border-top: 0; }
+.search-box.anchored .quick-search-filter-stack {
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--quick-search-border) 72%, transparent);
+}
+.search-box.anchored .quick-search-filter-row + .quick-search-filter-row {
+  padding-top: 2px;
+}
+.search-box.anchored .quick-search-filters button > span {
+  margin-left: 5px;
+  opacity: .58;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.search-box.anchored .search-result-info {
+  min-width: 0;
+  overflow: hidden;
+}
+.search-box.anchored .search-result-title,
+.search-box.anchored .search-result-supporting,
+.search-box.anchored .search-result-facts {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-box.anchored .search-result-supporting { white-space: nowrap; }
+
+/* Full-search navigation owns the canvas while active; the Orb returns only after Back restores a normal page. */
+.search-results-page ~ .search-orb,
+.music-search-page ~ .search-orb { pointer-events: none; }

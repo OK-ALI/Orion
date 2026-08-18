@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
 import { tmdbFetch } from "../../services/tmdb";
+import { VERIFIED_HISTORY_UPDATED_EVENT } from "../../services/viewingStateVerification";
 import {
   getLibraryMediaType,
   mergeLibraryOrder,
@@ -34,8 +35,17 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
         setProgress({});
       }
     };
+    const handleVerifiedHistoryUpdated = (event) => {
+      const enabled = storage.get(STORAGE_KEYS.HISTORY_ENABLED);
+      if (enabled === 0 || enabled === false) return;
+      setHistory(event.detail?.history || storage.get(STORAGE_KEYS.HISTORY) || []);
+    };
     window.addEventListener("orion:history-enabled-changed", handleHistorySettingChanged);
-    return () => window.removeEventListener("orion:history-enabled-changed", handleHistorySettingChanged);
+    window.addEventListener(VERIFIED_HISTORY_UPDATED_EVENT, handleVerifiedHistoryUpdated);
+    return () => {
+      window.removeEventListener("orion:history-enabled-changed", handleHistorySettingChanged);
+      window.removeEventListener(VERIFIED_HISTORY_UPDATED_EVENT, handleVerifiedHistoryUpdated);
+    };
   }, []);
 
   const showToast = useCallback((message) => {
@@ -124,7 +134,19 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
     setHistory((previous) => {
       const sameEntry = (candidate) => candidate.id === entry.id && candidate.media_type === entry.media_type && (entry.media_type !== "tv" || (candidate.season === entry.season && candidate.episode === entry.episode));
       const existing = previous.find(sameEntry);
-      const nextEntry = { ...entry, rewatchCount: (existing?.rewatchCount || 0) + (existing ? 1 : 0), completedAt: existing?.completedAt || null };
+      const verifiedFields = existing?.playbackVerified === true
+        ? {
+            playbackVerified: true,
+            playbackVerifiedAt: existing.playbackVerifiedAt || existing.lastPlayedAt || null,
+            lastPlayedAt: existing.lastPlayedAt || existing.playbackVerifiedAt || null,
+          }
+        : {};
+      const nextEntry = {
+        ...entry,
+        ...verifiedFields,
+        rewatchCount: (existing?.rewatchCount || 0) + (existing ? 1 : 0),
+        completedAt: existing?.completedAt || null,
+      };
       const next = [nextEntry, ...previous.filter((candidate) => !sameEntry(candidate))].slice(0, 100);
       storage.set("history", next);
       return next;
@@ -132,6 +154,16 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
   }, [getMediaType]);
 
   const saveProgress = useCallback((key, percent) => {
+    if (percent === null) {
+      setProgress((previous) => {
+        if (!(key in previous)) return previous;
+        const next = { ...previous };
+        delete next[key];
+        storage.set("progress", next);
+        return next;
+      });
+      return;
+    }
     const enabled = storage.get(STORAGE_KEYS.HISTORY_ENABLED);
     if (enabled === 0 || enabled === false) return;
     setProgress((previous) => {

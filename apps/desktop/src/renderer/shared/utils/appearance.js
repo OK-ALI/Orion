@@ -20,6 +20,15 @@ export const ACCENT_PRESETS = [
     border: "rgba(229, 9, 20, 0.4)",
   },
   {
+    id: "projector-red",
+    label: "Projector Red",
+    color: "#a1121d",
+    hover: "#bd1b28",
+    soft: "rgba(161, 18, 29, 0.12)",
+    glow: "rgba(161, 18, 29, 0.34)",
+    border: "rgba(161, 18, 29, 0.42)",
+  },
+  {
     id: "blue",
     label: "Blue",
     color: "#2563eb",
@@ -252,28 +261,28 @@ export const THEME_PRESETS = [
   {
     id: "light",
     label: "Projector Silver",
-    description: "Neutral cinema silver, charcoal type and restrained violet detail",
+    description: "Warm projector-paper silver with charcoal type and independently chosen accents",
     vars: {
-      "--bg-base": "#f2f4f7",
-      "--bg-elevated": "#fbfcfe",
-      "--bg-surface": "#e7ebf1",
-      "--bg-hover": "#dce2ea",
+      "--bg-base": "#f1ede5",
+      "--bg-elevated": "#faf8f4",
+      "--bg-surface": "#e8e2d9",
+      "--bg-hover": "#ded7cc",
       "--bg-input": "#ffffff",
-      "--text-primary": "#181b22",
-      "--text-secondary": "#48505e",
-      "--text-muted": "#687384",
-      "--border": "rgba(24, 27, 34, 0.12)",
-      "--cinema-gold": "#9a6a20",
+      "--text-primary": "#211f23",
+      "--text-secondary": "#55505a",
+      "--text-muted": "#77717b",
+      "--border": "rgba(32, 29, 34, 0.16)",
+      "--cinema-gold": "#96651f",
       "--cinema-velvet": "#7a315f",
-      "--music-scene-base": "#090b14",
-      "--music-scene-surface": "rgba(17, 23, 37, 0.72)",
-      "--music-scene-surface-active": "rgba(26, 52, 70, 0.84)",
-      "--music-scene-glass": "rgba(17, 23, 37, 0.72)",
-      "--music-scene-glass-strong": "rgba(17, 23, 37, 0.9)",
-      "--music-scene-text": "#f5f7ff",
-      "--music-scene-muted": "#c7d0dc",
-      "--music-scene-label": "#a8edf7",
-      "--music-scene-line": "rgba(225, 236, 255, 0.22)",
+      "--music-scene-base": "#eee8df",
+      "--music-scene-surface": "rgba(250, 248, 244, 0.76)",
+      "--music-scene-surface-active": "rgba(232, 226, 217, 0.9)",
+      "--music-scene-glass": "rgba(250, 248, 244, 0.78)",
+      "--music-scene-glass-strong": "rgba(250, 248, 244, 0.94)",
+      "--music-scene-text": "#211f23",
+      "--music-scene-muted": "#625b66",
+      "--music-scene-label": "#665087",
+      "--music-scene-line": "rgba(32, 29, 34, 0.16)",
     },
   },
   {
@@ -294,6 +303,65 @@ export const DEFAULT_CUSTOM_VARS = {
   "--text2": "#a0a0b0",
   "--text3": "#606078",
 };
+
+
+function parseCssLuminance(value) {
+  const raw = String(value || "").trim();
+  let red;
+  let green;
+  let blue;
+  const hex = raw.match(/^#([0-9a-f]{6})$/i);
+  if (hex) {
+    red = Number.parseInt(hex[1].slice(0, 2), 16);
+    green = Number.parseInt(hex[1].slice(2, 4), 16);
+    blue = Number.parseInt(hex[1].slice(4, 6), 16);
+  } else {
+    const rgb = raw.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
+    if (!rgb) return null;
+    red = Number(rgb[1]);
+    green = Number(rgb[2]);
+    blue = Number(rgb[3]);
+  }
+  const channel = (component) => {
+    const normalized = Math.max(0, Math.min(255, component)) / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  };
+  return channel(red) * 0.2126 + channel(green) * 0.7152 + channel(blue) * 0.0722;
+}
+
+function applySemanticThemeVars(root, themeId, vars) {
+  const sourceBackground = themeId === "custom" ? vars["--bg"] : vars["--bg-base"];
+  const luminance = parseCssLuminance(sourceBackground);
+  const lightSurface = themeId === "light" || (luminance !== null && luminance > 0.5);
+
+  const semantic = {
+    "--text-disabled": "color-mix(in srgb, var(--text-muted) 58%, var(--bg-base))",
+    "--border-hover": "color-mix(in srgb, var(--text-primary) 20%, transparent)",
+    "--surface-translucent": "color-mix(in srgb, var(--bg-elevated) 88%, transparent)",
+    "--glass-bg": "color-mix(in srgb, var(--bg-elevated) 88%, transparent)",
+    "--glass-border": "color-mix(in srgb, var(--text-primary) 12%, transparent)",
+    "--quick-search-glass": "color-mix(in srgb, var(--bg-elevated) 90%, transparent)",
+    "--quick-search-glass-strong": "color-mix(in srgb, var(--bg-elevated) 96%, transparent)",
+    "--quick-search-border": "color-mix(in srgb, var(--text-primary) 14%, transparent)",
+    "--shadow-color": lightSurface ? "rgba(52, 39, 45, 0.22)" : "rgba(0, 0, 0, 0.55)",
+    "--overlay-backdrop": lightSurface ? "rgba(52, 42, 47, 0.34)" : "rgba(2, 4, 10, 0.82)",
+    // Music primary actions need their own contrast contract. `--music-highlight`
+    // is intentionally pale in some palettes, so using the page background as
+    // foreground text can become unreadable on light/custom-light themes.
+    "--music-action-fill": lightSurface
+      ? "color-mix(in srgb, var(--music-violet) 78%, var(--text-primary))"
+      : "var(--music-highlight)",
+    "--music-action-fill-hover": lightSurface
+      ? "color-mix(in srgb, var(--music-violet) 88%, var(--text-primary))"
+      : "color-mix(in srgb, var(--music-highlight) 88%, var(--music-violet))",
+    "--music-action-text": lightSurface ? "var(--bg-elevated)" : "var(--bg-base)",
+  };
+  for (const [prop, value] of Object.entries(semantic)) {
+    root.style.setProperty(prop, value);
+  }
+}
 
 export function applyTheme(themeId, customVars = null) {
   const preset =
@@ -332,6 +400,19 @@ export function applyTheme(themeId, customVars = null) {
     "--music-scene-muted",
     "--music-scene-label",
     "--music-scene-line",
+    "--text-disabled",
+    "--border-hover",
+    "--surface-translucent",
+    "--glass-bg",
+    "--glass-border",
+    "--quick-search-glass",
+    "--quick-search-glass-strong",
+    "--quick-search-border",
+    "--shadow-color",
+    "--overlay-backdrop",
+    "--music-action-fill",
+    "--music-action-fill-hover",
+    "--music-action-text",
   ];
   for (const prop of allProps) {
     root.style.removeProperty(prop);
@@ -358,4 +439,6 @@ export function applyTheme(themeId, customVars = null) {
       }
     }
   }
+
+  applySemanticThemeVars(root, themeId, vars);
 }

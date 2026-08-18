@@ -1,3 +1,4 @@
+import { PLAYBACK_INTENT } from "../../player/services/playbackIntent";
 import {
   useState,
   useEffect,
@@ -108,16 +109,19 @@ export default function MovieOverlays({ model }) {
             <div className="resume-time-display">
               Resume {title} from {formatResumeTime(resumeTime)}
             </div>
+            <p className="resume-prompt-note">
+              Start Over may take a few seconds to sync before manual seeking responds normally.
+            </p>
             <div className="resume-prompt-actions">
               <button
                 className="btn btn-primary"
-                onClick={() => startMoviePlayback(resumeTime)}
+                onClick={() => startMoviePlayback(resumeTime, PLAYBACK_INTENT.RESUME)}
               >
                 Resume Playback
               </button>
               <button
                 className="btn btn-secondary"
-                onClick={() => startMoviePlayback(0)}
+                onClick={() => startMoviePlayback(0, PLAYBACK_INTENT.START_FROM_ZERO)}
               >
                 Start Over
               </button>
@@ -155,6 +159,8 @@ export default function MovieOverlays({ model }) {
           mediaType="movie"
           posterPath={d.poster_path}
           tmdbId={item.id}
+          expectedDurationSeconds={Number(d?.runtime) > 0 ? Number(d.runtime) * 60 : null}
+          expectedDurationConfidence="exact"
         />
       )}
 </>

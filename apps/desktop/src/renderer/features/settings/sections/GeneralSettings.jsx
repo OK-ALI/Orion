@@ -4,7 +4,7 @@ import UpdateModal from "../../../components/UpdateModal";
 import { storage, STORAGE_KEYS, isElectron } from "../../../services/settingsStore";
 import { checkForUpdates } from "../../../shared/utils/updates";
 import { HOME_ROWS, loadHomeLayout, loadHomeViewMode, saveHomeViewMode } from "../../../shared/utils/homeLayout";
-import { collectCompleteBackupData, restoreCompleteBackupData } from "../../../services/backup";
+import { collectCompleteBackupData, collectLegacyCloudSyncData, restoreCompleteBackupData, restoreLegacyCloudSyncData } from "../../../services/backup";
 import { SettingsSelect, Toggle } from "../components/SettingsControls";
 
 function formatBytes(bytes) {
@@ -719,7 +719,7 @@ export function GoogleAuthSection({ secGoogle }) {
     setSyncStatus("syncing");
     setSyncError(null);
     try {
-      const localData = await collectCompleteBackupData();
+      const localData = await collectLegacyCloudSyncData();
       localData.timestamp = new Date().toISOString();
       const res = await window.electron.uploadSync(localData);
       if (res?.ok) {
@@ -751,7 +751,7 @@ export function GoogleAuthSection({ secGoogle }) {
       const res = await window.electron.downloadSync();
       if (res?.ok && res.data) {
         setSyncStatus("success");
-        await restoreCompleteBackupData(res.data);
+        await restoreLegacyCloudSyncData(res.data);
         if (res.data.timestamp) {
           localStorage.setItem("orion_google_last_sync_time", res.data.timestamp);
         }
@@ -898,7 +898,7 @@ export function GoogleAuthSection({ secGoogle }) {
           lineHeight: 1.6,
         }}
       >
-        Connect your Google Account to backup and sync your settings, watch progress, and details to the cloud, or to access integrations like Google Drive streaming. Requires custom OAuth Credentials from Google Cloud Console.
+        Connect your Google Account to back up selected Orion data to the cloud or access integrations like Google Drive streaming. Requires custom OAuth Credentials from Google Cloud Console.
       </div>
 
       {profile ? (
@@ -1006,7 +1006,7 @@ export function GoogleAuthSection({ secGoogle }) {
                   Enable Cloud Auto-Sync
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.4 }}>
-                  Automatically sync your watchlist, play history, custom playlists, and settings with Google Drive.
+                  Automatically sync your watchlist, custom playlists, and settings with Google Drive.
                 </div>
               </div>
               <input

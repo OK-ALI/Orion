@@ -1,0 +1,102 @@
+/* MUSIC-UI C4: direct access to Orion theme presets from Music Settings. */
+
+.music-theme-quick-switch {
+  width: min(100%, 1180px);
+  margin: 0 auto 30px;
+  padding: clamp(20px, 2.6vw, 30px);
+  border: 1px solid var(--music-glass-line-soft);
+  border-radius: 24px;
+  background: var(--music-glass-panel);
+  box-shadow: 0 18px 46px color-mix(in srgb, var(--shadow-color) 24%, transparent);
+}
+
+.music-theme-quick-switch header h2 {
+  margin: 5px 0 6px;
+  color: var(--mp-text);
+  font: 700 clamp(24px, 2.5vw, 34px) / 1.08 var(--music-display-font, var(--font-heading));
+}
+
+.music-theme-quick-switch header p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--mp-muted);
+  line-height: 1.5;
+}
+
+.music-theme-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.music-theme-preset-grid > button {
+  min-width: 0;
+  min-height: 68px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+  border: 1px solid var(--music-glass-line-soft);
+  border-radius: 14px;
+  padding: 10px 12px;
+  color: var(--mp-text);
+  background: var(--music-hover-glass);
+  text-align: left;
+}
+
+.music-theme-preset-grid > button:hover,
+.music-theme-preset-grid > button:focus-visible {
+  border-color: var(--music-glass-edge);
+  background: var(--music-highlight-soft);
+}
+
+.music-theme-preset-grid > button.active {
+  border-color: color-mix(in srgb, var(--music-highlight) 62%, var(--music-glass-edge));
+  box-shadow: inset 3px 0 0 var(--music-highlight);
+}
+
+.music-theme-preset-grid strong,
+.music-theme-preset-grid small {
+  display: block;
+}
+
+.music-theme-preset-grid strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-theme-preset-grid small {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--mp-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-theme-swatch {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--music-glass-line-soft);
+  border-radius: 50%;
+  background: linear-gradient(
+    145deg,
+    var(--music-theme-swatch-start, var(--bg-elevated)),
+    var(--music-theme-swatch-end, var(--bg-surface))
+  );
+  box-shadow: inset 0 0 0 7px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+@media (max-width: 900px) {
+  .music-theme-preset-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .music-theme-preset-grid {
+    grid-template-columns: 1fr;
+  }
+}

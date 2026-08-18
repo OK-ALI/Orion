@@ -2,64 +2,179 @@ import { useEffect, useMemo, useState } from "react";
 import MusicTrackList from "../components/MusicTrackList";
 import PlanetGrid from "../components/PlanetGrid";
 import StarGrid from "../components/StarGrid";
+import "../../../styles/features/music/collection-detail-polish.css";
+import "../../../styles/features/music/music-library-overview.css";
 
 const ACTIVE_SCAN_PHASES = new Set(["discovering", "reading", "reconciling"]);
 const SCAN_LABELS = { discovering: "Finding audio files", reading: "Reading music metadata",
   reconciling: "Reconciling library", complete: "Library scan complete", cancelled: "Library scan paused" };
 const VIEWS = [["overview", "Overview"], ["songs", "Songs"], ["albums", "Albums"], ["artists", "Artists"],
   ["playlists", "Playlists"], ["recent", "Recently played"], ["local", "Local files"]];
+const VIEW_IDS = new Set(VIEWS.map(([id]) => id));
+const OVERVIEW_LIMIT = 8;
 
-export default function MusicLibrary({ onNavigate }) {
+function searchText(track) {
+  return [track?.title, track?.artistName, track?.albumTitle]
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase();
+}
+
+function newestFirst(left, right) {
+  return Number(right?.addedAt || 0) - Number(left?.addedAt || 0)
+    || String(left?.title || "").localeCompare(String(right?.title || ""));
+}
+
+export default function MusicLibrary({ selected, onNavigate }) {
+  const requestedView = VIEW_IDS.has(selected?.libraryView) ? selected.libraryView : "overview";
   const [tracks, setTracks] = useState([]);
   const [folders, setFolders] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [history, setHistory] = useState([]);
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState("title");
-  const [view, setView] = useState("overview");
+  const [sort, setSort] = useState(selected?.librarySort || "title");
+  const [view, setView] = useState(requestedView);
   const [scanning, setScanning] = useState(null);
+  const [scanVisible, setScanVisible] = useState(false);
+
   const refresh = () => Promise.all([
-    window.electron?.musicListTracks?.({ query, limit: 1000 }).then(setTracks),
-    window.electron?.musicListFolders?.().then(setFolders),
-    window.electron?.musicListPlaylists?.().then(setPlaylists),
-    window.electron?.musicListHistory?.(200).then(setHistory),
+    window.electron?.musicListTracks?.({ limit: 1000 }).then((value) => setTracks(value || [])),
+    window.electron?.musicListFolders?.().then((value) => setFolders(value || [])),
+    window.electron?.musicListPlaylists?.().then((value) => setPlaylists(value || [])),
+    window.electron?.musicListHistory?.(200).then((value) => setHistory(value || [])),
   ]).catch(() => {});
-  useEffect(() => { refresh(); }, [query]);
-  useEffect(() => window.electron?.onMusicScanProgress?.(setScanning), []);
+
+  useEffect(() => { refresh(); }, []);
+
+  useEffect(() => {
+    const unsubscribe = window.electron?.onMusicScanProgress?.((next) => {
+      setScanning(next || null);
+      setScanVisible(Boolean(next));
+    });
+    return typeof unsubscribe === "function" ? unsubscribe : undefined;
+  }, []);
+
+  useEffect(() => {
+    if (!scanning) return undefined;
+    setScanVisible(true);
+    if (ACTIVE_SCAN_PHASES.has(scanning.phase) || scanning.errors?.length) return undefined;
+
+    const delay = scanning.phase === "complete" ? 4500 : scanning.phase === "cancelled" ? 6500 : 0;
+    if (!delay) return undefined;
+    const timer = window.setTimeout(() => setScanVisible(false), delay);
+    return () => window.clearTimeout(timer);
+  }, [scanning]);
+
+  useEffect(() => {
+    if (!VIEW_IDS.has(selected?.libraryView)) return;
+    setView(selected.libraryView);
+    if (selected.librarySort) setSort(selected.librarySort);
+    if (["overview", "playlists", "recent"].includes(selected.libraryView)) setQuery("");
+  }, [selected?.librarySort, selected?.libraryView]);
+
   const scanActive = ACTIVE_SCAN_PHASES.has(scanning?.phase);
-  const sortedTracks = useMemo(() => tracks.slice().sort((left, right) => {
-    if (sort === "artist") return String(left.artistName).localeCompare(String(right.artistName));
-    if (sort === "album") return String(left.albumTitle).localeCompare(String(right.albumTitle));
-    if (sort === "newest") return Number(right.addedAt || 0) - Number(left.addedAt || 0);
-    return String(left.title).localeCompare(String(right.title));
-  }), [sort, tracks]);
-  const artists = useMemo(() => [...new Map(tracks.filter((track) => track.artistName).map((track) => [track.artistName, {
+  const searchable = ["songs", "albums", "artists", "local"].includes(view);
+  const sortable = ["songs", "local"].includes(view);
+
+  const filteredTracks = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return needle ? tracks.filter((track) => searchText(track).includes(needle)) : tracks;
+  }, [query, tracks]);
+
+  const sortedTracks = useMemo(() => filteredTracks.slice().sort((left, right) => {
+    if (sort === "artist") return String(left.artistName || "").localeCompare(String(right.artistName || ""));
+    if (sort === "album") return String(left.albumTitle || "").localeCompare(String(right.albumTitle || ""));
+    if (sort === "newest") return newestFirst(left, right);
+    return String(left.title || "").localeCompare(String(right.title || ""));
+  }), [filteredTracks, sort]);
+
+  const recentlyAdded = useMemo(() => tracks.slice().sort(newestFirst), [tracks]);
+
+  const artists = useMemo(() => [...new Map(filteredTracks.filter((track) => track.artistName).map((track) => [track.artistName, {
     id: track.id, name: track.artistName, artworkUrl: track.artworkUrl,
     source: { provider: "orion-local-metadata", id: track.artistName },
-  }])).values()], [tracks]);
-  const albums = useMemo(() => [...new Map(tracks.filter((track) => track.albumTitle).map((track) => [`${track.artistName}\0${track.albumTitle}`, {
+  }])).values()], [filteredTracks]);
+
+  const allArtists = useMemo(() => new Set(tracks.map((track) => track.artistName).filter(Boolean)).size, [tracks]);
+  const allAlbums = useMemo(() => new Set(tracks.filter((track) => track.albumTitle)
+    .map((track) => `${track.artistName || ""}\0${track.albumTitle}`)).size, [tracks]);
+
+  const albums = useMemo(() => [...new Map(filteredTracks.filter((track) => track.albumTitle).map((track) => [`${track.artistName}\0${track.albumTitle}`, {
     id: track.id, title: track.albumTitle, artistName: track.artistName, artworkUrl: track.artworkUrl,
     source: { provider: "orion-local-metadata", id: track.albumTitle },
-  }])).values()], [tracks]);
-  const recent = useMemo(() => [...new Map(history.map((item) => [`${item.track?.provider || ""}:${item.track?.id}`, item.track])).values()].filter(Boolean), [history]);
+  }])).values()], [filteredTracks]);
 
-  const addFolder = async () => { const result = await window.electron?.musicAddFolder?.(); if (result?.ok) refresh(); };
+  const recent = useMemo(() => [...new Map(history.map((item) => [
+    `${item.track?.provider || ""}:${item.track?.id}`,
+    item.track,
+  ])).values()].filter(Boolean), [history]);
+
+  const selectView = (nextView, nextSort) => {
+    setView(nextView);
+    if (nextSort) setSort(nextSort);
+    if (["overview", "playlists", "recent"].includes(nextView)) setQuery("");
+  };
+
+  const addFolder = async () => {
+    const result = await window.electron?.musicAddFolder?.();
+    if (result?.ok) refresh();
+  };
+
+  const startScan = async () => {
+    setScanVisible(true);
+    setScanning({ phase: "discovering", current: 0, total: 0 });
+    await window.electron?.musicScan?.();
+    refresh();
+  };
+
+  const terminalScan = scanning && !scanActive;
+
   return <div className="music-page music-library-page">
     <header className="music-page-header compact music-library-heading"><div><span className="music-eyebrow">Your collection</span><h1>Music Library</h1><p>Your saved and local listening, organized without leaving Music Planet.</p></div>
-      <div className="music-library-stats"><span><strong>{tracks.length}</strong> Tracks</span><span><strong>{artists.length}</strong> Artists</span><span><strong>{albums.length}</strong> Albums</span></div></header>
-    <nav className="music-library-tabs" aria-label="Music library view">{VIEWS.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}>{label}</button>)}</nav>
-    <div className="music-toolbar music-library-toolbar"><label><span>Search library</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tracks, artists or albums" /></label>
-      <label><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="title">Title</option><option value="artist">Artist</option><option value="album">Album</option><option value="newest">Recently added</option></select></label>
-      <button onClick={addFolder}>Add folder</button><button disabled={scanActive} onClick={async () => { setScanning({ phase: "discovering", current: 0, total: 0 }); await window.electron?.musicScan?.(); refresh(); }}>Rescan</button>
-      {scanActive && <button onClick={() => window.electron?.musicCancelScan?.()}>Cancel scan</button>}</div>
-    {scanning && <div className="music-scan-status"><span>{SCAN_LABELS[scanning.phase] || "Updating library"}</span><progress max={scanning.total || 1} value={scanning.current || 0} /><small>{scanning.current || 0} / {scanning.total || 0} · {scanning.imported || 0} updated · {scanning.unchanged || 0} unchanged · {scanning.failed || 0} skipped</small></div>}
-    {scanning?.errors?.length > 0 && <details className="music-scan-errors"><summary>{scanning.errors.length} files need attention</summary><ul>{scanning.errors.map((item, index) => <li key={`${item.fileName}-${index}`}><strong>{item.fileName}</strong><span>{item.reason}</span></li>)}</ul></details>}
+      <div className="music-library-stats" aria-label="Local library totals"><span><strong>{tracks.length}</strong><small>Local tracks</small></span><span><strong>{allArtists}</strong><small>Local artists</small></span><span><strong>{allAlbums}</strong><small>Local albums</small></span></div></header>
+
+    <nav className="music-library-tabs" aria-label="Music library view">{VIEWS.map(([id, label]) => <button key={id} className={view === id ? "active" : ""} aria-pressed={view === id} onClick={() => selectView(id)}>{label}</button>)}</nav>
+
+    <div className={`music-toolbar music-library-toolbar${searchable ? "" : " is-maintenance-only"}`}>
+      {searchable && <label className="music-library-search"><span>Search library</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tracks, artists or albums" /></label>}
+      {sortable && <label className="music-library-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="title">Title</option><option value="artist">Artist</option><option value="album">Album</option><option value="newest">Recently added</option></select></label>}
+      <div className="music-library-maintenance"><button className="primary" onClick={addFolder}>Add folder</button><button disabled={scanActive} onClick={startScan}>Rescan</button>
+        {scanActive && <button onClick={() => window.electron?.musicCancelScan?.()}>Cancel scan</button>}</div>
+    </div>
+
+    {scanVisible && scanning && <div className={`music-scan-status is-${scanning.phase || "unknown"}${terminalScan ? " is-terminal" : ""}`} role="status">
+      <div className="music-scan-status-copy"><span>{SCAN_LABELS[scanning.phase] || "Updating library"}</span>
+        <small>{scanning.current || 0} / {scanning.total || 0} · {scanning.imported || 0} updated · {scanning.unchanged || 0} unchanged · {scanning.failed || 0} skipped</small></div>
+      <progress max={scanning.total || 1} value={scanning.current || 0} />
+      {terminalScan && <button className="music-scan-dismiss" aria-label="Dismiss library scan status" onClick={() => setScanVisible(false)}>×</button>}
+    </div>}
+
+    {scanVisible && scanning?.errors?.length > 0 && <details className="music-scan-errors"><summary>{scanning.errors.length} files need attention</summary><ul>{scanning.errors.map((item, index) => <li key={`${item.fileName}-${index}`}><strong>{item.fileName}</strong><span>{item.reason}</span></li>)}</ul></details>}
+
     {view === "local" && <div className="music-folder-row">{folders.map((folder) => <span key={folder.id}>{folder.name}<button aria-label={`Remove ${folder.name}`} onClick={async () => { await window.electron.musicRemoveFolder(folder.id); refresh(); }}>×</button></span>)}</div>}
+
     {(view === "songs" || view === "local") && <MusicTrackList tracks={sortedTracks} empty={folders.length ? "No supported audio files were found." : "Add a music folder to build your library."} />}
     {view === "albums" && <PlanetGrid items={albums} onNavigate={onNavigate} empty="Albums from your local library will appear here." />}
     {view === "artists" && <StarGrid items={artists} onNavigate={onNavigate} empty="Artists from your local library will appear here." />}
     {view === "recent" && <MusicTrackList tracks={recent} empty="Recently played tracks will appear here." />}
-    {view === "playlists" && <div className="music-open-list">{playlists.map((playlist) => <button key={playlist.id} onClick={() => onNavigate?.("music-playlists", { playlistId: playlist.id })}><strong>{playlist.name}</strong><small>{playlist.items?.length || 0} tracks</small></button>)}</div>}
-    {view === "overview" && <><section className="music-section"><div className="music-section-heading"><div><span>Return to</span><h2>Recently played</h2></div></div><MusicTrackList tracks={recent.slice(0, 8)} compact empty="Your listening history will appear here." /></section><section className="music-section"><div className="music-section-heading"><div><span>On this device</span><h2>Recently added</h2></div></div><MusicTrackList tracks={sortedTracks.slice(0, 8)} compact empty="Add a folder to begin." /></section></>}
+    {view === "playlists" && (playlists.length ? <div className="music-open-list music-library-playlist-list">{playlists.map((playlist) => <button key={playlist.id} onClick={() => onNavigate?.("music-playlists", { playlistId: playlist.id })}><strong>{playlist.name}</strong><small>{playlist.items?.length || 0} tracks</small></button>)}</div> : <div className="music-collection-empty"><span>Playlist collection</span><strong>No playlists yet</strong><p>Create a playlist from any track menu and it will appear here.</p><button className="primary" onClick={() => onNavigate?.("music-playlists")}>Create playlist</button></div>)}
+
+    {view === "overview" && <div className="music-library-overview">
+      <section className="music-section music-library-preview-lane is-recent">
+        <div className="music-section-heading"><div><span>Return to</span><h2>Recently played</h2></div>
+          <div className="music-library-preview-actions"><small>{recent.length ? `${Math.min(recent.length, OVERVIEW_LIMIT)} of ${recent.length}` : "History"}</small>
+            {recent.length > OVERVIEW_LIMIT && <button onClick={() => selectView("recent")} aria-label={`View all ${recent.length} recently played tracks`}>View all</button>}</div>
+        </div>
+        <MusicTrackList tracks={recent.slice(0, OVERVIEW_LIMIT)} compact empty="Your listening history will appear here." />
+      </section>
+
+      <section className="music-section music-library-preview-lane is-local">
+        <div className="music-section-heading"><div><span>On this device</span><h2>Recently added</h2></div>
+          <div className="music-library-preview-actions"><small>{recentlyAdded.length ? `${Math.min(recentlyAdded.length, OVERVIEW_LIMIT)} of ${recentlyAdded.length}` : "Local"}</small>
+            {recentlyAdded.length > OVERVIEW_LIMIT && <button onClick={() => selectView("local", "newest")} aria-label={`View all ${recentlyAdded.length} local tracks`}>View all</button>}</div>
+        </div>
+        {recentlyAdded.length ? <MusicTrackList tracks={recentlyAdded.slice(0, OVERVIEW_LIMIT)} compact /> : <div className="music-library-empty-lane"><strong>No local music yet</strong><p>Add a folder to bring your own files into Music Planet.</p><button className="primary" onClick={addFolder}>Add folder</button></div>}
+      </section>
+    </div>}
   </div>;
 }

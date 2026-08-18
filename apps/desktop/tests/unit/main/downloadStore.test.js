@@ -1,6 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { normalize } = require("../../../src/main/downloader/store");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { cleanupTempFiles, normalize } = require("../../../src/main/downloader/store");
 
 test("download records migrate active jobs and legacy statuses", () => {
   const records = normalize([
@@ -38,4 +41,26 @@ test("download records retain the newest job for the same media identity", () =>
 
   assert.equal(records.length, 1);
   assert.equal(records[0].id, "new");
+});
+
+
+test("task-scoped cleanup preserves another episode's partial download in the same season folder", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "orion-download-cleanup-"));
+  try {
+    const first = "Episode 2 [orion-task-a]";
+    const second = "Episode 3 [orion-task-b]";
+    fs.writeFileSync(path.join(dir, `${first}.mp4.part`), "a");
+    fs.writeFileSync(path.join(dir, `${first}.mp4.ytdl`), "a");
+    fs.writeFileSync(path.join(dir, `${second}.mp4.part`), "b");
+    fs.writeFileSync(path.join(dir, `${second}.mp4`), "final");
+
+    cleanupTempFiles(dir, first);
+
+    assert.equal(fs.existsSync(path.join(dir, `${first}.mp4.part`)), false);
+    assert.equal(fs.existsSync(path.join(dir, `${first}.mp4.ytdl`)), false);
+    assert.equal(fs.existsSync(path.join(dir, `${second}.mp4.part`)), true);
+    assert.equal(fs.existsSync(path.join(dir, `${second}.mp4`)), true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

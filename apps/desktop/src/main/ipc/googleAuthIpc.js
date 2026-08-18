@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 const { secureStoreGet, secureStoreSet } = require("./storageIpc");
+const { prepareLegacySyncUploadPayload } = require("./legacyCloudSyncFence");
 
 // Scopes: profile, email, openid, hidden appData folder for syncing, and drive.file for media locker
 const SCOPES = ["openid", "profile", "email", "https://www.googleapis.com/auth/drive.appdata", "https://www.googleapis.com/auth/drive.file"];
@@ -450,6 +451,15 @@ function register() {
   ipcMain.handle("google-auth:upload-sync", async (_, data) => {
     try {
       const fileId = await findSyncFileId();
+      const uploadData = await prepareLegacySyncUploadPayload({
+        fileId,
+        data,
+        loadExisting: async () => {
+          const res = await googleDriveRequest(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+          if (!res.ok) throw new Error(`Failed to preserve legacy viewing state before cloud sync: ${res.status} - ${await res.text()}`);
+          return res.json();
+        },
+      });
       
       if (fileId) {
         const updateRes = await googleDriveRequest(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
@@ -457,7 +467,7 @@ function register() {
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify(data)
+          body: JSON.stringify(uploadData)
         });
         if (!updateRes.ok) {
           const errText = await updateRes.text();
@@ -472,7 +482,7 @@ function register() {
         };
         const body = [
           `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
-          `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(data)}\r\n`,
+          `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(uploadData)}\r\n`,
           `--${boundary}--`
         ].join("");
 

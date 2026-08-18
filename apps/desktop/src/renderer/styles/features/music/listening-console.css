@@ -1,0 +1,178 @@
+/* MUSIC-UI C4: Listening Console.
+   Presentation only. Playback state and transport ownership remain in MusicProvider. */
+
+.music-listening-copy {
+  min-width: 0;
+}
+
+.music-listening-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.music-listening-transport,
+.music-listening-modes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.music-listening-transport .icon {
+  flex: 0 0 auto;
+}
+
+.music-listening-modes {
+  min-width: 0;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.music-listening-timeline {
+  grid-template-columns: 48px minmax(120px, 1fr) 54px;
+  gap: 12px;
+  margin-top: 22px;
+  color: var(--mp-text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.music-listening-time {
+  opacity: .88;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+
+.music-listening-time.is-remaining {
+  text-align: right;
+}
+
+.music-listening-timeline .music-progress-track::before {
+  height: 5px;
+  background: color-mix(in srgb, var(--mp-text) 18%, transparent);
+}
+
+.music-listening-timeline .music-progress-buffered,
+.music-listening-timeline .music-progress-played {
+  height: 5px;
+}
+
+.music-listening-timeline .music-progress-buffered {
+  background: color-mix(in srgb, var(--mp-text) 28%, transparent);
+}
+
+.music-listening-timeline .music-progress-played {
+  background: color-mix(in srgb, var(--music-highlight) 78%, var(--mp-text));
+}
+
+.music-listening-timeline .music-progress-wave {
+  opacity: .42;
+}
+
+.music-listening-timeline .music-progress-track input::-webkit-slider-thumb {
+  width: 13px;
+  height: 13px;
+  border-color: color-mix(in srgb, var(--music-highlight) 62%, var(--mp-text));
+  background: var(--music-action-fill, var(--music-highlight));
+}
+
+.music-listening-footer {
+  min-height: 48px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  margin-top: 20px;
+  padding-top: 16px;
+}
+
+.music-listening-footer.has-lyric {
+  justify-content: space-between;
+}
+
+.music-listening-active-lyric {
+  min-width: 0;
+  max-width: min(46%, 360px);
+  overflow: hidden;
+  margin: 0;
+  color: var(--mp-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-listening-secondary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.music-listening-secondary-actions button {
+  min-height: 36px;
+  border: 1px solid var(--music-glass-line-soft);
+  border-radius: 10px;
+  padding: 0 12px;
+  color: var(--mp-text);
+  background: var(--music-hover-glass);
+  font-size: 12px;
+}
+
+.music-listening-secondary-actions button:hover,
+.music-listening-secondary-actions button:focus-visible {
+  border-color: var(--music-glass-edge);
+  background: var(--music-highlight-soft);
+}
+
+.music-listening-secondary-actions .observatory {
+  padding-inline: 14px;
+  border-color: color-mix(in srgb, var(--music-highlight) 40%, var(--music-glass-line-soft));
+}
+
+[data-theme="light"] .music-listening-time {
+  color: color-mix(in srgb, var(--text-primary) 92%, var(--music-violet));
+  opacity: 1;
+}
+
+[data-theme="light"] .music-listening-timeline .music-progress-track::before {
+  background: color-mix(in srgb, var(--text-primary) 24%, var(--bg-surface));
+}
+
+[data-theme="light"] .music-listening-timeline .music-progress-buffered {
+  background: color-mix(in srgb, var(--text-primary) 34%, var(--bg-surface));
+}
+
+[data-theme="light"] .music-listening-timeline .music-progress-played {
+  background: color-mix(in srgb, var(--music-violet) 72%, var(--text-primary));
+}
+
+@media (max-width: 840px) {
+  .music-listening-controls {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .music-listening-modes {
+    justify-content: flex-start;
+  }
+
+  .music-listening-footer,
+  .music-listening-footer.has-lyric {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .music-listening-active-lyric {
+    max-width: 100%;
+  }
+
+  .music-listening-secondary-actions {
+    width: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+}

@@ -12,7 +12,7 @@ import {
   ACCENT_PRESETS,
 } from "../shared/utils/appearance";
 import { applyStoredAppearance } from "./startup/applyStartupAppearance";
-import { collectCompleteBackupData, restoreCompleteBackupData } from "../services/backup";
+import { collectCompleteBackupData, collectLegacyCloudSyncData, restoreLegacyCloudSyncData } from "../services/backup";
 import { playPortalSound } from "../features/music/services/portalSound";
 import { tmdbFetch } from "../services/tmdb";
 import { clearAppCaches } from "../services/settingsStore";
@@ -44,6 +44,8 @@ import useNetworkStatus from "../shared/hooks/useNetworkStatus";
 const WHATS_NEW_EDITION = "orion-x-music-planet";
 import { claimPlayback, getPlaybackOwner } from "./playback/PlaybackCoordinator";
 import MusicPlayerBar from "../features/music/player/MusicPlayerBar";
+import SearchOrb from "../components/search/SearchOrb";
+import { useSearchOverlayController } from "./hooks/useSearchOverlayController";
 
 export default function App() {
   const {
@@ -63,6 +65,8 @@ export default function App() {
   });
   const [selected, setSelected] = useState(null);
   const [showSearch, setShowSearch] = useState(false);
+  const { searchAnchorRect, searchWorld, openGlobalSearch, openQuickSearch, closeSearch } =
+    useSearchOverlayController({ isOpen: showSearch, setOpen: setShowSearch });
   const [dlSearchOpen, setDlSearchOpen] = useState(false);
   const [librarySort, setLibrarySort] = useState(
     () => storage.get(STORAGE_KEYS.LIBRARY_SORT) || "manual",
@@ -138,7 +142,7 @@ export default function App() {
 
         // If cloud timestamp is newer or local is wiped/fresh:
         if (cloudTimestamp > localLastSyncTime || !localLastSyncStr) {
-          await restoreCompleteBackupData(cloudData);
+          await restoreLegacyCloudSyncData(cloudData);
           if (cloudData.timestamp) {
             localStorage.setItem("orion_google_last_sync_time", cloudData.timestamp);
           }
@@ -146,7 +150,7 @@ export default function App() {
           return true;
         } else {
           // Local is newer, upload local state to cloud
-          const localData = await collectCompleteBackupData();
+          const localData = await collectLegacyCloudSyncData();
           lastUploadedDataRef.current = JSON.stringify(localData);
           localData.timestamp = new Date().toISOString();
           await window.electron.uploadSync(localData);
@@ -154,7 +158,7 @@ export default function App() {
         }
       } else {
         // No cloud backup exists yet. Upload current local data to populate it!
-        const localData = await collectCompleteBackupData();
+        const localData = await collectLegacyCloudSyncData();
         lastUploadedDataRef.current = JSON.stringify(localData);
         localData.timestamp = new Date().toISOString();
         await window.electron.uploadSync(localData);
@@ -199,7 +203,7 @@ export default function App() {
       if (!syncEnabled) return;
 
       try {
-        const localData = await collectCompleteBackupData();
+        const localData = await collectLegacyCloudSyncData();
         const serialized = JSON.stringify(localData);
 
         if (!lastUploadedDataRef.current) {
@@ -733,7 +737,7 @@ export default function App() {
     const handler = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "f") {
         e.preventDefault();
-        setShowSearch(true);
+        openGlobalSearch(String(pageRef.current).startsWith("music-") ? "music" : "cinema");
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         if (pageRef.current === "downloads") {
@@ -742,7 +746,7 @@ export default function App() {
         }
       }
       if (e.key === "Escape") {
-        setShowSearch(false);
+        closeSearch();
         setShowShortcuts(false);
       }
       if (e.key === "?" && !e.ctrlKey && !e.metaKey) {
@@ -903,7 +907,7 @@ export default function App() {
               navigate(targetPage, targetData);
             }
           }}
-          onSearch={() => setShowSearch(true)}
+          onSearch={() => openGlobalSearch(String(page).startsWith("music-") ? "music" : "cinema")}
           downloadCount={activeDownloadCount}
           activeDownloads={activeDownloadCount}
           onReorderSaved={handleReorderSaved}
@@ -961,12 +965,19 @@ export default function App() {
         <MusicPlayerBar page={page} onNavigate={navigate} />
         </div>
 
+        <SearchOrb
+          world={String(page).startsWith("music-") ? "music" : "cinema"}
+          hidden={page === "search" || page === "music-search"}
+          onOpenFullSearch={() => { closeSearch(); navigate(String(page).startsWith("music-") ? "music-search" : "search", String(page).startsWith("music-") ? { query: "" } : ""); }}
+          onOpenQuickSearch={(rect) => openQuickSearch(rect, String(page).startsWith("music-") ? "music" : "cinema")}
+        />
+
         <AppOverlays model={{
           activeDownloadCount, apiKey, episodeCheckStatus, episodeDismissTimerRef,
           handleExpandMiniPlayer, handleSelectResult, hasCustomTitlebar, miniPlayer,
           handleMiniReady, miniTransition,
-          navigate, offline, openMiniPlayer: handleOpenMiniPlayer, setEpisodeCheckStatus, setMiniPlayer, setShowSearch,
-          setShowShortcuts, setShowUpdateModal, setUpdateBanner, showSearch,
+          navigate, offline, openMiniPlayer: handleOpenMiniPlayer, setEpisodeCheckStatus, setMiniPlayer,
+          setShowShortcuts, setShowUpdateModal, setUpdateBanner, showSearch, searchAnchorRect, searchWorld, closeSearch,
           showShortcuts, showUpdateModal, toast, updateBanner,
           saveProgress, markWatched,
           expandedLocalDownload, setExpandedLocalDownload, addHistory,

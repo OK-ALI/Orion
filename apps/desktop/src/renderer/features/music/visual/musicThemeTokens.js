@@ -24,7 +24,7 @@ export function computeThemeTokens(palette, sceneState) {
     '--mp-spectral': spectralColor,
     '--mp-glow': palette?.primary ? `color-mix(in srgb, ${primaryColor} 40%, transparent)` : theme.glow,
     '--mp-text': 'var(--music-scene-text)',
-    '--mp-muted': 'var(--music-scene-text-muted)',
+    '--mp-muted': 'var(--music-scene-muted)',
     '--mp-line': 'var(--music-glass-edge)',
     '--mp-surface': 'var(--music-scene-surface)',
     '--mp-surface-active': 'var(--music-active-surface)',

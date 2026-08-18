@@ -3,6 +3,7 @@ const path = require("path");
 const { Readable } = require("stream");
 const { protocol, session } = require("electron");
 const { parseByteRange } = require("../../player/localMediaRange");
+const { boundedRemoteRange } = require("./remoteMediaRange");
 const tokens = require("./tokenRegistry");
 
 let registered = false;
@@ -31,7 +32,7 @@ async function serve(request) {
   if (!grant) return failure(404, "Music stream grant expired.");
   if (grant.kind === "remote") {
     const headers = new Headers(grant.headers || {});
-    const range = request.headers.get("range");
+    const range = boundedRemoteRange(grant.url, request.headers.get("range"));
     if (range) headers.set("range", range);
     try {
       const response = await fetch(grant.url, { headers, redirect: "follow" });

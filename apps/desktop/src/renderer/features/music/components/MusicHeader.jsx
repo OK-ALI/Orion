@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { SearchIcon, SettingsIcon } from "../../../components/common/Icons";
+import { MusicPlanetIcon, SearchIcon, SettingsIcon } from "../../../components/common/Icons";
 import { storage, STORAGE_KEYS } from "../../../services/settingsStore";
 
 export default function MusicHeader({ onNavigate, showSearch = true }) {
@@ -28,7 +28,7 @@ export default function MusicHeader({ onNavigate, showSearch = true }) {
   };
 
   return <header className="music-header">
-    <button className="music-header-title" onClick={() => onNavigate("music-home")} aria-label="Music Planet Home"><span className="music-header-planet" aria-hidden="true"><i /></span><span>Music Planet</span></button>
+    <button className="music-header-title" onClick={() => onNavigate("music-home")} aria-label="Music Planet Home"><span className="music-header-planet" aria-hidden="true"><MusicPlanetIcon size={25} /></span><span>Music Planet</span></button>
     {showSearch && <form className="music-header-search-form" onSubmit={(event) => { event.preventDefault(); search(query); }} role="search">
       <label className="music-header-search-input-wrapper"><SearchIcon size={18} /><span className="sr-only">Search Music Planet</span><input type="search" placeholder="Search tracks, artists and albums" value={query} onFocus={() => setFocused(true)} onBlur={() => setTimeout(() => setFocused(false), 140)} onChange={(event) => setQuery(event.target.value)} /></label>
       {focused && (suggestions.length > 0 || (!query && history.length > 0)) && <div className="music-search-suggestions" role="listbox">

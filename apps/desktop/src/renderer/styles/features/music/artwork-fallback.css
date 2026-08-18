@@ -1,0 +1,55 @@
+/* MUSIC-UI C5.3: generated media artwork.
+   Missing covers use a calm spectral-disc language instead of floating star dots. */
+
+.music-artwork.artwork-error {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 28% 22%, color-mix(in srgb, var(--art-spectral) 44%, transparent), transparent 36%),
+    linear-gradient(145deg, var(--art-base), var(--art-primary));
+}
+
+.music-generated-art {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.music-generated-art::before,
+.music-generated-art::after {
+  content: "";
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--on-media) 34%, transparent);
+  border-radius: 50%;
+}
+
+.music-generated-art::before {
+  inset: 18%;
+  box-shadow:
+    0 0 0 8px color-mix(in srgb, var(--on-media) 4%, transparent),
+    0 0 0 18px color-mix(in srgb, var(--on-media) 3%, transparent);
+}
+
+.music-generated-art::after {
+  width: 64%;
+  height: 28%;
+  border-color: color-mix(in srgb, var(--art-spectral) 62%, transparent);
+  transform: rotate(-28deg);
+}
+
+.music-generated-art > i {
+  width: 28%;
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in srgb, var(--on-media) 54%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--art-primary) 56%, transparent);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--art-spectral) 46%, transparent);
+}
+
+.music-artwork.is-artist .music-generated-art::after {
+  width: 46%;
+  height: 46%;
+  border-color: color-mix(in srgb, var(--on-media) 26%, transparent);
+  transform: none;
+}

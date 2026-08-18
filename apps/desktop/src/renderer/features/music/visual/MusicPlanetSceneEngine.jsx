@@ -276,7 +276,7 @@ export default function MusicPlanetSceneEngine({ sceneState = 'idle-space', visu
   const visualIntensity = Math.max(0, Math.min(1, Number(visualPreferences.intensity ?? 65) / 100));
 
   return (
-    <div className="music-planet-canvas-container" data-scene-style={sceneStyle} style={{ "--music-scene-color": config.color }}>
+    <div className="music-planet-canvas-container" data-scene-style={sceneStyle} data-scene-state={sceneState} style={{ "--music-scene-color": config.color }}>
       {!visualPreferences.staticBg && (
         <Canvas camera={{ position: [0, 0, 10], fov: config.fov }}>
           <ambientLight intensity={0.5} />

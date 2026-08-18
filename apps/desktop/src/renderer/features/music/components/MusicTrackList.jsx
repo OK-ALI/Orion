@@ -1,15 +1,33 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMusic } from "../context/MusicProvider";
 import MusicArtwork from "./MusicArtwork";
+import AddToPlaylistDialog from "./AddToPlaylistDialog";
+import MusicTrackMenuPortal from "./MusicTrackMenuPortal";
+import "../../../styles/features/music/music-track-menu-portal.css";
 
 function duration(value) {
   if (!value) return "—";
   return `${Math.floor(value / 60000)}:${String(Math.floor(value / 1000) % 60).padStart(2, "0")}`;
 }
 
+function PlaylistAddIcon() {
+  return <svg className="music-track-add-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path d="M3.5 5.5h8.5M3.5 9.5h7M3.5 13.5h5.5" />
+    <path d="M15 9v6M12 12h6" />
+  </svg>;
+}
+
+function MoreActionsIcon() {
+  return <svg className="music-track-more-icon" viewBox="0 0 20 20" aria-hidden="true">
+    <circle cx="4" cy="10" r="1.6" />
+    <circle cx="10" cy="10" r="1.6" />
+    <circle cx="16" cy="10" r="1.6" />
+  </svg>;
+}
+
 export default function MusicTrackList({ tracks = [], empty = "No tracks found.", layout = "list", compact = false }) {
   const music = useMusic();
-  const [menuTrack, setMenuTrack] = useState(null);
+  const [menuState, setMenuState] = useState(null);
   const [playlistTrack, setPlaylistTrack] = useState(null);
 
   if (!tracks?.length) return layout === "grid" ? <p className="music-muted">{empty}</p> : <div className="music-empty">{empty}</div>;
@@ -22,7 +40,7 @@ export default function MusicTrackList({ tracks = [], empty = "No tracks found."
         <MusicArtwork className="art-container" track={{ ...track, artworkUrl: track.artworkUrl || track.album?.artworkUrl }} label={`Artwork for ${track.title || track.name || "track"}`} />
         <span className="track-info"><strong>{track.title || track.name}</strong><small>{track.artistName || "Unknown artist"}</small></span>
       </button>
-      <button className="moon-track-playlist" onClick={() => setPlaylistTrack(track)} aria-label={`Add ${track.title} to playlist`}>+ Playlist</button>
+      <button className="moon-track-playlist" onClick={() => setPlaylistTrack(track)} aria-label={`Add ${track.title} to playlist`}><PlaylistAddIcon /><span>Playlist</span></button>
     </div>)}{playlistTrack && <AddToPlaylistDialog track={playlistTrack} close={() => setPlaylistTrack(null)} />}</div>;
   }
 
@@ -36,56 +54,28 @@ export default function MusicTrackList({ tracks = [], empty = "No tracks found."
         <span className="music-track-album">{track.albumTitle || "Single"}</span>
         <span className="music-track-duration">{duration(track.durationMs)}</span>
       </button>
-      <button className="music-track-more" onClick={() => setMenuTrack(menuTrack?.id === track.id ? null : track)} aria-label={`More actions for ${track.title}`}>•••</button>
-      <button className="music-track-add-playlist" onClick={() => setPlaylistTrack(track)} aria-label={`Add ${track.title} to playlist`}>+ Playlist</button>
-      {menuTrack?.id === track.id && <TrackMenu music={music} track={track} close={() => setMenuTrack(null)} addToPlaylist={() => { setPlaylistTrack(track); setMenuTrack(null); }} />}
+      <div className="music-track-actions">
+        <button className="music-track-add-playlist" onClick={() => setPlaylistTrack(track)} aria-label={`Add ${track.title} to playlist`}><PlaylistAddIcon /><span>Playlist</span></button>
+        <button className="music-track-more" onClick={(event) => setMenuState(menuState?.track?.id === track.id ? null : { track, anchor: event.currentTarget })} aria-label={`More actions for ${track.title}`} aria-expanded={menuState?.track?.id === track.id}><MoreActionsIcon /></button>
+      </div>
     </div>)}
+    {menuState && <MusicTrackMenuPortal anchor={menuState.anchor} close={() => setMenuState(null)}>
+      <TrackMenuItems music={music} track={menuState.track} close={() => setMenuState(null)}
+        addToPlaylist={() => { setPlaylistTrack(menuState.track); setMenuState(null); }} />
+    </MusicTrackMenuPortal>}
     {playlistTrack && <AddToPlaylistDialog track={playlistTrack} close={() => setPlaylistTrack(null)} />}
   </div>;
 }
 
-function TrackMenu({ music, track, close, addToPlaylist }) {
+function TrackMenuItems({ music, track, close, addToPlaylist }) {
   const act = (callback) => { callback(); close(); };
-  return <div className="music-track-menu" role="menu">
+  return <>
     <button role="menuitem" onClick={() => act(() => music.playNextTrack(track))}>Play next</button>
     <button role="menuitem" onClick={() => act(() => music.addToQueue(track))}>Add to queue</button>
     <button role="menuitem" onClick={() => act(() => music.startRadio(track))}>Start radio</button>
     <button role="menuitem" onClick={addToPlaylist}>Add to playlist</button>
     <button role="menuitem" onClick={() => act(() => {
-      const identity = `${track.provider || track.source?.provider || "unknown"}:${track.id}`;
-      window.electron?.musicToggleFavorite?.("track", identity, track);
+      music.favorites?.toggleFavorite?.("track", track, track);
     })}>Toggle favorite</button>
-  </div>;
-}
-
-export function AddToPlaylistDialog({ track, close }) {
-  const [playlists, setPlaylists] = useState([]);
-  const [status, setStatus] = useState("loading");
-  const [newName, setNewName] = useState("");
-  useEffect(() => {
-    window.electron?.musicListPlaylists?.().then((items) => { setPlaylists(items || []); setStatus("ready"); })
-      .catch(() => setStatus("error"));
-  }, []);
-  const add = async (playlist) => {
-    if (!playlist.items?.some((item) => item.id === track.id && item.provider === track.provider)) {
-      await window.electron?.musicSavePlaylist?.({ ...playlist, items: [...(playlist.items || []), track] });
-    }
-    close();
-  };
-  const create = async () => {
-    const name = newName.trim();
-    if (!name) return;
-    await window.electron?.musicSavePlaylist?.({ name, description: "", items: [track] });
-    close();
-  };
-  return <div className="music-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
-    <section className="music-dialog" role="dialog" aria-modal="true" aria-label="Add track to playlist">
-      <header><div><span className="music-eyebrow">Keep this track</span><h2>Add to playlist</h2></div><button onClick={close} aria-label="Close">×</button></header>
-      {status === "loading" && <div className="music-loading-status"><span className="music-button-loader"><i /></span>Loading playlists…</div>}
-      {status === "error" && <p className="music-muted">Playlists could not be loaded.</p>}
-      {status === "ready" && !playlists.length && <p className="music-muted">Create a playlist first.</p>}
-      <div className="music-dialog-list">{playlists.map((playlist) => <button key={playlist.id} onClick={() => add(playlist)}><strong>{playlist.name}</strong><small>{playlist.items?.length || 0} tracks</small></button>)}</div>
-      <footer className="music-playlist-quick-create"><label><span>New playlist</span><input value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Playlist name" onKeyDown={(event) => event.key === "Enter" && create()} /></label><button className="primary" disabled={!newName.trim()} onClick={create}>Create and add</button></footer>
-    </section>
-  </div>;
+  </>;
 }
