@@ -38,3 +38,16 @@ export {
 
 export { reconcilePortableWatchedSteadyStateSyncV1 } from './portableWatchedSteadyStateSync';
 export type { PortableWatchedSteadyStateReconcileV1 } from './portableWatchedSteadyStateSync';
+
+export {
+  resolvePortableMyListSteadyStateConflictV1,
+  type PortableMyListCheckpointEvidenceV1,
+  type PortableMyListSteadyStateConflictResolutionV1,
+  type PortableMyListSteadyStateConflictResolutionResultV1,
+} from './portableMyListSteadyStateConflict';
+
+export {
+  resolvePortableWatchedSteadyStateConflictV1,
+  type PortableWatchedSteadyStateConflictResolutionV1,
+  type PortableWatchedSteadyStateConflictResolutionResultV1,
+} from './portableWatchedSteadyStateConflict';

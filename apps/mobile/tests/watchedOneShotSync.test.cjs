@@ -96,3 +96,21 @@ test("P8.4 C3-D shared steady-state coordinator is checkpoint-gated and composes
   assert.match(oneShot, /shouldProceed\?: \(\) => boolean \| Promise<boolean>/);
   assert.match(oneShot, /reason: 'cancelled'/);
 });
+
+
+test("P8 post-checkpoint Watched divergence requires an explicit device-or-cloud choice and never auto-unions conflicting Watched intent", () => {
+  const steady = read("src/features/account/WatchedSteadyStateSync.tsx");
+  const ui = read("src/features/settings/WatchedSyncControl.tsx");
+  const shared = readShared("api/portableWatchedSteadyStateConflict.ts");
+
+  assert.match(steady, /resolvePortableWatchedSteadyStateConflictV1/);
+  assert.match(steady, /reason === 'both-changed'/);
+  assert.match(steady, /resolution === 'device' \? 'keep-local' : 'keep-cloud'/);
+  assert.match(ui, /Keep this device/);
+  assert.match(ui, /Keep Orion Cloud/);
+  assert.match(ui, /Resolve Watched conflict\?/);
+  assert.match(shared, /Watched and Unwatched are competing intentions|intentional unwatch/i);
+  assert.match(shared, /decision\.reason !== 'both-changed'/);
+  assert.match(shared, /expectedRevisionTag: remote\.revisionTag/);
+  assert.match(shared, /portableProfilesSemanticallyMatch\(candidate, readBack\.profile\)/);
+});

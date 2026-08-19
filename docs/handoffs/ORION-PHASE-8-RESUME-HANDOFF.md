@@ -1,4 +1,4 @@
-# Orion — Phase 8 Resume Handoff
+# Orion – Phase 8 Resume Handoff
 
 **Purpose:** Resume the frozen Orion Mobile Phase 8 work after Desktop stabilization without losing the architectural context that caused the freeze.
 
@@ -275,15 +275,15 @@ Canonical audit:
 
 Current Phase 8 board:
 
-- P8.0 — COMPLETE
-- P8.1 — LOCKED
-- P8.2 — LOCKED
-- P8.3 — COMPLETE & LOCKED
-- P8.4 C1 — COMPLETE & LOCKED
-- P8.4 C2 — COMPLETE & LOCKED
-- P8.4 C3-A — COMPLETE & LOCKED
-- P8.4 C3-B — NEXT
-- Phase 8 overall — NOT LOCKED
+- P8.0 – COMPLETE
+- P8.1 – LOCKED
+- P8.2 – LOCKED
+- P8.3 – COMPLETE & LOCKED
+- P8.4 C1 – COMPLETE & LOCKED
+- P8.4 C2 – COMPLETE & LOCKED
+- P8.4 C3-A – COMPLETE & LOCKED
+- P8.4 C3-B – NEXT
+- Phase 8 overall – NOT LOCKED
 
 C3-B begins Watched namespace machinery. It must reuse the P8.3 synchronization architecture rather than introduce a second sync engine.
 
@@ -314,16 +314,16 @@ Canonical audit:
 
 Current Phase 8 board:
 
-- P8.0 — COMPLETE
-- P8.1 — LOCKED
-- P8.2 — LOCKED
-- P8.3 — COMPLETE & LOCKED
-- P8.4 C1 — COMPLETE & LOCKED
-- P8.4 C2 — COMPLETE & LOCKED
-- P8.4 C3-A — COMPLETE & LOCKED
-- P8.4 C3-B — COMPLETE & LOCKED
-- P8.4 C3-C — NEXT
-- Phase 8 overall — NOT LOCKED
+- P8.0 – COMPLETE
+- P8.1 – LOCKED
+- P8.2 – LOCKED
+- P8.3 – COMPLETE & LOCKED
+- P8.4 C1 – COMPLETE & LOCKED
+- P8.4 C2 – COMPLETE & LOCKED
+- P8.4 C3-A – COMPLETE & LOCKED
+- P8.4 C3-B – COMPLETE & LOCKED
+- P8.4 C3-C – NEXT
+- Phase 8 overall – NOT LOCKED
 
 
 ---
@@ -364,17 +364,17 @@ Canonical audit:
 
 Current Phase 8 board:
 
-- P8.0 — COMPLETE
-- P8.1 — LOCKED
-- P8.2 — LOCKED
-- P8.3 — COMPLETE & LOCKED
-- P8.4 C1 — COMPLETE & LOCKED
-- P8.4 C2 — COMPLETE & LOCKED
-- P8.4 C3-A — COMPLETE & LOCKED
-- P8.4 C3-B — COMPLETE & LOCKED
-- P8.4 C3-C — COMPLETE & LOCKED
-- P8.4 C3-D — NEXT
-- Phase 8 overall — NOT LOCKED
+- P8.0 – COMPLETE
+- P8.1 – LOCKED
+- P8.2 – LOCKED
+- P8.3 – COMPLETE & LOCKED
+- P8.4 C1 – COMPLETE & LOCKED
+- P8.4 C2 – COMPLETE & LOCKED
+- P8.4 C3-A – COMPLETE & LOCKED
+- P8.4 C3-B – COMPLETE & LOCKED
+- P8.4 C3-C – COMPLETE & LOCKED
+- P8.4 C3-D – NEXT
+- Phase 8 overall – NOT LOCKED
 
 ---
 
@@ -426,17 +426,17 @@ Canonical audit:
 
 Current Phase 8 board:
 
-- P8.0 — COMPLETE
-- P8.1 — LOCKED
-- P8.2 — LOCKED
-- P8.3 — COMPLETE & LOCKED
-- P8.4 C1 — COMPLETE & LOCKED
-- P8.4 C2 — COMPLETE & LOCKED
-- P8.4 C3-A — COMPLETE & LOCKED
-- P8.4 C3-B — COMPLETE & LOCKED
-- P8.4 C3-C — COMPLETE & LOCKED
-- P8.4 C3-D — COMPLETE & LOCKED
-- Phase 8 overall — NOT LOCKED
+- P8.0 – COMPLETE
+- P8.1 – LOCKED
+- P8.2 – LOCKED
+- P8.3 – COMPLETE & LOCKED
+- P8.4 C1 – COMPLETE & LOCKED
+- P8.4 C2 – COMPLETE & LOCKED
+- P8.4 C3-A – COMPLETE & LOCKED
+- P8.4 C3-B – COMPLETE & LOCKED
+- P8.4 C3-C – COMPLETE & LOCKED
+- P8.4 C3-D – COMPLETE & LOCKED
+- Phase 8 overall – NOT LOCKED
 
 Immediate next work is the focused Account / Sync UX productization pass already agreed for Orion Desktop and Orion Mobile. This handoff does not assign that polish pass a new canonical P8.x number.
 
@@ -505,18 +505,18 @@ Watched remains an independent domain and P8.4 C3-D remains locked.
 
 Current Phase 8 board:
 
-- P8.0 — COMPLETE
-- P8.1 — LOCKED
-- P8.2 — LOCKED
-- P8.3 — COMPLETE & LOCKED
-- P8.3 Desktop My List conflict-resolution amendment — COMPLETE & LOCKED
-- P8.4 C1 — COMPLETE & LOCKED
-- P8.4 C2 — COMPLETE & LOCKED
-- P8.4 C3-A — COMPLETE & LOCKED
-- P8.4 C3-B — COMPLETE & LOCKED
-- P8.4 C3-C — COMPLETE & LOCKED
-- P8.4 C3-D — COMPLETE & LOCKED
-- Phase 8 overall — NOT LOCKED
+- P8.0 – COMPLETE
+- P8.1 – LOCKED
+- P8.2 – LOCKED
+- P8.3 – COMPLETE & LOCKED
+- P8.3 Desktop My List conflict-resolution amendment – COMPLETE & LOCKED
+- P8.4 C1 – COMPLETE & LOCKED
+- P8.4 C2 – COMPLETE & LOCKED
+- P8.4 C3-A – COMPLETE & LOCKED
+- P8.4 C3-B – COMPLETE & LOCKED
+- P8.4 C3-C – COMPLETE & LOCKED
+- P8.4 C3-D – COMPLETE & LOCKED
+- Phase 8 overall – NOT LOCKED
 
 History and verified playback Progress remain future synchronization domains.
 Continue Watching remains derived and must not become an independent cloud namespace.
@@ -524,3 +524,95 @@ Continue Watching remains derived and must not become an independent cloud names
 Canonical amendment audit:
 
 `docs\audits\ORION-P8.3-DESKTOP-MYLIST-CONFLICT-RESOLUTION-POST-LOCK-AUDIT.md`
+
+
+---
+
+## Phase 8 steady-state conflict-recovery post-lock amendment
+
+**Status:** COMPLETE & LOCKED when committed with the validated Candidate 1.1
+**Date:** 2026-08-20
+
+Final Phase 8 physical acceptance proved that the locked My List and Watched steady-state engines correctly stop on genuine post-checkpoint two-sided divergence, but also exposed that `Check now` alone could leave an enrolled domain in a Review dead end.
+
+The controlled recovery amendment adds explicit whole-copy resolution for genuine enrolled-domain divergence:
+
+- keep the current device copy,
+- keep Orion Cloud.
+
+The selected source is revalidated before mutation. Device-wins recovery uses the existing conditional-write / semantic-read-back architecture. Cloud-wins recovery uses a stable re-read before verified local replacement. A new checkpoint is accepted only after convergence is proven.
+
+No silent winner and no last-write-wins path were introduced.
+
+### Important `Combine both` clarification
+
+The earlier P8.3 My List `Combine both` option is **first-enrollment conflict resolution**, not general steady-state conflict resolution.
+
+It remains valid and unchanged for the pre-checkpoint case where Desktop and Orion Cloud already contain different populated My Lists and Orion is establishing the first shared copy. That path was physically proven with 134 Desktop titles + 28 Cloud titles - 11 shared = 151 combined titles.
+
+After a verified checkpoint exists, `Combine both` is intentionally absent. The v1 checkpoint stores semantic signatures rather than the complete prior record set, so Orion cannot safely infer which missing records represent intentional removals. Blind union could resurrect titles deliberately removed on either device.
+
+Watched follows the same steady-state rule even more strictly because a missing Watched record may represent an explicit `Mark Unwatched` action.
+
+Therefore:
+
+- first-enrollment My List conflict: `Combine both` / keep device / keep Cloud,
+- post-checkpoint My List divergence: keep device / keep Cloud,
+- post-checkpoint Watched divergence: keep device / keep Cloud,
+- blind steady-state union: prohibited.
+
+Final Account / Orion Cloud production polish should make these two conflict classes visually/copy-wise distinct so the intentional difference in available actions is obvious to normal users.
+
+### Automated evidence
+
+Mobile:
+
+- focused TypeScript: PASS,
+- focused My List + Watched: 25 / 25,
+- full tests: 212 / 212,
+- source-size: 132,
+- Expo Doctor: 20 / 20,
+- web export: PASS.
+
+Desktop:
+
+- focused conflict recovery: 32 / 32,
+- source-size: 361,
+- bindings: 315,
+- IPC: 222 methods / 141 channels,
+- Node: 106 / 106,
+- renderer: 232 / 232,
+- production build: PASS.
+
+### Physical acceptance
+
+A fresh Candidate 1.1 standalone APK was installed on the Samsung S24 Ultra and a fresh Desktop runtime was used.
+
+Real existing two-sided conflicts were recovered in opposite directions:
+
+- My List: user selected **Keep Desktop My List** -> Desktop / Orion Cloud / Mobile returned to Synced,
+- Watched: user selected **Keep Orion Cloud** -> local Watched was replaced by verified cloud truth and both platforms returned to Synced.
+
+The recoveries remained domain-isolated.
+
+Canonical audit:
+
+`docs\audits\ORION-P8-STEADY-STATE-CONFLICT-RECOVERY-POST-LOCK-AUDIT.md`
+
+Current Phase 8 board:
+
+- P8.0 – COMPLETE
+- P8.1 – LOCKED
+- P8.2 – LOCKED
+- P8.3 – COMPLETE & LOCKED
+- P8.3 Desktop My List first-enrollment conflict-resolution amendment – COMPLETE & LOCKED
+- P8.4 C1 – COMPLETE & LOCKED
+- P8.4 C2 – COMPLETE & LOCKED
+- P8.4 C3-A – COMPLETE & LOCKED
+- P8.4 C3-B – COMPLETE & LOCKED
+- P8.4 C3-C – COMPLETE & LOCKED
+- P8.4 C3-D – COMPLETE & LOCKED
+- Phase 8 steady-state conflict-recovery post-lock amendment – COMPLETE & LOCKED when committed
+- Phase 8 overall – NOT LOCKED
+
+History and verified playback Progress remain separate future architecture decisions. Continue Watching remains derived and must not become an independent cloud namespace.

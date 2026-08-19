@@ -8,10 +8,12 @@ import {
   portableMyListPreviewSignatureV1,
   PORTABLE_PROFILE_PRIMARY_KEY,
 } from "@orion/shared/types";
+import { resolvePortableMyListSteadyStateConflictV1 } from "@orion/shared/api";
 import { DesktopPortableProfileCloudStore } from "../../services/portableProfileCloudStore";
 import { readBackCloudProfileUntilVerified } from "../../services/cloudProfileReadBackVerification";
 import {
   applyDesktopPortableMyListPreviewV1,
+  readDesktopPortableMyListPreviewV1,
 } from "../../services/myListSyncLocalStore";
 import {
   loadDesktopMyListSyncCheckpointV1,
@@ -52,6 +54,7 @@ export function DesktopMyListSteadyStateSyncProvider({ googleProfile, networkSta
   const [policy, setPolicy] = useState({ profileId: "", automatic: true });
   const automatic = policy.profileId === profileId ? policy.automatic : true;
   const [status, setStatus] = useState({ phase: "inactive", hasCheckpoint: false, count: preview.orderedKeys.length, message: null });
+  const [review, setReview] = useState(null);
   const busyRef = useRef(false);
   const pendingModeRef = useRef(null);
   const reconcileRef = useRef(async () => {});
@@ -137,6 +140,7 @@ export function DesktopMyListSteadyStateSyncProvider({ googleProfile, networkSta
       : { phase: "paused", hasCheckpoint: true, count, message: "My List is synced. Automatic sync remains paused on this Desktop." });
 
     busyRef.current = true;
+    setReview(null);
     setStatus({ phase: "checking", hasCheckpoint, count: startCount, message: null });
     try {
       const store = new DesktopPortableProfileCloudStore(operationProfileId);
@@ -191,6 +195,7 @@ export function DesktopMyListSteadyStateSyncProvider({ googleProfile, networkSta
       const cloudChanged = cloudNamespaceSignature !== checkpoint.cloudNamespaceSignature;
 
       if (localChanged && cloudChanged) {
+        setReview({ reason: "both-changed", localCount: startCount, cloudCount: cloudPreview.orderedKeys.length });
         setStatus({ phase: "needs-review", hasCheckpoint: true, count: startCount, message: "My List changed on this Desktop and in Orion Cloud since the last sync. Orion stopped instead of choosing a winner." });
         return;
       }
@@ -316,6 +321,59 @@ export function DesktopMyListSteadyStateSyncProvider({ googleProfile, networkSta
     }
   };
 
+
+  const resolveReview = useCallback(async (resolution) => {
+    if (busyRef.current) return;
+    const start = latestRef.current;
+    if (!start.profileId) return;
+    const checkpoint = loadDesktopMyListSyncCheckpointV1(start.profileId);
+    if (!checkpoint || start.networkStatus === "offline" || start.networkStatus === "checking") {
+      setReview(null);
+      setStatus({ phase: "needs-review", hasCheckpoint: !!checkpoint, count: start.preview.orderedKeys.length, message: "Orion cannot resolve My List until the signed-in profile and connection are ready." });
+      return;
+    }
+
+    const operationProfileId = start.profileId;
+    const sameAccount = () => latestRef.current.profileId === operationProfileId;
+    busyRef.current = true;
+    setReview(null);
+    setStatus({ phase: "syncing", hasCheckpoint: true, count: start.preview.orderedKeys.length, message: "Applying your confirmed My List choice and verifying both copies." });
+    try {
+      const store = new DesktopPortableProfileCloudStore(operationProfileId);
+      const result = await resolvePortableMyListSteadyStateConflictV1({
+        store,
+        profileKey: PORTABLE_PROFILE_PRIMARY_KEY,
+        profileId: operationProfileId,
+        updatedBy: operationProfileId,
+        checkpoint,
+        resolution: resolution === "desktop" ? "keep-local" : "keep-cloud",
+        readLocalPreview: readDesktopPortableMyListPreviewV1,
+        applyLocalPreview: applyDesktopPortableMyListPreviewV1,
+        shouldProceed: sameAccount,
+      });
+      if (!sameAccount()) return;
+      if (result.state === "cancelled") return;
+      if (result.state === "needs-review") {
+        setStatus({ phase: "needs-review", hasCheckpoint: true, count: readDesktopPortableMyListPreviewV1().orderedKeys.length, message: "My List changed while Orion was preparing the resolution. Orion stopped without overwriting the newer copy. Check again before choosing." });
+        return;
+      }
+
+      saveDesktopMyListSyncCheckpointV1(result.checkpoint);
+      const automaticNow = latestRef.current.automatic;
+      setStatus(automaticNow
+        ? { phase: "synced", hasCheckpoint: true, count: result.count, message: null }
+        : { phase: "paused", hasCheckpoint: true, count: result.count, message: "My List is synced. Automatic sync remains paused on this Desktop." });
+    } catch (error) {
+      if (!sameAccount()) return;
+      const message = error?.code === "GOOGLE_DRIVE_PROFILE_CONDITIONAL_UNAVAILABLE"
+        ? "Orion Cloud could not complete a safe My List resolution. Nothing was overwritten."
+        : "Orion could not verify the My List resolution. Nothing was marked as synced.";
+      setStatus({ phase: "error", hasCheckpoint: true, count: readDesktopPortableMyListPreviewV1().orderedKeys.length, message });
+    } finally {
+      busyRef.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     requestAutomaticReconcile();
   }, [profileId, localSignature, networkStatus, automatic, requestAutomaticReconcile]);
@@ -333,7 +391,7 @@ export function DesktopMyListSteadyStateSyncProvider({ googleProfile, networkSta
     };
   }, [requestAutomaticReconcile]);
 
-  const value = useMemo(() => ({ ...status, automatic, setAutomatic, refresh: requestManualReconcile }), [automatic, requestManualReconcile, setAutomatic, status]);
+  const value = useMemo(() => ({ ...status, automatic, setAutomatic, refresh: requestManualReconcile, review, resolveReview }), [automatic, requestManualReconcile, resolveReview, review, setAutomatic, status]);
   return <DesktopMyListSteadyStateContext.Provider value={value}>{children}</DesktopMyListSteadyStateContext.Provider>;
 }
 

@@ -1,6 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
-import { reconcilePortableWatchedSteadyStateSyncV1 } from '@orion/shared/api';
+import {
+  reconcilePortableWatchedSteadyStateSyncV1,
+  resolvePortableWatchedSteadyStateConflictV1,
+} from '@orion/shared/api';
 import {
   PORTABLE_PROFILE_PRIMARY_KEY,
   portableWatchedTruthSignatureV1,
@@ -27,12 +30,20 @@ export type WatchedSteadyStatePhase =
   | 'needs-review'
   | 'error';
 
+interface WatchedSteadyStateReview {
+  reason: 'both-changed';
+  localCount: number;
+  cloudCount: number;
+}
+
 interface WatchedSteadyStateValue {
   phase: WatchedSteadyStatePhase;
   hasCheckpoint: boolean;
   count: number | null;
   message: string | null;
   refresh: () => void;
+  review: WatchedSteadyStateReview | null;
+  resolveReview: (resolution: 'device' | 'cloud') => void;
 }
 
 type ReconcileMode = 'automatic' | 'manual';
@@ -66,12 +77,13 @@ export function WatchedSteadyStateSyncProvider({ children }: { children: React.R
   const watchedRef = useRef(watched);
   watchedRef.current = watched;
 
-  const [status, setStatus] = useState<Omit<WatchedSteadyStateValue, 'refresh'>>({
+  const [status, setStatus] = useState<Pick<WatchedSteadyStateValue, 'phase' | 'hasCheckpoint' | 'count' | 'message'>>({
     phase: 'inactive',
     hasCheckpoint: false,
     count: null,
     message: null,
   });
+  const [review, setReview] = useState<WatchedSteadyStateReview | null>(null);
   const busyRef = useRef(false);
   const pendingModeRef = useRef<ReconcileMode | null>(null);
   const reconcileRef = useRef<(mode: ReconcileMode) => Promise<void>>(async () => {});
@@ -183,6 +195,7 @@ export function WatchedSteadyStateSyncProvider({ children }: { children: React.R
     });
 
     busyRef.current = true;
+    setReview(null);
     setStatus({ phase: 'checking', hasCheckpoint: true, count: startCount, message: null });
     try {
       const authorization = await checkGoogleDriveAppDataAuthorization(profile.email);
@@ -227,6 +240,9 @@ export function WatchedSteadyStateSyncProvider({ children }: { children: React.R
         return;
       }
       if (result.state === 'needs-review') {
+        if (result.reason === 'both-changed') {
+          setReview({ reason: 'both-changed', localCount: result.localCount, cloudCount: result.cloudCount });
+        }
         setStatus({
           phase: 'needs-review',
           hasCheckpoint: true,
@@ -269,6 +285,65 @@ export function WatchedSteadyStateSyncProvider({ children }: { children: React.R
     }
   };
 
+
+  const resolveReview = useCallback((resolution: 'device' | 'cloud') => {
+    if (busyRef.current) return;
+    void (async () => {
+      const start = latestRef.current;
+      const profile = start.profile;
+      if (start.accountPhase !== 'signed-in' || !profile) return;
+      const checkpoint = loadWatchedSyncCheckpointV1(profile.accountId);
+      if (!checkpoint || !start.online || start.internetReachable === false || !isNativeGoogleDriveAuthorizationAvailable()) {
+        setReview(null);
+        setStatus({ phase: 'needs-review', hasCheckpoint: !!checkpoint, count: Object.keys(readLocalPreview().records).length, message: 'Orion cannot resolve Watched until the signed-in profile and connection are ready.' });
+        return;
+      }
+
+      const operationProfileId = profile.accountId;
+      const sameAccount = () => latestRef.current.profile?.accountId === operationProfileId;
+      busyRef.current = true;
+      setReview(null);
+      setStatus({ phase: 'syncing', hasCheckpoint: true, count: Object.keys(readLocalPreview().records).length, message: 'Applying your confirmed Watched choice and verifying both copies.' });
+      try {
+        const authorization = await checkGoogleDriveAppDataAuthorization(profile.email);
+        if (!sameAccount()) return;
+        if (!authorization.authorized) {
+          setStatus({ phase: 'needs-review', hasCheckpoint: true, count: Object.keys(readLocalPreview().records).length, message: 'Orion Cloud access is required before this Watched conflict can be resolved.' });
+          return;
+        }
+
+        const store = new GoogleDriveCloudProfileStore(profile.email);
+        const result = await resolvePortableWatchedSteadyStateConflictV1({
+          store,
+          profileKey: PORTABLE_PROFILE_PRIMARY_KEY,
+          profileId: operationProfileId,
+          updatedBy: operationProfileId,
+          checkpoint,
+          resolution: resolution === 'device' ? 'keep-local' : 'keep-cloud',
+          readLocalPreview,
+          applyLocalPreview,
+          shouldProceed: sameAccount,
+        });
+        if (!sameAccount()) return;
+        if (result.state === 'cancelled') return;
+        if (result.state === 'needs-review') {
+          setStatus({ phase: 'needs-review', hasCheckpoint: true, count: Object.keys(readLocalPreview().records).length, message: 'Watched changed while Orion was preparing the resolution. Orion stopped without overwriting the newer copy. Check again before choosing.' });
+          return;
+        }
+
+        saveWatchedSyncCheckpointV1(result.checkpoint);
+        setStatus(latestRef.current.watchedAutomatic
+          ? { phase: 'synced', hasCheckpoint: true, count: result.count, message: `${itemLabel(result.count)} verified across this device and Orion cloud.` }
+          : { phase: 'paused', hasCheckpoint: true, count: result.count, message: `${itemLabel(result.count)} synced. Automatic Watched sync remains paused on this device.` });
+      } catch {
+        if (!sameAccount()) return;
+        setStatus({ phase: 'error', hasCheckpoint: true, count: Object.keys(readLocalPreview().records).length, message: 'Orion could not verify the Watched resolution. Nothing was marked as synced.' });
+      } finally {
+        busyRef.current = false;
+      }
+    })();
+  }, [applyLocalPreview, readLocalPreview]);
+
   useEffect(() => {
     requestAutomaticReconcile();
   }, [account.state.phase, account.state.profile?.accountId, account.state.profile?.email, localTruthSignature, network.online, network.internetReachable, syncPolicy.ready, watchedAutomatic, requestAutomaticReconcile]);
@@ -283,7 +358,9 @@ export function WatchedSteadyStateSyncProvider({ children }: { children: React.R
   const value = useMemo<WatchedSteadyStateValue>(() => ({
     ...status,
     refresh: requestManualReconcile,
-  }), [requestManualReconcile, status]);
+    review,
+    resolveReview,
+  }), [requestManualReconcile, resolveReview, review, status]);
 
   return <WatchedSteadyStateContext.Provider value={value}>{children}</WatchedSteadyStateContext.Provider>;
 }

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import { resolvePortableMyListSteadyStateConflictV1 } from '@orion/shared/api';
 import {
   buildPortableMyListPreviewFromProfileV1,
   buildPortableMyListPreviewV1,
@@ -34,11 +35,19 @@ export type MyListSteadyStatePhase =
   | 'needs-review'
   | 'error';
 
+interface MyListSteadyStateReview {
+  reason: 'both-changed';
+  localCount: number;
+  cloudCount: number;
+}
+
 interface MyListSteadyStateValue {
   phase: MyListSteadyStatePhase;
   hasCheckpoint: boolean;
   message: string | null;
   refresh: () => void;
+  review: MyListSteadyStateReview | null;
+  resolveReview: (resolution: 'device' | 'cloud') => void;
 }
 
 const MyListSteadyStateContext = createContext<MyListSteadyStateValue | null>(null);
@@ -65,12 +74,15 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
   const { saved, savedOrder, replaceMyListFromSync } = useLibrary();
   const preview = useMemo(() => buildPortableMyListPreviewV1(saved, savedOrder), [saved, savedOrder]);
   const localSignature = useMemo(() => portableMyListPreviewSignatureV1(preview), [preview]);
+  const previewRef = useRef(preview);
+  previewRef.current = preview;
 
-  const [status, setStatus] = useState<Omit<MyListSteadyStateValue, 'refresh'>>({
+  const [status, setStatus] = useState<Pick<MyListSteadyStateValue, 'phase' | 'hasCheckpoint' | 'message'>>({
     phase: 'inactive',
     hasCheckpoint: false,
     message: null,
   });
+  const [review, setReview] = useState<MyListSteadyStateReview | null>(null);
   const busyRef = useRef(false);
   const pendingModeRef = useRef<'automatic' | 'manual' | null>(null);
   const reconcileRef = useRef<(mode: 'automatic' | 'manual') => Promise<void>>(async () => {});
@@ -189,6 +201,7 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
     });
 
     busyRef.current = true;
+    setReview(null);
     setStatus({ phase: 'checking', hasCheckpoint, message: null });
     try {
       const authorization = await checkGoogleDriveAppDataAuthorization(profile.email);
@@ -272,6 +285,7 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
       const cloudChanged = cloudNamespaceSignature !== checkpoint.cloudNamespaceSignature;
 
       if (localChanged && cloudChanged) {
+        setReview({ reason: 'both-changed', localCount: start.preview.orderedKeys.length, cloudCount: cloudPreview.orderedKeys.length });
         setStatus({
           phase: 'needs-review',
           hasCheckpoint: true,
@@ -434,6 +448,69 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
     }
   };
 
+
+  const resolveReview = useCallback((resolution: 'device' | 'cloud') => {
+    if (busyRef.current) return;
+    void (async () => {
+      const start = latestRef.current;
+      const profile = start.profile;
+      if (start.accountPhase !== 'signed-in' || !profile) return;
+      const checkpoint = loadMyListSyncCheckpointV1(profile.accountId);
+      if (!checkpoint || !start.online || start.internetReachable === false || !isNativeGoogleDriveAuthorizationAvailable()) {
+        setReview(null);
+        setStatus({ phase: 'needs-review', hasCheckpoint: !!checkpoint, message: 'Orion cannot resolve My List until the signed-in profile and connection are ready.' });
+        return;
+      }
+
+      const operationProfileId = profile.accountId;
+      const sameAccount = () => latestRef.current.profile?.accountId === operationProfileId;
+      busyRef.current = true;
+      setReview(null);
+      setStatus({ phase: 'syncing', hasCheckpoint: true, message: 'Applying your confirmed My List choice and verifying both copies.' });
+      try {
+        const authorization = await checkGoogleDriveAppDataAuthorization(profile.email);
+        if (!sameAccount()) return;
+        if (!authorization.authorized) {
+          setStatus({ phase: 'needs-review', hasCheckpoint: true, message: 'Orion Cloud access is required before this My List conflict can be resolved.' });
+          return;
+        }
+
+        const store = new GoogleDriveCloudProfileStore(profile.email);
+        const result = await resolvePortableMyListSteadyStateConflictV1({
+          store,
+          profileKey: PORTABLE_PROFILE_PRIMARY_KEY,
+          profileId: operationProfileId,
+          updatedBy: operationProfileId,
+          checkpoint,
+          resolution: resolution === 'device' ? 'keep-local' : 'keep-cloud',
+          readLocalPreview: () => previewRef.current,
+          applyLocalPreview: (nextPreview) => {
+            const snapshot = buildLocalMyListSnapshotV1(nextPreview, latestRef.current.saved);
+            replaceMyListFromSync(snapshot.saved, snapshot.savedOrder);
+            previewRef.current = nextPreview;
+          },
+          shouldProceed: sameAccount,
+        });
+        if (!sameAccount()) return;
+        if (result.state === 'cancelled') return;
+        if (result.state === 'needs-review') {
+          setStatus({ phase: 'needs-review', hasCheckpoint: true, message: 'My List changed while Orion was preparing the resolution. Orion stopped without overwriting the newer copy. Check again before choosing.' });
+          return;
+        }
+
+        saveMyListSyncCheckpointV1(result.checkpoint);
+        setStatus(latestRef.current.myListAutomatic
+          ? { phase: 'synced', hasCheckpoint: true, message: null }
+          : { phase: 'paused', hasCheckpoint: true, message: 'My List is synced. Automatic sync remains paused on this device.' });
+      } catch {
+        if (!sameAccount()) return;
+        setStatus({ phase: 'error', hasCheckpoint: true, message: 'Orion could not verify the My List resolution. Nothing was marked as synced.' });
+      } finally {
+        busyRef.current = false;
+      }
+    })();
+  }, [replaceMyListFromSync]);
+
   useEffect(() => {
     requestAutomaticReconcile();
   }, [account.state.phase, account.state.profile?.accountId, account.state.profile?.email, localSignature, network.online, network.internetReachable, syncPolicy.ready, myListAutomatic, requestAutomaticReconcile]);
@@ -448,7 +525,9 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
   const value = useMemo<MyListSteadyStateValue>(() => ({
     ...status,
     refresh: requestManualReconcile,
-  }), [requestManualReconcile, status]);
+    review,
+    resolveReview,
+  }), [requestManualReconcile, resolveReview, review, status]);
 
   return (
     <MyListSteadyStateContext.Provider value={value}>

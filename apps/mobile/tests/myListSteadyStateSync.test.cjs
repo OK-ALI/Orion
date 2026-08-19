@@ -185,3 +185,21 @@ test("P8.4 C3-D extends the reusable policy registry without changing My List do
   assert.match(preflight, /uploading only My List/);
   assert.match(preflight, /Keep My List consistent across Orion devices/);
 });
+
+
+test("P8 post-checkpoint My List divergence exposes explicit whole-copy recovery without inventing a steady-state merge", () => {
+  const steady = read("src/features/account/MyListSteadyStateSync.tsx");
+  const ui = read("src/features/settings/MyListEnrollmentPreflight.tsx");
+  const shared = readShared("api/portableMyListSteadyStateConflict.ts");
+
+  assert.match(steady, /resolvePortableMyListSteadyStateConflictV1/);
+  assert.match(steady, /reason: 'both-changed'/);
+  assert.match(steady, /resolution === 'device' \? 'keep-local' : 'keep-cloud'/);
+  assert.match(ui, /Keep this device/);
+  assert.match(ui, /Keep Orion Cloud/);
+  assert.match(ui, /Resolve My List conflict\?/);
+  assert.match(shared, /cannot safely infer which removals were intentional/i);
+  assert.match(shared, /expectedRevisionTag: remote\.revisionTag/);
+  assert.match(shared, /unrelatedNamespacesMatch\(candidate, readBack\.profile\)/);
+  assert.doesNotMatch(shared, /combinePortableMyListPreviewsV1/);
+});

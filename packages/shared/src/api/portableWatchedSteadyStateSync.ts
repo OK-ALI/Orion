@@ -24,6 +24,8 @@ export type PortableWatchedSteadyStateReconcileV1 =
       reason: string;
       conflictKeys: string[];
       cloudWasWritten: boolean;
+      localCount: number;
+      cloudCount: number;
     }
   | { state: 'cancelled' };
 
@@ -69,6 +71,8 @@ export async function reconcilePortableWatchedSteadyStateSyncV1(input: {
       reason: inspection.reason,
       conflictKeys: inspection.conflictKeys,
       cloudWasWritten: false,
+      localCount: inspection.localCount,
+      cloudCount: inspection.cloudCount,
     };
   }
 
@@ -100,5 +104,7 @@ export async function reconcilePortableWatchedSteadyStateSyncV1(input: {
     reason: execution.reason,
     conflictKeys: [],
     cloudWasWritten: execution.cloudWasWritten,
+    localCount: inspection.localCount,
+    cloudCount: inspection.cloudCount,
   };
 }

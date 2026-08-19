@@ -42,6 +42,7 @@ export default function MyListSyncCard({ googleProfile }) {
   const profileId = typeof googleProfile?.sub === "string" ? googleProfile.sub.trim() : "";
   const steady = useDesktopMyListSteadyStateSync();
   const [state, setState] = useState({ phase: "idle" });
+  const [steadyResolution, setSteadyResolution] = useState(null);
   const busyRef = useRef(false);
   const locallyEnrolled = !!(profileId && loadDesktopMyListSyncCheckpointV1(profileId));
   const steadyActive = locallyEnrolled || steady.hasCheckpoint;
@@ -401,6 +402,7 @@ const resolveConflict = async () => {
             : state.phase === "synced" ? "Synced"
               : state.phase === "error" ? "Error" : "Manual";
   const localPreview = readDesktopPortableMyListPreviewV1();
+  const steadyReviewAvailable = steadyActive && steady.phase === "needs-review" && steady.review?.reason === "both-changed";
   const localCount = Number.isFinite(steady.count) ? steady.count : localPreview.orderedKeys.length;
   const feedback = steadyActive
     ? steady.phase === "paused" ? "Automatic sync is paused. Local My List changes stay on this Desktop until you choose Sync now or turn Auto sync back on."
@@ -473,10 +475,48 @@ const resolveConflict = async () => {
   </div>
 )}
 
+
+      {steadyReviewAvailable && (
+        <div style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "12px 14px", marginTop: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+            <div>
+              <div style={{ color: "var(--text3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6 }}>This Desktop</div>
+              <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 700, marginTop: 3 }}>{steady.review.localCount} title{steady.review.localCount === 1 ? "" : "s"}</div>
+            </div>
+            <div>
+              <div style={{ color: "var(--text3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6 }}>Orion Cloud</div>
+              <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 700, marginTop: 3 }}>{steady.review.cloudCount} title{steady.review.cloudCount === 1 ? "" : "s"}</div>
+            </div>
+          </div>
+          <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.5, marginTop: 10 }}>
+            Both copies changed after the last verified sync. Orion cannot safely infer which removals were intentional, so choose the copy you want to keep.
+          </div>
+        </div>
+      )}
+
+      {steadyReviewAvailable && steadyResolution && (
+        <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.55, marginTop: 12 }}>
+          {steadyResolution === "desktop"
+            ? `Keep the ${steady.review.localCount} titles on this Desktop and replace the current Orion Cloud My List? Cloud-only changes will no longer be active.`
+            : `Keep the ${steady.review.cloudCount} titles in Orion Cloud and replace this Desktop My List? Desktop-only changes will no longer be active.`}
+        </div>
+      )}
+
       {feedback && <div style={{ color: needsReview || failed ? "var(--red)" : "var(--text3)", fontSize: 12, lineHeight: 1.55, marginTop: 12 }}>{feedback}</div>}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
-        {!steadyActive && state.phase === "conflict" ? (
+        {steadyReviewAvailable && !steadyResolution ? (
+          <>
+            <button className="btn btn-secondary" disabled={busy} onClick={() => setSteadyResolution("desktop")}>Keep Desktop My List</button>
+            <button className="btn btn-secondary" disabled={busy} onClick={() => setSteadyResolution("cloud")}>Keep Orion Cloud My List</button>
+            <button className="btn btn-ghost" disabled={busy} onClick={() => steady.refresh()}>Check again</button>
+          </>
+        ) : steadyReviewAvailable && steadyResolution ? (
+          <>
+            <button className="btn btn-secondary" disabled={busy} onClick={() => setSteadyResolution(null)}>Cancel</button>
+            <button className="btn btn-primary" disabled={busy} onClick={() => { const choice = steadyResolution; setSteadyResolution(null); steady.resolveReview(choice); }}>Confirm</button>
+          </>
+        ) : !steadyActive && state.phase === "conflict" ? (
           <>
             <button className="btn btn-primary" disabled={busy} onClick={() => beginConflictResolution("combine")}>Combine both</button>
             <button className="btn btn-secondary" disabled={busy} onClick={() => beginConflictResolution("desktop")}>Keep Desktop My List</button>

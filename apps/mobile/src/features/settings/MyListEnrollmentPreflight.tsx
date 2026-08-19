@@ -94,6 +94,7 @@ export function MyListEnrollmentPreflight({
   );
   const [state, setState] = useState<PreflightState>({ phase: 'idle' });
   const [showSyncDialog, setShowSyncDialog] = useState(false);
+  const [reviewResolution, setReviewResolution] = useState<'device' | 'cloud' | null>(null);
   const operationBusyRef = useRef(false);
   const contextKey = `${accountEmail}\u0000${profileId}\u0000${previewSignature}`;
   const contextKeyRef = useRef(contextKey);
@@ -455,6 +456,7 @@ export function MyListEnrollmentPreflight({
   const needsReview = steadyActive ? steady.phase === 'needs-review' : state.phase === 'needs-review';
   const paused = steadyActive && steady.phase === 'paused';
   const offline = steadyActive && steady.phase === 'offline';
+  const steadyReviewAvailable = steadyActive && steady.phase === 'needs-review' && steady.review?.reason === 'both-changed';
 
   const feedback = steadyActive
     ? steady.phase === 'synced'
@@ -629,6 +631,49 @@ export function MyListEnrollmentPreflight({
         <Text style={[styles.buttonText, { color: theme.text }]}>{buttonLabel}</Text>
       </Pressable>
 
+      {steadyReviewAvailable && (
+        <View style={styles.reviewActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Keep this device My List"
+            onPress={() => setReviewResolution('device')}
+            style={({ pressed }) => [styles.reviewButton, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed]}
+          >
+            <Text style={[styles.buttonText, { color: theme.text }]}>Keep this device</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Keep Orion Cloud My List"
+            onPress={() => setReviewResolution('cloud')}
+            style={({ pressed }) => [styles.reviewButton, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed]}
+          >
+            <Text style={[styles.buttonText, { color: theme.text }]}>Keep Orion Cloud</Text>
+          </Pressable>
+        </View>
+      )}
+
+      <OrionDialog
+        visible={reviewResolution != null}
+        title="Resolve My List conflict?"
+        message={reviewResolution === 'device'
+          ? `Keep the ${steady.review?.localCount ?? localCount} titles on this device and replace the current Orion Cloud My List? Cloud-only changes will no longer be active.`
+          : `Keep the ${steady.review?.cloudCount ?? 0} titles in Orion Cloud and replace this device My List? Device-only changes will no longer be active.`}
+        icon="alert-circle-outline"
+        onDismiss={() => setReviewResolution(null)}
+        actions={[
+          { label: 'Cancel', role: 'cancel', onPress: () => setReviewResolution(null) },
+          {
+            label: 'Confirm',
+            role: 'primary',
+            onPress: () => {
+              const choice = reviewResolution;
+              setReviewResolution(null);
+              if (choice) steady.resolveReview(choice);
+            },
+          },
+        ]}
+      />
+
       <OrionDialog
         visible={showSyncDialog}
         title={readyRestore ? 'Restore My List from Orion?' : 'Start My List sync?'}
@@ -687,6 +732,8 @@ const styles = StyleSheet.create({
     gap: spacing[2],
     marginLeft: 32,
   },
+  reviewActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], marginLeft: 32 },
+  reviewButton: { minHeight: 42, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center' },
   buttonText: { fontSize: fontSizes.xs, fontWeight: '800' },
   pressed: { opacity: 0.74, transform: [{ scale: 0.985 }] },
 });

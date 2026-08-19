@@ -10,6 +10,7 @@ import { PORTABLE_PROFILE_PRIMARY_KEY } from '@orion/shared/types';
 import { useLibrary } from '../../context/LibraryContext';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { fontSizes, radii, spacing } from '@orion/shared/tokens';
+import { OrionDialog } from '../../components/OrionDialog';
 import { GoogleDriveCloudProfileStore } from '../account/googleDriveCloudProfileStore';
 import { useOrionSyncPolicy } from '../account/SyncPolicyContext';
 import { useWatchedSteadyStateSync } from '../account/WatchedSteadyStateSync';
@@ -66,6 +67,7 @@ export function WatchedSyncControl({ accountEmail, profileId }: WatchedSyncContr
   watchedRef.current = watched;
   const localPreview = useMemo(() => buildMobilePortableWatchedPreviewV1(watched), [watched]);
   const [state, setState] = useState<UiState>({ phase: 'idle' });
+  const [reviewResolution, setReviewResolution] = useState<'device' | 'cloud' | null>(null);
   const busyRef = useRef(false);
   const locallyEnrolled = !!loadWatchedSyncCheckpointV1(profileId);
   const steadyActive = locallyEnrolled || steady.hasCheckpoint;
@@ -148,6 +150,7 @@ export function WatchedSyncControl({ accountEmail, profileId }: WatchedSyncContr
   const enrollmentBusy = state.phase === 'checking' || state.phase === 'syncing';
   const busy = steadyActive ? steadyBusy : enrollmentBusy;
   const needsReview = steadyActive ? steady.phase === 'needs-review' : state.phase === 'needs-review';
+  const steadyReviewAvailable = steadyActive && steady.phase === 'needs-review' && steady.review?.reason === 'both-changed';
   const badge = steadyActive
     ? steady.phase === 'synced' ? 'Synced'
       : steady.phase === 'paused' ? 'Paused'
@@ -265,6 +268,50 @@ export function WatchedSyncControl({ accountEmail, profileId }: WatchedSyncContr
           </Pressable>
         )}
       </View>
+
+      {steadyReviewAvailable && (
+        <View style={styles.reviewActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Keep this device Watched state"
+            onPress={() => setReviewResolution('device')}
+            style={({ pressed }) => [styles.button, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed]}
+          >
+            <Text style={[styles.buttonText, { color: theme.text }]}>Keep this device</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Keep Orion Cloud Watched state"
+            onPress={() => setReviewResolution('cloud')}
+            style={({ pressed }) => [styles.button, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed]}
+          >
+            <Text style={[styles.buttonText, { color: theme.text }]}>Keep Orion Cloud</Text>
+          </Pressable>
+        </View>
+      )}
+
+      <OrionDialog
+        visible={reviewResolution != null}
+        title="Resolve Watched conflict?"
+        message={reviewResolution === 'device'
+          ? `Keep this device's ${steady.review?.localCount ?? localCount} watched movies and episodes and replace the current Orion Cloud Watched state?`
+          : `Keep Orion Cloud's ${steady.review?.cloudCount ?? 0} watched movies and episodes and replace this device Watched state?`}
+        icon="alert-circle-outline"
+        onDismiss={() => setReviewResolution(null)}
+        actions={[
+          { label: 'Cancel', role: 'cancel', onPress: () => setReviewResolution(null) },
+          {
+            label: 'Confirm',
+            role: 'primary',
+            onPress: () => {
+              const choice = reviewResolution;
+              setReviewResolution(null);
+              if (choice) steady.resolveReview(choice);
+            },
+          },
+        ]}
+      />
+
       {localPreview.rejectedKeys.length > 0 && (
         <Text style={[styles.message, { color: theme.warning }]}>{itemLabel(localPreview.rejectedKeys.length)} cannot be represented safely and will block sync.</Text>
       )}
@@ -288,6 +335,7 @@ const styles = StyleSheet.create({
   localSummary: { fontSize: fontSizes.xs, lineHeight: 18, marginLeft: 52 },
   message: { fontSize: fontSizes.xs, lineHeight: 18, marginLeft: 52 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], marginLeft: 52 },
+  reviewActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], marginLeft: 52 },
   button: { minHeight: 42, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
   buttonText: { fontSize: fontSizes.xs, fontWeight: '800' },
   pressed: { opacity: 0.74, transform: [{ scale: 0.985 }] },

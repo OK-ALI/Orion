@@ -3,6 +3,7 @@ import {
   executePortableWatchedOneShotSyncV1,
   inspectPortableWatchedOneShotSyncV1,
   reconcilePortableWatchedSteadyStateSyncV1,
+  resolvePortableWatchedSteadyStateConflictV1,
 } from "@orion/shared/api";
 import {
   buildPortableWatchedSteadyStateProfileV1,
@@ -394,6 +395,44 @@ describe("P8.4 C3-D automatic Watched steady-state reconciliation", () => {
     expect(store.writeCount).toBe(0);
     expect(applies).toBe(0);
     expect(Object.keys(local.records)).toEqual(["movie_1", "movie_3"]);
+  });
+
+
+  it("lets an explicit local choice recover genuine two-sided divergence without unioning Watched intent", async () => {
+    const original = profileWith({ movie_1: movie(1) });
+    const cp = checkpoint(original, preview({ movie_1: movie(1) }));
+    const cloud = buildPortableWatchedSteadyStateProfileV1(original, preview({ movie_1: movie(1), movie_2: movie(2) }), {
+      profileId: "google-sub-1", updatedBy: "mobile", now: 40,
+    });
+    const store = new MemoryStore(cloud);
+    let local = preview({ movie_1: movie(1), movie_3: movie(3) });
+    const result = await resolvePortableWatchedSteadyStateConflictV1({
+      store, profileKey: "p", profileId: "google-sub-1", updatedBy: "desktop", checkpoint: cp,
+      resolution: "keep-local", readLocalPreview: () => local, applyLocalPreview: (next) => { local = deep(next); },
+      readBackDelaysMs: [0],
+    });
+    expect(result).toMatchObject({ state: "verified", resolution: "keep-local", count: 2 });
+    expect(store.profile.namespaces.watched.records.movie_2.deletedAt).not.toBeNull();
+    expect(store.profile.namespaces.watched.records.movie_3.deletedAt).toBeNull();
+    expect(Object.keys(local.records)).toEqual(["movie_1", "movie_3"]);
+  });
+
+  it("lets an explicit cloud choice recover divergence through a stable pull without rewriting cloud Watched", async () => {
+    const original = profileWith({ movie_1: movie(1) });
+    const cp = checkpoint(original, preview({ movie_1: movie(1) }));
+    const cloud = buildPortableWatchedSteadyStateProfileV1(original, preview({ movie_1: movie(1), movie_2: movie(2) }), {
+      profileId: "google-sub-1", updatedBy: "mobile", now: 40,
+    });
+    const store = new MemoryStore(cloud);
+    let local = preview({ movie_1: movie(1), movie_3: movie(3) });
+    const result = await resolvePortableWatchedSteadyStateConflictV1({
+      store, profileKey: "p", profileId: "google-sub-1", updatedBy: "desktop", checkpoint: cp,
+      resolution: "keep-cloud", readLocalPreview: () => local, applyLocalPreview: (next) => { local = deep(next); },
+      readBackDelaysMs: [0],
+    });
+    expect(result).toMatchObject({ state: "verified", resolution: "keep-cloud", count: 2 });
+    expect(store.writeCount).toBe(0);
+    expect(Object.keys(local.records)).toEqual(["movie_1", "movie_2"]);
   });
 
   it("cancels an automatic transaction before mutation when local policy turns off", async () => {

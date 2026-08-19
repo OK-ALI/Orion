@@ -1,5 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { reconcilePortableWatchedSteadyStateSyncV1 } from "@orion/shared/api";
+import {
+  reconcilePortableWatchedSteadyStateSyncV1,
+  resolvePortableWatchedSteadyStateConflictV1,
+} from "@orion/shared/api";
 import { PORTABLE_PROFILE_PRIMARY_KEY, portableWatchedTruthSignatureV1 } from "@orion/shared/types";
 import { DesktopPortableProfileCloudStore } from "../../services/portableProfileCloudStore";
 import {
@@ -40,6 +43,7 @@ export function DesktopWatchedSteadyStateSyncProvider({ googleProfile, networkSt
   const [policy, setPolicy] = useState({ profileId: "", automatic: true });
   const automatic = policy.profileId === profileId ? policy.automatic : true;
   const [status, setStatus] = useState({ phase: "inactive", hasCheckpoint: false, count: null, message: null });
+  const [review, setReview] = useState(null);
   const busyRef = useRef(false);
   const pendingModeRef = useRef(null);
   const reconcileRef = useRef(async () => {});
@@ -134,6 +138,7 @@ export function DesktopWatchedSteadyStateSyncProvider({ googleProfile, networkSt
     });
 
     busyRef.current = true;
+    setReview(null);
     setStatus({ phase: "checking", hasCheckpoint: true, count: startCount, message: null });
     try {
       const store = new DesktopPortableProfileCloudStore(operationProfileId);
@@ -167,6 +172,9 @@ export function DesktopWatchedSteadyStateSyncProvider({ googleProfile, networkSt
         return;
       }
       if (result.state === "needs-review") {
+        if (result.reason === "both-changed") {
+          setReview({ reason: "both-changed", localCount: result.localCount, cloudCount: result.cloudCount });
+        }
         setStatus({
           phase: "needs-review",
           hasCheckpoint: true,
@@ -206,6 +214,59 @@ export function DesktopWatchedSteadyStateSyncProvider({ googleProfile, networkSt
     }
   };
 
+
+  const resolveReview = useCallback(async (resolution) => {
+    if (busyRef.current) return;
+    const start = latestRef.current;
+    if (!start.profileId) return;
+    const checkpoint = loadDesktopWatchedSyncCheckpointV1(start.profileId);
+    if (!checkpoint || start.networkStatus === "offline" || start.networkStatus === "checking") {
+      setReview(null);
+      setStatus({ phase: "needs-review", hasCheckpoint: !!checkpoint, count: Object.keys(readDesktopPortableWatchedPreviewV1().records).length, message: "Orion cannot resolve Watched until the signed-in profile and connection are ready." });
+      return;
+    }
+
+    const operationProfileId = start.profileId;
+    const sameAccount = () => latestRef.current.profileId === operationProfileId;
+    busyRef.current = true;
+    setReview(null);
+    setStatus({ phase: "syncing", hasCheckpoint: true, count: Object.keys(readDesktopPortableWatchedPreviewV1().records).length, message: "Applying your confirmed Watched choice and verifying both copies." });
+    try {
+      const store = new DesktopPortableProfileCloudStore(operationProfileId);
+      const result = await resolvePortableWatchedSteadyStateConflictV1({
+        store,
+        profileKey: PORTABLE_PROFILE_PRIMARY_KEY,
+        profileId: operationProfileId,
+        updatedBy: operationProfileId,
+        checkpoint,
+        resolution: resolution === "desktop" ? "keep-local" : "keep-cloud",
+        readLocalPreview: readDesktopPortableWatchedPreviewV1,
+        applyLocalPreview: applyDesktopPortableWatchedPreviewV1,
+        shouldProceed: sameAccount,
+      });
+      if (!sameAccount()) return;
+      if (result.state === "cancelled") return;
+      if (result.state === "needs-review") {
+        setStatus({ phase: "needs-review", hasCheckpoint: true, count: Object.keys(readDesktopPortableWatchedPreviewV1().records).length, message: "Watched changed while Orion was preparing the resolution. Orion stopped without overwriting the newer copy. Check again before choosing." });
+        return;
+      }
+
+      saveDesktopWatchedSyncCheckpointV1(result.checkpoint);
+      const automaticNow = latestRef.current.automatic;
+      setStatus(automaticNow
+        ? { phase: "synced", hasCheckpoint: true, count: result.count, message: `${itemLabel(result.count)} verified across this Desktop and Orion cloud.` }
+        : { phase: "paused", hasCheckpoint: true, count: result.count, message: `${itemLabel(result.count)} synced. Automatic Watched sync remains paused on this Desktop.` });
+    } catch (error) {
+      if (!sameAccount()) return;
+      const message = error?.code === "GOOGLE_DRIVE_PROFILE_CONDITIONAL_UNAVAILABLE"
+        ? "Orion Cloud could not complete a safe Watched resolution. Nothing was overwritten."
+        : "Orion could not verify the Watched resolution. Nothing was marked as synced.";
+      setStatus({ phase: "error", hasCheckpoint: true, count: Object.keys(readDesktopPortableWatchedPreviewV1().records).length, message });
+    } finally {
+      busyRef.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     requestAutomaticReconcile();
   }, [profileId, localTruthSignature, networkStatus, automatic, requestAutomaticReconcile]);
@@ -228,7 +289,9 @@ export function DesktopWatchedSteadyStateSyncProvider({ googleProfile, networkSt
     automatic,
     setAutomatic,
     refresh: requestManualReconcile,
-  }), [automatic, requestManualReconcile, setAutomatic, status]);
+    review,
+    resolveReview,
+  }), [automatic, requestManualReconcile, resolveReview, review, setAutomatic, status]);
 
   return <DesktopWatchedSteadyStateContext.Provider value={value}>{children}</DesktopWatchedSteadyStateContext.Provider>;
 }

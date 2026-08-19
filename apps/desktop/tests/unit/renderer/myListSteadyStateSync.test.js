@@ -119,6 +119,17 @@ describe("P8.3 Desktop My List post-lock amendment", () => {
     window.removeEventListener(MY_LIST_SYNC_APPLIED_EVENT, listener);
   });
 
+  it("exposes explicit steady-state conflict recovery without treating a signature checkpoint as a merge base", () => {
+    const sync = read("features/account/MyListSteadyStateSync.jsx");
+    const card = read("features/settings/components/MyListSyncCard.jsx");
+    expect(sync).toMatch(/resolvePortableMyListSteadyStateConflictV1/);
+    expect(sync).toMatch(/reason: "both-changed"/);
+    expect(sync).toMatch(/resolution === "desktop" \? "keep-local" : "keep-cloud"/);
+    expect(card).toMatch(/Keep Desktop My List/);
+    expect(card).toMatch(/Keep Orion Cloud My List/);
+    expect(card).toMatch(/cannot safely infer which removals were intentional/);
+  });
+
   it("stores Auto sync per domain without erasing the other domain policy", () => {
     saveDesktopWatchedAutomaticV1("profile-1", false);
     saveDesktopMyListAutomaticV1("profile-1", false);
