@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   executePortableWatchedOneShotSyncV1,
   inspectPortableWatchedOneShotSyncV1,
+  reconcilePortableWatchedSteadyStateSyncV1,
 } from "@orion/shared/api";
 import {
   buildPortableWatchedSteadyStateProfileV1,
@@ -34,14 +35,18 @@ class MemoryStore {
     this.tag = profile ? "tag-1" : null;
     this.forceConflict = false;
     this.afterWriteReads = 0;
+    this.readCount = 0;
+    this.writeCount = 0;
   }
 
   async read() {
+    this.readCount += 1;
     if (!this.profile) return { state: "missing", revisionTag: null };
     return { state: "found", profile: deep(this.profile), revisionTag: this.tag, remoteModifiedAt: null };
   }
 
   async write(_key, request) {
+    this.writeCount += 1;
     if (this.forceConflict || request.expectedRevisionTag !== this.tag) {
       return { state: "conflict", revisionTag: this.tag };
     }
@@ -297,5 +302,113 @@ describe("P8.4 C3-C explicit Watched one-shot reconciliation", () => {
     expect(result).toEqual({ state: "needs-review", reason: "local-changed-during-sync", cloudWasWritten: true });
     expect(Object.keys(local.records)).toEqual(["movie_2", "movie_3"]);
     expect(Object.keys(store.profile.namespaces.watched.records)).toContain("movie_1");
+  });
+});
+
+
+describe("P8.4 C3-D automatic Watched steady-state reconciliation", () => {
+  it("requires an established checkpoint before any cloud read or write", async () => {
+    const store = new MemoryStore(profileWith({ movie_1: movie(1) }));
+    const result = await reconcilePortableWatchedSteadyStateSyncV1({
+      store,
+      profileKey: "p",
+      profileId: "google-sub-1",
+      updatedBy: "desktop",
+      checkpoint: null,
+      readLocalPreview: () => preview({ movie_1: movie(1) }),
+      applyLocalPreview: () => { throw new Error("must not apply before enrollment"); },
+      readBackDelaysMs: [0],
+    });
+    expect(result).toEqual({ state: "unenrolled" });
+    expect(store.readCount).toBe(0);
+    expect(store.writeCount).toBe(0);
+  });
+
+  it("reuses C3-C to automatically push a one-sided local change and verify a new checkpoint", async () => {
+    const original = profileWith({ movie_1: movie(1) });
+    const synced = preview({ movie_1: movie(1) });
+    const cp = checkpoint(original, synced);
+    let local = preview({ movie_1: movie(1), movie_2: movie(2) });
+    const store = new MemoryStore(original);
+    const result = await reconcilePortableWatchedSteadyStateSyncV1({
+      store, profileKey: "p", profileId: "google-sub-1", updatedBy: "desktop", checkpoint: cp,
+      readLocalPreview: () => local, applyLocalPreview: (next) => { local = deep(next); },
+      readBackDelaysMs: [0], shouldProceed: () => true,
+    });
+    expect(result).toMatchObject({ state: "verified", action: "push", count: 2 });
+    expect(store.writeCount).toBe(1);
+    expect(Object.keys(store.profile.namespaces.watched.records)).toEqual(["movie_1", "movie_2"]);
+  });
+
+  it("turns an established local unwatch into the existing portable tombstone path", async () => {
+    const original = profileWith({ movie_1: movie(1), movie_2: movie(2) });
+    const synced = preview({ movie_1: movie(1), movie_2: movie(2) });
+    const cp = checkpoint(original, synced);
+    let local = preview({ movie_1: movie(1) });
+    const store = new MemoryStore(original);
+    const result = await reconcilePortableWatchedSteadyStateSyncV1({
+      store, profileKey: "p", profileId: "google-sub-1", updatedBy: "desktop", checkpoint: cp,
+      readLocalPreview: () => local, applyLocalPreview: (next) => { local = deep(next); },
+      readBackDelaysMs: [0], shouldProceed: () => true,
+    });
+    expect(result).toMatchObject({ state: "verified", action: "push", count: 1 });
+    expect(store.writeCount).toBe(1);
+    expect(store.profile.namespaces.watched.records.movie_2.deletedAt).not.toBeNull();
+    expect(store.profile.namespaces.watched.records.movie_2.value).toBeNull();
+  });
+
+  it("automatically pulls a one-sided cloud change through the same stable C3-C pull path", async () => {
+    const original = profileWith({ movie_1: movie(1) });
+    const synced = preview({ movie_1: movie(1) });
+    const cp = checkpoint(original, synced);
+    const cloud = buildPortableWatchedSteadyStateProfileV1(original, preview({ movie_1: movie(1), movie_2: movie(2) }), {
+      profileId: "google-sub-1", updatedBy: "mobile", now: 40,
+    });
+    let local = synced;
+    const store = new MemoryStore(cloud);
+    const result = await reconcilePortableWatchedSteadyStateSyncV1({
+      store, profileKey: "p", profileId: "google-sub-1", updatedBy: "desktop", checkpoint: cp,
+      readLocalPreview: () => local, applyLocalPreview: (next) => { local = deep(next); },
+      shouldProceed: () => true,
+    });
+    expect(result).toMatchObject({ state: "verified", action: "pull", count: 2 });
+    expect(store.writeCount).toBe(0);
+    expect(Object.keys(local.records)).toEqual(["movie_1", "movie_2"]);
+  });
+
+  it("leaves both copies untouched when both sides changed after the checkpoint", async () => {
+    const original = profileWith({ movie_1: movie(1) });
+    const cp = checkpoint(original, preview({ movie_1: movie(1) }));
+    const cloud = buildPortableWatchedSteadyStateProfileV1(original, preview({ movie_1: movie(1), movie_2: movie(2) }), {
+      profileId: "google-sub-1", updatedBy: "mobile", now: 40,
+    });
+    let local = preview({ movie_1: movie(1), movie_3: movie(3) });
+    let applies = 0;
+    const store = new MemoryStore(cloud);
+    const result = await reconcilePortableWatchedSteadyStateSyncV1({
+      store, profileKey: "p", profileId: "google-sub-1", updatedBy: "desktop", checkpoint: cp,
+      readLocalPreview: () => local, applyLocalPreview: () => { applies += 1; },
+      readBackDelaysMs: [0], shouldProceed: () => true,
+    });
+    expect(result).toMatchObject({ state: "needs-review", reason: "both-changed", cloudWasWritten: false });
+    expect(store.writeCount).toBe(0);
+    expect(applies).toBe(0);
+    expect(Object.keys(local.records)).toEqual(["movie_1", "movie_3"]);
+  });
+
+  it("cancels an automatic transaction before mutation when local policy turns off", async () => {
+    const original = profileWith({ movie_1: movie(1) });
+    const cp = checkpoint(original, preview({ movie_1: movie(1) }));
+    let local = preview({ movie_1: movie(1), movie_2: movie(2) });
+    let applies = 0;
+    const store = new MemoryStore(original);
+    const result = await reconcilePortableWatchedSteadyStateSyncV1({
+      store, profileKey: "p", profileId: "google-sub-1", updatedBy: "desktop", checkpoint: cp,
+      readLocalPreview: () => local, applyLocalPreview: () => { applies += 1; },
+      readBackDelaysMs: [0], shouldProceed: () => false,
+    });
+    expect(result).toEqual({ state: "cancelled" });
+    expect(store.writeCount).toBe(0);
+    expect(applies).toBe(0);
   });
 });

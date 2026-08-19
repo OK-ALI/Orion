@@ -35,3 +35,6 @@ export {
   type PortableWatchedOneShotInspectionV1,
   type PortableWatchedOneShotExecutionV1,
 } from "./portableWatchedOneShotSync";
+
+export { reconcilePortableWatchedSteadyStateSyncV1 } from './portableWatchedSteadyStateSync';
+export type { PortableWatchedSteadyStateReconcileV1 } from './portableWatchedSteadyStateSync';

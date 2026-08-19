@@ -151,9 +151,106 @@ test("Desktop portable profile writer uses strong ETag If-Match for conditional 
   const upload = calls.find((call) => call.url.includes("uploadType=media"));
   assert.equal(upload.options.method, "PATCH");
   assert.equal(upload.options.headers["If-Match"], '"before"');
+  assert.match(upload.url, /upload\/drive\/v3/);
 });
 
-test("Desktop portable profile writer refuses stale or non-atomic revision tokens", async () => {
+test("Desktop portable profile writer resolves a version-only read through Drive v2 ETag and keeps the mutation atomic", async () => {
+  const calls = [];
+  let v3MetadataCount = 0;
+  const write = createPortableProfileWriter({
+    driveRequest: async (url, options = {}) => {
+      calls.push({ url, options });
+      if (url.includes("spaces=appDataFolder")) return response({ files: [{ id: "existing" }] });
+      if (url.includes("/upload/drive/v2/files/existing")) return response("");
+      if (url.includes("/drive/v2/files/existing")) {
+        return response({ id: "existing", version: "7", etag: '"v2-strong"' });
+      }
+      v3MetadataCount += 1;
+      return v3MetadataCount === 1
+        ? response({ id: "existing", version: "7", modifiedTime: "2026-08-19T01:00:00.000Z" })
+        : response({ id: "existing", version: "8", modifiedTime: "2026-08-19T01:01:00.000Z" });
+    },
+  });
+
+  const result = await write("orion-primary-profile-v3", portableProfileJson(), "version:7");
+  assert.equal(result.state, "written");
+  assert.equal(result.revisionTag, "version:8");
+  const conditionalMetadata = calls.find((call) => call.url.includes("/drive/v2/files/existing"));
+  assert.ok(conditionalMetadata);
+  const upload = calls.find((call) => call.url.includes("/upload/drive/v2/files/existing"));
+  assert.equal(upload.options.method, "PUT");
+  assert.equal(upload.options.headers["If-Match"], '"v2-strong"');
+});
+
+test("Desktop portable profile writer still fails closed when neither Drive API can provide a strong conditional token", async () => {
+  const versionOnly = createPortableProfileWriter({
+    driveRequest: async (url) => {
+      if (url.includes("spaces=appDataFolder")) return response({ files: [{ id: "existing" }] });
+      if (url.includes("/drive/v2/files/existing")) {
+        return response({ id: "existing", version: "7", etag: "" });
+      }
+      return response({ id: "existing", version: "7", modifiedTime: "2026-08-19T01:00:00.000Z" });
+    },
+  });
+  await assert.rejects(
+    () => versionOnly("orion-primary-profile-v3", portableProfileJson(), "version:7"),
+    (error) => error.code === "GOOGLE_DRIVE_PROFILE_CONDITIONAL_UNAVAILABLE",
+  );
+});
+
+test("Desktop portable profile writer treats a version change during strong-token resolution as conflict", async () => {
+  let mutationAttempted = false;
+  const write = createPortableProfileWriter({
+    driveRequest: async (url) => {
+      if (url.includes("spaces=appDataFolder")) return response({ files: [{ id: "existing" }] });
+      if (url.includes("/upload/drive/v2/files/existing")) {
+        mutationAttempted = true;
+        return response("");
+      }
+      if (url.includes("/drive/v2/files/existing")) {
+        return response({ id: "existing", version: "8", etag: '"newer"' });
+      }
+      if (url.includes("uploadType=media")) {
+        mutationAttempted = true;
+        return response("");
+      }
+      return response({ id: "existing", version: "7", modifiedTime: "2026-08-19T01:00:00.000Z" });
+    },
+  });
+
+  const result = await write("orion-primary-profile-v3", portableProfileJson(), "version:7");
+  assert.deepEqual(result, { state: "conflict", revisionTag: "version:8" });
+  assert.equal(mutationAttempted, false);
+});
+
+
+test("Desktop version-fallback conditional update maps Drive v2 HTTP 412 to conflict", async () => {
+  let searchCount = 0;
+  let v3MetadataCount = 0;
+  const write = createPortableProfileWriter({
+    driveRequest: async (url) => {
+      if (url.includes("spaces=appDataFolder")) {
+        searchCount += 1;
+        return response({ files: [{ id: "existing" }] });
+      }
+      if (url.includes("/upload/drive/v2/files/existing")) return response("", { status: 412 });
+      if (url.includes("/drive/v2/files/existing")) {
+        return response({ id: "existing", version: "7", etag: '"v2-before"' });
+      }
+      v3MetadataCount += 1;
+      return v3MetadataCount === 1
+        ? response({ id: "existing", version: "7", modifiedTime: "2026-08-19T01:00:00.000Z" })
+        : response({ id: "existing", version: "8", modifiedTime: "2026-08-19T01:01:00.000Z" });
+    },
+  });
+
+  const result = await write("orion-primary-profile-v3", portableProfileJson(), "version:7");
+  assert.equal(result.state, "conflict");
+  assert.equal(result.revisionTag, "version:8");
+  assert.ok(searchCount >= 2);
+});
+
+test("Desktop portable profile writer refuses a stale ETag revision token", async () => {
   const stale = createPortableProfileWriter({
     driveRequest: async (url) => {
       if (url.includes("spaces=appDataFolder")) return response({ files: [{ id: "existing" }] });
@@ -163,17 +260,6 @@ test("Desktop portable profile writer refuses stale or non-atomic revision token
   assert.deepEqual(
     await stale("orion-primary-profile-v3", portableProfileJson(), 'etag:"stale"'),
     { state: "conflict", revisionTag: 'etag:"current"' },
-  );
-
-  const versionOnly = createPortableProfileWriter({
-    driveRequest: async (url) => {
-      if (url.includes("spaces=appDataFolder")) return response({ files: [{ id: "existing" }] });
-      return response({ id: "existing", version: "7", modifiedTime: "2026-08-19T01:00:00.000Z" });
-    },
-  });
-  await assert.rejects(
-    () => versionOnly("orion-primary-profile-v3", portableProfileJson(), "version:7"),
-    (error) => error.code === "GOOGLE_DRIVE_PROFILE_CONDITIONAL_UNAVAILABLE",
   );
 });
 

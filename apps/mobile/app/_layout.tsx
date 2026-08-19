@@ -16,6 +16,7 @@ import { PerformanceProvider } from '../src/context/PerformanceContext';
 import { NetworkProvider } from '../src/context/NetworkContext';
 import { AccountProvider } from '../src/context/AccountContext';
 import { MyListSteadyStateSyncProvider } from '../src/features/account/MyListSteadyStateSync';
+import { WatchedSteadyStateSyncProvider } from '../src/features/account/WatchedSteadyStateSync';
 import { OrionSyncPolicyProvider } from '../src/features/account/SyncPolicyContext';
 import { OfflineBanner } from '../src/components/OfflineBanner';
 import { StorageUnavailableScreen } from '../src/components/StorageUnavailableScreen';
@@ -101,22 +102,24 @@ function ThemedApplication() {
     : (
       <LibraryProvider>
         <MyListSteadyStateSyncProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <View style={[styles.container, { backgroundColor: theme.background }]}>
-              <MobileDiagnosticsBridge />
-              <StatusBar style={theme.dark ? 'light' : 'dark'} />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: 'transparent' },
-                }}
-              >
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              </Stack>
-              <GlobalSearchShortcut />
-              <OfflineBanner />
-            </View>
-          </GestureHandlerRootView>
+          <WatchedSteadyStateSyncProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <View style={[styles.container, { backgroundColor: theme.background }]}>
+                <MobileDiagnosticsBridge />
+                <StatusBar style={theme.dark ? 'light' : 'dark'} />
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: 'transparent' },
+                  }}
+                >
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                </Stack>
+                <GlobalSearchShortcut />
+                <OfflineBanner />
+              </View>
+            </GestureHandlerRootView>
+          </WatchedSteadyStateSyncProvider>
         </MyListSteadyStateSyncProvider>
       </LibraryProvider>
     );

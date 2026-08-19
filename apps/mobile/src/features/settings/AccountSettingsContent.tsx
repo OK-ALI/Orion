@@ -401,7 +401,7 @@ export function AccountSettingsContent() {
       <View style={[styles.syncNote, { borderTopColor: theme.border }]}>
         <Ionicons name="shield-checkmark-outline" size={18} color={theme.textMuted} />
         <Text style={[styles.syncNoteText, { color: theme.textMuted }]}>
-          Connecting Google alone does not upload your library. My List and Watched use their own guarded sync flows; Watched remains manual in this phase.
+          Connecting Google alone does not upload your library. My List and Watched use their own guarded sync flows, with automatic behavior controlled locally on each enrolled device.
         </Text>
       </View>
 

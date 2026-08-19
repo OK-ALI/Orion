@@ -59,7 +59,8 @@ export type PortableWatchedOneShotExecutionV1 =
         | 'cloud-conflict'
         | 'cloud-verification-failed'
         | 'cloud-changed-before-pull'
-        | 'local-changed-during-sync';
+        | 'local-changed-during-sync'
+        | 'cancelled';
       cloudWasWritten: boolean;
     };
 
@@ -128,6 +129,10 @@ function makeConfirmationKey(input: {
 async function wait(delayMs: number): Promise<void> {
   if (delayMs <= 0) return;
   await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+}
+
+async function canProceed(callback?: () => boolean | Promise<boolean>): Promise<boolean> {
+  return callback ? !!(await callback()) : true;
 }
 
 async function inspectInternal(input: {
@@ -241,6 +246,7 @@ export async function executePortableWatchedOneShotSyncV1(input: {
   readLocalPreview: () => PortableWatchedPreviewV1 | Promise<PortableWatchedPreviewV1>;
   applyLocalPreview: (preview: PortableWatchedPreviewV1) => void | Promise<void>;
   readBackDelaysMs?: readonly number[];
+  shouldProceed?: () => boolean | Promise<boolean>;
 }): Promise<PortableWatchedOneShotExecutionV1> {
   const startLocal = await input.readLocalPreview();
   const fresh = await inspectInternal({
@@ -257,6 +263,10 @@ export async function executePortableWatchedOneShotSyncV1(input: {
     || fresh.decision.state !== 'ready'
   ) {
     return { state: 'needs-review', reason: 'readiness-changed', cloudWasWritten: false };
+  }
+
+  if (!(await canProceed(input.shouldProceed))) {
+    return { state: 'needs-review', reason: 'cancelled', cloudWasWritten: false };
   }
 
   const action = fresh.decision.action;
@@ -281,6 +291,9 @@ export async function executePortableWatchedOneShotSyncV1(input: {
     const latestLocal = await input.readLocalPreview();
     if (portableWatchedTruthSignatureV1(latestLocal) !== fresh.localTruthSignature) {
       return { state: 'needs-review', reason: 'local-changed-during-sync', cloudWasWritten: false };
+    }
+    if (!(await canProceed(input.shouldProceed))) {
+      return { state: 'needs-review', reason: 'cancelled', cloudWasWritten: false };
     }
     await input.applyLocalPreview(targetPreview);
     const applied = await input.readLocalPreview();
@@ -308,6 +321,10 @@ export async function executePortableWatchedOneShotSyncV1(input: {
         profileId: input.profileId,
         updatedBy: input.updatedBy,
       });
+
+  if (!(await canProceed(input.shouldProceed))) {
+    return { state: 'needs-review', reason: 'cancelled', cloudWasWritten: false };
+  }
 
   const write = await input.store.write(input.profileKey, {
     profile: candidate,

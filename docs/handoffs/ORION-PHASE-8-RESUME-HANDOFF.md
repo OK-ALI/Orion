@@ -375,3 +375,67 @@ Current Phase 8 board:
 - P8.4 C3-C — COMPLETE & LOCKED
 - P8.4 C3-D — NEXT
 - Phase 8 overall — NOT LOCKED
+
+---
+
+## P8.4 C3-D lock checkpoint
+
+**Status:** COMPLETE & LOCKED
+
+P8.4 C3-D activates automatic steady-state Watched synchronization after explicit C3-C enrollment.
+
+Locked contract:
+
+- first enrollment remains explicit,
+- automatic work requires an established Watched checkpoint,
+- the C3-C inspector/executor remains the single reconciliation engine,
+- local-only changes may automatically push,
+- cloud-only changes may automatically pull,
+- local removals use the existing tombstone path,
+- genuine two-sided divergence becomes Needs Review,
+- Auto Sync policy is local per device/profile,
+- Auto Sync OFF pauses automatic cloud work without deleting local or cloud state,
+- manual Sync now remains available while paused,
+- OFF → ON performs a fresh reconciliation,
+- account/policy changes can cancel an automatic transaction before unsafe mutation,
+- History and Progress remain unenrolled,
+- Continue Watching remains derived and has no cloud namespace,
+- legacy Desktop cloud viewing remains fenced.
+
+Desktop conditional-write amendment:
+
+- observed Drive v3 runtime metadata could provide only a version token,
+- Orion continued to fail closed rather than overwrite unsafely,
+- the C3-C Desktop writer now preserves atomic `If-Match` safety by resolving a matching strong v2 ETag only when the same file version is still current,
+- version drift / HTTP 412 remains conflict,
+- blind overwrite is still prohibited.
+
+Physical acceptance proved:
+
+- Mobile 97 → 98 automatic push and Desktop automatic pull,
+- repaired Desktop 98 → 100 automatic push,
+- Desktop 100 → 101 automatic push and Mobile automatic pull,
+- Auto Sync OFF preserved a local Desktop 102 while cloud/Mobile stayed 101,
+- manual Sync now while paused converged Desktop/cloud/Mobile to 102,
+- OFF → ON automatically converged the next local change to 103 on both clients,
+- Mobile visibly entered Orion's offline product state when disconnected; network-backed title loading prevented the exact proposed new-title Watched mutation from that screen, so that redundant physical subcase is documented rather than falsely claimed.
+
+Canonical audit:
+
+`docs\audits\ORION-P8.4-C3D-AUTOMATIC-WATCHED-STEADY-STATE-AUDIT.md`
+
+Current Phase 8 board:
+
+- P8.0 — COMPLETE
+- P8.1 — LOCKED
+- P8.2 — LOCKED
+- P8.3 — COMPLETE & LOCKED
+- P8.4 C1 — COMPLETE & LOCKED
+- P8.4 C2 — COMPLETE & LOCKED
+- P8.4 C3-A — COMPLETE & LOCKED
+- P8.4 C3-B — COMPLETE & LOCKED
+- P8.4 C3-C — COMPLETE & LOCKED
+- P8.4 C3-D — COMPLETE & LOCKED
+- Phase 8 overall — NOT LOCKED
+
+Immediate next work is the focused Account / Sync UX productization pass already agreed for Orion Desktop and Orion Mobile. This handoff does not assign that polish pass a new canonical P8.x number.

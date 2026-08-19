@@ -38,16 +38,18 @@ test("P8.4 C3-C one-shot coordinator revalidates, conditionally writes and seman
   assert.match(sync, /local-changed-during-sync/);
 });
 
-test("P8.4 C3-C Mobile exposes a manual Watched control only after Drive is ready", () => {
+test("P8.4 C3-D keeps first Watched enrollment explicit while exposing steady-state controls after a checkpoint", () => {
   const account = read("src/features/settings/AccountSettingsContent.tsx");
   const control = read("src/features/settings/WatchedSyncControl.tsx");
   assert.match(account, /drivePhase === 'ready'[\s\S]*<WatchedSyncControl/);
   assert.match(control, />Watched sync</);
-  assert.match(control, /Check Watched/);
+  assert.match(control, /checkpoint: null/);
   assert.match(control, /Confirm sync/);
-  assert.match(control, /manual one-shot sync/i);
-  assert.doesNotMatch(control, /useEffect\s*\(/);
-  assert.doesNotMatch(control, /<Switch|setAutomatic\(|getAutomatic\('watched'\)/);
+  assert.match(control, /first enrollment is explicit/i);
+  assert.match(control, /<Switch/);
+  assert.match(control, /syncPolicy\.setAutomatic\('watched', enabled\)/);
+  assert.match(control, /if \(steadyActive\) steady\.refresh\(\);/);
+  assert.match(control, /else void checkEnrollment\(\);/);
 });
 
 test("P8.4 C3-C Mobile checkpoint stores signatures only, never a persisted synced flag or cloud token", () => {
@@ -70,10 +72,27 @@ test("P8.4 C3-C Mobile local pull replaces Watched only and leaves playback doma
   assert.doesNotMatch(apply, /setHistory|setProgress|setSaved/);
 });
 
-test("P8.4 C3-C does not enroll Watched into automatic SyncPolicy yet", () => {
+test("P8.4 C3-D enrolls Watched into the existing local SyncPolicy and mounts one global Mobile steady-state owner", () => {
   const policy = read("src/features/account/SyncPolicyContext.tsx");
   const layout = read("app/_layout.tsx");
-  assert.match(policy, /ORION_SYNC_DOMAINS = \['myList'\]/);
-  assert.doesNotMatch(policy, /\['myList',\s*'watched'\]/);
-  assert.doesNotMatch(layout, /WatchedSteadyStateSyncProvider/);
+  const steady = read("src/features/account/WatchedSteadyStateSync.tsx");
+  assert.match(policy, /ORION_SYNC_DOMAINS = \['myList', 'watched'\] as const/);
+  assert.match(policy, /watched: \{ automatic: true \}/);
+  assert.match(layout, /<MyListSteadyStateSyncProvider>[\s\S]*<WatchedSteadyStateSyncProvider>[\s\S]*<GestureHandlerRootView/);
+  assert.match(steady, /mode === 'automatic' && !start\.watchedAutomatic/);
+  assert.match(steady, /requestManualReconcile/);
+  assert.match(steady, /shouldProceed: canMutate/);
+  assert.doesNotMatch(steady, /History|Progress|ContinueWatching|recordPlayback|clearHistory|removeProgress/);
+});
+
+test("P8.4 C3-D shared steady-state coordinator is checkpoint-gated and composes the C3-C coordinator", () => {
+  const steady = readShared("api/portableWatchedSteadyStateSync.ts");
+  const oneShot = readShared("api/portableWatchedOneShotSync.ts");
+  assert.match(steady, /if \(!input\.checkpoint\) return \{ state: 'unenrolled' \}/);
+  assert.match(steady, /inspectPortableWatchedOneShotSyncV1/);
+  assert.match(steady, /executePortableWatchedOneShotSyncV1/);
+  assert.match(steady, /shouldProceed: input\.shouldProceed/);
+  assert.doesNotMatch(steady, /planPortableWatchedReconciliationV1|buildPortableWatchedSteadyStateProfileV1/);
+  assert.match(oneShot, /shouldProceed\?: \(\) => boolean \| Promise<boolean>/);
+  assert.match(oneShot, /reason: 'cancelled'/);
 });

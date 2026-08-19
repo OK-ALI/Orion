@@ -465,7 +465,7 @@ export function MyListEnrollmentPreflight({
         : state.phase === 'syncing'
           ? 'Uploading My List and verifying the cloud copy. Your local library is not being changed.'
           : state.phase === 'synced'
-            ? `${itemLabel(localCount)} ${localCount === 1 ? 'is' : 'are'} synced with your Orion profile. History, watched status and playback progress stay on this device for now.`
+            ? `${itemLabel(localCount)} ${localCount === 1 ? 'is' : 'are'} synced with your Orion profile. This My List flow does not upload History, Watched or playback progress.`
             : state.phase === 'needs-review' || state.phase === 'error'
               ? state.message
               : null;
@@ -516,7 +516,7 @@ export function MyListEnrollmentPreflight({
         <View style={styles.headingCopy}>
           <Text style={[styles.title, { color: theme.text }]}>My List sync</Text>
           <Text style={[styles.copy, { color: theme.textSecondary }]}>
-            Sync only My List. After enrollment, choose automatic updates or pause them and sync only when you ask. Other library activity stays on this device for now.
+            Sync only My List. After enrollment, choose automatic updates or pause them and sync only when you ask. Other sync domains use their own controls.
           </Text>
         </View>
         <View
@@ -619,8 +619,8 @@ export function MyListEnrollmentPreflight({
         visible={showSyncDialog}
         title={readyRestore ? 'Restore My List from Orion?' : 'Start My List sync?'}
         message={readyRestore
-          ? `Restore ${itemLabel(restoreCloudCount)} from your Orion profile to this empty My List? History, watched status and playback progress stay on this device for now.`
-          : `Sync ${itemLabel(localCount)} with your Orion profile? Orion will upload only My List. History, watched status and playback progress stay on this device for now.`}
+          ? `Restore ${itemLabel(restoreCloudCount)} from your Orion profile to this empty My List? This action changes only My List.`
+          : `Sync ${itemLabel(localCount)} with your Orion profile? Orion will upload only My List. Other sync domains are not part of this action.`}
         icon={readyRestore ? 'cloud-download-outline' : 'cloud-upload-outline'}
         onDismiss={() => setShowSyncDialog(false)}
         actions={[

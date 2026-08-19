@@ -5,9 +5,9 @@ import { mmkvStorageAdapter } from '../../services/storageAdapter';
 const SYNC_POLICY_SCHEMA_VERSION = 1 as const;
 const SYNC_POLICY_KEY_PREFIX = 'p8.syncPolicy.v1:';
 
-// P8.3 registers only My List. Later Phase 8 domains can extend this registry
-// without changing the storage or provider contract.
-export const ORION_SYNC_DOMAINS = ['myList'] as const;
+// P8.3 introduced the reusable local policy registry. P8.4 C3-D enrolls
+// Watched without changing the storage contract or making policy portable.
+export const ORION_SYNC_DOMAINS = ['myList', 'watched'] as const;
 export type OrionSyncDomain = (typeof ORION_SYNC_DOMAINS)[number];
 
 export interface OrionSyncDomainPolicyV1 {
@@ -31,6 +31,7 @@ const SyncPolicyContext = createContext<SyncPolicyContextValue | null>(null);
 function defaultDomains(): Record<OrionSyncDomain, OrionSyncDomainPolicyV1> {
   return {
     myList: { automatic: true },
+    watched: { automatic: true },
   };
 }
 
@@ -51,19 +52,13 @@ function loadStoredPolicy(profileId: string): StoredSyncPolicyV1 {
 
   try {
     const parsed = JSON.parse(raw) as Partial<StoredSyncPolicyV1>;
-    const automatic = parsed
-      && parsed.schemaVersion === SYNC_POLICY_SCHEMA_VERSION
-      && parsed.profileId === profileId
-      && typeof parsed.domains?.myList?.automatic === 'boolean'
-      ? parsed.domains.myList.automatic
-      : true;
-    return {
-      schemaVersion: SYNC_POLICY_SCHEMA_VERSION,
-      profileId,
-      domains: {
-        myList: { automatic },
-      },
-    };
+    if (parsed.schemaVersion !== SYNC_POLICY_SCHEMA_VERSION || parsed.profileId !== profileId) return fallback;
+    const domains = defaultDomains();
+    for (const domain of ORION_SYNC_DOMAINS) {
+      const automatic = parsed.domains?.[domain]?.automatic;
+      if (typeof automatic === 'boolean') domains[domain] = { automatic };
+    }
+    return { schemaVersion: SYNC_POLICY_SCHEMA_VERSION, profileId, domains };
   } catch {
     return fallback;
   }

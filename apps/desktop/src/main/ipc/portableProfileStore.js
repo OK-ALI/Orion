@@ -2,6 +2,8 @@ const crypto = require("node:crypto");
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
+const DRIVE_V2_API = "https://www.googleapis.com/drive/v2";
+const DRIVE_V2_UPLOAD_API = "https://www.googleapis.com/upload/drive/v2";
 const PROFILE_FILE_PREFIX = "orion-portable-profile-v3-";
 const MAX_PROFILE_BYTES = 2 * 1024 * 1024;
 const READ_SNAPSHOT_ATTEMPTS = 3;
@@ -83,6 +85,26 @@ async function fetchMetadata(driveRequest, fileId) {
     modifiedAt: Number.isFinite(modified) ? modified : null,
     etag: String(response.headers?.get?.("etag") || "").trim() || null,
   };
+}
+
+async function fetchV2ConditionalMetadata(driveRequest, fileId) {
+  const fields = encode("id,etag,version");
+  const response = await driveRequest(`${DRIVE_V2_API}/files/${encode(fileId)}?fields=${fields}`);
+  await requireOk(response, "GOOGLE_DRIVE_PROFILE_IO_FAILED", "Failed to read portable profile conditional metadata");
+  const body = await responseJson(response);
+  const id = String(body?.id || "").trim();
+  const version = String(body?.version || "").trim();
+  const etag = String(body?.etag || "").trim();
+  if (!id || id !== String(fileId) || !version) {
+    throw codedError("GOOGLE_DRIVE_PROFILE_INVALID", "Portable profile conditional metadata is incomplete.");
+  }
+  if (!etag || etag.startsWith("W/")) {
+    throw codedError(
+      "GOOGLE_DRIVE_PROFILE_CONDITIONAL_UNAVAILABLE",
+      "Google Drive did not provide a strong conditional-write token. Orion refused to overwrite the portable profile.",
+    );
+  }
+  return { id, version, etag };
 }
 
 async function downloadProfile(driveRequest, fileId) {
@@ -259,17 +281,40 @@ function createPortableProfileWriter({ driveRequest } = {}) {
     const fileId = matches[0];
     const before = await fetchMetadata(driveRequest, fileId);
     const currentTag = revisionTag(before);
-    if (currentTag !== expected) return { state: "conflict", revisionTag: currentTag };
-    if (!currentTag.startsWith("etag:")) {
-      throw codedError(
-        "GOOGLE_DRIVE_PROFILE_CONDITIONAL_UNAVAILABLE",
-        "Google Drive did not provide a strong conditional-write token. Orion refused to overwrite the portable profile.",
-      );
+
+    let updateUrl = `${DRIVE_UPLOAD_API}/files/${encode(fileId)}?uploadType=media`;
+    let updateMethod = "PATCH";
+    let ifMatch = null;
+
+    if (expected.startsWith("version:")) {
+      const expectedVersion = expected.slice("version:".length);
+      if (before.version !== expectedVersion) {
+        return { state: "conflict", revisionTag: currentTag };
+      }
+      if (currentTag.startsWith("etag:")) {
+        ifMatch = currentTag.slice("etag:".length);
+      } else {
+        const conditional = await fetchV2ConditionalMetadata(driveRequest, fileId);
+        if (conditional.version !== expectedVersion) {
+          return { state: "conflict", revisionTag: `version:${conditional.version}` };
+        }
+        ifMatch = conditional.etag;
+        updateUrl = `${DRIVE_V2_UPLOAD_API}/files/${encode(fileId)}?uploadType=media`;
+        updateMethod = "PUT";
+      }
+    } else {
+      if (currentTag !== expected) return { state: "conflict", revisionTag: currentTag };
+      if (!currentTag.startsWith("etag:")) {
+        throw codedError(
+          "GOOGLE_DRIVE_PROFILE_CONDITIONAL_UNAVAILABLE",
+          "Google Drive did not provide a strong conditional-write token. Orion refused to overwrite the portable profile.",
+        );
+      }
+      ifMatch = currentTag.slice("etag:".length);
     }
 
-    const ifMatch = currentTag.slice("etag:".length);
-    const updateResponse = await driveRequest(`${DRIVE_UPLOAD_API}/files/${encode(fileId)}?uploadType=media`, {
-      method: "PATCH",
+    const updateResponse = await driveRequest(updateUrl, {
+      method: updateMethod,
       headers: {
         "Content-Type": "application/json; charset=UTF-8",
         "If-Match": ifMatch,

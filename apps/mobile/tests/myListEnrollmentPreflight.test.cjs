@@ -172,7 +172,9 @@ test("P8.3 Candidate 2 exposes the required calm status progression and confirma
   assert.match(preflight, /'Needs review'/);
   assert.match(preflight, /'Start My List sync\?'/);
   assert.match(preflight, /Orion will upload only My List/);
-  assert.match(preflight, /History, watched status and playback progress stay on this device for now/);
+  assert.match(preflight, /This My List flow does not upload History, Watched or playback progress/);
+  assert.match(preflight, /Other sync domains are not part of this action/);
+  assert.doesNotMatch(preflight, /watched status and playback progress stay on this device for now/i);
 });
 
 test("P8.3 Candidate 1A Settings grammar stays flat and development diagnostics remain hidden", () => {

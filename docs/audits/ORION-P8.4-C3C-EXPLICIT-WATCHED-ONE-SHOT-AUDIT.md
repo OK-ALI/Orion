@@ -434,3 +434,29 @@ C3-D must preserve:
 - manual Sync while automatic policy is paused.
 
 Automatic History and Progress synchronization remain separate future work unless the Phase 8 roadmap explicitly advances them.
+
+---
+
+## Post-lock amendment — P8.4 C3-D Desktop conditional-write runtime repair
+
+P8.4 C3-D physical validation exposed a runtime compatibility gap in the locked C3-C Desktop PortableProfileV3 writer.
+
+The C3-C writer correctly refused to update an existing profile when Drive v3 returned only a `version:` revision token and no strong ETag. The refusal preserved the locked no-blind-overwrite safety contract, but it prevented legitimate Desktop steady-state writes in the observed runtime environment.
+
+The Desktop writer was amended narrowly so the existing atomic-update requirement remains intact:
+
+- strong v3 ETag remains the preferred path,
+- a version-only stable v3 snapshot may resolve the corresponding strong v2 ETag for the same file,
+- the Drive version must remain unchanged while resolving that ETag,
+- the update still uses `If-Match`,
+- HTTP 412 or version drift remains a conflict,
+- no strong token still fails closed,
+- no blind read-then-overwrite path exists.
+
+Focused main-process tests prove the v3 ETag path, version-to-v2-ETag path, version-drift conflict, missing-ETag failure, HTTP 412 conflict and existing profile validation behavior.
+
+Physical validation then proved the previously blocked Desktop automatic Watched write could complete and verify safely.
+
+This amendment changes the implementation mechanism used to satisfy the existing C3-C conditional-write guarantee. It does not weaken or redefine that guarantee.
+
+**C3-C remains COMPLETE & LOCKED.**

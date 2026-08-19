@@ -40,6 +40,7 @@ import { useSystemIntegration } from "./hooks/useSystemIntegration";
 import { useSmartConnectRemoteCommands } from "./hooks/useSmartConnectRemoteCommands";
 import { useSmartConnectTelemetry } from "./hooks/useSmartConnectTelemetry";
 import useNetworkStatus from "../shared/hooks/useNetworkStatus";
+import { DesktopWatchedSteadyStateSyncProvider } from "../features/account/WatchedSteadyStateSync";
 
 const WHATS_NEW_EDITION = "orion-x-music-planet";
 import { claimPlayback, getPlaybackOwner } from "./playback/PlaybackCoordinator";
@@ -887,8 +888,9 @@ export default function App() {
     );
 
   return (
-    <ErrorBoundary>
-      <div className={`app-shell${String(page).startsWith("music-") ? " music-world" : ""}`}>
+    <DesktopWatchedSteadyStateSyncProvider googleProfile={googleProfile} networkStatus={network.status} watched={watched}>
+      <ErrorBoundary>
+        <div className={`app-shell${String(page).startsWith("music-") ? " music-world" : ""}`}>
         {hasCustomTitlebar && (
           <WindowTitlebar 
             network={network} 
@@ -1089,7 +1091,8 @@ export default function App() {
             </div>
           </div>
         )}
-      </div>
-    </ErrorBoundary>
+        </div>
+      </ErrorBoundary>
+    </DesktopWatchedSteadyStateSyncProvider>
   );
 }

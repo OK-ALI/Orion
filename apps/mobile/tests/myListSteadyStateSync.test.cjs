@@ -142,7 +142,7 @@ test("P8.3 Candidate 4 mounts a reusable per-domain sync policy between Account 
   const policy = read("src/features/account/SyncPolicyContext.tsx");
 
   assert.match(layout, /<AccountProvider>[\s\S]*<OrionSyncPolicyProvider>[\s\S]*<ThemedApplication \/>[\s\S]*<\/OrionSyncPolicyProvider>[\s\S]*<\/AccountProvider>/);
-  assert.match(policy, /ORION_SYNC_DOMAINS = \['myList'\] as const/);
+  assert.match(policy, /ORION_SYNC_DOMAINS = \['myList', 'watched'\] as const/);
   assert.match(policy, /p8\.syncPolicy\.v1:/);
   assert.match(policy, /profileId/);
   assert.match(policy, /automatic: true/);
@@ -175,11 +175,13 @@ test("P8.3 Candidate 4 Auto sync control is local policy only and OFF does not e
   assert.doesNotMatch(policy, /remove\(|clearMyListSyncCheckpoint|replaceMyListFromSync|store\.write|store\.read/);
 });
 
-test("P8.3 Candidate 4 keeps the sync-control foundation My List-only for the P8.4 handoff", () => {
+test("P8.4 C3-D extends the reusable policy registry without changing My List domain ownership", () => {
   const policy = read("src/features/account/SyncPolicyContext.tsx");
   const preflight = read("src/features/settings/MyListEnrollmentPreflight.tsx");
 
-  assert.doesNotMatch(policy, /watched|history|progress|preferences|continueWatching/i);
-  assert.doesNotMatch(preflight, /markWatched|markUnwatched|recordPlayback|clearHistory|removeProgress/);
-  assert.match(preflight, /History, watched status and playback progress stay on this device for now/);
+  assert.match(policy, /ORION_SYNC_DOMAINS = \['myList', 'watched'\] as const/);
+  assert.match(preflight, /syncPolicy\.setAutomatic\('myList', enabled\)/);
+  assert.doesNotMatch(preflight, /setAutomatic\('watched'|markWatched|markUnwatched|recordPlayback|clearHistory|removeProgress/);
+  assert.match(preflight, /This My List flow does not upload History, Watched or playback progress/);
+  assert.match(preflight, /Other sync domains use their own controls/);
 });
