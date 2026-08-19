@@ -135,7 +135,7 @@ export function MyListEnrollmentPreflight({
       if (remote.profile.profileId !== profileId) {
         setState({
           phase: 'needs-review',
-          message: 'This cloud data belongs to a different Orion profile. Sync is blocked and nothing was changed.',
+          message: 'This Orion Cloud data belongs to a different Orion profile. Sync is blocked and nothing was changed.',
         });
         return;
       }
@@ -144,7 +144,7 @@ export function MyListEnrollmentPreflight({
       if (myList.state === 'invalid') {
         setState({
           phase: 'needs-review',
-          message: 'Your cloud My List contains data this version of Orion cannot safely sync. Nothing was changed.',
+          message: 'My List in Orion Cloud contains data this version of Orion cannot safely sync. Nothing was changed.',
         });
         return;
       }
@@ -154,7 +154,7 @@ export function MyListEnrollmentPreflight({
         if (!cloudNamespaceSignature) {
           setState({
             phase: 'needs-review',
-            message: 'Your cloud My List cannot be verified safely by this Orion version. Nothing was changed.',
+            message: 'My List in Orion Cloud cannot be verified safely by this Orion version. Nothing was changed.',
           });
           return;
         }
@@ -198,7 +198,7 @@ export function MyListEnrollmentPreflight({
 
       setState({
         phase: 'needs-review',
-        message: 'Your cloud My List and this device both contain different saved changes. Orion will not merge or overwrite either copy automatically.',
+        message: 'My List on this device and in Orion Cloud both contain different saved changes. Orion will not merge or overwrite either copy automatically.',
       });
     } catch {
       if (contextKeyRef.current !== inspectionContextKey) return;
@@ -262,7 +262,7 @@ export function MyListEnrollmentPreflight({
         if (fresh.state !== 'missing') {
           setState({
             phase: 'needs-review',
-            message: 'Your cloud profile changed after the readiness check. Orion stopped before overwriting anything. Check readiness again.',
+            message: 'Orion Cloud changed after the readiness check. Orion stopped before overwriting anything. Check readiness again.',
           });
           return;
         }
@@ -275,7 +275,7 @@ export function MyListEnrollmentPreflight({
         ) {
           setState({
             phase: 'needs-review',
-            message: 'Your cloud profile changed after the readiness check. Orion stopped before overwriting anything. Check readiness again.',
+            message: 'Orion Cloud changed after the readiness check. Orion stopped before overwriting anything. Check readiness again.',
           });
           return;
         }
@@ -299,7 +299,7 @@ export function MyListEnrollmentPreflight({
       if (contextKeyRef.current !== confirmedContextKey) {
         setState({
           phase: 'needs-review',
-          message: 'My List changed while Orion was starting sync. Orion stopped before writing to the cloud. Check readiness again.',
+          message: 'My List changed while Orion was starting sync. Orion stopped before updating Orion Cloud. Check readiness again.',
         });
         return;
       }
@@ -311,7 +311,7 @@ export function MyListEnrollmentPreflight({
       if (write.state === 'conflict') {
         setState({
           phase: 'needs-review',
-          message: 'Your cloud profile changed while Orion was starting sync. Orion did not overwrite it. Check readiness again.',
+          message: 'Orion Cloud changed while Orion was starting sync. Orion did not overwrite it. Check readiness again.',
         });
         return;
       }
@@ -331,7 +331,7 @@ export function MyListEnrollmentPreflight({
       if (!verified || verify.state !== 'found') {
         setState({
           phase: 'needs-review',
-          message: 'Orion could not verify the cloud copy after writing. Your local My List was not changed. Check readiness before trying again.',
+          message: 'Orion could not verify the Orion Cloud copy after syncing. Your local My List was not changed. Check readiness before trying again.',
         });
         return;
       }
@@ -340,7 +340,7 @@ export function MyListEnrollmentPreflight({
       if (!verifiedNamespaceSignature) {
         setState({
           phase: 'needs-review',
-          message: 'Orion verified the Drive write but could not establish a safe My List sync checkpoint. Check sync status before continuing.',
+          message: 'Orion verified the Orion Cloud update but could not finish a safe My List sync. Check status before continuing.',
         });
         return;
       }
@@ -355,7 +355,7 @@ export function MyListEnrollmentPreflight({
       if (contextKeyRef.current !== confirmedContextKey) {
         setState({
           phase: 'needs-review',
-          message: 'My List changed while Orion was syncing. The cloud has the earlier confirmed copy, while your current local My List was left untouched. Check readiness before continuing.',
+          message: 'My List changed while Orion was syncing. Orion Cloud has the earlier confirmed copy, while your current local My List was left untouched. Check readiness before continuing.',
         });
         return;
       }
@@ -401,7 +401,7 @@ export function MyListEnrollmentPreflight({
       ) {
         setState({
           phase: 'needs-review',
-          message: 'My List changed on this device or in the cloud before restore. Orion stopped without replacing anything.',
+          message: 'My List changed on this device or in Orion Cloud before restore. Orion stopped without replacing anything.',
         });
         return;
       }
@@ -416,7 +416,7 @@ export function MyListEnrollmentPreflight({
       ) {
         setState({
           phase: 'needs-review',
-          message: 'The cloud My List changed before restore. Orion left this device untouched.',
+          message: 'My List in Orion Cloud changed before restore. Orion left this device untouched.',
         });
         return;
       }
@@ -457,15 +457,29 @@ export function MyListEnrollmentPreflight({
   const offline = steadyActive && steady.phase === 'offline';
 
   const feedback = steadyActive
-    ? steady.message
+    ? steady.phase === 'synced'
+      ? `${itemLabel(localCount)} synced with Orion Cloud.`
+      : steady.phase === 'paused'
+        ? 'Automatic sync is paused. Local My List changes stay on this device until you choose Sync now or turn Auto Sync back on.'
+        : steady.phase === 'offline'
+          ? 'My List is waiting for a connection. Your local My List stays available on this device.'
+          : steady.phase === 'checking'
+            ? 'Checking My List with Orion Cloud.'
+            : steady.phase === 'syncing'
+              ? 'Syncing My List with Orion Cloud.'
+              : steady.phase === 'needs-review'
+                ? 'My List needs your attention before Orion can sync it safely. Orion did not merge or overwrite either copy.'
+                : steady.phase === 'error'
+                  ? 'Orion could not sync My List right now. Your local My List was not changed.'
+                  : null
     : readyRestore
-      ? `${itemLabel(restoreCloudCount)} ${restoreCloudCount === 1 ? 'is' : 'are'} available in your Orion profile. This device My List is empty and can be restored without merging.`
+      ? `${itemLabel(restoreCloudCount)} ${restoreCloudCount === 1 ? 'is' : 'are'} available in Orion Cloud. This device My List is empty and can be restored without merging.`
       : readyEnroll
         ? `${itemLabel(localCount)} ${localCount === 1 ? 'is' : 'are'} ready to sync. Nothing has been uploaded yet.`
         : state.phase === 'syncing'
-          ? 'Uploading My List and verifying the cloud copy. Your local library is not being changed.'
+          ? 'Syncing My List with Orion Cloud. Your local library outside My List is not being changed.'
           : state.phase === 'synced'
-            ? `${itemLabel(localCount)} ${localCount === 1 ? 'is' : 'are'} synced with your Orion profile. This My List flow does not upload History, Watched or playback progress.`
+            ? `${itemLabel(localCount)} ${localCount === 1 ? 'is' : 'are'} synced with Orion Cloud.`
             : state.phase === 'needs-review' || state.phase === 'error'
               ? state.message
               : null;
@@ -485,7 +499,7 @@ export function MyListEnrollmentPreflight({
               : readyEnroll
                 ? 'Ready to sync'
                 : offline
-                  ? 'Not synced'
+                  ? 'Offline'
                   : 'Not synced';
   const statusColor = ready || syncing || synced
     ? theme.accent
@@ -500,13 +514,13 @@ export function MyListEnrollmentPreflight({
       : steadyActive && !autoSyncEnabled && !needsReview
         ? 'Sync now'
         : steadyActive
-          ? 'Check sync status'
+          ? 'Refresh status'
         : readyRestore
           ? 'Restore My List'
           : readyEnroll
             ? 'Start My List sync'
             : synced
-              ? 'Check sync status'
+              ? 'Refresh status'
               : 'Check sync readiness';
 
   return (
@@ -514,9 +528,9 @@ export function MyListEnrollmentPreflight({
       <View style={styles.heading}>
         <Ionicons name="list-outline" size={20} color={theme.textSecondary} />
         <View style={styles.headingCopy}>
-          <Text style={[styles.title, { color: theme.text }]}>My List sync</Text>
+          <Text style={[styles.title, { color: theme.text }]}>My List</Text>
           <Text style={[styles.copy, { color: theme.textSecondary }]}>
-            Sync only My List. After enrollment, choose automatic updates or pause them and sync only when you ask. Other sync domains use their own controls.
+            Keep My List consistent across Orion devices. First sync is confirmed once; after that, Auto Sync can keep changes current or stay paused on this device.
           </Text>
         </View>
         <View
@@ -543,13 +557,13 @@ export function MyListEnrollmentPreflight({
             <Text style={[styles.autoSyncTitle, { color: theme.text }]}>Auto sync</Text>
             <Text style={[styles.autoSyncDescription, { color: theme.textMuted }]}>
               {autoSyncEnabled
-                ? 'My List changes sync automatically when Orion is online.'
-                : 'Automatic cloud activity is paused. Local changes stay on this device until you choose Sync now or turn this back on.'}
+                ? 'My List changes sync automatically through Orion Cloud when Orion is online.'
+                : 'Automatic sync is paused. Local My List changes stay on this device until you choose Sync now or turn this back on.'}
             </Text>
           </View>
           <Switch
             accessibilityLabel="Auto sync My List"
-            accessibilityHint="Turns automatic My List cloud synchronization on or off without deleting local or cloud data"
+            accessibilityHint="Turns automatic My List sync through Orion Cloud on or off without deleting local or cloud data"
             accessibilityState={{ disabled: !syncPolicy.ready }}
             disabled={!syncPolicy.ready}
             value={autoSyncEnabled}
@@ -580,12 +594,12 @@ export function MyListEnrollmentPreflight({
         accessibilityRole="button"
         accessibilityLabel={buttonLabel}
         accessibilityHint={readyRestore
-          ? 'Opens a confirmation before restoring the verified cloud My List to this empty device list'
+          ? 'Opens a confirmation before restoring the synced My List from Orion Cloud to this empty device list'
           : readyEnroll
             ? 'Opens a confirmation before uploading only My List'
             : steadyActive && !autoSyncEnabled && !needsReview
               ? 'Runs one safe My List reconciliation even though automatic sync is paused'
-              : 'Checks this device and Orion cloud data without changing unrelated library activity'}
+              : 'Checks this device and Orion Cloud data without changing unrelated library activity'}
         accessibilityState={{ disabled: checking || syncing }}
         disabled={checking || syncing}
         onPress={() => {
@@ -619,8 +633,8 @@ export function MyListEnrollmentPreflight({
         visible={showSyncDialog}
         title={readyRestore ? 'Restore My List from Orion?' : 'Start My List sync?'}
         message={readyRestore
-          ? `Restore ${itemLabel(restoreCloudCount)} from your Orion profile to this empty My List? This action changes only My List.`
-          : `Sync ${itemLabel(localCount)} with your Orion profile? Orion will upload only My List. Other sync domains are not part of this action.`}
+          ? `Restore ${itemLabel(restoreCloudCount)} from Orion Cloud to this empty My List? This action changes only My List.`
+          : `Sync ${itemLabel(localCount)} with Orion Cloud? Orion will upload only My List. Other sync domains are not part of this action.`}
         icon={readyRestore ? 'cloud-download-outline' : 'cloud-upload-outline'}
         onDismiss={() => setShowSyncDialog(false)}
         actions={[

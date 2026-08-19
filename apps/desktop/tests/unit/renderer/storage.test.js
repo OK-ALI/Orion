@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { STORAGE_KEYS, formatBytes, storage } from "../../../src/renderer/services/settingsStore";
 import {
   BACKUP_KEYS,
+  LEGACY_CLOUD_MY_LIST_FENCE_MARKER,
   LEGACY_CLOUD_VIEWING_FENCE_MARKER,
   LEGACY_CLOUD_VIEWING_STATE_KEYS,
   collectBackupData,
@@ -10,6 +11,7 @@ import {
   restoreCompleteBackupData,
   restoreLegacyCloudSyncData,
 } from "../../../src/renderer/services/backup";
+import { saveDesktopMyListSyncCheckpointV1 } from "../../../src/renderer/services/myListSyncCheckpoint";
 
 describe("v1.0.7 renderer storage compatibility", () => {
   it("keeps the orion_ prefix and JSON representation", () => {
@@ -98,6 +100,36 @@ describe("v1.0.7 renderer storage compatibility", () => {
     expect(storage.get(STORAGE_KEYS.WATCH_PROGRESS)).toEqual({ movie_1: 44 });
     expect(storage.get(STORAGE_KEYS.WATCHED)).toEqual({ movie_1: true });
     expect(storage.get(STORAGE_KEYS.SAVED)).toEqual({ movie_2: { id: 2 } });
+  });
+
+  it("fences My List out of the legacy Google Drive workspace only after Orion Cloud enrollment", async () => {
+    const profileId = "profile-my-list-fence";
+    storage.set(STORAGE_KEYS.SAVED, { movie_7: { id: 7, media_type: "movie", title: "Local" } });
+    storage.set(STORAGE_KEYS.SAVED_ORDER, ["movie_7"]);
+
+    const beforeEnrollment = await collectLegacyCloudSyncData({ profileId });
+    expect(beforeEnrollment.saved.movie_7.id).toBe(7);
+    expect(beforeEnrollment.savedOrder).toEqual(["movie_7"]);
+
+    saveDesktopMyListSyncCheckpointV1({
+      profileId,
+      localSignature: "local",
+      cloudNamespaceSignature: "cloud",
+      verifiedAt: 1,
+    });
+
+    const afterEnrollment = await collectLegacyCloudSyncData({ profileId });
+    expect(afterEnrollment.saved).toBeUndefined();
+    expect(afterEnrollment.savedOrder).toBeUndefined();
+    expect(afterEnrollment[LEGACY_CLOUD_MY_LIST_FENCE_MARKER]).toBe(true);
+
+    await restoreLegacyCloudSyncData({
+      saved: { movie_99: { id: 99, media_type: "movie", title: "Legacy cloud" } },
+      savedOrder: ["movie_99"],
+    }, { profileId });
+
+    expect(storage.get(STORAGE_KEYS.SAVED).movie_7.id).toBe(7);
+    expect(storage.get(STORAGE_KEYS.SAVED_ORDER)).toEqual(["movie_7"]);
   });
 
   it("includes portable SQLite Music state without placing credentials in renderer storage", async () => {

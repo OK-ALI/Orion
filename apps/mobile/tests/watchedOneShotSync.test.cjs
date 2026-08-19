@@ -42,10 +42,10 @@ test("P8.4 C3-D keeps first Watched enrollment explicit while exposing steady-st
   const account = read("src/features/settings/AccountSettingsContent.tsx");
   const control = read("src/features/settings/WatchedSyncControl.tsx");
   assert.match(account, /drivePhase === 'ready'[\s\S]*<WatchedSyncControl/);
-  assert.match(control, />Watched sync</);
+  assert.match(control, />Watched</);
   assert.match(control, /checkpoint: null/);
   assert.match(control, /Confirm sync/);
-  assert.match(control, /first enrollment is explicit/i);
+  assert.match(control, /First sync is confirmed once/i);
   assert.match(control, /<Switch/);
   assert.match(control, /syncPolicy\.setAutomatic\('watched', enabled\)/);
   assert.match(control, /if \(steadyActive\) steady\.refresh\(\);/);

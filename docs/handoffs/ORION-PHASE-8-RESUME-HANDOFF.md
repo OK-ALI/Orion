@@ -439,3 +439,88 @@ Current Phase 8 board:
 - Phase 8 overall — NOT LOCKED
 
 Immediate next work is the focused Account / Sync UX productization pass already agreed for Orion Desktop and Orion Mobile. This handoff does not assign that polish pass a new canonical P8.x number.
+
+
+---
+
+## P8.3 Desktop My List conflict-resolution post-lock amendment
+
+**Status:** COMPLETE & LOCKED when committed with the validated candidate
+**Date:** 2026-08-19
+
+P8.3 My List Portable Sync remains locked.
+
+A post-lock Desktop product amendment adds explicit first-checkpoint conflict
+resolution when Desktop and Orion Cloud both contain divergent populated
+My Lists.
+
+Accepted resolution choices:
+
+- Combine both
+- Keep Desktop My List
+- Keep Orion Cloud My List
+
+No option silently executes merely because divergence exists.
+
+The resolution path reuses the existing P8.3 machinery:
+
+- PortableProfileV3 My List namespace
+- profile identity validation
+- fresh cloud reads
+- revision-aware conditional mutation
+- semantic read-back verification
+- namespace-specific checkpoints
+- preservation of unrelated namespaces
+- per-device automatic-sync policy
+- Needs review when safe reconciliation cannot be proven
+
+Physical Combine validation:
+
+- Desktop: 134
+- Orion Cloud: 28
+- shared: 11
+- expected union: 151
+- Desktop after Combine: 151 / Synced
+- Mobile after cloud reconciliation: 151 / Synced
+- actual Mobile Library My List: 151
+
+Desktop final gate:
+
+- source-size: 361
+- bindings: 315
+- IPC: 222 methods / 141 channels
+- Node: 106 / 106
+- Renderer: 227 / 227
+- production build: PASS
+
+Mobile final regression gate:
+
+- TypeScript: PASS
+- tests: 210 / 210
+- source-size: 132
+- Expo Doctor: 20 / 20
+- web export: PASS
+
+Watched remains an independent domain and P8.4 C3-D remains locked.
+
+Current Phase 8 board:
+
+- P8.0 — COMPLETE
+- P8.1 — LOCKED
+- P8.2 — LOCKED
+- P8.3 — COMPLETE & LOCKED
+- P8.3 Desktop My List conflict-resolution amendment — COMPLETE & LOCKED
+- P8.4 C1 — COMPLETE & LOCKED
+- P8.4 C2 — COMPLETE & LOCKED
+- P8.4 C3-A — COMPLETE & LOCKED
+- P8.4 C3-B — COMPLETE & LOCKED
+- P8.4 C3-C — COMPLETE & LOCKED
+- P8.4 C3-D — COMPLETE & LOCKED
+- Phase 8 overall — NOT LOCKED
+
+History and verified playback Progress remain future synchronization domains.
+Continue Watching remains derived and must not become an independent cloud namespace.
+
+Canonical amendment audit:
+
+`docs\audits\ORION-P8.3-DESKTOP-MYLIST-CONFLICT-RESOLUTION-POST-LOCK-AUDIT.md`

@@ -1,6 +1,8 @@
 // ── Backup & Restore Utilities ────────────────────────────────────────────────
 // Single source of truth for which keys are included in backups.
 
+import { loadDesktopMyListSyncCheckpointV1 } from "./myListSyncCheckpoint";
+
 const PREFIX = "orion_";
 
 export const BACKUP_KEYS = [
@@ -114,11 +116,30 @@ export const LEGACY_CLOUD_VIEWING_STATE_KEYS = Object.freeze([
   "watched",
 ]);
 
+export const LEGACY_CLOUD_MY_LIST_FENCE_MARKER = "__orion_preserve_legacy_my_list_state";
+
+export const LEGACY_CLOUD_MY_LIST_STATE_KEYS = Object.freeze([
+  "saved",
+  "savedOrder",
+]);
+
 export function fenceLegacyCloudViewingState(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return {};
   const safe = { ...data };
   for (const key of LEGACY_CLOUD_VIEWING_STATE_KEYS) delete safe[key];
   return safe;
+}
+
+export function fenceLegacyCloudMyListState(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return {};
+  const safe = { ...data };
+  for (const key of LEGACY_CLOUD_MY_LIST_STATE_KEYS) delete safe[key];
+  return safe;
+}
+
+function shouldFenceLegacyCloudMyList(profileId) {
+  const normalized = String(profileId || "").trim();
+  return !!(normalized && loadDesktopMyListSyncCheckpointV1(normalized));
 }
 
 export function collectBackupData() {
@@ -170,13 +191,20 @@ export async function restoreCompleteBackupData(data) {
   return result || { ok: true };
 }
 
-export async function collectLegacyCloudSyncData() {
+export async function collectLegacyCloudSyncData({ profileId = "" } = {}) {
+  const viewingSafe = fenceLegacyCloudViewingState(await collectCompleteBackupData());
+  const fenceMyList = shouldFenceLegacyCloudMyList(profileId);
   return {
-    ...fenceLegacyCloudViewingState(await collectCompleteBackupData()),
+    ...(fenceMyList ? fenceLegacyCloudMyListState(viewingSafe) : viewingSafe),
     [LEGACY_CLOUD_VIEWING_FENCE_MARKER]: true,
+    ...(fenceMyList ? { [LEGACY_CLOUD_MY_LIST_FENCE_MARKER]: true } : {}),
   };
 }
 
-export async function restoreLegacyCloudSyncData(data) {
-  return restoreCompleteBackupData(fenceLegacyCloudViewingState(data));
+export async function restoreLegacyCloudSyncData(data, { profileId = "" } = {}) {
+  const viewingSafe = fenceLegacyCloudViewingState(data);
+  const safe = shouldFenceLegacyCloudMyList(profileId)
+    ? fenceLegacyCloudMyListState(viewingSafe)
+    : viewingSafe;
+  return restoreCompleteBackupData(safe);
 }

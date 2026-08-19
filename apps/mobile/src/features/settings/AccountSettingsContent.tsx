@@ -141,7 +141,7 @@ export function AccountSettingsContent() {
   const driveReady = drivePhase === 'ready' || drivePhase === 'revoking';
   const driveBusy = drivePhase === 'checking' || drivePhase === 'authorizing' || drivePhase === 'revoking';
   const driveStatus = driveReady
-    ? 'Ready'
+    ? 'Connected'
     : drivePhase === 'checking'
       ? 'Checking'
       : drivePhase === 'authorizing'
@@ -163,7 +163,7 @@ export function AccountSettingsContent() {
             <View style={styles.profileCopy}>
               <Text style={[styles.profileName, { color: theme.text }]}>{displayName}</Text>
               <Text style={[styles.profileEmail, { color: theme.textSecondary }]}>{profile.email}</Text>
-              <Text style={[styles.profileMeta, { color: theme.textMuted }]}>Orion profile · Google connected</Text>
+              <Text style={[styles.profileMeta, { color: theme.textMuted }]}>Connected with Google</Text>
               <View style={styles.statusRow}>
                 <View style={[styles.statusChip, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
                   <Ionicons name="checkmark-circle" size={14} color={theme.accent} />
@@ -179,15 +179,15 @@ export function AccountSettingsContent() {
                 <Ionicons name="cloud-outline" size={20} color={theme.accent} />
               </View>
               <View style={styles.settingCopy}>
-                <Text style={[styles.settingTitle, { color: theme.text }]}>Google Drive</Text>
+                <Text style={[styles.settingTitle, { color: theme.text }]}>Orion Cloud</Text>
                 <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
                   {driveReady
-                    ? 'Drive access is ready. Sync starts only when you explicitly confirm it.'
+                    ? 'Orion Cloud is connected. Enrolled My List and Watched can sync automatically; first-time cross-device changes still ask for confirmation.'
                     : drivePhase === 'checking'
-                      ? 'Checking Drive access for this Google account.'
+                      ? 'Checking Orion Cloud connection.'
                       : drivePhase === 'authorizing'
-                        ? 'Waiting for Google Drive permission.'
-                        : 'Allow Orion to use private Google Drive storage for cross-device sync. This does not upload anything by itself.'}
+                        ? 'Waiting for Google permission.'
+                        : 'Connect Orion Cloud to keep supported Orion data in sync across devices. My List and Watched follow their own guarded sync controls.'}
                 </Text>
               </View>
               <View
@@ -216,20 +216,20 @@ export function AccountSettingsContent() {
                 ]}
               >
                 {driveFeedback === 'removed'
-                  ? 'Drive access was removed. Your local library was not changed.'
+                  ? 'Orion Cloud was disconnected. Your local library was not changed.'
                   : driveFeedback === 'revoke-error'
-                    ? 'Drive access could not be removed. Orion still considers Drive access active.'
+                    ? 'Orion Cloud could not be disconnected. Orion still considers the cloud connection active.'
                     : drivePhase === 'cancelled'
-                      ? 'Drive access was not enabled. Nothing changed.'
-                      : 'Drive access could not be enabled. Nothing was uploaded.'}
+                      ? 'Orion Cloud was not connected. Nothing changed.'
+                      : 'Orion Cloud could not be connected. Nothing was uploaded.'}
               </Text>
             )}
 
             {!driveReady && (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={drivePhase === 'checking' ? 'Checking Google Drive access' : 'Enable Google Drive access'}
-                accessibilityHint="Allows Orion to use private Google Drive storage without uploading the local library"
+                accessibilityLabel={drivePhase === 'checking' ? 'Checking Orion Cloud' : 'Connect Orion Cloud'}
+                accessibilityHint="Connects Orion Cloud. Enrolled sync domains continue to follow their own Auto Sync settings"
                 accessibilityState={{ disabled: busy || !driveNativeAvailable || driveBusy }}
                 disabled={busy || !driveNativeAvailable || driveBusy}
                 onPress={() => void authorizeDrive()}
@@ -246,16 +246,16 @@ export function AccountSettingsContent() {
                 )}
                 <Text style={[styles.inlineButtonText, { color: theme.text }]}>
                   {drivePhase === 'checking'
-                    ? 'Checking Drive...'
+                    ? 'Checking Cloud...'
                     : drivePhase === 'authorizing'
                       ? 'Opening Google...'
-                      : 'Enable Drive access'}
+                      : 'Connect Orion Cloud'}
                 </Text>
               </Pressable>
             )}
 
             {!driveNativeAvailable && (
-              <Text style={[styles.setupText, { color: theme.textMuted }]}>Drive access is unavailable on this device.</Text>
+              <Text style={[styles.setupText, { color: theme.textMuted }]}>Orion Cloud is unavailable on this device.</Text>
             )}
           </View>
 
@@ -277,8 +277,8 @@ export function AccountSettingsContent() {
             {driveReady && (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Remove Google Drive access"
-                accessibilityHint="Stops Orion from using Google Drive while keeping local Orion data on this device"
+                accessibilityLabel="Disconnect Orion Cloud"
+                accessibilityHint="Stops Orion Cloud sync while keeping local Orion data on this device"
                 accessibilityState={{ disabled: busy || driveBusy }}
                 disabled={busy || driveBusy}
                 onPress={() => setShowDriveRemovalDialog(true)}
@@ -287,7 +287,7 @@ export function AccountSettingsContent() {
                 <Ionicons name="cloud-offline-outline" size={20} color={theme.danger} />
                 <View style={styles.managementCopy}>
                   <Text style={[styles.managementTitle, { color: theme.danger }]}>
-                    {drivePhase === 'revoking' ? 'Removing Drive access...' : 'Remove Drive access'}
+                    {drivePhase === 'revoking' ? 'Disconnecting Orion Cloud...' : 'Disconnect Orion Cloud'}
                   </Text>
                   <Text style={[styles.managementDescription, { color: theme.textMuted }]}>Keep your library on this device.</Text>
                 </View>
@@ -401,14 +401,14 @@ export function AccountSettingsContent() {
       <View style={[styles.syncNote, { borderTopColor: theme.border }]}>
         <Ionicons name="shield-checkmark-outline" size={18} color={theme.textMuted} />
         <Text style={[styles.syncNoteText, { color: theme.textMuted }]}>
-          Connecting Google alone does not upload your library. My List and Watched use their own guarded sync flows, with automatic behavior controlled locally on each enrolled device.
+          Google connects your Orion identity. Orion Cloud is a separate connection; My List and Watched keep their own guarded sync controls with Auto Sync managed on each enrolled device.
         </Text>
       </View>
 
       <OrionDialog
         visible={showDriveRemovalDialog}
-        title="Remove Google Drive access?"
-        message="Orion will stop using its private Google Drive storage for this account. Your local library will stay on this device."
+        title="Disconnect Orion Cloud?"
+        message="Orion will stop using Orion Cloud for this account. Your local library will stay on this device."
         icon="cloud-offline-outline"
         onDismiss={() => setShowDriveRemovalDialog(false)}
         actions={[
@@ -418,7 +418,7 @@ export function AccountSettingsContent() {
             onPress: () => setShowDriveRemovalDialog(false),
           },
           {
-            label: 'Remove access',
+            label: 'Disconnect',
             role: 'destructive',
             onPress: () => void revokeDrive(),
           },

@@ -55,8 +55,8 @@ test("P8.1 keeps OAuth configuration Orion-owned and out of committed source", (
 
   const accountUi = read("src/features/settings/AccountSettingsContent.tsx");
   assert.match(accountUi, /does not move or overwrite My List, History, Watched or playback progress/);
-  assert.match(accountUi, /Sync starts only when you explicitly confirm it/);
-  assert.match(accountUi, /This does not upload anything by itself/);
+  assert.match(accountUi, /Orion Cloud is a separate connection/);
+  assert.match(accountUi, /first-time cross-device changes still ask for confirmation/i);
   assert.match(accountUi, /keeping local Orion data on this device/i);
 });
 
@@ -80,7 +80,7 @@ test("P8.1 Account copy is user-facing and does not expose internal phase langua
   assert.doesNotMatch(settings, /portable-profile|portable profiles/i);
   assert.match(accountUi, /establish your Orion identity across devices/);
   assert.match(settings, /Your Orion identity and account connection/);
-  assert.match(accountUi, /Connecting Google alone does not upload your library/);
+  assert.match(accountUi, /Google connects your Orion identity\. Orion Cloud is a separate connection/);
 });
 
 

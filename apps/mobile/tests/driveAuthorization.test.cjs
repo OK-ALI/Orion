@@ -51,10 +51,10 @@ test("P8.2 Drive authorization stays separate from sync and library mutation", (
   const accountUi = read("src/features/settings/AccountSettingsContent.tsx");
   const bridge = read("src/features/account/nativeGoogleDriveAuthorization.ts");
 
-  assert.match(accountUi, /Google Drive/);
-  assert.match(accountUi, /private Google Drive storage/);
-  assert.match(accountUi, /Sync starts only when you explicitly confirm it/);
-  assert.match(accountUi, /This does not upload anything by itself/);
+  assert.match(accountUi, /Orion Cloud/);
+  assert.match(accountUi, /My List and Watched follow their own guarded sync controls/);
+  assert.match(accountUi, /first-time cross-device changes still ask for confirmation/i);
+  assert.doesNotMatch(accountUi, />Google Drive<|private Google Drive storage|Sync starts only when you explicitly confirm it/);
   assert.doesNotMatch(bridge, /LibraryContext|playbackRepository|watchedState|savedOrder|history|progress|PortableProfileV3|CloudProfileStore/);
 });
 
@@ -88,13 +88,13 @@ test("P8.2 Drive authorization can explicitly revoke only Orion's app-data grant
 test("P8.2 Drive Ready state exposes an explicit confirmed removal action", () => {
   const accountUi = read("src/features/settings/AccountSettingsContent.tsx");
 
-  assert.match(accountUi, /Remove Drive access/);
-  assert.match(accountUi, /Remove Google Drive access\?/);
-  assert.match(accountUi, /Remove access/);
+  assert.match(accountUi, /Disconnect Orion Cloud/);
+  assert.match(accountUi, /Disconnect Orion Cloud\?/);
+  assert.match(accountUi, /label: 'Disconnect'/);
   assert.match(accountUi, /role: 'destructive'/);
   assert.match(accountUi, /revokeGoogleDriveAppData\(profile\.email\)/);
-  assert.match(accountUi, /Drive access was removed\. Your local library was not changed\./);
-  assert.match(accountUi, /Drive access could not be removed\. Orion still considers Drive access active\./);
+  assert.match(accountUi, /Orion Cloud was disconnected\. Your local library was not changed\./);
+  assert.match(accountUi, /Orion Cloud could not be disconnected\. Orion still considers the cloud connection active\./);
 });
 
 test("P8.2 Drive authorization silently restores an existing app-data grant after process restart", () => {
@@ -130,7 +130,7 @@ test("P8.2 Account restores Drive readiness without automatically launching cons
   assert.match(restoreEffect, /setDrivePhase\(result\.authorized \? 'ready' : 'idle'\)/);
   assert.doesNotMatch(restoreEffect, /authorizeGoogleDriveAppData|startIntentSenderForResult/);
 
-  assert.match(accountUi, /Checking Drive\.\.\./);
+  assert.match(accountUi, /Checking Cloud\.\.\./);
   assert.match(accountUi, /const driveStatus = driveReady[\s\S]{0,260}\? 'Checking'[\s\S]{0,260}: 'Off'/);
 });
 

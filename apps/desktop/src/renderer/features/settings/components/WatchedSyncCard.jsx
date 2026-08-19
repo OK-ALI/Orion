@@ -21,19 +21,19 @@ function itemLabel(count) {
 }
 
 function readyCopy(result) {
-  if (result.action === "pull") return `Cloud has ${itemLabel(result.targetCount)} ready to restore on this Desktop.`;
+  if (result.action === "pull") return `Orion Cloud has ${itemLabel(result.targetCount)} ready to restore on this Desktop.`;
   if (result.action === "merge") return `Orion can safely combine both copies into ${itemLabel(result.targetCount)} without deleting either side.`;
-  if (result.action === "create") return `No portable profile was found. Orion can create one with ${itemLabel(result.targetCount)}.`;
-  return `This Desktop can update Orion cloud to ${itemLabel(result.targetCount)}.`;
+  if (result.action === "create") return `Watched is not in Orion Cloud yet. Orion can start it with ${itemLabel(result.targetCount)}.`;
+  return `This Desktop can update Orion Cloud to ${itemLabel(result.targetCount)}.`;
 }
 
 function reviewCopy(result) {
-  if (result.reason === "tombstone-conflict") return `${itemLabel(result.conflictKeys.length)} were previously removed in the cloud. Orion will not resurrect them automatically.`;
-  if (result.reason === "both-changed") return "Watched changed locally and in the cloud since the last verified sync. Orion stopped instead of choosing a winner.";
-  if (result.reason === "profile-missing-after-checkpoint") return "The previously verified portable profile is missing. Orion will not recreate it automatically.";
-  if (result.reason.includes("identity")) return "The portable Watched state does not match this signed-in Google identity.";
+  if (result.reason === "tombstone-conflict") return `${itemLabel(result.conflictKeys.length)} were previously removed in Orion Cloud. Orion will not restore them automatically.`;
+  if (result.reason === "both-changed") return "Watched changed on this Desktop and in Orion Cloud since the last sync. Orion stopped instead of choosing a winner.";
+  if (result.reason === "profile-missing-after-checkpoint") return "Previously synced Watched data is missing from Orion Cloud. Orion will not recreate it automatically.";
+  if (result.reason.includes("identity")) return "Watched in Orion Cloud does not match this signed-in Google account.";
   if (result.reason.includes("invalid")) return "Watched contains data this Orion version cannot reconcile safely.";
-  return "The verified Watched checkpoint no longer matches both copies. Orion stopped without overwriting either side.";
+  return "Watched no longer matches the last synced copies. Orion stopped without overwriting either side.";
 }
 
 export default function WatchedSyncCard({ googleProfile }) {
@@ -67,7 +67,7 @@ export default function WatchedSyncCard({ googleProfile }) {
         setState({ phase: "needs-review", message: reviewCopy(result) });
       }
     } catch (error) {
-      setState({ phase: "error", message: error?.message || "Orion could not check Watched sync." });
+      setState({ phase: "error", message: "Orion could not check Watched with Orion Cloud. Nothing was changed." });
     } finally {
       busyRef.current = false;
     }
@@ -97,17 +97,17 @@ export default function WatchedSyncCard({ googleProfile }) {
         return;
       }
       const message = result.reason === "cloud-conflict" || result.reason === "cloud-changed-before-pull"
-        ? "The cloud profile changed while Watched was syncing. Orion did not overwrite it. Check again."
+        ? "Orion Cloud changed while Watched was syncing. Orion did not overwrite it. Check again."
         : result.reason === "local-changed-during-sync"
-          ? `Watched changed locally while sync was running.${result.cloudWasWritten ? " The verified cloud write is preserved, but no checkpoint was created." : ""} Check again.`
+          ? `Watched changed on this Desktop while sync was running.${result.cloudWasWritten ? " The earlier Orion Cloud update was preserved, but Orion did not finish the sync." : ""} Check again.`
           : result.reason === "cloud-verification-failed"
-            ? "The cloud write completed, but Orion could not verify the new copy within the safety window. Local Watched was left untouched and no checkpoint was created."
+            ? "Orion Cloud was updated, but Orion could not safely verify the new copy. Local Watched was left untouched."
             : "Watched changed after the readiness check. Orion stopped before using the stale plan.";
       setState({ phase: "needs-review", message });
     } catch (error) {
       const message = error?.code === "GOOGLE_DRIVE_PROFILE_CONDITIONAL_UNAVAILABLE"
-        ? "Google Drive did not provide the strong conditional-write token Orion requires on this Desktop. Nothing was overwritten."
-        : error?.message || "Watched sync could not finish safely.";
+        ? "Orion Cloud could not complete a safe Watched update on this Desktop. Nothing was overwritten."
+        : "Watched could not finish syncing safely. Orion left the operation incomplete instead of guessing.";
       setState({ phase: "error", message });
     } finally {
       busyRef.current = false;
@@ -118,59 +118,85 @@ export default function WatchedSyncCard({ googleProfile }) {
   const enrollmentBusy = state.phase === "checking" || state.phase === "syncing";
   const busy = steadyActive ? steadyBusy : enrollmentBusy;
   const needsReview = steadyActive ? steady.phase === "needs-review" : state.phase === "needs-review";
+  const failed = steadyActive ? steady.phase === "error" : state.phase === "error";
   const badge = steadyActive
-    ? steady.phase === "synced" ? "Verified"
+    ? steady.phase === "synced" ? "Synced"
       : steady.phase === "paused" ? "Paused"
         : steady.phase === "offline" ? "Offline"
-          : steady.phase === "needs-review" ? "Review"
+          : steady.phase === "needs-review" ? "Needs review"
             : steady.phase === "checking" ? "Checking"
               : steady.phase === "syncing" ? "Syncing"
                 : steady.phase === "error" ? "Error" : "Automatic"
     : state.phase === "ready" ? "Ready"
-      : state.phase === "needs-review" ? "Review"
+      : state.phase === "needs-review" ? "Needs review"
         : state.phase === "checking" ? "Checking"
           : state.phase === "syncing" ? "Syncing"
-            : state.phase === "synced" ? "Verified"
+            : state.phase === "synced" ? "Synced"
               : state.phase === "error" ? "Error" : "Manual";
   const buttonLabel = busy
     ? (steadyActive ? (steady.phase === "syncing" ? "Syncing…" : "Checking…") : (state.phase === "syncing" ? "Syncing…" : "Checking…"))
     : steadyActive && !steady.automatic && !needsReview ? "Sync now"
-      : steadyActive ? "Check sync status" : "Check Watched";
+      : steadyActive ? "Check now" : "Check Watched";
+  const localCount = Number.isFinite(steady.count)
+    ? steady.count
+    : state.phase === "synced" && Number.isFinite(state.count)
+      ? state.count
+      : null;
   const feedback = steadyActive
-    ? steady.message
+    ? steady.phase === "synced"
+      ? null
+      : steady.phase === "paused"
+        ? "Automatic sync is paused. Local Watched changes stay on this Desktop until you choose Sync now or turn Auto Sync back on."
+        : steady.phase === "offline"
+          ? "Watched is waiting for a connection. Your local Watched state stays available on this Desktop."
+          : steady.phase === "checking"
+            ? "Checking Watched with Orion Cloud."
+            : steady.phase === "syncing"
+              ? "Syncing Watched with Orion Cloud."
+              : steady.phase === "needs-review"
+                ? "Watched needs your attention before Orion can sync it safely. Orion did not choose a winner or overwrite either copy."
+                : steady.phase === "error"
+                  ? "Orion could not sync Watched right now. Your local Watched state was left available."
+                  : null
     : state.phase === "ready" ? `${readyCopy(state.result)} Nothing changes until you confirm.`
-      : state.phase === "syncing" ? "Verifying local Watched and the cloud copy. Orion will only mark this complete after both agree."
-        : state.phase === "synced" ? `${itemLabel(state.count)} verified across this Desktop and Orion cloud.`
+      : state.phase === "syncing" ? "Syncing Watched with Orion Cloud. Orion will only mark this complete after both copies agree."
+        : state.phase === "synced" ? `${itemLabel(state.count)} synced across this Desktop and Orion Cloud.`
           : state.phase === "needs-review" || state.phase === "error" ? state.message : null;
 
   return (
     <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "18px 20px", marginTop: 12 }}>
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         <div style={{ flex: 1 }}>
-          <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 700 }}>Cross-device Watched sync</div>
+          <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 700 }}>Watched</div>
           <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
-            Exact movies and episodes only. First enrollment is explicit; after that, sync can run automatically or stay paused on this Desktop.
+            Keep watched movies and episodes in sync across Orion devices.
           </div>
         </div>
-        <span style={{ border: "1px solid var(--border)", borderRadius: 999, color: needsReview ? "var(--red)" : "var(--text3)", fontSize: 11, fontWeight: 700, padding: "4px 9px" }}>{badge}</span>
+        <span style={{ border: "1px solid var(--border)", borderRadius: 999, color: needsReview || failed ? "var(--red)" : "var(--text3)", fontSize: 11, fontWeight: 700, padding: "4px 9px" }}>{badge}</span>
       </div>
 
-      {!profileId && <div style={{ color: "var(--red)", fontSize: 12, marginTop: 12 }}>A stable Google subject identity is required. Watched sync is blocked.</div>}
+      {localCount != null && (
+        <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.5, marginTop: 10 }}>
+          {localCount} item{localCount === 1 ? "" : "s"} on this Desktop
+        </div>
+      )}
+
+      {!profileId && <div style={{ color: "var(--red)", fontSize: 12, marginTop: 12 }}>Reconnect Google before syncing Watched. Orion did not change either copy.</div>}
       {steadyActive && (
         <div style={{ display: "flex", alignItems: "center", gap: 12, border: "1px solid var(--border)", borderRadius: 9, padding: "12px 14px", marginTop: 14 }}>
           <div style={{ flex: 1 }}>
             <div style={{ color: "var(--text)", fontSize: 13, fontWeight: 700 }}>Auto sync</div>
             <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.45, marginTop: 2 }}>
               {steady.automatic
-                ? "Watched changes reconcile automatically when Orion is online."
-                : "Automatic cloud activity is paused. Local changes stay here until you choose Sync now or turn this back on."}
+                ? "Sync changes automatically when Orion is online."
+                : "Automatic sync is paused. Local Watched changes stay on this Desktop until you choose Sync now or turn this back on."}
             </div>
           </div>
           <Toggle value={steady.automatic} onChange={steady.setAutomatic} title={steady.automatic ? "Pause automatic Watched sync" : "Enable automatic Watched sync"} />
         </div>
       )}
 
-      {feedback && <div style={{ color: needsReview ? "var(--red)" : steadyActive && steady.phase === "synced" ? "var(--accent)" : "var(--text3)", fontSize: 12, lineHeight: 1.55, marginTop: 12 }}>{feedback}</div>}
+      {feedback && <div style={{ color: needsReview || failed ? "var(--red)" : "var(--text3)", fontSize: 12, lineHeight: 1.55, marginTop: 12 }}>{feedback}</div>}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
         <button className="btn btn-ghost" disabled={busy || !profileId} onClick={() => steadyActive ? steady.refresh() : void checkEnrollment()}>

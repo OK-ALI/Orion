@@ -6,7 +6,7 @@ import { checkForUpdates } from "../../../shared/utils/updates";
 import { HOME_ROWS, loadHomeLayout, loadHomeViewMode, saveHomeViewMode } from "../../../shared/utils/homeLayout";
 import { collectCompleteBackupData, collectLegacyCloudSyncData, restoreCompleteBackupData, restoreLegacyCloudSyncData } from "../../../services/backup";
 import { SettingsSelect, Toggle } from "../components/SettingsControls";
-import PortableProfileProbeCard from "../components/PortableProfileProbeCard";
+import MyListSyncCard from "../components/MyListSyncCard";
 import WatchedSyncCard from "../components/WatchedSyncCard";
 
 function formatBytes(bytes) {
@@ -721,7 +721,7 @@ export function GoogleAuthSection({ secGoogle }) {
     setSyncStatus("syncing");
     setSyncError(null);
     try {
-      const localData = await collectLegacyCloudSyncData();
+      const localData = await collectLegacyCloudSyncData({ profileId: profile?.sub });
       localData.timestamp = new Date().toISOString();
       const res = await window.electron.uploadSync(localData);
       if (res?.ok) {
@@ -753,7 +753,7 @@ export function GoogleAuthSection({ secGoogle }) {
       const res = await window.electron.downloadSync();
       if (res?.ok && res.data) {
         setSyncStatus("success");
-        await restoreLegacyCloudSyncData(res.data);
+        await restoreLegacyCloudSyncData(res.data, { profileId: profile?.sub });
         if (res.data.timestamp) {
           localStorage.setItem("orion_google_last_sync_time", res.data.timestamp);
         }
@@ -891,7 +891,7 @@ export function GoogleAuthSection({ secGoogle }) {
 
   return (
     <div ref={secGoogle} style={{ scrollMarginTop: 80, marginBottom: 40 }}>
-      <div className="settings-section-title">Google Authentication</div>
+      <div className="settings-section-title">Account</div>
       <div
         style={{
           fontSize: 13,
@@ -900,7 +900,7 @@ export function GoogleAuthSection({ secGoogle }) {
           lineHeight: 1.6,
         }}
       >
-        Connect your Google Account to back up selected Orion data to the cloud or access integrations like Google Drive streaming. Requires custom OAuth Credentials from Google Cloud Console.
+        Connect with Google for your Orion identity. Orion Cloud keeps your data in sync across devices.
       </div>
 
       {profile ? (
@@ -956,14 +956,15 @@ export function GoogleAuthSection({ secGoogle }) {
               <div style={{ fontSize: 13, color: "var(--text3)", marginTop: 2 }}>
                 {profile.email}
               </div>
+              <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 3 }}>Connected with Google</div>
             </div>
             <button className="btn btn-ghost" onClick={handleLogout}>
-              Sign Out
+              Disconnect Google
             </button>
           </div>
 
-          <PortableProfileProbeCard googleProfile={profile} />
-          <WatchedSyncCard key={profile?.sub || "no-google"} googleProfile={profile} />
+          <MyListSyncCard key={`my-list-${profile?.sub || "no-google"}`} googleProfile={profile} />
+          <WatchedSyncCard key={`watched-${profile?.sub || "no-google"}`} googleProfile={profile} />
 
           {/* Legacy Sync Controls Section */}
           <div
@@ -975,6 +976,8 @@ export function GoogleAuthSection({ secGoogle }) {
               marginTop: 12,
             }}
           >
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Desktop backup & media</div>
+            <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5, marginBottom: 16 }}>Google Drive backup and Media Locker for this Desktop. Separate from Orion Cloud.</div>
             {/* Storage Meter */}
             {storageQuota && (
               <div style={{ marginBottom: 20 }}>
@@ -1008,10 +1011,10 @@ export function GoogleAuthSection({ secGoogle }) {
             >
               <div style={{ paddingRight: 16 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
-                  Enable Cloud Auto-Sync
+                  Google Drive workspace sync
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.4 }}>
-                  Automatically sync your watchlist, custom playlists, and settings with Google Drive.
+                  Back up this Desktop's playlists and settings to Google Drive.
                 </div>
               </div>
               <input
@@ -1042,10 +1045,10 @@ export function GoogleAuthSection({ secGoogle }) {
             >
               <div style={{ paddingRight: 16 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
-                  Auto-Backup Downloads to Cloud
+                  Back up downloads to Google Drive
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.4 }}>
-                  Automatically upload completed video downloads to your Orion Media Locker folder on Google Drive.
+                  Upload completed downloads to your Orion Media Locker on Google Drive.
                 </div>
               </div>
               <input
@@ -1075,7 +1078,7 @@ export function GoogleAuthSection({ secGoogle }) {
                 onClick={handleBackupToCloud}
                 style={{ fontSize: 13, padding: "8px 16px" }}
               >
-                {syncStatus === "syncing" ? "Syncing..." : "Backup to Cloud"}
+                {syncStatus === "syncing" ? "Syncing..." : "Back up Desktop workspace"}
               </button>
               <button
                 className="btn btn-secondary"
@@ -1098,7 +1101,7 @@ export function GoogleAuthSection({ secGoogle }) {
                   if (syncStatus !== "syncing") e.currentTarget.style.background = "var(--surface3)";
                 }}
               >
-                Restore from Cloud
+                Restore Desktop workspace
               </button>
             </div>
             <div>
@@ -1115,8 +1118,8 @@ export function GoogleAuthSection({ secGoogle }) {
                 {syncStatus === "error" && `✕ Failed: ${syncError || "Please check configuration"}`}
                 {syncStatus === "idle" && (
                   lastSyncTime
-                    ? `Last synced: ${new Date(lastSyncTime).toLocaleString()}`
-                    : "Ready to sync with Google Drive"
+                    ? `Last Google Drive sync: ${new Date(lastSyncTime).toLocaleString()}`
+                    : "Google Drive workspace backup is ready"
                 )}
               </span>
             </div>
@@ -1129,11 +1132,11 @@ export function GoogleAuthSection({ secGoogle }) {
             <div style={{ marginBottom: 20 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
                 <span className="badge badge-secondary" style={{ textTransform: "capitalize" }}>
-                  OAuth Configured ({configSource === "env" ? "Environment" : "User UI"})
+                  Google connection ready
                 </span>
                 {configSource === "user" && (
                   <button className="btn btn-ghost" style={{ padding: "4px 8px", fontSize: 11 }} onClick={handleClearConfig}>
-                    Clear Config
+                    Reset setup
                   </button>
                 )}
               </div>
@@ -1158,14 +1161,14 @@ export function GoogleAuthSection({ secGoogle }) {
                       <path d="M6,12.5c-0.2-0.7-0.3-1.4-0.3-2.1s0.1-1.4,0.3-2.1V5.5H1.1C0.4,6.9,0,8.4,0,10s0.4,3.1,1.1,4.5L6,12.5z" fill="#FBBC05"/>
                       <path d="M12,5.3c1.3,0,2.5,0.5,3.4,1.3l2.6-2.6C16.5,2.7,14.4,2,12,2C7,2,2.6,4.4,1.1,7.2L6,10C6.9,7.5,9.2,5.3,12,5.3z" fill="#EA4335"/>
                     </svg>
-                    Sign in with Google
+                    Continue with Google
                   </>
                 )}
               </button>
             </div>
           ) : (
             <div style={{ color: "var(--text3)", fontSize: 13, background: "rgba(229,9,20,0.06)", border: "1px solid rgba(229,9,20,0.15)", borderRadius: 8, padding: "12px 16px", marginBottom: 20 }}>
-              Google OAuth client keys are not set. Configure them below or define them in your <code>.env</code> file.
+              Google sign-in needs setup on this Desktop. Enter the Google connection details below.
             </div>
           )}
 
@@ -1181,7 +1184,7 @@ export function GoogleAuthSection({ secGoogle }) {
               }}
             >
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 12 }}>
-                OAuth Client Credentials
+                Google connection setup
               </div>
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text2)", marginBottom: 6 }}>
@@ -1211,7 +1214,7 @@ export function GoogleAuthSection({ secGoogle }) {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <button className="btn btn-primary" onClick={handleSaveConfig}>
-                  Save Credentials
+                  Save Google setup
                 </button>
                 {saveStatus && (
                   <span style={{ fontSize: 13, color: "#48c774" }}>{saveStatus}</span>
@@ -1250,7 +1253,7 @@ export function GoogleAuthSection({ secGoogle }) {
             </div>
             <div className="close-confirm-title" style={{ color: "var(--text)" }}>Restore Workspace?</div>
             <div className="close-confirm-body" style={{ color: "var(--text3)", maxWidth: 320, textAlign: "center", lineHeight: 1.5, fontSize: 13, marginBottom: 20 }}>
-              This will download your watchlist, history, playlists, and settings from Google Drive, overwriting all local workspace databases.
+              This restores the separate Desktop workspace backup from Google Drive, overwriting the local watchlist, history, playlists, and settings in that backup scope.
               <br /><br />
               <strong>Orion will reload to apply the restored sync workspace.</strong>
             </div>

@@ -3,6 +3,7 @@ import { storage, STORAGE_KEYS } from "../../services/settingsStore";
 import { tmdbFetch } from "../../services/tmdb";
 import { VERIFIED_HISTORY_UPDATED_EVENT } from "../../services/viewingStateVerification";
 import { WATCHED_SYNC_APPLIED_EVENT } from "../../services/watchedOneShotLocalStore";
+import { MY_LIST_SYNC_APPLIED_EVENT } from "../../services/myListSyncLocalStore";
 import {
   getLibraryMediaType,
   mergeLibraryOrder,
@@ -55,6 +56,15 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
     };
     window.addEventListener(WATCHED_SYNC_APPLIED_EVENT, handleWatchedSyncApplied);
     return () => window.removeEventListener(WATCHED_SYNC_APPLIED_EVENT, handleWatchedSyncApplied);
+  }, []);
+
+  useEffect(() => {
+    const handleMyListSyncApplied = (event) => {
+      setSaved(event.detail?.saved || storage.get("saved") || {});
+      setSavedOrder(event.detail?.savedOrder || storage.get("savedOrder") || []);
+    };
+    window.addEventListener(MY_LIST_SYNC_APPLIED_EVENT, handleMyListSyncApplied);
+    return () => window.removeEventListener(MY_LIST_SYNC_APPLIED_EVENT, handleMyListSyncApplied);
   }, []);
 
   const showToast = useCallback((message) => {
@@ -233,5 +243,5 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
     storage.set("savedOrder", nextOrder);
   }, []);
 
-  return { addHistory, clearHistory, getMediaType, handleReorderSaved, history, inProgress, isSaved, markUnwatched, markWatched, progress, removeHistory, saved, savedList, saveProgress, showToast, toggleSave, watched };
+  return { addHistory, clearHistory, getMediaType, handleReorderSaved, history, inProgress, isSaved, markUnwatched, markWatched, progress, removeHistory, saved, savedList, savedOrder, saveProgress, showToast, toggleSave, watched };
 }

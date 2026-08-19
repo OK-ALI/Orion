@@ -30,21 +30,26 @@ function loadPolicy(profileId) {
   };
 }
 
-export function loadDesktopWatchedAutomaticV1(profileId) {
+function loadAutomatic(profileId, domain) {
   const policy = loadPolicy(profileId);
   if (!policy) return true;
-  const automatic = policy.domains?.watched?.automatic;
+  const automatic = policy.domains?.[domain]?.automatic;
   return typeof automatic === "boolean" ? automatic : true;
 }
 
-export function saveDesktopWatchedAutomaticV1(profileId, enabled) {
+function saveAutomatic(profileId, domain, enabled) {
   const policy = loadPolicy(profileId);
   if (!policy) return;
   storage.set(keyFor(policy.profileId), {
     ...policy,
     domains: {
       ...policy.domains,
-      watched: { automatic: !!enabled },
+      [domain]: { automatic: !!enabled },
     },
   });
 }
+
+export const loadDesktopMyListAutomaticV1 = (profileId) => loadAutomatic(profileId, "myList");
+export const saveDesktopMyListAutomaticV1 = (profileId, enabled) => saveAutomatic(profileId, "myList", enabled);
+export const loadDesktopWatchedAutomaticV1 = (profileId) => loadAutomatic(profileId, "watched");
+export const saveDesktopWatchedAutomaticV1 = (profileId, enabled) => saveAutomatic(profileId, "watched", enabled);

@@ -40,7 +40,7 @@ import { useSystemIntegration } from "./hooks/useSystemIntegration";
 import { useSmartConnectRemoteCommands } from "./hooks/useSmartConnectRemoteCommands";
 import { useSmartConnectTelemetry } from "./hooks/useSmartConnectTelemetry";
 import useNetworkStatus from "../shared/hooks/useNetworkStatus";
-import { DesktopWatchedSteadyStateSyncProvider } from "../features/account/WatchedSteadyStateSync";
+import { DesktopSyncProviders } from "../features/account/DesktopSyncProviders";
 
 const WHATS_NEW_EDITION = "orion-x-music-planet";
 import { claimPlayback, getPlaybackOwner } from "./playback/PlaybackCoordinator";
@@ -127,7 +127,7 @@ export default function App() {
     if (String(page).startsWith("music-")) baseNavigate("home");
   };
 
-  const syncFromCloud = useCallback(async () => {
+  const syncFromCloud = useCallback(async (profileId = "") => {
     if (!window.electron?.downloadSync) return false;
     try {
       const syncEnabled = localStorage.getItem("orion_google_sync_enabled") !== "false";
@@ -143,7 +143,7 @@ export default function App() {
 
         // If cloud timestamp is newer or local is wiped/fresh:
         if (cloudTimestamp > localLastSyncTime || !localLastSyncStr) {
-          await restoreLegacyCloudSyncData(cloudData);
+          await restoreLegacyCloudSyncData(cloudData, { profileId });
           if (cloudData.timestamp) {
             localStorage.setItem("orion_google_last_sync_time", cloudData.timestamp);
           }
@@ -151,7 +151,7 @@ export default function App() {
           return true;
         } else {
           // Local is newer, upload local state to cloud
-          const localData = await collectLegacyCloudSyncData();
+          const localData = await collectLegacyCloudSyncData({ profileId });
           lastUploadedDataRef.current = JSON.stringify(localData);
           localData.timestamp = new Date().toISOString();
           await window.electron.uploadSync(localData);
@@ -159,7 +159,7 @@ export default function App() {
         }
       } else {
         // No cloud backup exists yet. Upload current local data to populate it!
-        const localData = await collectLegacyCloudSyncData();
+        const localData = await collectLegacyCloudSyncData({ profileId });
         lastUploadedDataRef.current = JSON.stringify(localData);
         localData.timestamp = new Date().toISOString();
         await window.electron.uploadSync(localData);
@@ -183,7 +183,7 @@ export default function App() {
           setGoogleProfile(res.profile);
           storage.remove("google_auth_skipped");
           setSyncMessage("Synchronizing Cloud Profile...");
-          await syncFromCloud();
+          await syncFromCloud(res.profile?.sub);
         }
       } catch (err) {
         console.error("Google Auth / Sync failed during startup:", err);
@@ -204,7 +204,7 @@ export default function App() {
       if (!syncEnabled) return;
 
       try {
-        const localData = await collectLegacyCloudSyncData();
+        const localData = await collectLegacyCloudSyncData({ profileId: googleProfile?.sub });
         const serialized = JSON.stringify(localData);
 
         if (!lastUploadedDataRef.current) {
@@ -232,7 +232,7 @@ export default function App() {
   const {
     addHistory, clearHistory, getMediaType, handleReorderSaved, history,
     inProgress, isSaved, markUnwatched, markWatched, progress, removeHistory,
-    saved, savedList, saveProgress, showToast, toggleSave, watched,
+    saved, savedList, savedOrder, saveProgress, showToast, toggleSave, watched,
   } = useLibraryState({ librarySort, setToast, apiKey });
   const [updateBanner, setUpdateBanner] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -860,7 +860,7 @@ export default function App() {
           storage.remove("google_auth_skipped");
           setAuthSkipped(false);
           setGoogleProfile(profile);
-          const restored = await syncFromCloud();
+          const restored = await syncFromCloud(profile?.sub);
           if (restored) {
             setSyncMessage("Restoring Settings & Watchlist...");
             setTimeout(() => {
@@ -888,7 +888,7 @@ export default function App() {
     );
 
   return (
-    <DesktopWatchedSteadyStateSyncProvider googleProfile={googleProfile} networkStatus={network.status} watched={watched}>
+    <DesktopSyncProviders googleProfile={googleProfile} networkStatus={network.status} saved={saved} savedOrder={savedOrder} watched={watched}>
       <ErrorBoundary>
         <div className={`app-shell${String(page).startsWith("music-") ? " music-world" : ""}`}>
         {hasCustomTitlebar && (
@@ -1093,6 +1093,6 @@ export default function App() {
         )}
         </div>
       </ErrorBoundary>
-    </DesktopWatchedSteadyStateSyncProvider>
+    </DesktopSyncProviders>
   );
 }
