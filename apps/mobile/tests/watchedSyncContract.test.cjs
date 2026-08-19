@@ -25,7 +25,10 @@ test("P8.4 C3-B Mobile preview and apply adapter keep exact episodes portable an
   const apply = read("src/features/library/watchedSyncAdapter.ts");
 
   assert.match(preview, /buildMobilePortableWatchedPreviewV1/);
-  assert.match(preview, /derived-series-summary/);
+  assert.match(preview, /if \(raw\.is_series_summary \|\| raw\.derived_from_episodes\) \{[\s\S]*?continue;[\s\S]*?\}/);
+  assert.doesNotMatch(preview, /derived-series-summary/);
+  assert.match(preview, /malformed-watched-record/);
+  assert.match(preview, /non-portable-watched-identity/);
   assert.match(apply, /buildLocalMobileWatchedSnapshotV1/);
   assert.match(apply, /series_id: media\.id/);
   assert.match(apply, /season_number: media\.season/);

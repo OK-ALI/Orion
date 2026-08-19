@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
 import { tmdbFetch } from "../../services/tmdb";
 import { VERIFIED_HISTORY_UPDATED_EVENT } from "../../services/viewingStateVerification";
+import { WATCHED_SYNC_APPLIED_EVENT } from "../../services/watchedOneShotLocalStore";
 import {
   getLibraryMediaType,
   mergeLibraryOrder,
@@ -46,6 +47,14 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
       window.removeEventListener("orion:history-enabled-changed", handleHistorySettingChanged);
       window.removeEventListener(VERIFIED_HISTORY_UPDATED_EVENT, handleVerifiedHistoryUpdated);
     };
+  }, []);
+
+  useEffect(() => {
+    const handleWatchedSyncApplied = (event) => {
+      setWatched(event.detail?.watched || storage.get("watched") || {});
+    };
+    window.addEventListener(WATCHED_SYNC_APPLIED_EVENT, handleWatchedSyncApplied);
+    return () => window.removeEventListener(WATCHED_SYNC_APPLIED_EVENT, handleWatchedSyncApplied);
   }, []);
 
   const showToast = useCallback((message) => {

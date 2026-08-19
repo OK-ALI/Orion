@@ -79,7 +79,8 @@ test("P8.3 Candidate 3 applies cloud-only changes through the My List-only Libra
   assert.match(library, /STORAGE_KEYS\.SAVED/);
   assert.match(library, /STORAGE_KEYS\.SAVED_ORDER/);
   const replacementStart = library.indexOf("const replaceMyListFromSync");
-  const replacementEnd = library.indexOf("const isSaved", replacementStart);
+  const replacementEnd = library.indexOf("\n\n  const ", replacementStart + 1);
+  assert.ok(replacementStart >= 0 && replacementEnd > replacementStart);
   const replacement = library.slice(replacementStart, replacementEnd);
   assert.doesNotMatch(replacement, /WATCHED|HISTORY|PROGRESS|markWatched|recordPlayback/);
 });

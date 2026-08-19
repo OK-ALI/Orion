@@ -41,7 +41,14 @@ test("P8.4 Candidate 1 canonicalizes exact TV episode identity across Desktop an
   assert.match(portable, /`tv_\$\{String\(id\)\}_s\$\{safeSeason\}_e\$\{safeEpisode\}`/);
   assert.match(portable, /Whole-series watched[\s\S]*derived locally/);
   assert.match(mobile, /portableViewingKey\(/);
-  assert.match(mobile, /derived-series-summary/);
+
+  // Whole-series summaries are derived local state. They must remain outside
+  // the portable Watched namespace without being classified as unsafe data.
+  assert.match(
+    mobile,
+    /if \(raw\.is_series_summary \|\| raw\.derived_from_episodes\) \{[\s\S]*?continue;[\s\S]*?\}/,
+  );
+  assert.doesNotMatch(mobile, /derived-series-summary/);
 });
 
 test("P8.4 Candidate 1 Mobile preview exports only verified playback truth and strips device evidence", () => {

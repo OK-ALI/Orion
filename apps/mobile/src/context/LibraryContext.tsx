@@ -74,6 +74,7 @@ interface LibraryContextType {
   progress: Record<string, any>;
   toggleSave: (item: TmdbMediaItem) => void;
   replaceMyListFromSync: (saved: Record<string, any>, savedOrder: string[]) => void;
+  replaceWatchedFromSync: (watched: Record<string, any>) => void;
   isSaved: (item: TmdbMediaItem) => boolean;
   markWatched: (item: TmdbMediaItem, options?: { isEpisode?: boolean, seriesId?: number | string }) => void;
   markUnwatched: (item: TmdbMediaItem, options?: { isEpisode?: boolean, seriesId?: number | string }) => void;
@@ -204,6 +205,23 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     savedRef.current = nextSaved;
     setSaved(nextSaved);
     setSavedOrder([...nextSavedOrder]);
+  }, []);
+
+  const replaceWatchedFromSync = useCallback((nextWatched: Record<string, any>) => {
+    const previousWatched = mmkvStorageAdapter.get(STORAGE_KEYS.WATCHED);
+    try {
+      mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(nextWatched));
+    } catch (error) {
+      try {
+        if (previousWatched == null) mmkvStorageAdapter.remove(STORAGE_KEYS.WATCHED);
+        else mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, previousWatched);
+      } catch {
+        // Do not mutate React state if the Watched replacement did not persist.
+      }
+      throw error;
+    }
+    watchedRef.current = nextWatched;
+    setWatched(nextWatched);
   }, []);
 
   const isSaved = useCallback((item: TmdbMediaItem) => {
@@ -574,6 +592,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     progress,
     toggleSave,
     replaceMyListFromSync,
+    replaceWatchedFromSync,
     isSaved,
     markWatched,
     markUnwatched,

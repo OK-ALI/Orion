@@ -304,3 +304,32 @@ C3-B must establish:
 Automatic steady-state sync is not implied merely by C3-B.
 
 Phase 8 remains **NOT LOCKED**.
+
+
+---
+
+## Post-lock amendment — P8.4 C3-C
+
+**Date:** 2026-08-19
+
+P8.4 C3-C extends the C3-A PortableProfileV3 Desktop bridge with the first guarded write capability required for explicit Watched synchronization.
+
+The new write path:
+
+- remains separate from the legacy Desktop cloud manifest,
+- validates PortableProfileV3 before Drive mutation,
+- requires stable Google subject identity to match `profileId`,
+- uses revision-aware conditional mutation,
+- fails closed on identity, malformed-profile, conflict or insufficient atomic-revision guarantees.
+
+Final IPC contract after C3-C:
+
+**222 methods / 141 channels**
+
+Focused main-process tests, complete Desktop gates, production build and physical Desktop ↔ Mobile reconciliation passed.
+
+Canonical C3-C audit:
+
+`docs\audits\ORION-P8.4-C3C-EXPLICIT-WATCHED-ONE-SHOT-AUDIT.md`
+
+**P8.4 C3-A remains COMPLETE & LOCKED.**

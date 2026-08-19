@@ -1,0 +1,79 @@
+"use strict";
+
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+
+const mobileRoot = path.resolve(__dirname, "..");
+const sharedRoot = path.resolve(mobileRoot, "..", "..", "packages", "shared", "src");
+const read = (relative) => fs.readFileSync(path.join(mobileRoot, relative), "utf8");
+const readShared = (relative) => fs.readFileSync(path.join(sharedRoot, relative), "utf8");
+
+test("P8.4 C3-C shared Watched planner is first-enrollment safe and checkpoint-driven", () => {
+  const watched = readShared("types/portableWatchedSync.ts");
+  assert.match(watched, /portableWatchedTruthSignatureV1/);
+  assert.match(watched, /buildPortableWatchedFirstEnrollmentPreviewV1/);
+  assert.match(watched, /tombstone-conflict/);
+  assert.match(watched, /localChanged && cloudChanged/);
+  assert.match(watched, /action: 'pull'/);
+  assert.match(watched, /action: 'push'/);
+  assert.match(watched, /localOnly\.length > 0 && cloudOnly\.length > 0 \? 'merge' : 'push'/);
+  assert.match(watched, /profile-missing-after-checkpoint/);
+});
+
+test("P8.4 C3-C one-shot coordinator revalidates, conditionally writes and semantically reads back", () => {
+  const sync = readShared("api/portableWatchedOneShotSync.ts");
+  assert.match(sync, /expectedConfirmationKey/);
+  assert.match(sync, /fresh\.confirmationKey !== input\.expectedConfirmationKey/);
+  assert.match(sync, /expectedRevisionTag: fresh\.remote\.revisionTag/);
+  assert.match(sync, /write\.state === 'conflict'/);
+  assert.match(sync, /DEFAULT_READ_BACK_DELAYS_MS = \[0, 250, 750, 1500\]/);
+  assert.match(sync, /unrelatedNamespacesMatch\(candidate, readBack\.profile\)/);
+  assert.match(sync, /portableWatchedTruthMatchesPreviewV1\(readBack\.profile, targetPreview\)/);
+  assert.match(sync, /portableProfilesSemanticallyMatch\(candidate, readBack\.profile\)/);
+  assert.doesNotMatch(sync, /readBack\.revisionTag === write\.revisionTag/);
+  assert.match(sync, /revision tags are optimistic-concurrency tokens/i);
+  assert.match(sync, /canonicalJson\(withoutWatched\(expected\)\)/);
+  assert.match(sync, /local-changed-during-sync/);
+});
+
+test("P8.4 C3-C Mobile exposes a manual Watched control only after Drive is ready", () => {
+  const account = read("src/features/settings/AccountSettingsContent.tsx");
+  const control = read("src/features/settings/WatchedSyncControl.tsx");
+  assert.match(account, /drivePhase === 'ready'[\s\S]*<WatchedSyncControl/);
+  assert.match(control, />Watched sync</);
+  assert.match(control, /Check Watched/);
+  assert.match(control, /Confirm sync/);
+  assert.match(control, /manual one-shot sync/i);
+  assert.doesNotMatch(control, /useEffect\s*\(/);
+  assert.doesNotMatch(control, /<Switch|setAutomatic\(|getAutomatic\('watched'\)/);
+});
+
+test("P8.4 C3-C Mobile checkpoint stores signatures only, never a persisted synced flag or cloud token", () => {
+  const checkpoint = read("src/features/account/watchedSyncCheckpoint.ts");
+  assert.match(checkpoint, /localTruthSignature/);
+  assert.match(checkpoint, /cloudNamespaceSignature/);
+  assert.match(checkpoint, /verifiedAt/);
+  assert.doesNotMatch(checkpoint, /revisionTag|accessToken|refreshToken|synced:\s*true/);
+});
+
+test("P8.4 C3-C Mobile local pull replaces Watched only and leaves playback domains outside the apply path", () => {
+  const library = read("src/context/LibraryContext.tsx");
+  const start = library.indexOf("const replaceWatchedFromSync");
+  const end = library.indexOf("const isSaved", start);
+  const apply = library.slice(start, end);
+  assert.match(apply, /STORAGE_KEYS\.WATCHED/);
+  assert.match(apply, /watchedRef\.current = nextWatched/);
+  assert.match(apply, /setWatched\(nextWatched\)/);
+  assert.doesNotMatch(apply, /STORAGE_KEYS\.(?:HISTORY|PROGRESS|SAVED)/);
+  assert.doesNotMatch(apply, /setHistory|setProgress|setSaved/);
+});
+
+test("P8.4 C3-C does not enroll Watched into automatic SyncPolicy yet", () => {
+  const policy = read("src/features/account/SyncPolicyContext.tsx");
+  const layout = read("app/_layout.tsx");
+  assert.match(policy, /ORION_SYNC_DOMAINS = \['myList'\]/);
+  assert.doesNotMatch(policy, /\['myList',\s*'watched'\]/);
+  assert.doesNotMatch(layout, /WatchedSteadyStateSyncProvider/);
+});

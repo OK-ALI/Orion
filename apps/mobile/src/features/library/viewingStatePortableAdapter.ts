@@ -110,7 +110,9 @@ function watchedPreview(watched: Record<string, any>) {
       continue;
     }
     if (raw.is_series_summary || raw.derived_from_episodes) {
-      rejected.push({ key: localKey, reason: 'derived-series-summary' });
+      // Whole-series summaries are derived local cache, not portable Watched
+      // truth. Ignore them at the portability boundary without treating them
+      // as unsafe data or allowing them to influence sync signatures.
       continue;
     }
 

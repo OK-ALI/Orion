@@ -7,6 +7,7 @@ import { HOME_ROWS, loadHomeLayout, loadHomeViewMode, saveHomeViewMode } from ".
 import { collectCompleteBackupData, collectLegacyCloudSyncData, restoreCompleteBackupData, restoreLegacyCloudSyncData } from "../../../services/backup";
 import { SettingsSelect, Toggle } from "../components/SettingsControls";
 import PortableProfileProbeCard from "../components/PortableProfileProbeCard";
+import WatchedSyncCard from "../components/WatchedSyncCard";
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
@@ -962,8 +963,9 @@ export function GoogleAuthSection({ secGoogle }) {
           </div>
 
           <PortableProfileProbeCard googleProfile={profile} />
+          <WatchedSyncCard key={profile?.sub || "no-google"} googleProfile={profile} />
 
-          {/* Sync Controls Section */}
+          {/* Legacy Sync Controls Section */}
           <div
             style={{
               background: "var(--surface2)",

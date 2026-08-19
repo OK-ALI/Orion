@@ -299,3 +299,37 @@ It must reuse:
 C3-C must remain explicit and user-controlled.
 
 Automatic steady-state Watched synchronization belongs to a later candidate.
+
+
+---
+
+## Post-lock amendment — P8.4 C3-C physical validation
+
+**Date:** 2026-08-19
+
+C3-C physical validation exposed one implementation mismatch with the already-locked C3-B contract.
+
+Mobile derived whole-series Watched summaries were being classified as rejected portable data.
+
+C3-B already defines those summaries as derived/local rather than portable truth.
+
+The Mobile adapter was therefore corrected so derived whole-series summaries are ignored at the portability boundary.
+
+They:
+
+- remain local,
+- are not uploaded,
+- do not affect Watched signatures,
+- do not block synchronization.
+
+Malformed and genuinely non-portable Watched records remain blocking failures.
+
+C3-C also extends the shared Watched machinery with explicit one-shot reconciliation planning while preserving the C3-B canonical identity, tombstone and namespace-signature contracts.
+
+Focused contracts, complete Mobile gates and physical 96 → 97 cross-device validation passed.
+
+Canonical C3-C audit:
+
+`docs\audits\ORION-P8.4-C3C-EXPLICIT-WATCHED-ONE-SHOT-AUDIT.md`
+
+**P8.4 C3-B remains COMPLETE & LOCKED.**

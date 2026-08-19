@@ -385,6 +385,14 @@ async function getOrCreatePathFolderId(lockerFolderId, metadata) {
   return lockerFolderId;
 }
 
+function getStoredGoogleProfile() {
+  const profileStr = secureStoreGet("google_profile");
+  if (!profileStr) return null;
+  const profile = JSON.parse(profileStr);
+  if (!secureStoreGet("google_access_token")) return null;
+  return profile;
+}
+
 function register() {
   ipcMain.handle("google-auth:get-client-config", () => {
     const config = getGoogleConfig();
@@ -409,15 +417,7 @@ function register() {
 
   ipcMain.handle("google-auth:get-profile", async () => {
     try {
-      const profileStr = secureStoreGet("google_profile");
-      if (!profileStr) return { ok: true, profile: null };
-
-      const profile = JSON.parse(profileStr);
-      
-      let accessToken = secureStoreGet("google_access_token");
-      if (!accessToken) return { ok: true, profile: null };
-
-      return { ok: true, profile };
+      return { ok: true, profile: getStoredGoogleProfile() };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -790,6 +790,7 @@ function register() {
 module.exports = {
   register,
   getGoogleConfig,
+  getStoredGoogleProfile,
   refreshAccessToken,
   googleDriveRequest,
 };

@@ -28,3 +28,10 @@ export {
   type CloudProfileWriteResult,
   type CloudProfileStore,
 } from "./cloudProfileStore";
+
+export {
+  inspectPortableWatchedOneShotSyncV1,
+  executePortableWatchedOneShotSyncV1,
+  type PortableWatchedOneShotInspectionV1,
+  type PortableWatchedOneShotExecutionV1,
+} from "./portableWatchedOneShotSync";

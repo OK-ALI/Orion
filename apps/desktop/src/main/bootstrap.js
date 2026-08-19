@@ -420,7 +420,7 @@ function createWindow() {
 // ── Register all IPC modules ──────────────────────────────────────────────────
 storageIpc.register();
 googleAuthIpc.register();
-portableProfileIpc.register({ driveRequest: googleAuthIpc.googleDriveRequest });
+portableProfileIpc.register({ driveRequest: googleAuthIpc.googleDriveRequest, getGoogleProfile: googleAuthIpc.getStoredGoogleProfile });
 downloadsIpc.register(getMainWindow, {
   resetSettingsData: storageIpc.resetStoredSettings,
 });

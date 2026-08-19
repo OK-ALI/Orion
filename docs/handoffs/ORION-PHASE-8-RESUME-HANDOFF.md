@@ -324,3 +324,54 @@ Current Phase 8 board:
 - P8.4 C3-B — COMPLETE & LOCKED
 - P8.4 C3-C — NEXT
 - Phase 8 overall — NOT LOCKED
+
+
+---
+
+## P8.4 C3-C lock checkpoint
+
+**Status:** COMPLETE & LOCKED
+
+P8.4 C3-C establishes explicit cross-device Watched one-shot synchronization.
+
+Locked contract:
+
+- exact movies and exact episodes only,
+- derived whole-series summaries stay local,
+- Check Watched is read-only,
+- cloud/local mutation requires explicit confirmation,
+- first enrollment treats pre-checkpoint local absence conservatively,
+- cloud tombstones are not silently resurrected,
+- writes are conditional and identity-safe,
+- confirmation is revalidated before execution,
+- full expected PortableProfileV3 semantics are verified after writes,
+- unresolved divergence becomes Review rather than guessed reconciliation,
+- local application changes Watched only,
+- automatic Watched synchronization remains disabled.
+
+Physical validation proved:
+
+- initial Mobile 96 → cloud 96 → Desktop 96 convergence,
+- repaired incremental Mobile 96 → 97 write,
+- immediate Mobile 97 verification without restart,
+- Desktop independent detection of the 97 cloud-only change,
+- Desktop restore to 97,
+- final 97 / 97 / 97 Desktop / Cloud / Mobile convergence.
+
+Canonical audit:
+
+`docs\audits\ORION-P8.4-C3C-EXPLICIT-WATCHED-ONE-SHOT-AUDIT.md`
+
+Current Phase 8 board:
+
+- P8.0 — COMPLETE
+- P8.1 — LOCKED
+- P8.2 — LOCKED
+- P8.3 — COMPLETE & LOCKED
+- P8.4 C1 — COMPLETE & LOCKED
+- P8.4 C2 — COMPLETE & LOCKED
+- P8.4 C3-A — COMPLETE & LOCKED
+- P8.4 C3-B — COMPLETE & LOCKED
+- P8.4 C3-C — COMPLETE & LOCKED
+- P8.4 C3-D — NEXT
+- Phase 8 overall — NOT LOCKED

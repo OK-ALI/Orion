@@ -47,7 +47,7 @@
     "musicGetCacheStatus", "musicSetCacheLimit", "musicClearCache",
     "getSmartConnectInfo", "setSmartConnectPin", "updateSmartConnectPlayback", "updateSmartConnectTelemetry", "disconnectSmartConnect", "revokeSmartConnectDevice", "renameSmartConnectDevice",
     "confirmSmartConnectPairing", "rejectSmartConnectPairing", "allowSmartConnectPublicNetwork", "acknowledgeSmartConnectCommand", "onSmartConnectStatus", "onRemoteCommand",
-    "getClientConfig", "setClientConfig", "getProfile", "login", "logout", "cancelLogin", "uploadSync", "downloadSync", "readPortableProfile", "getStorageQuota", "uploadMediaFile", "deleteMediaFile"
+    "getClientConfig", "setClientConfig", "getProfile", "login", "logout", "cancelLogin", "uploadSync", "downloadSync", "readPortableProfile", "writePortableProfile", "getStorageQuota", "uploadMediaFile", "deleteMediaFile"
   ],
   "channels": [
     "blocked-stats-update", "cancel-update", "check-downloader", "check-helper-downloader",
@@ -81,6 +81,6 @@
     "smart-connect:get-info", "smart-connect:set-pin", "smart-connect:update-playback", "smart-connect:update-telemetry",
     "smart-connect:disconnect", "smart-connect:revoke-device", "smart-connect:rename-device", "smart-connect:confirm-pairing", "smart-connect:reject-pairing", "smart-connect:allow-public-network", "smart-connect:ack-command",
     "orion:smart-connect-status", "orion:remote-command",
-    "google-auth:get-client-config", "google-auth:set-client-config", "google-auth:login", "google-auth:logout", "google-auth:get-profile", "google-auth:cancel-login", "google-auth:upload-sync", "google-auth:download-sync", "portable-profile:read", "google-auth:get-storage-quota", "google-auth:upload-media-file", "google-auth:delete-media-file"
+    "google-auth:get-client-config", "google-auth:set-client-config", "google-auth:login", "google-auth:logout", "google-auth:get-profile", "google-auth:cancel-login", "google-auth:upload-sync", "google-auth:download-sync", "portable-profile:read", "portable-profile:write", "google-auth:get-storage-quota", "google-auth:upload-media-file", "google-auth:delete-media-file"
   ]
 }

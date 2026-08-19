@@ -1,3 +1,4 @@
+import { createPortableProfileV3 } from './portableProfile';
 import type { PortableProfileV3, PortableRecordNamespaceV3 } from './portableProfile';
 import {
   normalizePortableWatchedValueV1,
@@ -5,9 +6,19 @@ import {
   type PortableWatchedValueV1,
 } from './portableViewingState';
 
+export const PORTABLE_WATCHED_SYNC_CHECKPOINT_SCHEMA_VERSION = 1 as const;
+
 export interface PortableWatchedPreviewV1 {
   records: Record<string, PortableWatchedValueV1>;
   rejectedKeys: string[];
+}
+
+export interface PortableWatchedSyncCheckpointV1 {
+  schemaVersion: typeof PORTABLE_WATCHED_SYNC_CHECKPOINT_SCHEMA_VERSION;
+  profileId: string;
+  localTruthSignature: string;
+  cloudNamespaceSignature: string;
+  verifiedAt: number;
 }
 
 export type PortableWatchedInspectionV1 =
@@ -20,6 +31,32 @@ export interface PortableWatchedSteadyStateOptionsV1 {
   updatedBy: string;
   now?: number;
 }
+
+export type PortableWatchedReconcileDecisionV1 =
+  | {
+      state: 'aligned';
+      cloudPreview: PortableWatchedPreviewV1;
+      cloudNamespaceSignature: string;
+    }
+  | {
+      state: 'ready';
+      action: 'create' | 'push' | 'merge' | 'pull';
+      targetPreview: PortableWatchedPreviewV1;
+      cloudNamespaceSignature: string | null;
+    }
+  | {
+      state: 'needs-review';
+      reason:
+        | 'local-invalid'
+        | 'profile-missing-after-checkpoint'
+        | 'profile-identity-mismatch'
+        | 'cloud-invalid'
+        | 'checkpoint-identity-mismatch'
+        | 'tombstone-conflict'
+        | 'both-changed'
+        | 'checkpoint-drift';
+      conflictKeys: string[];
+    };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -66,6 +103,14 @@ function canonicalValue(value: unknown): unknown {
   const next: Record<string, unknown> = {};
   for (const key of Object.keys(value).sort()) next[key] = canonicalValue(value[key]);
   return next;
+}
+
+function cloneWatchedValue(value: PortableWatchedValueV1): PortableWatchedValueV1 {
+  return {
+    schemaVersion: value.schemaVersion,
+    kind: value.kind,
+    media: { ...value.media },
+  };
 }
 
 export function buildPortableWatchedPreviewV1(
@@ -138,10 +183,34 @@ export function buildPortableWatchedPreviewFromProfileV1(
   return { records, rejectedKeys: [] };
 }
 
+export function portableWatchedTombstoneKeysV1(profile: PortableProfileV3): string[] | null {
+  if (inspectPortableWatchedV1(profile).state === 'invalid') return null;
+  const namespace = profile.namespaces.watched;
+  if (namespace == null) return [];
+  if (!isPortableRecordNamespaceV3(namespace)) return null;
+  return Object.entries(namespace.records)
+    .filter(([, record]) => record.deletedAt != null)
+    .map(([key]) => key)
+    .sort();
+}
+
 export function portableWatchedPreviewSignatureV1(preview: PortableWatchedPreviewV1): string {
   const keys = Object.keys(preview.records).sort();
   return JSON.stringify({
     records: keys.map((key) => [key, canonicalValue(preview.records[key])]),
+    rejectedKeys: [...preview.rejectedKeys].sort(),
+  });
+}
+
+/**
+ * Watched truth is exact identity, not presentation metadata. Desktop stores
+ * only boolean watched keys and may not know the same title/year metadata as
+ * Mobile, so a verified checkpoint must not manufacture a two-sided conflict
+ * merely because presentation metadata differs for the same movie/episode.
+ */
+export function portableWatchedTruthSignatureV1(preview: PortableWatchedPreviewV1): string {
+  return JSON.stringify({
+    keys: Object.keys(preview.records).sort(),
     rejectedKeys: [...preview.rejectedKeys].sort(),
   });
 }
@@ -178,6 +247,119 @@ export function portableWatchedActiveMatchesPreviewV1(
   ));
 }
 
+export function portableWatchedTruthMatchesPreviewV1(
+  profile: PortableProfileV3,
+  preview: PortableWatchedPreviewV1,
+): boolean {
+  if (preview.rejectedKeys.length > 0) return false;
+  const cloud = buildPortableWatchedPreviewFromProfileV1(profile);
+  if (!cloud) return false;
+  return portableWatchedTruthSignatureV1(cloud) === portableWatchedTruthSignatureV1(preview);
+}
+
+/**
+ * First enrollment is additive. Existing cloud positives stay positive, local
+ * positives are added, and cloud tombstones are never resurrected implicitly.
+ */
+export function buildPortableWatchedFirstEnrollmentPreviewV1(
+  profile: PortableProfileV3,
+  localPreview: PortableWatchedPreviewV1,
+): { preview: PortableWatchedPreviewV1; tombstoneConflictKeys: string[] } | null {
+  if (localPreview.rejectedKeys.length > 0 || inspectPortableWatchedV1(profile).state === 'invalid') return null;
+  const cloudPreview = buildPortableWatchedPreviewFromProfileV1(profile);
+  const tombstones = portableWatchedTombstoneKeysV1(profile);
+  if (!cloudPreview || !tombstones) return null;
+  const tombstoneSet = new Set(tombstones);
+  const conflictKeys = Object.keys(localPreview.records).filter((key) => tombstoneSet.has(key)).sort();
+  if (conflictKeys.length > 0) {
+    return { preview: cloudPreview, tombstoneConflictKeys: conflictKeys };
+  }
+
+  const records: Record<string, PortableWatchedValueV1> = {};
+  for (const key of Object.keys(cloudPreview.records).sort()) {
+    records[key] = cloneWatchedValue(cloudPreview.records[key]!);
+  }
+  for (const key of Object.keys(localPreview.records).sort()) {
+    if (!records[key]) records[key] = cloneWatchedValue(localPreview.records[key]!);
+  }
+  return { preview: { records, rejectedKeys: [] }, tombstoneConflictKeys: [] };
+}
+
+export function planPortableWatchedReconciliationV1(input: {
+  profile: PortableProfileV3 | null;
+  profileId: string;
+  localPreview: PortableWatchedPreviewV1;
+  checkpoint: PortableWatchedSyncCheckpointV1 | null;
+}): PortableWatchedReconcileDecisionV1 {
+  const profileId = requireText(input.profileId, 'Portable profile id');
+  if (input.localPreview.rejectedKeys.length > 0) {
+    return { state: 'needs-review', reason: 'local-invalid', conflictKeys: [...input.localPreview.rejectedKeys] };
+  }
+  if (input.checkpoint && input.checkpoint.profileId !== profileId) {
+    return { state: 'needs-review', reason: 'checkpoint-identity-mismatch', conflictKeys: [] };
+  }
+  if (!input.profile) {
+    if (input.checkpoint) {
+      return { state: 'needs-review', reason: 'profile-missing-after-checkpoint', conflictKeys: [] };
+    }
+    return {
+      state: 'ready',
+      action: 'create',
+      targetPreview: input.localPreview,
+      cloudNamespaceSignature: null,
+    };
+  }
+  if (input.profile.profileId !== profileId) {
+    return { state: 'needs-review', reason: 'profile-identity-mismatch', conflictKeys: [] };
+  }
+  if (inspectPortableWatchedV1(input.profile).state === 'invalid') {
+    return { state: 'needs-review', reason: 'cloud-invalid', conflictKeys: [] };
+  }
+  const cloudPreview = buildPortableWatchedPreviewFromProfileV1(input.profile);
+  const cloudNamespaceSignature = portableWatchedNamespaceSignatureV1(input.profile);
+  if (!cloudPreview || !cloudNamespaceSignature) {
+    return { state: 'needs-review', reason: 'cloud-invalid', conflictKeys: [] };
+  }
+
+  if (portableWatchedTruthMatchesPreviewV1(input.profile, input.localPreview)) {
+    return { state: 'aligned', cloudPreview, cloudNamespaceSignature };
+  }
+
+  if (!input.checkpoint) {
+    const first = buildPortableWatchedFirstEnrollmentPreviewV1(input.profile, input.localPreview);
+    if (!first) return { state: 'needs-review', reason: 'cloud-invalid', conflictKeys: [] };
+    if (first.tombstoneConflictKeys.length > 0) {
+      return { state: 'needs-review', reason: 'tombstone-conflict', conflictKeys: first.tombstoneConflictKeys };
+    }
+    const localKeys = new Set(Object.keys(input.localPreview.records));
+    const cloudKeys = new Set(Object.keys(cloudPreview.records));
+    const localOnly = [...localKeys].filter((key) => !cloudKeys.has(key));
+    const cloudOnly = [...cloudKeys].filter((key) => !localKeys.has(key));
+    if (localOnly.length === 0 && cloudOnly.length > 0) {
+      return { state: 'ready', action: 'pull', targetPreview: cloudPreview, cloudNamespaceSignature };
+    }
+    return {
+      state: 'ready',
+      action: localOnly.length > 0 && cloudOnly.length > 0 ? 'merge' : 'push',
+      targetPreview: first.preview,
+      cloudNamespaceSignature,
+    };
+  }
+
+  const localChanged = portableWatchedTruthSignatureV1(input.localPreview) !== input.checkpoint.localTruthSignature;
+  const cloudChanged = cloudNamespaceSignature !== input.checkpoint.cloudNamespaceSignature;
+  if (localChanged && cloudChanged) {
+    return { state: 'needs-review', reason: 'both-changed', conflictKeys: [] };
+  }
+  if (localChanged) {
+    return { state: 'ready', action: 'push', targetPreview: input.localPreview, cloudNamespaceSignature };
+  }
+  if (cloudChanged) {
+    return { state: 'ready', action: 'pull', targetPreview: cloudPreview, cloudNamespaceSignature };
+  }
+  return { state: 'needs-review', reason: 'checkpoint-drift', conflictKeys: [] };
+}
+
 export function buildPortableWatchedSteadyStateProfileV1(
   baseProfile: PortableProfileV3,
   preview: PortableWatchedPreviewV1,
@@ -205,7 +387,10 @@ export function buildPortableWatchedSteadyStateProfileV1(
     if (canonicalKey !== key) throw new Error('Portable Watched preview key is inconsistent.');
     const existing = previous.records[key];
     const existingValue = existing?.deletedAt == null ? normalizePortableWatchedValueV1(existing?.value) : null;
-    const unchanged = !!existing && existing.deletedAt == null && !!existingValue && watchedEquals(existingValue, value);
+    // Watched truth is the canonical key. Preserve an existing active cloud
+    // record when that key remains active so a metadata-poor device cannot
+    // overwrite richer title/year metadata merely while syncing another key.
+    const unchanged = !!existing && existing.deletedAt == null && !!existingValue;
     records[key] = unchanged ? existing : {
       revision: (existing?.revision ?? 0) + 1,
       updatedAt: now,
@@ -240,4 +425,15 @@ export function buildPortableWatchedSteadyStateProfileV1(
       },
     },
   };
+}
+
+export function buildPortableWatchedFirstEnrollmentProfileV1(
+  baseProfile: PortableProfileV3 | null,
+  preview: PortableWatchedPreviewV1,
+  options: PortableWatchedSteadyStateOptionsV1,
+): PortableProfileV3 {
+  const profileId = requireText(options.profileId, 'Portable profile id');
+  const now = requireTimestamp(options.now ?? Date.now());
+  const base = baseProfile || createPortableProfileV3(profileId, now);
+  return buildPortableWatchedSteadyStateProfileV1(base, preview, { ...options, profileId, now });
 }
