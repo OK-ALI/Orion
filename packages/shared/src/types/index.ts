@@ -4,3 +4,5 @@ export * from "./portableProfile";
 export * from "./portableMyList";
 
 export * from "./portableViewingState";
+
+export * from "./portableWatchedSync";

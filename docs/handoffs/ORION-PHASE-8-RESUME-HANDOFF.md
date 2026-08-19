@@ -286,3 +286,41 @@ Current Phase 8 board:
 - Phase 8 overall — NOT LOCKED
 
 C3-B begins Watched namespace machinery. It must reuse the P8.3 synchronization architecture rather than introduce a second sync engine.
+
+---
+
+## P8.4 C3-B lock checkpoint
+
+**Status:** COMPLETE & LOCKED
+
+P8.4 C3-B established the shared Watched synchronization machinery for Desktop and Mobile.
+
+Locked contract:
+
+- movies use canonical portable movie identity,
+- exact TV episodes use canonical season/episode identity,
+- whole-series Watched state remains derived locally,
+- Watched removals use explicit tombstones,
+- namespace signatures remain Watched-specific,
+- Desktop and Mobile retain their own local storage representations,
+- unrelated PortableProfileV3 namespaces are preserved,
+- no automatic cloud synchronization is activated.
+
+The Mobile SDK 57 dependency graph was also patch-aligned during final validation. Expo Doctor returned 20/20 and the standalone Android application was physically smoke-tested successfully.
+
+Canonical audit:
+
+`docs\audits\ORION-P8.4-C3B-WATCHED-NAMESPACE-AUDIT.md`
+
+Current Phase 8 board:
+
+- P8.0 — COMPLETE
+- P8.1 — LOCKED
+- P8.2 — LOCKED
+- P8.3 — COMPLETE & LOCKED
+- P8.4 C1 — COMPLETE & LOCKED
+- P8.4 C2 — COMPLETE & LOCKED
+- P8.4 C3-A — COMPLETE & LOCKED
+- P8.4 C3-B — COMPLETE & LOCKED
+- P8.4 C3-C — NEXT
+- Phase 8 overall — NOT LOCKED

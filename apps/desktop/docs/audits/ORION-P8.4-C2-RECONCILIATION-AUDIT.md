@@ -519,3 +519,31 @@ Canonical C3-A audit:
 `apps\desktop\docs\audits\ORION-P8.4-C3A-PORTABLE-PROFILE-BRIDGE-AUDIT.md`
 
 **C2 remains COMPLETE & LOCKED.**
+
+---
+
+## Post-lock amendment — P8.4 C3-B
+
+**Date:** 2026-08-19
+
+P8.4 C3-B required a narrow Watched-specific extension to:
+
+`apps\desktop\src\renderer\features\library\viewingStatePortableAdapter.js`
+
+The amendment adds the portable Watched synchronization boundary required by Candidate 3.
+
+It does not weaken or modify:
+
+- verified History requirements,
+- verified Progress requirements,
+- playback evidence thresholds,
+- Continue Watching derivation,
+- the legacy Google viewing-state fence.
+
+Focused adapter evidence, the full Desktop gate, production build, and final candidate-integrity checks passed.
+
+Canonical C3-B audit:
+
+`docs\audits\ORION-P8.4-C3B-WATCHED-NAMESPACE-AUDIT.md`
+
+**P8.4 C2 remains COMPLETE & LOCKED.**

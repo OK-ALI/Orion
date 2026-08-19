@@ -6,6 +6,7 @@ import {
   type PortableViewingIdentityV1,
   type PortableViewingPresentationV1,
   type PortableWatchedValueV1,
+  type PortableWatchedPreviewV1,
 } from '@orion/shared/types';
 import {
   isVerifiedPlaybackEvidence,
@@ -132,6 +133,16 @@ function watchedPreview(watched: Record<string, any>) {
   }
 
   return { accepted, rejected };
+}
+
+export function buildMobilePortableWatchedPreviewV1(
+  watched: Record<string, any>,
+): PortableWatchedPreviewV1 {
+  const preview = watchedPreview(watched || {});
+  return {
+    records: preview.accepted,
+    rejectedKeys: preview.rejected.map((entry) => entry.key).sort(),
+  };
 }
 
 function historyPreview(history: any[]) {

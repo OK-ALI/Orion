@@ -67,6 +67,14 @@ function presentationFrom(metadata) {
   };
 }
 
+export function buildDesktopPortableWatchedPreviewV1({ watched = {}, history = [] } = {}) {
+  const preview = buildDesktopPortableViewingStatePreview({ watched, history });
+  return {
+    records: preview.watched,
+    rejectedKeys: preview.rejected.watched.map((entry) => entry.key).sort(),
+  };
+}
+
 export function buildDesktopPortableViewingStatePreview({
   watched = {},
   history = [],
