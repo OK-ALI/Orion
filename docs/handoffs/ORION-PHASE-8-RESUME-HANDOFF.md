@@ -1023,3 +1023,23 @@ No additional Orion Cloud data domain is required before productization.
 The authoritative remaining sequence is:
 
 Count Semantics & Data Truth Audit -> Phase 8 production polish -> Mobile Settings/Account unification -> Desktop/Mobile consistency and accessibility validation -> final P8.7 cross-platform audit -> Phase 8 LOCK.
+
+<!-- V3-P8-CHECKLIST-RECONCILIATION-2026-08-21 -->
+
+## Phase 8 functional checklist reconciliation
+
+**Date:** 2026-08-21
+**Canonical floor:** `e9377ffe5915453cb61ca76e43e02e987f07916a`
+**Classification:** documentation drift only
+**Runtime repair required:** NO
+**Phase 8:** NOT LOCKED
+
+P8-003, P8-004, P8-005, P8-007, P8-008, P8-009 and P8-010 were re-audited after functional synchronization closure and are now treated as implemented.
+
+The audit found existing OAuth/account ownership on Desktop and Mobile, account-scoped Mobile Library ownership, the active PortableProfileV3 contract, revisions/merge/deletion safety across synchronized domains, offline/network-aware reconciliation, unknown namespace preservation, portable sensitive-data exclusions, platform secure-storage ownership, account/profile fencing and fail-closed interruption/recovery behavior.
+
+No production code changed for this reconciliation.
+
+All Phase 8 functional checklist items are now reconciled. Remaining work is productization and final validation:
+
+Count Semantics & Data Truth Audit -> production polish -> Mobile Settings/Account unification -> Desktop/Mobile consistency and accessibility validation -> P8.7 -> Phase 8 LOCK.
