@@ -6,3 +6,5 @@ export * from "./portableMyList";
 export * from "./portableViewingState";
 
 export * from "./portableWatchedSync";
+
+export * from "./portableViewingActivity";

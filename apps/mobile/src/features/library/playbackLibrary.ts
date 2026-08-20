@@ -96,6 +96,7 @@ export function normalizePlaybackProgress(
     || record.evidence === 'opened-only'
     ? record.evidence as MobilePlaybackEvidence
     : null;
+  const portableVerified = record.portableVerified === true ? true : undefined;
 
   return {
     schemaVersion: 3,
@@ -107,6 +108,7 @@ export function normalizePlaybackProgress(
     percent,
     sourceId: nullableText(record.sourceId),
     evidence,
+    ...(portableVerified ? { portableVerified: true as const } : {}),
     sessionId: nullableText(record.sessionId),
     startedAt,
     lastPlayedAt,
@@ -157,7 +159,7 @@ export function selectContinueWatching(
       displayProgress: progress.duration > 0 ? 'percentage' as const : 'elapsed' as const,
     }))
     .filter(({ progress }) => (
-      isVerifiedPlaybackEvidence(progress.evidence)
+      (isVerifiedPlaybackEvidence(progress.evidence) || progress.portableVerified === true)
       && progress.currentTime >= CONTINUE_MINIMUM_SECONDS
       && !progress.completed
       && (progress.percent == null || progress.percent < PLAYBACK_COMPLETION_PERCENT)

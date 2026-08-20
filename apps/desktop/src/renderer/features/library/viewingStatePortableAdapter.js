@@ -188,3 +188,110 @@ export function buildDesktopPortableViewingStatePreview({
 
   return result;
 }
+
+function desktopLocalViewingKey(portableKey) {
+  const movie = /^movie_(.+)$/.exec(String(portableKey || ""));
+  if (movie?.[1]) return `movie_${movie[1]}`;
+  const episode = /^tv_(.+)_s(\d+)_e(\d+)$/.exec(String(portableKey || ""));
+  if (!episode) return null;
+  return `tv_${episode[1]}_s${Number(episode[2])}e${Number(episode[3])}`;
+}
+
+function desktopHistoryKey(entry) {
+  if (!entry || entry.id == null) return null;
+  const identity = entry.media_type === "movie"
+    ? { mediaType: "movie", id: entry.id, season: null, episode: null }
+    : entry.media_type === "tv" && positive(entry.season) && positive(entry.episode)
+      ? { mediaType: "tv", id: entry.id, season: positive(entry.season), episode: positive(entry.episode) }
+      : null;
+  return identity
+    ? portableViewingKey(identity.mediaType, identity.id, identity.season, identity.episode)
+    : null;
+}
+
+function desktopHistoryFromPortable(value) {
+  const { media, presentation } = value;
+  return {
+    id: media.id,
+    media_type: media.mediaType,
+    title: media.title || presentation.seriesTitle || "Untitled",
+    ...(media.mediaType === "tv" ? { name: presentation.seriesTitle || media.title || "Untitled" } : {}),
+    poster_path: presentation.posterPath,
+    backdrop_path: presentation.backdropPath,
+    year: media.year ? String(media.year) : "",
+    season: media.season,
+    episode: media.episode,
+    episodeName: presentation.episodeTitle,
+    playbackVerified: true,
+    playbackVerifiedAt: value.lastPlayedAt,
+    playbackVerifiedOrigin: "portable-profile-v3",
+    lastPlayedAt: value.lastPlayedAt,
+    lastWatchedAt: value.lastPlayedAt,
+    watchedAt: value.lastPlayedAt,
+  };
+}
+
+/**
+ * Pure Desktop apply adapter for future Viewing Activity sync. It updates the
+ * existing Desktop storage shapes without performing storage/cloud I/O. Resume
+ * times are returned separately because Desktop persists them as dlTime_<key>.
+ */
+export function buildLocalDesktopViewingActivitySnapshotV1(state, existing = {}) {
+  const historyKeys = new Set([
+    ...Object.keys(state?.history || {}),
+    ...(state?.tombstones?.history || []),
+  ]);
+  const progressKeys = new Set([
+    ...Object.keys(state?.progress || {}),
+    ...(state?.tombstones?.progress || []),
+  ]);
+
+  const preservedHistory = (Array.isArray(existing.history) ? existing.history : [])
+    .filter((entry) => {
+      const key = desktopHistoryKey(entry);
+      return !key || !historyKeys.has(key);
+    });
+  const history = [
+    ...Object.values(state?.history || {}).map(desktopHistoryFromPortable),
+    ...preservedHistory,
+  ]
+    .sort((a, b) => Number(b.lastPlayedAt || 0) - Number(a.lastPlayedAt || 0))
+    .slice(0, 250);
+
+  const progress = { ...(existing.progress || {}) };
+  const progressDetails = { ...(existing.progressDetails || {}) };
+  for (const portableKey of progressKeys) {
+    const localKey = desktopLocalViewingKey(portableKey);
+    if (!localKey) continue;
+    delete progress[localKey];
+    delete progressDetails[localKey];
+  }
+
+  const resumeTimes = {};
+  for (const [portableKey, value] of Object.entries(state?.progress || {})) {
+    const localKey = desktopLocalViewingKey(portableKey);
+    if (!localKey) continue;
+    if (value.percent != null) progress[localKey] = value.percent;
+    progressDetails[localKey] = {
+      currentTime: value.currentTime,
+      duration: value.duration,
+      percent: value.percent ?? 0,
+      updatedAt: value.lastPlayedAt,
+      startedAt: value.startedAt,
+      playbackVerified: true,
+      playbackVerifiedAt: value.lastPlayedAt,
+      playbackVerifiedOrigin: "portable-profile-v3",
+    };
+    resumeTimes[localKey] = value.currentTime;
+  }
+
+  return {
+    history,
+    progress,
+    progressDetails,
+    resumeTimes,
+    resumeRemovedKeys: (state?.tombstones?.progress || [])
+      .map(desktopLocalViewingKey)
+      .filter(Boolean),
+  };
+}

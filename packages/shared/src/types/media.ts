@@ -192,6 +192,8 @@ export interface PlaybackProgressV3 {
   percent: number | null;
   sourceId: string | null;
   evidence: MobilePlaybackEvidence | null;
+  /** Verified cross-device truth imported from PortableProfileV3, not local telemetry. */
+  portableVerified?: true;
   sessionId: string | null;
   startedAt: number;
   lastPlayedAt: number;

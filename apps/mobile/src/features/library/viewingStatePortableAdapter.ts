@@ -7,8 +7,11 @@ import {
   type PortableViewingPresentationV1,
   type PortableWatchedValueV1,
   type PortableWatchedPreviewV1,
+  type PortableViewingActivityStateV1,
+  type PlaybackProgressV3,
 } from '@orion/shared/types';
 import {
+  historyEntryKey,
   isVerifiedPlaybackEvidence,
   normalizePlaybackProgress,
 } from './playbackLibrary';
@@ -159,7 +162,8 @@ function historyPreview(history: any[]) {
       continue;
     }
     const key = portableViewingKey(media.mediaType, media.id, media.season, media.episode);
-    if (!isVerifiedPlaybackEvidence(raw?.evidence) || !text(raw?.sessionId)) {
+    const portableVerified = raw?.portableVerified === true;
+    if ((!isVerifiedPlaybackEvidence(raw?.evidence) || !text(raw?.sessionId)) && !portableVerified) {
       rejected.push({ key, reason: 'unverified-history' });
       continue;
     }
@@ -204,7 +208,8 @@ function progressPreview(progress: Record<string, any>, watched: Record<string, 
       mediaIdentity.season,
       mediaIdentity.episode,
     );
-    if (!isVerifiedPlaybackEvidence(normalized.evidence) || !text(normalized.sessionId)) {
+    const locallyVerified = isVerifiedPlaybackEvidence(normalized.evidence) && Boolean(text(normalized.sessionId));
+    if (!locallyVerified && normalized.portableVerified !== true) {
       rejected.push({ key, reason: 'unverified-progress' });
       continue;
     }
@@ -260,4 +265,106 @@ export function buildMobilePortableViewingStatePreview(input: {
       progress: progress.rejected,
     },
   };
+}
+
+export interface MobileViewingActivitySnapshotV1 {
+  history: any[];
+  progress: Record<string, PlaybackProgressV3>;
+}
+
+function mobileHistoryFromPortable(
+  value: PortableHistoryValueV1,
+  progress: PortableProgressValueV1 | null,
+) {
+  const { media, presentation } = value;
+  return {
+    id: media.id,
+    media_type: media.mediaType,
+    title: media.title || presentation.seriesTitle || 'Untitled',
+    ...(media.mediaType === 'tv' ? { name: presentation.seriesTitle || media.title || 'Untitled' } : {}),
+    poster_path: presentation.posterPath,
+    backdrop_path: presentation.backdropPath,
+    year: media.year ? String(media.year) : '',
+    season: media.season,
+    episode: media.episode,
+    episode_title: presentation.episodeTitle,
+    currentTime: progress?.currentTime ?? null,
+    duration: progress?.duration ?? null,
+    sourceId: null,
+    evidence: null,
+    sessionId: null,
+    portableVerified: true,
+    lastPlayedAt: value.lastPlayedAt,
+    updatedAt: value.lastPlayedAt,
+  };
+}
+
+function mobileProgressFromPortable(key: string, value: PortableProgressValueV1): PlaybackProgressV3 {
+  const { media, presentation } = value;
+  return {
+    schemaVersion: 3,
+    key,
+    mediaIdentity: {
+      id: media.id,
+      mediaType: media.mediaType,
+      title: media.title || presentation.seriesTitle || 'Untitled',
+      year: media.year,
+      season: media.season,
+      episode: media.episode,
+    },
+    presentation: { ...presentation },
+    currentTime: value.currentTime,
+    duration: value.duration,
+    percent: value.percent,
+    sourceId: null,
+    evidence: null,
+    portableVerified: true,
+    sessionId: null,
+    startedAt: value.startedAt,
+    lastPlayedAt: value.lastPlayedAt,
+    completed: value.percent != null && value.percent >= 90,
+  };
+}
+
+/**
+ * Pure apply adapter for future Viewing Activity sync. It preserves unrelated
+ * local entries while replacing only canonical portable History/Progress keys.
+ * Portable truth is marked explicitly and never receives fake source/session
+ * telemetry from the receiving device.
+ */
+export function buildLocalMobileViewingActivitySnapshotV1(
+  state: PortableViewingActivityStateV1,
+  existing: { history?: any[]; progress?: Record<string, any> } = {},
+): MobileViewingActivitySnapshotV1 {
+  const historyKeys = new Set([
+    ...Object.keys(state.history),
+    ...state.tombstones.history,
+  ]);
+  const progressKeys = new Set([
+    ...Object.keys(state.progress),
+    ...state.tombstones.progress,
+  ]);
+
+  const preservedHistory = (Array.isArray(existing.history) ? existing.history : [])
+    .filter((entry) => {
+      const key = historyEntryKey(entry);
+      return !key || !historyKeys.has(key);
+    });
+  const portableHistory = Object.entries(state.history)
+    .map(([key, value]) => mobileHistoryFromPortable(value, state.progress[key] || null));
+  const history = [...portableHistory, ...preservedHistory]
+    .sort((a, b) => Number(b.lastPlayedAt || 0) - Number(a.lastPlayedAt || 0))
+    .slice(0, 250);
+
+  const progress: Record<string, PlaybackProgressV3> = {};
+  for (const [key, raw] of Object.entries(existing.progress || {})) {
+    if (progressKeys.has(key)) continue;
+    const normalized = normalizePlaybackProgress(key, raw);
+    if (normalized) progress[key] = normalized;
+  }
+  for (const [key, value] of Object.entries(state.progress)) {
+    progress[key] = mobileProgressFromPortable(key, value);
+  }
+
+  return { history, progress };
 }
