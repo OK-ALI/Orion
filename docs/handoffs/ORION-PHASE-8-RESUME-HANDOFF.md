@@ -967,3 +967,59 @@ The following is explicit roadmap work.
 ### Current authoritative sequence
 
 V3-P8-006A C3 checkpoint -> remaining Phase 8 functional domains/policies -> Count Semantics & Data Truth Audit -> Phase 8 production polish -> Mobile Account unification -> Desktop/Mobile consistency audit -> final P8.7 cross-platform audit -> Phase 8 LOCK.
+
+<!-- V3-P8-FUNCTIONAL-SYNC-CLOSURE-2026-08-21 -->
+
+## Phase 8 functional synchronization scope closure
+
+**Date:** 2026-08-21
+**Canonical floor:** `f4fd5b1e6e095b1bcc74a2c9e090e20ec3b46fa8`
+**Functional synchronization status:** COMPLETE
+**Phase 8 lock status:** NOT LOCKED
+
+### Final synchronized domains
+
+- My List;
+- Watched;
+- History;
+- verified playback positions through the Viewing Activity domain.
+
+Continue Watching remains locally derived from synchronized verified playback truth and does not own an independent Orion Cloud namespace.
+
+### Portable Preferences disposition
+
+Portable Preferences are intentionally removed from the Orion v3 cross-platform synchronization scope.
+
+Desktop and Mobile retain independent application preferences. This includes platform presentation, accessibility configuration, playback/device configuration, synchronization toggles, storage/download preferences and other settings unless a future roadmap explicitly introduces a new portable contract.
+
+The existing portable-profile schema may continue to recognize or preserve an unknown/legacy preferences namespace for compatibility. Recognition or preservation does not make Preferences an active synchronization domain.
+
+### Music Planet disposition
+
+Music Planet remains Desktop-only in the current Orion v3 product scope.
+
+Orion Mobile does not currently expose Music Planet, so Phase 8 does not create a Mobile Music synchronization owner, placeholder namespace or fake cross-platform Music support.
+
+Music references inside Smart Connect playback/context contracts remain valid Desktop/control-plane concepts and are not Music Planet profile synchronization.
+
+Cross-platform Music synchronization is deferred until a future Mobile Music Planet roadmap explicitly requires it.
+
+### Functional closure evidence
+
+- Desktop SyncPolicy exposes My List, Watched and Viewing Activity only;
+- Mobile ORION_SYNC_DOMAINS exposes My List, Watched and Viewing Activity only;
+- no portable Preferences synchronization implementation exists;
+- no active Music synchronization domain exists;
+- Continue Watching has no independent Cloud synchronization owner;
+- Watched and Viewing Activity contain fail-closed checkpoint/conflict contracts;
+- account/profile fencing evidence is present;
+- unrelated/unknown portable namespaces are preserved;
+- portable data contracts contain no credential, signed URL, provider URL, device-path or similar sensitive field.
+
+### Remaining Phase 8 work
+
+No additional Orion Cloud data domain is required before productization.
+
+The authoritative remaining sequence is:
+
+Count Semantics & Data Truth Audit -> Phase 8 production polish -> Mobile Settings/Account unification -> Desktop/Mobile consistency and accessibility validation -> final P8.7 cross-platform audit -> Phase 8 LOCK.
