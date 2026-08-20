@@ -51,3 +51,12 @@ export {
   type PortableWatchedSteadyStateConflictResolutionV1,
   type PortableWatchedSteadyStateConflictResolutionResultV1,
 } from './portableWatchedSteadyStateConflict';
+
+export {
+  inspectPortableViewingActivityOneShotSyncV1,
+  executePortableViewingActivityOneShotSyncV1,
+  type PortableViewingActivityCountsV1,
+  type PortableViewingActivityEnrollmentResolutionV1,
+  type PortableViewingActivityOneShotExecutionV1,
+  type PortableViewingActivityOneShotInspectionV1,
+} from './portableViewingActivityOneShotSync';

@@ -21,6 +21,16 @@ export interface PortableViewingActivityStateV1 extends PortableViewingActivityP
   tombstones: { history: string[]; progress: string[] };
 }
 
+export const PORTABLE_VIEWING_ACTIVITY_SYNC_CHECKPOINT_SCHEMA_VERSION = 1 as const;
+
+export interface PortableViewingActivitySyncCheckpointV1 {
+  schemaVersion: typeof PORTABLE_VIEWING_ACTIVITY_SYNC_CHECKPOINT_SCHEMA_VERSION;
+  profileId: string;
+  localTruthSignature: string;
+  cloudNamespaceSignature: string;
+  verifiedAt: number;
+}
+
 export interface PortableViewingActivityBuildOptionsV1 {
   profileId: string;
   updatedBy: string;
@@ -57,12 +67,17 @@ function requireTimestamp(value: number): number {
   return value;
 }
 
-function namespaceFrom(profile: PortableProfileV3, domain: ActivityDomain): PortableRecordNamespaceV3 | null {
+function namespaceFrom(profile: PortableProfileV3, domain: ActivityDomain): PortableRecordNamespaceV3 | null | undefined {
   const value = profile.namespaces[domain];
+  if (value == null) return undefined;
   if (!isPlainObject(value) || value.schemaVersion !== 1 || !isPlainObject(value.records)) return null;
   if (!Number.isInteger(value.revision) || Number(value.revision) < 0) return null;
   if (!Number.isFinite(value.updatedAt) || Number(value.updatedAt) < 0) return null;
   return value as unknown as PortableRecordNamespaceV3;
+}
+
+function emptyNamespaceFor(profile: PortableProfileV3): PortableRecordNamespaceV3 {
+  return { schemaVersion: 1, revision: 0, updatedAt: profile.updatedAt, records: {} };
 }
 
 function normalizeValue(domain: ActivityDomain, value: unknown): ActivityValue | null {
@@ -120,16 +135,21 @@ export function portableViewingActivityTruthSignatureV1(preview: PortableViewing
 export function portableViewingActivityNamespaceSignatureV1(profile: PortableProfileV3): string | null {
   const history = namespaceFrom(profile, 'history');
   const progress = namespaceFrom(profile, 'progress');
-  if (!history || !progress) return null;
+  if (history === null || progress === null) return null;
   return canonicalJson({
-    history: { revision: history.revision, records: recordMapSignature(history.records) },
-    progress: { revision: progress.revision, records: recordMapSignature(progress.records) },
+    history: history
+      ? { revision: history.revision, records: recordMapSignature(history.records) }
+      : { state: 'missing' },
+    progress: progress
+      ? { revision: progress.revision, records: recordMapSignature(progress.records) }
+      : { state: 'missing' },
   });
 }
 
 function readDomainState(profile: PortableProfileV3, domain: ActivityDomain) {
   const namespace = namespaceFrom(profile, domain);
-  if (!namespace) return null;
+  if (namespace === null) return null;
+  if (namespace === undefined) return { active: {}, tombstones: [] as string[] };
   const active: Record<string, ActivityValue> = {};
   const tombstones: string[] = [];
   for (const [key, record] of Object.entries(namespace.records)) {
@@ -257,12 +277,16 @@ export function buildPortableViewingActivitySteadyStateProfileV1(
 
   const history = namespaceFrom(baseProfile, 'history');
   const progress = namespaceFrom(baseProfile, 'progress');
-  if (!history || !progress) throw new Error('Portable viewing activity requires valid history and progress namespaces.');
+  if (history === null || progress === null) {
+    throw new Error('Portable viewing activity requires valid history and progress namespaces.');
+  }
+  const previousHistory = history ?? emptyNamespaceFor(baseProfile);
+  const previousProgress = progress ?? emptyNamespaceFor(baseProfile);
 
   const requested = requireTimestamp(options.now ?? Date.now());
-  const now = Math.max(requested, baseProfile.updatedAt + 1, history.updatedAt + 1, progress.updatedAt + 1);
-  const nextHistory = buildSteadyStateNamespace('history', history, preview.history, updatedBy, now);
-  const nextProgress = buildSteadyStateNamespace('progress', progress, preview.progress, updatedBy, now);
+  const now = Math.max(requested, baseProfile.updatedAt + 1, previousHistory.updatedAt + 1, previousProgress.updatedAt + 1);
+  const nextHistory = buildSteadyStateNamespace('history', previousHistory, preview.history, updatedBy, now);
+  const nextProgress = buildSteadyStateNamespace('progress', previousProgress, preview.progress, updatedBy, now);
   if (!nextHistory.changed && !nextProgress.changed) return baseProfile;
 
   return {
@@ -325,12 +349,20 @@ export function mergePortableViewingActivityRecordsV1(
   const rightHistory = namespaceFrom(rightProfile, 'history');
   const leftProgress = namespaceFrom(leftProfile, 'progress');
   const rightProgress = namespaceFrom(rightProfile, 'progress');
-  if (!leftHistory || !rightHistory || !leftProgress || !rightProgress) {
+  if (leftHistory === null || rightHistory === null || leftProgress === null || rightProgress === null) {
     return { state: 'needs-review', historyConflictKeys: ['invalid-namespace'], progressConflictKeys: [] };
   }
 
-  const history = mergeDomainRecords('history', leftHistory.records, rightHistory.records);
-  const progress = mergeDomainRecords('progress', leftProgress.records, rightProgress.records);
+  const history = mergeDomainRecords(
+    'history',
+    (leftHistory ?? emptyNamespaceFor(leftProfile)).records,
+    (rightHistory ?? emptyNamespaceFor(rightProfile)).records,
+  );
+  const progress = mergeDomainRecords(
+    'progress',
+    (leftProgress ?? emptyNamespaceFor(leftProfile)).records,
+    (rightProgress ?? emptyNamespaceFor(rightProfile)).records,
+  );
   if (history.conflictKeys.length || progress.conflictKeys.length) {
     return {
       state: 'needs-review',

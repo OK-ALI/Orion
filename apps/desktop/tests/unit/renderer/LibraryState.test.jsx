@@ -67,6 +67,51 @@ describe("library privacy behavior", () => {
     }));
   });
 
+
+  it("coalesces imported numeric and local string identities into one history row", () => {
+    storage.set(STORAGE_KEYS.HISTORY, [
+      {
+        id: 42,
+        media_type: "movie",
+        title: "Imported Colony",
+        playbackVerified: true,
+        playbackVerifiedAt: 5_000,
+        lastPlayedAt: 5_000,
+      },
+    ]);
+    storage.set(STORAGE_KEYS.WATCH_PROGRESS, { movie_42: 71 });
+
+    const { result } = renderHook(() =>
+      useLibraryState({ librarySort: "manual", setToast: vi.fn() }),
+    );
+
+    act(() => result.current.addHistory({ id: "42", title: "Colony", media_type: "movie" }));
+
+    expect(result.current.history).toHaveLength(1);
+    expect(result.current.history[0]).toEqual(expect.objectContaining({
+      id: "42",
+      title: "Colony",
+      playbackVerified: true,
+      lastPlayedAt: 5_000,
+    }));
+    expect(result.current.inProgress).toHaveLength(1);
+    expect(result.current.inProgress[0]._pk).toBe("movie_42");
+  });
+
+  it("removes a portable numeric history identity through its local string form", () => {
+    storage.set(STORAGE_KEYS.HISTORY, [
+      { id: 42, media_type: "movie", title: "Imported Colony" },
+    ]);
+
+    const { result } = renderHook(() =>
+      useLibraryState({ librarySort: "manual", setToast: vi.fn() }),
+    );
+
+    act(() => result.current.removeHistory({ id: "42", media_type: "movie" }));
+
+    expect(result.current.history).toEqual([]);
+  });
+
   it("hydrates legacy saved records and persists repaired metadata", async () => {
     storage.set(STORAGE_KEYS.SAVED, { movie_42: { id: 42, media_type: "movie", title: "Legacy", year: "2020" } });
     mocks.tmdbFetch.mockResolvedValue({ id: 42, title: "Legacy", release_date: "2020-04-03", poster_path: "/poster", backdrop_path: "/backdrop", vote_average: 8.4 });

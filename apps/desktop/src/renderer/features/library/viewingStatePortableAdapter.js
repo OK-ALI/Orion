@@ -1,5 +1,7 @@
 import {
   PORTABLE_VIEWING_STATE_SCHEMA_VERSION,
+  normalizePortableViewingIdentityV1,
+  normalizePortableViewingPresentationV1,
   portableViewingKey,
 } from "@orion/shared/types";
 
@@ -67,11 +69,56 @@ function presentationFrom(metadata) {
   };
 }
 
+function preservedPortableMetadata(raw) {
+  if (raw?.playbackVerifiedOrigin !== "portable-profile-v3") return null;
+  const media = normalizePortableViewingIdentityV1(raw?.portableViewingMedia);
+  const presentation = normalizePortableViewingPresentationV1(raw?.portableViewingPresentation);
+  if (!media || !presentation) return null;
+  try {
+    return {
+      key: portableViewingKey(media.mediaType, media.id, media.season, media.episode),
+      media,
+      presentation,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function buildDesktopPortableWatchedPreviewV1({ watched = {}, history = [] } = {}) {
   const preview = buildDesktopPortableViewingStatePreview({ watched, history });
   return {
     records: preview.watched,
     rejectedKeys: preview.rejected.watched.map((entry) => entry.key).sort(),
+  };
+}
+
+const DESKTOP_ACTIVITY_IGNORED_HISTORY_REASONS = new Set([
+  "non-portable-history-identity",
+  "legacy-unverified-history",
+]);
+
+const DESKTOP_ACTIVITY_IGNORED_PROGRESS_REASONS = new Set([
+  "non-portable-progress-identity",
+  "legacy-unverified-progress",
+  "watched-truth-supersedes-progress",
+]);
+
+export function buildDesktopPortableViewingActivityPreviewV1(input = {}) {
+  const preview = buildDesktopPortableViewingStatePreview(input);
+  return {
+    history: preview.history,
+    progress: preview.progress,
+    rejected: {
+      history: preview.rejected.history
+        .filter((entry) => !DESKTOP_ACTIVITY_IGNORED_HISTORY_REASONS.has(entry.reason))
+        .map((entry) => entry.key)
+        .sort(),
+      progress: preview.rejected.progress
+        .filter((entry) => !DESKTOP_ACTIVITY_IGNORED_PROGRESS_REASONS.has(entry.reason))
+        .map((entry) => entry.key)
+        .sort(),
+    },
   };
 }
 
@@ -107,17 +154,18 @@ export function buildDesktopPortableViewingStatePreview({
   }
 
   for (const [index, entry] of (Array.isArray(history) ? history : []).entries()) {
-    const identity = entry?.media_type === "movie"
+    const preserved = preservedPortableMetadata(entry);
+    const identity = preserved?.media || (entry?.media_type === "movie"
       ? { mediaType: "movie", id: entry.id, season: null, episode: null }
       : entry?.media_type === "tv" && positive(entry.season) && positive(entry.episode)
         ? { mediaType: "tv", id: entry.id, season: positive(entry.season), episode: positive(entry.episode) }
-        : null;
+        : null);
     const fallbackKey = `history_${index}`;
     if (!identity || identity.id == null) {
       result.rejected.history.push({ key: fallbackKey, reason: "non-portable-history-identity" });
       continue;
     }
-    const key = portableViewingKey(identity.mediaType, identity.id, identity.season, identity.episode);
+    const key = preserved?.key || portableViewingKey(identity.mediaType, identity.id, identity.season, identity.episode);
     if (entry.playbackVerified !== true) {
       // Legacy Desktop history can represent an opened player only. Records
       // without durable playback evidence remain local.
@@ -131,8 +179,8 @@ export function buildDesktopPortableViewingStatePreview({
     }
     result.history[key] = {
       schemaVersion: PORTABLE_VIEWING_STATE_SCHEMA_VERSION,
-      media: toPortableIdentity(identity, entry),
-      presentation: presentationFrom(entry),
+      media: preserved?.media || toPortableIdentity(identity, entry),
+      presentation: preserved?.presentation || presentationFrom(entry),
       lastPlayedAt,
       verified: true,
     };
@@ -170,11 +218,12 @@ export function buildDesktopPortableViewingStatePreview({
       result.rejected.progress.push({ key, reason: "watched-truth-supersedes-progress" });
       continue;
     }
+    const preserved = preservedPortableMetadata(details);
     const metadata = findHistoryMetadata(history, identity);
     result.progress[key] = {
       schemaVersion: PORTABLE_VIEWING_STATE_SCHEMA_VERSION,
-      media: toPortableIdentity(identity, metadata),
-      presentation: presentationFrom(metadata),
+      media: preserved?.key === key ? preserved.media : toPortableIdentity(identity, metadata),
+      presentation: preserved?.key === key ? preserved.presentation : presentationFrom(metadata),
       currentTime,
       duration,
       percent: duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : null,
@@ -225,6 +274,8 @@ function desktopHistoryFromPortable(value) {
     playbackVerified: true,
     playbackVerifiedAt: value.lastPlayedAt,
     playbackVerifiedOrigin: "portable-profile-v3",
+    portableViewingMedia: { ...media },
+    portableViewingPresentation: { ...presentation },
     lastPlayedAt: value.lastPlayedAt,
     lastWatchedAt: value.lastPlayedAt,
     watchedAt: value.lastPlayedAt,
@@ -281,6 +332,8 @@ export function buildLocalDesktopViewingActivitySnapshotV1(state, existing = {})
       playbackVerified: true,
       playbackVerifiedAt: value.lastPlayedAt,
       playbackVerifiedOrigin: "portable-profile-v3",
+      portableViewingMedia: { ...value.media },
+      portableViewingPresentation: { ...value.presentation },
     };
     resumeTimes[localKey] = value.currentTime;
   }

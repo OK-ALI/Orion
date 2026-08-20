@@ -7,6 +7,7 @@ import {
   type PortableViewingPresentationV1,
   type PortableWatchedValueV1,
   type PortableWatchedPreviewV1,
+  type PortableViewingActivityPreviewV1,
   type PortableViewingActivityStateV1,
   type PlaybackProgressV3,
 } from '@orion/shared/types';
@@ -245,6 +246,39 @@ function progressPreview(progress: Record<string, any>, watched: Record<string, 
   }
 
   return { accepted, rejected };
+}
+
+const MOBILE_ACTIVITY_IGNORED_HISTORY_REASONS = new Set([
+  'non-portable-history-identity',
+  'unverified-history',
+]);
+
+const MOBILE_ACTIVITY_IGNORED_PROGRESS_REASONS = new Set([
+  'non-portable-progress-identity',
+  'unverified-progress',
+  'watched-truth-supersedes-progress',
+]);
+
+export function buildMobilePortableViewingActivityPreviewV1(input: {
+  watched: Record<string, any>;
+  history: any[];
+  progress: Record<string, any>;
+}): PortableViewingActivityPreviewV1 {
+  const preview = buildMobilePortableViewingStatePreview(input);
+  return {
+    history: preview.history,
+    progress: preview.progress,
+    rejected: {
+      history: preview.rejected.history
+        .filter((entry) => !MOBILE_ACTIVITY_IGNORED_HISTORY_REASONS.has(entry.reason))
+        .map((entry) => entry.key)
+        .sort(),
+      progress: preview.rejected.progress
+        .filter((entry) => !MOBILE_ACTIVITY_IGNORED_PROGRESS_REASONS.has(entry.reason))
+        .map((entry) => entry.key)
+        .sort(),
+    },
+  };
 }
 
 export function buildMobilePortableViewingStatePreview(input: {

@@ -8,6 +8,7 @@ import { collectCompleteBackupData, collectLegacyCloudSyncData, restoreCompleteB
 import { SettingsSelect, Toggle } from "../components/SettingsControls";
 import MyListSyncCard from "../components/MyListSyncCard";
 import WatchedSyncCard from "../components/WatchedSyncCard";
+import ViewingActivitySyncCard from "../components/ViewingActivitySyncCard";
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
@@ -965,6 +966,7 @@ export function GoogleAuthSection({ secGoogle }) {
 
           <MyListSyncCard key={`my-list-${profile?.sub || "no-google"}`} googleProfile={profile} />
           <WatchedSyncCard key={`watched-${profile?.sub || "no-google"}`} googleProfile={profile} />
+          <ViewingActivitySyncCard key={`viewing-${profile?.sub || "no-google"}`} googleProfile={profile} />
 
           {/* Legacy Sync Controls Section */}
           <div
@@ -986,13 +988,13 @@ export function GoogleAuthSection({ secGoogle }) {
                   <span>{formatBytes(Number(storageQuota.usage))} of {formatBytes(Number(storageQuota.limit))} ({((Number(storageQuota.usage) / Number(storageQuota.limit)) * 100).toFixed(1)}% used)</span>
                 </div>
                 <div style={{ width: "100%", height: 8, background: "var(--surface3)", borderRadius: 4, overflow: "hidden" }}>
-                  <div 
-                    style={{ 
-                      width: `${Math.min(100, (Number(storageQuota.usage) / Number(storageQuota.limit)) * 100)}%`, 
-                      height: "100%", 
-                      background: (Number(storageQuota.usage) / Number(storageQuota.limit)) > 0.85 ? "var(--red)" : "var(--accent)", 
-                      borderRadius: 4 
-                    }} 
+                  <div
+                    style={{
+                      width: `${Math.min(100, (Number(storageQuota.usage) / Number(storageQuota.limit)) * 100)}%`,
+                      height: "100%",
+                      background: (Number(storageQuota.usage) / Number(storageQuota.limit)) > 0.85 ? "var(--red)" : "var(--accent)",
+                      borderRadius: 4
+                    }}
                   />
                 </div>
               </div>
@@ -1258,15 +1260,15 @@ export function GoogleAuthSection({ secGoogle }) {
               <strong>Orion will reload to apply the restored sync workspace.</strong>
             </div>
             <div className="close-confirm-actions" style={{ display: "flex", gap: 10, width: "100%" }}>
-              <button 
-                className="btn btn-secondary" 
+              <button
+                className="btn btn-secondary"
                 onClick={() => setShowRestoreConfirm(false)}
                 style={{ flex: 1, padding: "10px 16px", borderRadius: 8, background: "var(--surface3)", border: "1px solid var(--border)", color: "var(--text)" }}
               >
                 Cancel
               </button>
-              <button 
-                className="btn btn-primary" 
+              <button
+                className="btn btn-primary"
                 onClick={() => {
                   setShowRestoreConfirm(false);
                   executeRestoreFromCloud();

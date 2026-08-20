@@ -4,6 +4,7 @@ import { tmdbFetch } from "../../services/tmdb";
 import { VERIFIED_HISTORY_UPDATED_EVENT } from "../../services/viewingStateVerification";
 import { WATCHED_SYNC_APPLIED_EVENT } from "../../services/watchedOneShotLocalStore";
 import { MY_LIST_SYNC_APPLIED_EVENT } from "../../services/myListSyncLocalStore";
+import { VIEWING_ACTIVITY_SYNC_APPLIED_EVENT } from "../../services/viewingActivityOneShotLocalStore";
 import {
   getLibraryMediaType,
   mergeLibraryOrder,
@@ -65,6 +66,17 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
     };
     window.addEventListener(MY_LIST_SYNC_APPLIED_EVENT, handleMyListSyncApplied);
     return () => window.removeEventListener(MY_LIST_SYNC_APPLIED_EVENT, handleMyListSyncApplied);
+  }, []);
+
+  useEffect(() => {
+    const handleViewingActivitySyncApplied = (event) => {
+      const enabled = storage.get(STORAGE_KEYS.HISTORY_ENABLED);
+      if (enabled === 0 || enabled === false) return;
+      setHistory(event.detail?.history || storage.get("history") || []);
+      setProgress(event.detail?.progress || storage.get("progress") || {});
+    };
+    window.addEventListener(VIEWING_ACTIVITY_SYNC_APPLIED_EVENT, handleViewingActivitySyncApplied);
+    return () => window.removeEventListener(VIEWING_ACTIVITY_SYNC_APPLIED_EVENT, handleViewingActivitySyncApplied);
   }, []);
 
   const showToast = useCallback((message) => {
@@ -151,8 +163,12 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
       lastWatchedAt: Date.now(),
     };
     setHistory((previous) => {
-      const sameEntry = (candidate) => candidate.id === entry.id && candidate.media_type === entry.media_type && (entry.media_type !== "tv" || (candidate.season === entry.season && candidate.episode === entry.episode));
-      const existing = previous.find(sameEntry);
+      const sameEntry = (candidate) => String(candidate?.id) === String(entry.id)
+        && candidate?.media_type === entry.media_type
+        && (entry.media_type !== "tv"
+          || (Number(candidate?.season) === entry.season && Number(candidate?.episode) === entry.episode));
+      const matchingEntries = previous.filter(sameEntry);
+      const existing = matchingEntries.find((candidate) => candidate.playbackVerified === true) || matchingEntries[0];
       const verifiedFields = existing?.playbackVerified === true
         ? {
             playbackVerified: true,
@@ -166,7 +182,7 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
         rewatchCount: (existing?.rewatchCount || 0) + (existing ? 1 : 0),
         completedAt: existing?.completedAt || null,
       };
-      const next = [nextEntry, ...previous.filter((candidate) => !sameEntry(candidate))].slice(0, 100);
+      const next = [nextEntry, ...previous.filter((candidate) => !sameEntry(candidate))].slice(0, 250);
       storage.set("history", next);
       return next;
     });
@@ -212,7 +228,11 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
 
   const removeHistory = useCallback((item) => {
     setHistory((previous) => {
-      const next = previous.filter((candidate) => candidate.id !== item.id || candidate.media_type !== item.media_type || (item.media_type === "tv" && (candidate.season !== item.season || candidate.episode !== item.episode)));
+      const next = previous.filter((candidate) => String(candidate?.id) !== String(item.id)
+        || candidate?.media_type !== item.media_type
+        || (item.media_type === "tv"
+          && (Number(candidate?.season) !== Number(item.season)
+            || Number(candidate?.episode) !== Number(item.episode))));
       storage.set("history", next);
       return next;
     });

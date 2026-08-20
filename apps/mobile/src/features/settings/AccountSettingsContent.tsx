@@ -15,6 +15,7 @@ import {
 import { GoogleDriveCloudProfileStore } from '../account/googleDriveCloudProfileStore';
 import { MyListEnrollmentPreflight } from './MyListEnrollmentPreflight';
 import { WatchedSyncControl } from './WatchedSyncControl';
+import { ViewingActivitySyncControl } from './ViewingActivitySyncControl';
 
 
 export async function runP82DriveStorageProbeForDiagnostics(accountEmail: string) {
@@ -267,6 +268,11 @@ export function AccountSettingsContent() {
               />
               <WatchedSyncControl
                 key={profile.accountId}
+                accountEmail={profile.email}
+                profileId={profile.accountId}
+              />
+              <ViewingActivitySyncControl
+                key={`viewing-${profile.accountId}`}
                 accountEmail={profile.email}
                 profileId={profile.accountId}
               />

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   DESKTOP_VIEWING_STATE_PORTABILITY,
   buildDesktopPortableViewingStatePreview,
+  buildLocalDesktopViewingActivitySnapshotV1,
 } from "../../../src/renderer/features/library/viewingStatePortableAdapter";
 
 describe("P8.4 Desktop viewing-state portability", () => {
@@ -58,6 +59,53 @@ describe("P8.4 Desktop viewing-state portability", () => {
     expect(DESKTOP_VIEWING_STATE_PORTABILITY.history).toBe("portable-read-only-verified");
     expect(DESKTOP_VIEWING_STATE_PORTABILITY.progress).toBe("portable-read-only-verified");
   });
+
+  it("round-trips imported portable identity and presentation exactly for enrollment verification", () => {
+    const state = {
+      history: {
+        tv_100_s1_e1: {
+          schemaVersion: 1,
+          media: { mediaType: "tv", id: 100, season: 1, episode: 1, title: "Series A", year: 2025 },
+          presentation: { posterPath: "/p.jpg", backdropPath: "/b.jpg", seriesTitle: "Series A", episodeTitle: "Pilot" },
+          lastPlayedAt: 1000,
+          verified: true,
+        },
+      },
+      progress: {
+        tv_100_s1_e1: {
+          schemaVersion: 1,
+          media: { mediaType: "tv", id: 100, season: 1, episode: 1, title: "Series A", year: 2025 },
+          presentation: { posterPath: "/p.jpg", backdropPath: "/b.jpg", seriesTitle: null, episodeTitle: "Pilot" },
+          currentTime: 50,
+          duration: 100,
+          percent: 50,
+          startedAt: 900,
+          lastPlayedAt: 1000,
+          verified: true,
+        },
+      },
+      rejected: { history: [], progress: [] },
+      tombstones: { history: [], progress: [] },
+    };
+
+    const applied = buildLocalDesktopViewingActivitySnapshotV1(state, {
+      history: [],
+      progress: {},
+      progressDetails: {},
+    });
+    const preview = buildDesktopPortableViewingStatePreview({
+      watched: {},
+      history: applied.history,
+      progress: applied.progress,
+      progressDetails: applied.progressDetails,
+    });
+
+    expect(preview.history).toEqual(state.history);
+    expect(preview.progress).toEqual(state.progress);
+    expect(preview.rejected.history).toEqual([]);
+    expect(preview.rejected.progress).toEqual([]);
+  });
+
   it("fences the existing raw Google backup instead of treating it as PortableProfileV3", () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const rendererRoot = path.resolve(here, "../../../src/renderer");

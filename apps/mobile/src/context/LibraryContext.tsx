@@ -74,6 +74,7 @@ interface LibraryContextType {
   toggleSave: (item: TmdbMediaItem) => void;
   replaceMyListFromSync: (saved: Record<string, any>, savedOrder: string[]) => void;
   replaceWatchedFromSync: (watched: Record<string, any>) => void;
+  replaceViewingActivityFromSync: (history: any[], progress: Record<string, any>) => void;
   isSaved: (item: TmdbMediaItem) => boolean;
   markWatched: (item: TmdbMediaItem, options?: { isEpisode?: boolean, seriesId?: number | string }) => void;
   markUnwatched: (item: TmdbMediaItem, options?: { isEpisode?: boolean, seriesId?: number | string }) => void;
@@ -228,6 +229,30 @@ export function LibraryProvider({ children, storage }: { children: React.ReactNo
     return !!savedRef.current[key];
   }, [getMediaType]);
 
+  const replaceViewingActivityFromSync = useCallback((nextHistory: any[], nextProgress: Record<string, any>) => {
+    const previousHistory = storage.get(STORAGE_KEYS.HISTORY);
+    const previousProgress = storage.get(STORAGE_KEYS.PROGRESS);
+    try {
+      storage.set(STORAGE_KEYS.HISTORY, JSON.stringify(nextHistory));
+      storage.set(STORAGE_KEYS.PROGRESS, JSON.stringify(nextProgress));
+    } catch (error) {
+      try {
+        if (previousHistory == null) storage.remove(STORAGE_KEYS.HISTORY);
+        else storage.set(STORAGE_KEYS.HISTORY, previousHistory);
+        if (previousProgress == null) storage.remove(STORAGE_KEYS.PROGRESS);
+        else storage.set(STORAGE_KEYS.PROGRESS, previousProgress);
+      } catch {
+        // Do not publish partial History/Progress state when durable storage
+        // could not be restored. Storage health diagnostics own that failure.
+      }
+      throw error;
+    }
+    historyRef.current = nextHistory;
+    progressRef.current = nextProgress;
+    setHistory(nextHistory);
+    setProgress(nextProgress);
+  }, []);
+
   const getWatchedKey = useCallback((item: any, options?: { isEpisode?: boolean, seriesId?: number | string }) => {
     if (options?.isEpisode && options.seriesId) {
       return `tv_${options.seriesId}_episode_${item.id}`;
@@ -238,7 +263,7 @@ export function LibraryProvider({ children, storage }: { children: React.ReactNo
   const markWatched = useCallback((item: any, options?: { isEpisode?: boolean, seriesId?: number | string }) => {
     const key = getWatchedKey(item, options);
     const mediaType = getMediaType(item);
-    
+
     const record = toLibraryRecord(item, mediaType);
     if (options?.isEpisode && options.seriesId) {
       record.is_episode = true;
@@ -592,6 +617,7 @@ export function LibraryProvider({ children, storage }: { children: React.ReactNo
     toggleSave,
     replaceMyListFromSync,
     replaceWatchedFromSync,
+    replaceViewingActivityFromSync,
     isSaved,
     markWatched,
     markUnwatched,
