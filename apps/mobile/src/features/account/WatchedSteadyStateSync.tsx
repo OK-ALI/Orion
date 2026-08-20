@@ -10,6 +10,7 @@ import {
   type PortableWatchedPreviewV1,
 } from '@orion/shared/types';
 import { useOrionAccount } from '../../context/AccountContext';
+import { useOrionLibraryProfile } from './LibraryProfileContext';
 import { useLibrary } from '../../context/LibraryContext';
 import { useNetworkStatus } from '../../context/NetworkContext';
 import { buildMobilePortableWatchedPreviewV1 } from '../library/viewingStatePortableAdapter';
@@ -70,6 +71,7 @@ export function WatchedSteadyStateSyncProvider({ children }: { children: React.R
   const account = useOrionAccount();
   const network = useNetworkStatus();
   const syncPolicy = useOrionSyncPolicy();
+  const libraryProfile = useOrionLibraryProfile();
   const watchedAutomatic = syncPolicy.getAutomatic('watched');
   const { watched, replaceWatchedFromSync } = useLibrary();
   const preview = useMemo(() => buildMobilePortableWatchedPreviewV1(watched), [watched]);
@@ -93,6 +95,8 @@ export function WatchedSteadyStateSyncProvider({ children }: { children: React.R
     online: network.online,
     internetReachable: network.internetReachable,
     policyReady: syncPolicy.ready,
+    libraryProfileReady: libraryProfile.cloudEligible,
+    libraryProfileId: libraryProfile.profileId,
     watchedAutomatic,
     localTruthSignature,
   });
@@ -102,6 +106,8 @@ export function WatchedSteadyStateSyncProvider({ children }: { children: React.R
     online: network.online,
     internetReachable: network.internetReachable,
     policyReady: syncPolicy.ready,
+    libraryProfileReady: libraryProfile.cloudEligible,
+    libraryProfileId: libraryProfile.profileId,
     watchedAutomatic,
     localTruthSignature,
   };
@@ -133,6 +139,11 @@ export function WatchedSteadyStateSyncProvider({ children }: { children: React.R
     const start = latestRef.current;
     const profile = start.profile;
     if (start.accountPhase !== 'signed-in' || !profile) {
+      setStatus({ phase: 'inactive', hasCheckpoint: false, count: null, message: null });
+      return;
+    }
+
+    if (!start.libraryProfileReady || start.libraryProfileId !== profile.accountId) {
       setStatus({ phase: 'inactive', hasCheckpoint: false, count: null, message: null });
       return;
     }
@@ -184,7 +195,9 @@ export function WatchedSteadyStateSyncProvider({ children }: { children: React.R
     }
 
     const operationProfileId = profile.accountId;
-    const sameAccount = () => latestRef.current.profile?.accountId === operationProfileId;
+    const sameAccount = () => latestRef.current.profile?.accountId === operationProfileId
+        && latestRef.current.libraryProfileReady
+        && latestRef.current.libraryProfileId === operationProfileId;
     const automaticStillAllowed = () => mode === 'manual' || latestRef.current.watchedAutomatic;
     const canMutate = () => sameAccount() && automaticStillAllowed();
     const setPaused = () => setStatus({
@@ -292,6 +305,7 @@ export function WatchedSteadyStateSyncProvider({ children }: { children: React.R
       const start = latestRef.current;
       const profile = start.profile;
       if (start.accountPhase !== 'signed-in' || !profile) return;
+      if (!start.libraryProfileReady || start.libraryProfileId !== profile.accountId) return;
       const checkpoint = loadWatchedSyncCheckpointV1(profile.accountId);
       if (!checkpoint || !start.online || start.internetReachable === false || !isNativeGoogleDriveAuthorizationAvailable()) {
         setReview(null);
@@ -300,7 +314,9 @@ export function WatchedSteadyStateSyncProvider({ children }: { children: React.R
       }
 
       const operationProfileId = profile.accountId;
-      const sameAccount = () => latestRef.current.profile?.accountId === operationProfileId;
+      const sameAccount = () => latestRef.current.profile?.accountId === operationProfileId
+        && latestRef.current.libraryProfileReady
+        && latestRef.current.libraryProfileId === operationProfileId;
       busyRef.current = true;
       setReview(null);
       setStatus({ phase: 'syncing', hasCheckpoint: true, count: Object.keys(readLocalPreview().records).length, message: 'Applying your confirmed Watched choice and verifying both copies.' });
@@ -346,7 +362,7 @@ export function WatchedSteadyStateSyncProvider({ children }: { children: React.R
 
   useEffect(() => {
     requestAutomaticReconcile();
-  }, [account.state.phase, account.state.profile?.accountId, account.state.profile?.email, localTruthSignature, network.online, network.internetReachable, syncPolicy.ready, watchedAutomatic, requestAutomaticReconcile]);
+  }, [account.state.phase, account.state.profile?.accountId, account.state.profile?.email, libraryProfile.cloudEligible, libraryProfile.profileId, localTruthSignature, network.online, network.internetReachable, syncPolicy.ready, watchedAutomatic, requestAutomaticReconcile]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {

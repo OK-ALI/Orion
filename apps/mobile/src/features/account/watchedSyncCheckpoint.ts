@@ -1,8 +1,11 @@
+import type { IStorageAdapter } from '@orion/shared/api';
 import { mmkvStorageAdapter } from '../../services/storageAdapter';
 import {
   PORTABLE_WATCHED_SYNC_CHECKPOINT_SCHEMA_VERSION,
+  portableWatchedTruthSignatureV1,
   type PortableWatchedSyncCheckpointV1,
 } from '@orion/shared/types';
+import { buildMobilePortableWatchedPreviewV1 } from '../library/viewingStatePortableAdapter';
 
 const KEY_PREFIX = 'p8.watchedSyncCheckpoint.v1:';
 
@@ -64,4 +67,27 @@ export function clearWatchedSyncCheckpointV1(profileId: string): void {
   const normalized = profileId.trim();
   if (!normalized) return;
   mmkvStorageAdapter.remove(keyFor(normalized));
+}
+
+export function canCarryWatchedSyncCheckpointToScopedLibraryV1(
+  profileId: string,
+  scopedStorage: IStorageAdapter,
+): boolean {
+  const checkpoint = loadWatchedSyncCheckpointV1(profileId);
+  if (!checkpoint) return false;
+
+  try {
+    const raw = scopedStorage.get('watched');
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    const preview = buildMobilePortableWatchedPreviewV1(parsed as Record<string, unknown>);
+    if (preview.rejectedKeys.length > 0) return false;
+
+    // The checkpoint is semantic reconciliation evidence, not a storage-path
+    // lease. A byte-for-byte profile migration may carry it only when the new
+    // scoped library still represents exactly the same portable Watched truth.
+    return portableWatchedTruthSignatureV1(preview) === checkpoint.localTruthSignature;
+  } catch {
+    return false;
+  }
 }

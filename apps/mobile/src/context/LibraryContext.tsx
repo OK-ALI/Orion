@@ -1,12 +1,11 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { mmkvStorageAdapter } from '../services/storageAdapter';
 import {
   TmdbMediaItem,
   type ContinueWatchingEntry,
   type MobilePlaybackEvidence,
   type PlaybackProgressV3,
 } from '@orion/shared/types';
-import { tmdbFetch } from '@orion/shared/api';
+import { tmdbFetch, type IStorageAdapter } from '@orion/shared/api';
 import { canPersistVerifiedPlayback } from '../features/playback/playbackEvidence';
 import { updateMobileDiagnostics } from '../services/mobileDiagnostics';
 import {
@@ -136,12 +135,12 @@ function safeParse(str: string | null, fallback: any) {
   try { return JSON.parse(str); } catch { return fallback; }
 }
 
-export function LibraryProvider({ children }: { children: React.ReactNode }) {
-  const [saved, setSaved] = useState<Record<string, any>>(() => safeParse(mmkvStorageAdapter.get(STORAGE_KEYS.SAVED), {}));
-  const [savedOrder, setSavedOrder] = useState<string[]>(() => safeParse(mmkvStorageAdapter.get(STORAGE_KEYS.SAVED_ORDER), []));
-  const [history, setHistory] = useState<any[]>(() => safeParse(mmkvStorageAdapter.get(STORAGE_KEYS.HISTORY), []));
-  const [watched, setWatched] = useState<Record<string, any>>(() => safeParse(mmkvStorageAdapter.get(STORAGE_KEYS.WATCHED), {}));
-  const [progress, setProgress] = useState<Record<string, any>>(() => safeParse(mmkvStorageAdapter.get(STORAGE_KEYS.PROGRESS), {}));
+export function LibraryProvider({ children, storage }: { children: React.ReactNode; storage: IStorageAdapter }) {
+  const [saved, setSaved] = useState<Record<string, any>>(() => safeParse(storage.get(STORAGE_KEYS.SAVED), {}));
+  const [savedOrder, setSavedOrder] = useState<string[]>(() => safeParse(storage.get(STORAGE_KEYS.SAVED_ORDER), []));
+  const [history, setHistory] = useState<any[]>(() => safeParse(storage.get(STORAGE_KEYS.HISTORY), []));
+  const [watched, setWatched] = useState<Record<string, any>>(() => safeParse(storage.get(STORAGE_KEYS.WATCHED), {}));
+  const [progress, setProgress] = useState<Record<string, any>>(() => safeParse(storage.get(STORAGE_KEYS.PROGRESS), {}));
 
   const savedRef = useRef(saved);
   const watchedRef = useRef(watched);
@@ -166,35 +165,35 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       delete next[key];
       setSavedOrder(prev => {
         const order = (prev.length ? prev : Object.keys(current)).filter(k => k !== key);
-        mmkvStorageAdapter.set(STORAGE_KEYS.SAVED_ORDER, JSON.stringify(order));
+        storage.set(STORAGE_KEYS.SAVED_ORDER, JSON.stringify(order));
         return order;
       });
     } else {
       next[key] = toLibraryRecord(item, mediaType);
       setSavedOrder(prev => {
         const order = [...(prev.length ? prev : Object.keys(current)), key];
-        mmkvStorageAdapter.set(STORAGE_KEYS.SAVED_ORDER, JSON.stringify(order));
+        storage.set(STORAGE_KEYS.SAVED_ORDER, JSON.stringify(order));
         return order;
       });
     }
 
     savedRef.current = next;
     setSaved(next);
-    mmkvStorageAdapter.set(STORAGE_KEYS.SAVED, JSON.stringify(next));
+    storage.set(STORAGE_KEYS.SAVED, JSON.stringify(next));
   }, [getMediaType]);
 
   const replaceMyListFromSync = useCallback((nextSaved: Record<string, any>, nextSavedOrder: string[]) => {
-    const previousSaved = mmkvStorageAdapter.get(STORAGE_KEYS.SAVED);
-    const previousOrder = mmkvStorageAdapter.get(STORAGE_KEYS.SAVED_ORDER);
+    const previousSaved = storage.get(STORAGE_KEYS.SAVED);
+    const previousOrder = storage.get(STORAGE_KEYS.SAVED_ORDER);
     try {
-      mmkvStorageAdapter.set(STORAGE_KEYS.SAVED, JSON.stringify(nextSaved));
-      mmkvStorageAdapter.set(STORAGE_KEYS.SAVED_ORDER, JSON.stringify(nextSavedOrder));
+      storage.set(STORAGE_KEYS.SAVED, JSON.stringify(nextSaved));
+      storage.set(STORAGE_KEYS.SAVED_ORDER, JSON.stringify(nextSavedOrder));
     } catch (error) {
       try {
-        if (previousSaved == null) mmkvStorageAdapter.remove(STORAGE_KEYS.SAVED);
-        else mmkvStorageAdapter.set(STORAGE_KEYS.SAVED, previousSaved);
-        if (previousOrder == null) mmkvStorageAdapter.remove(STORAGE_KEYS.SAVED_ORDER);
-        else mmkvStorageAdapter.set(STORAGE_KEYS.SAVED_ORDER, previousOrder);
+        if (previousSaved == null) storage.remove(STORAGE_KEYS.SAVED);
+        else storage.set(STORAGE_KEYS.SAVED, previousSaved);
+        if (previousOrder == null) storage.remove(STORAGE_KEYS.SAVED_ORDER);
+        else storage.set(STORAGE_KEYS.SAVED_ORDER, previousOrder);
       } catch {
         // Storage health will surface a persistent backend failure. Do not
         // mutate React state if the local My List replacement was incomplete.
@@ -208,13 +207,13 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const replaceWatchedFromSync = useCallback((nextWatched: Record<string, any>) => {
-    const previousWatched = mmkvStorageAdapter.get(STORAGE_KEYS.WATCHED);
+    const previousWatched = storage.get(STORAGE_KEYS.WATCHED);
     try {
-      mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(nextWatched));
+      storage.set(STORAGE_KEYS.WATCHED, JSON.stringify(nextWatched));
     } catch (error) {
       try {
-        if (previousWatched == null) mmkvStorageAdapter.remove(STORAGE_KEYS.WATCHED);
-        else mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, previousWatched);
+        if (previousWatched == null) storage.remove(STORAGE_KEYS.WATCHED);
+        else storage.set(STORAGE_KEYS.WATCHED, previousWatched);
       } catch {
         // Do not mutate React state if the Watched replacement did not persist.
       }
@@ -253,7 +252,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     const next = { ...watchedRef.current, [key]: { ...record, timestamp: Date.now() } };
     watchedRef.current = next;
     setWatched(next);
-    mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
+    storage.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
   }, [getWatchedKey, getMediaType]);
 
   const markUnwatched = useCallback((item: any, options?: { isEpisode?: boolean, seriesId?: number | string }) => {
@@ -268,7 +267,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     if (next === watchedRef.current) return;
     watchedRef.current = next;
     setWatched(next);
-    mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
+    storage.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
   }, [getWatchedKey]);
 
   const isWatched = useCallback((item: any, options?: { isEpisode?: boolean, seriesId?: number | string }) => {
@@ -289,7 +288,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     if (next === watchedRef.current) return;
     watchedRef.current = next;
     setWatched(next);
-    mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
+    storage.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
   }, []);
 
   const markSeasonWatched = useCallback((series: any, seasonNumber: number, episodes: any[]) => {
@@ -297,7 +296,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     if (next === watchedRef.current) return;
     watchedRef.current = next;
     setWatched(next);
-    mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
+    storage.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
   }, []);
 
   const markSeasonUnwatched = useCallback((seriesId: number | string, seasonNumber: number, episodes: any[]) => {
@@ -305,7 +304,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     if (next === watchedRef.current) return;
     watchedRef.current = next;
     setWatched(next);
-    mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
+    storage.set(STORAGE_KEYS.WATCHED, JSON.stringify(next));
   }, []);
 
   const isSeasonWatched = useCallback((seriesId: number | string, seasonNumber: number, episodes: any[]) => (
@@ -315,14 +314,14 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   const clearHistory = useCallback(() => {
     historyRef.current = [];
     setHistory([]);
-    mmkvStorageAdapter.set(STORAGE_KEYS.HISTORY, JSON.stringify([]));
+    storage.set(STORAGE_KEYS.HISTORY, JSON.stringify([]));
   }, []);
 
   const removeHistoryEntry = useCallback((key: string) => {
     const next = withoutHistoryEntry(historyRef.current, key);
     historyRef.current = next;
     setHistory(next);
-    mmkvStorageAdapter.set(STORAGE_KEYS.HISTORY, JSON.stringify(next));
+    storage.set(STORAGE_KEYS.HISTORY, JSON.stringify(next));
   }, []);
 
   const getProgressKey = useCallback((
@@ -339,7 +338,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     if (next === progressRef.current) return;
     progressRef.current = next;
     setProgress(next);
-    mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(next));
+    storage.set(STORAGE_KEYS.PROGRESS, JSON.stringify(next));
   }, []);
 
   const markProgressWatched = useCallback((key: string) => {
@@ -349,8 +348,8 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     progressRef.current = next.progress;
     setWatched(next.watched);
     setProgress(next.progress);
-    mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(next.watched));
-    mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(next.progress));
+    storage.set(STORAGE_KEYS.WATCHED, JSON.stringify(next.watched));
+    storage.set(STORAGE_KEYS.PROGRESS, JSON.stringify(next.progress));
   }, []);
 
   const getContinueWatching = useCallback(
@@ -422,7 +421,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         const completedProgress = withoutProgressRecord(nextProgress, key);
         progressRef.current = completedProgress;
         setProgress(completedProgress);
-        mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(completedProgress));
+        storage.set(STORAGE_KEYS.PROGRESS, JSON.stringify(completedProgress));
       } else {
         const completed = markProgressRecordWatched(nextProgress, watchedRef.current, key, updatedAt);
         if (completed) {
@@ -430,14 +429,14 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           progressRef.current = completed.progress;
           setWatched(completed.watched);
           setProgress(completed.progress);
-          mmkvStorageAdapter.set(STORAGE_KEYS.WATCHED, JSON.stringify(completed.watched));
-          mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(completed.progress));
+          storage.set(STORAGE_KEYS.WATCHED, JSON.stringify(completed.watched));
+          storage.set(STORAGE_KEYS.PROGRESS, JSON.stringify(completed.progress));
         }
       }
     } else {
       progressRef.current = nextProgress;
       setProgress(nextProgress);
-      mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(nextProgress));
+      storage.set(STORAGE_KEYS.PROGRESS, JSON.stringify(nextProgress));
     }
     updateMobileDiagnostics({ lastProgressPersistedAt: updatedAt });
 
@@ -464,7 +463,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     ].slice(0, 250);
     historyRef.current = nextHistory;
     setHistory(nextHistory);
-    mmkvStorageAdapter.set(STORAGE_KEYS.HISTORY, JSON.stringify(nextHistory));
+    storage.set(STORAGE_KEYS.HISTORY, JSON.stringify(nextHistory));
     updateMobileDiagnostics({ lastHistoryPersistedAt: updatedAt });
   }, [getProgressKey]);
 
@@ -528,7 +527,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       const nextProgress = { ...progressRef.current, [key]: nextEntry };
       progressRef.current = nextProgress;
       setProgress(nextProgress);
-      mmkvStorageAdapter.set(STORAGE_KEYS.PROGRESS, JSON.stringify(nextProgress));
+      storage.set(STORAGE_KEYS.PROGRESS, JSON.stringify(nextProgress));
 
       const nextHistory = historyRef.current.map((entry) => historyEntryKey(entry) === key ? {
         ...entry,
@@ -540,7 +539,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       } : entry);
       historyRef.current = nextHistory;
       setHistory(nextHistory);
-      mmkvStorageAdapter.set(STORAGE_KEYS.HISTORY, JSON.stringify(nextHistory));
+      storage.set(STORAGE_KEYS.HISTORY, JSON.stringify(nextHistory));
     })().finally(() => metadataRequestsRef.current.delete(key));
     metadataRequestsRef.current.set(key, task);
     return task;

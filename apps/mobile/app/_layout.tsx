@@ -18,6 +18,7 @@ import { AccountProvider } from '../src/context/AccountContext';
 import { MyListSteadyStateSyncProvider } from '../src/features/account/MyListSteadyStateSync';
 import { WatchedSteadyStateSyncProvider } from '../src/features/account/WatchedSteadyStateSync';
 import { OrionSyncPolicyProvider } from '../src/features/account/SyncPolicyContext';
+import { LibraryProfileProvider, useOrionLibraryProfile } from '../src/features/account/LibraryProfileContext';
 import { OfflineBanner } from '../src/components/OfflineBanner';
 import { StorageUnavailableScreen } from '../src/components/StorageUnavailableScreen';
 import { MobileDiagnosticsBridge } from '../src/components/MobileDiagnosticsBridge';
@@ -68,9 +69,11 @@ export default function RootLayout() {
         <PerformanceProvider>
           <NetworkProvider>
             <AccountProvider>
-              <OrionSyncPolicyProvider>
-                <ThemedApplication />
-              </OrionSyncPolicyProvider>
+              <LibraryProfileProvider>
+                <OrionSyncPolicyProvider>
+                  <ThemedApplication />
+                </OrionSyncPolicyProvider>
+              </LibraryProfileProvider>
             </AccountProvider>
           </NetworkProvider>
         </PerformanceProvider>
@@ -82,6 +85,7 @@ export default function RootLayout() {
 function ThemedApplication() {
   const { theme } = useOrionTheme();
   const storageHealth = getMobileStorageHealth();
+  const libraryProfile = useOrionLibraryProfile();
   const [startupActive, setStartupActive] = useState(false);
   const [showStartup, setShowStartup] = useState(true);
   const didRevealRef = useRef(false);
@@ -99,8 +103,12 @@ function ThemedApplication() {
 
   const application = storageHealth.state === 'unavailable'
     ? <StorageUnavailableScreen errorCode={storageHealth.errorCode} />
-    : (
-      <LibraryProvider>
+    : libraryProfile.phase === 'error'
+      ? <StorageUnavailableScreen errorCode={libraryProfile.errorCode || 'LIBRARY_PROFILE_INIT_FAILED'} />
+      : !libraryProfile.ready || !libraryProfile.storage || !libraryProfile.scopeId
+        ? null
+        : (
+      <LibraryProvider key={libraryProfile.scopeId} storage={libraryProfile.storage}>
         <MyListSteadyStateSyncProvider>
           <WatchedSteadyStateSyncProvider>
             <GestureHandlerRootView style={{ flex: 1 }}>

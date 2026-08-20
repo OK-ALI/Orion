@@ -14,6 +14,7 @@ import {
 import { useLibrary } from '../../context/LibraryContext';
 import { useNetworkStatus } from '../../context/NetworkContext';
 import { useOrionAccount } from '../../context/AccountContext';
+import { useOrionLibraryProfile } from './LibraryProfileContext';
 import { buildLocalMyListSnapshotV1 } from '../library/myListPortableAdapter';
 import { GoogleDriveCloudProfileStore } from './googleDriveCloudProfileStore';
 import { readBackCloudProfileUntilVerified } from './cloudProfileReadBackVerification';
@@ -70,6 +71,7 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
   const account = useOrionAccount();
   const network = useNetworkStatus();
   const syncPolicy = useOrionSyncPolicy();
+  const libraryProfile = useOrionLibraryProfile();
   const myListAutomatic = syncPolicy.getAutomatic('myList');
   const { saved, savedOrder, replaceMyListFromSync } = useLibrary();
   const preview = useMemo(() => buildPortableMyListPreviewV1(saved, savedOrder), [saved, savedOrder]);
@@ -95,6 +97,8 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
     online: network.online,
     internetReachable: network.internetReachable,
     policyReady: syncPolicy.ready,
+    libraryProfileReady: libraryProfile.cloudEligible,
+    libraryProfileId: libraryProfile.profileId,
     myListAutomatic,
   });
   latestRef.current = {
@@ -106,6 +110,8 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
     online: network.online,
     internetReachable: network.internetReachable,
     policyReady: syncPolicy.ready,
+    libraryProfileReady: libraryProfile.cloudEligible,
+    libraryProfileId: libraryProfile.profileId,
     myListAutomatic,
   };
 
@@ -129,6 +135,11 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
     const start = latestRef.current;
     const profile = start.profile;
     if (start.accountPhase !== 'signed-in' || !profile) {
+      setStatus({ phase: 'inactive', hasCheckpoint: false, message: null });
+      return;
+    }
+
+    if (!start.libraryProfileReady || start.libraryProfileId !== profile.accountId) {
       setStatus({ phase: 'inactive', hasCheckpoint: false, message: null });
       return;
     }
@@ -177,7 +188,9 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
 
     const operationProfileId = profile.accountId;
     const operationLocalSignature = start.localSignature;
-    const sameAccount = () => latestRef.current.profile?.accountId === operationProfileId;
+    const sameAccount = () => latestRef.current.profile?.accountId === operationProfileId
+        && latestRef.current.libraryProfileReady
+        && latestRef.current.libraryProfileId === operationProfileId;
     const automaticStillAllowed = () => mode === 'manual' || latestRef.current.myListAutomatic;
     const setVerifiedStatus = (count: number) => {
       if (latestRef.current.myListAutomatic) {
@@ -455,6 +468,7 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
       const start = latestRef.current;
       const profile = start.profile;
       if (start.accountPhase !== 'signed-in' || !profile) return;
+      if (!start.libraryProfileReady || start.libraryProfileId !== profile.accountId) return;
       const checkpoint = loadMyListSyncCheckpointV1(profile.accountId);
       if (!checkpoint || !start.online || start.internetReachable === false || !isNativeGoogleDriveAuthorizationAvailable()) {
         setReview(null);
@@ -463,7 +477,9 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
       }
 
       const operationProfileId = profile.accountId;
-      const sameAccount = () => latestRef.current.profile?.accountId === operationProfileId;
+      const sameAccount = () => latestRef.current.profile?.accountId === operationProfileId
+        && latestRef.current.libraryProfileReady
+        && latestRef.current.libraryProfileId === operationProfileId;
       busyRef.current = true;
       setReview(null);
       setStatus({ phase: 'syncing', hasCheckpoint: true, message: 'Applying your confirmed My List choice and verifying both copies.' });
@@ -513,7 +529,7 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
 
   useEffect(() => {
     requestAutomaticReconcile();
-  }, [account.state.phase, account.state.profile?.accountId, account.state.profile?.email, localSignature, network.online, network.internetReachable, syncPolicy.ready, myListAutomatic, requestAutomaticReconcile]);
+  }, [account.state.phase, account.state.profile?.accountId, account.state.profile?.email, libraryProfile.cloudEligible, libraryProfile.profileId, localSignature, network.online, network.internetReachable, syncPolicy.ready, myListAutomatic, requestAutomaticReconcile]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {

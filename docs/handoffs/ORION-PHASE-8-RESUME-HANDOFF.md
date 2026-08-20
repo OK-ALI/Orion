@@ -518,8 +518,9 @@ Current Phase 8 board:
 - P8.4 C3-D – COMPLETE & LOCKED
 - Phase 8 overall – NOT LOCKED
 
-History and verified playback Progress remain future synchronization domains.
-Continue Watching remains derived and must not become an independent cloud namespace.
+History and verified playback Progress remain required Phase 8 synchronization domains and are not implemented yet.
+Continue Watching remains a derived cross-device outcome and must not become an independent cloud namespace.
+Portable Preferences still require an explicit whitelist/policy, and supported Music data requires an explicit Phase 8 disposition before Phase 8 can lock.
 
 Canonical amendment audit:
 
@@ -615,4 +616,210 @@ Current Phase 8 board:
 - Phase 8 steady-state conflict-recovery post-lock amendment – COMPLETE & LOCKED when committed
 - Phase 8 overall – NOT LOCKED
 
-History and verified playback Progress remain separate future architecture decisions. Continue Watching remains derived and must not become an independent cloud namespace.
+History and verified playback Progress remain required Phase 8 synchronization domains and are not implemented yet. Continue Watching remains a derived cross-device outcome and must not become an independent cloud namespace. Portable Preferences still require an explicit whitelist/policy, and supported Music data requires an explicit Phase 8 disposition before Phase 8 can lock.
+
+---
+
+## V3-P8-004 Mobile account-scoped profiles lock checkpoint
+
+**Status:** COMPLETE & LOCKED when committed with the validated implementation and canonical audit
+**Date:** 2026-08-20
+
+V3-P8-004 completes the revised Phase 8 requirement for account-namespaced Mobile library profiles and non-destructive anonymous/local-profile preservation.
+
+### Locked ownership contract
+
+Mobile now has one active local-library profile at a time:
+
+- signed out: preserved `local` profile,
+- signed in: `google:<stable account id>` account-scoped profile.
+
+The existing `LibraryProvider` remains the single library owner. The profile layer selects and injects the active storage adapter; it does not create a second My List, Watched, History, or Progress state manager.
+
+The five legacy Mobile library keys remain preserved as a recovery source:
+
+- `saved`,
+- `savedOrder`,
+- `history`,
+- `watched`,
+- `progress`.
+
+The migration copies them byte-for-byte into the local profile and does not remove or rewrite the legacy recovery source.
+
+On first sign-in for a Google identity, Orion copies the preserved local profile into that account namespace, verifies exact read-back, retires stale synchronization proof where required, and commits the account profile `ready` marker last. A staged or mismatched profile is never eligible for cloud synchronization.
+
+Existing My List and Watched enrollment/conflict engines remain authoritative. P8-004 does not add another merge engine and does not duplicate `Keep device`, `Keep Orion Cloud`, or `Combine both` policy.
+
+The preserved local profile is never a cloud-sync participant.
+
+### C1 Watched checkpoint regression and C1.1 repair
+
+Physical C1 validation exposed one migration-only regression: an already-enrolled Watched domain could appear as `Manual` after the application update because C1 retired the pre-migration Watched checkpoint unconditionally.
+
+Manual `Check Watched` recreated a valid checkpoint, after which automatic Watched synchronization worked and persisted across relaunch. This proved the steady-state engine itself was healthy and isolated the defect to migration-time checkpoint retirement.
+
+Candidate 1.1 repairs that boundary without weakening first enrollment:
+
+- an existing Watched checkpoint may survive the storage-only migration only when the newly scoped Watched preview has no rejected keys and its portable truth signature exactly equals the checkpoint's verified local truth signature,
+- if equality cannot be proven, the checkpoint is retired and explicit Watched enrollment remains required,
+- no checkpoint is synthesized or rewritten merely because migration occurred.
+
+This preserves the locked rule that genuinely unenrolled Watched state cannot silently auto-enroll.
+
+### Automated evidence
+
+C1 focused validation:
+
+- TypeScript: PASS,
+- focused tests: 62 / 62 PASS.
+
+C1 full Mobile gate:
+
+- tests: 219 / 219 PASS,
+- source-size: 134 files PASS,
+- Expo Doctor: 20 / 20 PASS,
+- web export: PASS.
+
+C1.1 focused repair validation:
+
+- TypeScript: PASS,
+- focused tests: 44 / 44 PASS,
+- includes the semantic checkpoint-carry invariant.
+
+C1.1 full Mobile gate:
+
+- tests: 220 / 220 PASS,
+- source-size: 134 files PASS,
+- Expo Doctor: 20 / 20 PASS,
+- web export: PASS.
+
+No source-size ceiling was raised.
+
+### Physical Samsung S24 Ultra evidence
+
+The preserving-install migration retained the existing real user library without visible duplication, storage failure, or unexpected conflict.
+
+Observed post-migration baseline included:
+
+- My List: 153,
+- Watched: 104,
+- History: 37,
+- Google identity connected,
+- Orion Cloud connected,
+- verified playback Progress/Continue Watching remained available.
+
+The user later clarified that an earlier Library screenshot showing `Continue 0` preceded the later playback that created the visible Continue Watching entry; it is not recorded as a cross-surface defect.
+
+Final profile-isolation acceptance physically proved:
+
+1. **Account A probe**
+   - a title added after migration existed in Account A and synchronized normally,
+   - it survived relaunch.
+
+2. **Signed-out Local**
+   - after disconnecting Google, the Account A probe was absent,
+   - the preserved Local profile remained intact.
+
+3. **Account B**
+   - Account B showed `Ready to sync` rather than silently appearing enrolled/automatic,
+   - Account A-specific state did not leak into B,
+   - no accidental Orion Cloud enrollment was observed.
+
+4. **Return to Account A**
+   - Account A's own scoped state returned,
+   - Account B-specific state did not bleed into A.
+
+Physical acceptance therefore proved the isolation invariant:
+
+`Local ≠ Account A ≠ Account B`
+
+The user reported all final validation steps passed.
+
+### Desktop ownership audit
+
+A focused Desktop account/local-ownership archaeology was performed before extending Phase 8 to additional sync domains.
+
+Result: **no Desktop P8-004 migration candidate is required.**
+
+Desktop local Cinema library state remains installation/device-local, while My List/Watched checkpoints and automatic-sync policy are already keyed by Google profile identity. Desktop does not perform the Mobile `global local storage -> account-scoped local storage` migration that created the C1 checkpoint-lineage issue.
+
+Existing Desktop enrollment/checkpoint guards prevent an unverified account from silently becoming a steady-state cloud participant. Therefore copying Mobile's profile-migration architecture into Desktop would add unnecessary storage migration risk and is outside the explicit V3-P8-004 Mobile-profile requirement.
+
+This is a recorded no-change decision, not evidence that future History/Progress synchronization may bypass Desktop's existing identity/checkpoint safety rules.
+
+### Candidate artifacts
+
+Primary P8-004 candidate:
+
+`Orion-v3.0-P8-004-Mobile-Account-Scoped-Profiles-Candidate-1.zip`
+
+SHA-256:
+
+`78A7D40847D6C1A1EB9D95CEE3BF18A5DE418DA7E91EE64B823680C448B676F5`
+
+Watched checkpoint migration repair:
+
+`Orion-v3.0-P8-004-Watched-Checkpoint-Migration-Repair-Candidate-1.1.zip`
+
+SHA-256:
+
+`D4799EA005FB2FB2A4367FFC4F12CEB6D17C726AADC4F855968350A328B2B74A`
+
+### Canonical implementation manifest
+
+The validated runtime/test implementation owns these 9 project paths:
+
+1. `apps/mobile/app/_layout.tsx`
+2. `apps/mobile/src/context/LibraryContext.tsx`
+3. `apps/mobile/src/features/account/LibraryProfileContext.tsx`
+4. `apps/mobile/src/features/account/MyListSteadyStateSync.tsx`
+5. `apps/mobile/src/features/account/WatchedSteadyStateSync.tsx`
+6. `apps/mobile/src/features/account/watchedSyncCheckpoint.ts`
+7. `apps/mobile/src/features/library/libraryProfileStorage.ts`
+8. `apps/mobile/tests/accountScopedLibraryProfile.test.cjs`
+9. `apps/mobile/tests/myListSteadyStateSync.test.cjs`
+
+Canonical lock documentation additionally changes:
+
+10. `docs/audits/ORION-V3-P8-004-MOBILE-ACCOUNT-SCOPED-PROFILES-AUDIT.md`
+11. `docs/handoffs/ORION-PHASE-8-RESUME-HANDOFF.md`
+
+The expected lock commit manifest is therefore exactly **11 paths**.
+
+Canonical audit:
+
+`docs\audits\ORION-V3-P8-004-MOBILE-ACCOUNT-SCOPED-PROFILES-AUDIT.md`
+
+### Phase 8 board after V3-P8-004
+
+- P8.0 – COMPLETE
+- P8.1 – LOCKED
+- P8.2 – LOCKED
+- P8.3 – COMPLETE & LOCKED
+- P8.3 Desktop My List first-enrollment conflict-resolution amendment – COMPLETE & LOCKED
+- P8.4 C1 – COMPLETE & LOCKED
+- P8.4 C2 – COMPLETE & LOCKED
+- P8.4 C3-A – COMPLETE & LOCKED
+- P8.4 C3-B – COMPLETE & LOCKED
+- P8.4 C3-C – COMPLETE & LOCKED
+- P8.4 C3-D – COMPLETE & LOCKED
+- Phase 8 steady-state conflict-recovery post-lock amendment – COMPLETE & LOCKED
+- **V3-P8-004 Mobile account-scoped profiles & non-destructive local import – COMPLETE & LOCKED when committed**
+- Phase 8 overall – **NOT LOCKED**
+
+### Remaining revised Phase 8 scope
+
+The saved master roadmap remains the original Phase 8 baseline and is intentionally not rewritten at this checkpoint. Its final reconciliation occurs after the final Phase 8 build/audit.
+
+The remaining Phase 8 work must continue to satisfy that baseline:
+
+- synchronize **History**,
+- synchronize **verified Progress**,
+- derive **Continue Watching** locally from verified Progress rather than create another cloud namespace,
+- define and synchronize an explicit portable **Preferences** whitelist,
+- make an explicit supported-**Music** Phase 8 disposition rather than silently dropping the requirement,
+- extend revisions/tombstones/offline reconciliation through the remaining portable domains,
+- complete interruption/rollback acceptance tied to the final account/sync lifecycle,
+- perform the P8.7 full cross-platform audit before Phase 8 can lock.
+
+Immediate next implementation work is therefore the remaining V3-P8-006/007/008/010 synchronization and reconciliation scope, beginning with History + verified Progress architecture.

@@ -13,7 +13,7 @@ const readShared = (relative) => fs.readFileSync(path.join(sharedRoot, relative)
 test("P8.3 Candidate 3 mounts steady-state My List sync globally inside the existing provider boundary", () => {
   const layout = read("app/_layout.tsx");
   assert.match(layout, /<AccountProvider>[\s\S]*<ThemedApplication \/>/);
-  assert.match(layout, /<LibraryProvider>[\s\S]*<MyListSteadyStateSyncProvider>[\s\S]*<GestureHandlerRootView/);
+  assert.match(layout, /<LibraryProvider[^>]*>[\s\S]*<MyListSteadyStateSyncProvider>[\s\S]*<GestureHandlerRootView/);
   assert.equal((layout.match(/<MyListSteadyStateSyncProvider>/g) || []).length, 1);
 });
 
