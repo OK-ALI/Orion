@@ -5,9 +5,13 @@ import type {
   PlaybackPresentationMetadata,
   PlaybackProgressV3,
 } from '@orion/shared/types';
+import {
+  CONTINUE_MINIMUM_SECONDS,
+  PLAYBACK_COMPLETION_PERCENT,
+  isContinueWatchingProgressEligible,
+} from '@orion/shared/api/continueWatchingPolicy';
 
-export const CONTINUE_MINIMUM_SECONDS = 30;
-export const PLAYBACK_COMPLETION_PERCENT = 90;
+export { CONTINUE_MINIMUM_SECONDS, PLAYBACK_COMPLETION_PERCENT };
 
 const VERIFIED_EVIDENCE = new Set<MobilePlaybackEvidence>([
   'native-video-event',
@@ -160,9 +164,7 @@ export function selectContinueWatching(
     }))
     .filter(({ progress }) => (
       (isVerifiedPlaybackEvidence(progress.evidence) || progress.portableVerified === true)
-      && progress.currentTime >= CONTINUE_MINIMUM_SECONDS
-      && !progress.completed
-      && (progress.percent == null || progress.percent < PLAYBACK_COMPLETION_PERCENT)
+      && isContinueWatchingProgressEligible(progress)
       && !isWatchedProgress(progress, watched)
     ));
 

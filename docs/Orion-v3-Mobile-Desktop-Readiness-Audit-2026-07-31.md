@@ -1763,3 +1763,59 @@ The correct v3 strategy is to preserve those foundations while replacing the unr
 9. Runtime-safe updates.
 
 This order prevents Orion from displaying invented progress, stale remote state, false shield confidence, or unreliable synchronization. It also creates the contracts needed for a later TV-casting milestone without prematurely coupling casting to Smart Connect.
+
+<!-- V3-P8-COUNT-SEMANTICS-DATA-TRUTH-CLOSURE-2026-08-21 -->
+
+## Phase 8 Count Semantics and Data Truth closure - 2026-08-21
+
+**Status:** COMPLETE at functional/data-truth scope. Phase 8 overall remains NOT LOCKED.
+
+The required Phase 8 Count Semantics and Data Truth audit is complete.
+
+Accepted count semantics:
+
+- My List Library count represents saved titles.
+- My List Account/Orion Cloud count represents the portable My List population.
+- Watched Library count represents watched titles inside My List.
+- Watched Account/Orion Cloud count represents portable watched movies and exact episodes.
+- Library History represents local displayable History identities.
+- Account Viewing Activity History represents portable verified exact-identity History.
+- Account playback-position count represents portable verified playback positions.
+- Continue Watching is derived locally from verified playback truth and is not a Cloud namespace.
+
+The audit did not force unrelated populations to display the same number.
+
+Functional repairs recovered by the audit:
+
+- Mobile title-level TV playback now persists the effective S1E1 fallback identity instead of creating new title-level TV History/Progress with null episode coordinates.
+- Continue Watching uses one shared 30-second minimum / below-90-percent completion policy.
+- Desktop Continue Watching now derives from verified portable playback truth.
+- Desktop Home and Library now share one Continue Watching owner.
+- Desktop keeps only the latest resumable episode per TV series.
+
+Physical acceptance:
+
+- Mobile-to-Desktop Michael playback synchronization was observed.
+- Desktop Viewing Activity showed 39 History / 9 Progress at that checkpoint.
+- Final Mobile title-level TV validation used Outer Banks and produced exact S1E1 identity.
+- Final Mobile/Orion Cloud portable Viewing Activity truth reached 40 History / 10 Progress with readback verification.
+- Desktop Home Continue Watching and My Library Continue both physically showed 6 canonical cards.
+- Reacher appeared only as the latest resumable episode, S1E2.
+- the previously above-90-percent Supergirl position remained excluded.
+
+Historical TV records that already lack an exact episode identity are not guessed or rewritten. They remain local and are excluded from portable exact-episode synchronization.
+
+Canonical audit:
+
+`docs/audits/ORION-V3-P8-COUNT-SEMANTICS-DATA-TRUTH-AUDIT.md`
+
+Immediate next work is the coherent Phase 8 production-polish pass before overall Phase 8 lock:
+
+- unify Mobile Settings -> Account,
+- clarify user-facing count language,
+- normalize Account / Orion Cloud / sync presentation,
+- make manual Sync now visibly show busy/Syncing even while Auto Sync is paused,
+- complete consistency, responsive and accessibility polish,
+- then perform the P8.7 full cross-platform audit.
+
+Phase 8 remains NOT LOCKED.

@@ -48,6 +48,7 @@ import {
   getNextReleasedEpisode,
   type NextEpisodeCandidate,
 } from './playbackCompletion';
+import { resolvePlaybackRouteIdentity } from './routePlaybackIdentity';
 
 type PlayerRouteParams = {
   id: string;
@@ -73,7 +74,10 @@ export default function PlayerScreen() {
   } =
     useLocalSearchParams<PlayerRouteParams>();
   const { getPlaybackProgress } = useLibraryPlaybackActions();
-  const existingProgress = getPlaybackProgress(type, id, Number(season) || null, Number(episode) || null);
+  const routePlaybackIdentity = resolvePlaybackRouteIdentity(type, season, episode);
+  const resolvedSeason = routePlaybackIdentity.season;
+  const resolvedEpisode = routePlaybackIdentity.episode;
+  const existingProgress = getPlaybackProgress(type, id, resolvedSeason, resolvedEpisode);
   const routedNextSource = nextSourceId
     && MOBILE_PLAYER_SOURCES.some((source) => source.id === nextSourceId)
     ? nextSourceId
@@ -93,7 +97,7 @@ export default function PlayerScreen() {
   const [nextEpisodePrompt, setNextEpisodePrompt] = useState<NextEpisodeCandidate | null>(null);
   const completionHandledRef = useRef(new Set<string>());
   const nextEpisodeRequestRef = useRef(0);
-  const playbackIdentity = `${type}:${id}:s${Number(season) || 0}:e${Number(episode) || 0}`;
+  const playbackIdentity = `${type}:${id}:s${resolvedSeason || 0}:e${resolvedEpisode || 0}`;
   const playbackIdentityRef = useRef(playbackIdentity);
 
   const publishHandoff = useCallback((next: PlaybackHandoffV1 | null) => {
@@ -117,15 +121,15 @@ export default function PlayerScreen() {
     const routeProgress = getPlaybackProgress(
       type,
       id,
-      Number(season) || null,
-      Number(episode) || null,
+      resolvedSeason,
+      resolvedEpisode,
     );
     const savedTime = routeProgress?.completed
       ? 0
       : Math.max(0, Number(routeProgress?.currentTime) || 0);
     setInitialChoicePending(savedTime > 30);
     setResumeTime(savedTime > 30 ? 0 : savedTime);
-  }, [episode, getPlaybackProgress, id, playbackIdentity, publishHandoff, season, type]);
+  }, [getPlaybackProgress, id, playbackIdentity, publishHandoff, resolvedEpisode, resolvedSeason, type]);
 
   useEffect(() => { hydrateMobileSourceHealth(); }, []);
   useEffect(() => {
@@ -159,11 +163,11 @@ export default function PlayerScreen() {
       sourceId,
       type,
       { tmdbId: id, imdbId: imdbId || undefined },
-      Number(season) || 1,
-      Number(episode) || 1,
+      resolvedSeason || 1,
+      resolvedEpisode || 1,
       resumeParams,
     );
-  }, [episode, id, imdbId, isOffline, offlineUri, resumeTime, season, sourceId, type]);
+  }, [id, imdbId, isOffline, offlineUri, resolvedEpisode, resolvedSeason, resumeTime, sourceId, type]);
 
   const launchHandoff = useCallback(({
     targetSourceId,
@@ -342,11 +346,10 @@ export default function PlayerScreen() {
   }, [initialSavedTime, sourceId]);
 
   const handleVerifiedPlaybackCompletion = useCallback((_snapshot: VerifiedPlaybackSnapshot) => {
-    if (type !== 'tv' || isOffline === 'true') return;
-    const seasonNumber = Number(season);
-    const episodeNumber = Number(episode);
-    if (!Number.isFinite(seasonNumber) || seasonNumber <= 0
-      || !Number.isFinite(episodeNumber) || episodeNumber <= 0) return;
+    if (type !== 'tv' || isOffline === 'true'
+      || resolvedSeason == null || resolvedEpisode == null) return;
+    const seasonNumber = resolvedSeason;
+    const episodeNumber = resolvedEpisode;
     const completionKey = `tv:${id}:s${seasonNumber}:e${episodeNumber}`;
     if (completionHandledRef.current.has(completionKey)) return;
     completionHandledRef.current.add(completionKey);
@@ -362,7 +365,7 @@ export default function PlayerScreen() {
         if (next) setNextEpisodePrompt(next);
       })
       .catch(() => {});
-  }, [episode, id, isOffline, season, type]);
+  }, [id, isOffline, resolvedEpisode, resolvedSeason, type]);
 
   const playNextEpisode = useCallback(() => {
     const next = nextEpisodePrompt;
@@ -416,8 +419,8 @@ export default function PlayerScreen() {
     activeHandoffId: handoffIsPending(handoff) ? handoff?.id : null,
     id,
     type,
-    season,
-    episode,
+    season: resolvedSeason == null ? undefined : String(resolvedSeason),
+    episode: resolvedEpisode == null ? undefined : String(resolvedEpisode),
     initialResumeTime: resumeTime,
   };
 

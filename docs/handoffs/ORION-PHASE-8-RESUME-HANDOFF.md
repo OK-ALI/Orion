@@ -1043,3 +1043,51 @@ No production code changed for this reconciliation.
 All Phase 8 functional checklist items are now reconciled. Remaining work is productization and final validation:
 
 Count Semantics & Data Truth Audit -> production polish -> Mobile Settings/Account unification -> Desktop/Mobile consistency and accessibility validation -> P8.7 -> Phase 8 LOCK.
+
+<!-- V3-P8-COUNT-SEMANTICS-DATA-TRUTH-CLOSURE-2026-08-21 -->
+
+## Phase 8 Count Semantics and Data Truth checkpoint
+
+**Date:** 2026-08-21
+**Status:** COMPLETE
+**Phase 8 overall:** NOT LOCKED
+
+The mandatory Count Semantics and Data Truth audit is now complete.
+
+Count differences were classified by actual population rather than cosmetically forced to match. My List and Watched differences are intentional population differences. Local Library History can also contain legacy/local records that are not portable exact-identity records.
+
+The audit recovered and repaired two functional ownership defects:
+
+1. Mobile title-level TV playback could play the S1E1 source fallback while persisting null season/episode identity.
+2. Desktop Continue Watching had different eligibility/grouping semantics across Desktop and Mobile, and Desktop Home could expose multiple resumable episodes from one series.
+
+Final accepted contract:
+
+- verified playback only,
+- at least 30 seconds,
+- below 90 percent completion,
+- watched truth excludes Continue Watching,
+- exact TV episode identity,
+- latest resumable episode per series,
+- Continue Watching remains locally derived,
+- no Continue Watching Cloud namespace.
+
+Physical evidence:
+
+- Michael playback propagated Mobile -> Orion Cloud -> Desktop.
+- Desktop physically showed 39 History / 9 Progress after that sync.
+- Outer Banks title-level Mobile playback persisted exact S1E1 identity.
+- final Mobile/Cloud Viewing Activity signature reached 40 History / 10 Progress.
+- Desktop Home and Library both physically showed 6 Continue Watching titles.
+- Reacher appeared only as S1E2.
+- Supergirl above the completion threshold was absent.
+
+Historical ambiguous title-level TV records are preserved locally rather than retroactively guessed into episodes.
+
+Canonical audit:
+
+`docs/audits/ORION-V3-P8-COUNT-SEMANTICS-DATA-TRUTH-AUDIT.md`
+
+Next:
+
+Run one coherent Phase 8 production-polish pass. The largest target is Mobile Settings -> Account unification, followed by truthful count wording, visible Syncing/busy feedback, consistency, responsiveness and accessibility. After polish, perform the P8.7 full Phase 8 cross-platform audit before any overall Phase 8 lock.

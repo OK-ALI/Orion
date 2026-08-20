@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isContinueWatchingProgressEligible } from "@orion/shared/api/continueWatchingPolicy";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
 import { tmdbFetch } from "../../services/tmdb";
+import { buildDesktopPortableViewingStatePreview } from "../../features/library/viewingStatePortableAdapter";
 import { VERIFIED_HISTORY_UPDATED_EVENT } from "../../services/viewingStateVerification";
 import { WATCHED_SYNC_APPLIED_EVENT } from "../../services/watchedOneShotLocalStore";
 import { MY_LIST_SYNC_APPLIED_EVENT } from "../../services/myListSyncLocalStore";
@@ -247,10 +249,40 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
     .filter((entry) => entry.media_type !== "tv" || (entry.season != null && entry.episode != null))
     .map((entry) => ({ ...entry, _pk: entry.media_type === "movie" ? `movie_${entry.id}` : `tv_${entry.id}_s${entry.season}e${entry.episode}` })), [history]);
 
-  const inProgress = useMemo(() => historyWithKeys.filter((entry) => {
-    const percent = progress[entry._pk];
-    return !watched[entry._pk] && percent != null && percent > 2 && percent < 98;
-  }), [historyWithKeys, progress, watched]);
+  const inProgress = useMemo(() => {
+    const progressDetails = storage.get(STORAGE_KEYS.PROGRESS_DETAILS) || {};
+    const portable = buildDesktopPortableViewingStatePreview({
+      watched,
+      history,
+      progress,
+      progressDetails,
+    });
+    const historyByKey = new Map(
+      historyWithKeys.map((entry) => [entry._pk, entry]),
+    );
+    const candidates = Object.values(portable.progress)
+      .filter((record) => isContinueWatchingProgressEligible(record))
+      .sort((a, b) => Number(b.lastPlayedAt || 0) - Number(a.lastPlayedAt || 0));
+    const seen = new Set();
+    const selected = [];
+
+    for (const record of candidates) {
+      const media = record.media;
+      const localKey = media.mediaType === "movie"
+        ? `movie_${media.id}`
+        : `tv_${media.id}_s${media.season}e${media.episode}`;
+      const groupKey = media.mediaType === "tv"
+        ? `tv_${media.id}`
+        : localKey;
+      if (seen.has(groupKey)) continue;
+      const entry = historyByKey.get(localKey);
+      if (!entry) continue;
+      seen.add(groupKey);
+      selected.push(entry);
+    }
+
+    return selected;
+  }, [history, historyWithKeys, progress, watched]);
 
   const savedList = useMemo(() => {
     const keys = mergeLibraryOrder(saved, savedOrder);

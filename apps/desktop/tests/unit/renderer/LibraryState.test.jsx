@@ -80,6 +80,17 @@ describe("library privacy behavior", () => {
       },
     ]);
     storage.set(STORAGE_KEYS.WATCH_PROGRESS, { movie_42: 71 });
+    storage.set(STORAGE_KEYS.PROGRESS_DETAILS, {
+      movie_42: {
+        currentTime: 71,
+        duration: 100,
+        percent: 71,
+        updatedAt: 5_000,
+        playbackVerified: true,
+        playbackVerifiedAt: 5_000,
+        startedAt: 5_000,
+      },
+    });
 
     const { result } = renderHook(() =>
       useLibraryState({ librarySort: "manual", setToast: vi.fn() }),

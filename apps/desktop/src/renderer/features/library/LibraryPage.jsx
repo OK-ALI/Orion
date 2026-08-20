@@ -123,20 +123,9 @@ export default function LibraryPage({
 
   const completedDownloads = useMemo(() => downloads.filter((item) => item.status === "completed"), [downloads]);
   const progressDetails = useMemo(() => storage.get(STORAGE_KEYS.PROGRESS_DETAILS) || {}, [progress]);
-  const continueItems = useMemo(() => {
-    const sorted = [...inProgress].sort((a, b) => {
-      const keyA = a.media_type === "movie" ? `movie_${a.id}` : `tv_${a.id}_s${a.season}e${a.episode}`;
-      const keyB = b.media_type === "movie" ? `movie_${b.id}` : `tv_${b.id}_s${b.season}e${b.episode}`;
-      return (progressDetails[keyB]?.updatedAt || b.watchedAt || 0) - (progressDetails[keyA]?.updatedAt || a.watchedAt || 0);
-    });
-    const seen = new Set();
-    return sorted.filter((item) => {
-      const identity = `${item.media_type}_${item.id}`;
-      if (seen.has(identity)) return false;
-      seen.add(identity);
-      return true;
-    });
-  }, [inProgress, progressDetails]);
+  // useLibraryState owns canonical Continue Watching eligibility, ordering,
+  // and latest-episode-per-series collapse for every Desktop surface.
+  const continueItems = inProgress;
   const uniqueOverviewCount = useMemo(() => new Set([...continueItems, ...saved, ...history].map((item) => `${item.media_type}_${item.id}`)).size, [continueItems, saved, history]);
   const tabs = [
     { id: "overview", label: "Overview", count: uniqueOverviewCount },
