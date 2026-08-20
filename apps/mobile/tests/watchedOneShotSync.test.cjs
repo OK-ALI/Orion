@@ -76,7 +76,7 @@ test("P8.4 C3-D enrolls Watched into the existing local SyncPolicy and mounts on
   const policy = read("src/features/account/SyncPolicyContext.tsx");
   const layout = read("app/_layout.tsx");
   const steady = read("src/features/account/WatchedSteadyStateSync.tsx");
-  assert.match(policy, /ORION_SYNC_DOMAINS = \['myList', 'watched'\] as const/);
+  assert.match(policy, /ORION_SYNC_DOMAINS = \[[^\]]*'myList'[^\]]*'watched'[^\]]*\] as const/);
   assert.match(policy, /watched: \{ automatic: true \}/);
   assert.match(layout, /<MyListSteadyStateSyncProvider>[\s\S]*<WatchedSteadyStateSyncProvider>[\s\S]*<GestureHandlerRootView/);
   assert.match(steady, /mode === 'automatic' && !start\.watchedAutomatic/);

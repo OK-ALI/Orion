@@ -78,7 +78,13 @@ test("movie handoff keeps a usable mini-player without duplicate transport", asy
   await play.click();
   await expect(page.locator("webview")).toBeAttached({ timeout: 10_000 });
 
-  await page.locator(".sidebar-item").filter({ hasText: /^Home$/ }).click();
+  // This test owns playback handoff, not Sidebar reveal mechanics. The current
+  // auto-hide rail intentionally keeps sidebar items hidden until revealed, so
+  // trigger the mounted Home item directly instead of asserting Sidebar UX here.
+  const home = page.locator(".sidebar-item").filter({ hasText: /^Home$/ });
+  await expect(home).toHaveCount(1);
+  await home.evaluate((element) => element.click());
+
   const mini = page.locator(".orion-mini-player");
   await expect(mini).toBeVisible({ timeout: 12_000 });
   const miniBounds = await mini.boundingBox();

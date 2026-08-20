@@ -242,10 +242,46 @@ the physical eight-provider/orientation matrix passes.
 - [ ] **V3-P8-004:** Add account-namespaced Mobile profiles and non-destructive anonymous-profile import.
 - [ ] **V3-P8-005:** Define and validate `PortableProfileV3` across Desktop and Mobile.
 - [ ] **V3-P8-006:** Synchronize My List, History, Continue Watching, watched state, preferences and supported Music data.
+<!-- V3-P8-006A-C3-2026-08-20 -->
+  - **V3-P8-006A C3 checkpoint:** History and verified playback Progress now have steady-state cross-platform Orion Cloud synchronization after explicit enrollment. Desktop and Mobile reuse the existing PortableProfileV3/CloudProfileStore architecture, profile-scoped checkpoints, conditional writes, semantic read-back verification and existing Library owners.
+  - **Continue Watching remains derived locally.** It is reconstructed from synchronized verified Progress and is not an independent Cloud namespace.
+  - **C3 physical acceptance:** Mobile -> Desktop History/Progress propagation passed; Desktop -> Mobile propagation passed; Continue Watching re-derived correctly on the receiving device; Auto Sync OFF prevented automatic propagation; explicit Sync now reconciled successfully.
+  - **Offline playback physical test:** N/A under the current streaming-only offline UX. Downloaded offline playback remains Phase 10 work. Automated offline/reconciliation safety remains required.
+  - **C3 automated closeout:** Mobile 239/239 tests, 137-file source-size gate, Expo Doctor 20/20 and web export passed; Desktop 106/106 Node tests, 262/262 renderer tests across 59 files, source/binding/IPC/secret/theme/cycle gates and production build passed; Electron E2E passed 22/22 after repairing one stale hidden-Sidebar test-harness assumption.
+  - **V3-P8-006 remains open.** Portable Preferences and supported Music disposition remain required before the broad checklist item can close.
 - [ ] **V3-P8-007:** Add record revisions, merge rules and deletion tombstones.
 - [ ] **V3-P8-008:** Preserve offline-first operation and reconcile later without erasing unknown namespaces.
 - [ ] **V3-P8-009:** Exclude credentials, caches, downloads, signed URLs and machine-specific paths.
 - [ ] **V3-P8-010:** Keep tokens exclusively in platform secure storage and test account switching, interruption and rollback.
+
+<!-- PHASE-8-PRE-LOCK-PRODUCTIZATION-2026-08-20 -->
+### Phase 8 pre-lock productization gates
+
+Phase 8 must not lock immediately after the final functional synchronization domain. The following work is mandatory before the final Phase 8 lock.
+
+1. **Count Semantics & Data Truth Audit**
+   - Trace every displayed My List, Watched, History, playback-position/Progress, Continue Watching and Orion Cloud count to its real Desktop and Mobile owner.
+   - Prove the population represented by every number before changing labels or layout.
+   - Same data must use the same count. Different populations must use explicit language rather than being forced to match.
+   - Library remains the user-facing content truth.
+   - Settings -> Account communicates account and Orion Cloud synchronization truth.
+   - Watched Library counts and Orion Cloud Watched record counts must be described according to their actual populations.
+   - Continue Watching is a derived resumable view and must not be treated as numerically equivalent to the underlying playback-position records.
+   - Any unexplained difference is a functional/data defect and must be resolved before presentation polish.
+
+2. **Phase 8 production UI/UX polish**
+   - Consistency over invention. Preserve Orion's established Desktop and Mobile interaction grammar.
+   - Unify Mobile Settings -> Account, including account identity, Orion Cloud, synchronization domains, status hierarchy, Auto Sync, manual actions, review/conflict states and destructive actions.
+   - Normalize user-facing state vocabulary across platforms: Set up, Synced, Syncing, Paused, Offline, Needs review, Check now / Sync now, Auto sync and Orion Cloud.
+   - Replace backend-shaped wording such as generic Progress with clearer product language such as playback positions where appropriate.
+   - Remove or rewrite developer-oriented product copy such as Manual status, portable state terminology, v1 checkpoint language and other implementation details.
+   - Explicit Sync now must expose an active busy/Syncing state while the operation runs, then return to Paused when Auto Sync remains OFF.
+   - Audit responsive behavior, accessibility, themes, spacing, typography, loading, disabled and busy states on both platforms.
+
+3. **Final P8.7 cross-platform audit**
+   - Re-audit every Phase 8 requirement and locked boundary.
+   - Require code, automated tests, production builds and physical evidence.
+   - Do not declare Phase 8 locked while Preferences, supported Music disposition, productization findings or final audit requirements remain open.
 
 ### Phase 9 — Distribution, updates, availability and notifications
 
@@ -399,6 +435,7 @@ Every roadmap update should add one row. Do not delete older entries.
 | 2026-08-13 | V3-P6-006 immersive system-bar ownership clarification | Added an explicit Mobile-player lifecycle requirement for Android status/navigation bar hiding, platform edge-swipe reveal, playback-aware re-hiding, cutout-safe geometry and immediate restoration on every exit path. Renumbered the previously open Phase 6 items `V3-P6-006` through `V3-P6-011` to `V3-P6-007` through `V3-P6-012`; historical old-phase migration references remain unchanged. | Roadmap-only clarification after confirming that the audit previously implied system-bar validation but did not specify ownership or restoration behavior. No implementation, validation or completion credit was added. | 63% |
 | 2026-08-13 | V3-P6-002, V3-P6-003, V3-P6-004, V3-P6-006, V3-P6-008 through V3-P6-010 and V3-P6-012 implementation checkpoint | Added one controller/reducer for native and embedded HUD ownership; a persistent embedded reveal handle; truthful Fit, Fill, Stretch and Provider/Original capability handling; player-scoped Android immersive-system-bar ownership with restoration; mutually exclusive player sheets; state-driven preparation/buffering/switching/error presentation; and a typed native shield-evidence callback that is filtered by view, session, source and sequence. Preserved one playback surface and Phase 5 blocker behavior. Physical geometry/provider validation and safe captured-VTT byte delivery remain open. | Mobile typecheck; 96/96 tests; 100-file source-size gate; Expo Doctor 20/20; production web export (1,543 modules); native standalone Android compile with embedded Metro bundle; standalone APK 110,411,876 bytes, SHA-256 `75127F5623302AC55922C10E5BBB3D0094ED4A3502DC5B71A3345BCC5D816D5D`; embedded bundle 4,817,395 bytes, SHA-256 `5743AD887D1244C5BDCFB56F9D2A339A71438D8AFC072F32252092D2C713A116`; Desktop full check passed: 58/58 Node tests, 139/139 renderer tests and production build. | 69% |
 | 2026-08-13 | Phase 6 provider-independent immersive HUD repair | Separated upper-toolbar intent from playback attention and provider telemetry; removed the provider-page `TAP` bridge; added explicit reveal/collapse handles to both embedded and controlled native HUDs; restored pre-sheet visibility; rejected stale sessions; and cancelled timers during backgrounding and teardown. Buffering and ordinary provider errors remain in the central status layer and cannot flash the toolbar. Physical provider acceptance remains open. | Mobile typecheck; 96/96 tests including chrome-intent, controlled-native-HUD, stale-session, sheet-restoration and no-`TAP` regression guards; 100-file source-size gate; Expo Doctor 20/20; production web export (1,543 modules); `git diff --check`; fully bundled standalone APK 110,410,524 bytes, SHA-256 `48DE28B6A2A583B06F3404733B6D835268E2898F4BC570E3FCB8B275CF1FCDEA`; independently verified `assets/index.android.bundle` inside the APK. No additional completion credit is awarded until the physical eight-provider/orientation matrix passes. | 69% |
+| 2026-08-20 | V3-P8-006A C3 | Completed steady-state cross-platform Viewing Activity synchronization for verified History + Progress after enrollment; repaired metadata-only alignment and first-real-push reconciliation; preserved Continue Watching as a local derived view; repaired one stale Electron hidden-Sidebar harness assumption. C3 is checkpoint-ready while Phase 8 remains open. | Physical Mobile -> Cloud -> Desktop and Desktop -> Cloud -> Mobile acceptance; Auto Sync OFF + Sync now acceptance; Mobile 239/239, source-size 137, Expo Doctor 20/20, web export; Desktop 106/106 Node + 262/262 renderer, full structural gates and production build; Electron 22/22. Offline playback physical validation is N/A until Phase 10 downloads/offline playback exists. | No new release-readiness percentage claimed before Phase 8 closeout audit |
 
 Phase 3 is complete. Orion now keeps
 all viable TMDB YouTube and Vimeo candidates, ranks rather than prematurely

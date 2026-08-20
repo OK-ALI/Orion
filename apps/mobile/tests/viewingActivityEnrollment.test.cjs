@@ -24,16 +24,18 @@ test("V3-P8-006A C2 uses one shared first-enrollment owner and the existing Clou
   assert.doesNotMatch(api, /GoogleDrive|MMKV|localStorage|SecureStore/);
 });
 
-test("V3-P8-006A C2 keeps first enrollment explicit and does not activate a second steady-state owner", () => {
+test("V3-P8-006A C2 first enrollment stays explicit when C3 extends the same control into steady-state sync", () => {
   const control = readMobile("src/features/settings/ViewingActivitySyncControl.tsx");
 
   assert.match(control, /Check Viewing Activity/);
   assert.match(control, /Keep this device/);
   assert.match(control, /Keep Orion Cloud/);
   assert.match(control, /Combine recent activity/);
-  assert.match(control, /Automatic Viewing Activity sync is not enabled yet/);
   assert.match(control, /executePortableViewingActivityOneShotSyncV1/);
-  assert.doesNotMatch(control, /SyncPolicyContext|useOrionSyncPolicy|SteadyStateSync|setAutomatic|Auto sync/i);
+  assert.match(control, /useViewingActivitySteadyStateSync/);
+  assert.match(control, /getAutomatic\('viewingActivity'\)/);
+  assert.match(control, /setAutomatic\('viewingActivity'/);
+  assert.match(control, /Auto sync/);
 });
 
 test("V3-P8-006A C2 checkpoints are account-scoped and are created only from verified shared results", () => {

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import {
   executePortableViewingActivityOneShotSyncV1,
   inspectPortableViewingActivityOneShotSyncV1,
@@ -13,6 +13,8 @@ import { OrionDialog } from '../../components/OrionDialog';
 import { useLibrary } from '../../context/LibraryContext';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { GoogleDriveCloudProfileStore } from '../account/googleDriveCloudProfileStore';
+import { useOrionSyncPolicy } from '../account/SyncPolicyContext';
+import { useViewingActivitySteadyStateSync } from '../account/ViewingActivitySteadyStateSync';
 import {
   loadViewingActivitySyncCheckpointV1,
   saveViewingActivitySyncCheckpointV1,
@@ -79,6 +81,9 @@ function executionMessage(reason: string, cloudWasWritten: boolean): string {
 
 export function ViewingActivitySyncControl({ accountEmail, profileId }: ViewingActivitySyncControlProps) {
   const { theme } = useOrionTheme();
+  const syncPolicy = useOrionSyncPolicy();
+  const steady = useViewingActivitySteadyStateSync();
+  const autoSyncEnabled = syncPolicy.getAutomatic('viewingActivity');
   const {
     watched,
     history,
@@ -96,6 +101,7 @@ export function ViewingActivitySyncControl({ accountEmail, profileId }: ViewingA
   const checkpoint = loadViewingActivitySyncCheckpointV1(profileId);
   const [state, setState] = useState<UiState>({ phase: 'idle' });
   const [resolution, setResolution] = useState<PortableViewingActivityEnrollmentResolutionV1 | null>(null);
+  const [reviewResolution, setReviewResolution] = useState<'device' | 'cloud' | null>(null);
   const busyRef = useRef(false);
   const activeRef = useRef(true);
   useEffect(() => {
@@ -103,7 +109,7 @@ export function ViewingActivitySyncControl({ accountEmail, profileId }: ViewingA
     return () => { activeRef.current = false; };
   }, [accountEmail, profileId]);
   const enrolled = !!checkpoint || state.phase === 'enrolled';
-  const busy = state.phase === 'checking' || state.phase === 'syncing';
+  const steadyActive = enrolled;
 
   const readLocalPreview = () => buildMobilePortableViewingActivityPreviewV1({
     watched: watchedRef.current,
@@ -137,6 +143,7 @@ export function ViewingActivitySyncControl({ accountEmail, profileId }: ViewingA
       if (result.state === 'aligned') {
         saveViewingActivitySyncCheckpointV1(result.checkpoint);
         setState({ phase: 'enrolled', history: result.localCount.history, progress: result.localCount.progress });
+        steady.refresh();
       } else if (result.state === 'ready') {
         setState({ phase: 'ready', inspection: result });
       } else {
@@ -173,6 +180,7 @@ export function ViewingActivitySyncControl({ accountEmail, profileId }: ViewingA
       if (result.state === 'verified') {
         saveViewingActivitySyncCheckpointV1(result.checkpoint);
         setState({ phase: 'enrolled', history: result.count.history, progress: result.count.progress });
+        steady.refresh();
       } else {
         setState({ phase: 'needs-review', message: executionMessage(result.reason, result.cloudWasWritten) });
       }
@@ -185,16 +193,36 @@ export function ViewingActivitySyncControl({ accountEmail, profileId }: ViewingA
   };
 
   const localCount = countCopy(Object.keys(localPreview.history).length, Object.keys(localPreview.progress).length);
-  const needsReview = state.phase === 'needs-review' || state.phase === 'error';
-  const badge = enrolled ? 'Enrolled'
+  const steadyBusy = steady.phase === 'checking' || steady.phase === 'syncing';
+  const enrollmentBusy = state.phase === 'checking' || state.phase === 'syncing';
+  const busy = steadyActive ? steadyBusy : enrollmentBusy;
+  const steadyReview = steady.phase === 'needs-review' && steady.review?.reason === 'two-sided-divergence'
+    ? steady.review
+    : null;
+  const steadyReviewAvailable = steadyActive && steadyReview != null;
+  const needsReview = steadyActive
+    ? steady.phase === 'needs-review' || steady.phase === 'error'
+    : state.phase === 'needs-review' || state.phase === 'error';
+  const badge = steadyActive
+    ? steady.phase === 'synced' ? 'Synced'
+      : steady.phase === 'paused' ? 'Paused'
+        : steady.phase === 'offline' ? 'Offline'
+          : steady.phase === 'needs-review' ? 'Needs review'
+            : steady.phase === 'checking' ? 'Checking'
+              : steady.phase === 'syncing' ? 'Syncing'
+                : steady.phase === 'error' ? 'Error' : 'Automatic'
     : state.phase === 'ready' ? 'Ready'
       : state.phase === 'checking' ? 'Checking'
         : state.phase === 'syncing' ? 'Syncing'
           : needsReview ? 'Needs review' : 'Manual';
-  const feedback = state.phase === 'ready'
-    ? `This device has ${countCopy(state.inspection.localCount.history, state.inspection.localCount.progress)}. Orion Cloud has ${countCopy(state.inspection.cloudCount.history, state.inspection.cloudCount.progress)}. Choose how to establish Viewing Activity sync.`
-    : state.phase === 'syncing' ? 'Syncing verified History and Progress. Orion will create enrollment only after the Cloud and local result are verified.'
-      : state.phase === 'enrolled' ? `${countCopy(state.history, state.progress)} verified with Orion Cloud for this account.`
+  const feedback = steadyActive
+    ? steady.phase === 'synced' ? null
+      : steady.phase === 'paused' ? 'Automatic Viewing Activity sync is paused. Local verified playback stays available until you choose Sync now or turn Auto Sync back on.'
+        : steady.phase === 'offline' ? 'Viewing Activity is waiting for a connection. Local History and Progress remain available.'
+          : steady.message
+    : state.phase === 'ready'
+      ? `This device has ${countCopy(state.inspection.localCount.history, state.inspection.localCount.progress)}. Orion Cloud has ${countCopy(state.inspection.cloudCount.history, state.inspection.cloudCount.progress)}. Choose how to establish Viewing Activity sync.`
+      : state.phase === 'syncing' ? 'Syncing verified History and Progress. Orion will create enrollment only after the Cloud and local result are verified.'
         : state.phase === 'needs-review' || state.phase === 'error' ? state.message : null;
 
   return (
@@ -214,8 +242,41 @@ export function ViewingActivitySyncControl({ accountEmail, profileId }: ViewingA
 
       <Text style={[styles.localSummary, { color: theme.textSecondary }]}>{localCount} on this device</Text>
       {feedback && <Text accessibilityRole={needsReview ? 'alert' : undefined} style={[styles.message, { color: needsReview ? theme.warning : theme.textSecondary }]}>{feedback}</Text>}
-      {enrolled && (
-        <Text style={[styles.message, { color: theme.textSecondary }]}>Automatic Viewing Activity sync is not enabled yet. New verified playback changes stay on this device.</Text>
+      {steadyActive && (
+        <View style={[styles.autoRow, { borderColor: theme.border, backgroundColor: theme.elevated }]}>
+          <View style={styles.autoCopy}>
+            <Text style={[styles.autoTitle, { color: theme.text }]}>Auto sync</Text>
+            <Text style={[styles.autoDescription, { color: theme.textSecondary }]}>{autoSyncEnabled ? 'Sync verified History and Progress automatically when Orion is online.' : 'Automatic sync is paused. Local verified playback remains on this device until you sync manually.'}</Text>
+          </View>
+          <Switch value={autoSyncEnabled} onValueChange={(enabled) => syncPolicy.setAutomatic('viewingActivity', enabled)} />
+        </View>
+      )}
+
+      {steadyReviewAvailable && steadyReview && (
+        <View style={[styles.reviewBox, { borderColor: theme.border, backgroundColor: theme.elevated }]}>
+          <View style={styles.reviewCounts}>
+            <View style={styles.reviewCount}>
+              <Text style={[styles.reviewLabel, { color: theme.textMuted }]}>This device</Text>
+              <Text style={[styles.reviewValue, { color: theme.text }]}>{countCopy(steadyReview.localCount.history, steadyReview.localCount.progress)}</Text>
+            </View>
+            <View style={styles.reviewCount}>
+              <Text style={[styles.reviewLabel, { color: theme.textMuted }]}>Orion Cloud</Text>
+              <Text style={[styles.reviewValue, { color: theme.text }]}>{countCopy(steadyReview.cloudCount.history, steadyReview.cloudCount.progress)}</Text>
+            </View>
+          </View>
+          <Text style={[styles.reviewDescription, { color: theme.textSecondary }]}>Both copies changed after the last verified sync. Orion cannot prove deletion intent from the v1 checkpoint, so post-checkpoint recovery uses an explicit whole-copy choice instead of Combine.</Text>
+          <View style={styles.actions}>
+            <Pressable accessibilityRole="button" disabled={busy} onPress={() => setReviewResolution('device')} style={({ pressed }) => [styles.button, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed, busy && styles.disabled]}>
+              <Text style={[styles.buttonText, { color: theme.text }]}>Keep this device</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" disabled={busy} onPress={() => setReviewResolution('cloud')} style={({ pressed }) => [styles.button, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed, busy && styles.disabled]}>
+              <Text style={[styles.buttonText, { color: theme.text }]}>Keep Orion Cloud</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" disabled={busy} onPress={steady.refresh} style={({ pressed }) => [styles.button, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed, busy && styles.disabled]}>
+              <Text style={[styles.buttonText, { color: theme.text }]}>Check again</Text>
+            </Pressable>
+          </View>
+        </View>
       )}
 
       {!enrolled && state.phase === 'ready' ? (
@@ -254,7 +315,14 @@ export function ViewingActivitySyncControl({ accountEmail, profileId }: ViewingA
             <Text style={[styles.buttonText, { color: theme.text }]}>{busy ? (state.phase === 'syncing' ? 'Syncing...' : 'Checking...') : 'Check Viewing Activity'}</Text>
           </Pressable>
         </View>
-      ) : null}
+      ) : steadyReviewAvailable ? null : (
+        <View style={styles.actions}>
+          <Pressable accessibilityRole="button" disabled={busy} onPress={steady.refresh} style={({ pressed }) => [styles.button, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed, busy && styles.disabled]}>
+            {busy ? <ActivityIndicator color={theme.text} /> : <Ionicons name="refresh-outline" size={17} color={theme.text} />}
+            <Text style={[styles.buttonText, { color: theme.text }]}>{busy ? (steady.phase === 'syncing' ? 'Syncing...' : 'Checking...') : autoSyncEnabled ? 'Check now' : 'Sync now'}</Text>
+          </Pressable>
+        </View>
+      )}
 
       <OrionDialog
         visible={resolution != null && state.phase === 'ready'}
@@ -265,6 +333,28 @@ export function ViewingActivitySyncControl({ accountEmail, profileId }: ViewingA
         actions={[
           { label: 'Cancel', role: 'cancel', onPress: () => setResolution(null) },
           { label: 'Confirm', role: 'primary', onPress: () => void confirmResolution() },
+        ]}
+      />
+
+      <OrionDialog
+        visible={reviewResolution != null}
+        title="Resolve Viewing Activity conflict?"
+        message={reviewResolution === 'device'
+          ? `Keep this device's ${steadyReview ? countCopy(steadyReview.localCount.history, steadyReview.localCount.progress) : localCount} and replace the current Orion Cloud Viewing Activity?`
+          : `Keep Orion Cloud's ${steadyReview ? countCopy(steadyReview.cloudCount.history, steadyReview.cloudCount.progress) : 'verified Viewing Activity'} and replace this device's portable History and Progress?`}
+        icon="alert-circle-outline"
+        onDismiss={() => setReviewResolution(null)}
+        actions={[
+          { label: 'Cancel', role: 'cancel', onPress: () => setReviewResolution(null) },
+          {
+            label: 'Confirm',
+            role: 'primary',
+            onPress: () => {
+              const choice = reviewResolution;
+              setReviewResolution(null);
+              if (choice) steady.resolveReview(choice);
+            },
+          },
         ]}
       />
 
@@ -287,6 +377,16 @@ const styles = StyleSheet.create({
   localSummary: { fontSize: fontSizes.xs, lineHeight: 18, marginLeft: 52 },
   message: { fontSize: fontSizes.xs, lineHeight: 18, marginLeft: 52 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], marginLeft: 52 },
+  autoRow: { marginLeft: 52, borderWidth: 1, borderRadius: radii.lg, padding: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  autoCopy: { flex: 1 },
+  autoTitle: { fontSize: fontSizes.sm, fontWeight: '800' },
+  autoDescription: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: 2 },
+  reviewBox: { marginLeft: 52, borderWidth: 1, borderRadius: radii.lg, padding: spacing[3], gap: spacing[3] },
+  reviewCounts: { flexDirection: 'row', gap: spacing[3] },
+  reviewCount: { flex: 1 },
+  reviewLabel: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 },
+  reviewValue: { fontSize: fontSizes.sm, fontWeight: '800', marginTop: 3 },
+  reviewDescription: { fontSize: fontSizes.xs, lineHeight: 18 },
   button: { minHeight: 42, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
   buttonText: { fontSize: fontSizes.xs, fontWeight: '800' },
   pressed: { opacity: 0.74, transform: [{ scale: 0.985 }] },

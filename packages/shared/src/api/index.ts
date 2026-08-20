@@ -53,6 +53,17 @@ export {
 } from './portableWatchedSteadyStateConflict';
 
 export {
+  reconcilePortableViewingActivitySteadyStateSyncV1,
+  type PortableViewingActivitySteadyStateReconcileV1,
+} from './portableViewingActivitySteadyStateSync';
+
+export {
+  resolvePortableViewingActivitySteadyStateConflictV1,
+  type PortableViewingActivitySteadyStateConflictResolutionV1,
+  type PortableViewingActivitySteadyStateConflictResolutionResultV1,
+} from './portableViewingActivitySteadyStateConflict';
+
+export {
   inspectPortableViewingActivityOneShotSyncV1,
   executePortableViewingActivityOneShotSyncV1,
   type PortableViewingActivityCountsV1,

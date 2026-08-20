@@ -888,7 +888,7 @@ export default function App() {
     );
 
   return (
-    <DesktopSyncProviders googleProfile={googleProfile} networkStatus={network.status} saved={saved} savedOrder={savedOrder} watched={watched}>
+    <DesktopSyncProviders googleProfile={googleProfile} networkStatus={network.status} saved={saved} savedOrder={savedOrder} watched={watched} history={history} progress={progress}>
       <ErrorBoundary>
         <div className={`app-shell${String(page).startsWith("music-") ? " music-world" : ""}`}>
         {hasCustomTitlebar && (

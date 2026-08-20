@@ -92,6 +92,23 @@ function eventTime(domain: ActivityDomain, record: PortableProfileRecordV3): num
   return value ? value.lastPlayedAt : null;
 }
 
+
+function sameVerifiedEventTruth(domain: ActivityDomain, left: ActivityValue, right: ActivityValue): boolean {
+  if (domain === 'history') {
+    const a = left as PortableHistoryValueV1;
+    const b = right as PortableHistoryValueV1;
+    return a.lastPlayedAt === b.lastPlayedAt && a.verified === b.verified;
+  }
+  const a = left as PortableProgressValueV1;
+  const b = right as PortableProgressValueV1;
+  return a.currentTime === b.currentTime
+    && a.duration === b.duration
+    && a.percent === b.percent
+    && a.startedAt === b.startedAt
+    && a.lastPlayedAt === b.lastPlayedAt
+    && a.verified === b.verified;
+}
+
 function canonicalKey(value: ActivityValue): string {
   return portableViewingKey(
     value.media.mediaType,
@@ -226,7 +243,22 @@ function buildSteadyStateNamespace(
       throw new Error(`Portable ${domain} local truth is older than the verified profile record.`);
     }
     if (value.lastPlayedAt === existingValue.lastPlayedAt) {
-      throw new Error(`Portable ${domain} has an ambiguous equal-time update.`);
+      if (!sameVerifiedEventTruth(domain, existingValue, value)) {
+        throw new Error(`Portable ${domain} has an ambiguous equal-time update.`);
+      }
+      // Presentation/media-label enrichment is portable but not playback truth.
+      // Do not create a standalone Cloud write for it, but when a real
+      // steady-state mutation is already being built, carry the richer local
+      // representation forward instead of blocking the verified event.
+      changed = true;
+      records[key] = {
+        revision: existing.revision + 1,
+        updatedAt: now,
+        updatedBy,
+        deletedAt: null,
+        value: value as any,
+      };
+      continue;
     }
 
     changed = true;

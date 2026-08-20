@@ -17,6 +17,7 @@ import { NetworkProvider } from '../src/context/NetworkContext';
 import { AccountProvider } from '../src/context/AccountContext';
 import { MyListSteadyStateSyncProvider } from '../src/features/account/MyListSteadyStateSync';
 import { WatchedSteadyStateSyncProvider } from '../src/features/account/WatchedSteadyStateSync';
+import { ViewingActivitySteadyStateSyncProvider } from '../src/features/account/ViewingActivitySteadyStateSync';
 import { OrionSyncPolicyProvider } from '../src/features/account/SyncPolicyContext';
 import { LibraryProfileProvider, useOrionLibraryProfile } from '../src/features/account/LibraryProfileContext';
 import { OfflineBanner } from '../src/components/OfflineBanner';
@@ -111,7 +112,8 @@ function ThemedApplication() {
       <LibraryProvider key={libraryProfile.scopeId} storage={libraryProfile.storage}>
         <MyListSteadyStateSyncProvider>
           <WatchedSteadyStateSyncProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
+            <ViewingActivitySteadyStateSyncProvider>
+              <GestureHandlerRootView style={{ flex: 1 }}>
               <View style={[styles.container, { backgroundColor: theme.background }]}>
                 <MobileDiagnosticsBridge />
                 <StatusBar style={theme.dark ? 'light' : 'dark'} />
@@ -126,7 +128,8 @@ function ThemedApplication() {
                 <GlobalSearchShortcut />
                 <OfflineBanner />
               </View>
-            </GestureHandlerRootView>
+              </GestureHandlerRootView>
+            </ViewingActivitySteadyStateSyncProvider>
           </WatchedSteadyStateSyncProvider>
         </MyListSteadyStateSyncProvider>
       </LibraryProvider>

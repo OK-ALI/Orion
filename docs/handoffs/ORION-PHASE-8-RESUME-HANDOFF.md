@@ -823,3 +823,147 @@ The remaining Phase 8 work must continue to satisfy that baseline:
 - perform the P8.7 full cross-platform audit before Phase 8 can lock.
 
 Immediate next implementation work is therefore the remaining V3-P8-006/007/008/010 synchronization and reconciliation scope, beginning with History + verified Progress architecture.
+
+<!-- V3-P8-006A-C3-CHECKPOINT-2026-08-20 -->
+
+## V3-P8-006A C3 - Viewing Activity steady-state checkpoint
+
+**Date:** 2026-08-20
+**Canonical entry HEAD:** `03f31444c9b601b1f4100ff75e7fbc28b15d6947`
+**Branch:** `codex/orion-v3-p8.1-candidate-1`
+**Checkpoint status:** C3 implementation and acceptance COMPLETE; commit not yet created at the time of this handoff entry.
+**P8-006A lock status:** NOT LOCKED.
+**Phase 8 status:** NOT LOCKED.
+
+### Outcome
+
+History and verified playback Progress now participate in steady-state cross-platform synchronization after explicit enrollment.
+
+The implementation extends the existing Phase 8 synchronization architecture:
+
+- one shared Viewing Activity reconciliation coordinator owns History + Progress;
+- Desktop and Mobile remain thin platform adapters;
+- existing CloudProfileStore implementations are reused;
+- existing Library owners remain authoritative for local History and Progress;
+- checkpoints are account/profile scoped reconciliation evidence;
+- conditional Cloud writes and semantic read-back verification remain mandatory;
+- stale in-flight work is fenced by active account/profile identity;
+- later verified event time wins where deterministic;
+- tombstones prevent deleted records from being silently resurrected;
+- equal-time contradictory truth fails closed;
+- two-sided post-checkpoint ambiguity requires an explicit Keep this device/Desktop or Keep Orion Cloud decision;
+- Continue Watching remains locally derived from synchronized verified Progress and has no Cloud namespace.
+
+### Physical acceptance
+
+Initial enrolled state converged on Mobile and Desktop.
+
+Mobile -> Orion Cloud -> Desktop:
+
+- new verified playback created new History;
+- playback position propagated;
+- Desktop received the synchronized state;
+- Desktop Continue Watching re-derived locally from the received Progress.
+
+Desktop -> Orion Cloud -> Mobile:
+
+- new Desktop verified playback propagated to Mobile;
+- History and playback position appeared on Mobile;
+- Mobile Continue Watching re-derived locally and displayed the received resumable position.
+
+Auto Sync OFF:
+
+- new local Mobile Viewing Activity remained local while automatic synchronization was paused;
+- Desktop remained unchanged;
+- explicit Sync now reconciled the new state successfully.
+
+Offline playback physical validation is **N/A for C3 under the current product boundary** because current streaming playback cannot open media while offline. Full offline media playback belongs to Phase 10. Offline-first synchronization/reconciliation safety remains covered by the C3 contracts and tests.
+
+### Repair history
+
+Candidate 1.4 repaired metadata-only same-time presentation drift so already-equivalent portable Viewing Activity does not enter false review.
+
+Candidate 1.5 repaired the first-real-push path so old harmless presentation drift cannot block propagation of an unrelated genuinely new verified event.
+
+Candidate 1.6 repaired a stale Electron E2E harness assumption. The playback-lifecycle test had attempted a normal Playwright click on a mounted but intentionally hidden auto-hide Sidebar item. The test now triggers the mounted Home item directly, consistent with the existing navigation harness. Production playback code was not changed.
+
+### Final automated evidence
+
+Mobile:
+
+- TypeScript PASS;
+- 239/239 tests PASS;
+- source-size PASS for 137 files;
+- Expo Doctor 20/20 PASS;
+- production web export PASS.
+
+Desktop:
+
+- source-size PASS for 365 files;
+- renderer binding PASS for 319 files;
+- IPC contract preserved at 222 methods / 141 channels;
+- secret scan PASS;
+- theme-color gate PASS;
+- no circular dependencies across 350 processed files;
+- Node tests 106/106 PASS;
+- renderer tests 262/262 PASS across 59 files;
+- fresh Vite production build PASS.
+
+Electron:
+
+- previously failing playback-handoff test 1/1 PASS;
+- full Electron E2E 22/22 PASS.
+
+Known non-blocking warnings remain classified:
+
+- Mobile `MODULE_TYPELESS_PACKAGE_JSON` trailerCandidateService warning;
+- Desktop SQLite experimental warning;
+- MiniPlayer React `act(...)` warning;
+- Vite chunk-size advisory.
+
+### C3 workspace boundary
+
+Checkpoint candidate scope before documentation:
+
+- 13 tracked modifications;
+- 6 new C3 source/test files;
+- 19 C3-owned paths total;
+- staged index empty;
+- C3 whitespace clean;
+- existing My List, Watched, Library apply and CloudProfileStore owners not rewritten;
+- Continue Watching did not acquire Cloud ownership;
+- historical archaeology left untouched.
+
+### Mandatory work before Phase 8 lock
+
+The following is explicit roadmap work.
+
+**Count Semantics & Data Truth Audit**
+
+- trace every displayed count on Desktop and Mobile;
+- prove the population represented by My List, Watched, History, playback positions and Continue Watching;
+- do not alter correct backend semantics merely to make numbers visually agree;
+- Library represents user-facing content truth;
+- Settings -> Account represents account/Orion Cloud synchronization truth;
+- different populations require explicit wording.
+
+**Production polish**
+
+- unify Mobile Settings -> Account;
+- normalize Desktop/Mobile Orion Cloud vocabulary and state hierarchy;
+- replace backend-shaped Progress wording with clearer playback-position language where appropriate;
+- remove developer-oriented wording such as Manual, portable, and v1 checkpoint from user-facing presentation;
+- show an actual busy/Syncing state during explicit Sync now even when Auto Sync is OFF;
+- retain Paused after the operation if Auto Sync remains OFF;
+- audit responsive layout, accessibility, themes, spacing, typography, disabled and busy states.
+
+**Remaining functional Phase 8 scope**
+
+- portable Preferences whitelist/policy;
+- supported Music data disposition;
+- remaining reconciliation/policy requirements;
+- final P8.7 cross-platform audit.
+
+### Current authoritative sequence
+
+V3-P8-006A C3 checkpoint -> remaining Phase 8 functional domains/policies -> Count Semantics & Data Truth Audit -> Phase 8 production polish -> Mobile Account unification -> Desktop/Mobile consistency audit -> final P8.7 cross-platform audit -> Phase 8 LOCK.

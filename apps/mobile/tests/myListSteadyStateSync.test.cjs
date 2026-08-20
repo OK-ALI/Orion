@@ -142,7 +142,7 @@ test("P8.3 Candidate 4 mounts a reusable per-domain sync policy between Account 
   const policy = read("src/features/account/SyncPolicyContext.tsx");
 
   assert.match(layout, /<AccountProvider>[\s\S]*<OrionSyncPolicyProvider>[\s\S]*<ThemedApplication \/>[\s\S]*<\/OrionSyncPolicyProvider>[\s\S]*<\/AccountProvider>/);
-  assert.match(policy, /ORION_SYNC_DOMAINS = \['myList', 'watched'\] as const/);
+  assert.match(policy, /ORION_SYNC_DOMAINS = \[[^\]]*'myList'[^\]]*'watched'[^\]]*\] as const/);
   assert.match(policy, /p8\.syncPolicy\.v1:/);
   assert.match(policy, /profileId/);
   assert.match(policy, /automatic: true/);
@@ -179,7 +179,7 @@ test("P8.4 C3-D extends the reusable policy registry without changing My List do
   const policy = read("src/features/account/SyncPolicyContext.tsx");
   const preflight = read("src/features/settings/MyListEnrollmentPreflight.tsx");
 
-  assert.match(policy, /ORION_SYNC_DOMAINS = \['myList', 'watched'\] as const/);
+  assert.match(policy, /ORION_SYNC_DOMAINS = \[[^\]]*'myList'[^\]]*'watched'[^\]]*\] as const/);
   assert.match(preflight, /syncPolicy\.setAutomatic\('myList', enabled\)/);
   assert.doesNotMatch(preflight, /setAutomatic\('watched'|markWatched|markUnwatched|recordPlayback|clearHistory|removeProgress/);
   assert.match(preflight, /uploading only My List/);

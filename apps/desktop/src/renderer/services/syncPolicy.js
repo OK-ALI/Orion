@@ -53,3 +53,6 @@ export const loadDesktopMyListAutomaticV1 = (profileId) => loadAutomatic(profile
 export const saveDesktopMyListAutomaticV1 = (profileId, enabled) => saveAutomatic(profileId, "myList", enabled);
 export const loadDesktopWatchedAutomaticV1 = (profileId) => loadAutomatic(profileId, "watched");
 export const saveDesktopWatchedAutomaticV1 = (profileId, enabled) => saveAutomatic(profileId, "watched", enabled);
+
+export const loadDesktopViewingActivityAutomaticV1 = (profileId) => loadAutomatic(profileId, "viewingActivity");
+export const saveDesktopViewingActivityAutomaticV1 = (profileId, enabled) => saveAutomatic(profileId, "viewingActivity", enabled);

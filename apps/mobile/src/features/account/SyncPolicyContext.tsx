@@ -7,7 +7,7 @@ const SYNC_POLICY_KEY_PREFIX = 'p8.syncPolicy.v1:';
 
 // P8.3 introduced the reusable local policy registry. P8.4 C3-D enrolls
 // Watched without changing the storage contract or making policy portable.
-export const ORION_SYNC_DOMAINS = ['myList', 'watched'] as const;
+export const ORION_SYNC_DOMAINS = ['myList', 'watched', 'viewingActivity'] as const;
 export type OrionSyncDomain = (typeof ORION_SYNC_DOMAINS)[number];
 
 export interface OrionSyncDomainPolicyV1 {
@@ -32,6 +32,7 @@ function defaultDomains(): Record<OrionSyncDomain, OrionSyncDomainPolicyV1> {
   return {
     myList: { automatic: true },
     watched: { automatic: true },
+    viewingActivity: { automatic: true },
   };
 }
 
