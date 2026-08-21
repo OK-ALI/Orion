@@ -7,7 +7,7 @@
 
 ## Living Roadmap Status
 
-> **Overall Orion v3 implementation completion: 74%**
+> **Overall Orion v3 implementation completion: 83%**
 >
 > **Last verified:** August 21, 2026
 > **Release readiness:** Not ready  
@@ -199,7 +199,7 @@ release regression matrix; neither item reduces Phase 5's accepted completion.
 - [x] **V3-P6-011:** Validate every provider and presentation mode with 200% text and Reduced Motion.
 - [x] **V3-P6-012:** Deliver native shield evidence counters directly through the Android view event boundary to the unified HUD without depending on provider-page JavaScript or changing/blocking playback.
 
-Phase 6 remains open at 75%. The controller, HUD, presentation preferences,
+Historical Phase 6 checkpoint: the phase was open at 75% at this point. The controller, HUD, presentation preferences,
 immersive Android ownership, mutually exclusive overlays, state-driven recovery
 and native shield callback are implemented and automated. `V3-P6-005` and
 `V3-P6-011` require the physical layout/provider matrix. `V3-P6-007` remains
@@ -403,7 +403,7 @@ reordering itself earned no credit. Revised Phase 4 is complete only because its
 scope was narrowed to the accepted secure foundation; every excluded failed
 outcome remains open in Phase 11. Phase 10 adds an essential Mobile downloader
 without awarding completion for roadmap text alone. Phase 5 subsequently closed
-at its physically accepted boundary; Phase 6 is now active.
+at its physically accepted boundary; Phase 6 later completed and locked before Phase 8.
 
 ## Progress Log
 
@@ -411,7 +411,7 @@ Every roadmap update should add one row. Do not delete older entries.
 
 | Date | Checklist IDs | Change | Evidence | Overall completion |
 |---|---|---|---|---:|
-| 2026-08-21 | V3-P8-001-V3-P8-010, P8.7 | Completed final Phase 8 cross-platform audit, physical bidirectional sync/conflict/isolation acceptance, canonical production gates and implementation lock | Lock `5b9cb7ad8824b24cecccc83f5cee52614c72a8ee`; final lock audit in `docs/audits` | 74% |
+| 2026-08-21 | V3-P8-001-V3-P8-010, P8.7 | Completed final Phase 8 cross-platform audit, physical bidirectional sync/conflict/isolation acceptance, canonical production gates and implementation lock | Lock `5b9cb7ad8824b24cecccc83f5cee52614c72a8ee`; final lock audit in `docs/audits` | 83% |
 | 2026-07-31 | V3-P0-001, V3-P0-002, V3-P0-003 | Verified current type, IPC, and binding baseline | Local repository checks | 24% |
 | 2026-07-31 | V3-P1-001, V3-P1-002, V3-P2-001 | Confirmed native progress and MMKV storage foundations; embedded telemetry remains missing | Code audit | 24% |
 | 2026-07-31 | V3-P3-001, V3-P3-002 | Confirmed non-blank trailer surface and external fallback; in-Orion reliability remains partial | Physical-device screenshots and code audit | 24% |
