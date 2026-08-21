@@ -16,6 +16,23 @@
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
+### Canonical Phase 7-8 reconciliation - August 21, 2026
+
+This section is the current source of truth for the Phase 7 and Phase 8 boundary. Dated checkpoint sections later in this document preserve what was true at those earlier moments; any historical `NOT LOCKED` statement is superseded by the final locks below.
+
+| Boundary | Canonical evidence | Verified result |
+|---|---|---|
+| Phase 7 implementation | Lock `437640f5e6c7d16d0dad2b020d34b06436731acd` (`checkpoint: lock post-Phase-7 mobile viewing foundation`) | Complete and locked on August 16, 2026 |
+| Phase 7 archive/readiness | Commit `ec65bec235087cba72ed6388b8fa4be1c09289ef`; `docs/checkpoints/candidate-archives/Orion-Phase7-Candidates.zip`; archive SHA-256 `27865B59D381A72D915B955DE912169EAFF29DA52499C920233656D15C4474B7` | Accepted candidates are preserved; rejected Phase 7.10.2 remains archival only and is not part of the canonical lock |
+| Phase 8 implementation | Lock `5b9cb7ad8824b24cecccc83f5cee52614c72a8ee` (`lock: complete Phase 8 cross-platform sync`) | Complete and locked on August 21, 2026 |
+| Phase 8 final acceptance | Audit commit `9be060d0f0288e4c8fefdbd72dd1e04c19127d6e`; `docs/audits/ORION-V3-P8.7-PHASE-8-FINAL-LOCK-AUDIT.md` | Bidirectional My List, Watched, History and verified Progress sync, conflict recovery, account/profile fencing, data truth and production gates accepted |
+| Phase 8 Android artifact | Bundled APK, 112.63 MB; SHA-256 `FB27A130BB383A5EDB6A140CB927149E3C48BE0B4F9260FACBB3F55EFFD48DAD` | Final Phase 8 Mobile artifact recorded and physically validated |
+| Roadmap/repository alignment | Reconciliation commit `ca8e04130b60b81f3533f70a1d190fc550129a42`; local branch and upstream were aligned with a clean worktree before this audit amendment | 82.53% weighted completion, rounded to 83%; Phase 9 is the next active phase |
+
+Phase 8 intentionally keeps Continue Watching as a local derived view, application preferences platform-local, and Music Planet Desktop-only. These are accepted scope decisions, not missing Phase 8 work.
+
+**Phase 9 branch hygiene:** the verified implementation currently sits on `codex/orion-v3-p8.1-candidate-1`. This does not weaken either lock, but Phase 9 work should branch from reconciliation commit `ca8e04130b60b81f3533f70a1d190fc550129a42` (plus this audit amendment once committed) so the new milestone has an unambiguous rollback boundary.
+
 ### Status legend
 
 | Status | Meaning |
@@ -412,6 +429,7 @@ Every roadmap update should add one row. Do not delete older entries.
 | Date | Checklist IDs | Change | Evidence | Overall completion |
 |---|---|---|---|---:|
 | 2026-08-21 | V3-P8-001-V3-P8-010, P8.7 | Completed final Phase 8 cross-platform audit, physical bidirectional sync/conflict/isolation acceptance, canonical production gates and implementation lock | Lock `5b9cb7ad8824b24cecccc83f5cee52614c72a8ee`; final lock audit in `docs/audits` | 83% |
+| 2026-08-16 | V3-P7-001-V3-P7-011, V3-P7-022, V3-P7-023 | Locked the complete Mobile UX/performance boundary and preserved the accepted Phase 7 candidate history before Phase 8 | Implementation lock `437640f5e6c7d16d0dad2b020d34b06436731acd`; archive/readiness commit `ec65bec235087cba72ed6388b8fa4be1c09289ef`; candidate archive SHA-256 `27865B59D381A72D915B955DE912169EAFF29DA52499C920233656D15C4474B7` | Historical Phase 7 boundary; current total 83% |
 | 2026-07-31 | V3-P0-001, V3-P0-002, V3-P0-003 | Verified current type, IPC, and binding baseline | Local repository checks | 24% |
 | 2026-07-31 | V3-P1-001, V3-P1-002, V3-P2-001 | Confirmed native progress and MMKV storage foundations; embedded telemetry remains missing | Code audit | 24% |
 | 2026-07-31 | V3-P3-001, V3-P3-002 | Confirmed non-blank trailer surface and external fallback; in-Orion reliability remains partial | Physical-device screenshots and code audit | 24% |
@@ -1786,9 +1804,11 @@ This order prevents Orion from displaying invented progress, stale remote state,
 
 <!-- V3-P8-COUNT-SEMANTICS-DATA-TRUTH-CLOSURE-2026-08-21 -->
 
-## Phase 8 Count Semantics and Data Truth closure - 2026-08-21
+## Historical Phase 8 Count Semantics and Data Truth closure - 2026-08-21
 
-**Status:** COMPLETE at functional/data-truth scope. Phase 8 overall remains NOT LOCKED.
+> **Superseded checkpoint status:** Phase 8 was not yet locked when this audit was written. The final implementation lock `5b9cb7ad8824b24cecccc83f5cee52614c72a8ee` and P8.7 audit now define the current status.
+
+**Historical status at this checkpoint:** COMPLETE at functional/data-truth scope; Phase 8 overall was not yet locked.
 
 The required Phase 8 Count Semantics and Data Truth audit is complete.
 
@@ -1838,16 +1858,18 @@ Immediate next work is the coherent Phase 8 production-polish pass before overal
 - complete consistency, responsive and accessibility polish,
 - then perform the P8.7 full cross-platform audit.
 
-Phase 8 remains NOT LOCKED.
+At this checkpoint, Phase 8 remained not locked. That status was superseded by the final Phase 8 implementation lock and P8.7 acceptance recorded above.
 
 
 <!-- V3-P8-PRE-P8.7-CHECKPOINT-AUDIT-2026-08-21 -->
 
-## Phase 8 pre-P8.7 checkpoint audit - 2026-08-21
+## Historical Phase 8 pre-P8.7 checkpoint audit - 2026-08-21
+
+> **Superseded checkpoint status:** This section records the state before P8.7. Phase 8 subsequently completed and locked at `5b9cb7ad8824b24cecccc83f5cee52614c72a8ee`.
 
 **Checkpoint parent:** `c18162cacac69499fc30d073e125f330b009de27`
 **Classification:** PRE-P8.7 CHECKPOINT CANDIDATE
-**Phase 8:** NOT LOCKED
+**Historical Phase 8 status at this checkpoint:** NOT LOCKED (superseded by final lock)
 
 The completed-work audit found 55 current code/test candidate paths before this documentation amendment: 42 Desktop, 12 Mobile and 1 Shared, with an empty staged index.
 
