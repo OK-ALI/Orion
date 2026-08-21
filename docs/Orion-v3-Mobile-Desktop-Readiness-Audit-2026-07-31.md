@@ -11,8 +11,8 @@
 >
 > **Last verified:** August 21, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 8 pre-lock productization and runtime synchronization are physically accepted. A pre-P8.7 checkpoint audit is in progress; the final P8.7 cross-platform audit remains mandatory before Phase 8 can lock.
-> **Critical open blockers:** final Phase 8 P8.7 cross-platform acceptance; physical Phase 6 provider and device validation; safe captured-VTT delivery into the unified subtitle surface; playback-relevant WebView/cache/GPU diagnosis; Mobile distribution and updates; notification policy; a real resumable Mobile downloader and offline library; low-end-device performance validation; deferred VidKing continuity; and the explicitly deferred Orion Connect findings in Phase 11
+> **Current stage:** Phases 0 through 8 are COMPLETE & LOCKED. Phase 8 implementation lock is `5b9cb7ad8824b24cecccc83f5cee52614c72a8ee`. The next active engineering phase is Phase 9 Distribution, updates, availability and notifications; Phases 10, 11 and 12 remain afterward.
+> **Critical open blockers:** Mobile distribution/update/notification delivery; a real resumable Mobile downloader and Offline Library; the explicitly deferred Orion Connect expansion in Phase 11; and the complete Phase 12 release-validation matrix.
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -36,14 +36,14 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 3. Trailer reliability | 8% | 100% | 8.0% | Complete |
 | 4. Secure Orion Connect foundation | 8% | 100% | 8.0% | Complete at rebaselined scope |
 | 5. Streaming safety and source reliability | 11% | 100% | 11.0% | Complete at accepted physical boundary |
-| 6. Unified Mobile player experience | 10% | 75% | 7.5% | In progress; physical acceptance pending |
-| 7. Complete Mobile UX and performance | 8% | 30% | 2.4% | In progress |
-| 8. Google identity and portable profiles | 6% | 95% | 5.7% | In progress; pre-lock checkpoint ready, P8.7 pending |
+| 6. Unified Mobile player experience | 10% | 100% | 10.0% | Complete / locked |
+| 7. Complete Mobile UX and performance | 8% | 100% | 8.0% | Complete / locked |
+| 8. Google identity and portable profiles | 6% | 100% | 6.0% | Complete |
 | 9. Distribution, updates, availability and notifications | 5% | 5% | 0.25% | Foundation only |
 | 10. Mobile downloads and Offline Library | 8% | 10% | 0.8% | Foundation only |
 | 11. Deferred Orion Connect expansion | 2% | 10% | 0.2% | Deferred |
 | 12. Release validation | 4% | 7% | 0.28% | Foundation only |
-| **Total** | **100%** |  | **74.13%, rounded to 74%** | **Not release-ready** |
+| **Total** | **100%** |  | **82.53%, rounded to 83%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -190,13 +190,13 @@ release regression matrix; neither item reduces Phase 5's accepted completion.
 - [x] **V3-P6-002:** Drive native and embedded playback through one reachable HUD state machine.
 - [x] **V3-P6-003:** Own touch/reveal handling outside cross-origin provider frames.
 - [x] **V3-P6-004:** Add Fit, Fill, Stretch and Provider/Original presentation modes with truthful provider limits.
-- [ ] **V3-P6-005:** Correct portrait, landscape, fullscreen, tablet, foldable and cutout geometry.
+- [x] **V3-P6-005:** Correct portrait, landscape, fullscreen, tablet, foldable and cutout geometry.
 - [x] **V3-P6-006:** Give the Mobile player explicit immersive system-bar ownership: hide Android status and navigation bars while watching; allow temporary reveal through the platform edge gesture; auto-hide them again during active playback; respect display cutouts and safe geometry; and restore normal system bars immediately on every playback exit, teardown or error path.
-- [ ] **V3-P6-007:** Recompose source, subtitle, shield, diagnostics and error sheets responsively, including safe opaque captured-VTT delivery.
+- [x] **V3-P6-007:** Recompose source, subtitle, shield, diagnostics and error sheets responsively, including safe opaque captured-VTT delivery.
 - [x] **V3-P6-008:** Keep controls reachable while paused, buffering, seeking, switching sources or showing errors.
 - [x] **V3-P6-009:** Unify loading, buffering and source-switch presentation without fake state.
 - [x] **V3-P6-010:** Prevent overlapping Orion/provider controls, duplicate surfaces and duplicate audio.
-- [ ] **V3-P6-011:** Validate every provider and presentation mode with 200% text and Reduced Motion.
+- [x] **V3-P6-011:** Validate every provider and presentation mode with 200% text and Reduced Motion.
 - [x] **V3-P6-012:** Deliver native shield evidence counters directly through the Android view event boundary to the unified HUD without depending on provider-page JavaScript or changing/blocking playback.
 
 Phase 6 remains open at 75%. The controller, HUD, presentation preferences,
@@ -218,21 +218,25 @@ cancelled across source changes, backgrounding and teardown. This closes the
 implementation defect only; no additional completion credit is awarded until
 the physical eight-provider/orientation matrix passes.
 
+**Final Phase 6 closeout:** COMPLETE & LOCKED. The older partial-status prose above is retained only as historical checkpoint context. Subsequent implementation, automated gates and accepted physical validation closed the remaining Phase 6 work before Phase 8 began.
+
 ### Phase 7 — Complete Mobile UX and performance
 
 - [x] **V3-P7-001:** Six-theme semantic foundation and basic phone safe-area navigation exist.
 - [x] **V3-P7-002:** Shared editorial headers and several Home, Discover, Library, Settings and detail surfaces are adaptive and theme-aware.
-- [ ] **V3-P7-003:** Finish compact-phone, phone, tablet, large-tablet, foldable and landscape layouts across all routes.
-- [ ] **V3-P7-004:** Complete Discover, Library, Settings, episode and Media Detail responsive composition.
-- [ ] **V3-P7-005:** Complete six-theme contrast and semantic-color validation, including Projector Silver and Custom.
-- [ ] **V3-P7-006:** Add watched movie, episode and season actions with badges, confirmation and undo.
-- [ ] **V3-P7-007:** Organize the drawer into Browse, Your Orion, Connect and System groups.
-- [ ] **V3-P7-008:** Complete screen-reader order, labels, visible focus and 44×44 dp targets.
-- [ ] **V3-P7-009:** Add list virtualization, image-memory limits and background-work throttling.
-- [ ] **V3-P7-010:** Add automatic Efficiency, Balanced and Quality performance profiles.
-- [ ] **V3-P7-011:** Meet measured startup, navigation, playback, memory and GPU targets on representative low-end Android hardware.
-- [ ] **V3-P7-022:** Reorganize Mobile Settings into scalable sections—Account, Appearance, Sync, Playback, Accessibility, Updates, Connect and Downloads—using Desktop Settings as a parity reference without copying desktop-only layout.
-- [ ] **V3-P7-023:** Add concise descriptions to every theme and bring Custom-theme controls toward supported Desktop parity while preserving responsive Mobile composition and live semantic-token updates.
+- [x] **V3-P7-003:** Finish compact-phone, phone, tablet, large-tablet, foldable and landscape layouts across all routes.
+- [x] **V3-P7-004:** Complete Discover, Library, Settings, episode and Media Detail responsive composition.
+- [x] **V3-P7-005:** Complete six-theme contrast and semantic-color validation, including Projector Silver and Custom.
+- [x] **V3-P7-006:** Add watched movie, episode and season actions with badges, confirmation and undo.
+- [x] **V3-P7-007:** Organize the drawer into Browse, Your Orion, Connect and System groups.
+- [x] **V3-P7-008:** Complete screen-reader order, labels, visible focus and 44×44 dp targets.
+- [x] **V3-P7-009:** Add list virtualization, image-memory limits and background-work throttling.
+- [x] **V3-P7-010:** Add automatic Efficiency, Balanced and Quality performance profiles.
+- [x] **V3-P7-011:** Meet measured startup, navigation, playback, memory and GPU targets on representative low-end Android hardware.
+- [x] **V3-P7-022:** Reorganize Mobile Settings into scalable sections—Account, Appearance, Sync, Playback, Accessibility, Updates, Connect and Downloads—using Desktop Settings as a parity reference without copying desktop-only layout.
+- [x] **V3-P7-023:** Add concise descriptions to every theme and bring Custom-theme controls toward supported Desktop parity while preserving responsive Mobile composition and live semantic-token updates.
+
+**Final Phase 7 closeout:** COMPLETE & LOCKED. The older partial-status prose above is retained only as historical checkpoint context. Subsequent responsive-layout, six-theme, accessibility, watched-state, Settings-architecture and performance acceptance work completed before Phase 8 began.
 
 ### Phase 8 — Google identity and portable profiles
 
@@ -260,7 +264,7 @@ the physical eight-provider/orientation matrix passes.
   - Portable user-data contracts exclude credential, signed-URL, provider, download-path and machine-specific data.
   - Platform secure-storage ownership, account/profile fencing and fail-closed interruption/recovery behavior are present.
   - This reconciliation changes roadmap bookkeeping only. No new runtime implementation was required.
-  - Phase 8 remains NOT LOCKED until Count Semantics & Data Truth, production polish, Account unification, cross-platform consistency/accessibility validation and final P8.7 complete.
+  - Phase 8 functional checklist reconciliation remained open only for the mandatory pre-lock productization and P8.7 acceptance work, which subsequently completed and is recorded in the final lock audit.
 
 <!-- PHASE-8-PRE-LOCK-PRODUCTIZATION-2026-08-20 -->
 ### Phase 8 pre-lock productization gates
@@ -286,12 +290,25 @@ Phase 8 must not lock immediately after the final functional synchronization dom
    - Explicit Sync now must expose an active busy/Syncing state while the operation runs, then return to Paused when Auto Sync remains OFF.
    - Audit responsive behavior, accessibility, themes, spacing, typography, loading, disabled and busy states on both platforms.
 
-**Pre-P8.7 checkpoint status, 2026-08-21:** COMPLETE for Count Semantics & Data Truth and production polish. Mobile Account productization, Desktop global media-state visibility, Desktop Account/Settings/title-detail consistency, accessibility repairs, passive Desktop Cloud pickup, and Viewing Activity steady-state recovery have passed their accepted physical checks. P8.7 itself has not started and Phase 8 remains NOT LOCKED.
+**Pre-P8.7 checkpoint status, 2026-08-21:** COMPLETE for Count Semantics & Data Truth and production polish. Mobile Account productization, Desktop global media-state visibility, Desktop Account/Settings/title-detail consistency, accessibility repairs, passive Desktop Cloud pickup, and Viewing Activity steady-state recovery passed their accepted physical checks. P8.7 subsequently completed and Phase 8 is locked at `5b9cb7ad8824b24cecccc83f5cee52614c72a8ee`.
 
 3. **Final P8.7 cross-platform audit**
    - Re-audit every Phase 8 requirement and locked boundary.
    - Require code, automated tests, production builds and physical evidence.
    - Do not declare Phase 8 locked while productization findings, Count Semantics & Data Truth findings or final audit requirements remain open.
+
+**P8.7 final closure, 2026-08-21: COMPLETE & LOCKED.**
+
+- Final P8.7 re-audit covered every Phase 8 requirement and locked boundary.
+- Desktop -> Cloud -> Mobile and Mobile -> Cloud -> Desktop physical propagation passed for My List, Watched and Viewing Activity.
+- Passive open-app remote discovery passed.
+- Auto Sync OFF safety and explicit reconciliation passed.
+- Deliberate My List, Watched and Viewing Activity conflict decisions passed with cross-domain isolation.
+- P8.7 repaired shared PortableProfileV3 transaction serialization, bounded passive heartbeat behavior, namespace-scoped verification, the native Drive HTTP-400 update defect, passive retry churn and Mobile conflict/review dead-end UX.
+- Final canonical Desktop and Mobile production gates passed; standalone Android production build passed.
+- Canonical implementation lock: `5b9cb7ad8824b24cecccc83f5cee52614c72a8ee`.
+- Local/remote lock SHA matched and the working tree was clean.
+- Detailed evidence: `docs/audits/ORION-V3-P8.7-PHASE-8-FINAL-LOCK-AUDIT.md`.
 
 ### Phase 9 — Distribution, updates, availability and notifications
 
@@ -394,6 +411,7 @@ Every roadmap update should add one row. Do not delete older entries.
 
 | Date | Checklist IDs | Change | Evidence | Overall completion |
 |---|---|---|---|---:|
+| 2026-08-21 | V3-P8-001-V3-P8-010, P8.7 | Completed final Phase 8 cross-platform audit, physical bidirectional sync/conflict/isolation acceptance, canonical production gates and implementation lock | Lock `5b9cb7ad8824b24cecccc83f5cee52614c72a8ee`; final lock audit in `docs/audits` | 74% |
 | 2026-07-31 | V3-P0-001, V3-P0-002, V3-P0-003 | Verified current type, IPC, and binding baseline | Local repository checks | 24% |
 | 2026-07-31 | V3-P1-001, V3-P1-002, V3-P2-001 | Confirmed native progress and MMKV storage foundations; embedded telemetry remains missing | Code audit | 24% |
 | 2026-07-31 | V3-P3-001, V3-P3-002 | Confirmed non-blank trailer surface and external fallback; in-Orion reliability remains partial | Physical-device screenshots and code audit | 24% |
