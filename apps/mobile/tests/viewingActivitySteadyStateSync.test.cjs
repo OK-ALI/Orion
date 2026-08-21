@@ -18,7 +18,7 @@ test('V3-P8-006A C3 uses one shared event-time coordinator and keeps Continue Wa
   assert.match(shared, /mergePortableViewingActivityRecordsV1/);
   assert.match(shared, /two-sided-removal-ambiguity/);
   assert.match(shared, /expectedRevisionTag: remote\.revisionTag/);
-  assert.match(shared, /unrelatedNamespacesMatch/);
+  assert.doesNotMatch(shared, /unrelatedNamespacesMatch/);
   assert.doesNotMatch(shared, /continueWatching|Continue Watching/);
   const recovery = read('packages/shared/src/api/portableViewingActivitySteadyStateConflict.ts');
   assert.match(recovery, /keep-local.*keep-cloud|keep-cloud.*keep-local/s);

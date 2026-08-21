@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import { startPortableProfileAutoSyncHeartbeat } from './portableProfileAutoSyncHeartbeat';
+import { runPortableProfileCloudTransaction } from './portableProfileCloudTransactionCoordinator';
 import { resolvePortableMyListSteadyStateConflictV1 } from '@orion/shared/api';
 import {
   buildPortableMyListPreviewFromProfileV1,
@@ -9,14 +11,13 @@ import {
   portableMyListNamespaceSignatureV1,
   portableMyListPreviewSignatureV1,
   PORTABLE_PROFILE_PRIMARY_KEY,
-  type PortableProfileV3,
 } from '@orion/shared/types';
 import { useLibrary } from '../../context/LibraryContext';
 import { useNetworkStatus } from '../../context/NetworkContext';
 import { useOrionAccount } from '../../context/AccountContext';
 import { useOrionLibraryProfile } from './LibraryProfileContext';
 import { buildLocalMyListSnapshotV1 } from '../library/myListPortableAdapter';
-import { GoogleDriveCloudProfileStore } from './googleDriveCloudProfileStore';
+import { describeGoogleDriveCloudFailure, GoogleDriveCloudProfileStore, reportGoogleDriveCloudFailure } from './googleDriveCloudProfileStore';
 import { readBackCloudProfileUntilVerified } from './cloudProfileReadBackVerification';
 import { useOrionSyncPolicy } from './SyncPolicyContext';
 import { checkGoogleDriveAppDataAuthorization, isNativeGoogleDriveAuthorizationAvailable } from './nativeGoogleDriveAuthorization';
@@ -57,16 +58,6 @@ function itemLabel(count: number): string {
   return `${count} item${count === 1 ? '' : 's'}`;
 }
 
-function unrelatedNamespacesMatch(expected: PortableProfileV3, actual: PortableProfileV3): boolean {
-  const expectedNames = Object.keys(expected.namespaces).filter((name) => name !== 'myList').sort();
-  const actualNames = Object.keys(actual.namespaces).filter((name) => name !== 'myList').sort();
-  if (expectedNames.length !== actualNames.length) return false;
-  return expectedNames.every((name, index) => (
-    actualNames[index] === name
-    && JSON.stringify(expected.namespaces[name]) === JSON.stringify(actual.namespaces[name])
-  ));
-}
-
 export function MyListSteadyStateSyncProvider({ children }: { children: React.ReactNode }) {
   const account = useOrionAccount();
   const network = useNetworkStatus();
@@ -85,7 +76,10 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
     message: null,
   });
   const [review, setReview] = useState<MyListSteadyStateReview | null>(null);
+  const statusRef = useRef(status);
+  statusRef.current = status;
   const busyRef = useRef(false);
+  const activeLocalSignatureRef = useRef<string | null>(null);
   const pendingModeRef = useRef<'automatic' | 'manual' | null>(null);
   const reconcileRef = useRef<(mode: 'automatic' | 'manual') => Promise<void>>(async () => {});
   const latestRef = useRef({
@@ -117,20 +111,29 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
 
   const enqueueReconcile = useCallback((mode: 'automatic' | 'manual') => {
     if (busyRef.current) {
-      if (mode === 'manual' || pendingModeRef.current == null) pendingModeRef.current = mode;
+      if (mode === 'manual') {
+        pendingModeRef.current = 'manual';
+      } else if (
+        activeLocalSignatureRef.current != null
+        && latestRef.current.localSignature !== activeLocalSignatureRef.current
+        && pendingModeRef.current == null
+      ) {
+        pendingModeRef.current = 'automatic';
+      }
       return;
     }
     void reconcileRef.current(mode);
   }, []);
 
   const requestAutomaticReconcile = useCallback(() => enqueueReconcile('automatic'), [enqueueReconcile]);
+  const requestHeartbeatReconcile = useCallback(() => {
+    if (busyRef.current || statusRef.current.phase === 'needs-review' || statusRef.current.phase === 'error') return;
+    enqueueReconcile('automatic');
+  }, [enqueueReconcile]);
   const requestManualReconcile = useCallback(() => enqueueReconcile('manual'), [enqueueReconcile]);
 
   reconcileRef.current = async (mode) => {
-    if (busyRef.current) {
-      if (mode === 'manual' || pendingModeRef.current == null) pendingModeRef.current = mode;
-      return;
-    }
+    if (busyRef.current) return;
 
     const start = latestRef.current;
     const profile = start.profile;
@@ -214,10 +217,17 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
     });
 
     busyRef.current = true;
-    setReview(null);
-    setStatus({ phase: 'checking', hasCheckpoint, message: null });
+    activeLocalSignatureRef.current = operationLocalSignature;
     try {
-      const authorization = await checkGoogleDriveAppDataAuthorization(profile.email);
+      await runPortableProfileCloudTransaction(operationProfileId, async () => {
+        if (!sameAccount()) return;
+        if (latestRef.current.localSignature !== operationLocalSignature) {
+          pendingModeRef.current = mode;
+          return;
+        }
+        setReview(null);
+        setStatus({ phase: 'checking', hasCheckpoint, message: null });
+        const authorization = await checkGoogleDriveAppDataAuthorization(profile.email);
       if (!sameAccount()) return;
       if (!automaticStillAllowed()) {
         setPaused();
@@ -241,7 +251,7 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
           ? {
               phase: 'needs-review',
               hasCheckpoint: true,
-              message: 'The previously verified cloud profile is missing. Orion will not recreate it automatically or overwrite local My List data.',
+              message: 'Previously synced My List data is missing from Orion Cloud. Orion will not recreate it automatically or overwrite local My List data.',
             }
           : { phase: 'unenrolled', hasCheckpoint: false, message: null });
         return;
@@ -261,7 +271,7 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
         setStatus({
           phase: 'needs-review',
           hasCheckpoint,
-          message: 'The cloud My List contains data this Orion version cannot safely reconcile. Nothing was changed.',
+          message: 'My List in Orion Cloud contains data this Orion version cannot safely sync. Nothing was changed.',
         });
         return;
       }
@@ -302,7 +312,7 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
         setStatus({
           phase: 'needs-review',
           hasCheckpoint: true,
-          message: 'My List changed on this device and in the cloud since the last verified sync. Orion stopped instead of merging or overwriting either copy.',
+          message: 'My List changed on this device and in Orion Cloud since the last confirmed sync. Orion stopped instead of merging or overwriting either copy.',
         });
         return;
       }
@@ -315,7 +325,7 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
         setStatus({
           phase: 'syncing',
           hasCheckpoint: true,
-          message: 'Updating My List and verifying the cloud copy. Other library activity stays local.',
+          message: 'Syncing My List and confirming the Orion Cloud copy. Other library activity stays local.',
         });
         const candidate = buildPortableMyListSteadyStateProfileV1(remote.profile, start.preview, {
           profileId: operationProfileId,
@@ -352,10 +362,7 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
               (readBack) => {
                 const verifiedNamespaceSignature = portableMyListNamespaceSignatureV1(readBack.profile);
                 return readBack.profile.profileId === operationProfileId
-                  && readBack.profile.revision === candidate.revision
-                  && readBack.profile.updatedAt === candidate.updatedAt
                   && verifiedNamespaceSignature === candidateNamespaceSignature
-                  && unrelatedNamespacesMatch(candidate, readBack.profile)
                   && portableMyListActiveMatchesPreviewV1(readBack.profile, start.preview);
               },
             );
@@ -365,8 +372,8 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
 
         // Drive revision tags are opaque concurrency tokens, not document
         // identity. The write was conditional on the fresh pre-write tag above;
-        // read-back acceptance instead requires the exact PortableProfileV3
-        // revision/timestamp, My List namespace and unrelated namespaces. The
+        // read-back acceptance instead proves the My List namespace we wrote.
+        // Unrelated domains may legitimately advance before verification. The
         // next write will again use the tag from its own fresh Drive read.
         if (!verify || !verifiedNamespaceSignature) {
           setStatus({
@@ -414,7 +421,6 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
           : null;
         if (
           freshPull.state !== 'found'
-          || freshPull.revisionTag !== remote.revisionTag
           || freshPull.profile.profileId !== operationProfileId
           || freshPullSignature !== cloudNamespaceSignature
         ) {
@@ -444,17 +450,20 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
       setStatus({
         phase: 'needs-review',
         hasCheckpoint: true,
-        message: 'The saved My List checkpoint no longer matches the verified copies. Orion stopped without changing either side.',
+        message: 'My List no longer matches the last confirmed sync on both copies. Orion stopped without changing either side.',
       });
-    } catch {
+      });
+    } catch (error) {
       if (!sameAccount()) return;
+      reportGoogleDriveCloudFailure('myList', error);
       setStatus({
         phase: 'error',
         hasCheckpoint,
-        message: 'Orion could not check My List sync right now. Your local My List was not changed.',
+        message: describeGoogleDriveCloudFailure('My List', error),
       });
     } finally {
       busyRef.current = false;
+      activeLocalSignatureRef.current = null;
       const pendingMode = pendingModeRef.current;
       pendingModeRef.current = null;
       if (pendingMode) setTimeout(() => enqueueReconcile(pendingMode), 0);
@@ -481,10 +490,12 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
         && latestRef.current.libraryProfileReady
         && latestRef.current.libraryProfileId === operationProfileId;
       busyRef.current = true;
-      setReview(null);
-      setStatus({ phase: 'syncing', hasCheckpoint: true, message: 'Applying your confirmed My List choice and verifying both copies.' });
       try {
-        const authorization = await checkGoogleDriveAppDataAuthorization(profile.email);
+        await runPortableProfileCloudTransaction(operationProfileId, async () => {
+          if (!sameAccount()) return;
+          setReview(null);
+          setStatus({ phase: 'syncing', hasCheckpoint: true, message: 'Applying your confirmed My List choice and verifying both copies.' });
+          const authorization = await checkGoogleDriveAppDataAuthorization(profile.email);
         if (!sameAccount()) return;
         if (!authorization.authorized) {
           setStatus({ phase: 'needs-review', hasCheckpoint: true, message: 'Orion Cloud access is required before this My List conflict can be resolved.' });
@@ -518,6 +529,7 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
         setStatus(latestRef.current.myListAutomatic
           ? { phase: 'synced', hasCheckpoint: true, message: null }
           : { phase: 'paused', hasCheckpoint: true, message: 'My List is synced. Automatic sync remains paused on this device.' });
+        });
       } catch {
         if (!sameAccount()) return;
         setStatus({ phase: 'error', hasCheckpoint: true, message: 'Orion could not verify the My List resolution. Nothing was marked as synced.' });
@@ -532,11 +544,36 @@ export function MyListSteadyStateSyncProvider({ children }: { children: React.Re
   }, [account.state.phase, account.state.profile?.accountId, account.state.profile?.email, libraryProfile.cloudEligible, libraryProfile.profileId, localSignature, network.online, network.internetReachable, syncPolicy.ready, myListAutomatic, requestAutomaticReconcile]);
 
   useEffect(() => {
+    if (
+      account.state.phase !== 'signed-in'
+      || !libraryProfile.cloudEligible
+      || !syncPolicy.ready
+      || !myListAutomatic
+      || !network.online
+      || network.internetReachable === false
+    ) return undefined;
+
+    return startPortableProfileAutoSyncHeartbeat(
+      'myList',
+      requestHeartbeatReconcile,
+      { isActive: () => AppState.currentState === 'active' },
+    );
+  }, [
+    account.state.phase,
+    libraryProfile.cloudEligible,
+    syncPolicy.ready,
+    myListAutomatic,
+    network.online,
+    network.internetReachable,
+    requestHeartbeatReconcile,
+  ]);
+
+  useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') requestAutomaticReconcile();
+      if (nextState === 'active') requestHeartbeatReconcile();
     });
     return () => subscription.remove();
-  }, [requestAutomaticReconcile]);
+  }, [requestHeartbeatReconcile]);
 
   const value = useMemo<MyListSteadyStateValue>(() => ({
     ...status,

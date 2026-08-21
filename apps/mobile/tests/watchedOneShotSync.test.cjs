@@ -29,12 +29,11 @@ test("P8.4 C3-C one-shot coordinator revalidates, conditionally writes and seman
   assert.match(sync, /expectedRevisionTag: fresh\.remote\.revisionTag/);
   assert.match(sync, /write\.state === 'conflict'/);
   assert.match(sync, /DEFAULT_READ_BACK_DELAYS_MS = \[0, 250, 750, 1500\]/);
-  assert.match(sync, /unrelatedNamespacesMatch\(candidate, readBack\.profile\)/);
+  assert.doesNotMatch(sync, /unrelatedNamespacesMatch\(candidate, readBack\.profile\)/);
   assert.match(sync, /portableWatchedTruthMatchesPreviewV1\(readBack\.profile, targetPreview\)/);
-  assert.match(sync, /portableProfilesSemanticallyMatch\(candidate, readBack\.profile\)/);
+  assert.doesNotMatch(sync, /portableProfilesSemanticallyMatch\(candidate, readBack\.profile\)/);
   assert.doesNotMatch(sync, /readBack\.revisionTag === write\.revisionTag/);
-  assert.match(sync, /revision tags are optimistic-concurrency tokens/i);
-  assert.match(sync, /canonicalJson\(withoutWatched\(expected\)\)/);
+  assert.doesNotMatch(sync, /canonicalJson\(withoutWatched\(expected\)\)/);
   assert.match(sync, /local-changed-during-sync/);
 });
 
@@ -112,5 +111,5 @@ test("P8 post-checkpoint Watched divergence requires an explicit device-or-cloud
   assert.match(shared, /Watched and Unwatched are competing intentions|intentional unwatch/i);
   assert.match(shared, /decision\.reason !== 'both-changed'/);
   assert.match(shared, /expectedRevisionTag: remote\.revisionTag/);
-  assert.match(shared, /portableProfilesSemanticallyMatch\(candidate, readBack\.profile\)/);
+  assert.doesNotMatch(shared, /portableProfilesSemanticallyMatch\(candidate, readBack\.profile\)/);
 });

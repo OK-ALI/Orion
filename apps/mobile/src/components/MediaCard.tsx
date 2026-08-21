@@ -8,6 +8,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLibraryVisual } from '../context/LibraryContext';
 import { useOrionTheme } from '../context/ThemeContext';
 
+
+function normalizeDisplayYear(value: unknown): string | undefined {
+  if (typeof value !== 'string' && typeof value !== 'number') return undefined;
+  const match = String(value).trim().match(/^(\d{4})/);
+  return match?.[1];
+}
+
 interface MediaCardProps {
   item: TmdbMediaItem;
   onPress?: () => void;
@@ -24,9 +31,8 @@ export function MediaCard({ item, onPress, width = 140, height = 210, style, wat
   const { theme } = useOrionTheme();
   const isMovie = item.media_type === 'movie' || !item.name;
   const title = isMovie ? item.title : item.name;
-  const year = isMovie
-    ? item.release_date?.slice(0, 4)
-    : item.first_air_date?.slice(0, 4);
+  const portableYear = normalizeDisplayYear((item as TmdbMediaItem & { year?: string | number }).year);
+  const year = normalizeDisplayYear(isMovie ? item.release_date : item.first_air_date) ?? portableYear;
 
   const poster = imgUrl(item.poster_path, 'w500');
   const typeBadgeText = isMovie ? 'HD' : 'TV';

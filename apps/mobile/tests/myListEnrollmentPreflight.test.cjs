@@ -166,7 +166,7 @@ test("P8.3 Candidate 2 exposes the required calm status progression and confirma
   const preflight = read("src/features/settings/MyListEnrollmentPreflight.tsx");
 
   assert.match(preflight, /'Set up'/);
-  assert.match(preflight, /'Checking'/);
+  assert.match(preflight, /'Syncing'/);
   assert.match(preflight, /'Syncing'/);
   assert.match(preflight, /'Synced'/);
   assert.match(preflight, /'Paused'/);

@@ -14,8 +14,12 @@ const manual = read("src/features/settings/useManualSyncPresentation.ts");
 const myList = read("src/features/settings/MyListEnrollmentPreflight.tsx");
 const watched = read("src/features/settings/WatchedSyncControl.tsx");
 const viewing = read("src/features/settings/ViewingActivitySyncControl.tsx");
+const myListSteady = read("src/features/account/MyListSteadyStateSync.tsx");
+const watchedSteady = read("src/features/account/WatchedSteadyStateSync.tsx");
+const viewingSteady = read("src/features/account/ViewingActivitySteadyStateSync.tsx");
 
 const domains = [myList, watched, viewing];
+const userFacingSyncSources = [...domains, myListSteady, watchedSteady, viewingSteady];
 
 test("Mobile Account flows directly from Orion Cloud into the three compact sync domains", () => {
   assert.match(account, />Orion Cloud</);
@@ -102,10 +106,23 @@ test("all three Auto sync controls retain accessibility and live Orion theme own
 });
 
 test("Mobile Account accessibility and exceptional copy stays product-facing", () => {
-  const syncCopy = domains.join("\n");
+  const syncCopy = userFacingSyncSources.join("\n");
   assert.doesNotMatch(syncCopy, /Runs one safe .* reconciliation/i);
   assert.doesNotMatch(syncCopy, /cannot safely reconcile/i);
   assert.doesNotMatch(syncCopy, /cannot reconcile safely/i);
-  assert.doesNotMatch(syncCopy, /enrollment checkpoint/i);
+  assert.doesNotMatch(syncCopy, /no checkpoint was created/i);
+  assert.doesNotMatch(syncCopy, /last verified checkpoint/i);
+  assert.doesNotMatch(syncCopy, /saved My List checkpoint/i);
+  assert.doesNotMatch(syncCopy, /portable Watched state/i);
   assert.doesNotMatch(syncCopy, /local History or Progress/i);
+  assert.doesNotMatch(syncCopy, /Reconciling verified History and Progress/i);
+});
+
+test("Mobile sync-domain badges use the normalized transient Syncing status", () => {
+  for (const source of domains) {
+    assert.doesNotMatch(source, /\? 'Checking'/);
+  }
+  assert.match(myList, /\? 'Syncing'/);
+  assert.match(watched, /steady\.phase === 'checking' \? 'Syncing'/);
+  assert.match(viewing, /steady\.phase === 'checking' \? 'Syncing'/);
 });

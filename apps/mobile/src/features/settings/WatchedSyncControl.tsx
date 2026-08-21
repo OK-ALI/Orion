@@ -152,7 +152,7 @@ export function WatchedSyncControl({ accountEmail, profileId }: WatchedSyncContr
   const steadyBusy = steady.phase === 'checking' || steady.phase === 'syncing';
   const enrollmentBusy = state.phase === 'checking' || state.phase === 'syncing';
   const busy = (steadyActive ? steadyBusy : enrollmentBusy)
-    || (steadyActive && !autoSyncEnabled && manualSync.manualBusy);
+    || (steadyActive && manualSync.manualBusy);
   const needsReview = steadyActive
     ? steady.phase === 'needs-review' || steady.phase === 'error'
     : state.phase === 'needs-review' || state.phase === 'error';
@@ -164,11 +164,11 @@ export function WatchedSyncControl({ accountEmail, profileId }: WatchedSyncContr
         : steady.phase === 'paused' ? 'Paused'
           : steady.phase === 'offline' ? 'Offline'
             : steady.phase === 'needs-review' || steady.phase === 'error' ? 'Needs review'
-              : steady.phase === 'checking' ? 'Checking'
+              : steady.phase === 'checking' ? 'Syncing'
                 : steady.phase === 'syncing' ? 'Syncing'
                   : 'Set up'
       : state.phase === 'needs-review' || state.phase === 'error' ? 'Needs review'
-        : state.phase === 'checking' ? 'Checking'
+        : state.phase === 'checking' ? 'Syncing'
           : state.phase === 'syncing' ? 'Syncing'
             : state.phase === 'synced' ? 'Synced'
               : 'Set up';
@@ -188,9 +188,9 @@ export function WatchedSyncControl({ accountEmail, profileId }: WatchedSyncContr
             : steady.phase === 'syncing'
               ? 'Syncing Watched with Orion Cloud.'
               : steady.phase === 'needs-review'
-                ? 'Watched needs your attention before Orion can sync it safely. Orion did not choose a winner or overwrite either copy.'
+                ? steady.message
                 : steady.phase === 'error'
-                  ? 'Orion could not sync Watched right now. Your local Watched state was left available.'
+                  ? steady.message
                   : null
     : state.phase === 'ready' ? readyCopy(state.inspection)
       : state.phase === 'syncing' ? 'Syncing Watched with Orion Cloud. Orion will only mark this complete after both copies agree.'
@@ -202,11 +202,17 @@ export function WatchedSyncControl({ accountEmail, profileId }: WatchedSyncContr
     : busy
       ? steadyActive ? (steady.phase === 'syncing' ? 'Syncing...' : 'Checking...') : (state.phase === 'syncing' ? 'Syncing...' : 'Checking...')
       : steadyActive
-        ? 'Sync now'
+        ? steady.phase === 'error'
+          ? 'Try again'
+          : steady.phase === 'needs-review' && !steadyReviewAvailable
+            ? 'Check again'
+            : 'Sync now'
         : 'Check Watched';
   const showFeedback = Boolean(feedback) && (!steadyActive || needsReview);
   const showAction = steadyActive
-    ? !autoSyncEnabled && !needsReview
+    ? steady.phase === 'error'
+      || (steady.phase === 'needs-review' && !steadyReviewAvailable)
+      || (!autoSyncEnabled && !needsReview)
     : state.phase !== 'ready';
 
   return (
@@ -227,7 +233,11 @@ export function WatchedSyncControl({ accountEmail, profileId }: WatchedSyncContr
           label: actionLabel,
           accessibilityLabel: steadyActive ? actionLabel : 'Check Watched',
           accessibilityHint: steadyActive
-            ? 'Runs one safe Watched sync while automatic sync is paused'
+            ? steady.phase === 'error'
+              ? 'Retries one safe Watched sync after the last Orion Cloud error'
+              : steady.phase === 'needs-review' && !steadyReviewAvailable
+                ? 'Checks the current Watched copies again without choosing a winner'
+                : 'Runs one safe Watched sync while automatic sync is paused'
             : 'Checks this device and Orion Cloud before first Watched sync',
           disabled: busy,
           busy,

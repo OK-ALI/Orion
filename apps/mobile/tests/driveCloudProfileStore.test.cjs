@@ -42,15 +42,29 @@ test("P8.2 GoogleDriveCloudProfileStore implements the backend-neutral contract 
   assert.match(store, /state === 'conflict'/);
 });
 
-test("P8.2 Drive writes are conflict-aware instead of blind overwrite", () => {
+test("P8.2 Drive writes are atomic for both ETag and version revision tokens", () => {
   const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveProfileStoreModule.kt");
 
-  assert.match(native, /current\.revisionTag\(\) != expectedRevisionTag/);
-  assert.match(native, /If-Match/);
-  assert.match(native, /X-HTTP-Method-Override[\s\S]*PATCH/);
+  assert.match(native, /DRIVE_V2_API = "https:\/\/www\.googleapis\.com\/drive\/v2"/);
+  assert.match(native, /DRIVE_V2_UPLOAD_API = "https:\/\/www\.googleapis\.com\/upload\/drive\/v2"/);
+  assert.match(native, /fetchV2ConditionalMetadata/);
+  assert.match(native, /expectedRevisionTag\.startsWith\("version:"\)/);
+  assert.match(native, /conditional\.version != expectedVersion[\s\S]*conflictResult\("version:\$\{conditional\.version\}"\)/);
+  assert.match(native, /updateApi = DRIVE_V2_UPLOAD_API[\s\S]*updateMethod = "PUT"/);
+  assert.match(native, /mutableMapOf\("If-Match" to strongIfMatch\)/);
+  assert.match(native, /strongIfMatch\.isBlank\(\) \|\| strongIfMatch\.startsWith\("W\/"\)/);
+  assert.match(native, /GOOGLE_DRIVE_PROFILE_CONDITIONAL_UNAVAILABLE/);
   assert.match(native, /error\.status == 412/);
   assert.match(native, /conflictResult/);
-  assert.match(native, /version:\$version/);
+  assert.doesNotMatch(native, /version remains the conservative compare-before-write token/);
+});
+
+test("P8.2 Drive writes verify one unique profile after create and update", () => {
+  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveProfileStoreModule.kt");
+
+  assert.match(native, /val createdId = createProfile[\s\S]*val afterMatches = findProfileFiles\(token, key\)[\s\S]*afterMatches\.size != 1 \|\| afterMatches\.first\(\) != createdId/);
+  assert.match(native, /updateProfile\([\s\S]*val afterMatches = findProfileFiles\(token, key\)[\s\S]*afterMatches\.size != 1 \|\| afterMatches\.first\(\) != current\.id/);
+  assert.match(native, /GOOGLE_DRIVE_PROFILE_DUPLICATE/);
 });
 
 test("P8.2 standalone and Expo generation synchronize the Drive profile store native module", () => {

@@ -50,13 +50,6 @@ function semanticallyEqual(left: PortableProfileV3, right: PortableProfileV3): b
   return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
 }
 
-function unrelatedNamespacesMatch(expected: PortableProfileV3, actual: PortableProfileV3): boolean {
-  const strip = (profile: PortableProfileV3) => Object.fromEntries(
-    Object.entries(profile.namespaces).filter(([name]) => name !== 'history' && name !== 'progress'),
-  );
-  return JSON.stringify(canonicalize(strip(expected))) === JSON.stringify(canonicalize(strip(actual)));
-}
-
 function namespace(profile: PortableProfileV3, name: 'history' | 'progress'): PortableRecordNamespaceV3 {
   const value = profile.namespaces[name] as PortableRecordNamespaceV3 | undefined;
   return value ?? { schemaVersion: 1, revision: 0, updatedAt: profile.updatedAt, records: {} };
@@ -305,7 +298,6 @@ export async function reconcilePortableViewingActivitySteadyStateSyncV1(input: {
     if (
       stable.state !== 'found'
       || stable.profile.profileId !== input.profileId
-      || stable.revisionTag !== remote.revisionTag
       || portableViewingActivityNamespaceSignatureV1(stable.profile) !== cloudNamespaceSignature
     ) {
       return {
@@ -385,8 +377,7 @@ export async function reconcilePortableViewingActivitySteadyStateSyncV1(input: {
       if (
         stable.state !== 'found'
         || stable.profile.profileId !== input.profileId
-        || stable.revisionTag !== remote.revisionTag
-        || portableViewingActivityNamespaceSignatureV1(stable.profile) !== cloudNamespaceSignature
+          || portableViewingActivityNamespaceSignatureV1(stable.profile) !== cloudNamespaceSignature
       ) {
         return {
           state: 'needs-review', reason: 'cloud-changed-before-pull', historyConflictKeys: [], progressConflictKeys: [],
@@ -446,17 +437,22 @@ export async function reconcilePortableViewingActivitySteadyStateSyncV1(input: {
     }
     cloudWasWritten = true;
     const candidateSignature = portableViewingActivityNamespaceSignatureV1(candidate);
-    if (!candidateSignature) throw new Error('Portable Viewing Activity steady-state candidate is invalid.');
+    const candidateState = buildPortableViewingActivityStateFromProfileV1(candidate);
+    if (!candidateSignature || !candidateState) throw new Error('Portable Viewing Activity steady-state candidate is invalid.');
+    const candidateTruthSignature = portableViewingActivityTruthSignatureV1(candidateState);
     let verified = null as null | Extract<Awaited<ReturnType<CloudProfileStore['read']>>, { state: 'found' }>;
     for (const delayMs of input.readBackDelaysMs || DEFAULT_READ_BACK_DELAYS_MS) {
       await wait(delayMs);
       const readBack = await input.store.read(input.profileKey);
+      const readBackState = readBack.state === 'found'
+        ? buildPortableViewingActivityStateFromProfileV1(readBack.profile)
+        : null;
       if (
         readBack.state === 'found'
         && readBack.profile.profileId === input.profileId
         && portableViewingActivityNamespaceSignatureV1(readBack.profile) === candidateSignature
-        && unrelatedNamespacesMatch(candidate, readBack.profile)
-        && semanticallyEqual(candidate, readBack.profile)
+        && readBackState != null
+        && portableViewingActivityTruthSignatureV1(readBackState) === candidateTruthSignature
       ) {
         verified = readBack;
         break;

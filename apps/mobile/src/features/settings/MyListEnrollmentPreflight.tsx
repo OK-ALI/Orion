@@ -453,7 +453,7 @@ export function MyListEnrollmentPreflight({
   const restoreCloudCount = state.phase === 'ready-restore' ? state.cloudPreview.orderedKeys.length : 0;
   const ready = readyEnroll || readyRestore;
   const engineSyncing = steadyActive ? steady.phase === 'syncing' : state.phase === 'syncing';
-  const syncing = engineSyncing || (steadyActive && !autoSyncEnabled && manualSync.manualBusy);
+  const syncing = engineSyncing || (steadyActive && manualSync.manualBusy);
   const synced = steadyActive ? steady.phase === 'synced' : state.phase === 'synced';
   const checking = !manualSync.manualBusy && (steadyActive ? steady.phase === 'checking' : state.phase === 'checking');
   const needsReview = steadyActive
@@ -477,9 +477,9 @@ export function MyListEnrollmentPreflight({
             : steady.phase === 'syncing'
               ? 'Syncing My List with Orion Cloud.'
               : steady.phase === 'needs-review'
-                ? 'My List needs your attention before Orion can sync it safely. Orion did not merge or overwrite either copy.'
+                ? steady.message
                 : steady.phase === 'error'
-                  ? 'Orion could not sync My List right now. Your local My List was not changed.'
+                  ? steady.message
                   : null
     : readyRestore
       ? `${itemLabel(restoreCloudCount)} ${restoreCloudCount === 1 ? 'is' : 'are'} available in Orion Cloud. This device My List is empty and can be restored without merging.`
@@ -496,7 +496,7 @@ export function MyListEnrollmentPreflight({
   const statusLabel = syncing
     ? 'Syncing'
     : checking
-      ? 'Checking'
+      ? 'Syncing'
       : needsReview
         ? 'Needs review'
         : paused
@@ -511,14 +511,21 @@ export function MyListEnrollmentPreflight({
     : checking
       ? 'Checking...'
       : steadyActive
-        ? 'Sync now'
+        ? steady.phase === 'error'
+          ? 'Try again'
+          : steady.phase === 'needs-review' && !steadyReviewAvailable
+            ? 'Check again'
+            : 'Sync now'
         : readyRestore
           ? 'Restore My List'
           : readyEnroll
             ? 'Start My List sync'
             : 'Check My List';
   const showFeedback = Boolean(feedback) && (!steadyActive || needsReview);
-  const showAction = !steadyActive || (!autoSyncEnabled && !needsReview);
+  const showAction = !steadyActive
+    || steady.phase === 'error'
+    || (steady.phase === 'needs-review' && !steadyReviewAvailable)
+    || (!autoSyncEnabled && !needsReview);
 
   return (
     <>
@@ -541,7 +548,11 @@ export function MyListEnrollmentPreflight({
             : readyEnroll
               ? 'Opens a confirmation before uploading only My List'
               : steadyActive
-                ? 'Runs one safe My List sync while automatic sync is paused'
+                ? steady.phase === 'error'
+                  ? 'Retries one safe My List sync after the last Orion Cloud error'
+                  : steady.phase === 'needs-review' && !steadyReviewAvailable
+                    ? 'Checks the current My List and Orion Cloud copies again without choosing a winner'
+                    : 'Runs one safe My List sync while automatic sync is paused'
                 : 'Checks this device and Orion Cloud data without changing unrelated library activity',
           disabled: checking || syncing,
           busy: checking || syncing,

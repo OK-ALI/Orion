@@ -53,27 +53,6 @@ function checkpointFor(
   };
 }
 
-function canonicalJson(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalJson);
-  if (!value || typeof value !== 'object') return value;
-  const source = value as Record<string, unknown>;
-  const normalized: Record<string, unknown> = {};
-  for (const key of Object.keys(source).sort()) normalized[key] = canonicalJson(source[key]);
-  return normalized;
-}
-
-function portableProfilesSemanticallyMatch(expected: PortableProfileV3, actual: PortableProfileV3): boolean {
-  return JSON.stringify(canonicalJson(expected)) === JSON.stringify(canonicalJson(actual));
-}
-
-function unrelatedNamespacesMatch(expected: PortableProfileV3, actual: PortableProfileV3): boolean {
-  const withoutWatched = (profile: PortableProfileV3) => Object.fromEntries(
-    Object.entries(profile.namespaces).filter(([name]) => name !== 'watched'),
-  );
-  return JSON.stringify(canonicalJson(withoutWatched(expected)))
-    === JSON.stringify(canonicalJson(withoutWatched(actual)));
-}
-
 async function wait(delayMs: number): Promise<void> {
   if (delayMs <= 0) return;
   await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
@@ -138,7 +117,6 @@ export async function resolvePortableWatchedSteadyStateConflictV1(input: {
       : null;
     if (
       stable.state !== 'found'
-      || stable.revisionTag !== remote.revisionTag
       || stable.profile.profileId !== input.profileId
       || stableSignature !== cloudNamespaceSignature
       || !portableWatchedTruthMatchesPreviewV1(stable.profile, cloudPreview)
@@ -193,9 +171,8 @@ export async function resolvePortableWatchedSteadyStateConflictV1(input: {
     const readBack = await input.store.read(input.profileKey);
     if (
       readBack.state === 'found'
-      && portableProfilesSemanticallyMatch(candidate, readBack.profile)
+      && readBack.profile.profileId === input.profileId
       && portableWatchedNamespaceSignatureV1(readBack.profile) === candidateNamespaceSignature
-      && unrelatedNamespacesMatch(candidate, readBack.profile)
       && portableWatchedTruthMatchesPreviewV1(readBack.profile, startLocal)
     ) {
       verifiedProfile = readBack.profile;

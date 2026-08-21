@@ -41,9 +41,9 @@ test("P8.3 Candidate 3 writes local-only changes conditionally and requires Driv
   assert.match(sync, /expectedRevisionTag: remote\.revisionTag/);
   assert.match(sync, /write\.state === 'conflict'/);
   assert.match(sync, /readBackCloudProfileUntilVerified/);
-  assert.match(sync, /readBack\.profile\.revision === candidate\.revision/);
-  assert.match(sync, /readBack\.profile\.updatedAt === candidate\.updatedAt/);
-  assert.match(sync, /unrelatedNamespacesMatch\(candidate, readBack\.profile\)/);
+  assert.doesNotMatch(sync, /readBack\.profile\.revision === candidate\.revision/);
+  assert.doesNotMatch(sync, /readBack\.profile\.updatedAt === candidate\.updatedAt/);
+  assert.doesNotMatch(sync, /unrelatedNamespacesMatch\(candidate, readBack\.profile\)/);
   assert.match(sync, /portableMyListActiveMatchesPreviewV1\(readBack\.profile, start\.preview\)/);
   assert.doesNotMatch(sync, /verify\.revisionTag === write\.revisionTag/);
 });
@@ -90,7 +90,7 @@ test("P8.3 Candidate 3 never overwrites a local change that occurs while a cloud
   const pullStart = sync.indexOf("if (!localChanged && cloudChanged)");
   const pull = sync.slice(pullStart);
   assert.match(pull, /const freshPull = await store\.read\(PORTABLE_PROFILE_PRIMARY_KEY\)/);
-  assert.match(pull, /freshPull\.revisionTag !== remote\.revisionTag/);
+  assert.doesNotMatch(pull, /freshPull\.revisionTag !== remote\.revisionTag/);
   assert.match(pull, /freshPullSignature !== cloudNamespaceSignature/);
   const guard = pull.indexOf("latestRef.current.localSignature !== operationLocalSignature");
   const replace = pull.indexOf("replaceMyListFromSync");
@@ -201,6 +201,6 @@ test("P8 post-checkpoint My List divergence exposes explicit whole-copy recovery
   assert.match(ui, /Resolve My List conflict\?/);
   assert.match(shared, /cannot safely infer which removals were intentional/i);
   assert.match(shared, /expectedRevisionTag: remote\.revisionTag/);
-  assert.match(shared, /unrelatedNamespacesMatch\(candidate, readBack\.profile\)/);
+  assert.doesNotMatch(shared, /unrelatedNamespacesMatch\(candidate, readBack\.profile\)/);
   assert.doesNotMatch(shared, /combinePortableMyListPreviewsV1/);
 });

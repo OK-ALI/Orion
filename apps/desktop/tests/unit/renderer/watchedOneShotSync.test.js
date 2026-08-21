@@ -236,7 +236,7 @@ describe("P8.4 C3-C explicit Watched one-shot reconciliation", () => {
     expect(result).toMatchObject({ state: "verified", action: "push", count: 1 });
   });
 
-  it("still rejects a post-write read when the semantic profile body changed", async () => {
+  it("accepts an unrelated post-write namespace change when Watched truth remains verified", async () => {
     const store = new MemoryStore(profileWith({}));
     let local = preview({ movie_1: movie(1) });
     const inspection = await inspectPortableWatchedOneShotSyncV1({
@@ -253,9 +253,45 @@ describe("P8.4 C3-C explicit Watched one-shot reconciliation", () => {
       store, profileKey: "p", profileId: "google-sub-1", updatedBy: "desktop", expectedConfirmationKey: inspection.confirmationKey,
       checkpoint: null, readLocalPreview: () => local, applyLocalPreview: (next) => { local = deep(next); }, readBackDelaysMs: [0],
     });
-    expect(result).toEqual({ state: "needs-review", reason: "cloud-verification-failed", cloudWasWritten: true });
+    expect(result).toMatchObject({ state: "verified", action: "push", count: 1 });
   });
 
+  it("still rejects a post-write read when the Watched namespace itself changed", async () => {
+    const store = new MemoryStore(profileWith({}));
+    let local = preview({ movie_1: movie(1) });
+    const inspection = await inspectPortableWatchedOneShotSyncV1({
+      store, profileKey: "p", profileId: "google-sub-1", localPreview: local, checkpoint: null,
+    });
+    const originalWrite = store.write.bind(store);
+    store.write = async (...args) => {
+      const result = await originalWrite(...args);
+
+      store.profile = buildPortableWatchedSteadyStateProfileV1(
+        store.profile,
+        preview({
+          movie_1: movie(1),
+          movie_2: movie(2),
+        }),
+        {
+          profileId: "google-sub-1",
+          updatedBy: "other-writer",
+          now: 50,
+        },
+      );
+
+      store.tag = `${result.revisionTag}-other-writer`;
+      return result;
+    };
+    const result = await executePortableWatchedOneShotSyncV1({
+      store, profileKey: "p", profileId: "google-sub-1", updatedBy: "desktop", expectedConfirmationKey: inspection.confirmationKey,
+      checkpoint: null, readLocalPreview: () => local, applyLocalPreview: (next) => { local = deep(next); }, readBackDelaysMs: [0],
+    });
+    expect(result).toEqual({
+      state: "needs-review",
+      reason: "cloud-verification-failed",
+      cloudWasWritten: true,
+    });
+  });
   it("compares unrelated namespaces semantically rather than by JSON property order", async () => {
     const base = profileWith({});
     base.namespaces.future = { z: 1, a: { y: 2, x: 3 } };

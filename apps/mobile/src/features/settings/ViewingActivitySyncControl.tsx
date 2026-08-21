@@ -198,7 +198,7 @@ export function ViewingActivitySyncControl({ accountEmail, profileId }: ViewingA
   const steadyBusy = steady.phase === 'checking' || steady.phase === 'syncing';
   const enrollmentBusy = state.phase === 'checking' || state.phase === 'syncing';
   const busy = (steadyActive ? steadyBusy : enrollmentBusy)
-    || (steadyActive && !autoSyncEnabled && manualSync.manualBusy);
+    || (steadyActive && manualSync.manualBusy);
   const steadyReview = steady.phase === 'needs-review' && steady.review?.reason === 'two-sided-divergence'
     ? steady.review
     : null;
@@ -213,10 +213,10 @@ export function ViewingActivitySyncControl({ accountEmail, profileId }: ViewingA
         : steady.phase === 'paused' ? 'Paused'
           : steady.phase === 'offline' ? 'Offline'
             : steady.phase === 'needs-review' || steady.phase === 'error' ? 'Needs review'
-              : steady.phase === 'checking' ? 'Checking'
+              : steady.phase === 'checking' ? 'Syncing'
                 : steady.phase === 'syncing' ? 'Syncing'
                   : 'Set up'
-      : state.phase === 'checking' ? 'Checking'
+      : state.phase === 'checking' ? 'Syncing'
         : state.phase === 'syncing' ? 'Syncing'
           : needsReview ? 'Needs review' : 'Set up';
   const feedback = manualSync.manualBusy
@@ -236,10 +236,18 @@ export function ViewingActivitySyncControl({ accountEmail, profileId }: ViewingA
     : busy
       ? (steady.phase === 'syncing' || state.phase === 'syncing' ? 'Syncing...' : 'Checking...')
       : enrolled
-        ? 'Sync now'
+        ? steady.phase === 'error'
+          ? 'Try again'
+          : steady.phase === 'needs-review' && !steadyReviewAvailable
+            ? 'Check again'
+            : 'Sync now'
         : 'Check Viewing Activity';
   const showAction = enrolled
-    ? !steadyReviewAvailable && !autoSyncEnabled
+    ? !steadyReviewAvailable && (
+        steady.phase === 'error'
+        || steady.phase === 'needs-review'
+        || !autoSyncEnabled
+      )
     : state.phase !== 'ready';
 
 
@@ -261,7 +269,11 @@ export function ViewingActivitySyncControl({ accountEmail, profileId }: ViewingA
           label: actionLabel,
           accessibilityLabel: enrolled ? actionLabel : 'Check Viewing Activity',
           accessibilityHint: enrolled
-            ? 'Runs one safe Viewing Activity sync while automatic sync is paused'
+            ? steady.phase === 'error'
+              ? 'Retries one safe Viewing Activity sync after the last Orion Cloud error'
+              : steady.phase === 'needs-review' && !steadyReviewAvailable
+                ? 'Checks the current Viewing Activity copies again without choosing a winner'
+                : 'Runs one safe Viewing Activity sync while automatic sync is paused'
             : 'Checks this device and Orion Cloud before first Viewing Activity sync',
           disabled: busy,
           busy,

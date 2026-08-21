@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import { startPortableProfileAutoSyncHeartbeat } from './portableProfileAutoSyncHeartbeat';
+import { runPortableProfileCloudTransaction } from './portableProfileCloudTransactionCoordinator';
 import { reconcilePortableViewingActivitySteadyStateSyncV1, resolvePortableViewingActivitySteadyStateConflictV1 } from '@orion/shared/api';
 import { PORTABLE_PROFILE_PRIMARY_KEY, portableViewingActivityTruthSignatureV1, type PortableViewingActivityPreviewV1, type PortableViewingActivityStateV1 } from '@orion/shared/types';
 import { useOrionAccount } from '../../context/AccountContext';
@@ -7,7 +9,7 @@ import { useLibrary } from '../../context/LibraryContext';
 import { useNetworkStatus } from '../../context/NetworkContext';
 import { buildLocalMobileViewingActivitySnapshotV1, buildMobilePortableViewingActivityPreviewV1 } from '../library/viewingStatePortableAdapter';
 import { useOrionLibraryProfile } from './LibraryProfileContext';
-import { GoogleDriveCloudProfileStore } from './googleDriveCloudProfileStore';
+import { describeGoogleDriveCloudFailure, GoogleDriveCloudProfileStore, reportGoogleDriveCloudFailure } from './googleDriveCloudProfileStore';
 import { checkGoogleDriveAppDataAuthorization, isNativeGoogleDriveAuthorizationAvailable } from './nativeGoogleDriveAuthorization';
 import { useOrionSyncPolicy } from './SyncPolicyContext';
 import { loadViewingActivitySyncCheckpointV1, saveViewingActivitySyncCheckpointV1 } from './viewingActivitySyncCheckpoint';
@@ -34,16 +36,16 @@ const ViewingActivitySteadyStateContext = createContext<ViewingActivitySteadySta
 type ReconcileMode = 'automatic' | 'manual';
 
 function reviewMessage(result: Extract<Awaited<ReturnType<typeof reconcilePortableViewingActivitySteadyStateSyncV1>>, { state: 'needs-review' }>): string {
-  if (result.reason === 'profile-missing-after-checkpoint') return 'Previously verified Viewing Activity is missing from Orion Cloud. Orion will not recreate it automatically.';
+  if (result.reason === 'profile-missing-after-checkpoint') return 'Previously synced Viewing Activity is missing from Orion Cloud. Orion will not recreate it automatically.';
   if (result.reason === 'two-sided-removal-ambiguity') return 'Viewing Activity changed on both sides and Orion cannot prove whether missing local items are Cloud additions or offline local removals. Nothing was overwritten.';
   if (result.reason === 'event-time-conflict') return 'Viewing Activity contains an exact-time verified conflict. Orion stopped instead of guessing which playback truth is correct.';
   if (result.reason === 'cloud-conflict' || result.reason === 'cloud-changed-before-pull') return 'Orion Cloud changed while Viewing Activity was syncing. Orion stopped without overwriting it.';
-  if (result.reason === 'local-changed-during-sync') return `Viewing Activity changed on this device while sync was running.${result.cloudWasWritten ? ' The verified Cloud write is preserved, but no checkpoint was created.' : ''}`;
-  if (result.reason === 'cloud-verification-failed') return 'Orion Cloud was updated, but Orion could not verify the new Viewing Activity copy. No checkpoint was created.';
+  if (result.reason === 'local-changed-during-sync') return `Viewing Activity changed on this device while sync was running.${result.cloudWasWritten ? ' Orion Cloud kept the verified update, but this device could not confirm it yet.' : ''}`;
+  if (result.reason === 'cloud-verification-failed') return 'Orion Cloud saved the Viewing Activity update, but Orion could not confirm the new copy in time.';
   if (result.reason === 'local-apply-failed') return 'Orion could not verify the local Viewing Activity update. The operation was not marked as synced.';
   if (result.reason.includes('identity') || result.reason.includes('profile')) return 'Viewing Activity does not match this signed-in Orion profile.';
-  if (result.reason.includes('invalid') || result.reason === 'local-update-unsafe') return 'Viewing Activity contains data Orion cannot reconcile safely without losing verified playback truth.';
-  return 'Viewing Activity no longer matches the last verified checkpoint. Orion stopped without choosing a winner.';
+  if (result.reason.includes('invalid') || result.reason === 'local-update-unsafe') return 'Viewing Activity contains data Orion cannot sync safely without losing verified playback truth.';
+  return 'Viewing Activity no longer matches the last confirmed sync. Orion stopped without choosing a winner.';
 }
 
 export function ViewingActivitySteadyStateSyncProvider({ children }: { children: React.ReactNode }) {
@@ -59,8 +61,11 @@ export function ViewingActivitySteadyStateSyncProvider({ children }: { children:
   stateRef.current = { watched, history, progress };
   const [status, setStatus] = useState<Pick<ViewingActivitySteadyStateValue, 'phase' | 'hasCheckpoint' | 'count' | 'message'>>({ phase: 'inactive', hasCheckpoint: false, count: null, message: null });
   const [review, setReview] = useState<ViewingActivitySteadyStateReview | null>(null);
+  const statusRef = useRef(status);
+  statusRef.current = status;
   const mountedRef = useRef(true);
   const busyRef = useRef(false);
+  const activeLocalSignatureRef = useRef<string | null>(null);
   const pendingModeRef = useRef<ReconcileMode | null>(null);
   const reconcileRef = useRef<(mode: ReconcileMode) => Promise<void>>(async () => {});
   const latestRef = useRef({
@@ -101,12 +106,24 @@ export function ViewingActivitySteadyStateSyncProvider({ children }: { children:
   const enqueueReconcile = useCallback((mode: ReconcileMode) => {
     if (!mountedRef.current) return;
     if (busyRef.current) {
-      if (mode === 'manual' || pendingModeRef.current == null) pendingModeRef.current = mode;
+      if (mode === 'manual') {
+        pendingModeRef.current = 'manual';
+      } else if (
+        activeLocalSignatureRef.current != null
+        && latestRef.current.localTruthSignature !== activeLocalSignatureRef.current
+        && pendingModeRef.current == null
+      ) {
+        pendingModeRef.current = 'automatic';
+      }
       return;
     }
     void reconcileRef.current(mode);
   }, []);
   const requestAutomaticReconcile = useCallback(() => enqueueReconcile('automatic'), [enqueueReconcile]);
+  const requestHeartbeatReconcile = useCallback(() => {
+    if (!mountedRef.current || busyRef.current || statusRef.current.phase === 'needs-review' || statusRef.current.phase === 'error') return;
+    enqueueReconcile('automatic');
+  }, [enqueueReconcile]);
   const requestManualReconcile = useCallback(() => enqueueReconcile('manual'), [enqueueReconcile]);
 
   reconcileRef.current = async (mode) => {
@@ -135,7 +152,7 @@ export function ViewingActivitySteadyStateSyncProvider({ children }: { children:
       return;
     }
     if (!start.online || start.internetReachable === false) {
-      setStatus({ phase: 'offline', hasCheckpoint: true, count: startCount, message: 'Viewing Activity is waiting for a connection. Local History and Progress remain available.' });
+      setStatus({ phase: 'offline', hasCheckpoint: true, count: startCount, message: 'Viewing Activity is waiting for a connection. Local History and playback positions remain available.' });
       return;
     }
     if (!isNativeGoogleDriveAuthorizationAvailable()) {
@@ -144,6 +161,7 @@ export function ViewingActivitySteadyStateSyncProvider({ children }: { children:
     }
 
     const operationProfileId = profile.accountId;
+    const operationLocalSignature = start.localTruthSignature;
     const sameAccount = () => mountedRef.current
       && latestRef.current.profile?.accountId === operationProfileId
       && latestRef.current.libraryProfileReady
@@ -151,10 +169,17 @@ export function ViewingActivitySteadyStateSyncProvider({ children }: { children:
     const automaticStillAllowed = () => mode === 'manual' || latestRef.current.automatic;
     const canMutate = () => sameAccount() && automaticStillAllowed();
     busyRef.current = true;
-    setReview(null);
-    setStatus({ phase: 'checking', hasCheckpoint: true, count: startCount, message: null });
+    activeLocalSignatureRef.current = operationLocalSignature;
     try {
-      const authorization = await checkGoogleDriveAppDataAuthorization(profile.email);
+      await runPortableProfileCloudTransaction(operationProfileId, async () => {
+        if (!sameAccount()) return;
+        if (latestRef.current.localTruthSignature !== operationLocalSignature) {
+          pendingModeRef.current = mode;
+          return;
+        }
+        setReview(null);
+        setStatus({ phase: 'checking', hasCheckpoint: true, count: startCount, message: null });
+        const authorization = await checkGoogleDriveAppDataAuthorization(profile.email);
       if (!sameAccount()) return;
       if (!automaticStillAllowed()) {
         setStatus({ phase: 'paused', hasCheckpoint: true, count: startCount, message: 'Automatic Viewing Activity sync paused before another mutation.' });
@@ -174,7 +199,7 @@ export function ViewingActivitySteadyStateSyncProvider({ children }: { children:
         applyLocalState,
         shouldProceed: canMutate,
         onExecutionStart: () => {
-          if (sameAccount()) setStatus({ phase: 'syncing', hasCheckpoint: true, count: startCount, message: 'Reconciling verified History and Progress with Orion Cloud.' });
+          if (sameAccount()) setStatus({ phase: 'syncing', hasCheckpoint: true, count: startCount, message: 'Syncing verified History and playback positions with Orion Cloud.' });
         },
       });
       if (!sameAccount()) return;
@@ -197,11 +222,14 @@ export function ViewingActivitySteadyStateSyncProvider({ children }: { children:
       setStatus(latestRef.current.automatic
         ? { phase: 'synced', hasCheckpoint: true, count: result.count, message: null }
         : { phase: 'paused', hasCheckpoint: true, count: result.count, message: 'Viewing Activity synced. Automatic sync remains paused on this device.' });
-    } catch {
+      });
+    } catch (error) {
       if (!sameAccount()) return;
-      setStatus({ phase: 'error', hasCheckpoint: true, count: startCount, message: 'Orion could not reconcile Viewing Activity right now. Nothing was marked as synced.' });
+      reportGoogleDriveCloudFailure('viewingActivity', error);
+      setStatus({ phase: 'error', hasCheckpoint: true, count: startCount, message: describeGoogleDriveCloudFailure('Viewing Activity', error) });
     } finally {
       busyRef.current = false;
+      activeLocalSignatureRef.current = null;
       const pendingMode = pendingModeRef.current;
       pendingModeRef.current = null;
       if (pendingMode && mountedRef.current) setTimeout(() => enqueueReconcile(pendingMode), 0);
@@ -229,10 +257,12 @@ export function ViewingActivitySteadyStateSyncProvider({ children }: { children:
         && latestRef.current.libraryProfileReady
         && latestRef.current.libraryProfileId === operationProfileId;
       busyRef.current = true;
-      setReview(null);
-      setStatus({ phase: 'syncing', hasCheckpoint: true, count: startCount, message: 'Applying your confirmed Viewing Activity choice and verifying both copies.' });
       try {
-        const authorization = await checkGoogleDriveAppDataAuthorization(profile.email);
+        await runPortableProfileCloudTransaction(operationProfileId, async () => {
+          if (!sameAccount()) return;
+          setReview(null);
+          setStatus({ phase: 'syncing', hasCheckpoint: true, count: startCount, message: 'Applying your confirmed Viewing Activity choice and verifying both copies.' });
+          const authorization = await checkGoogleDriveAppDataAuthorization(profile.email);
         if (!sameAccount()) return;
         if (!authorization.authorized) {
           setStatus({ phase: 'needs-review', hasCheckpoint: true, count: startCount, message: 'Orion Cloud access is required before this Viewing Activity conflict can be resolved.' });
@@ -259,6 +289,7 @@ export function ViewingActivitySteadyStateSyncProvider({ children }: { children:
         setStatus(latestRef.current.automatic
           ? { phase: 'synced', hasCheckpoint: true, count: result.count, message: 'Viewing Activity is verified across this device and Orion Cloud.' }
           : { phase: 'paused', hasCheckpoint: true, count: result.count, message: 'Viewing Activity synced. Automatic sync remains paused on this device.' });
+        });
       } catch {
         if (!sameAccount()) return;
         setStatus({ phase: 'error', hasCheckpoint: true, count: startCount, message: 'Orion could not verify the Viewing Activity resolution. Nothing was marked as synced.' });
@@ -273,9 +304,34 @@ export function ViewingActivitySteadyStateSyncProvider({ children }: { children:
   }, [account.state.phase, account.state.profile?.accountId, account.state.profile?.email, libraryProfile.cloudEligible, libraryProfile.profileId, localTruthSignature, network.online, network.internetReachable, syncPolicy.ready, automatic, requestAutomaticReconcile]);
 
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => { if (nextState === 'active') requestAutomaticReconcile(); });
+    if (
+      account.state.phase !== 'signed-in'
+      || !libraryProfile.cloudEligible
+      || !syncPolicy.ready
+      || !automatic
+      || !network.online
+      || network.internetReachable === false
+    ) return undefined;
+
+    return startPortableProfileAutoSyncHeartbeat(
+      'viewingActivity',
+      requestHeartbeatReconcile,
+      { isActive: () => AppState.currentState === 'active' },
+    );
+  }, [
+    account.state.phase,
+    libraryProfile.cloudEligible,
+    syncPolicy.ready,
+    automatic,
+    network.online,
+    network.internetReachable,
+    requestHeartbeatReconcile,
+  ]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => { if (nextState === 'active') requestHeartbeatReconcile(); });
     return () => subscription.remove();
-  }, [requestAutomaticReconcile]);
+  }, [requestHeartbeatReconcile]);
 
   const value = useMemo<ViewingActivitySteadyStateValue>(() => ({
     ...status,

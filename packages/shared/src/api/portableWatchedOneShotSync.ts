@@ -92,30 +92,6 @@ function checkpointFor(
   };
 }
 
-function canonicalJson(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalJson);
-  if (!value || typeof value !== 'object') return value;
-  const source = value as Record<string, unknown>;
-  const normalized: Record<string, unknown> = {};
-  for (const key of Object.keys(source).sort()) normalized[key] = canonicalJson(source[key]);
-  return normalized;
-}
-
-function portableProfilesSemanticallyMatch(
-  expected: PortableProfileV3,
-  actual: PortableProfileV3,
-): boolean {
-  return JSON.stringify(canonicalJson(expected)) === JSON.stringify(canonicalJson(actual));
-}
-
-function unrelatedNamespacesMatch(expected: PortableProfileV3, actual: PortableProfileV3): boolean {
-  const withoutWatched = (profile: PortableProfileV3) => Object.fromEntries(
-    Object.entries(profile.namespaces).filter(([name]) => name !== 'watched'),
-  );
-  return JSON.stringify(canonicalJson(withoutWatched(expected)))
-    === JSON.stringify(canonicalJson(withoutWatched(actual)));
-}
-
 function makeConfirmationKey(input: {
   action: string;
   localTruthSignature: string;
@@ -281,7 +257,6 @@ export async function executePortableWatchedOneShotSyncV1(input: {
     if (
       stable.state !== 'found'
       || fresh.remote.state !== 'found'
-      || stable.revisionTag !== fresh.remote.revisionTag
       || stable.profile.profileId !== input.profileId
       || stableSignature !== fresh.cloudNamespaceSignature
       || !portableWatchedTruthMatchesPreviewV1(stable.profile, targetPreview)
@@ -344,14 +319,12 @@ export async function executePortableWatchedOneShotSyncV1(input: {
     const readBack = await input.store.read(input.profileKey);
     if (
       readBack.state === 'found'
-      // CloudProfileStore revision tags are optimistic-concurrency tokens, not
-      // durable document identity. A backend may return a fresh opaque tag for
-      // the exact document we just wrote. The pre-write conditional mutation
-      // already protected against overwriting a newer remote revision, so
-      // read-back acceptance is based on the complete semantic profile body.
-      && portableProfilesSemanticallyMatch(candidate, readBack.profile)
+      // The conditional pre-write revision tag protects the shared document
+      // from overwriting a newer remote revision. Read-back verification owns
+      // only Watched: unrelated My List/Viewing Activity writes may advance the
+      // profile immediately after this write and must not fabricate a failure.
+      && readBack.profile.profileId === input.profileId
       && portableWatchedNamespaceSignatureV1(readBack.profile) === candidateNamespaceSignature
-      && unrelatedNamespacesMatch(candidate, readBack.profile)
       && portableWatchedTruthMatchesPreviewV1(readBack.profile, targetPreview)
     ) {
       verified = readBack;

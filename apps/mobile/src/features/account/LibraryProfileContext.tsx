@@ -15,6 +15,7 @@ import {
   canCarryWatchedSyncCheckpointToScopedLibraryV1,
   clearWatchedSyncCheckpointV1,
 } from './watchedSyncCheckpoint';
+import { clearViewingActivitySyncCheckpointV1 } from './viewingActivitySyncCheckpoint';
 
 export type LibraryProfilePhase = 'preparing' | 'ready' | 'error';
 
@@ -101,6 +102,11 @@ export function LibraryProfileProvider({ children }: { children: React.ReactNode
           prepared.storage,
         );
         if (!carryWatchedCheckpoint) clearWatchedSyncCheckpointV1(accountProfileId);
+
+        // Viewing Activity checkpoints bind verified History/playback truth to
+        // the prior storage lineage. Re-enroll against the scoped copy instead
+        // of carrying that proof across a migration it did not verify.
+        clearViewingActivitySyncCheckpointV1(accountProfileId);
 
         finalizeGoogleLibraryProfileV1(mmkvStorageAdapter, accountProfileId);
       }

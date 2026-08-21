@@ -48,14 +48,6 @@ function canonicalJson(value: unknown): unknown {
   return normalized;
 }
 
-function unrelatedNamespacesMatch(expected: PortableProfileV3, actual: PortableProfileV3): boolean {
-  const withoutMyList = (profile: PortableProfileV3) => Object.fromEntries(
-    Object.entries(profile.namespaces).filter(([name]) => name !== 'myList'),
-  );
-  return JSON.stringify(canonicalJson(withoutMyList(expected)))
-    === JSON.stringify(canonicalJson(withoutMyList(actual)));
-}
-
 async function wait(delayMs: number): Promise<void> {
   if (delayMs <= 0) return;
   await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
@@ -137,7 +129,6 @@ export async function resolvePortableMyListSteadyStateConflictV1(input: {
       : null;
     if (
       stable.state !== 'found'
-      || stable.revisionTag !== remote.revisionTag
       || stable.profile.profileId !== input.profileId
       || stableSignature !== cloudNamespaceSignature
       || !portableMyListActiveMatchesPreviewV1(stable.profile, cloudPreview)
@@ -197,10 +188,7 @@ export async function resolvePortableMyListSteadyStateConflictV1(input: {
     if (
       readBack.state === 'found'
       && readBack.profile.profileId === input.profileId
-      && readBack.profile.revision === candidate.revision
-      && readBack.profile.updatedAt === candidate.updatedAt
       && readBackNamespaceSignature === candidateNamespaceSignature
-      && unrelatedNamespacesMatch(candidate, readBack.profile)
       && portableMyListActiveMatchesPreviewV1(readBack.profile, startLocal)
     ) {
       verifiedProfile = readBack.profile;

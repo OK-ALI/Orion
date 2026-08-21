@@ -57,8 +57,15 @@ test("V3-P8-004 commits account profile readiness only after exact local copy ve
   const clearMyList = profile.indexOf("clearMyListSyncCheckpointV1(accountProfileId)");
   const watchedCarry = profile.indexOf("canCarryWatchedSyncCheckpointToScopedLibraryV1(");
   const clearWatched = profile.indexOf("if (!carryWatchedCheckpoint) clearWatchedSyncCheckpointV1(accountProfileId)");
+  const clearViewing = profile.indexOf("clearViewingActivitySyncCheckpointV1(accountProfileId)");
   const finalize = profile.indexOf("finalizeGoogleLibraryProfileV1(mmkvStorageAdapter, accountProfileId)");
-  assert.ok(clearMyList >= 0 && watchedCarry > clearMyList && clearWatched > watchedCarry && finalize > clearWatched);
+  assert.ok(
+    clearMyList >= 0
+      && watchedCarry > clearMyList
+      && clearWatched > watchedCarry
+      && clearViewing > clearWatched
+      && finalize > clearViewing,
+  );
   assert.match(storage.slice(finalizeStart), /snapshotsMatch\(sourceSnapshot, accountSnapshot\)/);
   assert.match(storage.slice(finalizeStart), /writeManifest\(storage, scope, 'ready'/);
 });
