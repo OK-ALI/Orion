@@ -191,7 +191,7 @@ export default function MovieDetails({ model }) {
                 ))}
               <button className="btn btn-secondary" onClick={onSave}>
                 {isSaved ? <BookmarkFillIcon /> : <BookmarkIcon />}
-                {isSaved ? "Saved" : "Save"}
+                {isSaved ? "In My List" : "Add to My List"}
               </button>
               {!isUnreleased && !restricted && (
                 <button

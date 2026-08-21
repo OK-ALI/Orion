@@ -5,16 +5,18 @@ import {
   PlayIcon,
   FilmIcon,
   TVIcon,
-  WatchedIcon,
   RatingShieldIcon,
   RatingLockIcon,
 } from "../common/Icons";
+import MediaStateIndicators from "./MediaStateIndicators";
+import { isMediaItemWatched } from "../../shared/utils/library";
 
 const MediaCard = memo(function MediaCard({
   item,
   onClick,
   progress,
   watched,
+  inMyList = false,
   onMarkWatched,
   onMarkUnwatched,
   ageRating,
@@ -35,16 +37,16 @@ const MediaCard = memo(function MediaCard({
   const watchedKey = isTV
     ? item.season != null && item.episode != null
       ? `tv_${item.id}_s${item.season}e${item.episode}`
-      : `tv_${item.id}`
+      : null
     : `movie_${item.id}`;
 
-  const isWatched = !!watched?.[watchedKey];
+  const isWatched = isMediaItemWatched(item, watched);
 
   // Context menu state
   const [menu, setMenu] = useState(null); // { x, y }
   const menuRef = useRef(null);
 
-  const canMarkWatched = !isTV || (item.season != null && item.episode != null);
+  const canMarkWatched = watchedKey != null;
 
   const openMenu = useCallback(
     (e) => {
@@ -92,7 +94,7 @@ const MediaCard = memo(function MediaCard({
         className={`media-card${isWatched ? " watched" : ""}${isUnreleased ? " unreleased" : ""}`}
         role="button"
         tabIndex={0}
-        aria-label={`Open ${title}`}
+        aria-label={`Open ${title}${inMyList ? ", in My List" : ""}${isWatched ? ", watched" : ""}`}
         onClick={() => {
           if (onClick) onClick(item);
         }}
@@ -148,11 +150,11 @@ const MediaCard = memo(function MediaCard({
               />
             </div>
           )}
-          {!isUnreleased && isWatched && (
-            <div className="media-card-watched-badge">
-              <WatchedIcon size={24} />
-            </div>
-          )}
+          <MediaStateIndicators
+            inMyList={inMyList}
+            watched={!isUnreleased && isWatched}
+            variant="poster"
+          />
         </div>
         <div className="media-card-info">
           <div className="media-card-title" title={title}>

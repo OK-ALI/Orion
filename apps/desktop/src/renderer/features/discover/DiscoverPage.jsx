@@ -44,7 +44,7 @@ const TV_GENRES = [
   { id: 37, name: "Western", gradient: "linear-gradient(135deg, #cd853f 0%, #8b5a2b 100%)" },
 ];
 
-export default function DiscoverPage({ apiKey, onNavigate, offline = false }) {
+export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSaved, watched = {} }) {
   const [type, setType] = useState("movie"); // "all" | "movie" | "tv"
   const [selectedGenre, setSelectedGenre] = useState(null); // null or genre object
   const [region, setRegion] = useState("all"); // "all" | "hollywood" | "bollywood" | "asian"
@@ -420,6 +420,8 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false }) {
                         key={`${item.id}_${item.media_type || type}`}
                         item={{ ...item, media_type: item.media_type || type }}
                         onClick={(itemData) => { const mediaType = item.media_type || type; onNavigate(mediaType, itemData && !itemData.nativeEvent ? itemData : { ...item, media_type: mediaType }); }}
+                        watched={watched}
+                        inMyList={!!isSaved?.({ ...item, media_type: item.media_type || type })}
                       />
                     ))}
                   </div>
@@ -460,6 +462,8 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false }) {
                   key={`${item.id}_${item.media_type || type}`}
                   item={{ ...item, media_type: item.media_type || type }}
                   onClick={(itemData) => { const mediaType = item.media_type || type; onNavigate(mediaType, itemData && !itemData.nativeEvent ? itemData : { ...item, media_type: mediaType }); }}
+                  watched={watched}
+                  inMyList={!!isSaved?.({ ...item, media_type: item.media_type || type })}
                 />
               ))}
             </div>

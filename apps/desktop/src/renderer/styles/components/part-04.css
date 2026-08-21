@@ -585,3 +585,12 @@
 .search-history-item:hover {
     background: rgba(255, 255, 255, 0.05);
 }
+
+.media-carousel-item .media-state-indicators--carousel {
+    opacity: 0;
+    transition: opacity 350ms var(--ease-out);
+}
+
+.media-carousel-item.active .media-state-indicators--carousel {
+    opacity: 1;
+}

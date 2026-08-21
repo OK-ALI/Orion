@@ -52,8 +52,11 @@ test("P8.2 Drive authorization stays separate from sync and library mutation", (
   const bridge = read("src/features/account/nativeGoogleDriveAuthorization.ts");
 
   assert.match(accountUi, /Orion Cloud/);
-  assert.match(accountUi, /My List and Watched follow their own guarded sync controls/);
-  assert.match(accountUi, /first-time cross-device changes still ask for confirmation/i);
+  assert.match(accountUi, /Keep your Orion library in sync across devices/);
+  assert.match(accountUi, /<MyListEnrollmentPreflight/);
+  assert.match(accountUi, /<WatchedSyncControl/);
+  assert.match(accountUi, /<ViewingActivitySyncControl/);
+  assert.doesNotMatch(accountUi, /Choose what stays updated automatically on this device/);
   assert.doesNotMatch(accountUi, />Google Drive<|private Google Drive storage|Sync starts only when you explicitly confirm it/);
   assert.doesNotMatch(bridge, /LibraryContext|playbackRepository|watchedState|savedOrder|history|progress|PortableProfileV3|CloudProfileStore/);
 });

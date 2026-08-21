@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { imgUrl, isAnimeContent } from "../../services/tmdb";
 import { StarIcon, ChevronLeftIcon, ChevronRightIcon } from "../common/Icons";
+import MediaStateIndicators from "./MediaStateIndicators";
+import { isMediaItemWatched } from "../../shared/utils/library";
 
 const VISIBLE = 5;
 const HALF = Math.floor(VISIBLE / 2);
@@ -38,6 +40,8 @@ const CarouselSlot = memo(function CarouselSlot({
   ageRating,
   restricted,
   isAnime,
+  inMyList,
+  watched,
 }) {
   if (!item) return null;
   const isCenter = offset === 0;
@@ -118,6 +122,11 @@ const CarouselSlot = memo(function CarouselSlot({
         {isAnime && (
           <div className="media-carousel-anime-badge">ANIME</div>
         )}
+        <MediaStateIndicators
+          inMyList={inMyList}
+          watched={!isUnreleased && watched}
+          variant="carousel"
+        />
       </div>
 
       <div className="media-carousel-info">
@@ -141,6 +150,8 @@ export default function MediaCarousel({
   title,
   titleHighlight,
   ratingsMap = {},
+  isSaved,
+  watched = {},
 }) {
   const count = items.length;
   const activeRef = useRef(0);
@@ -392,6 +403,8 @@ export default function MediaCarousel({
                 ageRating={ratingData.cert}
                 restricted={ratingData.restricted || false}
                 isAnime={isAnimeContent(item)}
+                inMyList={!!isSaved?.(item)}
+                watched={isMediaItemWatched(item, watched)}
               />
             );
           })}

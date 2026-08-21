@@ -237,16 +237,19 @@ No further functional Count Truth implementation is required unless later source
 
 This checkpoint is not an overall Phase 8 lock.
 
-## 9. Immediate next work
+## 9. Post-audit status before P8.7
 
-Run one coherent production-polish pass before Phase 8 lock:
+The production-polish work required by this audit is now physically accepted:
 
-- unify Mobile Settings -> Account,
-- clarify My List / Watched / History / playback-position count language,
-- normalize Orion Cloud status language,
-- show visible Syncing/busy feedback during manual Sync now while Auto Sync is paused,
-- normalize spacing, hierarchy, buttons, loading and disabled states,
-- validate accessibility, responsive layouts and themes,
-- then perform P8.7 full cross-platform audit.
+- Mobile Settings -> Account is unified around Orion Cloud and the three synchronized domains;
+- user-facing count language distinguishes titles, watched movies & episodes, History entries and playback positions;
+- explicit Sync now exposes visible Syncing/busy feedback while Auto sync is paused;
+- Desktop Account/Orion Cloud presentation and global My List/Watched indicators are productized;
+- Desktop passive Cloud pickup is covered by a bounded heartbeat;
+- Viewing Activity recovered from `Needs review` to `Synced` through the guarded steady-state path.
+
+The later live Desktop snapshot showed 39 History entries and 8 playback positions. That operational count does not replace or invalidate the historical 40 History / 10 Progress portable proof recorded in Section 6.
+
+Immediate next work is the pre-P8.7 checkpoint gate and checkpoint commit, followed by the independent P8.7 full cross-platform audit.
 
 Phase 8 remains NOT LOCKED.

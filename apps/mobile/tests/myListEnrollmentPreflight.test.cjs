@@ -157,7 +157,7 @@ test("P8.3 Account exposes My List enrollment only after Drive is Ready", () => 
   assert.match(account, /drivePhase === 'ready'[\s\S]*<MyListEnrollmentPreflight/);
   assert.match(account, /accountEmail=\{profile\.email\}/);
   assert.match(account, /profileId=\{profile\.accountId\}/);
-  assert.match(preflight, /item\{localCount === 1 \? '' : 's'\} on this device/);
+  assert.match(preflight, /summary=\{`\$\{localCount\} title/);
   assert.match(preflight, /ready to sync\. Nothing has been uploaded yet/);
   assert.match(preflight, /will not merge or overwrite either copy automatically/i);
 });
@@ -165,14 +165,16 @@ test("P8.3 Account exposes My List enrollment only after Drive is Ready", () => 
 test("P8.3 Candidate 2 exposes the required calm status progression and confirmation scope", () => {
   const preflight = read("src/features/settings/MyListEnrollmentPreflight.tsx");
 
-  assert.match(preflight, /'Not synced'/);
-  assert.match(preflight, /'Ready to sync'/);
-  assert.match(preflight, /'Syncing…'/);
+  assert.match(preflight, /'Set up'/);
+  assert.match(preflight, /'Checking'/);
+  assert.match(preflight, /'Syncing'/);
   assert.match(preflight, /'Synced'/);
+  assert.match(preflight, /'Paused'/);
+  assert.match(preflight, /'Offline'/);
   assert.match(preflight, /'Needs review'/);
   assert.match(preflight, /'Start My List sync\?'/);
   assert.match(preflight, /Orion will upload only My List/);
-  assert.match(preflight, /My List changes sync automatically through Orion Cloud/);
+  assert.match(preflight, /accessibilityLabel: 'Auto sync My List'/);
   assert.match(preflight, /Other sync domains are not part of this action/);
   assert.doesNotMatch(preflight, /watched status and playback progress stay on this device for now/i);
 });
@@ -184,8 +186,8 @@ test("P8.3 Candidate 1A Settings grammar stays flat and development diagnostics 
   assert.match(account, /topDivider: \{ borderTopWidth: 1, paddingTop: spacing\[4\] \}/);
   assert.match(account, /managementRow: \{ minHeight: 58, flexDirection: 'row'/);
   assert.match(account, /Orion Cloud/);
-  assert.match(preflight, />My List</);
-  assert.match(account, /Google connects your Orion identity\. Orion Cloud is a separate connection/);
+  assert.match(preflight, /title="My List"/);
+  assert.match(account, /Keep your Orion library in sync across devices/);
 
   assert.doesNotMatch(account, /Cloud profile storage check|Verify Drive storage|Development validation only|Checking appDataFolder|appDataFolder/);
   assert.doesNotMatch(preflight, />My List enrollment preflight<|Read-only development check|Local preview:|portable item|primary cloud profile/);

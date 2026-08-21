@@ -328,6 +328,7 @@ export default function LibraryPage({
                     item={item}
                     onClick={(itemData) => onSelect(itemData && !itemData.nativeEvent ? itemData : item)}
                     watched={watched}
+                    inMyList
                     onMarkWatched={onMarkWatched}
                     onMarkUnwatched={onMarkUnwatched}
                     ageRating={r.cert}

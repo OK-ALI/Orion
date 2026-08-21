@@ -22,7 +22,8 @@ import {
   saveDesktopMyListSyncCheckpointV1,
 } from "../../../services/myListSyncCheckpoint";
 import { combinePortableMyListPreviewsV1 } from "../../../services/myListConflictResolution";
-import { Toggle } from "./SettingsControls";
+import AccountSyncDomainRow from "./AccountSyncDomainRow";
+import { BookmarkIcon } from "../../../components/common/Icons";
 
 function itemLabel(count) {
   return `${count} item${count === 1 ? "" : "s"}`;
@@ -385,99 +386,103 @@ const resolveConflict = async () => {
   const steadyBusy = steady.phase === "checking" || steady.phase === "syncing";
   const enrollmentBusy = state.phase === "checking" || state.phase === "syncing" || state.phase === "resolving";
   const busy = steadyActive ? steadyBusy : enrollmentBusy;
-  const needsReview = steadyActive ? steady.phase === "needs-review" : state.phase === "needs-review" || state.phase === "conflict" || state.phase === "confirm-resolution";
-  const failed = steadyActive ? steady.phase === "error" : state.phase === "error";
-  const badge = steadyActive
+  const steadyReviewAvailable = steadyActive && steady.phase === "needs-review" && steady.review?.reason === "both-changed";
+  const needsReview = steadyActive
+    ? steady.phase === "needs-review" || steady.phase === "error"
+    : state.phase === "needs-review" || state.phase === "error" || state.phase === "conflict" || state.phase === "confirm-resolution";
+  const localPreview = readDesktopPortableMyListPreviewV1();
+  const localCount = Number.isFinite(steady.count) ? steady.count : localPreview.orderedKeys.length;
+  const status = steadyActive
     ? steady.phase === "synced" ? "Synced"
       : steady.phase === "paused" ? "Paused"
         : steady.phase === "offline" ? "Offline"
-          : steady.phase === "needs-review" ? "Needs review"
-            : steady.phase === "checking" ? "Checking"
-              : steady.phase === "syncing" ? "Syncing"
-                : steady.phase === "error" ? "Error" : "Automatic"
-    : state.phase === "ready" ? (state.action === "restore" ? "Ready to restore" : "Ready")
-      : state.phase === "needs-review" || state.phase === "conflict" || state.phase === "confirm-resolution" ? "Needs review"
-        : state.phase === "checking" ? "Checking"
-          : state.phase === "syncing" || state.phase === "resolving" ? "Syncing"
-            : state.phase === "synced" ? "Synced"
-              : state.phase === "error" ? "Error" : "Manual";
-  const localPreview = readDesktopPortableMyListPreviewV1();
-  const steadyReviewAvailable = steadyActive && steady.phase === "needs-review" && steady.review?.reason === "both-changed";
-  const localCount = Number.isFinite(steady.count) ? steady.count : localPreview.orderedKeys.length;
+          : steady.phase === "checking" ? "Syncing"
+            : steady.phase === "syncing" ? "Syncing"
+              : steady.phase === "needs-review" || steady.phase === "error" ? "Needs review"
+                : steady.automatic ? "Synced" : "Paused"
+    : state.phase === "checking" ? "Syncing"
+      : state.phase === "syncing" || state.phase === "resolving" ? "Syncing"
+        : state.phase === "synced" ? "Synced"
+          : needsReview ? "Needs review" : "Set up";
+
   const feedback = steadyActive
-    ? steady.phase === "paused" ? "Automatic sync is paused. Local My List changes stay on this Desktop until you choose Sync now or turn Auto sync back on."
-      : steady.phase === "offline" ? "My List is waiting for a connection. Your local My List stays available on this Desktop."
-        : steady.phase === "checking" ? "Checking My List with Orion Cloud."
-          : steady.phase === "syncing" ? "Syncing My List with Orion Cloud."
-            : steady.phase === "needs-review" || steady.phase === "error" ? steady.message : null
+    ? steady.phase === "offline"
+      ? "My List is waiting for a connection. Your titles remain available on this Desktop."
+      : steady.phase === "needs-review" || steady.phase === "error"
+        ? steady.message
+        : null
     : state.phase === "ready"
       ? state.action === "restore"
         ? `${itemLabel(state.count)} can be restored from Orion Cloud. Nothing changes until you confirm.`
         : `${itemLabel(state.count)} can start syncing with Orion Cloud. Nothing changes until you confirm.`
-      : state.phase === "syncing" || state.phase === "resolving" ? "Syncing My List with Orion Cloud."
-        : state.phase === "conflict" || state.phase === "confirm-resolution"
-          ? "Your My List is different on this Desktop and in Orion Cloud."
-          : state.phase === "needs-review" || state.phase === "error" ? state.message : null;
-  const buttonLabel = busy
-    ? (steadyActive ? (steady.phase === "syncing" ? "Syncing…" : "Checking…") : (state.phase === "syncing" || state.phase === "resolving" ? "Syncing…" : "Checking…"))
-    : steadyActive && !steady.automatic && !needsReview ? "Sync now"
-      : steadyActive ? "Check now" : "Check My List";
+      : state.phase === "conflict" || state.phase === "confirm-resolution"
+        ? "Your My List is different on this Desktop and in Orion Cloud. Choose which copy Orion should keep, or combine both during first setup."
+        : state.phase === "needs-review" || state.phase === "error"
+          ? state.message
+          : null;
+
+  const action = busy
+    ? null
+    : steadyActive
+      ? !steady.automatic && !needsReview
+        ? { label: "Sync now", onClick: () => steady.refresh() }
+        : steady.phase === "offline" || steady.phase === "error"
+          ? { label: "Try again", onClick: () => steady.refresh() }
+          : null
+      : state.phase === "idle" || state.phase === "needs-review" || state.phase === "error"
+        ? { label: state.phase === "idle" ? "Set up" : "Check again", onClick: () => void checkEnrollment() }
+        : null;
 
   return (
-    <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "18px 20px", marginTop: 12 }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 700 }}>My List</div>
-          <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>Keep My List in sync across Orion devices.</div>
-        </div>
-        <span style={{ border: "1px solid var(--border)", borderRadius: 999, color: needsReview || failed ? "var(--red)" : "var(--text3)", fontSize: 11, fontWeight: 700, padding: "4px 9px" }}>{badge}</span>
-      </div>
-
-      <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.5, marginTop: 10 }}>{localCount} item{localCount === 1 ? "" : "s"} on this Desktop</div>
-
-      {steadyActive && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, border: "1px solid var(--border)", borderRadius: 9, padding: "12px 14px", marginTop: 14 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: "var(--text)", fontSize: 13, fontWeight: 700 }}>Auto sync</div>
-            <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.45, marginTop: 2 }}>
-              {steady.automatic ? "Sync changes automatically when Orion is online." : "Automatic sync is paused. Local changes stay on this Desktop until you choose Sync now or turn this back on."}
-            </div>
-          </div>
-          <Toggle value={steady.automatic} onChange={steady.setAutomatic} title={steady.automatic ? "Pause automatic My List sync" : "Enable automatic My List sync"} />
+    <AccountSyncDomainRow
+      icon={<BookmarkIcon size={18} />}
+      title="My List"
+      summary={`${localCount} title${localCount === 1 ? "" : "s"}`}
+      status={status}
+      autoSync={steadyActive ? {
+        value: steady.automatic,
+        disabled: busy,
+        label: steady.automatic ? "Pause automatic My List sync" : "Enable automatic My List sync",
+        onChange: steady.setAutomatic,
+      } : null}
+      action={action}
+    >
+      {feedback && (
+        <div style={{ color: needsReview ? "var(--danger)" : "var(--text3)", fontSize: 12, lineHeight: 1.55 }}>
+          {feedback}
         </div>
       )}
 
-{!steadyActive && (state.phase === "conflict" || state.phase === "confirm-resolution" || state.phase === "resolving") && state.summary && (
-  <div style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "12px 14px", marginTop: 14 }}>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-      <div>
-        <div style={{ color: "var(--text3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6 }}>Orion Desktop</div>
-        <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 700, marginTop: 3 }}>{state.summary.desktopCount} title{state.summary.desktopCount === 1 ? "" : "s"}</div>
-      </div>
-      <div>
-        <div style={{ color: "var(--text3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6 }}>Orion Cloud</div>
-        <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 700, marginTop: 3 }}>{state.summary.cloudCount} title{state.summary.cloudCount === 1 ? "" : "s"}</div>
-      </div>
-    </div>
-    <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.5, marginTop: 10 }}>
-      {state.summary.sharedCount} title{state.summary.sharedCount === 1 ? "" : "s"} already match across both My Lists.
-    </div>
-  </div>
-)}
+      {!steadyActive && (state.phase === "conflict" || state.phase === "confirm-resolution" || state.phase === "resolving") && state.summary && (
+        <div style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "12px 14px", marginTop: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+            <div>
+              <div style={{ color: "var(--text3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6 }}>This Desktop</div>
+              <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 700, marginTop: 3 }}>{state.summary.desktopCount} title{state.summary.desktopCount === 1 ? "" : "s"}</div>
+            </div>
+            <div>
+              <div style={{ color: "var(--text3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6 }}>Orion Cloud</div>
+              <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 700, marginTop: 3 }}>{state.summary.cloudCount} title{state.summary.cloudCount === 1 ? "" : "s"}</div>
+            </div>
+          </div>
+          <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.5, marginTop: 10 }}>
+            {state.summary.sharedCount} title{state.summary.sharedCount === 1 ? "" : "s"} already match across both My Lists.
+          </div>
+        </div>
+      )}
 
-{!steadyActive && state.phase === "confirm-resolution" && state.summary && (
-  <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.55, marginTop: 12 }}>
-    {state.resolution === "combine"
-      ? `${state.summary.combinedCount} titles after combining. Every title currently present in either My List will be preserved.`
-      : state.resolution === "desktop"
-        ? `Orion Cloud will be replaced with the ${state.summary.desktopCount} titles on this Desktop. ${state.summary.cloudOnlyCount} Cloud-only title${state.summary.cloudOnlyCount === 1 ? "" : "s"} will no longer be active in My List.`
-        : `This Desktop will be replaced with the ${state.summary.cloudCount} titles in Orion Cloud. ${state.summary.desktopOnlyCount} Desktop-only title${state.summary.desktopOnlyCount === 1 ? "" : "s"} will no longer be active in My List.`}
-  </div>
-)}
-
+      {!steadyActive && state.phase === "confirm-resolution" && state.summary && (
+        <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.55, marginTop: 10 }}>
+          {state.resolution === "combine"
+            ? `${state.summary.combinedCount} titles after combining. Every title currently present in either My List will be preserved.`
+            : state.resolution === "desktop"
+              ? `Keep the ${state.summary.desktopCount} titles on this Desktop and replace Orion Cloud? ${state.summary.cloudOnlyCount} Cloud-only title${state.summary.cloudOnlyCount === 1 ? "" : "s"} will no longer be in My List.`
+              : `Keep the ${state.summary.cloudCount} titles in Orion Cloud and replace this Desktop? ${state.summary.desktopOnlyCount} Desktop-only title${state.summary.desktopOnlyCount === 1 ? "" : "s"} will no longer be in My List.`}
+        </div>
+      )}
 
       {steadyReviewAvailable && (
-        <div style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "12px 14px", marginTop: 14 }}>
+        <div style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "12px 14px", marginTop: 10 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
             <div>
               <div style={{ color: "var(--text3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6 }}>This Desktop</div>
@@ -489,22 +494,20 @@ const resolveConflict = async () => {
             </div>
           </div>
           <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.5, marginTop: 10 }}>
-            Both copies changed after the last verified sync. Orion cannot safely infer which removals were intentional, so choose the copy you want to keep.
+            Both copies changed. Choose which My List Orion should keep.
           </div>
         </div>
       )}
 
       {steadyReviewAvailable && steadyResolution && (
-        <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.55, marginTop: 12 }}>
+        <div style={{ color: "var(--text3)", fontSize: 12, lineHeight: 1.55, marginTop: 10 }}>
           {steadyResolution === "desktop"
-            ? `Keep the ${steady.review.localCount} titles on this Desktop and replace the current Orion Cloud My List? Cloud-only changes will no longer be active.`
-            : `Keep the ${steady.review.cloudCount} titles in Orion Cloud and replace this Desktop My List? Desktop-only changes will no longer be active.`}
+            ? `Keep the ${steady.review.localCount} titles on this Desktop and replace the current Orion Cloud My List?`
+            : `Keep the ${steady.review.cloudCount} titles in Orion Cloud and replace this Desktop My List?`}
         </div>
       )}
 
-      {feedback && <div style={{ color: needsReview || failed ? "var(--red)" : "var(--text3)", fontSize: 12, lineHeight: 1.55, marginTop: 12 }}>{feedback}</div>}
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
         {steadyReviewAvailable && !steadyResolution ? (
           <>
             <button className="btn btn-secondary" disabled={busy} onClick={() => setSteadyResolution("desktop")}>Keep Desktop My List</button>
@@ -530,17 +533,14 @@ const resolveConflict = async () => {
               {state.resolution === "combine" ? "Combine" : "Confirm"}
             </button>
           </>
-        ) : (
-          <>
-            <button className="btn btn-ghost" disabled={busy || !profileId} onClick={() => steadyActive ? steady.refresh() : void checkEnrollment()}>{buttonLabel}</button>
-            {!steadyActive && state.phase === "ready" && (
-              <button className="btn btn-primary" disabled={busy} onClick={() => state.action === "restore" ? void confirmRestore() : void confirmUpload()}>
-                {state.action === "restore" ? "Confirm restore" : "Confirm sync"}
-              </button>
-            )}
-          </>
-        )}
+        ) : !steadyActive && state.phase === "ready" ? (
+          <button className="btn btn-primary" disabled={busy} onClick={() => state.action === "restore" ? void confirmRestore() : void confirmUpload()}>
+            {state.action === "restore" ? "Confirm restore" : "Confirm sync"}
+          </button>
+        ) : busy ? (
+          <span style={{ color: "var(--text3)", fontSize: 12 }}>{state.phase === "syncing" || state.phase === "resolving" || steady.phase === "syncing" ? "Syncing…" : "Checking…"}</span>
+        ) : null}
       </div>
-    </div>
+    </AccountSyncDomainRow>
   );
 }

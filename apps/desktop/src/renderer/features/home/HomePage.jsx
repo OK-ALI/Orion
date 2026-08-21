@@ -245,6 +245,7 @@ export default function HomePage({
                 onClick={(itemData) => onSelect(itemData && !itemData.nativeEvent ? itemData : item)}
                 progress={progress[pk] || 0}
                 watched={watched}
+                inMyList={!!isSaved?.(item)}
                 onMarkWatched={onMarkWatched}
                 onMarkUnwatched={onMarkUnwatched}
                 ageRating={r.cert}
@@ -328,6 +329,8 @@ export default function HomePage({
                   onClick={(itemData) => onSelect(itemData && !itemData.nativeEvent ? itemData : item)}
                   ageRating={getRating(item).cert}
                   restricted={itemRestricted(item)}
+                  watched={watched}
+                  inMyList
                 />
               ))}
             </div>
@@ -342,6 +345,8 @@ export default function HomePage({
             titleHighlight="List"
             onSelect={onSelect}
             ratingsMap={enrichedRatingsMap}
+            isSaved={isSaved}
+            watched={watched}
           />
         )}
 
@@ -362,6 +367,8 @@ export default function HomePage({
                 titleHighlight="for You"
                 onSelect={onSelect}
                 ratingsMap={enrichedRatingsMap}
+                isSaved={isSaved}
+                watched={watched}
               />
             );
           }
@@ -376,6 +383,8 @@ export default function HomePage({
                 titleHighlight="Movies"
                 onSelect={onSelect}
                 ratingsMap={enrichedRatingsMap}
+                isSaved={isSaved}
+                watched={watched}
               />
             );
           }
@@ -390,6 +399,8 @@ export default function HomePage({
                 titleHighlight="TV Shows"
                 onSelect={onSelect}
                 ratingsMap={enrichedRatingsMap}
+                isSaved={isSaved}
+                watched={watched}
               />
             );
           }
@@ -404,6 +415,8 @@ export default function HomePage({
                 titleHighlight="K-Series"
                 onSelect={onSelect}
                 ratingsMap={enrichedRatingsMap}
+                isSaved={isSaved}
+                watched={watched}
               />
             );
           }
@@ -418,6 +431,8 @@ export default function HomePage({
                 titleHighlight="Rated"
                 onSelect={onSelect}
                 ratingsMap={enrichedRatingsMap}
+                isSaved={isSaved}
+                watched={watched}
               />
             );
           }

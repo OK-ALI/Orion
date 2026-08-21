@@ -164,13 +164,7 @@ export function AccountSettingsContent() {
             <View style={styles.profileCopy}>
               <Text style={[styles.profileName, { color: theme.text }]}>{displayName}</Text>
               <Text style={[styles.profileEmail, { color: theme.textSecondary }]}>{profile.email}</Text>
-              <Text style={[styles.profileMeta, { color: theme.textMuted }]}>Connected with Google</Text>
-              <View style={styles.statusRow}>
-                <View style={[styles.statusChip, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
-                  <Ionicons name="checkmark-circle" size={14} color={theme.accent} />
-                  <Text style={[styles.statusText, { color: theme.accent }]}>Connected</Text>
-                </View>
-              </View>
+              <Text style={[styles.profileMeta, { color: theme.textMuted }]}>Google connected</Text>
             </View>
           </View>
 
@@ -183,12 +177,12 @@ export function AccountSettingsContent() {
                 <Text style={[styles.settingTitle, { color: theme.text }]}>Orion Cloud</Text>
                 <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
                   {driveReady
-                    ? 'Orion Cloud is connected. Enrolled My List and Watched can sync automatically; first-time cross-device changes still ask for confirmation.'
+                    ? 'Keep your Orion library in sync across devices.'
                     : drivePhase === 'checking'
                       ? 'Checking Orion Cloud connection.'
                       : drivePhase === 'authorizing'
                         ? 'Waiting for Google permission.'
-                        : 'Connect Orion Cloud to keep supported Orion data in sync across devices. My List and Watched follow their own guarded sync controls.'}
+                        : 'Connect Orion Cloud to keep your Orion library in sync across devices.'}
                 </Text>
               </View>
               <View
@@ -230,7 +224,7 @@ export function AccountSettingsContent() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={drivePhase === 'checking' ? 'Checking Orion Cloud' : 'Connect Orion Cloud'}
-                accessibilityHint="Connects Orion Cloud. Enrolled sync domains continue to follow their own Auto Sync settings"
+                accessibilityHint="Connects Orion Cloud. Each sync area keeps its own Auto sync setting"
                 accessibilityState={{ disabled: busy || !driveNativeAvailable || driveBusy }}
                 disabled={busy || !driveNativeAvailable || driveBusy}
                 onPress={() => void authorizeDrive()}
@@ -349,7 +343,7 @@ export function AccountSettingsContent() {
           </View>
 
           <Text style={[styles.explanation, { color: theme.textSecondary }]}>
-            Connect Google to establish your Orion identity across devices. Connecting here does not move or overwrite My List, History, Watched or playback progress.
+            Connect Google to use the same Orion identity across devices.
           </Text>
 
           <Pressable
@@ -404,13 +398,6 @@ export function AccountSettingsContent() {
         </View>
       )}
 
-      <View style={[styles.syncNote, { borderTopColor: theme.border }]}>
-        <Ionicons name="shield-checkmark-outline" size={18} color={theme.textMuted} />
-        <Text style={[styles.syncNoteText, { color: theme.textMuted }]}>
-          Google connects your Orion identity. Orion Cloud is a separate connection; My List and Watched keep their own guarded sync controls with Auto Sync managed on each enrolled device.
-        </Text>
-      </View>
-
       <OrionDialog
         visible={showDriveRemovalDialog}
         title="Disconnect Orion Cloud?"
@@ -436,17 +423,14 @@ export function AccountSettingsContent() {
 
 const styles = StyleSheet.create({
   stack: { gap: spacing[4] },
-  profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  avatar: { width: 58, height: 58, borderRadius: 29 },
-  avatarFallback: { width: 58, height: 58, borderRadius: 29, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  avatarInitial: { fontSize: 22, fontWeight: '900' },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  avatar: { width: 48, height: 48, borderRadius: 24 },
+  avatarFallback: { width: 48, height: 48, borderRadius: 24, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  avatarInitial: { fontSize: 19, fontWeight: '900' },
   profileCopy: { flex: 1, minWidth: 0 },
-  profileName: { fontSize: fontSizes.md, fontWeight: '900', flexShrink: 1 },
-  profileEmail: { marginTop: 3, fontSize: fontSizes.xs, flexShrink: 1 },
-  profileMeta: { marginTop: 4, fontSize: 11, fontWeight: '700', flexShrink: 1 },
-  statusRow: { marginTop: spacing[2], alignItems: 'flex-start' },
-  statusChip: { minHeight: 28, borderRadius: 14, borderWidth: 1, paddingHorizontal: 9, flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start' },
-  statusText: { fontSize: 10, fontWeight: '900' },
+  profileName: { fontSize: fontSizes.sm, fontWeight: '900', flexShrink: 1 },
+  profileEmail: { marginTop: 2, fontSize: 11, lineHeight: 15, flexShrink: 1 },
+  profileMeta: { marginTop: 1, fontSize: 10, lineHeight: 14, fontWeight: '700', flexShrink: 1 },
   topDivider: { borderTopWidth: 1, paddingTop: spacing[4] },
   settingBlock: { gap: spacing[3] },
   settingHeading: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
@@ -480,7 +464,5 @@ const styles = StyleSheet.create({
   feedback: { borderWidth: 1, borderRadius: radii.lg, padding: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   feedbackText: { flex: 1, fontSize: fontSizes.xs, lineHeight: 18 },
   dismiss: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  syncNote: { borderTopWidth: 1, paddingTop: spacing[4], flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2] },
-  syncNoteText: { flex: 1, fontSize: 11, lineHeight: 17 },
   pressed: { opacity: 0.74, transform: [{ scale: 0.985 }] },
 });

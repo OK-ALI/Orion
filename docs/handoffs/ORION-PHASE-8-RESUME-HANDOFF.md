@@ -1091,3 +1091,26 @@ Canonical audit:
 Next:
 
 Run one coherent Phase 8 production-polish pass. The largest target is Mobile Settings -> Account unification, followed by truthful count wording, visible Syncing/busy feedback, consistency, responsiveness and accessibility. After polish, perform the P8.7 full Phase 8 cross-platform audit before any overall Phase 8 lock.
+
+<!-- V3-P8-PRE-P8.7-CHECKPOINT-AUDIT-2026-08-21 -->
+
+## Pre-P8.7 completed-work checkpoint audit
+
+**Date:** 2026-08-21
+**Checkpoint parent:** `c18162cacac69499fc30d073e125f330b009de27`
+**Status:** PRE-P8.7 CHECKPOINT CANDIDATE
+**Phase 8:** NOT LOCKED
+
+The pre-P8.7 workspace audit records 55 current code/test candidate paths before documentation amendment: 42 Desktop, 12 Mobile and 1 Shared, with an empty staged index.
+
+Completed and physically accepted since the count-truth checkpoint: Mobile Account production polish; Desktop global My List + Watched state visibility; Desktop Account/Orion Cloud/Settings productization; Movie/TV `Add to My List` / `In My List`; TV `Watch Now`; accessibility/source-size repairs; passive Orion Cloud heartbeat; and guarded checkpointed Viewing Activity stale-cache recovery.
+
+Latest accepted physical Desktop sync state: My List Synced with passive Mobile -> Desktop pickup while Auto sync remained ON; Watched Synced; Viewing Activity Synced at 39 History entries / 8 playback positions. The 39/8 snapshot is later operational state and does not rewrite the historical 40/10 exact portable proof.
+
+This audit also found a small amount of backend-shaped wording in exceptional Account status/accessibility copy. This amendment changes presentation strings only from terms such as `reconciliation`, `checkpoint`, `portable profile` and generic `Progress` to product-facing `sync`, `last confirmed sync` and `playback positions`. No planner, checkpoint schema, Cloud store, storage owner or portable namespace changes.
+
+Required before checkpoint commit: Shared build; complete Mobile production gate; fresh standalone Android APK; complete Desktop production gate; exact hash/path/boundary proof; and a short S24 Ultra account/sync sanity check.
+
+After those proofs pass, create and push one exact-path checkpoint commit. Only then begin P8.7.
+
+**This checkpoint is not a Phase 8 lock.**

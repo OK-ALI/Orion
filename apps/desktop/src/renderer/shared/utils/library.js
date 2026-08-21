@@ -54,3 +54,40 @@ export function needsLibraryMetadata(item = {}) {
     || !(item.release_date || item.first_air_date)
     || !item.backdrop_path;
 }
+
+export function getWatchedPresentationKey(item = {}) {
+  if (item.id == null) return null;
+  const mediaType = getLibraryMediaType(item);
+  if (mediaType === "movie") return `movie_${item.id}`;
+  if (item.season == null || item.episode == null) return null;
+  const season = Number(item.season);
+  const episode = Number(item.episode);
+  if (!Number.isInteger(season) || season < 0 || !Number.isInteger(episode) || episode < 1) return null;
+  return `tv_${item.id}_s${season}e${episode}`;
+}
+
+function getKnownSeriesEpisodeKeys(item = {}) {
+  if (getLibraryMediaType(item) !== "tv" || item.id == null) return [];
+  if (item.season != null && item.episode != null) return [];
+  if (!Array.isArray(item.seasons)) return [];
+
+  const keys = [];
+  for (const season of item.seasons) {
+    const seasonNumber = Number(season?.season_number);
+    const episodeCount = Number(season?.episode_count);
+    if (!Number.isInteger(seasonNumber) || seasonNumber < 1) continue;
+    if (!Number.isInteger(episodeCount) || episodeCount < 1) continue;
+    for (let episode = 1; episode <= episodeCount; episode += 1) {
+      keys.push(`tv_${item.id}_s${seasonNumber}e${episode}`);
+    }
+  }
+  return keys;
+}
+
+export function isMediaItemWatched(item = {}, watched = {}) {
+  const exactKey = getWatchedPresentationKey(item);
+  if (exactKey) return !!watched?.[exactKey];
+
+  const seriesKeys = getKnownSeriesEpisodeKeys(item);
+  return seriesKeys.length > 0 && seriesKeys.every((key) => !!watched?.[key]);
+}

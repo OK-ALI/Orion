@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MediaCard from "../../components/media/MediaCard";
+import MediaStateIndicators from "../../components/media/MediaStateIndicators";
 import { imgUrl, tmdbFetch } from "../../services/tmdb";
 import { normalizeCombinedCredits, selectKnownFor } from "../../shared/utils/credits";
+import { isMediaItemWatched } from "../../shared/utils/library";
 
 function yearOf(item) {
   return String(item.release_date || "").slice(0, 4);
 }
 
-export default function PersonPage({ item, apiKey, onNavigate, onBack }) {
+export default function PersonPage({ item, apiKey, onNavigate, onBack, isSaved, watched = {} }) {
   const [details, setDetails] = useState(null);
   const [credits, setCredits] = useState([]);
   const [filter, setFilter] = useState("all");
@@ -79,11 +81,45 @@ export default function PersonPage({ item, apiKey, onNavigate, onBack }) {
         </div>
       </header>
 
-      {knownFor.length > 0 && <section className="person-section"><h2>Known for</h2><div className="scroll-row">{knownFor.map((credit) => <div className="person-credit" key={`${credit.media_type}_${credit.id}`}><MediaCard item={credit} onClick={() => onNavigate(credit.media_type, credit)} /><small>{[...(credit.roles || []), ...(credit.jobs || [])].slice(0, 2).join(" · ")}</small></div>)}</div></section>}
+      {knownFor.length > 0 && <section className="person-section"><h2>Known for</h2><div className="scroll-row">{knownFor.map((credit) => <div className="person-credit" key={`${credit.media_type}_${credit.id}`}><MediaCard item={credit} onClick={() => onNavigate(credit.media_type, credit)} watched={watched} inMyList={!!isSaved?.(credit)} /><small>{[...(credit.roles || []), ...(credit.jobs || [])].slice(0, 2).join(" · ")}</small></div>)}</div></section>}
 
       <section className="person-section">
         <div className="person-section__heading"><h2>Filmography</h2><div className="person-filter-tabs" role="tablist" aria-label="Filmography type">{[["all", "All"], ["movie", "Movies"], ["tv", "TV"]].map(([value, label]) => <button type="button" role="tab" aria-selected={filter === value} className={filter === value ? "active" : ""} key={value} onClick={() => setFilter(value)}>{label}</button>)}</div></div>
-        {filmography.length > 0 ? <div className="person-filmography">{filmography.map((credit) => <button type="button" className="filmography-row" key={`${credit.media_type}_${credit.id}`} onClick={() => onNavigate(credit.media_type, credit)}><span className="filmography-year">{yearOf(credit) || "—"}</span><span><strong>{credit.title}</strong><small>{[...(credit.roles || []), ...(credit.jobs || [])].join(" · ") || (credit.media_type === "tv" ? "TV series" : "Movie")}</small></span><em>{credit.media_type === "tv" ? "TV" : "Movie"}</em></button>)}</div> : <div className="person-empty">No {filter === "all" ? "filmography" : filter} credits are available.</div>}
+        {filmography.length > 0 ? (
+          <div className="person-filmography">
+            {filmography.map((credit) => {
+              const inMyList = !!isSaved?.(credit);
+              const creditWatched = isMediaItemWatched(credit, watched);
+              const year = yearOf(credit) || "Unknown year";
+              const role = [...(credit.roles || []), ...(credit.jobs || [])].join(" · ")
+                || (credit.media_type === "tv" ? "TV series" : "Movie");
+              const mediaType = credit.media_type === "tv" ? "TV" : "Movie";
+              const stateLabel = `${inMyList ? ", in My List" : ""}${creditWatched ? ", watched" : ""}`;
+
+              return (
+                <button
+                  type="button"
+                  className="filmography-row"
+                  key={`${credit.media_type}_${credit.id}`}
+                  onClick={() => onNavigate(credit.media_type, credit)}
+                  aria-label={`${year} ${credit.title} ${role} ${mediaType}${stateLabel}`}
+                >
+                  <span className="filmography-year">{yearOf(credit) || "—"}</span>
+                  <span>
+                    <strong>{credit.title}</strong>
+                    <small>{role}</small>
+                  </span>
+                  <span className="filmography-trailing">
+                    <MediaStateIndicators inMyList={inMyList} watched={creditWatched} variant="inline" />
+                    <em>{mediaType}</em>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="person-empty">No {filter === "all" ? "filmography" : filter} credits are available.</div>
+        )}
       </section>
     </div>
   );

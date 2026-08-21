@@ -112,3 +112,22 @@ body.no-anim .credits-rail--loading span { animation:none; }
 @media (prefers-reduced-motion:reduce) { .person-card:hover { transform:none; } }
 @media (max-width:900px) { .quick-search-result-grid { grid-template-columns:1fr; } .quick-search-result-grid .search-result { border-right:0; } }
 @media (max-width:720px) { .person-hero { grid-template-columns:1fr; } .person-hero__portrait { width:min(260px,75vw); margin:auto; } .search-results-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .filmography-row { grid-template-columns:44px minmax(0,1fr); } .filmography-row em { display:none; } .search-result { padding-inline:12px; } .search-result-image { width:44px; height:66px; } .search-result--person .search-result-image { width:48px; } .search-result-type { display:none; } .quick-search-filter-stack { padding-inline:12px; } .quick-search-filter-row { grid-template-columns:1fr; } .search-filter-group { grid-template-columns:1fr; } .search-filter-group > span { padding-top:0; } }
+
+.search-result-trailing,
+.filmography-trailing {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 0;
+}
+
+.search-box.anchored .search-result-trailing {
+    justify-self: end;
+}
+
+@media (max-width: 720px) {
+    .filmography-row {
+        grid-template-columns: 44px minmax(0, 1fr) auto;
+    }
+}

@@ -54,9 +54,11 @@ test("P8.1 keeps OAuth configuration Orion-owned and out of committed source", (
   assert.doesNotMatch(context, /\.apps\.googleusercontent\.com/);
 
   const accountUi = read("src/features/settings/AccountSettingsContent.tsx");
-  assert.match(accountUi, /does not move or overwrite My List, History, Watched or playback progress/);
-  assert.match(accountUi, /Orion Cloud is a separate connection/);
-  assert.match(accountUi, /first-time cross-device changes still ask for confirmation/i);
+  assert.match(accountUi, /Connect Google to use the same Orion identity across devices/);
+  assert.match(accountUi, /Keep your Orion library in sync across devices/);
+  assert.match(accountUi, /<MyListEnrollmentPreflight/);
+  assert.match(accountUi, /<WatchedSyncControl/);
+  assert.match(accountUi, /<ViewingActivitySyncControl/);
   assert.match(accountUi, /keeping local Orion data on this device/i);
 });
 
@@ -78,9 +80,11 @@ test("P8.1 Account copy is user-facing and does not expose internal phase langua
   const settings = read("app/(tabs)/settings.tsx");
   assert.doesNotMatch(accountUi, /P8\.1|portable-profile|portable profiles/i);
   assert.doesNotMatch(settings, /portable-profile|portable profiles/i);
-  assert.match(accountUi, /establish your Orion identity across devices/);
+  assert.match(accountUi, /use the same Orion identity across devices/);
   assert.match(settings, /Your Orion identity and account connection/);
-  assert.match(accountUi, /Google connects your Orion identity\. Orion Cloud is a separate connection/);
+  assert.match(accountUi, /Google connected/);
+  assert.match(accountUi, />Orion Cloud</);
+  assert.doesNotMatch(accountUi, /Google connects your Orion identity\. Orion Cloud is a separate connection/);
 });
 
 
@@ -105,13 +109,16 @@ test("P8.1 native Google bridge uses the React activity context required by Cred
 });
 
 
-test("P8.1 Connected badge has its own zoom-safe row below profile identity", () => {
+test("P8.1 profile identity stays zoom-safe without a redundant Connected badge", () => {
   const accountUi = read("src/features/settings/AccountSettingsContent.tsx");
-  assert.match(accountUi, /<View style=\{styles\.statusRow\}>[\s\S]*?<View style=\{\[styles\.statusChip/);
-  assert.match(accountUi, /statusRow: \{ marginTop: spacing\[2\], alignItems: 'flex-start' \}/);
-  assert.match(accountUi, /statusChip: \{[^}]*alignSelf: 'flex-start'/);
+  assert.match(accountUi, /<Text style=\{\[styles\.profileMeta[^>]*>Google connected<\/Text>/);
+  assert.doesNotMatch(accountUi, /styles\.statusRow|styles\.statusChip/);
   assert.doesNotMatch(accountUi, /profileTitleRow/);
   assert.doesNotMatch(accountUi, /<Text numberOfLines=\{1\} style=\{\[styles\.profileEmail/);
+  assert.match(accountUi, /profileRow: \{ flexDirection: 'row', alignItems: 'center', gap: spacing\[2\] \}/);
+  assert.match(accountUi, /avatar: \{ width: 48, height: 48, borderRadius: 24 \}/);
+  assert.match(accountUi, /profileName: \{ fontSize: fontSizes\.sm/);
+  assert.match(accountUi, /profileMeta: \{ marginTop: 1, fontSize: 10, lineHeight: 14/);
 });
 
 

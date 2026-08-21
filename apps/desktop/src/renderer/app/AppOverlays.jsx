@@ -19,6 +19,7 @@ export default function AppOverlays({ model }) {
     setShowShortcuts, setShowUpdateModal, setUpdateBanner, showSearch, searchAnchorRect, searchWorld, closeSearch,
     showShortcuts, showUpdateModal, toast, updateBanner, saveProgress, markWatched,
     expandedLocalDownload, setExpandedLocalDownload, addHistory, handleDeleteDownload,
+    isSaved, watched,
   } = model;
 
   const [toastPosition, setToastPosition] = useState(
@@ -49,6 +50,8 @@ export default function AppOverlays({ model }) {
           onClose={closeSearch}
           offline={offline}
           anchorRect={searchAnchorRect}
+          isSaved={isSaved}
+          watched={watched}
         />
         {updateBanner && (
           <div

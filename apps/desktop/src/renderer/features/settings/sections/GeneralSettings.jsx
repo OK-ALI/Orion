@@ -9,6 +9,7 @@ import { SettingsSelect, Toggle } from "../components/SettingsControls";
 import MyListSyncCard from "../components/MyListSyncCard";
 import WatchedSyncCard from "../components/WatchedSyncCard";
 import ViewingActivitySyncCard from "../components/ViewingActivitySyncCard";
+import WorkspaceRestoreConfirm from "../components/WorkspaceRestoreConfirm";
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
@@ -901,7 +902,7 @@ export function GoogleAuthSection({ secGoogle }) {
           lineHeight: 1.6,
         }}
       >
-        Connect with Google for your Orion identity. Orion Cloud keeps your data in sync across devices.
+        Your Orion identity and account connection.
       </div>
 
       {profile ? (
@@ -911,12 +912,12 @@ export function GoogleAuthSection({ secGoogle }) {
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 16,
+              gap: 14,
               background: "var(--surface2)",
               border: "1px solid var(--border)",
               borderRadius: 10,
-              padding: "16px 20px",
-              marginBottom: 16,
+              padding: "14px 18px",
+              marginBottom: 12,
             }}
           >
             {profile.picture ? (
@@ -924,8 +925,8 @@ export function GoogleAuthSection({ secGoogle }) {
                 src={profile.picture}
                 alt={profile.name || "Profile"}
                 style={{
-                  width: 48,
-                  height: 48,
+                  width: 44,
+                  height: 44,
                   borderRadius: "50%",
                   border: "2px solid var(--accent)",
                 }}
@@ -934,15 +935,15 @@ export function GoogleAuthSection({ secGoogle }) {
             ) : (
               <div
                 style={{
-                  width: 48,
-                  height: 48,
+                  width: 44,
+                  height: 44,
                   borderRadius: "50%",
                   background: "var(--surface3)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   fontWeight: 700,
-                  fontSize: 18,
+                  fontSize: 17,
                   color: "var(--text)",
                   border: "2px solid var(--accent)",
                 }}
@@ -950,41 +951,90 @@ export function GoogleAuthSection({ secGoogle }) {
                 {profile.name ? profile.name[0].toUpperCase() : "G"}
               </div>
             )}
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 650, color: "var(--text)" }}>
                 {profile.name}
               </div>
-              <div style={{ fontSize: 13, color: "var(--text3)", marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>
                 {profile.email}
               </div>
-              <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 3 }}>Connected with Google</div>
             </div>
-            <button className="btn btn-ghost" onClick={handleLogout}>
-              Disconnect Google
-            </button>
+            <span
+              style={{
+                border: "1px solid var(--border)",
+                borderRadius: 999,
+                padding: "4px 9px",
+                color: "var(--text3)",
+                background: "var(--surface3)",
+                fontSize: 10,
+                fontWeight: 800,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Google connected
+            </span>
           </div>
 
-          <MyListSyncCard key={`my-list-${profile?.sub || "no-google"}`} googleProfile={profile} />
-          <WatchedSyncCard key={`watched-${profile?.sub || "no-google"}`} googleProfile={profile} />
-          <ViewingActivitySyncCard key={`viewing-${profile?.sub || "no-google"}`} googleProfile={profile} />
-
-          {/* Legacy Sync Controls Section */}
           <div
             style={{
               background: "var(--surface2)",
               border: "1px solid var(--border)",
               borderRadius: 10,
-              padding: "20px 24px",
+              padding: "18px 20px 4px",
+              marginBottom: 10,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, paddingBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 750, color: "var(--text)" }}>Orion Cloud</div>
+                <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5, marginTop: 3 }}>
+                  Keep your Orion library in sync across devices.
+                </div>
+              </div>
+              <span
+                style={{
+                  border: "1px solid var(--accent)",
+                  borderRadius: 999,
+                  padding: "4px 9px",
+                  background: "var(--accent-soft)",
+                  color: "var(--accent)",
+                  fontSize: 10,
+                  fontWeight: 800,
+                }}
+              >
+                Connected
+              </span>
+            </div>
+
+            <MyListSyncCard key={`my-list-${profile?.sub || "no-google"}`} googleProfile={profile} />
+            <WatchedSyncCard key={`watched-${profile?.sub || "no-google"}`} googleProfile={profile} />
+            <ViewingActivitySyncCard key={`viewing-${profile?.sub || "no-google"}`} googleProfile={profile} />
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+            <button className="btn btn-ghost" onClick={handleLogout} style={{ color: "var(--danger)" }}>
+              Disconnect Google
+            </button>
+          </div>
+
+          <div
+            style={{
+              background: "var(--surface2)",
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              padding: "18px 20px",
               marginTop: 12,
             }}
           >
             <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Desktop backup & media</div>
-            <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5, marginBottom: 16 }}>Google Drive backup and Media Locker for this Desktop. Separate from Orion Cloud.</div>
-            {/* Storage Meter */}
+            <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5, marginBottom: 16 }}>
+              Back up this Desktop's workspace and completed downloads to Google Drive. Separate from Orion Cloud.
+            </div>
+
             {storageQuota && (
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text3)", marginBottom: 6 }}>
-                  <span style={{ fontWeight: 600, color: "var(--text)" }}>Google Drive Storage</span>
+                  <span style={{ fontWeight: 600, color: "var(--text)" }}>Google Drive storage</span>
                   <span>{formatBytes(Number(storageQuota.usage))} of {formatBytes(Number(storageQuota.limit))} ({((Number(storageQuota.usage) / Number(storageQuota.limit)) * 100).toFixed(1)}% used)</span>
                 </div>
                 <div style={{ width: "100%", height: 8, background: "var(--surface3)", borderRadius: 4, overflow: "hidden" }}>
@@ -992,8 +1042,8 @@ export function GoogleAuthSection({ secGoogle }) {
                     style={{
                       width: `${Math.min(100, (Number(storageQuota.usage) / Number(storageQuota.limit)) * 100)}%`,
                       height: "100%",
-                      background: (Number(storageQuota.usage) / Number(storageQuota.limit)) > 0.85 ? "var(--red)" : "var(--accent)",
-                      borderRadius: 4
+                      background: (Number(storageQuota.usage) / Number(storageQuota.limit)) > 0.85 ? "var(--danger)" : "var(--accent)",
+                      borderRadius: 4,
                     }}
                   />
                 </div>
@@ -1002,77 +1052,62 @@ export function GoogleAuthSection({ secGoogle }) {
 
             {storageQuota && <div style={{ height: "1px", background: "var(--border)", margin: "16px 0" }} />}
 
-            {/* Toggle 1: Auto-Sync */}
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
+                gap: 18,
                 marginBottom: 16,
               }}
             >
-              <div style={{ paddingRight: 16 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
-                  Google Drive workspace sync
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 3 }}>
+                  Desktop workspace backup
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.4 }}>
-                  Back up this Desktop's playlists and settings to Google Drive.
+                  Back up playlists and settings to Google Drive.
                 </div>
               </div>
-              <input
-                type="checkbox"
-                checked={syncEnabled}
-                onChange={(e) => {
-                  const val = e.target.checked;
+              <Toggle
+                value={syncEnabled}
+                onChange={(val) => {
                   setSyncEnabled(val);
                   localStorage.setItem("orion_google_sync_enabled", val ? "true" : "false");
                 }}
-                style={{
-                  width: 18,
-                  height: 18,
-                  cursor: "pointer",
-                  accentColor: "var(--accent)",
-                }}
+                title={syncEnabled ? "Disable Desktop workspace backup" : "Enable Desktop workspace backup"}
               />
             </div>
 
-            {/* Toggle 2: Auto-Backup Media Downloads */}
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
+                gap: 18,
                 marginBottom: 20,
               }}
             >
-              <div style={{ paddingRight: 16 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
-                  Back up downloads to Google Drive
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 3 }}>
+                  Media Locker backup
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.4 }}>
-                  Upload completed downloads to your Orion Media Locker on Google Drive.
+                  Back up completed downloads to Google Drive.
                 </div>
               </div>
-              <input
-                type="checkbox"
-                checked={autoBackupMedia}
-                onChange={(e) => {
-                  const val = e.target.checked;
+              <Toggle
+                value={autoBackupMedia}
+                onChange={(val) => {
                   setAutoBackupMedia(val);
                   localStorage.setItem("orion_google_auto_backup_media", val ? "true" : "false");
                 }}
-                style={{
-                  width: 18,
-                  height: 18,
-                  cursor: "pointer",
-                  accentColor: "var(--accent)",
-                }}
+                title={autoBackupMedia ? "Disable Media Locker backup" : "Enable Media Locker backup"}
               />
             </div>
 
             <div style={{ height: "1px", background: "var(--border)", margin: "16px 0" }} />
 
-            {/* Cloud Manual Buttons */}
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
               <button
                 className="btn btn-primary"
@@ -1080,28 +1115,13 @@ export function GoogleAuthSection({ secGoogle }) {
                 onClick={handleBackupToCloud}
                 style={{ fontSize: 13, padding: "8px 16px" }}
               >
-                {syncStatus === "syncing" ? "Syncing..." : "Back up Desktop workspace"}
+                {syncStatus === "syncing" ? "Backing up..." : "Back up Desktop workspace"}
               </button>
               <button
                 className="btn btn-secondary"
                 disabled={syncStatus === "syncing"}
                 onClick={handleRestoreFromCloud}
-                style={{
-                  fontSize: 13,
-                  padding: "8px 16px",
-                  background: "var(--surface3)",
-                  border: "1px solid var(--border)",
-                  color: "var(--text)",
-                  borderRadius: 8,
-                  cursor: "pointer",
-                  transition: "background 0.15s"
-                }}
-                onMouseEnter={(e) => {
-                  if (syncStatus !== "syncing") e.currentTarget.style.background = "var(--surface2)";
-                }}
-                onMouseLeave={(e) => {
-                  if (syncStatus !== "syncing") e.currentTarget.style.background = "var(--surface3)";
-                }}
+                style={{ fontSize: 13, padding: "8px 16px" }}
               >
                 Restore Desktop workspace
               </button>
@@ -1110,7 +1130,7 @@ export function GoogleAuthSection({ secGoogle }) {
               <span
                 style={{
                   fontSize: 12,
-                  color: syncStatus === "error" ? "var(--red)" : "var(--text3)",
+                  color: syncStatus === "error" ? "var(--danger)" : "var(--text3)",
                   lineHeight: 1.4,
                 }}
               >
@@ -1120,8 +1140,8 @@ export function GoogleAuthSection({ secGoogle }) {
                 {syncStatus === "error" && `✕ Failed: ${syncError || "Please check configuration"}`}
                 {syncStatus === "idle" && (
                   lastSyncTime
-                    ? `Last Google Drive sync: ${new Date(lastSyncTime).toLocaleString()}`
-                    : "Google Drive workspace backup is ready"
+                    ? `Last backup: ${new Date(lastSyncTime).toLocaleString()}`
+                    : "Google Drive backup is ready"
                 )}
               </span>
             </div>
@@ -1243,44 +1263,14 @@ export function GoogleAuthSection({ secGoogle }) {
         </div>
       )}
 
-      {showRestoreConfirm && (
-        <div className="close-confirm-overlay" style={{ zIndex: 999999 }}>
-          <div className="close-confirm-modal" style={{ background: "rgba(20, 20, 20, 0.85)", backdropFilter: "blur(20px)", border: "1px solid var(--border)" }}>
-            <div className="close-confirm-icon-wrap">
-              <div className="close-confirm-icon-ring" style={{ background: "rgba(0, 168, 255, 0.12)", border: "1.5px solid rgba(0, 168, 255, 0.5)" }}>
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#00a8ff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-                </svg>
-              </div>
-            </div>
-            <div className="close-confirm-title" style={{ color: "var(--text)" }}>Restore Workspace?</div>
-            <div className="close-confirm-body" style={{ color: "var(--text3)", maxWidth: 320, textAlign: "center", lineHeight: 1.5, fontSize: 13, marginBottom: 20 }}>
-              This restores the separate Desktop workspace backup from Google Drive, overwriting the local watchlist, history, playlists, and settings in that backup scope.
-              <br /><br />
-              <strong>Orion will reload to apply the restored sync workspace.</strong>
-            </div>
-            <div className="close-confirm-actions" style={{ display: "flex", gap: 10, width: "100%" }}>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowRestoreConfirm(false)}
-                style={{ flex: 1, padding: "10px 16px", borderRadius: 8, background: "var(--surface3)", border: "1px solid var(--border)", color: "var(--text)" }}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  setShowRestoreConfirm(false);
-                  executeRestoreFromCloud();
-                }}
-                style={{ flex: 1, padding: "10px 16px", borderRadius: 8, background: "var(--accent)", color: "#fff", border: "none" }}
-              >
-                Restore Now
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <WorkspaceRestoreConfirm
+        open={showRestoreConfirm}
+        onCancel={() => setShowRestoreConfirm(false)}
+        onConfirm={() => {
+          setShowRestoreConfirm(false);
+          executeRestoreFromCloud();
+        }}
+      />
     </div>
   );
 }

@@ -375,4 +375,57 @@ describe("V3-P8-006A C3 Viewing Activity steady-state sync", () => {
     expect(store.profile.namespaces.futureNamespace).toEqual({ keep: "me" });
     expect(buildPortableViewingActivityStateFromProfileV1(store.profile).progress.movie_7.currentTime).toBe(60);
   });
+  it("restores newer checkpoint-backed cloud truth when a Desktop cache regresses without a cloud change", async () => {
+    const basePreview = preview({ movie_7: progress(7, 2000, 70) });
+    const baseProfile = profileFrom("account-a", basePreview.progress, 2100);
+    const localPreview = preview({ movie_7: progress(7, 1000, 20) });
+    const { result, store, local } = await reconcile({ baseProfile, basePreview, localPreview });
+
+    expect(result).toMatchObject({ state: "verified", count: { history: 0, progress: 1 } });
+    expect(store.writes).toBe(0);
+    expect(local.progress.movie_7.currentTime).toBe(70);
+    expect(local.progress.movie_7.lastPlayedAt).toBe(2000);
+  });
+
+  it("keeps a newer verified cloud tombstone when stale Desktop playback reappears", async () => {
+    const originalPreview = preview({ movie_7: progress(7, 1000, 20) });
+    const originalProfile = profileFrom("account-a", originalPreview.progress, 1100);
+    const deletedPreview = preview();
+    const deletedProfile = buildPortableViewingActivitySteadyStateProfileV1(
+      originalProfile,
+      deletedPreview,
+      { profileId: "account-a", updatedBy: "other-device", now: 3000 },
+    );
+    const store = storeFor(deletedProfile);
+    let local = preview({ movie_7: progress(7, 1500, 30) });
+
+    const result = await reconcilePortableViewingActivitySteadyStateSyncV1({
+      store,
+      profileKey: "profile.json",
+      profileId: "account-a",
+      updatedBy: "account-a",
+      checkpoint: checkpoint("account-a", deletedPreview, deletedProfile),
+      readLocalPreview: () => clone(local),
+      applyLocalState: (state) => {
+        local = { history: clone(state.history), progress: clone(state.progress), rejected: { history: [], progress: [] } };
+      },
+      readBackDelaysMs: [0],
+    });
+
+    expect(result).toMatchObject({ state: "verified", count: { history: 0, progress: 0 } });
+    expect(store.writes).toBe(0);
+    expect(local.progress).toEqual({});
+    expect(store.profile.namespaces.progress.records.movie_7.deletedAt).toBe(3000);
+  });
+
+  it("still fails closed on a contradictory equal-time one-sided local playback update", async () => {
+    const basePreview = preview({ movie_7: progress(7, 2000, 70) });
+    const baseProfile = profileFrom("account-a", basePreview.progress, 2100);
+    const localPreview = preview({ movie_7: progress(7, 2000, 60) });
+    const { result, store } = await reconcile({ baseProfile, basePreview, localPreview });
+
+    expect(result).toMatchObject({ state: "needs-review", reason: "local-update-unsafe" });
+    expect(store.writes).toBe(0);
+  });
+
 });

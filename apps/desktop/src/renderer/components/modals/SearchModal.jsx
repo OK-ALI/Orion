@@ -8,6 +8,7 @@ import QuickSearchFilterRail from "../search/QuickSearchFilterRail";
 import MusicQuickSearchRow from "../search/MusicQuickSearchRow";
 import { MUSIC_QUICK_FILTERS, useMusicQuickSearch } from "../search/useMusicQuickSearch";
 import { useOptionalMusic } from "../../features/music/context/MusicProvider";
+import { isMediaItemWatched } from "../../shared/utils/library";
 
 const HISTORY_KEY = "searchHistory";
 const MAX_HISTORY = 12;
@@ -26,6 +27,8 @@ export default function SearchModal({
   offline,
   anchorRect = null,
   searchWorld = "cinema",
+  isSaved,
+  watched = {},
 }) {
   const music = useOptionalMusic();
   const isMusic = searchWorld === "music";
@@ -229,7 +232,7 @@ export default function SearchModal({
             <div className="quick-search-result-grid">
               {isMusic
                 ? visibleMusicResults.map((entry, index) => <MusicQuickSearchRow key={entry.id} entry={entry} active={activeIndex === index} onHover={() => setActiveIndex(index)} onActivate={() => handleMusicSelect(entry)} />)
-                : visibleCinemaResults.map((result, index) => <SearchResultRow key={`${result.media_type}_${result.id}`} result={result} active={activeIndex === index} duplicateTitle={duplicateTitles.has(getSearchTitleKey(result))} onHover={() => setActiveIndex(index)} onActivate={() => handleCinemaSelect(result)} />)}
+                : visibleCinemaResults.map((result, index) => <SearchResultRow key={`${result.media_type}_${result.id}`} result={result} active={activeIndex === index} duplicateTitle={duplicateTitles.has(getSearchTitleKey(result))} onHover={() => setActiveIndex(index)} onActivate={() => handleCinemaSelect(result)} inMyList={!!isSaved?.(result)} watched={isMediaItemWatched(result, watched)} />)}
             </div>
           )}
 

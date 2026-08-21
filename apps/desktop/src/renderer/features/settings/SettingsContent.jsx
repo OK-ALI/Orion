@@ -31,7 +31,7 @@ export default function SettingsContent({ model }) {
           SETTINGS
         </div>
         <div style={{ color: "var(--text3)", fontSize: 14, marginBottom: 48 }}>
-          App configuration for Orion
+          Customize Orion on this Desktop.
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════ */}

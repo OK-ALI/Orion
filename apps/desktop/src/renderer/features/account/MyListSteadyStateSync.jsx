@@ -24,6 +24,8 @@ import {
   saveDesktopMyListAutomaticV1,
 } from "../../services/syncPolicy";
 
+import { startPortableProfileAutoSyncHeartbeat } from "../../services/portableProfileAutoSyncHeartbeat";
+
 const DesktopMyListSteadyStateContext = createContext(null);
 
 function itemLabel(count) {
@@ -79,7 +81,7 @@ export function DesktopMyListSteadyStateSyncProvider({ googleProfile, networkSta
       if (mode === "manual" || pendingModeRef.current == null) pendingModeRef.current = mode;
       return;
     }
-    void reconcileRef.current(mode);
+    return reconcileRef.current(mode);
   }, []);
   const requestAutomaticReconcile = useCallback(() => enqueueReconcile("automatic"), [enqueueReconcile]);
   const requestManualReconcile = useCallback(() => enqueueReconcile("manual"), [enqueueReconcile]);
@@ -161,7 +163,7 @@ export function DesktopMyListSteadyStateSyncProvider({ googleProfile, networkSta
       const cloudPreview = buildPortableMyListPreviewFromProfileV1(remote.profile);
       const cloudNamespaceSignature = portableMyListNamespaceSignatureV1(remote.profile);
       if (!cloudPreview || !cloudNamespaceSignature) {
-        setStatus({ phase: "needs-review", hasCheckpoint, count: startCount, message: "My List in Orion Cloud cannot be reconciled safely by this Orion version." });
+        setStatus({ phase: "needs-review", hasCheckpoint, count: startCount, message: "My List in Orion Cloud cannot be synced safely by this Orion version." });
         return;
       }
 
@@ -306,7 +308,7 @@ export function DesktopMyListSteadyStateSyncProvider({ googleProfile, networkSta
         return;
       }
 
-      setStatus({ phase: "needs-review", hasCheckpoint: true, count: startCount, message: "The saved My List checkpoint no longer matches both copies. Orion stopped without changing either side." });
+      setStatus({ phase: "needs-review", hasCheckpoint: true, count: startCount, message: "My List no longer matches the last confirmed sync on both copies. Orion stopped without changing either side." });
     } catch (error) {
       if (!sameAccount()) return;
       const message = error?.code === "GOOGLE_DRIVE_PROFILE_CONDITIONAL_UNAVAILABLE"
@@ -390,6 +392,8 @@ export function DesktopMyListSteadyStateSyncProvider({ googleProfile, networkSta
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [requestAutomaticReconcile]);
+
+  useEffect(() => startPortableProfileAutoSyncHeartbeat("myList", requestAutomaticReconcile), [requestAutomaticReconcile]);
 
   const value = useMemo(() => ({ ...status, automatic, setAutomatic, refresh: requestManualReconcile, review, resolveReview }), [automatic, requestManualReconcile, resolveReview, review, setAutomatic, status]);
   return <DesktopMyListSteadyStateContext.Provider value={value}>{children}</DesktopMyListSteadyStateContext.Provider>;

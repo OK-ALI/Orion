@@ -15,6 +15,8 @@ import {
   saveDesktopViewingActivityAutomaticV1,
 } from "../../services/syncPolicy";
 
+import { startPortableProfileAutoSyncHeartbeat } from "../../services/portableProfileAutoSyncHeartbeat";
+
 const DesktopViewingActivitySteadyStateContext = createContext(null);
 
 function countLabel(value) {
@@ -26,12 +28,12 @@ function reviewMessage(result) {
   if (result.reason === "two-sided-removal-ambiguity") return "Viewing Activity changed on both sides and Orion cannot prove whether missing local items are Cloud additions or offline local removals. Nothing was overwritten.";
   if (result.reason === "event-time-conflict") return "Viewing Activity contains an exact-time verified conflict. Orion stopped instead of guessing which playback truth is correct.";
   if (result.reason === "cloud-conflict" || result.reason === "cloud-changed-before-pull") return "Orion Cloud changed while Viewing Activity was syncing. Orion stopped without overwriting it.";
-  if (result.reason === "local-changed-during-sync") return `Viewing Activity changed on this Desktop while sync was running.${result.cloudWasWritten ? " The verified Cloud write is preserved, but no checkpoint was created." : ""}`;
-  if (result.reason === "cloud-verification-failed") return "The Cloud write completed, but Orion could not verify the updated Viewing Activity copy. No checkpoint was created.";
+  if (result.reason === "local-changed-during-sync") return `Viewing Activity changed on this Desktop while sync was running.${result.cloudWasWritten ? " Orion Cloud kept the verified update, but this Desktop could not confirm it yet." : ""}`;
+  if (result.reason === "cloud-verification-failed") return "Orion Cloud saved the Viewing Activity update, but Orion could not confirm the new copy in time.";
   if (result.reason === "local-apply-failed") return "Orion could not verify the local Viewing Activity update. The operation was not marked as synced.";
   if (result.reason.includes("identity") || result.reason.includes("profile")) return "Viewing Activity does not match this signed-in Orion profile.";
-  if (result.reason.includes("invalid") || result.reason === "local-update-unsafe") return "Viewing Activity contains data Orion cannot reconcile safely without losing verified playback truth.";
-  return "Viewing Activity no longer matches the last verified checkpoint. Orion stopped without choosing a winner.";
+  if (result.reason.includes("invalid") || result.reason === "local-update-unsafe") return "Viewing Activity contains data Orion cannot sync safely without losing verified playback truth.";
+  return "Viewing Activity no longer matches the last confirmed sync. Orion stopped without choosing a winner.";
 }
 
 export function DesktopViewingActivitySteadyStateSyncProvider({ googleProfile, networkStatus, history, progress, children }) {
@@ -70,7 +72,7 @@ export function DesktopViewingActivitySteadyStateSyncProvider({ googleProfile, n
       if (mode === "manual" || pendingModeRef.current == null) pendingModeRef.current = mode;
       return;
     }
-    void reconcileRef.current(mode);
+    return reconcileRef.current(mode);
   }, []);
   const requestAutomaticReconcile = useCallback(() => enqueueReconcile("automatic"), [enqueueReconcile]);
   const requestManualReconcile = useCallback(() => enqueueReconcile("manual"), [enqueueReconcile]);
@@ -96,7 +98,7 @@ export function DesktopViewingActivitySteadyStateSyncProvider({ googleProfile, n
       return;
     }
     if (start.networkStatus === "offline") {
-      setStatus({ phase: "offline", hasCheckpoint: true, count: startCount, message: "Viewing Activity is waiting for a connection. Local History and Progress remain available." });
+      setStatus({ phase: "offline", hasCheckpoint: true, count: startCount, message: "Viewing Activity is waiting for a connection. Local History and playback positions remain available." });
       return;
     }
     if (start.networkStatus === "checking") {
@@ -122,7 +124,7 @@ export function DesktopViewingActivitySteadyStateSyncProvider({ googleProfile, n
         applyLocalState: applyDesktopPortableViewingActivityStateV1,
         shouldProceed: canMutate,
         onExecutionStart: () => {
-          if (sameAccount()) setStatus({ phase: "syncing", hasCheckpoint: true, count: startCount, message: "Reconciling verified History and Progress with Orion Cloud." });
+          if (sameAccount()) setStatus({ phase: "syncing", hasCheckpoint: true, count: startCount, message: "Syncing verified History and playback positions with Orion Cloud." });
         },
       });
       if (!sameAccount()) return;
@@ -149,7 +151,7 @@ export function DesktopViewingActivitySteadyStateSyncProvider({ googleProfile, n
       if (!sameAccount()) return;
       const message = error?.code === "GOOGLE_DRIVE_PROFILE_CONDITIONAL_UNAVAILABLE"
         ? "Orion Cloud did not provide the conditional-write token required for safe Viewing Activity sync. Nothing was overwritten."
-        : error?.message || "Orion could not reconcile Viewing Activity right now. Nothing was marked as synced.";
+        : error?.message || "Orion could not sync Viewing Activity right now. Nothing was marked as synced.";
       setStatus({ phase: "error", hasCheckpoint: true, count: startCount, message });
     } finally {
       busyRef.current = false;
@@ -225,6 +227,8 @@ export function DesktopViewingActivitySteadyStateSyncProvider({ googleProfile, n
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [requestAutomaticReconcile]);
+
+  useEffect(() => startPortableProfileAutoSyncHeartbeat("viewingActivity", requestAutomaticReconcile), [requestAutomaticReconcile]);
 
   const value = useMemo(() => ({
     ...status,

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   buildPortableMyListEnrollmentProfileV1,
   buildPortableMyListPreviewFromProfileV1,
@@ -23,6 +22,8 @@ import { useMyListSteadyStateSync } from '../account/MyListSteadyStateSync';
 import { useOrionSyncPolicy } from '../account/SyncPolicyContext';
 import { saveMyListSyncCheckpointV1 } from '../account/myListSyncCheckpoint';
 import { buildLocalMyListSnapshotV1 } from '../library/myListPortableAdapter';
+import { AccountSyncDomainRow } from './AccountSyncDomainRow';
+import { useManualSyncPresentation } from './useManualSyncPresentation';
 
 type ReadyState =
   | { phase: 'ready-create'; baselineRevisionTag: null; previewSignature: string }
@@ -50,7 +51,7 @@ interface MyListEnrollmentPreflightProps {
 }
 
 function itemLabel(count: number): string {
-  return `${count} item${count === 1 ? '' : 's'}`;
+  return `${count} title${count === 1 ? '' : 's'}`;
 }
 
 function unrelatedNamespacesMatch(
@@ -80,6 +81,7 @@ export function MyListEnrollmentPreflight({
   const steady = useMyListSteadyStateSync();
   const syncPolicy = useOrionSyncPolicy();
   const autoSyncEnabled = syncPolicy.getAutomatic('myList');
+  const manualSync = useManualSyncPresentation(steady.refresh);
   const preview = useMemo(
     () => buildPortableMyListPreviewV1(saved, savedOrder),
     [saved, savedOrder],
@@ -450,15 +452,20 @@ export function MyListEnrollmentPreflight({
   const readyRestore = !steadyActive && state.phase === 'ready-restore';
   const restoreCloudCount = state.phase === 'ready-restore' ? state.cloudPreview.orderedKeys.length : 0;
   const ready = readyEnroll || readyRestore;
-  const syncing = steadyActive ? steady.phase === 'syncing' : state.phase === 'syncing';
+  const engineSyncing = steadyActive ? steady.phase === 'syncing' : state.phase === 'syncing';
+  const syncing = engineSyncing || (steadyActive && !autoSyncEnabled && manualSync.manualBusy);
   const synced = steadyActive ? steady.phase === 'synced' : state.phase === 'synced';
-  const checking = steadyActive ? steady.phase === 'checking' : state.phase === 'checking';
-  const needsReview = steadyActive ? steady.phase === 'needs-review' : state.phase === 'needs-review';
+  const checking = !manualSync.manualBusy && (steadyActive ? steady.phase === 'checking' : state.phase === 'checking');
+  const needsReview = steadyActive
+    ? steady.phase === 'needs-review' || steady.phase === 'error'
+    : state.phase === 'needs-review' || state.phase === 'error';
   const paused = steadyActive && steady.phase === 'paused';
   const offline = steadyActive && steady.phase === 'offline';
   const steadyReviewAvailable = steadyActive && steady.phase === 'needs-review' && steady.review?.reason === 'both-changed';
 
-  const feedback = steadyActive
+  const feedback = manualSync.manualBusy
+    ? 'Syncing My List with Orion Cloud.'
+    : steadyActive
     ? steady.phase === 'synced'
       ? `${itemLabel(localCount)} synced with Orion Cloud.`
       : steady.phase === 'paused'
@@ -486,171 +493,99 @@ export function MyListEnrollmentPreflight({
               ? state.message
               : null;
 
-  const statusLabel = checking
-    ? 'Checking'
-    : syncing
-      ? 'Syncing…'
+  const statusLabel = syncing
+    ? 'Syncing'
+    : checking
+      ? 'Checking'
       : needsReview
         ? 'Needs review'
         : paused
           ? 'Paused'
           : synced
             ? 'Synced'
-            : readyRestore
-              ? 'Ready to restore'
-              : readyEnroll
-                ? 'Ready to sync'
-                : offline
-                  ? 'Offline'
-                  : 'Not synced';
-  const statusColor = ready || syncing || synced
-    ? theme.accent
-    : needsReview
-      ? theme.warning
-      : theme.textMuted;
-
-  const buttonLabel = checking
-    ? 'Checking...'
-    : syncing
-      ? 'Syncing...'
-      : steadyActive && !autoSyncEnabled && !needsReview
+            : offline
+              ? 'Offline'
+              : 'Set up';
+  const actionLabel = syncing
+    ? 'Syncing...'
+    : checking
+      ? 'Checking...'
+      : steadyActive
         ? 'Sync now'
-        : steadyActive
-          ? 'Refresh status'
         : readyRestore
           ? 'Restore My List'
           : readyEnroll
             ? 'Start My List sync'
-            : synced
-              ? 'Refresh status'
-              : 'Check sync readiness';
+            : 'Check My List';
+  const showFeedback = Boolean(feedback) && (!steadyActive || needsReview);
+  const showAction = !steadyActive || (!autoSyncEnabled && !needsReview);
 
   return (
-    <View style={[styles.block, { borderTopColor: theme.border }]}>
-      <View style={styles.heading}>
-        <Ionicons name="list-outline" size={20} color={theme.textSecondary} />
-        <View style={styles.headingCopy}>
-          <Text style={[styles.title, { color: theme.text }]}>My List</Text>
-          <Text style={[styles.copy, { color: theme.textSecondary }]}>
-            Keep My List consistent across Orion devices. First sync is confirmed once; after that, Auto Sync can keep changes current or stay paused on this device.
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.statusChip,
-            {
-              backgroundColor: theme.surfaceHover,
-              borderColor: ready || syncing || synced ? theme.accent : theme.border,
-            },
-          ]}
-        >
-          <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
-        </View>
-      </View>
-
-      <Text style={[styles.localSummary, { color: theme.textSecondary }]}>
-        {localCount} item{localCount === 1 ? '' : 's'} on this device
-        {preview.rejectedKeys.length > 0 ? ` · ${preview.rejectedKeys.length} cannot sync` : ''}
-      </Text>
-
-      {steadyActive && (
-        <View style={[styles.autoSyncRow, { borderColor: theme.border }]}>
-          <View style={styles.autoSyncCopy}>
-            <Text style={[styles.autoSyncTitle, { color: theme.text }]}>Auto sync</Text>
-            <Text style={[styles.autoSyncDescription, { color: theme.textMuted }]}>
-              {autoSyncEnabled
-                ? 'My List changes sync automatically through Orion Cloud when Orion is online.'
-                : 'Automatic sync is paused. Local My List changes stay on this device until you choose Sync now or turn this back on.'}
-            </Text>
-          </View>
-          <Switch
-            accessibilityLabel="Auto sync My List"
-            accessibilityHint="Turns automatic My List sync through Orion Cloud on or off without deleting local or cloud data"
-            accessibilityState={{ disabled: !syncPolicy.ready }}
-            disabled={!syncPolicy.ready}
-            value={autoSyncEnabled}
-            onValueChange={(enabled) => syncPolicy.setAutomatic('myList', enabled)}
-            trackColor={{ false: theme.surfaceHover, true: theme.accentSoft }}
-            thumbColor={autoSyncEnabled ? theme.accent : theme.textMuted}
-          />
-        </View>
-      )}
-
-      {feedback && (
-        <Text
-          accessibilityRole="alert"
-          style={[
-            styles.feedback,
-            {
-              color: needsReview || state.phase === 'error' || (steadyActive && steady.phase === 'error')
-                ? theme.warning
-                : theme.textSecondary,
-            },
-          ]}
-        >
-          {feedback}
-        </Text>
-      )}
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={buttonLabel}
-        accessibilityHint={readyRestore
-          ? 'Opens a confirmation before restoring the synced My List from Orion Cloud to this empty device list'
-          : readyEnroll
-            ? 'Opens a confirmation before uploading only My List'
-            : steadyActive && !autoSyncEnabled && !needsReview
-              ? 'Runs one safe My List reconciliation even though automatic sync is paused'
-              : 'Checks this device and Orion Cloud data without changing unrelated library activity'}
-        accessibilityState={{ disabled: checking || syncing }}
-        disabled={checking || syncing}
-        onPress={() => {
-          if (ready) {
-            setShowSyncDialog(true);
-          } else if (steadyActive) {
-            steady.refresh();
-          } else {
-            void inspectEnrollment();
-          }
-        }}
-        style={({ pressed }) => [
-          styles.button,
-          { backgroundColor: theme.elevated, borderColor: theme.border },
-          pressed && styles.pressed,
-        ]}
+    <>
+      <AccountSyncDomainRow
+        icon="list-outline"
+        title="My List"
+        summary={`${localCount} title${localCount === 1 ? '' : 's'}${preview.rejectedKeys.length > 0 ? `, ${preview.rejectedKeys.length} cannot sync` : ''}`}
+        status={statusLabel}
+        autoSync={steadyActive ? {
+          value: autoSyncEnabled,
+          disabled: !syncPolicy.ready,
+          accessibilityLabel: 'Auto sync My List',
+          accessibilityHint: 'Turns automatic My List sync through Orion Cloud on or off without deleting local or cloud data',
+          onValueChange: (enabled) => syncPolicy.setAutomatic('myList', enabled),
+        } : undefined}
+        action={showAction ? {
+          label: actionLabel,
+          accessibilityHint: readyRestore
+            ? 'Opens a confirmation before restoring the synced My List from Orion Cloud to this empty device list'
+            : readyEnroll
+              ? 'Opens a confirmation before uploading only My List'
+              : steadyActive
+                ? 'Runs one safe My List sync while automatic sync is paused'
+                : 'Checks this device and Orion Cloud data without changing unrelated library activity',
+          disabled: checking || syncing,
+          busy: checking || syncing,
+          onPress: () => {
+            if (ready) {
+              setShowSyncDialog(true);
+            } else if (steadyActive) {
+              manualSync.runManualSync();
+            } else {
+              void inspectEnrollment();
+            }
+          },
+        } : undefined}
       >
-        {checking || syncing ? (
-          <ActivityIndicator color={theme.text} />
-        ) : (
-          <Ionicons
-            name={readyRestore ? 'cloud-download-outline' : readyEnroll ? 'cloud-upload-outline' : paused ? 'sync-outline' : synced ? 'checkmark-circle-outline' : 'shield-checkmark-outline'}
-            size={17}
-            color={theme.text}
-          />
+        {showFeedback && (
+          <Text
+            accessibilityRole={needsReview ? 'alert' : undefined}
+            style={[styles.feedback, { color: needsReview ? theme.warning : theme.textSecondary }]}
+          >
+            {feedback}
+          </Text>
         )}
-        <Text style={[styles.buttonText, { color: theme.text }]}>{buttonLabel}</Text>
-      </Pressable>
 
-      {steadyReviewAvailable && (
-        <View style={styles.reviewActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Keep this device My List"
-            onPress={() => setReviewResolution('device')}
-            style={({ pressed }) => [styles.reviewButton, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed]}
-          >
-            <Text style={[styles.buttonText, { color: theme.text }]}>Keep this device</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Keep Orion Cloud My List"
-            onPress={() => setReviewResolution('cloud')}
-            style={({ pressed }) => [styles.reviewButton, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed]}
-          >
-            <Text style={[styles.buttonText, { color: theme.text }]}>Keep Orion Cloud</Text>
-          </Pressable>
-        </View>
-      )}
+        {steadyReviewAvailable && (
+          <View style={styles.reviewActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Keep this device My List"
+              onPress={() => setReviewResolution('device')}
+              style={({ pressed }) => [styles.reviewButton, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed]}
+            >
+              <Text style={[styles.buttonText, { color: theme.text }]}>Keep this device</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Keep Orion Cloud My List"
+              onPress={() => setReviewResolution('cloud')}
+              style={({ pressed }) => [styles.reviewButton, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed]}
+            >
+              <Text style={[styles.buttonText, { color: theme.text }]}>Keep Orion Cloud</Text>
+            </Pressable>
+          </View>
+        )}
+      </AccountSyncDomainRow>
 
       <OrionDialog
         visible={reviewResolution != null}
@@ -683,57 +618,25 @@ export function MyListEnrollmentPreflight({
         icon={readyRestore ? 'cloud-download-outline' : 'cloud-upload-outline'}
         onDismiss={() => setShowSyncDialog(false)}
         actions={[
+          { label: 'Cancel', role: 'cancel', onPress: () => setShowSyncDialog(false) },
           {
-            label: 'Cancel',
-            role: 'cancel',
-            onPress: () => setShowSyncDialog(false),
-          },
-          {
-            label: readyRestore ? 'Restore' : 'Start sync',
+            label: readyRestore ? 'Restore' : 'Sync',
             role: 'primary',
-            onPress: () => readyRestore ? void confirmRestore() : void confirmEnrollment(),
+            onPress: () => {
+              setShowSyncDialog(false);
+              void confirmEnrollment();
+            },
           },
         ]}
       />
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  block: { borderTopWidth: 1, paddingTop: spacing[4], gap: spacing[3] },
-  heading: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
-  headingCopy: { flex: 1, minWidth: 0 },
-  title: { fontSize: fontSizes.md, fontWeight: '800' },
-  copy: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: 4 },
-  statusChip: { minHeight: 30, borderRadius: 15, borderWidth: 1, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
-  statusText: { fontSize: 10, fontWeight: '900' },
-  localSummary: { fontSize: fontSizes.xs, fontWeight: '700', paddingLeft: 32 },
-  autoSyncRow: {
-    minHeight: 58,
-    marginLeft: 32,
-    paddingVertical: spacing[2],
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  autoSyncCopy: { flex: 1, minWidth: 0 },
-  autoSyncTitle: { fontSize: fontSizes.sm, fontWeight: '800' },
-  autoSyncDescription: { fontSize: fontSizes.xs, lineHeight: 17, marginTop: 2 },
-  feedback: { fontSize: fontSizes.xs, lineHeight: 18, fontWeight: '600', paddingLeft: 32 },
-  button: {
-    minHeight: 46,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing[2],
-    marginLeft: 32,
-  },
-  reviewActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], marginLeft: 32 },
-  reviewButton: { minHeight: 42, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center' },
+  feedback: { fontSize: fontSizes.xs, lineHeight: 18, fontWeight: '600' },
+  reviewActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
+  reviewButton: { minHeight: 44, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: 13, alignItems: 'center', justifyContent: 'center' },
   buttonText: { fontSize: fontSizes.xs, fontWeight: '800' },
   pressed: { opacity: 0.74, transform: [{ scale: 0.985 }] },
 });

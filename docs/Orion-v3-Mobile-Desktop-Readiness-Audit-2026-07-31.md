@@ -7,12 +7,12 @@
 
 ## Living Roadmap Status
 
-> **Overall Orion v3 implementation completion: 69%**
+> **Overall Orion v3 implementation completion: 74%**
 >
-> **Last verified:** August 13, 2026
+> **Last verified:** August 21, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phase 6 — Unified Mobile Player Experience — has completed its four implementation checkpoints. Physical provider/device acceptance, safe captured-VTT delivery and the exhaustive responsive presentation matrix remain open.
-> **Critical open blockers:** physical Phase 6 provider and device validation; safe captured-VTT delivery into the unified subtitle surface; playback-relevant WebView/cache/GPU diagnosis; cross-platform profiles; Mobile distribution and updates; notification policy; a real resumable Mobile downloader and offline library; low-end-device performance validation; deferred VidKing continuity; and the explicitly deferred Orion Connect findings in Phase 11
+> **Current stage:** Phase 8 pre-lock productization and runtime synchronization are physically accepted. A pre-P8.7 checkpoint audit is in progress; the final P8.7 cross-platform audit remains mandatory before Phase 8 can lock.
+> **Critical open blockers:** final Phase 8 P8.7 cross-platform acceptance; physical Phase 6 provider and device validation; safe captured-VTT delivery into the unified subtitle surface; playback-relevant WebView/cache/GPU diagnosis; Mobile distribution and updates; notification policy; a real resumable Mobile downloader and offline library; low-end-device performance validation; deferred VidKing continuity; and the explicitly deferred Orion Connect findings in Phase 11
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -38,12 +38,12 @@ The percentage is weighted by release risk. It is not based on the number of fil
 | 5. Streaming safety and source reliability | 11% | 100% | 11.0% | Complete at accepted physical boundary |
 | 6. Unified Mobile player experience | 10% | 75% | 7.5% | In progress; physical acceptance pending |
 | 7. Complete Mobile UX and performance | 8% | 30% | 2.4% | In progress |
-| 8. Google identity and portable profiles | 6% | 15% | 0.9% | Foundation only |
+| 8. Google identity and portable profiles | 6% | 95% | 5.7% | In progress; pre-lock checkpoint ready, P8.7 pending |
 | 9. Distribution, updates, availability and notifications | 5% | 5% | 0.25% | Foundation only |
 | 10. Mobile downloads and Offline Library | 8% | 10% | 0.8% | Foundation only |
 | 11. Deferred Orion Connect expansion | 2% | 10% | 0.2% | Deferred |
 | 12. Release validation | 4% | 7% | 0.28% | Foundation only |
-| **Total** | **100%** |  | **69.33%, rounded to 69%** | **Not release-ready** |
+| **Total** | **100%** |  | **74.13%, rounded to 74%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -285,6 +285,8 @@ Phase 8 must not lock immediately after the final functional synchronization dom
    - Remove or rewrite developer-oriented product copy such as Manual status, portable state terminology, v1 checkpoint language and other implementation details.
    - Explicit Sync now must expose an active busy/Syncing state while the operation runs, then return to Paused when Auto Sync remains OFF.
    - Audit responsive behavior, accessibility, themes, spacing, typography, loading, disabled and busy states on both platforms.
+
+**Pre-P8.7 checkpoint status, 2026-08-21:** COMPLETE for Count Semantics & Data Truth and production polish. Mobile Account productization, Desktop global media-state visibility, Desktop Account/Settings/title-detail consistency, accessibility repairs, passive Desktop Cloud pickup, and Viewing Activity steady-state recovery have passed their accepted physical checks. P8.7 itself has not started and Phase 8 remains NOT LOCKED.
 
 3. **Final P8.7 cross-platform audit**
    - Re-audit every Phase 8 requirement and locked boundary.
@@ -1819,3 +1821,26 @@ Immediate next work is the coherent Phase 8 production-polish pass before overal
 - then perform the P8.7 full cross-platform audit.
 
 Phase 8 remains NOT LOCKED.
+
+
+<!-- V3-P8-PRE-P8.7-CHECKPOINT-AUDIT-2026-08-21 -->
+
+## Phase 8 pre-P8.7 checkpoint audit - 2026-08-21
+
+**Checkpoint parent:** `c18162cacac69499fc30d073e125f330b009de27`
+**Classification:** PRE-P8.7 CHECKPOINT CANDIDATE
+**Phase 8:** NOT LOCKED
+
+The completed-work audit found 55 current code/test candidate paths before this documentation amendment: 42 Desktop, 12 Mobile and 1 Shared, with an empty staged index.
+
+Accepted post-count-audit work includes Mobile Account productization; Desktop global My List/Watched indicators; Desktop Account/Settings/title-detail polish; TV `Watch Now`; accessibility repairs; a bounded staggered Desktop Orion Cloud heartbeat; and checkpointed Viewing Activity stale-cache recovery only when newer verified Orion Cloud truth strictly dominates older local playback truth.
+
+Physical acceptance recorded before this checkpoint includes the Desktop product-polish pass, TV `Watch Now` / `In My List` presentation, Viewing Activity recovery from `Needs review` to `Synced`, and passive Mobile -> Desktop My List pickup while Desktop remained open with Auto sync ON.
+
+The accepted live Desktop snapshot showed 39 History entries / 8 playback positions. This later operational state does not rewrite the historical 40/10 portable proof in the Count Semantics audit.
+
+Locked scope remains My List, Watched, History and verified playback positions. Continue Watching remains locally derived with no Cloud namespace. Preferences remain local. Music Planet remains Desktop-only for current v3 scope. Downloads, storage configuration, Smart Connect state and device-local presentation settings are not portable profile domains.
+
+Before checkpoint commit: pass one grouped Shared + Mobile + standalone Android + Desktop gate, complete a short S24 Ultra account/sync sanity check, then create and push one exact-path checkpoint commit with local/remote SHA equality.
+
+The checkpoint does not lock Phase 8. P8.7 begins only after this checkpoint is sealed.

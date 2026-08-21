@@ -1,5 +1,6 @@
 import { imgUrl } from "../../services/tmdb";
 import { getSearchResultIdentity } from "../../services/search";
+import MediaStateIndicators from "./MediaStateIndicators";
 
 export function SearchMediaContext({ result, duplicateTitle = false }) {
   const identity = getSearchResultIdentity(result, duplicateTitle);
@@ -12,7 +13,7 @@ export function SearchMediaContext({ result, duplicateTitle = false }) {
   );
 }
 
-export default function SearchResultRow({ result, active, duplicateTitle, onActivate, onHover }) {
+export default function SearchResultRow({ result, active, duplicateTitle, onActivate, onHover, inMyList = false, watched = false }) {
   const identity = getSearchResultIdentity(result, duplicateTitle);
   const isPerson = result.media_type === "person";
   const imagePath = result.poster_path || result.profile_path;
@@ -38,7 +39,10 @@ export default function SearchResultRow({ result, active, duplicateTitle, onActi
         </span>
         {identity.supportingText && <span className="search-result-supporting"><b>{identity.supportingLabel}</b>{identity.supportingText}</span>}
       </span>
-      <span className={`search-result-type ${isPerson ? "type-person" : result.media_type === "tv" ? "type-tv" : "type-movie"}`}>{typeLabel}</span>
+      <span className="search-result-trailing">
+        {!isPerson && <MediaStateIndicators inMyList={inMyList} watched={watched} variant="inline" />}
+        <span className={`search-result-type ${isPerson ? "type-person" : result.media_type === "tv" ? "type-tv" : "type-movie"}`}>{typeLabel}</span>
+      </span>
     </button>
   );
 }

@@ -18,6 +18,8 @@ import {
   saveDesktopWatchedAutomaticV1,
 } from "../../services/syncPolicy";
 
+import { startPortableProfileAutoSyncHeartbeat } from "../../services/portableProfileAutoSyncHeartbeat";
+
 const DesktopWatchedSteadyStateContext = createContext(null);
 
 function itemLabel(count) {
@@ -26,14 +28,14 @@ function itemLabel(count) {
 
 function reviewMessage(reason, conflictKeys, cloudWasWritten) {
   if (reason === "both-changed") return "Watched changed on this Desktop and in the cloud since the last verified sync. Orion stopped instead of choosing a winner.";
-  if (reason === "profile-missing-after-checkpoint") return "The previously verified portable profile is missing. Orion will not recreate it automatically.";
+  if (reason === "profile-missing-after-checkpoint") return "Previously synced Watched data is missing from Orion Cloud. Orion will not recreate it automatically.";
   if (reason === "tombstone-conflict") return `${itemLabel(conflictKeys.length)} collide with cloud removals. Orion will not resurrect them automatically.`;
   if (reason === "cloud-conflict" || reason === "cloud-changed-before-pull") return "The cloud profile changed while Watched was syncing. Orion did not overwrite it.";
-  if (reason === "local-changed-during-sync") return `Watched changed on this Desktop while sync was running.${cloudWasWritten ? " The verified cloud write is preserved, but no checkpoint was created." : ""}`;
-  if (reason === "cloud-verification-failed") return "The cloud write completed, but Orion could not verify the new copy within the safety window. No checkpoint was created.";
-  if (reason.includes("identity")) return "The portable Watched state does not match this signed-in Google identity.";
-  if (reason.includes("invalid")) return "Watched contains data this Orion version cannot reconcile safely.";
-  return "The verified Watched checkpoint no longer matches both copies. Orion stopped without overwriting either side.";
+  if (reason === "local-changed-during-sync") return `Watched changed on this Desktop while sync was running.${cloudWasWritten ? " Orion Cloud kept the verified update, but this Desktop could not confirm it yet." : ""}`;
+  if (reason === "cloud-verification-failed") return "Orion Cloud saved the Watched update, but Orion could not confirm the new copy in time.";
+  if (reason.includes("identity")) return "Watched data does not match this signed-in Google identity.";
+  if (reason.includes("invalid")) return "Watched contains data this Orion version cannot sync safely.";
+  return "Watched no longer matches the last confirmed sync on both copies. Orion stopped without changing either side.";
 }
 
 export function DesktopWatchedSteadyStateSyncProvider({ googleProfile, networkStatus, watched, children }) {
@@ -68,7 +70,7 @@ export function DesktopWatchedSteadyStateSyncProvider({ googleProfile, networkSt
       if (mode === "manual" || pendingModeRef.current == null) pendingModeRef.current = mode;
       return;
     }
-    void reconcileRef.current(mode);
+    return reconcileRef.current(mode);
   }, []);
   const requestAutomaticReconcile = useCallback(() => enqueueReconcile("automatic"), [enqueueReconcile]);
   const requestManualReconcile = useCallback(() => enqueueReconcile("manual"), [enqueueReconcile]);
@@ -157,7 +159,7 @@ export function DesktopWatchedSteadyStateSyncProvider({ googleProfile, networkSt
               phase: "syncing",
               hasCheckpoint: true,
               count: Object.keys(readDesktopPortableWatchedPreviewV1().records).length,
-              message: "Reconciling Watched and verifying both copies before creating a new checkpoint.",
+              message: "Syncing Watched and confirming both copies.",
             });
           }
         },
@@ -190,7 +192,7 @@ export function DesktopWatchedSteadyStateSyncProvider({ googleProfile, networkSt
           phase: "synced",
           hasCheckpoint: true,
           count: result.count,
-          message: `${itemLabel(result.count)} verified across this Desktop and Orion cloud.`,
+          message: `${itemLabel(result.count)} verified across this Desktop and Orion Cloud.`,
         });
       } else {
         setStatus({
@@ -204,7 +206,7 @@ export function DesktopWatchedSteadyStateSyncProvider({ googleProfile, networkSt
       if (!sameAccount()) return;
       const message = error?.code === "GOOGLE_DRIVE_PROFILE_CONDITIONAL_UNAVAILABLE"
         ? "Google Drive did not provide the strong conditional-write token Orion requires on this Desktop. Nothing was overwritten."
-        : error?.message || "Orion could not reconcile Watched right now. It did not mark the operation as verified.";
+        : error?.message || "Orion could not sync Watched right now. Nothing was marked as synced.";
       setStatus({ phase: "error", hasCheckpoint: true, count: startCount, message });
     } finally {
       busyRef.current = false;
@@ -254,7 +256,7 @@ export function DesktopWatchedSteadyStateSyncProvider({ googleProfile, networkSt
       saveDesktopWatchedSyncCheckpointV1(result.checkpoint);
       const automaticNow = latestRef.current.automatic;
       setStatus(automaticNow
-        ? { phase: "synced", hasCheckpoint: true, count: result.count, message: `${itemLabel(result.count)} verified across this Desktop and Orion cloud.` }
+        ? { phase: "synced", hasCheckpoint: true, count: result.count, message: `${itemLabel(result.count)} verified across this Desktop and Orion Cloud.` }
         : { phase: "paused", hasCheckpoint: true, count: result.count, message: `${itemLabel(result.count)} synced. Automatic Watched sync remains paused on this Desktop.` });
     } catch (error) {
       if (!sameAccount()) return;
@@ -283,6 +285,8 @@ export function DesktopWatchedSteadyStateSyncProvider({ googleProfile, networkSt
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [requestAutomaticReconcile]);
+
+  useEffect(() => startPortableProfileAutoSyncHeartbeat("watched", requestAutomaticReconcile), [requestAutomaticReconcile]);
 
   const value = useMemo(() => ({
     ...status,

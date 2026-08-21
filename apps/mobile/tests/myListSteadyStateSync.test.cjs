@@ -166,8 +166,8 @@ test("P8.3 Candidate 4 Auto sync control is local policy only and OFF does not e
   const policy = read("src/features/account/SyncPolicyContext.tsx");
   const preflight = read("src/features/settings/MyListEnrollmentPreflight.tsx");
 
-  assert.match(preflight, /<Switch/);
-  assert.match(preflight, /accessibilityLabel="Auto sync My List"/);
+  assert.match(preflight, /AccountSyncDomainRow/);
+  assert.match(preflight, /accessibilityLabel: 'Auto sync My List'/);
   assert.match(preflight, /syncPolicy\.setAutomatic\('myList', enabled\)/);
   assert.match(preflight, /'Sync now'/);
   assert.match(preflight, /Automatic sync is paused/);
@@ -183,7 +183,8 @@ test("P8.4 C3-D extends the reusable policy registry without changing My List do
   assert.match(preflight, /syncPolicy\.setAutomatic\('myList', enabled\)/);
   assert.doesNotMatch(preflight, /setAutomatic\('watched'|markWatched|markUnwatched|recordPlayback|clearHistory|removeProgress/);
   assert.match(preflight, /uploading only My List/);
-  assert.match(preflight, /Keep My List consistent across Orion devices/);
+  assert.match(preflight, /AccountSyncDomainRow/);
+  assert.match(preflight, /title="My List"/);
 });
 
 

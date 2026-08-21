@@ -324,10 +324,15 @@ export function ConfirmDialog({
   );
 }
 
-export function Toggle({ value, onChange, title }) {
+export function Toggle({ value, onChange, title, disabled = false }) {
   return (
     <button
-      onClick={() => onChange(!value)}
+      type="button"
+      role="switch"
+      aria-checked={!!value}
+      aria-label={title || "Toggle setting"}
+      disabled={disabled}
+      onClick={() => { if (!disabled) onChange(!value); }}
       title={title}
       style={{
         background: value ? "var(--red)" : "var(--surface2)",
@@ -335,10 +340,11 @@ export function Toggle({ value, onChange, title }) {
         borderRadius: 20,
         width: 40,
         height: 22,
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.6 : 1,
         position: "relative",
         flexShrink: 0,
-        transition: "background 0.2s, border-color 0.2s",
+        transition: "background 0.2s, border-color 0.2s, opacity 0.2s",
       }}
     >
       <span

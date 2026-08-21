@@ -1,7 +1,7 @@
 import { memo, useCallback } from "react";
 import MediaCard from "../../../components/media/MediaCard";
 
-function CollectionCard({ part, isCurrent, onSelect, progress, watched, onMarkWatched, onMarkUnwatched }) {
+function CollectionCard({ part, isCurrent, onSelect, progress, watched, onMarkWatched, onMarkUnwatched, inMyList = false }) {
   const handleSelect = useCallback(
     (value) => onSelect(value && !value.nativeEvent ? value : part),
     [onSelect, part],
@@ -15,6 +15,7 @@ function CollectionCard({ part, isCurrent, onSelect, progress, watched, onMarkWa
         watched={watched}
         onMarkWatched={onMarkWatched}
         onMarkUnwatched={onMarkUnwatched}
+        inMyList={inMyList}
       />
     </div>
   );

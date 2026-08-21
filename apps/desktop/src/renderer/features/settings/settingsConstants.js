@@ -222,8 +222,8 @@ export const SECTION_NAV = [
   },
   {
     id: "google",
-    label: "Google Sync",
-    icon: "🔑",
+    label: "Account",
+    icon: "👤",
     keywords: [
       "google",
       "auth",

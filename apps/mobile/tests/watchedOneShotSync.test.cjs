@@ -42,14 +42,14 @@ test("P8.4 C3-D keeps first Watched enrollment explicit while exposing steady-st
   const account = read("src/features/settings/AccountSettingsContent.tsx");
   const control = read("src/features/settings/WatchedSyncControl.tsx");
   assert.match(account, /drivePhase === 'ready'[\s\S]*<WatchedSyncControl/);
-  assert.match(control, />Watched</);
   assert.match(control, /checkpoint: null/);
   assert.match(control, /Confirm sync/);
-  assert.match(control, /First sync is confirmed once/i);
-  assert.match(control, /<Switch/);
+  assert.match(control, /AccountSyncDomainRow/);
+  assert.match(control, /title="Watched"/);
   assert.match(control, /syncPolicy\.setAutomatic\('watched', enabled\)/);
-  assert.match(control, /if \(steadyActive\) steady\.refresh\(\);/);
-  assert.match(control, /else void checkEnrollment\(\);/);
+  assert.match(control, /showAction = steadyActive[\s\S]*!autoSyncEnabled && !needsReview/);
+  assert.match(control, /if \(steadyActive\) \{[\s\S]*manualSync\.runManualSync\(\);/);
+  assert.match(control, /void checkEnrollment\(\);/);
 });
 
 test("P8.4 C3-C Mobile checkpoint stores signatures only, never a persisted synced flag or cloud token", () => {

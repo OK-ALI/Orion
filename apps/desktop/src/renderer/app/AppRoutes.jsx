@@ -38,7 +38,7 @@ export default function AppRoutes({ model }) {
         />
       )}
       {page === "discover" && (
-        <DiscoverPage apiKey={apiKey} onNavigate={navigate} offline={offline} />
+        <DiscoverPage apiKey={apiKey} onNavigate={navigate} offline={offline} isSaved={isSaved} watched={watched} />
       )}
       {page === "search" && (
         <SearchResultsPage
@@ -46,6 +46,8 @@ export default function AppRoutes({ model }) {
           item={page === "search" && typeof selected === "string" ? selected : ""}
           onNavigate={navigate}
           isActive={page === "search"}
+          isSaved={isSaved}
+          watched={watched}
         />
       )}
       {page === "person" && selected && (
@@ -54,6 +56,8 @@ export default function AppRoutes({ model }) {
           apiKey={apiKey}
           onNavigate={navigate}
           onBack={navigateBack}
+          isSaved={isSaved}
+          watched={watched}
         />
       )}
       {page === "constellation" && (
@@ -65,7 +69,7 @@ export default function AppRoutes({ model }) {
       {page === "movie" && selected && (
         <MoviePage
           item={selected} apiKey={apiKey} playerSettings={playerSettings}
-          onSave={toggleSave} isSaved={isSaved(selected)}
+          onSave={toggleSave} isSaved={isSaved(selected)} isSavedItem={isSaved}
           onHistory={addHistory} progress={progress} saveProgress={saveProgress}
           onBack={navigateBack} onSettings={(section) => navigate("settings", { section: section || null })}
           onDownloadStarted={handleDownloadStarted} watched={watched}

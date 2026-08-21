@@ -983,7 +983,7 @@ export default function App() {
           showShortcuts, showUpdateModal, toast, updateBanner,
           saveProgress, markWatched,
           expandedLocalDownload, setExpandedLocalDownload, addHistory,
-          handleDeleteDownload,
+          handleDeleteDownload, isSaved, watched,
           showConnectModal, setShowConnectModal,
         }} />
          {worldTransition && <div className={`music-world-transition ${worldTransition}`} aria-hidden="true" />}

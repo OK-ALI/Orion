@@ -127,7 +127,17 @@ describe("P8.3 Desktop My List post-lock amendment", () => {
     expect(sync).toMatch(/resolution === "desktop" \? "keep-local" : "keep-cloud"/);
     expect(card).toMatch(/Keep Desktop My List/);
     expect(card).toMatch(/Keep Orion Cloud My List/);
-    expect(card).toMatch(/cannot safely infer which removals were intentional/);
+    expect(card).toMatch(/Both copies changed\. Choose which My List Orion should keep\./);
+
+    const steadyReviewStart = card.indexOf("{steadyReviewAvailable && (");
+    const firstEnrollmentConflictStart = card.indexOf('!steadyActive && state.phase === "conflict"');
+    expect(steadyReviewStart).toBeGreaterThanOrEqual(0);
+    expect(firstEnrollmentConflictStart).toBeGreaterThan(steadyReviewStart);
+    const steadyReviewPresentation = card.slice(steadyReviewStart, firstEnrollmentConflictStart);
+    expect(steadyReviewPresentation).toMatch(/Keep Desktop My List/);
+    expect(steadyReviewPresentation).toMatch(/Keep Orion Cloud My List/);
+    expect(steadyReviewPresentation).not.toMatch(/Combine both/);
+    expect(card).not.toMatch(/cannot safely infer which removals were intentional/);
   });
 
   it("stores Auto sync per domain without erasing the other domain policy", () => {

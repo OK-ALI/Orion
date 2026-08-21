@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   executePortableWatchedOneShotSyncV1,
   inspectPortableWatchedOneShotSyncV1,
@@ -20,6 +20,8 @@ import {
 } from '../account/watchedSyncCheckpoint';
 import { buildMobilePortableWatchedPreviewV1 } from '../library/viewingStatePortableAdapter';
 import { buildLocalMobileWatchedSnapshotV1 } from '../library/watchedSyncAdapter';
+import { AccountSyncDomainRow } from './AccountSyncDomainRow';
+import { useManualSyncPresentation } from './useManualSyncPresentation';
 
 type ReadyInspection = Extract<PortableWatchedOneShotInspectionV1, { state: 'ready' }>;
 
@@ -38,7 +40,7 @@ interface WatchedSyncControlProps {
 }
 
 function itemLabel(count: number): string {
-  return `${count} Watched item${count === 1 ? '' : 's'}`;
+  return count === 1 ? '1 watched movie or episode' : `${count} watched movies & episodes`;
 }
 
 function readyCopy(result: ReadyInspection): string {
@@ -53,7 +55,7 @@ function reviewMessage(reason: string, conflictKeys: string[]): string {
   if (reason === 'both-changed') return 'Watched changed on this device and in Orion Cloud since the last sync. Orion stopped instead of choosing a winner.';
   if (reason === 'profile-missing-after-checkpoint') return 'Previously synced Watched data is missing from Orion Cloud. Orion will not recreate it automatically.';
   if (reason.includes('identity')) return 'Watched in Orion Cloud does not match this signed-in Google account.';
-  if (reason.includes('invalid')) return 'Watched contains data this Orion version cannot reconcile safely.';
+  if (reason.includes('invalid')) return 'Watched contains data this Orion version cannot sync safely.';
   return 'Watched no longer matches the last synced copies. Orion stopped without overwriting either side.';
 }
 
@@ -63,6 +65,7 @@ export function WatchedSyncControl({ accountEmail, profileId }: WatchedSyncContr
   const syncPolicy = useOrionSyncPolicy();
   const steady = useWatchedSteadyStateSync();
   const autoSyncEnabled = syncPolicy.getAutomatic('watched');
+  const manualSync = useManualSyncPresentation(steady.refresh);
   const watchedRef = useRef(watched);
   watchedRef.current = watched;
   const localPreview = useMemo(() => buildMobilePortableWatchedPreviewV1(watched), [watched]);
@@ -148,26 +151,32 @@ export function WatchedSyncControl({ accountEmail, profileId }: WatchedSyncContr
 
   const steadyBusy = steady.phase === 'checking' || steady.phase === 'syncing';
   const enrollmentBusy = state.phase === 'checking' || state.phase === 'syncing';
-  const busy = steadyActive ? steadyBusy : enrollmentBusy;
-  const needsReview = steadyActive ? steady.phase === 'needs-review' : state.phase === 'needs-review';
+  const busy = (steadyActive ? steadyBusy : enrollmentBusy)
+    || (steadyActive && !autoSyncEnabled && manualSync.manualBusy);
+  const needsReview = steadyActive
+    ? steady.phase === 'needs-review' || steady.phase === 'error'
+    : state.phase === 'needs-review' || state.phase === 'error';
   const steadyReviewAvailable = steadyActive && steady.phase === 'needs-review' && steady.review?.reason === 'both-changed';
-  const badge = steadyActive
-    ? steady.phase === 'synced' ? 'Synced'
-      : steady.phase === 'paused' ? 'Paused'
-        : steady.phase === 'offline' ? 'Offline'
-          : steady.phase === 'needs-review' ? 'Needs review'
-            : steady.phase === 'checking' ? 'Checking'
-              : steady.phase === 'syncing' ? 'Syncing'
-                : steady.phase === 'error' ? 'Error' : 'Automatic'
-    : state.phase === 'ready' ? 'Ready'
-      : state.phase === 'needs-review' ? 'Needs review'
+  const badge = manualSync.manualBusy
+    ? 'Syncing'
+    : steadyActive
+      ? steady.phase === 'synced' ? 'Synced'
+        : steady.phase === 'paused' ? 'Paused'
+          : steady.phase === 'offline' ? 'Offline'
+            : steady.phase === 'needs-review' || steady.phase === 'error' ? 'Needs review'
+              : steady.phase === 'checking' ? 'Checking'
+                : steady.phase === 'syncing' ? 'Syncing'
+                  : 'Set up'
+      : state.phase === 'needs-review' || state.phase === 'error' ? 'Needs review'
         : state.phase === 'checking' ? 'Checking'
           : state.phase === 'syncing' ? 'Syncing'
             : state.phase === 'synced' ? 'Synced'
-              : state.phase === 'error' ? 'Error' : 'Manual';
+              : 'Set up';
 
   const localCount = Object.keys(localPreview.records).length;
-  const feedback = steadyActive
+  const feedback = manualSync.manualBusy
+    ? 'Syncing watched movies & episodes with Orion Cloud.'
+    : steadyActive
     ? steady.phase === 'synced'
       ? `${itemLabel(steady.count ?? localCount)} synced with Orion Cloud.`
       : steady.phase === 'paused'
@@ -188,73 +197,58 @@ export function WatchedSyncControl({ accountEmail, profileId }: WatchedSyncContr
         : state.phase === 'synced' ? `${itemLabel(state.count)} synced across this device and Orion Cloud.`
           : state.phase === 'needs-review' || state.phase === 'error' ? state.message : null;
 
-  const buttonLabel = busy
-    ? steadyActive ? (steady.phase === 'syncing' ? 'Syncing...' : 'Checking...') : (state.phase === 'syncing' ? 'Syncing...' : 'Checking...')
-    : steadyActive && !autoSyncEnabled && !needsReview ? 'Sync now'
-      : steadyActive ? 'Refresh status'
-        : state.phase === 'ready' ? 'Check Watched'
-          : 'Check Watched';
+  const actionLabel = manualSync.manualBusy
+    ? 'Syncing...'
+    : busy
+      ? steadyActive ? (steady.phase === 'syncing' ? 'Syncing...' : 'Checking...') : (state.phase === 'syncing' ? 'Syncing...' : 'Checking...')
+      : steadyActive
+        ? 'Sync now'
+        : 'Check Watched';
+  const showFeedback = Boolean(feedback) && (!steadyActive || needsReview);
+  const showAction = steadyActive
+    ? !autoSyncEnabled && !needsReview
+    : state.phase !== 'ready';
 
   return (
-    <View style={[styles.block, { borderTopColor: theme.border }]}>
-      <View style={styles.heading}>
-        <View style={[styles.icon, { backgroundColor: theme.accentSoft }]}>
-          <Ionicons name="eye-outline" size={20} color={theme.accent} />
-        </View>
-        <View style={styles.copy}>
-          <Text style={[styles.title, { color: theme.text }]}>Watched</Text>
-          <Text style={[styles.description, { color: theme.textSecondary }]}>Keep watched movies and individual episodes consistent across Orion devices. First sync is confirmed once; after that, Auto Sync can keep them current or stay paused on this device.</Text>
-        </View>
-        <View style={[styles.chip, { backgroundColor: theme.surfaceHover, borderColor: needsReview ? theme.warning : theme.border }]}>
-          <Text style={[styles.chipText, { color: needsReview ? theme.warning : theme.textMuted }]}>{badge}</Text>
-        </View>
-      </View>
+    <>
+      <AccountSyncDomainRow
+        icon="eye-outline"
+        title="Watched"
+        summary={itemLabel(localCount)}
+        status={badge}
+        autoSync={steadyActive ? {
+          value: autoSyncEnabled,
+          disabled: !syncPolicy.ready,
+          accessibilityLabel: 'Auto sync Watched',
+          accessibilityHint: 'Turns automatic Watched sync through Orion Cloud on or off without deleting local or cloud data',
+          onValueChange: (enabled) => syncPolicy.setAutomatic('watched', enabled),
+        } : undefined}
+        action={showAction ? {
+          label: actionLabel,
+          accessibilityLabel: steadyActive ? actionLabel : 'Check Watched',
+          accessibilityHint: steadyActive
+            ? 'Runs one safe Watched sync while automatic sync is paused'
+            : 'Checks this device and Orion Cloud before first Watched sync',
+          disabled: busy,
+          busy,
+          onPress: () => {
+            if (steadyActive) {
+              manualSync.runManualSync();
+            } else {
+              void checkEnrollment();
+            }
+          },
+        } : undefined}
+      >
+        {showFeedback && (
+          <Text
+            accessibilityRole={needsReview ? 'alert' : undefined}
+            style={[styles.message, { color: needsReview ? theme.warning : theme.textSecondary }]}
+          >
+            {feedback}
+          </Text>
+        )}
 
-      <Text style={[styles.localSummary, { color: theme.textSecondary }]}>
-        {localCount} Watched item{localCount === 1 ? '' : 's'} on this device
-      </Text>
-
-      {steadyActive && (
-        <View style={[styles.autoSyncRow, { borderColor: theme.border }]}>
-          <View style={styles.autoSyncCopy}>
-            <Text style={[styles.autoSyncTitle, { color: theme.text }]}>Auto sync</Text>
-            <Text style={[styles.autoSyncDescription, { color: theme.textMuted }]}>
-              {autoSyncEnabled
-                ? 'Watched changes sync automatically through Orion Cloud when Orion is online.'
-                : 'Automatic sync is paused. Local Watched changes stay on this device until you choose Sync now or turn this back on.'}
-            </Text>
-          </View>
-          <Switch
-            accessibilityLabel="Auto sync Watched"
-            accessibilityHint="Turns automatic Watched sync through Orion Cloud on or off without deleting local or cloud data"
-            accessibilityState={{ disabled: !syncPolicy.ready }}
-            disabled={!syncPolicy.ready}
-            value={autoSyncEnabled}
-            onValueChange={(enabled) => syncPolicy.setAutomatic('watched', enabled)}
-            trackColor={{ false: theme.surfaceHover, true: theme.accentSoft }}
-            thumbColor={autoSyncEnabled ? theme.accent : theme.textMuted}
-          />
-        </View>
-      )}
-
-      {feedback && (
-        <Text accessibilityRole={needsReview ? 'alert' : undefined} style={[styles.message, { color: needsReview ? theme.warning : steadyActive && steady.phase === 'synced' ? theme.accent : theme.textSecondary }]}>{feedback}</Text>
-      )}
-
-      <View style={styles.actions}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={steadyActive ? buttonLabel : 'Check Watched'}
-          disabled={busy}
-          onPress={() => {
-            if (steadyActive) steady.refresh();
-            else void checkEnrollment();
-          }}
-          style={({ pressed }) => [styles.button, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed, busy && styles.disabled]}
-        >
-          {busy ? <ActivityIndicator color={theme.text} /> : <Ionicons name="refresh-outline" size={17} color={theme.text} />}
-          <Text style={[styles.buttonText, { color: theme.text }]}>{buttonLabel}</Text>
-        </Pressable>
         {!steadyActive && state.phase === 'ready' && (
           <Pressable
             accessibilityRole="button"
@@ -267,28 +261,32 @@ export function WatchedSyncControl({ accountEmail, profileId }: WatchedSyncContr
             <Text style={[styles.buttonText, { color: theme.accent }]}>Confirm sync</Text>
           </Pressable>
         )}
-      </View>
 
-      {steadyReviewAvailable && (
-        <View style={styles.reviewActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Keep this device Watched state"
-            onPress={() => setReviewResolution('device')}
-            style={({ pressed }) => [styles.button, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed]}
-          >
-            <Text style={[styles.buttonText, { color: theme.text }]}>Keep this device</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Keep Orion Cloud Watched state"
-            onPress={() => setReviewResolution('cloud')}
-            style={({ pressed }) => [styles.button, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed]}
-          >
-            <Text style={[styles.buttonText, { color: theme.text }]}>Keep Orion Cloud</Text>
-          </Pressable>
-        </View>
-      )}
+        {steadyReviewAvailable && (
+          <View style={styles.reviewActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Keep this device Watched state"
+              onPress={() => setReviewResolution('device')}
+              style={({ pressed }) => [styles.button, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed]}
+            >
+              <Text style={[styles.buttonText, { color: theme.text }]}>Keep this device</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Keep Orion Cloud Watched state"
+              onPress={() => setReviewResolution('cloud')}
+              style={({ pressed }) => [styles.button, { backgroundColor: theme.elevated, borderColor: theme.border }, pressed && styles.pressed]}
+            >
+              <Text style={[styles.buttonText, { color: theme.text }]}>Keep Orion Cloud</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {localPreview.rejectedKeys.length > 0 && (
+          <Text style={[styles.message, { color: theme.warning }]}>{itemLabel(localPreview.rejectedKeys.length)} cannot sync safely yet.</Text>
+        )}
+      </AccountSyncDomainRow>
 
       <OrionDialog
         visible={reviewResolution != null}
@@ -311,33 +309,14 @@ export function WatchedSyncControl({ accountEmail, profileId }: WatchedSyncContr
           },
         ]}
       />
-
-      {localPreview.rejectedKeys.length > 0 && (
-        <Text style={[styles.message, { color: theme.warning }]}>{itemLabel(localPreview.rejectedKeys.length)} cannot be represented safely and will block sync.</Text>
-      )}
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  block: { borderTopWidth: 1, paddingTop: spacing[4], gap: spacing[3] },
-  heading: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
-  icon: { width: 40, height: 40, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center' },
-  copy: { flex: 1, minWidth: 0 },
-  title: { fontSize: fontSizes.md, fontWeight: '800' },
-  description: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: 4 },
-  chip: { minHeight: 30, borderRadius: 15, borderWidth: 1, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
-  chipText: { fontSize: 10, fontWeight: '900' },
-  autoSyncRow: { marginLeft: 52, borderWidth: 1, borderRadius: radii.lg, padding: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  autoSyncCopy: { flex: 1, minWidth: 0 },
-  autoSyncTitle: { fontSize: fontSizes.xs, fontWeight: '800' },
-  autoSyncDescription: { fontSize: 11, lineHeight: 16, marginTop: 2 },
-  localSummary: { fontSize: fontSizes.xs, lineHeight: 18, marginLeft: 52 },
-  message: { fontSize: fontSizes.xs, lineHeight: 18, marginLeft: 52 },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], marginLeft: 52 },
-  reviewActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], marginLeft: 52 },
-  button: { minHeight: 42, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
+  message: { fontSize: fontSizes.xs, lineHeight: 18 },
+  reviewActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
+  button: { minHeight: 44, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
   buttonText: { fontSize: fontSizes.xs, fontWeight: '800' },
   pressed: { opacity: 0.74, transform: [{ scale: 0.985 }] },
-  disabled: { opacity: 0.6 },
 });

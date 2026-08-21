@@ -92,6 +92,84 @@ function verifiedEventTruthSignature(
   }));
 }
 
+
+function sameVerifiedEventValue(
+  domain: 'history' | 'progress',
+  left: PortableViewingActivityStateV1['history'][string] | PortableViewingActivityStateV1['progress'][string],
+  right: PortableViewingActivityStateV1['history'][string] | PortableViewingActivityStateV1['progress'][string],
+): boolean {
+  if (domain === 'history') {
+    const a = left as PortableViewingActivityStateV1['history'][string];
+    const b = right as PortableViewingActivityStateV1['history'][string];
+    return a.lastPlayedAt === b.lastPlayedAt && a.verified === b.verified;
+  }
+  const a = left as PortableViewingActivityStateV1['progress'][string];
+  const b = right as PortableViewingActivityStateV1['progress'][string];
+  return a.currentTime === b.currentTime
+    && a.duration === b.duration
+    && a.percent === b.percent
+    && a.startedAt === b.startedAt
+    && a.lastPlayedAt === b.lastPlayedAt
+    && a.verified === b.verified;
+}
+
+/**
+ * A checkpointed Desktop cache can occasionally regress to playback truth that
+ * Orion Cloud has already superseded. This helper recognizes only the narrow
+ * monotonic case where every active difference is dominated by newer verified
+ * Cloud truth or a newer Cloud tombstone. It deliberately rejects local-only
+ * additions, local removals, newer local events, and equal-time contradictions.
+ */
+function cloudStrictlyDominatesLocalPlayback(
+  remote: PortableProfileV3,
+  cloud: PortableViewingActivityStateV1,
+  local: PortableViewingActivityPreviewV1,
+): boolean {
+  let sawDominatingDifference = false;
+
+  for (const domain of ['history', 'progress'] as const) {
+    const remoteNamespace = namespace(remote, domain);
+    const localValues = local[domain];
+    const cloudValues = cloud[domain];
+    const keys = new Set([
+      ...Object.keys(localValues),
+      ...Object.keys(cloudValues),
+      ...Object.keys(remoteNamespace.records),
+    ]);
+
+    for (const key of keys) {
+      const localValue = localValues[key];
+      const cloudValue = cloudValues[key];
+      const cloudRecord = remoteNamespace.records[key];
+
+      if (localValue && cloudValue) {
+        if (sameVerifiedEventValue(domain, localValue as never, cloudValue as never)) continue;
+        if (localValue.lastPlayedAt < cloudValue.lastPlayedAt) {
+          sawDominatingDifference = true;
+          continue;
+        }
+        return false;
+      }
+
+      if (localValue && !cloudValue) {
+        if (cloudRecord?.deletedAt != null && localValue.lastPlayedAt <= cloudRecord.deletedAt) {
+          sawDominatingDifference = true;
+          continue;
+        }
+        return false;
+      }
+
+      if (!localValue && cloudValue) {
+        // Missing local activity may be an intentional removal. Never erase
+        // that intent automatically just because the Cloud copy is active.
+        return false;
+      }
+    }
+  }
+
+  return sawDominatingDifference;
+}
+
 function checkpointFor(
   profileId: string,
   localTruthSignature: string,
@@ -295,9 +373,52 @@ export async function reconcilePortableViewingActivitySteadyStateSyncV1(input: {
         updatedBy: input.updatedBy,
       });
     } catch {
+      if (!cloudStrictlyDominatesLocalPlayback(remote.profile, cloudState, startLocal)) {
+        return {
+          state: 'needs-review', reason: 'local-update-unsafe', historyConflictKeys: [], progressConflictKeys: [],
+          cloudWasWritten: false, localCount, cloudCount,
+        };
+      }
+
+      input.onExecutionStart?.('pull');
+      const stable = await input.store.read(input.profileKey);
+      if (
+        stable.state !== 'found'
+        || stable.profile.profileId !== input.profileId
+        || stable.revisionTag !== remote.revisionTag
+        || portableViewingActivityNamespaceSignatureV1(stable.profile) !== cloudNamespaceSignature
+      ) {
+        return {
+          state: 'needs-review', reason: 'cloud-changed-before-pull', historyConflictKeys: [], progressConflictKeys: [],
+          cloudWasWritten: false, localCount, cloudCount,
+        };
+      }
+      const latestLocal = await input.readLocalPreview();
+      if (portableViewingActivityTruthSignatureV1(latestLocal) !== startLocalSignature) {
+        return {
+          state: 'needs-review', reason: 'local-changed-during-sync', historyConflictKeys: [], progressConflictKeys: [],
+          cloudWasWritten: false, localCount, cloudCount,
+        };
+      }
+      if (!(await canProceed(input.shouldProceed))) return { state: 'cancelled' };
+      try {
+        await input.applyLocalState(cloudState);
+      } catch {
+        return {
+          state: 'needs-review', reason: 'local-apply-failed', historyConflictKeys: [], progressConflictKeys: [],
+          cloudWasWritten: false, localCount, cloudCount,
+        };
+      }
+      const applied = await input.readLocalPreview();
+      if (portableViewingActivityTruthSignatureV1(applied) !== cloudTruthSignature) {
+        return {
+          state: 'needs-review', reason: 'local-apply-failed', historyConflictKeys: [], progressConflictKeys: [],
+          cloudWasWritten: false, localCount, cloudCount,
+        };
+      }
       return {
-        state: 'needs-review', reason: 'local-update-unsafe', historyConflictKeys: [], progressConflictKeys: [],
-        cloudWasWritten: false, localCount, cloudCount,
+        state: 'verified', action: 'pull', count: cloudCount,
+        checkpoint: checkpointFor(input.profileId, cloudTruthSignature, cloudNamespaceSignature),
       };
     }
   }

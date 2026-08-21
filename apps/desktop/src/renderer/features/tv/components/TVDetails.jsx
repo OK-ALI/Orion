@@ -71,7 +71,9 @@ import {
 import { ContextMenu, EpisodeDesc, PartialCircleIcon, VoiceBoostIcon } from "./EpisodeUi";
 
 export default function TVDetails({ model }) {
-  const { currentEpDownload, d, displayEpisodeCount, displayGenres, displayOverview, displayScore, displaySeasonCount, isSaved, onBack, onGoToDownloads, onSave, rating, restricted, selectedEp, setShowDownload, setShowTrailer, title, trailerKey } = model;
+  const { currentEpDownload, currentSeasonEpisodes, d, displayEpisodeCount, displayGenres, displayOverview, displayScore, displaySeasonCount, isSaved, onBack, onGoToDownloads, onSave, playEpisode, rating, restricted, selectedEp, setShowDownload, setShowTrailer, title, trailerKey } = model;
+  const watchNowEpisode = selectedEp || currentSeasonEpisodes?.[0] || null;
+
   return (
 <div className="detail-hero">
             <div
@@ -149,6 +151,28 @@ export default function TVDetails({ model }) {
                 )}
                 <p className="detail-overview">{displayOverview}</p>
                 <div className="detail-actions">
+                  {restricted ? (
+                    <button
+                      className="btn btn-primary btn-restricted"
+                      disabled
+                      title="Inappropriate for your age rating setting"
+                    >
+                      🔒 Restricted
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-primary"
+                      disabled={!watchNowEpisode}
+                      onClick={() => watchNowEpisode && playEpisode(watchNowEpisode)}
+                      title={watchNowEpisode ? "Watch the selected episode" : "Preparing episode list"}
+                    >
+                      <PlayIcon /> Watch Now
+                    </button>
+                  )}
+                  <button className="btn btn-secondary" onClick={onSave}>
+                    {isSaved ? <BookmarkFillIcon /> : <BookmarkIcon />}
+                    {isSaved ? "In My List" : "Add to My List"}
+                  </button>
                   {trailerKey &&
                     (restricted ? (
                       <button
@@ -166,10 +190,6 @@ export default function TVDetails({ model }) {
                         <TrailerIcon /> Trailer
                       </button>
                     ))}
-                  <button className="btn btn-secondary" onClick={onSave}>
-                    {isSaved ? <BookmarkFillIcon /> : <BookmarkIcon />}
-                    {isSaved ? "Saved" : "Save"}
-                  </button>
                   {!restricted && selectedEp && (
                     <button
                       className="btn btn-secondary"
