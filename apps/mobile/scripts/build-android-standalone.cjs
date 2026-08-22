@@ -22,6 +22,14 @@ const embeddedBundle = path.join(
   "assets",
   "index.android.bundle",
 );
+const embeddedManifest = path.join(
+  androidDirectory,
+  "app",
+  "src",
+  "main",
+  "assets",
+  "app.manifest",
+);
 const androidResources = path.join(androidDirectory, "app", "src", "main", "res");
 const standaloneDirectory = path.join(
   androidDirectory,
@@ -149,6 +157,9 @@ const orionUpdateNativeFiles = ["OrionUpdateModule.kt", "OrionUpdatePackage.kt"]
 const androidManifest = path.join(androidDirectory, "app", "src", "main", "AndroidManifest.xml");
 const androidXmlDirectory = path.join(androidDirectory, "app", "src", "main", "res", "xml");
 const updateFilePathsXml = path.join(androidXmlDirectory, "orion_update_file_paths.xml");
+const appConfigJson = path.join(projectDirectory, "app.json");
+const androidValuesDirectory = path.join(androidDirectory, "app", "src", "main", "res", "values");
+const androidStringsXml = path.join(androidValuesDirectory, "strings.xml");
 
 function syncCinemaNativeSources() {
   fs.mkdirSync(cinemaNativeTargetDirectory, { recursive: true });
@@ -382,6 +393,179 @@ function ensureDirectUpdateManifest() {
 }
 
 
+function escapeXmlAttribute(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function upsertAndroidMetaData(contents, name, value) {
+  const line = `    <meta-data android:name="${name}" android:value="${escapeXmlAttribute(value)}"/>`;
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`\\s*<meta-data\\s+android:name="${escapedName}"[^>]*/>`);
+  if (pattern.test(contents)) return contents.replace(pattern, `\n${line}`);
+  if (!contents.includes("  </application>")) {
+    throw new Error(`Unable to locate Android application block for ${name}.`);
+  }
+  return contents.replace("  </application>", `${line}\n  </application>`);
+}
+
+function ensureExpoRuntimeUpdateConfiguration() {
+  const appConfig = JSON.parse(fs.readFileSync(appConfigJson, "utf8")).expo || {};
+  const updates = appConfig.updates || {};
+  const runtimeVersion = appConfig.runtimeVersion;
+  const updateUrl = updates.url;
+  const requestHeaders = updates.requestHeaders || {};
+  const selectedChannel = requestHeaders["expo-channel-name"];
+
+  if (updates.disableAntiBrickingMeasures === true) {
+    throw new Error("Orion runtime updates must keep Expo anti-bricking measures enabled.");
+  }
+  if (typeof runtimeVersion !== "string" || !runtimeVersion.trim()) {
+    throw new Error("Orion runtimeVersion is missing from app.json.");
+  }
+  if (typeof updateUrl !== "string" || !/^https:\/\/u\.expo\.dev\/[0-9a-f-]+$/i.test(updateUrl)) {
+    throw new Error("Orion Expo update URL is missing or invalid.");
+  }
+  if (selectedChannel !== "stable") {
+    throw new Error("Orion embedded runtime update channel must default to stable.");
+  }
+
+  const checkOnLaunchMap = {
+    ON_LOAD: "ALWAYS",
+    ON_ERROR_RECOVERY: "ERROR_RECOVERY_ONLY",
+    WIFI_ONLY: "WIFI_ONLY",
+    NEVER: "NEVER",
+  };
+  const checkOnLaunch = checkOnLaunchMap[updates.checkAutomatically || "ON_LOAD"];
+  if (!checkOnLaunch) {
+    throw new Error(`Unsupported Orion runtime update launch policy: ${updates.checkAutomatically}`);
+  }
+
+  let manifest = fs.readFileSync(androidManifest, "utf8");
+  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.ENABLED", updates.enabled === false ? "false" : "true");
+  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.EXPO_UPDATE_URL", updateUrl);
+  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.EXPO_RUNTIME_VERSION", "@string/expo_runtime_version");
+  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH", checkOnLaunch);
+  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS", String(updates.fallbackToCacheTimeout ?? 0));
+  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.HAS_EMBEDDED_UPDATE", updates.useEmbeddedUpdate === false ? "false" : "true");
+  manifest = upsertAndroidMetaData(
+    manifest,
+    "expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY",
+    JSON.stringify(requestHeaders),
+  );
+  fs.writeFileSync(androidManifest, manifest, "utf8");
+
+  fs.mkdirSync(androidValuesDirectory, { recursive: true });
+  let strings = fs.existsSync(androidStringsXml)
+    ? fs.readFileSync(androidStringsXml, "utf8")
+    : '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n</resources>\n';
+  const runtimeLine = `  <string name="expo_runtime_version" translatable="false">${runtimeVersion}</string>`;
+  const runtimePattern = /\s*<string\s+name="expo_runtime_version"[^>]*>[^<]*<\/string>/;
+  if (runtimePattern.test(strings)) {
+    strings = strings.replace(runtimePattern, `\n${runtimeLine}`);
+  } else if (strings.includes("</resources>")) {
+    strings = strings.replace("</resources>", `${runtimeLine}\n</resources>`);
+  } else {
+    throw new Error("Unable to locate Android strings resources for Expo runtime version.");
+  }
+  fs.writeFileSync(androidStringsXml, strings, "utf8");
+
+  const verifiedManifest = fs.readFileSync(androidManifest, "utf8");
+  const verifiedStrings = fs.readFileSync(androidStringsXml, "utf8");
+  for (const required of [
+    "expo.modules.updates.EXPO_UPDATE_URL",
+    "expo.modules.updates.EXPO_RUNTIME_VERSION",
+    "expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH",
+    "expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY",
+  ]) {
+    if (!verifiedManifest.includes(required)) {
+      throw new Error(`Expo runtime update Android metadata did not persist: ${required}`);
+    }
+  }
+  if (!verifiedStrings.includes(runtimeVersion)) {
+    throw new Error("Expo runtime version Android resource did not persist.");
+  }
+  console.log(`[Android] Expo runtime updates configured for ${runtimeVersion} on stable.`);
+}
+
+
+function prepareExpoEmbeddedUpdateManifest(entryFile) {
+  let expoUpdatesPackageJson;
+  try {
+    expoUpdatesPackageJson = require.resolve("expo-updates/package.json", {
+      paths: [projectDirectory],
+    });
+  } catch (error) {
+    throw new Error(
+      `Unable to resolve expo-updates for embedded manifest generation: ${error.message}`,
+    );
+  }
+
+  const createUpdatesResourcesScript = path.join(
+    path.dirname(expoUpdatesPackageJson),
+    "utils",
+    "build",
+    "createUpdatesResources.js",
+  );
+  if (!fs.existsSync(createUpdatesResourcesScript)) {
+    throw new Error(
+      `Expo embedded update resource generator is missing: ${createUpdatesResourcesScript}`,
+    );
+  }
+
+  fs.mkdirSync(path.dirname(embeddedManifest), { recursive: true });
+  fs.rmSync(embeddedManifest, { force: true });
+
+  const result = spawnSync(
+    process.execPath,
+    [
+      createUpdatesResourcesScript,
+      "android",
+      projectDirectory,
+      path.dirname(embeddedManifest),
+      "all",
+      entryFile,
+    ],
+    {
+      cwd: projectDirectory,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+      },
+      shell: false,
+      stdio: "inherit",
+    },
+  );
+
+  if (result.error || result.status !== 0 || !fs.existsSync(embeddedManifest)) {
+    throw new Error(
+      `Unable to create Expo embedded update manifest: ${result.error?.message || "app.manifest generation failed"}`,
+    );
+  }
+
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(embeddedManifest, "utf8"));
+  } catch (error) {
+    throw new Error(`Expo embedded update manifest is invalid JSON: ${error.message}`);
+  }
+
+  if (
+    typeof manifest.id !== "string" ||
+    !manifest.id ||
+    typeof manifest.commitTime !== "number" ||
+    !Array.isArray(manifest.assets)
+  ) {
+    throw new Error("Expo embedded update manifest is missing its required embedded-update fields.");
+  }
+
+  console.log("[Android] Expo embedded update manifest prepared: app.manifest");
+}
+
+
 try {
   syncCinemaNativeSources();
   syncGoogleIdentityNativeSources();
@@ -393,6 +577,7 @@ try {
   ensureGoogleDriveAuthorizationPackageRegistration();
   ensureOrionUpdatePackageRegistration();
   ensureDirectUpdateManifest();
+  ensureExpoRuntimeUpdateConfiguration();
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
@@ -442,6 +627,13 @@ const bundleResult = spawnSync(
 if (bundleResult.error || bundleResult.status !== 0 || !fs.existsSync(embeddedBundle)) {
   console.error(`Unable to create the embedded Android bundle: ${bundleResult.error?.message || "bundle failed"}`);
   process.exit(bundleResult.status ?? 1);
+}
+
+try {
+  prepareExpoEmbeddedUpdateManifest(entryResult.stdout.trim());
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
 }
 
 if (process.argv.includes("--prepare-only")) {

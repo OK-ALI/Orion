@@ -62,7 +62,7 @@ test('P9.2 native JS bridge exposes direct APK execution only', () => {
   assert.doesNotMatch(bridge, /OrionPlayUpdateStatus/);
 });
 
-test('P9.2 Updates Settings exposes verified direct APK execution without claiming Play or Expo execution', () => {
+test('P9.2 Updates Settings keeps verified direct APK execution separate from runtime updates', () => {
   const updates = read('src', 'features', 'settings', 'UpdatesSettingsContent.tsx');
   const execution = read('src', 'features', 'settings', 'MobileUpdateExecutionSection.tsx');
 
@@ -71,6 +71,7 @@ test('P9.2 Updates Settings exposes verified direct APK execution without claimi
   assert.match(execution, /Verifying APK integrity/);
   assert.match(execution, /Allow installs/);
   assert.doesNotMatch(execution, /Google Play|Play Core|logo-google-playstore|startFlexiblePlayUpdate/);
-  assert.match(updates, /Google Play distribution is intentionally out of scope/);
-  assert.match(updates, /runtime-compatible Expo updates remain in the next update-engine candidate/);
+  assert.match(updates, /Google Play distribution remains out of scope/);
+  assert.match(updates, /RuntimeUpdateExecutionSection/);
+  assert.match(updates, /Signed APK updates remain the path for native changes/);
 });

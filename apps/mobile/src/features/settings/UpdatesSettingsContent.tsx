@@ -5,6 +5,7 @@ import { fontSizes, radii, spacing } from '@orion/shared/tokens';
 import type { OrionReleaseChannelV1 } from '@orion/shared/types';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { MobileUpdateExecutionSection } from './MobileUpdateExecutionSection';
+import { RuntimeUpdateExecutionSection } from './RuntimeUpdateExecutionSection';
 import {
   checkMobileReleaseTruthV1,
   getMobileCurrentVersionV1,
@@ -13,6 +14,12 @@ import {
   setMobileUpdateChannelV1,
   type MobileReleaseCheckV1,
 } from '../../services/mobileReleaseTruth';
+import {
+  checkExpoRuntimeUpdateV1,
+  getExpoRuntimeUpdateStatusV1,
+  setExpoRuntimeUpdateChannelV1,
+  type OrionRuntimeUpdateStatusV1,
+} from '../../services/expoRuntimeUpdates';
 
 function formatCheckedAt(value: number | null): string {
   if (!value) return 'Not checked yet';
@@ -30,19 +37,36 @@ export function UpdatesSettingsContent() {
   const [result, setResult] = React.useState<MobileReleaseCheckV1 | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [lastCheckedAt, setLastCheckedAt] = React.useState<number | null>(() => getMobileUpdateLastCheckedV1());
+  const [runtimeStatus, setRuntimeStatus] = React.useState<OrionRuntimeUpdateStatusV1>(() =>
+    getExpoRuntimeUpdateStatusV1(getMobileUpdateChannelV1()),
+  );
 
   const runCheck = React.useCallback(async (nextChannel: OrionReleaseChannelV1 = channel) => {
     setChecking(true);
     setError(null);
-    try {
-      const next = await checkMobileReleaseTruthV1(nextChannel);
-      setResult(next);
-      setLastCheckedAt(next.lastCheckedAt);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to check for updates.');
-    } finally {
-      setChecking(false);
+    setRuntimeStatus((current) => ({ ...current, channel: nextChannel, state: 'checking', message: null }));
+    const [releaseOutcome, runtimeOutcome] = await Promise.allSettled([
+      checkMobileReleaseTruthV1(nextChannel),
+      checkExpoRuntimeUpdateV1(nextChannel),
+    ]);
+
+    if (releaseOutcome.status === 'fulfilled') {
+      setResult(releaseOutcome.value);
+      setLastCheckedAt(releaseOutcome.value.lastCheckedAt);
+    } else {
+      setError(releaseOutcome.reason instanceof Error ? releaseOutcome.reason.message : 'Unable to check for APK updates.');
     }
+
+    if (runtimeOutcome.status === 'fulfilled') {
+      setRuntimeStatus(runtimeOutcome.value);
+    } else {
+      setRuntimeStatus({
+        ...getExpoRuntimeUpdateStatusV1(nextChannel),
+        state: 'failed',
+        message: runtimeOutcome.reason instanceof Error ? runtimeOutcome.reason.message : 'Unable to check runtime updates.',
+      });
+    }
+    setChecking(false);
   }, [channel]);
 
   React.useEffect(() => {
@@ -51,6 +75,7 @@ export function UpdatesSettingsContent() {
 
   const chooseChannel = (next: OrionReleaseChannelV1) => {
     setMobileUpdateChannelV1(next);
+    setExpoRuntimeUpdateChannelV1(next);
     setChannel(next);
   };
 
@@ -61,13 +86,17 @@ export function UpdatesSettingsContent() {
     ? 'Unable to check'
     : checking
       ? 'Checking'
-      : result?.state === 'available'
-        ? 'Update available'
-        : result?.state === 'unsupported'
-          ? 'Unsupported'
-          : result
-            ? 'Current'
-            : 'Not checked';
+      : runtimeStatus.state === 'restart-required'
+        ? 'Restart required'
+        : runtimeStatus.state === 'available'
+          ? 'Runtime update available'
+          : result?.state === 'available'
+            ? 'APK update available'
+            : result?.state === 'unsupported'
+              ? 'Unsupported'
+              : result
+                ? 'Current'
+                : 'Not checked';
 
   return (
     <View style={styles.root}>
@@ -136,6 +165,8 @@ export function UpdatesSettingsContent() {
 
       <MobileUpdateExecutionSection result={result} />
 
+      <RuntimeUpdateExecutionSection status={runtimeStatus} onStatusChange={setRuntimeStatus} />
+
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Check for Orion Mobile updates"
@@ -152,7 +183,7 @@ export function UpdatesSettingsContent() {
       </Pressable>
 
       <Text style={[styles.scopeNote, { color: theme.textMuted }]}>
-        Verified direct APK execution now uses the Phase 9 update engine. Google Play distribution is intentionally out of scope for the current Orion release plan, and runtime-compatible Expo updates remain in the next update-engine candidate.
+        Signed APK updates remain the path for native changes. Runtime updates are limited to compatible JavaScript and assets, with Orion's embedded runtime kept as the recovery floor. Google Play distribution remains out of scope for the current release plan.
       </Text>
     </View>
   );

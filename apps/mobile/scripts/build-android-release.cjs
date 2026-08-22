@@ -93,7 +93,7 @@ function patchReleaseGradleText(input) {
     const block = [
       "    // ORION_RELEASE_EMBEDDED_BUNDLE",
       "    if (orionEmbeddedReleaseBundle) {",
-      "        // Orion prepares the production Expo bundle explicitly before assembleRelease.",
+      "        // Orion prepares the production Expo bundle and Expo embedded manifest explicitly before assembleRelease.",
       "        // This skips duplicate RN bundling only; Android's release build remains non-debuggable.",
       '        debuggableVariants = ["debug", "release"]',
       "    }",
@@ -287,8 +287,12 @@ function verifyEmbeddedBundle(apkPath) {
   if (listing.error || listing.status !== 0) {
     throw new Error(`Unable to inspect release APK contents: ${listing.error?.message || listing.stderr || "jar failed"}`);
   }
-  if (!listing.stdout.split(/\r?\n/).includes("assets/index.android.bundle")) {
+  const entries = listing.stdout.split(/\r?\n/);
+  if (!entries.includes("assets/index.android.bundle")) {
     throw new Error("Release APK validation failed: assets/index.android.bundle is missing.");
+  }
+  if (!entries.includes("assets/app.manifest")) {
+    throw new Error("Release APK validation failed: assets/app.manifest is missing.");
   }
 }
 
@@ -395,6 +399,7 @@ function main() {
   console.log(`[Android] Release APK size: ${(fs.statSync(distributionApk).size / (1024 * 1024)).toFixed(2)} MB`);
   console.log(`[Android] Release APK SHA-256: ${sha256(distributionApk)}`);
   console.log("[Android] Bundled JavaScript verified: assets/index.android.bundle");
+  console.log("[Android] Expo embedded manifest verified: assets/app.manifest");
 }
 
 if (require.main === module) {

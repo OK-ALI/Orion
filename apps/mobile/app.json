@@ -62,6 +62,17 @@
       "eas": {
         "projectId": "db8d113f-2d08-4a1c-b58a-19dceeeca94f"
       }
+    },
+    "runtimeVersion": "orion-mobile-native-r1",
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/db8d113f-2d08-4a1c-b58a-19dceeeca94f",
+      "requestHeaders": {
+        "expo-channel-name": "stable"
+      },
+      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "fallbackToCacheTimeout": 0,
+      "useEmbeddedUpdate": true
     }
   }
 }
