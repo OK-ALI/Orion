@@ -42,6 +42,7 @@
           "cameraPermission": "Allow Orion to access your camera to scan the desktop pairing QR code."
         }
       ],
+      "expo-notifications",
       "expo-video",
       "./plugins/withOrionNsd",
       "./plugins/withOrionCinemaWebView",

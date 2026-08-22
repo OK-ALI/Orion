@@ -7,6 +7,7 @@ export type MobileSettingsSectionId =
   | 'sync'
   | 'playback'
   | 'accessibility'
+  | 'notifications'
   | 'updates'
   | 'connect'
   | 'downloads';
@@ -27,6 +28,7 @@ export const MOBILE_SETTINGS_SECTIONS: readonly MobileSettingsSectionDefinition[
   { id: 'sync', label: 'Sync', status: 'reserved' },
   { id: 'playback', label: 'Playback', status: 'reserved' },
   { id: 'accessibility', label: 'Accessibility', status: 'active' },
+  { id: 'notifications', label: 'Notifications', status: 'active' },
   { id: 'updates', label: 'Updates', status: 'active' },
   { id: 'connect', label: 'Connect', status: 'reserved' },
   { id: 'downloads', label: 'Downloads', status: 'reserved' },

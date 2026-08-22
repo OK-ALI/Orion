@@ -7,12 +7,12 @@
 
 ## Living Roadmap Status
 
-> **Overall Orion v3 implementation completion: 83%**
+> **Overall Orion v3 implementation completion: 86%**
 >
-> **Last verified:** August 21, 2026
+> **Last verified:** August 22, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phases 0 through 8 are COMPLETE & LOCKED. Phase 8 implementation lock is `5b9cb7ad8824b24cecccc83f5cee52614c72a8ee`. The next active engineering phase is Phase 9 Distribution, updates, availability and notifications; Phases 10, 11 and 12 remain afterward.
-> **Critical open blockers:** Mobile distribution/update/notification delivery; a real resumable Mobile downloader and Offline Library; the explicitly deferred Orion Connect expansion in Phase 11; and the complete Phase 12 release-validation matrix.
+> **Current stage:** Phases 0 through 8 are COMPLETE & LOCKED. Phase 9 is active: P9.1 Distribution & Release Truth, P9.2 Update Engine & Integrity, and P9.3 Availability & Notifications are functionally and physically accepted. V3-P9-007 remains open before the dedicated Phase 9 product-polish pass and final audit/lock.
+> **Critical open blockers:** remaining V3-P9-007 work plus Phase 9 product polish/final lock; a real resumable Mobile downloader and Offline Library; the explicitly deferred Orion Connect expansion in Phase 11; and the complete Phase 12 release-validation matrix.
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -56,11 +56,11 @@ Phase 8 intentionally keeps Continue Watching as a local derived view, applicati
 | 6. Unified Mobile player experience | 10% | 100% | 10.0% | Complete / locked |
 | 7. Complete Mobile UX and performance | 8% | 100% | 8.0% | Complete / locked |
 | 8. Google identity and portable profiles | 6% | 100% | 6.0% | Complete |
-| 9. Distribution, updates, availability and notifications | 5% | 5% | 0.25% | Foundation only |
+| 9. Distribution, updates, availability and notifications | 5% | 75% | 3.75% | In progress |
 | 10. Mobile downloads and Offline Library | 8% | 10% | 0.8% | Foundation only |
 | 11. Deferred Orion Connect expansion | 2% | 10% | 0.2% | Deferred |
 | 12. Release validation | 4% | 7% | 0.28% | Foundation only |
-| **Total** | **100%** |  | **82.53%, rounded to 83%** | **Not release-ready** |
+| **Total** | **100%** |  | **86.03%, rounded to 86%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -329,16 +329,18 @@ Phase 8 must not lock immediately after the final functional synchronization dom
 
 ### Phase 9 — Distribution, updates, availability and notifications
 
-- [x] **V3-P9-001:** Desktop updater/status foundations exist; no complete Mobile update channel is claimed.
-- [ ] **V3-P9-002:** Add a Desktop Mobile Download area with a distinct installation QR and signed direct APK link.
-- [ ] **V3-P9-003:** Show stable/preview channel, latest Mobile version, minimum Android version and installer availability.
-- [ ] **V3-P9-004:** Present checking, available, downloading, ready, restart-required, current, failed and unsupported states consistently.
-- [ ] **V3-P9-005:** Support signed GitHub APK, Play Core flexible and runtime-compatible Expo update paths.
-- [ ] **V3-P9-006:** Validate checksums and signing identity before installation.
+- [x] **V3-P9-001:** Desktop updater/status foundations are established and remain integrated with the accepted Phase 9 release truth.
+- [x] **V3-P9-002:** Add a Desktop Mobile Download area with a distinct installation QR and signed direct APK link.
+- [x] **V3-P9-003:** Show stable/preview channel, latest Mobile version, minimum Android version and installer availability.
+- [x] **V3-P9-004:** Present checking, available, downloading, ready, restart-required, current, failed and unsupported states consistently.
+- [x] **V3-P9-005:** Support signed GitHub APK and runtime-compatible Expo update paths. Play Core is deferred by product decision while Orion Mobile remains direct-GitHub distributed.
+- [x] **V3-P9-006:** Validate checksums and signing identity before installation.
 - [ ] **V3-P9-007:** Add staged rollout, rollback, release notes, retry and restart UX.
-- [ ] **V3-P9-008:** Add local-first Android checks for updates, sync failures, offline recovery, provider degradation, watchlist releases and availability changes.
-- [ ] **V3-P9-009:** Add per-category controls, quiet hours, deduplication and deep links.
-- [ ] **V3-P9-010:** Request notification permission contextually and persist notification preferences locally per device.
+- [x] **V3-P9-008:** Add local-first Android checks for updates, sync failures, offline recovery, provider degradation, watchlist releases and availability changes.
+- [x] **V3-P9-009:** Add per-category controls, quiet hours, deduplication and deep links.
+- [x] **V3-P9-010:** Request notification permission contextually and persist notification preferences locally per device.
+
+**Phase 9 product decision:** Google Play / Play Core is not part of the current Orion Mobile distribution plan. The accepted Android path is the permanently signed direct GitHub APK, with runtime-compatible Expo updates for compatible JavaScript/runtime delivery. This deferral is intentional scope, not an unimplemented P9.2 requirement.
 
 ### Phase 10 — Mobile downloads and Offline Library
 
@@ -428,6 +430,8 @@ Every roadmap update should add one row. Do not delete older entries.
 
 | Date | Checklist IDs | Change | Evidence | Overall completion |
 |---|---|---|---|---:|
+| 2026-08-22 | P9.3; V3-P9-008-V3-P9-010 | Accepted P9.3 Availability & Notifications: local-first availability checks, contextual notification permission, per-device category preferences, quiet hours, persistent deduplication, whitelisted deep links and physically accepted 12-hour AM/PM quiet-hours control. Broader Notifications/Updates restructuring and production-language polish remain reserved for the dedicated Phase 9 polish pass. | P9.2 + P9.3 focused regression 19/19 and initial full Mobile/Android candidate gates; final quiet-hours UX amendments passed focused 6/6, typecheck, source-size and `git diff --check`; production APK SHA-256 `3BA46D5E83B0A27DBD5E6CC84405D31D8D33028CD2E46E5202CA8CA9E4B588BA`; permanent signer SHA-256 `4422EC4BC16B1C83C914A0AD1B688BE8F7C158FF7F99BCD223A909966AC7A1BD`; same-signer `adb install -r` and S24 Ultra physical notification/deep-link/quiet-hours acceptance | 86% |
+| 2026-08-22 | P9.2; V3-P9-004-V3-P9-006; V3-P9-007 foundations | Accepted P9.2 Update Engine & Integrity: Desktop integrity hardening, signed direct Android APK execution, runtime-compatible Expo updates and recovery UX. Play Core is explicitly deferred by product decision because Orion Mobile is not planned for Google Play distribution. | Checkpoints `5c1bc4adea04b3446e801e092b2b3c6e9848b6fc`, `b0188a532506b82f71faaf483dd3552d100e6db1`, `5229a586923ec58b44c55b50de986a93c41afd17`; package/version/hash/permanent-signer verification; S24 Ultra physical update validation | 85% |
 | 2026-08-22 | P9.1; V3-P9-001-V3-P9-006 foundations | Accepted P9.1 Distribution & Release Truth: dedicated Desktop Get Orion Mobile ownership, shared Stable/Preview truth, Mobile Updates productization, permanent Android release signing and integrity foundations without falsely publishing a Mobile release | docs/audits/ORION-V3-P9.1-DISTRIBUTION-RELEASE-TRUTH-AUDIT.md; Shared/Desktop/Mobile gates green; signed APK SHA-256 785EA4D68A5243B42D68C6D6897711D978931267E1A1007DC1A674F4F346824F; production-signer in-place S24 Ultra validation | 83% |
 | 2026-08-21 | V3-P8-001-V3-P8-010, P8.7 | Completed final Phase 8 cross-platform audit, physical bidirectional sync/conflict/isolation acceptance, canonical production gates and implementation lock | Lock `5b9cb7ad8824b24cecccc83f5cee52614c72a8ee`; final lock audit in `docs/audits` | 83% |
 | 2026-08-16 | V3-P7-001-V3-P7-011, V3-P7-022, V3-P7-023 | Locked the complete Mobile UX/performance boundary and preserved the accepted Phase 7 candidate history before Phase 8 | Implementation lock `437640f5e6c7d16d0dad2b020d34b06436731acd`; archive/readiness commit `ec65bec235087cba72ed6388b8fa4be1c09289ef`; candidate archive SHA-256 `27865B59D381A72D915B955DE912169EAFF29DA52499C920233656D15C4474B7` | Historical Phase 7 boundary; current total 83% |

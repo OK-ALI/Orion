@@ -1,4 +1,5 @@
 import React from "react";
+import { useLocalSearchParams } from "expo-router";
 import {
   ScrollView,
   View,
@@ -26,6 +27,7 @@ import {
 import { SettingsSectionNavigator } from "../../src/features/settings/SettingsSectionNavigator";
 import { AccountSettingsContent } from "../../src/features/settings/AccountSettingsContent";
 import { UpdatesSettingsContent } from "../../src/features/settings/UpdatesSettingsContent";
+import { NotificationSettingsContent } from "../../src/features/settings/NotificationSettingsContent";
 import {
   PERFORMANCE_PROFILE_LABELS,
   PERFORMANCE_PROFILE_OPTIONS,
@@ -85,18 +87,17 @@ export default function MobileSettingsScreen() {
   const { theme, preferences, setTheme, setReducedMotion, setFollowSystem, setCustomAccent } = useOrionTheme();
   const { selection, resolvedProfile, setSelection } = usePerformanceProfile();
   const { isTablet } = useResponsiveLayout();
+  const { section: requestedSectionParam } = useLocalSearchParams<{ section?: string | string[] }>();
   const account = MOBILE_SETTINGS_SECTION_BY_ID.account;
   const appearance = MOBILE_SETTINGS_SECTION_BY_ID.appearance;
   const performance = MOBILE_SETTINGS_SECTION_BY_ID.performance;
   const accessibility = MOBILE_SETTINGS_SECTION_BY_ID.accessibility;
+  const notifications = MOBILE_SETTINGS_SECTION_BY_ID.notifications;
   const updates = MOBILE_SETTINGS_SECTION_BY_ID.updates;
   const scrollRef = React.useRef<ScrollView>(null);
   const sectionOffsets = React.useRef<Partial<Record<MobileSettingsSectionId, number>>>({});
+  const pendingDeepLinkSectionRef = React.useRef<MobileSettingsSectionId | null>(null);
   const [currentSectionId, setCurrentSectionId] = React.useState<MobileSettingsSectionId>('account');
-
-  const recordSectionLayout = React.useCallback((sectionId: MobileSettingsSectionId) => (event: LayoutChangeEvent) => {
-    sectionOffsets.current[sectionId] = event.nativeEvent.layout.y;
-  }, []);
 
   const jumpToSection = React.useCallback((sectionId: MobileSettingsSectionId) => {
     const y = sectionOffsets.current[sectionId];
@@ -104,6 +105,25 @@ export default function MobileSettingsScreen() {
     setCurrentSectionId(sectionId);
     scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing[2]), animated: !preferences.reducedMotion });
   }, [preferences.reducedMotion]);
+
+  const recordSectionLayout = React.useCallback((sectionId: MobileSettingsSectionId) => (event: LayoutChangeEvent) => {
+    sectionOffsets.current[sectionId] = event.nativeEvent.layout.y;
+    if (pendingDeepLinkSectionRef.current !== sectionId) return;
+    pendingDeepLinkSectionRef.current = null;
+    requestAnimationFrame(() => jumpToSection(sectionId));
+  }, [jumpToSection]);
+
+  React.useEffect(() => {
+    const requested = Array.isArray(requestedSectionParam) ? requestedSectionParam[0] : requestedSectionParam;
+    const section = MOBILE_ACTIVE_SETTINGS_SECTIONS.find((candidate) => candidate.id === requested);
+    if (!section) return;
+    const y = sectionOffsets.current[section.id];
+    if (typeof y === 'number') {
+      requestAnimationFrame(() => jumpToSection(section.id));
+    } else {
+      pendingDeepLinkSectionRef.current = section.id;
+    }
+  }, [jumpToSection, requestedSectionParam]);
 
   const handleScroll = React.useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = event.nativeEvent.contentOffset.y + 28;
@@ -312,6 +332,17 @@ export default function MobileSettingsScreen() {
               thumbColor={preferences.reducedMotion ? theme.accent : theme.textMuted}
             />
           </View>
+        </SettingsSection>
+
+        <SettingsSection
+          sectionId="notifications"
+          icon="notifications-outline"
+          title={notifications.label}
+          description="Local alerts, categories, quiet hours and notification privacy."
+          theme={theme}
+          onLayout={recordSectionLayout('notifications')}
+        >
+          <NotificationSettingsContent />
         </SettingsSection>
 
         <SettingsSection

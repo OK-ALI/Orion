@@ -25,6 +25,8 @@ import { StorageUnavailableScreen } from '../src/components/StorageUnavailableSc
 import { MobileDiagnosticsBridge } from '../src/components/MobileDiagnosticsBridge';
 import { StartupIntro } from '../src/components/StartupIntro';
 import { GlobalSearchShortcut } from '../src/components/GlobalSearchShortcut';
+import { MobileNotificationCoordinator } from '../src/features/notifications/MobileNotificationCoordinator';
+import { MobileNotificationResponseRouter } from '../src/features/notifications/MobileNotificationResponseRouter';
 
 
 // Keep the splash screen visible while we fetch resources
@@ -115,6 +117,8 @@ function ThemedApplication() {
             <ViewingActivitySteadyStateSyncProvider>
               <GestureHandlerRootView style={{ flex: 1 }}>
               <View style={[styles.container, { backgroundColor: theme.background }]}>
+                <MobileNotificationCoordinator />
+                <MobileNotificationResponseRouter />
                 <MobileDiagnosticsBridge />
                 <StatusBar style={theme.dark ? 'light' : 'dark'} />
                 <Stack

@@ -10,6 +10,7 @@ const SECTION_ICONS: Partial<Record<MobileSettingsSectionId, React.ComponentProp
   appearance: 'color-palette-outline',
   performance: 'speedometer-outline',
   accessibility: 'accessibility-outline',
+  notifications: 'notifications-outline',
   account: 'person-circle-outline',
   sync: 'sync-outline',
   playback: 'play-circle-outline',

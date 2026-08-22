@@ -56,6 +56,21 @@ const V1_STORAGE_KEY = "mobileCinemaSourceHealthV1";
 const V2_STORAGE_KEY = "mobileCinemaSourceHealthV2";
 const MAX_RECORDS = 80;
 
+type MobileSourceHealthListenerV2 = (
+  next: CinemaSourceHealthV2,
+  previous: CinemaSourceHealthV2 | null,
+) => void;
+const sourceHealthListenersV2 = new Set<MobileSourceHealthListenerV2>();
+
+export function subscribeMobileSourceHealthV2(listener: MobileSourceHealthListenerV2): () => void {
+  sourceHealthListenersV2.add(listener);
+  return () => sourceHealthListenersV2.delete(listener);
+}
+
+function emitMobileSourceHealthV2(next: CinemaSourceHealthV2, previous: CinemaSourceHealthV2 | null): void {
+  for (const listener of sourceHealthListenersV2) listener(next, previous);
+}
+
 function parseRecords<T>(key: string): T[] {
   try {
     const parsed = JSON.parse(mmkvStorageAdapter.get(key) || "[]");
@@ -190,6 +205,7 @@ export function updateMobileSourceHealthV2(
   if (index >= 0) records[index] = next;
   else records.push(next);
   persistV2(records);
+  emitMobileSourceHealthV2(next, index >= 0 ? previous : null);
   return next;
 }
 
