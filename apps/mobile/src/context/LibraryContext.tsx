@@ -26,6 +26,10 @@ import {
   withoutEpisodeWatched,
   withoutSeasonWatched,
 } from '../features/library/watchedState';
+import {
+  replacePersistedMyListV1,
+  type PersistedMyListReceiptV1,
+} from '../features/library/myListPersistence';
 
 function getLibraryMediaType(item: any = {}) {
   return item.media_type || (item.first_air_date || item.name ? "tv" : "movie");
@@ -72,7 +76,10 @@ interface LibraryContextType {
   watched: Record<string, any>;
   progress: Record<string, any>;
   toggleSave: (item: TmdbMediaItem) => void;
-  replaceMyListFromSync: (saved: Record<string, any>, savedOrder: string[]) => void;
+  replaceMyListFromSync: (
+    saved: Record<string, any>,
+    savedOrder: string[],
+  ) => PersistedMyListReceiptV1;
   replaceWatchedFromSync: (watched: Record<string, any>) => void;
   replaceViewingActivityFromSync: (history: any[], progress: Record<string, any>) => void;
   isSaved: (item: TmdbMediaItem) => boolean;
@@ -184,27 +191,11 @@ export function LibraryProvider({ children, storage }: { children: React.ReactNo
   }, [getMediaType]);
 
   const replaceMyListFromSync = useCallback((nextSaved: Record<string, any>, nextSavedOrder: string[]) => {
-    const previousSaved = storage.get(STORAGE_KEYS.SAVED);
-    const previousOrder = storage.get(STORAGE_KEYS.SAVED_ORDER);
-    try {
-      storage.set(STORAGE_KEYS.SAVED, JSON.stringify(nextSaved));
-      storage.set(STORAGE_KEYS.SAVED_ORDER, JSON.stringify(nextSavedOrder));
-    } catch (error) {
-      try {
-        if (previousSaved == null) storage.remove(STORAGE_KEYS.SAVED);
-        else storage.set(STORAGE_KEYS.SAVED, previousSaved);
-        if (previousOrder == null) storage.remove(STORAGE_KEYS.SAVED_ORDER);
-        else storage.set(STORAGE_KEYS.SAVED_ORDER, previousOrder);
-      } catch {
-        // Storage health will surface a persistent backend failure. Do not
-        // mutate React state if the local My List replacement was incomplete.
-      }
-      throw error;
-    }
-
-    savedRef.current = nextSaved;
-    setSaved(nextSaved);
-    setSavedOrder([...nextSavedOrder]);
+    const persisted = replacePersistedMyListV1(storage, nextSaved, nextSavedOrder);
+    savedRef.current = persisted.saved;
+    setSaved(persisted.saved);
+    setSavedOrder([...persisted.savedOrder]);
+    return persisted;
   }, []);
 
   const replaceWatchedFromSync = useCallback((nextWatched: Record<string, any>) => {

@@ -43,7 +43,7 @@ type PreflightState =
   | { phase: 'syncing' }
   | { phase: 'synced' }
   | { phase: 'needs-review'; message: string }
-  | { phase: 'error'; message: string };
+  | { phase: 'error'; message: string; retry?: ReadyState };
 
 interface MyListEnrollmentPreflightProps {
   accountEmail: string;
@@ -374,10 +374,23 @@ export function MyListEnrollmentPreflight({
     }
   };
 
+  const restoreReadyState = state.phase === 'ready-restore'
+    ? state
+    : state.phase === 'error' && state.retry?.phase === 'ready-restore'
+      ? state.retry
+      : null;
+
   const confirmRestore = async () => {
-    if (operationBusyRef.current || state.phase !== 'ready-restore') return;
-    const readyState = state;
+    if (operationBusyRef.current) return;
+    const readyState = restoreReadyState;
     setShowSyncDialog(false);
+    if (!readyState) {
+      setState({
+        phase: 'error',
+        message: 'Restore is no longer ready. Check My List again before changing anything.',
+      });
+      return;
+    }
     if (
       readyState.previewSignature !== previewSignature
       || preview.orderedKeys.length !== 0
@@ -425,7 +438,19 @@ export function MyListEnrollmentPreflight({
       }
 
       const snapshot = buildLocalMyListSnapshotV1(cloudPreview);
-      replaceMyListFromSync(snapshot.saved, snapshot.savedOrder);
+      // LibraryContext writes saved + savedOrder as one guarded replacement,
+      // then reads both native values back and verifies identities, count,
+      // ordering, and normalized content before returning this receipt.
+      const persisted = replaceMyListFromSync(snapshot.saved, snapshot.savedOrder);
+      const expectedIdentities = Object.keys(cloudPreview.records).sort();
+      if (
+        persisted.count !== cloudPreview.orderedKeys.length
+        || JSON.stringify(persisted.itemIdentities) !== JSON.stringify(expectedIdentities)
+        || JSON.stringify(persisted.savedOrder) !== JSON.stringify(snapshot.savedOrder)
+        || persisted.normalizedContentSignature !== portableMyListPreviewSignatureV1(cloudPreview)
+      ) {
+        throw new Error('MY_LIST_RESTORE_RECEIPT_MISMATCH');
+      }
       saveMyListSyncCheckpointV1({
         profileId,
         localSignature: portableMyListPreviewSignatureV1(cloudPreview),
@@ -439,18 +464,36 @@ export function MyListEnrollmentPreflight({
     } catch {
       setState({
         phase: 'error',
-        message: 'Orion could not restore My List safely. Your existing local My List was not replaced.',
+        message: 'Orion could not write and verify My List on this device. Orion Cloud was not changed. You can try Restore again.',
+        retry: readyState,
       });
     } finally {
       operationBusyRef.current = false;
     }
   };
 
+  const confirmReadyAction = () => {
+    if (operationBusyRef.current) return;
+    if (restoreReadyState) {
+      void confirmRestore();
+      return;
+    }
+    if (state.phase === 'ready-create' || state.phase === 'ready-empty') {
+      void confirmEnrollment();
+      return;
+    }
+    setShowSyncDialog(false);
+    setState({
+      phase: 'error',
+      message: 'This My List action is no longer ready. Check again before changing this device or Orion Cloud.',
+    });
+  };
+
   const localCount = preview.orderedKeys.length;
   const steadyActive = steady.hasCheckpoint;
   const readyEnroll = !steadyActive && (state.phase === 'ready-create' || state.phase === 'ready-empty');
-  const readyRestore = !steadyActive && state.phase === 'ready-restore';
-  const restoreCloudCount = state.phase === 'ready-restore' ? state.cloudPreview.orderedKeys.length : 0;
+  const readyRestore = !steadyActive && restoreReadyState != null;
+  const restoreCloudCount = restoreReadyState?.cloudPreview.orderedKeys.length ?? 0;
   const ready = readyEnroll || readyRestore;
   const engineSyncing = steadyActive ? steady.phase === 'syncing' : state.phase === 'syncing';
   const syncing = engineSyncing || (steadyActive && manualSync.manualBusy);
@@ -481,7 +524,9 @@ export function MyListEnrollmentPreflight({
                 : steady.phase === 'error'
                   ? steady.message
                   : null
-    : readyRestore
+    : state.phase === 'error'
+      ? state.message
+      : readyRestore
       ? `${itemLabel(restoreCloudCount)} ${restoreCloudCount === 1 ? 'is' : 'are'} available in Orion Cloud. This device My List is empty and can be restored without merging.`
       : readyEnroll
         ? `${itemLabel(localCount)} ${localCount === 1 ? 'is' : 'are'} ready to sync. Nothing has been uploaded yet.`
@@ -489,7 +534,7 @@ export function MyListEnrollmentPreflight({
           ? 'Syncing My List with Orion Cloud. Your local library outside My List is not being changed.'
           : state.phase === 'synced'
             ? `${itemLabel(localCount)} ${localCount === 1 ? 'is' : 'are'} synced with Orion Cloud.`
-            : state.phase === 'needs-review' || state.phase === 'error'
+            : state.phase === 'needs-review'
               ? state.message
               : null;
 
@@ -633,10 +678,7 @@ export function MyListEnrollmentPreflight({
           {
             label: readyRestore ? 'Restore' : 'Sync',
             role: 'primary',
-            onPress: () => {
-              setShowSyncDialog(false);
-              void confirmEnrollment();
-            },
+            onPress: confirmReadyAction,
           },
         ]}
       />
