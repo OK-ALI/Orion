@@ -427,6 +427,17 @@ export function ConnectIcon({ size = 20, ...props }) {
   );
 }
 
+export function MobileDeviceIcon({ size = 20, ...props }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="6.5" y="2.5" width="11" height="19" rx="2.6" />
+      <path d="M9.6 5.5h4.8" opacity=".72" />
+      <path d="M10.4 18.4h3.2" />
+      <path d="m9.3 12 2 2 3.8-4" />
+    </svg>
+  );
+}
+
 export function NowPlayingIcon({ size = 20, ...props }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>

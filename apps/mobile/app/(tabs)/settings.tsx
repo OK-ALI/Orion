@@ -25,6 +25,7 @@ import {
 } from "../../src/features/settings/settingsArchitecture";
 import { SettingsSectionNavigator } from "../../src/features/settings/SettingsSectionNavigator";
 import { AccountSettingsContent } from "../../src/features/settings/AccountSettingsContent";
+import { UpdatesSettingsContent } from "../../src/features/settings/UpdatesSettingsContent";
 import {
   PERFORMANCE_PROFILE_LABELS,
   PERFORMANCE_PROFILE_OPTIONS,
@@ -88,6 +89,7 @@ export default function MobileSettingsScreen() {
   const appearance = MOBILE_SETTINGS_SECTION_BY_ID.appearance;
   const performance = MOBILE_SETTINGS_SECTION_BY_ID.performance;
   const accessibility = MOBILE_SETTINGS_SECTION_BY_ID.accessibility;
+  const updates = MOBILE_SETTINGS_SECTION_BY_ID.updates;
   const scrollRef = React.useRef<ScrollView>(null);
   const sectionOffsets = React.useRef<Partial<Record<MobileSettingsSectionId, number>>>({});
   const [currentSectionId, setCurrentSectionId] = React.useState<MobileSettingsSectionId>('account');
@@ -310,6 +312,17 @@ export default function MobileSettingsScreen() {
               thumbColor={preferences.reducedMotion ? theme.accent : theme.textMuted}
             />
           </View>
+        </SettingsSection>
+
+        <SettingsSection
+          sectionId="updates"
+          icon="cloud-download-outline"
+          title={updates.label}
+          description="Release channel, version availability and Android compatibility."
+          theme={theme}
+          onLayout={recordSectionLayout('updates')}
+        >
+          <UpdatesSettingsContent />
         </SettingsSection>
 
         <View style={[styles.notice, { backgroundColor: theme.elevated, borderColor: theme.border }]}>

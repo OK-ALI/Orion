@@ -80,4 +80,20 @@ describe("Sidebar rail behavior", () => {
     expect(worldSwitch.querySelector("svg")).toBeTruthy();
     expect(worldSwitch.querySelector("circle")).toBeNull();
   });
+  it("separates Cinema navigation into Browse, Library, Devices and Worlds", () => {
+    const onNavigate = vi.fn();
+    render(<Sidebar activePage="home" onNavigate={onNavigate} />);
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Reveal Orion Cinema sidebar" }));
+
+    expect(screen.getByText("Browse")).toBeInTheDocument();
+    expect(screen.getByText("Library")).toBeInTheDocument();
+    expect(screen.getByText("Devices")).toBeInTheDocument();
+    expect(screen.getByText("Worlds")).toBeInTheDocument();
+    expect(screen.getByText("System")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Get Orion Mobile"));
+    expect(onNavigate).toHaveBeenCalledWith("get-mobile");
+    expect(screen.getByRole("button", { name: "Enter Music Planet" })).toBeInTheDocument();
+  });
+
 });

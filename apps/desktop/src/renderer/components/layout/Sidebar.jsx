@@ -13,6 +13,7 @@ import {
   CinemaIcon,
   ChevronRightIcon,
   ConnectIcon,
+  MobileDeviceIcon,
   NowPlayingIcon,
   AlbumIcon,
   ArtistsIcon,
@@ -41,11 +42,17 @@ const NAV_GROUPS = [
     ],
   },
   {
-    label: "Personal",
+    label: "Library",
     items: [
       { id: "library", label: "My Library", icon: LibraryIcon },
       { id: "downloads", label: "Downloads", icon: DownloadIcon },
+    ],
+  },
+  {
+    label: "Devices",
+    items: [
       { id: "connect", label: "Orion Connect", icon: ConnectIcon },
+      { id: "get-mobile", label: "Get Orion Mobile", icon: MobileDeviceIcon },
     ],
   },
 ];
@@ -260,15 +267,18 @@ export default function Sidebar({
               })}
             </div>
           ))}
-          <button
-            className={`sidebar-world-switch${musicWorld ? " music-active" : ""}`}
-            onClick={() => onNavigate(musicWorld ? "home" : "music-home")}
-            aria-label={musicWorld ? "Return to Cinema" : "Enter Music Planet"}
-            title={musicWorld ? "Cinema world" : "Music Planet"}
-          >
-            <span className="sidebar-world-orbit">{musicWorld ? <CinemaIcon size={21} /> : <MusicPlanetIcon size={21} />}</span>
-            <span className="sidebar-item-label">{musicWorld ? "Cinema" : "Music Planet"}</span>
-          </button>
+          <div className="sidebar-group sidebar-worlds-group">
+            <div className="sidebar-group-label">Worlds</div>
+            <button
+              className={`sidebar-world-switch${musicWorld ? " music-active" : ""}`}
+              onClick={() => onNavigate(musicWorld ? "home" : "music-home")}
+              aria-label={musicWorld ? "Return to Cinema" : "Enter Music Planet"}
+              title={musicWorld ? "Cinema world" : "Music Planet"}
+            >
+              <span className="sidebar-world-orbit">{musicWorld ? <CinemaIcon size={21} /> : <MusicPlanetIcon size={21} />}</span>
+              <span className="sidebar-item-label">{musicWorld ? "Cinema" : "Music Planet"}</span>
+            </button>
+          </div>
         </div>
 
         <div className="sidebar-footer">

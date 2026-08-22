@@ -8,6 +8,7 @@ const MoviePage = lazy(() => import("../features/movies/MoviePage"));
 const TVPage = lazy(() => import("../features/tv/TVPage"));
 const LibraryPage = lazy(() => import("../features/library/LibraryPage"));
 const SettingsPage = lazy(() => import("../features/settings/SettingsPage"));
+const GetOrionMobilePage = lazy(() => import("../features/updates/GetOrionMobilePage"));
 const DownloadsPage = lazy(() => import("../features/downloads/DownloadsPage"));
 const SearchResultsPage = lazy(() => import("../features/discover/SearchResultsPage"));
 const PersonPage = lazy(() => import("../features/people/PersonPage"));
@@ -109,6 +110,9 @@ export default function AppRoutes({ model }) {
           apiKey={apiKey} apiKeySource={apiKeySource} onChangeApiKey={changeApiKey}
           initialSection={page === "settings" ? selected?.section : null}
         />
+      )}
+      {page === "get-mobile" && (
+        <GetOrionMobilePage />
       )}
       {page === "downloads" && (
         <DownloadsPage

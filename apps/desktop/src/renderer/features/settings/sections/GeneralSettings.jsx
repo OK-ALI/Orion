@@ -10,7 +10,6 @@ import MyListSyncCard from "../components/MyListSyncCard";
 import WatchedSyncCard from "../components/WatchedSyncCard";
 import ViewingActivitySyncCard from "../components/ViewingActivitySyncCard";
 import WorkspaceRestoreConfirm from "../components/WorkspaceRestoreConfirm";
-
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`;
@@ -20,8 +19,11 @@ function formatBytes(bytes) {
 
 export function VersionSection() {
   const [checking, setChecking] = useState(false);
-  const [result, setResult] = useState(null); // { latest, current, url, hasUpdate } | { error }
+  const [result, setResult] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [channel, setChannel] = useState(() =>
+    storage.get(STORAGE_KEYS.UPDATE_CHANNEL) === "preview" ? "preview" : "stable",
+  );
   const [autoCheck, setAutoCheck] = useState(() => {
     const stored = storage.get(STORAGE_KEYS.AUTO_CHECK_UPDATES);
     return stored === null || stored === undefined ? true : !!stored;
@@ -31,23 +33,34 @@ export function VersionSection() {
 
   useEffect(() => {
     if (window.electron?.getAppVersion) {
-      window.electron.getAppVersion().then((v) => {
-        setCurrentVersion(v);
-      });
+      window.electron.getAppVersion().then((v) => setCurrentVersion(v));
     }
   }, []);
 
-  const runCheck = async () => {
+  const runCheck = useCallback(async (selectedChannel = channel) => {
     setChecking(true);
     setResult(null);
     try {
-      const r = await checkForUpdates();
+      const r = await checkForUpdates(selectedChannel);
       setResult(r);
+      return r;
     } catch (e) {
-      setResult({ error: e.message || "Could not reach GitHub." });
+      const failed = { error: e.message || "Could not reach GitHub." };
+      setResult(failed);
+      return failed;
     } finally {
       setChecking(false);
     }
+  }, [channel]);
+
+  useEffect(() => {
+    runCheck(channel);
+  }, [channel, runCheck]);
+
+  const changeChannel = (next) => {
+    const normalized = next === "preview" ? "preview" : "stable";
+    storage.set(STORAGE_KEYS.UPDATE_CHANNEL, normalized);
+    setChannel(normalized);
   };
 
   const toggleAuto = (val) => {
@@ -59,121 +72,63 @@ export function VersionSection() {
 
   return (
     <div style={{ marginBottom: 40 }}>
-      <div className="settings-section-title">App Version</div>
+      <div className="settings-section-title">Orion Updates</div>
 
-      {/* Version row */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          flexWrap: "wrap",
-          marginBottom: 20,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 13, color: "var(--text3)" }}>
-            Current version
-          </span>
-          <code
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: "var(--text)",
-              background: "var(--surface2)",
-              border: "1px solid var(--border)",
-              borderRadius: 6,
-              padding: "4px 12px",
-            }}
-          >
-            v{currentVersion}
-          </code>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(220px, .55fr)", gap: 18, marginBottom: 18 }}>
+        <div style={{ border: "1px solid var(--border)", background: "var(--surface2)", borderRadius: 12, padding: 18 }}>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 8 }}>ORION DESKTOP</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <code style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 12px" }}>
+              v{currentVersion}
+            </code>
+            {result && !result.error && (
+              <span style={{ fontSize: 13, color: result.hasUpdate ? "var(--red)" : "#48c774", fontWeight: 600 }}>
+                {result.hasUpdate ? `v${result.latest} available` : "✓ You're up to date"}
+              </span>
+            )}
+            {result?.error && <span style={{ fontSize: 13, color: "var(--red)" }}>✕ {result.error}</span>}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+            <SettingsSelect
+              value={channel}
+              onChange={changeChannel}
+              options={[
+                { value: "stable", label: "Stable — Recommended" },
+                { value: "preview", label: "Preview — Early releases" },
+              ]}
+              style={{ minWidth: 210 }}
+            />
+            <button className="btn btn-ghost" disabled={checking} onClick={() => runCheck(channel)} style={{ opacity: checking ? 0.6 : 1 }}>
+              {checking ? "Checking…" : "Check for Updates"}
+            </button>
+            {result && !result.error && result.hasUpdate && (
+              <button className="btn btn-primary" onClick={() => setShowUpdateModal(true)}>
+                View Update
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 10, lineHeight: 1.5 }}>
+            Preview widens eligibility to newer preview builds, but never downgrades below the newest Stable release.
+          </div>
         </div>
 
-        <button
-          className="btn btn-ghost"
-          disabled={checking}
-          onClick={runCheck}
-          style={{ opacity: checking ? 0.6 : 1 }}
-        >
-          {checking ? "Checking…" : "Check for Updates"}
-        </button>
-
-        {result && !result.error && result.hasUpdate && (
-          <button
-            onClick={() => setShowUpdateModal(true)}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              background: "rgba(229,9,20,0.12)",
-              border: "1px solid rgba(229,9,20,0.4)",
-              color: "var(--red)",
-              borderRadius: 8,
-              padding: "6px 14px",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              transition: "background 0.2s",
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.background = "rgba(229,9,20,0.22)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.background = "rgba(229,9,20,0.12)")
-            }
-          >
-            🎉 v{result.latest} available. Install Update
-          </button>
-        )}
-
-        {result && !result.error && !result.hasUpdate && (
-          <span style={{ fontSize: 13, color: "#48c774", fontWeight: 500 }}>
-            ✓ You're up to date
-          </span>
-        )}
-
-        {result?.error && (
-          <span style={{ fontSize: 13, color: "var(--red)" }}>
-            ✕ {result.error}
-          </span>
-        )}
+        <div style={{ border: "1px solid var(--border)", background: "var(--surface2)", borderRadius: 12, padding: 18 }}>
+          <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 8 }}>UPDATE CHECKS</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <Toggle value={autoCheck} onChange={toggleAuto} title={autoCheck ? "Disable auto-check" : "Enable auto-check"} />
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>Check on startup</div>
+              <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>Uses the selected {channel} channel.</div>
+            </div>
+            {autoSaved && <span style={{ fontSize: 12, color: "#48c774" }}>✓ Saved</span>}
+          </div>
+        </div>
       </div>
 
       {showUpdateModal && result?.hasUpdate && (
-        <UpdateModal
-          updateInfo={result}
-          onClose={() => setShowUpdateModal(false)}
-        />
+        <UpdateModal updateInfo={result} onClose={() => setShowUpdateModal(false)} />
       )}
 
-      {/* Auto-check toggle */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <Toggle
-          value={autoCheck}
-          onChange={toggleAuto}
-          title={autoCheck ? "Disable auto-check" : "Enable auto-check"}
-        />
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>
-            Check for updates on startup
-          </div>
-          <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>
-            Shows a notification banner if a new version is available. Turned on
-            by default.
-          </div>
-        </div>
-        {autoSaved && (
-          <span style={{ fontSize: 12, color: "#48c774" }}>✓ Saved</span>
-        )}
-      </div>
     </div>
   );
 }

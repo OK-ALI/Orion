@@ -347,6 +347,11 @@ if (bundleResult.error || bundleResult.status !== 0 || !fs.existsSync(embeddedBu
   process.exit(bundleResult.status ?? 1);
 }
 
+if (process.argv.includes("--prepare-only")) {
+  console.log("[Android] Production bundle and native release prerequisites prepared.");
+  process.exit(0);
+}
+
 const result = spawnSync(
   gradleWrapper,
   [

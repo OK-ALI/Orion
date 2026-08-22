@@ -1,0 +1,540 @@
+.gom-page {
+  width: min(1180px, calc(100% - 64px));
+  margin: 0 auto;
+  padding: 54px 0 88px;
+  color: var(--text-primary);
+}
+
+/* Hero remains the one intentionally framed surface on this page. */
+.gom-hero {
+  position: relative;
+  min-height: 300px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr);
+  align-items: center;
+  gap: 36px;
+  overflow: hidden;
+  padding: 46px 50px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 84% 18%, color-mix(in srgb, var(--spectral) 11%, transparent), transparent 32%),
+    radial-gradient(circle at 10% 88%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 34%),
+    linear-gradient(145deg, var(--bg-elevated), color-mix(in srgb, var(--bg-elevated) 93%, var(--accent) 7%));
+  box-shadow: var(--shadow-sm);
+}
+
+.gom-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 0 58%, color-mix(in srgb, var(--text-primary) 3%, transparent));
+}
+
+.gom-hero-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 680px;
+}
+
+.gom-eyebrow,
+.gom-section-kicker {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: var(--weight-extrabold);
+  letter-spacing: .17em;
+  text-transform: uppercase;
+}
+
+.gom-hero h1 {
+  margin: 10px 0 12px;
+  font-family: var(--font-display);
+  font-size: clamp(38px, 4vw, 58px);
+  line-height: .98;
+  letter-spacing: -.035em;
+}
+
+.gom-hero p {
+  max-width: 610px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.gom-status {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 24px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--bg-elevated) 84%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: var(--weight-semibold);
+}
+
+.gom-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--text-muted) 12%, transparent);
+}
+
+.gom-status-available {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 30%, var(--border));
+}
+.gom-status-available .gom-status-dot {
+  background: var(--success);
+  box-shadow: 0 0 0 4px var(--success-soft);
+}
+.gom-status-error {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 32%, var(--border));
+}
+.gom-status-error .gom-status-dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 4px var(--danger-soft);
+}
+.gom-status-checking .gom-status-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+/* The phone itself carries Orion's theme-aware energy. No orbital decoration. */
+.gom-device-stage {
+  position: relative;
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  z-index: 1;
+}
+
+.gom-device-shell {
+  position: relative;
+  width: 150px;
+  height: 208px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 30px;
+  color: var(--accent);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--surface-translucent) 92%, transparent), color-mix(in srgb, var(--bg-base) 94%, var(--accent) 6%)) padding-box,
+    linear-gradient(145deg, color-mix(in srgb, var(--accent) 86%, transparent), color-mix(in srgb, var(--spectral) 70%, transparent), color-mix(in srgb, var(--accent) 34%, transparent)) border-box;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text-primary) 8%, transparent),
+    0 28px 70px color-mix(in srgb, var(--shadow-color) 30%, transparent),
+    0 0 20px color-mix(in srgb, var(--accent) 20%, transparent),
+    0 0 52px color-mix(in srgb, var(--spectral) 13%, transparent);
+}
+
+.gom-device-shell::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 1px solid color-mix(in srgb, var(--accent) 15%, transparent);
+  border-radius: 35px;
+  pointer-events: none;
+  box-shadow:
+    0 0 20px color-mix(in srgb, var(--accent) 12%, transparent),
+    0 0 34px color-mix(in srgb, var(--spectral) 8%, transparent);
+}
+
+.gom-device-mark {
+  position: absolute;
+  bottom: 24px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--border));
+  border-radius: 50%;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 800;
+  background: var(--accent-soft);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* Release channel follows the open editorial rhythm used by Orion pages. */
+.gom-channel-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 32px;
+  margin: 28px 0 0;
+  padding: 28px 4px 30px;
+  border-bottom: 1px solid var(--border);
+}
+
+.gom-channel-panel h2,
+.gom-release-section h2,
+.gom-install-section h2 {
+  margin: 5px 0 0;
+  font-family: var(--font-heading);
+  font-size: 20px;
+  letter-spacing: -.015em;
+}
+
+.gom-channel-panel p {
+  max-width: 720px;
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.gom-channel-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.gom-channel-option {
+  min-width: 140px;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-out), border-color var(--duration-fast), background var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.gom-channel-option:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-hover);
+  background: var(--bg-hover);
+}
+
+.gom-channel-option.is-selected {
+  color: var(--text-primary);
+  border-color: var(--border-accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.gom-channel-option span,
+.gom-channel-option small {
+  display: block;
+}
+.gom-channel-option span {
+  font-size: 13px;
+  font-weight: var(--weight-bold);
+}
+.gom-channel-option small {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+/* Release + install become one open two-column chapter instead of two cards. */
+.gom-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(310px, .65fr);
+  gap: 0;
+  padding-top: 34px;
+}
+
+.gom-release-section {
+  min-width: 0;
+  padding: 0 38px 0 4px;
+  border-right: 1px solid var(--border);
+}
+
+.gom-install-section {
+  min-width: 0;
+  padding: 0 4px 0 38px;
+}
+
+.gom-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.gom-icon-button {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  transition: color var(--duration-fast), border-color var(--duration-fast), background var(--duration-fast), transform var(--duration-fast);
+}
+
+.gom-icon-button:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--border-accent);
+  background: var(--bg-hover);
+  transform: rotate(18deg);
+}
+.gom-icon-button:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.gom-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 30px;
+  row-gap: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.gom-fact {
+  min-height: 92px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 15px 2px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.gom-fact-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.gom-fact-value {
+  margin-top: 6px;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.gom-fact-detail {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.gom-message,
+.gom-release-notes {
+  margin-top: 22px;
+  padding: 2px 0 2px 16px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+}
+
+.gom-message strong,
+.gom-message span {
+  display: block;
+}
+.gom-message strong {
+  font-size: 13px;
+}
+.gom-message span {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.gom-message-error {
+  border-left-color: var(--danger);
+}
+.gom-release-notes p {
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.gom-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+.gom-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* QR is one of the few elements that benefits from a bounded surface. */
+.gom-qr-stage {
+  min-height: 292px;
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at center, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%),
+    color-mix(in srgb, var(--bg-surface) 90%, transparent);
+}
+
+.gom-qr-stage.has-qr {
+  background: #fff;
+}
+
+.gom-qr-stage img {
+  display: block;
+  width: min(264px, 100%);
+  height: auto;
+  border-radius: 12px;
+}
+
+.gom-qr-awaiting {
+  max-width: 230px;
+  text-align: center;
+}
+
+.gom-qr-device {
+  width: 78px;
+  height: 78px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 18px;
+  border: 1px solid var(--border-accent);
+  border-radius: 22px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 16px 38px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.gom-qr-awaiting strong,
+.gom-qr-awaiting span {
+  display: block;
+}
+.gom-qr-awaiting strong {
+  font-size: 14px;
+}
+.gom-qr-awaiting span {
+  margin-top: 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+/* Pairing distinction is a clean explanatory row, not another nested card. */
+.gom-connect-note {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 17px 2px 0;
+  border-top: 1px solid var(--border);
+}
+
+.gom-connect-icon {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  display: grid;
+  place-items: center;
+  align-self: center;
+  color: var(--accent);
+  line-height: 0;
+}
+
+.gom-connect-icon svg {
+  display: block;
+}
+
+.gom-connect-note > div {
+  min-width: 0;
+}
+
+.gom-connect-note strong,
+.gom-connect-note span {
+  display: block;
+}
+.gom-connect-note strong {
+  font-size: 12px;
+  line-height: 1.35;
+}
+.gom-connect-note div > span {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.gom-channel-option:focus-visible,
+.gom-icon-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+body[data-motion="calm"] .gom-channel-option,
+body[data-motion="calm"] .gom-icon-button {
+  transition-property: color, border-color, background, box-shadow;
+}
+body[data-motion="calm"] .gom-channel-option:hover,
+body[data-motion="calm"] .gom-icon-button:hover:not(:disabled) {
+  transform: none;
+}
+
+@media (max-width: 980px) {
+  .gom-page {
+    width: min(100% - 36px, 900px);
+    padding-top: 34px;
+  }
+  .gom-hero {
+    grid-template-columns: 1fr;
+    padding: 38px;
+  }
+  .gom-device-stage {
+    min-height: 170px;
+  }
+  .gom-device-shell {
+    transform: scale(.82);
+  }
+  .gom-grid {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+  .gom-release-section {
+    padding: 0 0 30px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .gom-install-section {
+    padding: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .gom-page {
+    width: min(100% - 24px, 680px);
+  }
+  .gom-hero {
+    padding: 30px 24px;
+  }
+  .gom-channel-panel {
+    grid-template-columns: 1fr;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .gom-channel-switch {
+    width: 100%;
+  }
+  .gom-channel-option {
+    min-width: 0;
+  }
+  .gom-facts {
+    grid-template-columns: 1fr;
+  }
+}

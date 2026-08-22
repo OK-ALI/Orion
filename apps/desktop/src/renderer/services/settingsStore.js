@@ -28,6 +28,7 @@ export const STORAGE_KEYS = {
   HOME_ROW_VISIBLE: "homeRowVisible",
   HOME_VIEW_MODE: "homeViewMode",
   AUTO_CHECK_UPDATES: "autoCheckUpdates",
+  UPDATE_CHANNEL: "updateChannel",
   INVIDIOUS_BASE: "invidiousBase",
   // Subtitle settings
   SUBTITLE_ENABLED: "subtitleDownload",

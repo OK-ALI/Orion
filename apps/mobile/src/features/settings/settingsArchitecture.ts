@@ -27,7 +27,7 @@ export const MOBILE_SETTINGS_SECTIONS: readonly MobileSettingsSectionDefinition[
   { id: 'sync', label: 'Sync', status: 'reserved' },
   { id: 'playback', label: 'Playback', status: 'reserved' },
   { id: 'accessibility', label: 'Accessibility', status: 'active' },
-  { id: 'updates', label: 'Updates', status: 'reserved' },
+  { id: 'updates', label: 'Updates', status: 'active' },
   { id: 'connect', label: 'Connect', status: 'reserved' },
   { id: 'downloads', label: 'Downloads', status: 'reserved' },
 ] as const;

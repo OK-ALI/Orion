@@ -8,3 +8,5 @@ export * from "./portableViewingState";
 export * from "./portableWatchedSync";
 
 export * from "./portableViewingActivity";
+
+export * from "./orionReleaseTruth";

@@ -386,13 +386,29 @@
   flex-direction: column;
   padding: 0 0 var(--sp-2);
   gap: var(--sp-2);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .sidebar-group {
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+
+.sidebar-group + .sidebar-group {
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.sidebar-worlds-group {
+  padding-bottom: 2px;
 }
 
 .sidebar-group-label {

@@ -303,7 +303,8 @@ export default function App() {
   useEffect(() => {
     const autoCheck = storage.get("autoCheckUpdates");
     if (autoCheck === false || autoCheck === 0) return;
-    checkForUpdates()
+    const updateChannel = storage.get(STORAGE_KEYS.UPDATE_CHANNEL) === "preview" ? "preview" : "stable";
+    checkForUpdates(updateChannel)
       .then((r) => {
         if (r.hasUpdate) setUpdateBanner(r);
       })

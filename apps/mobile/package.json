@@ -49,6 +49,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "build:android:standalone": "node scripts/build-android-standalone.cjs",
+    "build:android:release": "node scripts/build-android-release.cjs",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",

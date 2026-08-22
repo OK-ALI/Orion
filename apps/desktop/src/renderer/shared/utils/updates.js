@@ -1,19 +1,22 @@
 // ── App Update Utilities ──────────────────────────────────────────────────────
 
+import {
+  compareOrionVersionsV1,
+  normalizeOrionReleaseChannelV1,
+  normalizeOrionVersionV1,
+  resolveOrionReleaseTruthV1,
+} from "@orion/shared/types";
+
 export const GITHUB_REPO = "OK-ALI/Orion";
 
+// Backward-compatible helpers retained for existing callers/tests.
 export function normaliseVersion(v) {
-  const parts = String(v).replace(/^v/i, "").split(".");
-  while (parts.length < 3) parts.push("0");
-  return parts.slice(0, 3).map(Number);
+  const normalized = normalizeOrionVersionV1(v) || "0.0.0";
+  return normalized.split("-")[0].split(".").map(Number);
 }
 
 export function semverGt(a, b) {
-  for (let i = 0; i < 3; i++) {
-    if (a[i] > b[i]) return true;
-    if (a[i] < b[i]) return false;
-  }
-  return false;
+  return compareOrionVersionsV1(a.join("."), b.join(".")) > 0;
 }
 
 async function getCurrentVersion() {
@@ -23,11 +26,9 @@ async function getCurrentVersion() {
   return "0.0.0";
 }
 
-export async function checkForUpdates() {
-  const currentVersion = await getCurrentVersion();
-
+async function fetchGithubReleases() {
   const res = await fetch(
-    `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=10`,
+    `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20`,
     {
       headers: { Accept: "application/vnd.github+json" },
       signal: AbortSignal.timeout(8000),
@@ -35,38 +36,41 @@ export async function checkForUpdates() {
   );
   if (!res.ok) throw new Error(`GitHub API error ${res.status}`);
   const releases = await res.json();
+  if (!Array.isArray(releases)) throw new Error("GitHub release response is invalid");
+  return releases;
+}
 
-  const data = Array.isArray(releases)
-    ? releases.find((r) => !r.prerelease && !r.draft)
-    : null;
-  if (!data) throw new Error("No stable release found");
+export async function fetchOrionReleaseTruth(channel = "stable") {
+  const releases = await fetchGithubReleases();
+  return resolveOrionReleaseTruthV1(
+    releases,
+    normalizeOrionReleaseChannelV1(channel),
+  );
+}
 
-  const latestRaw = (data.tag_name || "").replace(/^v/i, "");
-  const latestParts = normaliseVersion(latestRaw);
-  const currentParts = normaliseVersion(currentVersion);
-  const url =
-    data.html_url || `https://github.com/${GITHUB_REPO}/releases/latest`;
+export async function checkForUpdates(channel = "stable") {
+  const currentVersion = await getCurrentVersion();
+  const releaseTruth = await fetchOrionReleaseTruth(channel);
+  const data = releaseTruth.desktop.release;
+  if (!data) throw new Error(`No ${releaseTruth.channel} Desktop release found`);
 
   const assets = {};
-  for (const asset of data.assets || []) {
-    const name = asset.name.toLowerCase();
-    if (name.endsWith(".appimage"))
-      assets.appimage = asset.browser_download_url;
-    else if (name.endsWith(".deb")) assets.deb = asset.browser_download_url;
-    else if (name.endsWith(".exe"))
-      assets.exe = asset.browser_download_url;
-    else if (name.endsWith(".pacman"))
-      assets.pacman = asset.browser_download_url;
-    else if (name.endsWith(".dmg"))
-      assets.dmg = asset.browser_download_url;
+  for (const artifact of data.artifacts || []) {
+    if (artifact.kind === "linux-appimage") assets.appimage = artifact.url;
+    else if (artifact.kind === "linux-deb") assets.deb = artifact.url;
+    else if (artifact.kind === "windows-exe") assets.exe = artifact.url;
+    else if (artifact.kind === "linux-pacman") assets.pacman = artifact.url;
+    else if (artifact.kind === "mac-dmg") assets.dmg = artifact.url;
   }
 
   return {
-    latest: latestRaw || currentVersion,
+    latest: data.version || currentVersion,
     current: currentVersion,
-    url,
-    changelog: data.body || "",
+    url: data.url,
+    changelog: data.notes || "",
     assets,
-    hasUpdate: latestRaw !== "" && semverGt(latestParts, currentParts),
+    channel: releaseTruth.channel,
+    releaseTruth,
+    hasUpdate: compareOrionVersionsV1(data.version, currentVersion) > 0,
   };
 }
