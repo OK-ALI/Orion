@@ -39,24 +39,24 @@ export const MOBILE_NOTIFICATION_CATEGORY_COPY_V1: Readonly<Record<
   { label: string; description: string }
 >> = Object.freeze({
   appUpdates: Object.freeze({
-    label: 'App updates',
-    description: 'Verified Orion Mobile releases available for your selected channel.',
+    label: 'Orion updates',
+    description: 'New Orion versions ready to install.',
   }),
   syncFailures: Object.freeze({
-    label: 'Sync needs attention',
-    description: 'The first My List, Watched or Viewing Activity sync failure after a healthy state.',
+    label: 'Sync alerts',
+    description: 'Know when your library needs attention.',
   }),
   offlineRecovery: Object.freeze({
-    label: 'Connection restored',
-    description: 'When Orion can reach online services again after being offline.',
+    label: 'Back online',
+    description: 'When Orion reconnects after being offline.',
   }),
   providerHealth: Object.freeze({
-    label: 'Playback source health',
-    description: 'A selected Cinema source moves into a failed health state.',
+    label: 'Playback issues',
+    description: 'When a selected playback source stops working.',
   }),
   watchlist: Object.freeze({
-    label: 'My List releases & availability',
-    description: 'Saved titles release or their streaming availability changes in your region.',
+    label: 'My List releases',
+    description: 'Saved movies, shows and anime release or become available to watch.',
   }),
 });
 
@@ -348,8 +348,8 @@ export async function sendMobileNotificationSelfTestV1(): Promise<boolean> {
     const trigger = Platform.OS === 'android' ? { channelId: 'orion-status' } : null;
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Orion notifications are ready',
-        body: 'This device can show local Orion alerts. Tap to return to Notifications settings.',
+        title: 'Notifications are working',
+        body: 'Orion alerts are ready on this device. Tap to return to Notifications.',
         data: { target: 'settings', section: 'notifications' },
       },
       trigger,

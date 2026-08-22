@@ -3,31 +3,44 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import QRCode from "qrcode";
 import GetOrionMobilePage from "../../../src/renderer/features/updates/GetOrionMobilePage";
-import { fetchOrionReleaseTruth } from "../../../src/renderer/shared/utils/updates";
+import { fetchOrionMobileDistributionStatus } from "../../../src/renderer/shared/utils/updates";
 
 vi.mock("qrcode", () => ({
   default: { toDataURL: vi.fn() },
 }));
 
 vi.mock("../../../src/renderer/shared/utils/updates", () => ({
-  fetchOrionReleaseTruth: vi.fn(),
+  fetchOrionMobileDistributionStatus: vi.fn(),
 }));
 
-function truth({ channel = "stable", version = null, apk = null } = {}) {
+function distribution({ channel = "stable", version = null, apk = null, installerReady = Boolean(apk) } = {}) {
+  const release = version ? {
+    version,
+    publishedAt: "2026-08-22T00:00:00Z",
+    notes: `${version} release notes`,
+    url: `https://github.com/OK-ALI/Orion/releases/tag/v${version}`,
+  } : null;
+  const artifact = apk ? {
+    name: apk,
+    url: `https://github.com/OK-ALI/Orion/releases/download/v${version}/${apk}`,
+  } : null;
   return {
-    channel,
-    mobile: {
-      release: version ? {
-        version,
-        publishedAt: "2026-08-22T00:00:00Z",
-        notes: `${version} release notes`,
-        url: `https://github.com/OK-ALI/Orion/releases/tag/v${version}`,
-      } : null,
-      apk: apk ? {
-        name: apk,
-        url: `https://github.com/OK-ALI/Orion/releases/download/v${version}/${apk}`,
-      } : null,
-      installerAvailable: Boolean(apk),
+    releaseTruth: {
+      channel,
+      mobile: {
+        release,
+        apk: artifact,
+        installerAvailable: Boolean(apk),
+      },
+    },
+    release,
+    apk: artifact,
+    notes: release?.notes || "",
+    installerReady,
+    integrity: {
+      ok: installerReady,
+      status: installerReady ? "ready" : "missing",
+      reason: installerReady ? null : "Release verification metadata is unavailable.",
     },
   };
 }
@@ -35,7 +48,7 @@ function truth({ channel = "stable", version = null, apk = null } = {}) {
 describe("Get Orion Mobile distribution page", () => {
   beforeEach(() => {
     window.localStorage.clear();
-    fetchOrionReleaseTruth.mockReset();
+    fetchOrionMobileDistributionStatus.mockReset();
     QRCode.toDataURL.mockReset();
     Object.defineProperty(window, "electron", {
       configurable: true,
@@ -44,7 +57,7 @@ describe("Get Orion Mobile distribution page", () => {
   });
 
   it("renders an intentional unpublished state without inventing a QR or APK action", async () => {
-    fetchOrionReleaseTruth.mockResolvedValue(truth());
+    fetchOrionMobileDistributionStatus.mockResolvedValue(distribution());
 
     const { container } = render(<GetOrionMobilePage />);
 
@@ -52,26 +65,26 @@ describe("Get Orion Mobile distribution page", () => {
     expect(container.querySelector(".gom-orbit")).not.toBeInTheDocument();
     expect(container.querySelector(".gom-card")).not.toBeInTheDocument();
     expect(screen.getAllByText("Not published")).toHaveLength(2);
-    expect(screen.getByText("QR activates with the published APK.")).toBeInTheDocument();
+    expect(screen.getByText("QR activates after release verification.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Download APK/i })).not.toBeInTheDocument();
     expect(QRCode.toDataURL).not.toHaveBeenCalled();
   });
 
   it("persists Preview locally and refreshes release truth for that channel", async () => {
-    fetchOrionReleaseTruth.mockImplementation(async (channel) => truth({ channel }));
+    fetchOrionMobileDistributionStatus.mockImplementation(async (channel) => distribution({ channel }));
 
     render(<GetOrionMobilePage />);
     await screen.findByText("Awaiting first Mobile release");
 
     fireEvent.click(screen.getByRole("radio", { name: /Preview/i }));
 
-    await waitFor(() => expect(fetchOrionReleaseTruth).toHaveBeenCalledWith("preview"));
+    await waitFor(() => expect(fetchOrionMobileDistributionStatus).toHaveBeenCalledWith("preview"));
     expect(window.localStorage.getItem("orion_updateChannel")).toBe('"preview"');
   });
 
-  it("enables the real download and installation QR only for a published APK", async () => {
+  it("enables the real download and installation QR only for a verified published APK", async () => {
     const apk = "orion-mobile-2.1.0-preview.1.apk";
-    fetchOrionReleaseTruth.mockResolvedValue(truth({ channel: "preview", version: "2.1.0-preview.1", apk }));
+    fetchOrionMobileDistributionStatus.mockResolvedValue(distribution({ channel: "preview", version: "2.1.0-preview.1", apk }));
     QRCode.toDataURL.mockResolvedValue("data:image/png;base64,ORION");
     window.localStorage.setItem("orion_updateChannel", '"preview"');
 
@@ -86,4 +99,23 @@ describe("Get Orion Mobile distribution page", () => {
       "https://github.com/OK-ALI/Orion/releases/download/v2.1.0-preview.1/orion-mobile-2.1.0-preview.1.apk",
     );
   });
+  it("fails closed when an APK is published without complete release verification metadata", async () => {
+    const apk = "orion-mobile-2.1.0-preview.1.apk";
+    fetchOrionMobileDistributionStatus.mockResolvedValue(distribution({
+      channel: "preview",
+      version: "2.1.0-preview.1",
+      apk,
+      installerReady: false,
+    }));
+    window.localStorage.setItem("orion_updateChannel", '"preview"');
+
+    render(<GetOrionMobilePage />);
+
+    expect(await screen.findByText("Installer verification unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Installer verification is not ready.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Download APK/i })).not.toBeInTheDocument();
+    expect(screen.queryByAltText("Orion Mobile Android installation QR code")).not.toBeInTheDocument();
+    expect(QRCode.toDataURL).not.toHaveBeenCalled();
+  });
+
 });

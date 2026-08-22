@@ -140,8 +140,8 @@ function availabilityEvents(
     events.push({
       category: 'watchlist',
       dedupeKey: `watchlist-release:${current.mediaKey}:${current.releaseDate}`,
-      title: `${current.title} is out now`,
-      body: 'A title in My List has reached its release date.',
+      title: `${current.title} is now available`,
+      body: 'A saved title from My List has reached its release date.',
       target: { target: 'media', mediaId: current.mediaId, mediaType: current.mediaType },
     });
   }
@@ -153,7 +153,7 @@ function availabilityEvents(
     events.push({
       category: 'watchlist',
       dedupeKey: `watchlist-availability:${current.mediaKey}:${current.region}:${current.providerSignature || 'none'}`,
-      title: `Availability changed for ${current.title}`,
+      title: `${current.title} availability changed`,
       body,
       target: { target: 'media', mediaId: current.mediaId, mediaType: current.mediaType },
     });

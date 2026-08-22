@@ -36,7 +36,9 @@ test("P9.1 Desktop reuses normalized release truth and keeps installation QR dis
   assert.match(routes, /page === "get-mobile"/);
   assert.match(routes, /<GetOrionMobilePage \/>/);
   assert.doesNotMatch(settings, /Get Orion Mobile/);
-  assert.match(mobilePage, /fetchOrionReleaseTruth/);
+  assert.match(mobilePage, /fetchOrionMobileDistributionStatus/);
+  assert.match(updates, /export async function fetchOrionMobileDistributionStatus\(channel = "stable"\)/);
+  assert.match(updates, /const releaseTruth = await fetchOrionReleaseTruth\(channel\)/);
   assert.match(mobilePage, /QRCode\.toDataURL\(apk\.url/);
   assert.match(mobilePage, /Installation, not pairing\./);
   assert.match(mobilePage, /Device pairing happens later inside Orion Connect\./);
@@ -52,8 +54,8 @@ test("P9.1 Mobile activates Updates with local channel persistence and honest in
   assert.match(service, /mmkvStorageAdapter/);
   assert.match(service, /resolveOrionReleaseTruthV1/);
   assert.match(service, /Platform\.Version/);
-  assert.match(content, /No Mobile APK has been published in this channel yet/);
-  assert.match(content, /Minimum Android/);
+  assert.match(content, /Update channel/);
+  assert.match(content, /<MobileUpdateExecutionSection result=\{result\} \/>/);
   assert.match(content, /Last checked/);
   assert.match(settings, /<UpdatesSettingsContent \/>/);
 });

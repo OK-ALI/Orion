@@ -12,6 +12,15 @@ import {
 
 export const GITHUB_REPO = "OK-ALI/Orion";
 
+const HIDDEN_RELEASE_DIRECTIVE_RE = /<!--\s*orion-(?:mobile|desktop)-rollout\s*:\s*\d{1,3}\s*-->/gi;
+
+export function formatOrionReleaseNotes(notes = "") {
+  return String(notes || "")
+    .replace(HIDDEN_RELEASE_DIRECTIVE_RE, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 const DESKTOP_FORMAT_BY_KIND = Object.freeze({
   "windows-exe": "exe",
   "linux-appimage": "appimage",
@@ -125,6 +134,111 @@ async function fetchReleaseIntegrity(release) {
   }
 }
 
+
+function buildMobileInstallerIntegrity(release, apk, integrityResult) {
+  if (!release || !apk) {
+    return {
+      ok: false,
+      status: "unpublished",
+      reason: "No Android installer is published in this channel yet.",
+      expectedSize: null,
+      expectedSha256: null,
+      expectedSignerSha256: null,
+    };
+  }
+
+  if (integrityResult.status !== "ready" || !integrityResult.manifest) {
+    return {
+      ok: false,
+      status: integrityResult.status,
+      reason: integrityResult.reason || "Release verification metadata is unavailable.",
+      expectedSize: null,
+      expectedSha256: null,
+      expectedSignerSha256: null,
+    };
+  }
+
+  const entry = findOrionReleaseIntegrityArtifactV1(
+    integrityResult.manifest,
+    apk.name,
+  );
+
+  if (!entry) {
+    return {
+      ok: false,
+      status: "invalid",
+      reason: `No integrity record exists for ${apk.name}.`,
+      expectedSize: null,
+      expectedSha256: null,
+      expectedSignerSha256: null,
+    };
+  }
+
+  if (apk.size !== null && apk.size !== entry.size) {
+    return {
+      ok: false,
+      status: "invalid",
+      reason: "The published APK size does not match Orion release metadata.",
+      expectedSize: null,
+      expectedSha256: null,
+      expectedSignerSha256: null,
+    };
+  }
+
+  if (!entry.signerSha256) {
+    return {
+      ok: false,
+      status: "invalid",
+      reason: "The published APK is missing Orion signing-identity metadata.",
+      expectedSize: null,
+      expectedSha256: null,
+      expectedSignerSha256: null,
+    };
+  }
+
+  return {
+    ok: true,
+    status: "ready",
+    reason: null,
+    expectedSize: entry.size,
+    expectedSha256: entry.sha256,
+    expectedSignerSha256: entry.signerSha256,
+  };
+}
+
+export async function fetchOrionMobileDistributionStatus(channel = "stable") {
+  const releaseTruth = await fetchOrionReleaseTruth(channel);
+  const release = releaseTruth.mobile.release;
+  const apk = releaseTruth.mobile.apk;
+
+  if (!release || !apk) {
+    return {
+      releaseTruth,
+      release,
+      apk,
+      notes: formatOrionReleaseNotes(release?.notes),
+      installerReady: false,
+      integrity: buildMobileInstallerIntegrity(release, apk, {
+        status: "missing",
+        reason: "No Android installer is published in this channel yet.",
+        manifest: null,
+      }),
+    };
+  }
+
+  const integrityResult = await fetchReleaseIntegrity(release);
+  const integrity = buildMobileInstallerIntegrity(release, apk, integrityResult);
+
+  return {
+    releaseTruth,
+    release,
+    apk,
+    notes: formatOrionReleaseNotes(release.notes),
+    installerReady: integrity.ok,
+    integrity,
+  };
+}
+
 function formatForArtifact(artifact) {
   return DESKTOP_FORMAT_BY_KIND[artifact?.kind] || null;
 }
@@ -210,7 +324,7 @@ export async function checkForUpdates(channel = "stable") {
     latest: data.version || currentVersion,
     current: currentVersion,
     url: data.url,
-    changelog: data.notes || "",
+    changelog: formatOrionReleaseNotes(data.notes),
     assets,
     assetNames,
     integrity,

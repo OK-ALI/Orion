@@ -11,6 +11,19 @@ import { renderChangelog } from "../features/updates/changelog";
 //          - /* bullets, ![img](url), blank lines, paragraphs
 
 
+
+function friendlyUpdateError(message) {
+  const raw = String(message || "");
+  if (/cancel/i.test(raw)) return "Update cancelled.";
+  if (/integrity|sha-?256|signer|signature|size mismatch|verified release/i.test(raw)) {
+    return "Orion could not verify this update, so automatic installation was stopped.";
+  }
+  if (/http|network|fetch|socket|timed? ?out|enotfound|econn|offline/i.test(raw)) {
+    return "Orion could not download the update. Check your connection and try again.";
+  }
+  return "Orion could not finish the update. Try again or download it manually.";
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function UpdateModal({
   updateInfo,
@@ -59,7 +72,7 @@ export default function UpdateModal({
     assetName &&
     integrityEntry?.ok === true &&
     activeDownloads === 0 &&
-    phase === "idle";
+    (phase === "idle" || phase === "error");
 
   const handleInstall = async () => {
     if (!canInstall) return;
@@ -83,7 +96,7 @@ export default function UpdateModal({
     } catch (e) {
       if (cancelRef.current) return;
       setPhase("error");
-      setErrorMsg(e.message || "Update failed");
+      setErrorMsg(friendlyUpdateError(e?.message));
     }
   };
 
@@ -394,25 +407,9 @@ export default function UpdateModal({
           {/* Error */}
           {phase === "error" && (
             <div
-              style={{ fontSize: 13, color: "var(--red)", marginBottom: 12 }}
+              style={{ fontSize: 13, color: "var(--red)", marginBottom: 12, lineHeight: 1.5 }}
             >
               ✕ {errorMsg}
-              <span style={{ marginLeft: 10 }}>
-                <a
-                  href={url}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.electron?.openExternal(url);
-                  }}
-                  style={{
-                    color: "var(--red)",
-                    textDecoration: "underline",
-                    cursor: "pointer",
-                  }}
-                >
-                  Download manually ↗
-                </a>
-              </span>
             </div>
           )}
 
@@ -428,7 +425,7 @@ export default function UpdateModal({
             <button className="btn btn-ghost" onClick={handleCancel}>
               {phase === "downloading" ? "Cancel" : "Close"}
             </button>
-            {phase === "idle" && (
+            {(phase === "idle" || phase === "error") && (
               <>
                 <a
                   href={url}
@@ -467,7 +464,7 @@ export default function UpdateModal({
                     cursor: canInstall ? "pointer" : "not-allowed",
                   }}
                 >
-                  Install Update
+                  {phase === "error" ? "Try Again" : "Install Update"}
                 </button>
               </>
             )}

@@ -29,18 +29,18 @@ test('P9.4 release truth distinguishes latest published release from the update 
   assert.match(releaseTruth, /rolloutDeferred/);
 });
 
-test('P9.4 direct APK update exposes staged-rollout truth and a real retry action without downgrade logic', () => {
+test('P9.4 direct APK update preserves staged-rollout truth and retry without downgrade logic', () => {
   const execution = read('src', 'features', 'settings', 'MobileUpdateExecutionSection.tsx');
   const bridge = read('src', 'services', 'nativeUpdateEngine.ts');
 
   assert.match(execution, /result\?\.rollout\.deferred/);
-  assert.match(execution, /rolling out gradually/);
   assert.match(execution, /engineState === 'failed' \? 'Retry update' : 'Download & install'/);
+  assert.match(execution, /result\.integrity\.status === 'ready'/);
   assert.match(bridge, /installDirectApkV1/);
   assert.doesNotMatch(bridge, /downgrade|rollbackApk|installOlder/i);
 });
 
-test('P9.4 runtime lifecycle supports rollback, retry and restart without bypassing Expo anti-bricking', () => {
+test('P9.4 runtime lifecycle preserves rollback, retry and restart without bypassing Expo anti-bricking', () => {
   const service = read('src', 'services', 'expoRuntimeUpdates.ts');
   const runtime = read('src', 'features', 'settings', 'RuntimeUpdateExecutionSection.tsx');
   const config = JSON.parse(read('app.json')).expo;
@@ -50,22 +50,21 @@ test('P9.4 runtime lifecycle supports rollback, retry and restart without bypass
   assert.match(service, /retryAction: 'check'/);
   assert.match(service, /retryAction: 'download'/);
   assert.match(runtime, /retryAction: 'restart'/);
-  assert.match(runtime, /Restore built-in runtime/);
-  assert.match(runtime, /Restart with recovery/);
-  assert.match(runtime, /Try runtime check again/);
-  assert.match(runtime, /Retry runtime update/);
-  assert.match(runtime, /Try restart again/);
+  assert.match(runtime, /status\.rollbackToEmbedded/);
+  assert.match(runtime, /Use recovery version/);
+  assert.match(runtime, /Get quick update/);
+  assert.match(runtime, /Restart Orion/);
+  assert.match(runtime, /label="Try again"/);
   assert.equal(config.updates.useEmbeddedUpdate, true);
   assert.notEqual(config.updates.disableAntiBrickingMeasures, true);
 });
 
-test('P9.4 Updates surface keeps release notes user-visible while hiding rollout metadata and offering retry', () => {
+test('P9.4 Updates surface keeps release notes visible, rollout-aware and retryable', () => {
   const settings = read('src', 'features', 'settings', 'UpdatesSettingsContent.tsx');
 
   assert.match(settings, /formatMobileReleaseNotesV1\(published\?\.notes\)/);
-  assert.match(settings, />Release notes</);
-  assert.match(settings, /Release rollout/);
-  assert.match(settings, /Not yet offered/);
+  assert.match(settings, /What's new/);
+  assert.match(settings, /result\?\.rollout\.deferred/);
   assert.match(settings, /onRetryCheck=\{retryRuntimeCheck\}/);
-  assert.match(settings, /error \? 'Try again' : 'Check now'/);
+  assert.match(settings, /error \? 'Try again' : 'Check for updates'/);
 });

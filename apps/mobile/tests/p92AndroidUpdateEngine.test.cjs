@@ -67,11 +67,12 @@ test('P9.2 Updates Settings keeps verified direct APK execution separate from ru
   const execution = read('src', 'features', 'settings', 'MobileUpdateExecutionSection.tsx');
 
   assert.match(updates, /MobileUpdateExecutionSection/);
-  assert.match(execution, /Download & install/);
-  assert.match(execution, /Verifying APK integrity/);
-  assert.match(execution, /Allow installs/);
-  assert.doesNotMatch(execution, /Google Play|Play Core|logo-google-playstore|startFlexiblePlayUpdate/);
-  assert.match(updates, /Google Play distribution remains out of scope/);
   assert.match(updates, /RuntimeUpdateExecutionSection/);
-  assert.match(updates, /Signed APK updates remain the path for native changes/);
+  assert.match(execution, /installDirectApkV1/);
+  assert.match(execution, /expectedSha256: integrity\.sha256/);
+  assert.match(execution, /expectedSignerSha256: integrity\.signerSha256/);
+  assert.match(execution, /Download & install/);
+  assert.match(execution, /Allow installs/);
+  assert.doesNotMatch(execution, /checkExpoRuntimeUpdateV1|downloadExpoRuntimeUpdateV1|reloadExpoRuntimeUpdateV1/);
+  assert.doesNotMatch(execution, /Google Play|Play Core|logo-google-playstore|startFlexiblePlayUpdate/);
 });

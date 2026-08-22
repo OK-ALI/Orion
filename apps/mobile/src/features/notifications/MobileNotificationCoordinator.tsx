@@ -58,8 +58,8 @@ export function MobileNotificationCoordinator() {
     void deliverMobileNotificationV1({
       category: 'syncFailures',
       dedupeKey: `sync-failure:${domain.toLowerCase().replaceAll(' ', '-')}:${detail || 'error'}:${Math.floor(Date.now() / (12 * 60 * 60_000))}`,
-      title: `${domain} sync needs attention`,
-      body: detail || `Orion could not finish ${domain} sync safely.`,
+      title: 'Sync needs attention',
+      body: `${domain} could not finish syncing. Open Account to try again.`,
       target: { target: 'settings', section: 'account' },
     });
   }, []);
@@ -84,7 +84,7 @@ export function MobileNotificationCoordinator() {
         category: 'offlineRecovery',
         dedupeKey: `offline-recovery:${Math.floor(Date.now() / (60 * 60_000))}`,
         title: 'Orion is back online',
-        body: 'Connection restored. Cloud sync, updates and availability checks can continue.',
+        body: 'You are connected again. Sync and update checks can continue.',
         target: { target: 'home' },
       });
     }
@@ -98,8 +98,8 @@ export function MobileNotificationCoordinator() {
     void deliverMobileNotificationV1({
       category: 'providerHealth',
       dedupeKey: `provider-failed:${next.sourceId}:${next.mediaType}:${next.lastFailure || 'unknown'}:${Math.floor(Date.now() / (6 * 60 * 60_000))}`,
-      title: `${label} is having trouble`,
-      body: `Orion marked this ${next.mediaType === 'tv' ? 'TV' : 'movie'} source as temporarily failed and will avoid it while the cooldown is active.`,
+      title: 'Playback source unavailable',
+      body: `${label} is having trouble right now. Orion will avoid it temporarily.`,
       target: { target: 'home' },
     });
   }), []);
@@ -133,8 +133,8 @@ export function MobileNotificationCoordinator() {
       await deliverMobileNotificationV1({
         category: 'appUpdates',
         dedupeKey: `mobile-update:${result.channel}:${release.version}`,
-        title: `Orion Mobile ${release.version} is available`,
-        body: `A verified ${result.channel} APK is ready. Open Updates to review the release before installing.`,
+        title: 'Orion update available',
+        body: `Orion Mobile ${release.version} is ready to install. Open Updates to see what is new.`,
         target: { target: 'settings', section: 'updates' },
       });
     } catch {

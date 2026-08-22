@@ -44,10 +44,12 @@ test('P9.2 C3 Settings separates runtime download and restart from signed APK in
 
   assert.match(settings, /RuntimeUpdateExecutionSection/);
   assert.match(settings, /checkExpoRuntimeUpdateV1/);
-  assert.match(runtime, /Download runtime update/);
+  assert.match(runtime, /downloadExpoRuntimeUpdateV1/);
+  assert.match(runtime, /reloadExpoRuntimeUpdateV1/);
+  assert.match(runtime, /Get quick update/);
   assert.match(runtime, /Restart Orion/);
-  assert.match(runtime, /Recovery mode/);
-  assert.match(runtime, /Native changes still require a signed Orion APK/);
+  assert.match(runtime, /Use recovery version/);
+  assert.doesNotMatch(runtime, /installDirectApkV1|openDirectInstallPermissionSettingsV1/);
 });
 
 test('P9.2 C3 local Android build materializes Expo update URL, runtime and recovery policy', () => {

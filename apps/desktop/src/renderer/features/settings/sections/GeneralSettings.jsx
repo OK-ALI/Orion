@@ -45,7 +45,7 @@ export function VersionSection() {
       setResult(r);
       return r;
     } catch (e) {
-      const failed = { error: e.message || "Could not reach GitHub." };
+      const failed = { error: "Orion could not check for updates. Check your connection and try again." };
       setResult(failed);
       return failed;
     } finally {
@@ -83,7 +83,7 @@ export function VersionSection() {
             </code>
             {result && !result.error && (
               <span style={{ fontSize: 13, color: result.hasUpdate ? "var(--red)" : "#48c774", fontWeight: 600 }}>
-                {result.hasUpdate ? `v${result.latest} available` : "✓ You're up to date"}
+                {result.hasUpdate ? `v${result.latest} available` : "✓ Up to date"}
               </span>
             )}
             {result?.error && <span style={{ fontSize: 13, color: "var(--red)" }}>✕ {result.error}</span>}
@@ -99,7 +99,7 @@ export function VersionSection() {
               style={{ minWidth: 210 }}
             />
             <button className="btn btn-ghost" disabled={checking} onClick={() => runCheck(channel)} style={{ opacity: checking ? 0.6 : 1 }}>
-              {checking ? "Checking…" : "Check for Updates"}
+              {checking ? "Checking…" : result?.error ? "Try again" : "Check for updates"}
             </button>
             {result && !result.error && result.hasUpdate && (
               <button className="btn btn-primary" onClick={() => setShowUpdateModal(true)}>

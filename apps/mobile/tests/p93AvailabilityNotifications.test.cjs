@@ -37,12 +37,12 @@ test('P9.3 requests permission only from the user-controlled Notifications setti
   const layout = read('app', '_layout.tsx');
 
   assert.match(settings, /requestMobileNotificationPermissionV1/);
-  assert.match(settings, /Enable Orion local notifications/);
+  assert.match(settings, /Enable Orion notifications/);
   assert.doesNotMatch(coordinator, /requestMobileNotificationPermissionV1/);
   assert.doesNotMatch(layout, /requestMobileNotificationPermissionV1/);
 });
 
-test('P9.3 activates Notifications in Settings with local category and quiet-hour controls', () => {
+test('P9.3 keeps Notifications active with category, quiet-hour and device-test controls', () => {
   const architecture = read('src', 'features', 'settings', 'settingsArchitecture.ts');
   const navigator = read('src', 'features', 'settings', 'SettingsSectionNavigator.tsx');
   const settingsScreen = read('app', '(tabs)', 'settings.tsx');
@@ -53,9 +53,8 @@ test('P9.3 activates Notifications in Settings with local category and quiet-hou
   assert.match(navigator, /notifications: 'notifications-outline'/);
   assert.match(settingsScreen, /<NotificationSettingsContent \/>/);
   assert.match(settingsScreen, /useLocalSearchParams/);
-  assert.match(settingsContent, /Quiet hours/);
-  assert.match(settingsContent, /Categories/);
-  assert.match(settingsContent, /does not register a remote push token/);
+  assert.match(settingsContent, />Alerts</);
+  assert.match(settingsContent, />Quiet hours</);
   assert.match(settingsContent, /Send Orion test notification/);
   assert.match(settingsContent, /sendMobileNotificationSelfTestV1/);
   assert.match(settingsContent, /QuietHoursTimePicker/);
@@ -98,7 +97,7 @@ test('P9.3 notification taps use a whitelisted target contract rather than arbit
   assert.match(service, /value\.target === 'media'/);
   assert.match(service, /value\.target === 'settings'/);
   assert.match(service, /sendMobileNotificationSelfTestV1/);
-  assert.match(service, /Orion notifications are ready/);
+  assert.match(service, /Notifications are working/);
   assert.doesNotMatch(router, /Linking\.openURL/);
   assert.match(router, /pathname: '\/media\/\[id\]'/);
   assert.match(router, /pathname: '\/\(tabs\)\/settings'/);

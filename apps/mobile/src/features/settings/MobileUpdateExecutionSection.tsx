@@ -14,6 +14,42 @@ import {
   type OrionNativeUpdateEventV1,
 } from '../../services/nativeUpdateEngine';
 
+function appUpdateStatusLabel(
+  result: MobileReleaseCheckV1 | null,
+  environment: OrionAndroidUpdateEnvironmentV1 | null,
+  engineState: OrionUpdateStateV1,
+): string {
+  if (engineState === 'downloading') return 'Downloading';
+  if (engineState === 'verifying') return 'Verifying';
+  if (engineState === 'installing') return 'Installing';
+  if (engineState === 'failed') return 'Needs attention';
+  if (result?.state === 'current') return 'No update';
+  if (result?.rollout.deferred && result.state !== 'available') return 'Rolling out';
+  if (!environment) return 'Checking';
+  if (!environment.productionSignerMatched || !environment.requestInstallPackagesDeclared) return 'Unavailable';
+  if (result?.state === 'available' && result.integrity.status === 'ready') return 'Update ready';
+  return 'Ready';
+}
+
+function appUpdateFeedback(
+  result: MobileReleaseCheckV1 | null,
+  engineState: OrionUpdateStateV1,
+  hasRawMessage: boolean,
+): string | null {
+  if (result?.rollout.deferred) {
+    return result.state === 'available' && result.rollout.offeredVersion
+      ? `A newer Orion version is still rolling out. v${result.rollout.offeredVersion} is the newest update available to this device.`
+      : 'A newer Orion version is rolling out and has not reached this device yet.';
+  }
+  if (result?.state === 'available' && result.integrity.status !== 'ready') {
+    return 'This update is not ready to install safely yet.';
+  }
+  if (engineState === 'failed' || hasRawMessage) {
+    return 'Orion could not finish the app update. Try again.';
+  }
+  return null;
+}
+
 export function MobileUpdateExecutionSection({ result }: { result: MobileReleaseCheckV1 | null }) {
   const { theme } = useOrionTheme();
   const [environment, setEnvironment] = React.useState<OrionAndroidUpdateEnvironmentV1 | null>(null);
@@ -25,6 +61,7 @@ export function MobileUpdateExecutionSection({ result }: { result: MobileRelease
   const refreshEnvironment = React.useCallback(async () => {
     try {
       setEnvironment(await getAndroidUpdateEnvironmentV1());
+      setMessage(null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to inspect Android update support.');
     }
@@ -64,9 +101,9 @@ export function MobileUpdateExecutionSection({ result }: { result: MobileRelease
         expectedSignerSha256: integrity.signerSha256 || '',
       });
       if (response.code === 'permission-required') {
-        setMessage('Allow Orion as an install source, then return here and try again.');
+        setMessage('permission-required');
       } else if (response.code === 'direct-build-required') {
-        setMessage('This build is not configured for direct APK installation.');
+        setMessage('direct-build-required');
       }
     } catch (error) {
       setEngineState('failed');
@@ -83,40 +120,28 @@ export function MobileUpdateExecutionSection({ result }: { result: MobileRelease
     && environment.requestInstallPackagesDeclared
     && environment.canRequestPackageInstalls
     && result.integrity.status === 'ready';
-
-  const pathLabel = !environment
-    ? 'Unavailable in this build'
-    : environment.productionSignerMatched
-      ? 'Verified direct APK'
-      : 'Direct updates require a production build';
+  const showPermissionAction = result?.state === 'available' && permissionRequired;
+  const statusLabel = appUpdateStatusLabel(result, environment, engineState);
+  const feedback = message === 'permission-required'
+    ? 'Android needs permission before Orion can install this update.'
+    : message === 'direct-build-required'
+      ? 'App updates are not available in this build.'
+      : appUpdateFeedback(result, engineState, !!message);
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
+    <View style={styles.root}>
       <View style={styles.heading}>
-        <View style={styles.headingCopy}>
-          <Text style={[styles.title, { color: theme.text }]}>Update engine</Text>
-          <Text style={[styles.description, { color: theme.textSecondary }]}>{pathLabel}</Text>
+        <View style={[styles.iconTile, { backgroundColor: theme.accentSoft }]}>
+          <Ionicons name="shield-checkmark-outline" size={20} color={theme.accent} />
         </View>
-        <Ionicons
-          name="shield-checkmark-outline"
-          size={21}
-          color={theme.accent}
-        />
+        <View style={styles.headingCopy}>
+          <Text style={[styles.title, { color: theme.text }]}>App updates</Text>
+          <Text style={[styles.description, { color: theme.textSecondary }]}>Orion verifies every app update before installation.</Text>
+        </View>
+        <View style={[styles.statusChip, { backgroundColor: theme.surfaceHover, borderColor: theme.border }]}>
+          <Text style={[styles.statusChipText, { color: engineState === 'failed' ? theme.warning : theme.accent }]}>{statusLabel}</Text>
+        </View>
       </View>
-
-      {result?.rollout.deferred ? (
-        <Text style={[styles.message, { color: theme.textSecondary }]}>
-          {result.state === 'available' && result.rollout.offeredVersion
-            ? `Orion Mobile ${result.rollout.latestVersion} is still rolling out. Version ${result.rollout.offeredVersion} is the newest update currently offered to this device.`
-            : `Orion Mobile ${result.rollout.latestVersion} is rolling out gradually and has not reached this device yet.`}
-        </Text>
-      ) : null}
-
-      {result?.state === 'available' && result.integrity.status !== 'ready' ? (
-        <Text style={[styles.message, { color: theme.textSecondary }]}>
-          Automatic installation is locked. {result.integrity.reason}
-        </Text>
-      ) : null}
 
       {busy ? (
         <View style={styles.progressRow}>
@@ -124,20 +149,18 @@ export function MobileUpdateExecutionSection({ result }: { result: MobileRelease
             {engineState === 'downloading'
               ? 'Downloading update…'
               : engineState === 'verifying'
-                ? 'Verifying APK integrity…'
+                ? 'Verifying update…'
                 : 'Opening Android installer…'}
           </Text>
           {progress !== null ? (
-            <Text style={[styles.progress, { color: theme.accent }]}>
-              {Math.round(progress * 100)}%
-            </Text>
+            <Text style={[styles.progress, { color: theme.accent }]}>{Math.round(progress * 100)}%</Text>
           ) : null}
         </View>
       ) : null}
 
-      {message ? <Text style={[styles.message, { color: theme.textSecondary }]}>{message}</Text> : null}
+      {feedback ? <Text style={[styles.message, { color: engineState === 'failed' ? theme.warning : theme.textSecondary }]}>{feedback}</Text> : null}
 
-      {permissionRequired ? (
+      {showPermissionAction ? (
         <ActionButton
           label="Allow installs"
           icon="settings-outline"
@@ -185,11 +208,14 @@ function ActionButton({ label, icon, disabled, onPress, theme }: {
 }
 
 const styles = StyleSheet.create({
-  root: { borderWidth: 1, borderRadius: radii.xl, padding: spacing[3], gap: spacing[2] },
+  root: { padding: spacing[3], gap: spacing[3] },
   heading: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  headingCopy: { flex: 1 },
+  iconTile: { width: 40, height: 40, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center' },
+  headingCopy: { flex: 1, minWidth: 0 },
   title: { fontSize: fontSizes.sm, fontWeight: '900' },
   description: { fontSize: fontSizes.xs, marginTop: 3, lineHeight: 18 },
+  statusChip: { minHeight: 28, borderRadius: 14, borderWidth: 1, paddingHorizontal: 9, alignItems: 'center', justifyContent: 'center' },
+  statusChipText: { fontSize: 10, fontWeight: '900' },
   message: { fontSize: fontSizes.xs, lineHeight: 18 },
   progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3] },
   progress: { fontSize: fontSizes.xs, fontWeight: '900' },

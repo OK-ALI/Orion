@@ -3,6 +3,7 @@ import {
   compareOrionVersionsV1,
   resolveOrionReleaseTruthV1,
 } from "@orion/shared/types";
+import { formatOrionReleaseNotes } from "../../../src/renderer/shared/utils/updates";
 
 function release(tag, { prerelease = false, assets = [] } = {}) {
   return {
@@ -58,4 +59,11 @@ describe("P9.1 Orion release truth", () => {
     expect(truth.mobile.release).toBeNull();
     expect(compareOrionVersionsV1("2.0.1", "1.0.1")).toBeGreaterThan(0);
   });
+
+  it("keeps rollout directives out of Desktop and Mobile release notes", () => {
+    expect(formatOrionReleaseNotes(
+      "New release notes\n\n<!-- orion-mobile-rollout: 25 -->\n<!-- orion-desktop-rollout: 50 -->",
+    )).toBe("New release notes");
+  });
+
 });

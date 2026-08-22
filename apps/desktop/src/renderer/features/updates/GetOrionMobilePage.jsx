@@ -7,7 +7,7 @@ import {
   MobileDeviceIcon,
 } from "../../components/common/Icons";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
-import { fetchOrionReleaseTruth } from "../../shared/utils/updates";
+import { fetchOrionMobileDistributionStatus } from "../../shared/utils/updates";
 import "./get-orion-mobile.css";
 
 
@@ -57,7 +57,7 @@ export default function GetOrionMobilePage() {
   const [channel, setChannel] = useState(() =>
     storage.get(STORAGE_KEYS.UPDATE_CHANNEL) === "preview" ? "preview" : "stable",
   );
-  const [truth, setTruth] = useState(null);
+  const [distribution, setDistribution] = useState(null);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
@@ -66,12 +66,12 @@ export default function GetOrionMobilePage() {
     setChecking(true);
     setError("");
     try {
-      const nextTruth = await fetchOrionReleaseTruth(selectedChannel);
-      setTruth(nextTruth);
-      return nextTruth;
+      const nextDistribution = await fetchOrionMobileDistributionStatus(selectedChannel);
+      setDistribution(nextDistribution);
+      return nextDistribution;
     } catch (reason) {
-      setTruth(null);
-      setError(reason?.message || "Orion could not reach release services.");
+      setDistribution(null);
+      setError("Orion could not reach release services. Check your connection and try again.");
       return null;
     } finally {
       setChecking(false);
@@ -82,15 +82,19 @@ export default function GetOrionMobilePage() {
     refresh(channel);
   }, [channel, refresh]);
 
+  const truth = distribution?.releaseTruth || null;
   const mobile = truth?.mobile || null;
-  const release = mobile?.release || null;
-  const apk = mobile?.apk || null;
-  const installerAvailable = Boolean(apk?.url);
+  const release = distribution?.release || mobile?.release || null;
+  const apk = distribution?.apk || mobile?.apk || null;
+  const installerPublished = Boolean(apk?.url);
+  const installerAvailable = Boolean(distribution?.installerReady && apk?.url);
+  const integrity = distribution?.integrity || null;
+  const releaseNotes = distribution?.notes || "";
 
   useEffect(() => {
     let cancelled = false;
     setQrDataUrl("");
-    if (!apk?.url) return () => { cancelled = true; };
+    if (!installerAvailable || !apk?.url) return () => { cancelled = true; };
 
     QRCode.toDataURL(apk.url, {
       errorCorrectionLevel: "M",
@@ -102,14 +106,15 @@ export default function GetOrionMobilePage() {
       .catch(() => { if (!cancelled) setQrDataUrl(""); });
 
     return () => { cancelled = true; };
-  }, [apk?.url]);
+  }, [apk?.url, installerAvailable]);
 
   const status = useMemo(() => {
     if (checking) return { tone: "checking", label: "Checking release availability" };
     if (error) return { tone: "error", label: "Release check unavailable" };
-    if (installerAvailable) return { tone: "available", label: "Android installer available" };
+    if (installerAvailable) return { tone: "available", label: "Android installer ready" };
+    if (installerPublished) return { tone: "error", label: "Installer verification unavailable" };
     return { tone: "waiting", label: "Awaiting first Mobile release" };
-  }, [checking, error, installerAvailable]);
+  }, [checking, error, installerAvailable, installerPublished]);
 
   const changeChannel = (nextChannel) => {
     const normalized = nextChannel === "preview" ? "preview" : "stable";
@@ -197,8 +202,8 @@ export default function GetOrionMobilePage() {
             <ReleaseFact label="Android" value="Android 7.0+" detail={`Minimum API ${ORION_MIN_ANDROID_API_V1}`} />
             <ReleaseFact
               label="Installer"
-              value={installerAvailable ? "Available" : "Not published"}
-              detail={installerAvailable ? apk.name : "A verified APK will appear here when released"}
+              value={installerAvailable ? "Ready" : installerPublished ? "Verification required" : "Not published"}
+              detail={installerAvailable ? `Integrity metadata published · ${apk.name}` : installerPublished ? "Orion will not expose the QR until release integrity metadata is complete" : "A signed APK will appear here when released"}
             />
           </div>
 
@@ -207,10 +212,15 @@ export default function GetOrionMobilePage() {
               <strong>Release check failed.</strong>
               <span>{error}</span>
             </div>
-          ) : release?.notes ? (
+          ) : installerPublished && !installerAvailable ? (
+            <div className="gom-message gom-message-error">
+              <strong>Installer verification is not ready.</strong>
+              <span>Orion could not verify the published installer metadata yet. Refresh in a moment or open the release notes for details.</span>
+            </div>
+          ) : releaseNotes ? (
             <div className="gom-release-notes">
               <span className="gom-section-kicker">WHAT'S NEW</span>
-              <p>{release.notes}</p>
+              <p>{releaseNotes}</p>
             </div>
           ) : (
             <div className="gom-message">
@@ -249,8 +259,8 @@ export default function GetOrionMobilePage() {
             ) : (
               <div className="gom-qr-awaiting">
                 <div className="gom-qr-device"><MobileDeviceIcon size={48} /></div>
-                <strong>QR activates with the published APK.</strong>
-                <span>Nothing is generated until Orion has a real installer URL.</span>
+                <strong>QR activates after release verification.</strong>
+                <span>Orion only generates an installation QR when the published APK has complete integrity metadata.</span>
               </div>
             )}
           </div>

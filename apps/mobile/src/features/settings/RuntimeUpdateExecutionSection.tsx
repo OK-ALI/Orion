@@ -9,22 +9,57 @@ import {
   type OrionRuntimeUpdateStatusV1,
 } from '../../services/expoRuntimeUpdates';
 
+function runtimeStatusLabel(status: OrionRuntimeUpdateStatusV1): string {
+  if (status.isEmergencyLaunch) return 'Recovery';
+  if (!status.enabled) return 'Unavailable';
+  if (status.state === 'checking') return 'Checking';
+  if (status.state === 'downloading') return 'Downloading';
+  if (status.state === 'installing') return 'Restarting';
+  if (status.state === 'available') return status.rollbackToEmbedded ? 'Recovery ready' : 'Update ready';
+  if (status.state === 'restart-required') return 'Restart needed';
+  if (status.state === 'failed') return 'Needs attention';
+  return 'Up to date';
+}
+
+function runtimeStatusMessage(status: OrionRuntimeUpdateStatusV1): string | null {
+  if (status.isEmergencyLaunch) {
+    return 'Orion returned to a working recovery version after a quick update could not start safely.';
+  }
+  if (!status.enabled) return 'Quick updates are not available in this build.';
+  if (status.state === 'checking') return 'Checking for quick updates…';
+  if (status.state === 'downloading') return 'Downloading quick update…';
+  if (status.state === 'installing') return 'Restarting Orion…';
+  if (status.state === 'available') {
+    return status.rollbackToEmbedded
+      ? 'Orion can return to its built-in recovery version.'
+      : 'A quick update is ready to download.';
+  }
+  if (status.state === 'restart-required') {
+    return status.rollbackToEmbedded
+      ? 'Recovery is ready. Restart Orion to use the working version.'
+      : 'Your quick update is ready. Restart Orion to finish.';
+  }
+  if (status.state === 'failed') {
+    if (status.retryAction === 'download') return 'The quick update could not be downloaded. Check your connection and try again.';
+    if (status.retryAction === 'restart') return 'Orion could not restart to finish the update. Try again.';
+    return 'Orion could not check for quick updates. Check your connection and try again.';
+  }
+  return null;
+}
+
 export function RuntimeUpdateExecutionSection({
   status,
   onStatusChange,
   onRetryCheck,
+  showRetryAction = true,
 }: {
   status: OrionRuntimeUpdateStatusV1;
   onStatusChange: (status: OrionRuntimeUpdateStatusV1) => void;
   onRetryCheck: () => void | Promise<void>;
+  showRetryAction?: boolean;
 }) {
   const { theme } = useOrionTheme();
   const busy = status.state === 'checking' || status.state === 'downloading' || status.state === 'installing';
-  const sourceLabel = status.enabled
-    ? status.isEmbeddedLaunch
-      ? 'Built-in runtime'
-      : 'Downloaded runtime'
-    : 'Embedded bundle only';
 
   const download = async () => {
     onStatusChange({ ...status, state: 'downloading', retryAction: null, message: 'Downloading runtime update…' });
@@ -65,42 +100,32 @@ export function RuntimeUpdateExecutionSection({
     await onRetryCheck();
   };
 
-  const retryLabel = status.retryAction === 'restart'
-    ? 'Try restart again'
-    : status.retryAction === 'download'
-      ? 'Retry runtime update'
-      : 'Try runtime check again';
+  const statusMessage = runtimeStatusMessage(status);
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
+    <View style={styles.root}>
       <View style={styles.heading}>
-        <View style={styles.headingCopy}>
-          <Text style={[styles.title, { color: theme.text }]}>Runtime updates</Text>
-          <Text style={[styles.description, { color: theme.textSecondary }]}>
-            {status.runtimeVersion ? `${status.runtimeVersion} · ${sourceLabel}` : sourceLabel}
-          </Text>
+        <View style={[styles.iconTile, { backgroundColor: theme.accentSoft }]}>
+          <Ionicons name={status.isEmergencyLaunch ? 'medkit-outline' : 'flash-outline'} size={20} color={theme.accent} />
         </View>
-        <Ionicons
-          name={status.isEmergencyLaunch ? 'medkit-outline' : 'flash-outline'}
-          size={21}
-          color={theme.accent}
-        />
+        <View style={styles.headingCopy}>
+          <Text style={[styles.title, { color: theme.text }]}>Quick updates</Text>
+          <Text style={[styles.description, { color: theme.textSecondary }]}>Small fixes can arrive without downloading the full app again.</Text>
+        </View>
+        <View style={[styles.statusChip, { backgroundColor: theme.surfaceHover, borderColor: theme.border }]}>
+          <Text style={[styles.statusChipText, { color: status.state === 'failed' ? theme.warning : theme.accent }]}>{runtimeStatusLabel(status)}</Text>
+        </View>
       </View>
 
-      {status.isEmergencyLaunch ? (
-        <View style={[styles.recovery, { borderColor: theme.accent, backgroundColor: theme.accentSoft }]}>
-          <Text style={[styles.recoveryTitle, { color: theme.text }]}>Recovery mode</Text>
-          <Text style={[styles.message, { color: theme.textSecondary }]}>
-            Orion fell back to a working runtime instead of repeatedly launching a broken update.
-          </Text>
-        </View>
+      {statusMessage ? (
+        <Text style={[styles.message, { color: status.state === 'failed' ? theme.warning : theme.textSecondary }]}>
+          {statusMessage}
+        </Text>
       ) : null}
-
-      {status.message ? <Text style={[styles.message, { color: theme.textSecondary }]}>{status.message}</Text> : null}
 
       {status.state === 'available' ? (
         <ActionButton
-          label={status.rollbackToEmbedded ? 'Restore built-in runtime' : 'Download runtime update'}
+          label={status.rollbackToEmbedded ? 'Use recovery version' : 'Get quick update'}
           icon={status.rollbackToEmbedded ? 'return-down-back-outline' : 'cloud-download-outline'}
           disabled={busy}
           onPress={download}
@@ -108,36 +133,21 @@ export function RuntimeUpdateExecutionSection({
         />
       ) : status.state === 'restart-required' ? (
         <ActionButton
-          label={status.rollbackToEmbedded ? 'Restart with recovery' : 'Restart Orion'}
+          label="Restart Orion"
           icon="refresh-outline"
           disabled={false}
           onPress={restart}
           theme={theme}
         />
-      ) : status.state === 'failed' && status.retryAction ? (
+      ) : status.state === 'failed' && status.retryAction && showRetryAction ? (
         <ActionButton
-          label={retryLabel}
+          label="Try again"
           icon="refresh-outline"
           disabled={busy}
           onPress={retry}
           theme={theme}
         />
-      ) : busy ? (
-        <View style={styles.busyRow}>
-          <Ionicons name="sync-outline" size={17} color={theme.accent} />
-          <Text style={[styles.message, { color: theme.textSecondary }]}>
-            {status.state === 'checking'
-              ? 'Checking runtime compatibility…'
-              : status.state === 'installing'
-                ? 'Restarting Orion…'
-                : 'Downloading runtime update…'}
-          </Text>
-        </View>
       ) : null}
-
-      <Text style={[styles.safety, { color: theme.textMuted }]}>
-        Runtime updates can change JavaScript and assets only. Native changes still require a signed Orion APK.
-      </Text>
     </View>
   );
 }
@@ -167,16 +177,15 @@ function ActionButton({ label, icon, disabled, onPress, theme }: {
 }
 
 const styles = StyleSheet.create({
-  root: { borderWidth: 1, borderRadius: radii.xl, padding: spacing[3], gap: spacing[2] },
+  root: { padding: spacing[3], gap: spacing[3] },
   heading: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  headingCopy: { flex: 1 },
+  iconTile: { width: 40, height: 40, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center' },
+  headingCopy: { flex: 1, minWidth: 0 },
   title: { fontSize: fontSizes.sm, fontWeight: '900' },
   description: { fontSize: fontSizes.xs, marginTop: 3, lineHeight: 18 },
-  message: { fontSize: fontSizes.xs, lineHeight: 18, flex: 1 },
-  recovery: { borderWidth: 1, borderRadius: radii.lg, padding: spacing[3], gap: 4 },
-  recoveryTitle: { fontSize: fontSizes.xs, fontWeight: '900' },
-  busyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  statusChip: { minHeight: 28, borderRadius: 14, borderWidth: 1, paddingHorizontal: 9, alignItems: 'center', justifyContent: 'center' },
+  statusChipText: { fontSize: 10, fontWeight: '900' },
+  message: { fontSize: fontSizes.xs, lineHeight: 18 },
   button: { minHeight: 44, borderRadius: radii.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing[3] },
   buttonText: { color: '#fff', fontSize: fontSizes.sm, fontWeight: '900' },
-  safety: { fontSize: 11, lineHeight: 17 },
 });

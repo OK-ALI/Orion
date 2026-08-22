@@ -27,14 +27,14 @@ const CATEGORY_ORDER: readonly MobileNotificationCategoryV1[] = [
   'watchlist',
 ];
 
-function permissionLabel(permission: MobileNotificationPermissionV1): string {
-  if (permission === 'granted') return 'Allowed by device';
-  if (permission === 'denied') return 'Blocked by device';
-  if (permission === 'unsupported') return 'Unavailable here';
-  return 'Not requested';
-}
-
 type QuietTimeField = 'start' | 'end';
+
+function notificationStatusLabel(permission: MobileNotificationPermissionV1, enabled: boolean): string {
+  if (permission === 'granted' && enabled) return 'On';
+  if (permission === 'denied') return 'Blocked';
+  if (permission === 'unsupported') return 'Unavailable';
+  return 'Off';
+}
 
 function notificationTimeToMinutes(value: string): number {
   const [hour, minute] = value.split(':').map(Number);
@@ -97,21 +97,11 @@ function QuietHoursTimePicker({
   const draftMeridiem = notificationTimeToMinutes(draft) >= 720 ? 'PM' : 'AM';
 
   return (
-    <Modal
-      animationType="fade"
-      transparent
-      visible={visible}
-      onRequestClose={onCancel}
-    >
-      <View
-        accessibilityViewIsModal
-        style={styles.pickerBackdrop}
-      >
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onCancel}>
+      <View accessibilityViewIsModal style={styles.pickerBackdrop}>
         <View style={[styles.pickerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Text accessibilityRole="header" style={[styles.pickerTitle, { color: theme.text }]}>{label}</Text>
-          <Text style={[styles.pickerHint, { color: theme.textSecondary }]}>
-            Set the time without opening the keyboard.
-          </Text>
+          <Text style={[styles.pickerHint, { color: theme.textSecondary }]}>Choose the time Orion should use.</Text>
 
           <View style={styles.pickerTimeRow}>
             <Pressable
@@ -141,9 +131,7 @@ function QuietHoursTimePicker({
               >
                 {formatNotificationClockForDisplay(draft)}
               </Text>
-              <Text style={[styles.pickerTimeMeridiemText, { color: theme.textSecondary }]}>
-                {draftMeridiem}
-              </Text>
+              <Text style={[styles.pickerTimeMeridiemText, { color: theme.textSecondary }]}>{draftMeridiem}</Text>
             </View>
 
             <Pressable
@@ -304,8 +292,8 @@ export function NotificationSettingsContent() {
     try {
       const delivered = await sendMobileNotificationSelfTestV1();
       setTestMessage(delivered
-        ? 'Test notification sent. Tap it to verify the Notifications deep link.'
-        : 'Orion could not show the test notification. Check the device permission and try again.');
+        ? 'Test notification sent.'
+        : 'Orion could not show the test notification. Check notification access and try again.');
     } finally {
       setTestBusy(false);
     }
@@ -313,20 +301,20 @@ export function NotificationSettingsContent() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.summary, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
-        <View style={[styles.summaryIcon, { backgroundColor: theme.surfaceHover }]}>
-          <Ionicons name="notifications-outline" size={22} color={statusTone} />
+      <View style={[styles.summary, { borderBottomColor: theme.border }]}>
+        <View style={[styles.summaryIcon, { backgroundColor: theme.accentSoft }]}>
+          <Ionicons name="notifications-outline" size={21} color={statusTone} />
         </View>
         <View style={styles.summaryCopy}>
-          <Text style={[styles.title, { color: theme.text }]}>Local notifications</Text>
-          <Text style={[styles.description, { color: theme.textSecondary }]}>
-            Orion checks on this device and does not register a remote push token for these alerts.
-          </Text>
-          <Text style={[styles.status, { color: statusTone }]}>{permissionLabel(permission)}</Text>
+          <Text style={[styles.title, { color: theme.text }]}>Notification access</Text>
+          <Text style={[styles.description, { color: theme.textSecondary }]}>Choose what Orion can alert you about on this device.</Text>
+        </View>
+        <View style={[styles.statusChip, { backgroundColor: theme.surfaceHover, borderColor: statusTone }]}>
+          <Text style={[styles.statusChipText, { color: statusTone }]}>{notificationStatusLabel(permission, preferences.enabled)}</Text>
         </View>
         <Switch
           accessibilityRole="switch"
-          accessibilityLabel="Enable Orion local notifications"
+          accessibilityLabel="Enable Orion notifications"
           accessibilityHint="Requests notification permission only when you turn this on"
           accessibilityState={{ checked: preferences.enabled, disabled: permissionBusy || permission === 'unsupported' }}
           disabled={permissionBusy || permission === 'unsupported'}
@@ -337,37 +325,12 @@ export function NotificationSettingsContent() {
         />
       </View>
 
-      {permission === 'granted' && preferences.enabled && Platform.OS !== 'web' && (
-        <View style={[styles.testRow, { borderColor: theme.border }]}>
-          <View style={styles.rowCopy}>
-            <Text style={[styles.rowTitle, { color: theme.text }]}>Test this device</Text>
-            <Text style={[styles.description, { color: theme.textSecondary }]}>
-              Send one user-requested local notification and verify that tapping it returns here.
-            </Text>
-            {testMessage && <Text accessibilityLiveRegion="polite" style={[styles.testMessage, { color: theme.textSecondary }]}>{testMessage}</Text>}
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Send Orion test notification"
-            accessibilityState={{ disabled: testBusy }}
-            disabled={testBusy}
-            onPress={() => void sendTestNotification()}
-            style={({ pressed }) => [
-              styles.smallButton,
-              { borderColor: theme.border, backgroundColor: pressed ? theme.surface : theme.elevated },
-            ]}
-          >
-            <Text style={[styles.smallButtonText, { color: theme.text }]}>{testBusy ? 'Sending…' : 'Send test'}</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {permission === 'denied' && Platform.OS !== 'web' && (
+      {permission === 'denied' && Platform.OS !== 'web' ? (
         <View style={[styles.notice, { backgroundColor: theme.surfaceHover, borderColor: theme.border }]}>
-          <Ionicons name="alert-circle-outline" size={18} color={theme.warning} />
+          <Ionicons name="alert-circle-outline" size={19} color={theme.warning} />
           <View style={styles.noticeCopy}>
-            <Text style={[styles.noticeTitle, { color: theme.text }]}>Android is blocking Orion notifications</Text>
-            <Text style={[styles.description, { color: theme.textSecondary }]}>Your Orion preferences stay local. Allow notifications in system settings to use them.</Text>
+            <Text style={[styles.noticeTitle, { color: theme.text }]}>Notifications are blocked by Android</Text>
+            <Text style={[styles.description, { color: theme.textSecondary }]}>Allow them in system settings to receive Orion alerts.</Text>
           </View>
           <Pressable
             accessibilityRole="button"
@@ -381,10 +344,10 @@ export function NotificationSettingsContent() {
             <Text style={[styles.smallButtonText, { color: theme.text }]}>Open settings</Text>
           </Pressable>
         </View>
-      )}
+      ) : null}
 
-      <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Categories</Text>
-      <View style={[styles.group, { borderColor: theme.border }]}>
+      <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Alerts</Text>
+      <View style={styles.group}>
         {CATEGORY_ORDER.map((category, index) => {
           const copy = MOBILE_NOTIFICATION_CATEGORY_COPY_V1[category];
           const enabled = preferences.categories[category];
@@ -416,13 +379,11 @@ export function NotificationSettingsContent() {
       </View>
 
       <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Quiet hours</Text>
-      <View style={[styles.group, { borderColor: theme.border }]}>
+      <View style={styles.group}>
         <View style={styles.row}>
           <View style={styles.rowCopy}>
-            <Text style={[styles.rowTitle, { color: theme.text }]}>Silence Orion notifications</Text>
-            <Text style={[styles.description, { color: theme.textSecondary }]}>
-              Events found during quiet hours are suppressed instead of being replayed later.
-            </Text>
+            <Text style={[styles.rowTitle, { color: theme.text }]}>Pause alerts</Text>
+            <Text style={[styles.description, { color: theme.textSecondary }]}>Alerts muted during quiet hours won't appear later.</Text>
           </View>
           <Switch
             accessibilityRole="switch"
@@ -445,10 +406,7 @@ export function NotificationSettingsContent() {
               onPress={() => setActiveTimeField('start')}
               style={({ pressed }) => [
                 styles.timeButton,
-                {
-                  backgroundColor: pressed ? theme.surfaceHover : theme.input,
-                  borderColor: theme.border,
-                },
+                { backgroundColor: pressed ? theme.surfaceHover : theme.input, borderColor: theme.border },
               ]}
             >
               <Text style={[styles.timeButtonText, { color: theme.text }]}>{formatNotificationTimeForDisplay(preferences.quietHours.start)}</Text>
@@ -464,10 +422,7 @@ export function NotificationSettingsContent() {
               onPress={() => setActiveTimeField('end')}
               style={({ pressed }) => [
                 styles.timeButton,
-                {
-                  backgroundColor: pressed ? theme.surfaceHover : theme.input,
-                  borderColor: theme.border,
-                },
+                { backgroundColor: pressed ? theme.surfaceHover : theme.input, borderColor: theme.border },
               ]}
             >
               <Text style={[styles.timeButtonText, { color: theme.text }]}>{formatNotificationTimeForDisplay(preferences.quietHours.end)}</Text>
@@ -476,6 +431,34 @@ export function NotificationSettingsContent() {
           </View>
         </View>
       </View>
+
+      {permission === 'granted' && preferences.enabled && Platform.OS !== 'web' ? (
+        <View style={[styles.utilityRow, { borderTopColor: theme.border }]}>
+          <View style={[styles.utilityIcon, { backgroundColor: theme.surfaceHover }]}>
+            <Ionicons name="paper-plane-outline" size={18} color={theme.accent} />
+          </View>
+          <View style={styles.rowCopy}>
+            <Text style={[styles.rowTitle, { color: theme.text }]}>Test notifications</Text>
+            <Text style={[styles.description, { color: theme.textSecondary }]}>Make sure Orion alerts are working on this device.</Text>
+            {testMessage ? (
+              <Text accessibilityLiveRegion="polite" style={[styles.testMessage, { color: theme.textSecondary }]}>{testMessage}</Text>
+            ) : null}
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Send Orion test notification"
+            accessibilityState={{ disabled: testBusy }}
+            disabled={testBusy}
+            onPress={() => void sendTestNotification()}
+            style={({ pressed }) => [
+              styles.smallButton,
+              { borderColor: theme.border, backgroundColor: pressed ? theme.surface : theme.elevated },
+            ]}
+          >
+            <Text style={[styles.smallButtonText, { color: theme.text }]}>{testBusy ? 'Sending…' : 'Send test'}</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <QuietHoursTimePicker
         visible={activeTimeField === 'start'}
@@ -493,40 +476,38 @@ export function NotificationSettingsContent() {
         onCancel={() => setActiveTimeField(null)}
         onConfirm={(value) => commitQuietHourTime('end', value)}
       />
-
-      <Text style={[styles.footer, { color: theme.textMuted }]}>
-        Watchlist checks are bounded and rotate through My List while Orion is active. Initial availability is treated as a baseline, so enabling the feature does not flood the notification tray.
-      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { gap: spacing[4] },
-  summary: { borderWidth: 1, borderRadius: radii.xl, padding: spacing[4], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  summaryIcon: { width: 42, height: 42, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center' },
+  summary: { paddingBottom: spacing[4], borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  summaryIcon: { width: 40, height: 40, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center' },
   summaryCopy: { flex: 1, minWidth: 0 },
   title: { fontSize: fontSizes.md, fontWeight: '900' },
   description: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: 3 },
-  status: { fontSize: fontSizes.xs, fontWeight: '900', marginTop: 7 },
+  statusChip: { minHeight: 28, borderRadius: 14, borderWidth: 1, paddingHorizontal: 9, alignItems: 'center', justifyContent: 'center' },
+  statusChipText: { fontSize: 10, fontWeight: '900' },
   notice: { borderWidth: 1, borderRadius: radii.xl, padding: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  testRow: { borderWidth: 1, borderRadius: radii.xl, padding: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  noticeCopy: { flex: 1 },
+  noticeCopy: { flex: 1, minWidth: 0 },
   noticeTitle: { fontSize: fontSizes.sm, fontWeight: '900' },
   smallButton: { minHeight: 38, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: 11, alignItems: 'center', justifyContent: 'center' },
   smallButtonText: { fontSize: fontSizes.xs, fontWeight: '900' },
-  testMessage: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: 7 },
   groupTitle: { fontSize: fontSizes.sm, fontWeight: '900', marginTop: spacing[1] },
-  group: { borderWidth: 1, borderRadius: radii.xl, overflow: 'hidden' },
+  group: { overflow: 'hidden' },
   row: { minHeight: 72, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: spacing[4] },
   rowDivider: { borderTopWidth: StyleSheet.hairlineWidth },
-  rowCopy: { flex: 1 },
+  rowCopy: { flex: 1, minWidth: 0 },
   rowTitle: { fontSize: fontSizes.sm, fontWeight: '800' },
   timeRow: { borderTopWidth: StyleSheet.hairlineWidth, padding: 14, flexDirection: 'row', gap: spacing[3] },
   timeField: { flex: 1 },
   timeLabel: { fontSize: fontSizes.xs, fontWeight: '800', marginBottom: 6 },
   timeButton: { minHeight: 50, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2] },
   timeButtonText: { fontSize: fontSizes.md, fontWeight: '900' },
+  utilityRow: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: spacing[4], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  utilityIcon: { width: 38, height: 38, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center' },
+  testMessage: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: 6 },
   pickerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.62)', alignItems: 'center', justifyContent: 'center', padding: spacing[5] },
   pickerCard: { width: '100%', maxWidth: 420, borderWidth: 1, borderRadius: radii['2xl'], padding: spacing[5] },
   pickerTitle: { fontSize: fontSizes.lg, fontWeight: '900' },
@@ -546,5 +527,4 @@ const styles = StyleSheet.create({
   pickerActions: { flexDirection: 'row', gap: spacing[3], marginTop: spacing[5] },
   pickerActionButton: { flex: 1, minHeight: 48, borderWidth: 1, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center' },
   pickerActionText: { fontSize: fontSizes.sm, fontWeight: '900' },
-  footer: { fontSize: fontSizes.xs, lineHeight: 18 },
 });
