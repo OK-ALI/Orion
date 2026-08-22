@@ -9,11 +9,19 @@ import {
   resolveOrionReleaseIntegrityManifestV1,
   resolveOrionReleaseTruthV1,
   type OrionReleaseChannelV1,
+  type OrionReleaseEntryV1,
   type OrionReleaseIntegrityArtifactV1,
   type OrionReleaseTruthV1,
   type OrionUpdateStateV1,
 } from '@orion/shared/types';
 import { mmkvStorageAdapter } from './storageAdapter';
+import {
+  applyMobileStagedRolloutV1,
+  getMobileRolloutBucketV1,
+  isMobileRolloutEligibleV1,
+  resolveMobileRolloutPercentageV1,
+  type MobileRolloutStatusV1,
+} from './mobileUpdateLifecycle';
 
 const GITHUB_RELEASES_URL = 'https://api.github.com/repos/OK-ALI/Orion/releases?per_page=20';
 const CHANNEL_KEY = 'orion.mobile.updateChannel.v1';
@@ -31,6 +39,8 @@ export interface MobileReleaseCheckV1 {
   channel: OrionReleaseChannelV1;
   lastCheckedAt: number;
   releaseTruth: OrionReleaseTruthV1;
+  publishedRelease: OrionReleaseEntryV1 | null;
+  rollout: MobileRolloutStatusV1;
   integrity: MobileReleaseIntegrityV1;
 }
 
@@ -127,20 +137,52 @@ export async function checkMobileReleaseTruthV1(
 ): Promise<MobileReleaseCheckV1> {
   const channel = normalizeOrionReleaseChannelV1(requestedChannel);
   const releases = await fetchGitHubReleases();
-  const releaseTruth = resolveOrionReleaseTruthV1(releases, channel);
+  const publishedTruth = resolveOrionReleaseTruthV1(releases, channel);
+  const publishedRelease = publishedTruth.mobile.release;
+  const rolloutBucket = getMobileRolloutBucketV1();
+  const rolloutPercentage = resolveMobileRolloutPercentageV1(publishedRelease?.notes);
+  const rolloutStaged = !!publishedRelease && rolloutPercentage < 100;
+  const rolloutEligible = !rolloutStaged
+    || isMobileRolloutEligibleV1(publishedRelease?.notes, rolloutBucket);
+  const rolloutReleases = applyMobileStagedRolloutV1(releases, rolloutBucket);
+  const releaseTruth = resolveOrionReleaseTruthV1(rolloutReleases, channel);
   const integrity = await resolveMobileIntegrity(releaseTruth);
   const currentVersion = getMobileCurrentVersionV1();
-  const latestMobileRelease = releaseTruth.mobile.release;
+  const offeredRelease = releaseTruth.mobile.release;
   const apiLevel = androidApiLevel();
   const unsupported = apiLevel !== null && apiLevel < releaseTruth.mobile.minimumAndroidApi;
-  const hasNewerPublishedMobile = !!latestMobileRelease
-    && compareOrionVersionsV1(latestMobileRelease.version, currentVersion) > 0;
+  const hasNewerPublishedMobile = !!publishedRelease
+    && compareOrionVersionsV1(publishedRelease.version, currentVersion) > 0;
+  const hasNewerOfferedMobile = !!offeredRelease
+    && compareOrionVersionsV1(offeredRelease.version, currentVersion) > 0;
+  const rolloutDeferred = hasNewerPublishedMobile
+    && rolloutStaged
+    && !rolloutEligible
+    && (!offeredRelease || compareOrionVersionsV1(publishedRelease?.version, offeredRelease.version) > 0);
+  const rollout: MobileRolloutStatusV1 = {
+    bucket: rolloutBucket,
+    percentage: rolloutPercentage,
+    staged: rolloutStaged,
+    eligible: rolloutEligible,
+    deferred: rolloutDeferred,
+    latestVersion: publishedRelease?.version || null,
+    offeredVersion: offeredRelease?.version || null,
+  };
   const state: MobileReleaseCheckV1['state'] = unsupported
     ? 'unsupported'
-    : hasNewerPublishedMobile
+    : hasNewerOfferedMobile
       ? 'available'
       : 'current';
   const lastCheckedAt = Date.now();
   setLastChecked(lastCheckedAt);
-  return { state, currentVersion, channel, lastCheckedAt, releaseTruth, integrity };
+  return {
+    state,
+    currentVersion,
+    channel,
+    lastCheckedAt,
+    releaseTruth,
+    publishedRelease,
+    rollout,
+    integrity,
+  };
 }

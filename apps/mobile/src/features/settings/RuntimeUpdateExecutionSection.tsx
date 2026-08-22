@@ -12,12 +12,14 @@ import {
 export function RuntimeUpdateExecutionSection({
   status,
   onStatusChange,
+  onRetryCheck,
 }: {
   status: OrionRuntimeUpdateStatusV1;
   onStatusChange: (status: OrionRuntimeUpdateStatusV1) => void;
+  onRetryCheck: () => void | Promise<void>;
 }) {
   const { theme } = useOrionTheme();
-  const busy = status.state === 'checking' || status.state === 'downloading';
+  const busy = status.state === 'checking' || status.state === 'downloading' || status.state === 'installing';
   const sourceLabel = status.enabled
     ? status.isEmbeddedLaunch
       ? 'Built-in runtime'
@@ -25,23 +27,49 @@ export function RuntimeUpdateExecutionSection({
     : 'Embedded bundle only';
 
   const download = async () => {
-    onStatusChange({ ...status, state: 'downloading', message: 'Downloading runtime update…' });
+    onStatusChange({ ...status, state: 'downloading', retryAction: null, message: 'Downloading runtime update…' });
     const next = await downloadExpoRuntimeUpdateV1(status.channel);
     onStatusChange(next);
   };
 
   const restart = async () => {
-    onStatusChange({ ...status, state: 'installing', message: 'Restarting Orion with the downloaded runtime…' });
+    onStatusChange({
+      ...status,
+      state: 'installing',
+      retryAction: null,
+      message: status.rollbackToEmbedded
+        ? 'Restarting Orion with the built-in recovery runtime…'
+        : 'Restarting Orion with the downloaded runtime…',
+    });
     try {
       await reloadExpoRuntimeUpdateV1();
     } catch (error) {
       onStatusChange({
         ...status,
         state: 'failed',
+        retryAction: 'restart',
         message: error instanceof Error ? error.message : 'Unable to restart Orion.',
       });
     }
   };
+
+  const retry = async () => {
+    if (status.retryAction === 'restart') {
+      await restart();
+      return;
+    }
+    if (status.retryAction === 'download') {
+      await download();
+      return;
+    }
+    await onRetryCheck();
+  };
+
+  const retryLabel = status.retryAction === 'restart'
+    ? 'Try restart again'
+    : status.retryAction === 'download'
+      ? 'Retry runtime update'
+      : 'Try runtime check again';
 
   return (
     <View style={[styles.root, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
@@ -72,25 +100,37 @@ export function RuntimeUpdateExecutionSection({
 
       {status.state === 'available' ? (
         <ActionButton
-          label={status.rollbackToEmbedded ? 'Download recovery' : 'Download runtime update'}
-          icon="cloud-download-outline"
+          label={status.rollbackToEmbedded ? 'Restore built-in runtime' : 'Download runtime update'}
+          icon={status.rollbackToEmbedded ? 'return-down-back-outline' : 'cloud-download-outline'}
           disabled={busy}
           onPress={download}
           theme={theme}
         />
       ) : status.state === 'restart-required' ? (
         <ActionButton
-          label="Restart Orion"
+          label={status.rollbackToEmbedded ? 'Restart with recovery' : 'Restart Orion'}
           icon="refresh-outline"
           disabled={false}
           onPress={restart}
+          theme={theme}
+        />
+      ) : status.state === 'failed' && status.retryAction ? (
+        <ActionButton
+          label={retryLabel}
+          icon="refresh-outline"
+          disabled={busy}
+          onPress={retry}
           theme={theme}
         />
       ) : busy ? (
         <View style={styles.busyRow}>
           <Ionicons name="sync-outline" size={17} color={theme.accent} />
           <Text style={[styles.message, { color: theme.textSecondary }]}>
-            {status.state === 'checking' ? 'Checking runtime compatibility…' : 'Downloading runtime update…'}
+            {status.state === 'checking'
+              ? 'Checking runtime compatibility…'
+              : status.state === 'installing'
+                ? 'Restarting Orion…'
+                : 'Downloading runtime update…'}
           </Text>
         </View>
       ) : null}

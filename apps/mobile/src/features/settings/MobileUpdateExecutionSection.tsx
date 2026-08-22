@@ -35,7 +35,11 @@ export function MobileUpdateExecutionSection({ result }: { result: MobileRelease
     const unsubscribe = subscribeAndroidUpdateStateV1((event: OrionNativeUpdateEventV1) => {
       setEngineState(event.state);
       setProgress(typeof event.progress === 'number' ? event.progress : null);
-      if (event.error) setMessage(event.error);
+      if (event.error) {
+        setMessage(event.error);
+      } else if (['downloading', 'verifying', 'ready', 'installing'].includes(event.state)) {
+        setMessage(null);
+      }
     });
     const appState = AppState.addEventListener('change', (state) => {
       if (state === 'active') refreshEnvironment();
@@ -100,6 +104,14 @@ export function MobileUpdateExecutionSection({ result }: { result: MobileRelease
         />
       </View>
 
+      {result?.rollout.deferred ? (
+        <Text style={[styles.message, { color: theme.textSecondary }]}>
+          {result.state === 'available' && result.rollout.offeredVersion
+            ? `Orion Mobile ${result.rollout.latestVersion} is still rolling out. Version ${result.rollout.offeredVersion} is the newest update currently offered to this device.`
+            : `Orion Mobile ${result.rollout.latestVersion} is rolling out gradually and has not reached this device yet.`}
+        </Text>
+      ) : null}
+
       {result?.state === 'available' && result.integrity.status !== 'ready' ? (
         <Text style={[styles.message, { color: theme.textSecondary }]}>
           Automatic installation is locked. {result.integrity.reason}
@@ -137,7 +149,7 @@ export function MobileUpdateExecutionSection({ result }: { result: MobileRelease
         />
       ) : directReady ? (
         <ActionButton
-          label="Download & install"
+          label={engineState === 'failed' ? 'Retry update' : 'Download & install'}
           icon="download-outline"
           disabled={busy}
           onPress={runDirectUpdate}

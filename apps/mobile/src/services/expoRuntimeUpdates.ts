@@ -8,6 +8,8 @@ import {
 
 export const ORION_MOBILE_RUNTIME_VERSION_V1 = 'orion-mobile-native-r1';
 
+export type OrionRuntimeRetryActionV1 = 'check' | 'download' | 'restart';
+
 export interface OrionRuntimeUpdateStatusV1 {
   state: OrionUpdateStateV1;
   channel: OrionReleaseChannelV1;
@@ -19,6 +21,7 @@ export interface OrionRuntimeUpdateStatusV1 {
   emergencyLaunchReason: string | null;
   availableUpdateId: string | null;
   rollbackToEmbedded: boolean;
+  retryAction: OrionRuntimeRetryActionV1 | null;
   message: string | null;
 }
 
@@ -49,6 +52,7 @@ function baseStatus(
     emergencyLaunchReason: Updates.emergencyLaunchReason || null,
     availableUpdateId: null,
     rollbackToEmbedded: false,
+    retryAction: null,
     message,
   };
 }
@@ -102,11 +106,14 @@ export async function checkExpoRuntimeUpdateV1(
     }
     return baseStatus(initial.channel, 'current', 'Runtime code is current for this channel.');
   } catch (error) {
-    return baseStatus(
-      initial.channel,
-      'failed',
-      error instanceof Error ? error.message : 'Unable to check for a runtime update.',
-    );
+    return {
+      ...baseStatus(
+        initial.channel,
+        'failed',
+        error instanceof Error ? error.message : 'Unable to check for a runtime update.',
+      ),
+      retryAction: 'check',
+    };
   }
 }
 
@@ -131,11 +138,14 @@ export async function downloadExpoRuntimeUpdateV1(
       rollbackToEmbedded: result.isRollBackToEmbedded,
     };
   } catch (error) {
-    return baseStatus(
-      initial.channel,
-      'failed',
-      error instanceof Error ? error.message : 'Unable to download the runtime update.',
-    );
+    return {
+      ...baseStatus(
+        initial.channel,
+        'failed',
+        error instanceof Error ? error.message : 'Unable to download the runtime update.',
+      ),
+      retryAction: 'download',
+    };
   }
 }
 

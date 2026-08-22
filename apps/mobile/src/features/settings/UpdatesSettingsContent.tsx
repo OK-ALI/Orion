@@ -20,6 +20,7 @@ import {
   setExpoRuntimeUpdateChannelV1,
   type OrionRuntimeUpdateStatusV1,
 } from '../../services/expoRuntimeUpdates';
+import { formatMobileReleaseNotesV1 } from '../../services/mobileUpdateLifecycle';
 
 function formatCheckedAt(value: number | null): string {
   if (!value) return 'Not checked yet';
@@ -44,7 +45,13 @@ export function UpdatesSettingsContent() {
   const runCheck = React.useCallback(async (nextChannel: OrionReleaseChannelV1 = channel) => {
     setChecking(true);
     setError(null);
-    setRuntimeStatus((current) => ({ ...current, channel: nextChannel, state: 'checking', message: null }));
+    setRuntimeStatus((current) => ({
+      ...current,
+      channel: nextChannel,
+      state: 'checking',
+      retryAction: null,
+      message: null,
+    }));
     const [releaseOutcome, runtimeOutcome] = await Promise.allSettled([
       checkMobileReleaseTruthV1(nextChannel),
       checkExpoRuntimeUpdateV1(nextChannel),
@@ -63,6 +70,7 @@ export function UpdatesSettingsContent() {
       setRuntimeStatus({
         ...getExpoRuntimeUpdateStatusV1(nextChannel),
         state: 'failed',
+        retryAction: 'check',
         message: runtimeOutcome.reason instanceof Error ? runtimeOutcome.reason.message : 'Unable to check runtime updates.',
       });
     }
@@ -73,6 +81,26 @@ export function UpdatesSettingsContent() {
     runCheck(channel);
   }, [channel, runCheck]);
 
+  const retryRuntimeCheck = React.useCallback(async () => {
+    setRuntimeStatus((current) => ({
+      ...current,
+      channel,
+      state: 'checking',
+      retryAction: null,
+      message: 'Checking runtime compatibility…',
+    }));
+    try {
+      setRuntimeStatus(await checkExpoRuntimeUpdateV1(channel));
+    } catch (runtimeError) {
+      setRuntimeStatus({
+        ...getExpoRuntimeUpdateStatusV1(channel),
+        state: 'failed',
+        retryAction: 'check',
+        message: runtimeError instanceof Error ? runtimeError.message : 'Unable to check runtime updates.',
+      });
+    }
+  }, [channel]);
+
   const chooseChannel = (next: OrionReleaseChannelV1) => {
     setMobileUpdateChannelV1(next);
     setExpoRuntimeUpdateChannelV1(next);
@@ -80,8 +108,10 @@ export function UpdatesSettingsContent() {
   };
 
   const mobileTruth = result?.releaseTruth.mobile || null;
-  const published = mobileTruth?.release || null;
-  const installerAvailable = !!mobileTruth?.apk;
+  const published = result?.publishedRelease || mobileTruth?.release || null;
+  const offeredRelease = mobileTruth?.release || null;
+  const installerAvailable = !!published?.artifacts.some((artifact) => artifact.kind === 'android-apk');
+  const releaseNotes = formatMobileReleaseNotesV1(published?.notes);
   const stateLabel = error
     ? 'Unable to check'
     : checking
@@ -92,11 +122,13 @@ export function UpdatesSettingsContent() {
           ? 'Runtime update available'
           : result?.state === 'available'
             ? 'APK update available'
-            : result?.state === 'unsupported'
-              ? 'Unsupported'
-              : result
-                ? 'Current'
-                : 'Not checked';
+            : result?.rollout.deferred
+              ? 'Rolling out'
+              : result?.state === 'unsupported'
+                ? 'Unsupported'
+                : result
+                  ? 'Current'
+                  : 'Not checked';
 
   return (
     <View style={styles.root}>
@@ -151,13 +183,23 @@ export function UpdatesSettingsContent() {
         <Fact label="Latest Mobile" value={published ? `v${published.version}` : 'Not published'} theme={theme} />
         <Fact label="Minimum Android" value={mobileTruth ? `${mobileTruth.minimumAndroidLabel} (API ${mobileTruth.minimumAndroidApi})` : 'Android 7.0+ (API 24)'} theme={theme} />
         <Fact label="Installer" value={installerAvailable ? 'Available' : 'Not published'} theme={theme} />
+        {result?.rollout.staged ? (
+          <Fact
+            label="Release rollout"
+            value={`${result.rollout.percentage}% · ${result.rollout.eligible ? 'Included' : 'Not yet offered'}`}
+            theme={theme}
+          />
+        ) : null}
+        {result?.state === 'available' && offeredRelease ? (
+          <Fact label="Offered update" value={`v${offeredRelease.version}`} theme={theme} />
+        ) : null}
         <Fact label="Last checked" value={formatCheckedAt(lastCheckedAt)} theme={theme} />
       </View>
 
-      {published?.notes ? (
+      {releaseNotes ? (
         <View style={[styles.notes, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
           <Text style={[styles.notesTitle, { color: theme.text }]}>Release notes</Text>
-          <Text numberOfLines={6} style={[styles.notesText, { color: theme.textSecondary }]}>{published.notes}</Text>
+          <Text numberOfLines={6} style={[styles.notesText, { color: theme.textSecondary }]}>{releaseNotes}</Text>
         </View>
       ) : null}
 
@@ -165,7 +207,11 @@ export function UpdatesSettingsContent() {
 
       <MobileUpdateExecutionSection result={result} />
 
-      <RuntimeUpdateExecutionSection status={runtimeStatus} onStatusChange={setRuntimeStatus} />
+      <RuntimeUpdateExecutionSection
+        status={runtimeStatus}
+        onStatusChange={setRuntimeStatus}
+        onRetryCheck={retryRuntimeCheck}
+      />
 
       <Pressable
         accessibilityRole="button"
@@ -179,7 +225,7 @@ export function UpdatesSettingsContent() {
         ]}
       >
         <Ionicons name={checking ? 'sync-outline' : 'refresh-outline'} size={18} color="#fff" />
-        <Text style={styles.checkButtonText}>{checking ? 'Checking…' : 'Check now'}</Text>
+        <Text style={styles.checkButtonText}>{checking ? 'Checking…' : error ? 'Try again' : 'Check now'}</Text>
       </Pressable>
 
       <Text style={[styles.scopeNote, { color: theme.textMuted }]}>
