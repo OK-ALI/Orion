@@ -9,13 +9,16 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   detectUpdateFormat: () => ipcRenderer.invoke("detect-update-format"),
+  downloadAndInstallUpdate: (args) =>
+    ipcRenderer.invoke("download-and-install-update", args),
   cancelUpdate: () => ipcRenderer.invoke("cancel-update"),
   onUpdateProgress: (cb) => {
     const handler = (_, data) => cb(data);
     ipcRenderer.on("update-progress", handler);
     return handler;
   },
-  offUpdateProgress: (handler) => ipcRenderer.removeListener("update-progress", handler),
+  offUpdateProgress: (handler) =>
+    ipcRenderer.removeListener("update-progress", handler),
   onUpdateCloseBehavior: (cb) => {
     const handler = (_, behavior) => cb(behavior);
     ipcRenderer.on("update-close-behavior", handler);

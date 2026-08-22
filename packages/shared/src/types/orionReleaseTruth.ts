@@ -1,4 +1,6 @@
 export const ORION_RELEASE_TRUTH_SCHEMA_V1 = 1 as const;
+export const ORION_RELEASE_INTEGRITY_SCHEMA_V1 = 1 as const;
+export const ORION_RELEASE_INTEGRITY_MANIFEST_NAME_V1 = 'orion-release-integrity-v1.json' as const;
 export const ORION_MIN_ANDROID_API_V1 = 24 as const;
 export const ORION_MIN_ANDROID_LABEL_V1 = 'Android 7.0+' as const;
 
@@ -44,6 +46,20 @@ export interface OrionReleaseEntryV1 {
   url: string;
   notes: string;
   artifacts: readonly OrionReleaseArtifactV1[];
+}
+
+export interface OrionReleaseIntegrityArtifactV1 {
+  name: string;
+  size: number;
+  sha256: string;
+  signerSha256: string | null;
+}
+
+export interface OrionReleaseIntegrityManifestV1 {
+  schemaVersion: typeof ORION_RELEASE_INTEGRITY_SCHEMA_V1;
+  tag: string;
+  version: string;
+  artifacts: readonly OrionReleaseIntegrityArtifactV1[];
 }
 
 export interface OrionDesktopReleaseTruthV1 {
@@ -155,6 +171,73 @@ export function compareOrionVersionsV1(left: unknown, right: unknown): number {
     if (a.numeric[index] < b.numeric[index]) return -1;
   }
   return comparePrerelease(a.prerelease, b.prerelease);
+}
+
+export function normalizeOrionSha256V1(value: unknown): string {
+  const normalized = text(value).replace(/:/g, '').toLowerCase();
+  return /^[a-f0-9]{64}$/.test(normalized) ? normalized : '';
+}
+
+export function resolveOrionReleaseIntegrityManifestV1(
+  raw: unknown,
+  release: OrionReleaseEntryV1 | null = null,
+): OrionReleaseIntegrityManifestV1 | null {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const input = raw as Record<string, unknown>;
+  if (Number(input.schemaVersion) !== ORION_RELEASE_INTEGRITY_SCHEMA_V1) return null;
+
+  const tag = text(input.tag);
+  const version = normalizeOrionVersionV1(input.version);
+
+  if (!tag || !version || !Array.isArray(input.artifacts)) return null;
+
+  if (release) {
+    if (tag !== release.tag) return null;
+    if (compareOrionVersionsV1(version, release.version) !== 0) return null;
+  }
+
+  const artifacts: OrionReleaseIntegrityArtifactV1[] = [];
+  const names = new Set<string>();
+
+  for (const rawArtifact of input.artifacts) {
+    if (!rawArtifact || typeof rawArtifact !== 'object') return null;
+
+    const artifact = rawArtifact as Record<string, unknown>;
+    const name = text(artifact.name);
+    const size = Number(artifact.size);
+    const sha256 = normalizeOrionSha256V1(artifact.sha256);
+    const signerSha256 = normalizeOrionSha256V1(artifact.signerSha256) || null;
+
+    if (!name || !Number.isSafeInteger(size) || size <= 0 || !sha256) return null;
+    if (names.has(name)) return null;
+
+    names.add(name);
+    artifacts.push({
+      name,
+      size,
+      sha256,
+      signerSha256,
+    });
+  }
+
+  if (artifacts.length === 0) return null;
+
+  return {
+    schemaVersion: ORION_RELEASE_INTEGRITY_SCHEMA_V1,
+    tag,
+    version,
+    artifacts,
+  };
+}
+
+export function findOrionReleaseIntegrityArtifactV1(
+  manifest: OrionReleaseIntegrityManifestV1 | null,
+  artifactName: unknown,
+): OrionReleaseIntegrityArtifactV1 | null {
+  const name = text(artifactName);
+  if (!manifest || !name) return null;
+  return manifest.artifacts.find((artifact) => artifact.name === name) || null;
 }
 
 export function classifyOrionReleaseArtifactV1(nameValue: unknown): OrionReleaseArtifactKindV1 {

@@ -17,9 +17,9 @@ export default function UpdateModal({
   activeDownloads = 0,
   onClose,
 }) {
-  const { latest, current, url, changelog, assets } = updateInfo;
+  const { latest, current, url, changelog, assets, assetNames, integrity } = updateInfo;
 
-  const [phase, setPhase] = useState("idle"); // idle | downloading | installing | done | error
+  const [phase, setPhase] = useState("idle"); // idle | downloading | verifying | installing | done | error
   const [format, setFormat] = useState(null); // "appimage" | "deb" | "exe" | "dmg" | null
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState("");
@@ -44,13 +44,22 @@ export default function UpdateModal({
     const handler = window.electron.onUpdateProgress((data) => {
       setProgress(data.percent ?? 0);
       setProgressLabel(data.label ?? "");
+      if (data.state === "verifying") setPhase("verifying");
+      if (data.state === "installing") setPhase("installing");
     });
     return () => window.electron.offUpdateProgress(handler);
   }, []);
 
   const assetUrl = format && assets?.[format];
+  const assetName = format && assetNames?.[format];
+  const integrityEntry = format && integrity?.byFormat?.[format];
   const canInstall =
-    format && assetUrl && activeDownloads === 0 && phase === "idle";
+    format &&
+    assetUrl &&
+    assetName &&
+    integrityEntry?.ok === true &&
+    activeDownloads === 0 &&
+    phase === "idle";
 
   const handleInstall = async () => {
     if (!canInstall) return;
@@ -63,6 +72,9 @@ export default function UpdateModal({
       const result = await window.electron.downloadAndInstallUpdate({
         url: assetUrl,
         format,
+        expectedSize: integrityEntry.expectedSize,
+        expectedSha256: integrityEntry.expectedSha256,
+        expectedSignerSha256: integrityEntry.expectedSignerSha256,
       });
       if (cancelRef.current) return;
       if (!result.ok) throw new Error(result.error || "Update failed");
@@ -91,7 +103,10 @@ export default function UpdateModal({
     dmg: "macOS installer (Universal)",
   }[format] || "installer";
 
-  const busy = phase === "downloading" || phase === "installing";
+  const busy =
+    phase === "downloading" ||
+    phase === "verifying" ||
+    phase === "installing";
 
   return (
     <div
@@ -309,8 +324,26 @@ export default function UpdateModal({
             </div>
           )}
 
+          {format && assetUrl && integrityEntry?.ok !== true && phase === "idle" && (
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--text3)",
+                marginBottom: 12,
+                lineHeight: 1.5,
+              }}
+            >
+              Automatic installation is locked because this release does not
+              have complete verified integrity metadata.
+              {integrityEntry?.reason ? ` ${integrityEntry.reason}` : ""}
+              {" "}Use GitHub for the manual installer instead.
+            </div>
+          )}
+
           {/* Progress bar */}
-          {(phase === "downloading" || phase === "installing") && (
+          {(phase === "downloading" ||
+            phase === "verifying" ||
+            phase === "installing") && (
             <div style={{ marginBottom: 14 }}>
               <div
                 style={{
@@ -325,7 +358,9 @@ export default function UpdateModal({
                   {progressLabel ||
                     (phase === "downloading"
                       ? "Downloading update…"
-                      : "Installing…")}
+                      : phase === "verifying"
+                        ? "Verifying update integrity…"
+                        : "Installing…")}
                 </span>
                 {phase === "downloading" && (
                   <span>{Math.round(progress)}%</span>

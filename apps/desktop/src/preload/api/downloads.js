@@ -17,11 +17,16 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
   checkHelperDownloader: (folder) =>
     ipcRenderer.invoke("check-helper-downloader", folder),
   getDownloaderStatus: () => ipcRenderer.invoke("get-downloader-status"),
-  beginStreamCapture: (details) => ipcRenderer.invoke("downloads:begin-capture", details),
-  endStreamCapture: (sessionId) => ipcRenderer.invoke("downloads:end-capture", sessionId),
-  listStreamCandidates: (details) => ipcRenderer.invoke("downloads:list-candidates", details),
-  clearStreamCandidates: (details) => ipcRenderer.invoke("downloads:clear-candidates", details),
-  installDownloaderTools: () => ipcRenderer.invoke("install-downloader-tools"),
+  beginStreamCapture: (details) =>
+    ipcRenderer.invoke("downloads:begin-capture", details),
+  endStreamCapture: (sessionId) =>
+    ipcRenderer.invoke("downloads:end-capture", sessionId),
+  listStreamCandidates: (details) =>
+    ipcRenderer.invoke("downloads:list-candidates", details),
+  clearStreamCandidates: (details) =>
+    ipcRenderer.invoke("downloads:clear-candidates", details),
+  installDownloaderTools: () =>
+    ipcRenderer.invoke("install-downloader-tools"),
   openDownloaderToolsFolder: () =>
     ipcRenderer.invoke("open-downloader-tools-folder"),
   onDownloaderToolsProgress: (cb) => {
@@ -40,7 +45,5 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
   getDownloadsSize: () => ipcRenderer.invoke("get-downloads-size"),
   deleteAllDownloads: () => ipcRenderer.invoke("delete-all-downloads"),
   downloadSubtitlesForFile: (args) =>
-    ipcRenderer.invoke("download-subtitles-for-file", args),
-  downloadAndInstallUpdate: (args) =>
-    ipcRenderer.invoke("download-and-install-update", args)
+    ipcRenderer.invoke("download-subtitles-for-file", args)
 });

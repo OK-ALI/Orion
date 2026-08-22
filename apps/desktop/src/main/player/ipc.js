@@ -13,6 +13,10 @@ const {
   findPrimaryVideo,
   qualifyUserSeek,
 } = require("./videoTargeting");
+const {
+  normalizeSha256,
+  verifyDownloadedUpdate,
+} = require("../updates/integrity");
 
 let _updateAbortController = null;
 
@@ -203,11 +207,37 @@ function register(getMainWindow, { writeSecretMigration }) {
     return null;
   });
 
-  ipcMain.handle("download-and-install-update", async (_, { url, format }) => {
+  ipcMain.handle("download-and-install-update", async (_, {
+    url,
+    format,
+    expectedSize,
+    expectedSha256,
+    expectedSignerSha256,
+  }) => {
     try {
       const ALLOWED_FORMATS = ["exe", "deb", "pacman", "dmg", "dmg_arm64", "appimage"];
       if (!ALLOWED_FORMATS.includes(format)) {
-        return { ok: false, error: "Invalid format" };
+        return { ok: false, state: "failed", error: "Invalid format" };
+      }
+
+      const verifiedSize = Number(expectedSize);
+      const verifiedSha256 = normalizeSha256(expectedSha256);
+      const verifiedSignerSha256 = normalizeSha256(expectedSignerSha256);
+
+      if (!Number.isSafeInteger(verifiedSize) || verifiedSize <= 0 || !verifiedSha256) {
+        return {
+          ok: false,
+          state: "failed",
+          error: "Verified release integrity metadata is required before automatic installation.",
+        };
+      }
+
+      if (format === "exe" && !verifiedSignerSha256) {
+        return {
+          ok: false,
+          state: "failed",
+          error: "Verified Windows signer metadata is required before automatic installation.",
+        };
       }
 
       const TRUSTED_ORIGIN   = "https://github.com";
@@ -310,6 +340,7 @@ function register(getMainWindow, { writeSecretMigration }) {
                 const mw = getMainWindow();
                 if (mw && !mw.isDestroyed()) {
                   mw.webContents.send("update-progress", {
+                    state: "downloading",
                     percent,
                     label: `Downloading… ${mb} MB ${totalMb}`,
                   });
@@ -330,12 +361,42 @@ function register(getMainWindow, { writeSecretMigration }) {
         doRequest(url);
       });
 
-      if (signal.aborted) return { ok: false, error: "Cancelled" };
+      if (signal.aborted) return { ok: false, state: "failed", error: "Cancelled" };
+
+      const verifyingWindow = getMainWindow();
+      if (verifyingWindow && !verifyingWindow.isDestroyed()) {
+        verifyingWindow.webContents.send("update-progress", {
+          state: "verifying",
+          percent: 100,
+          label: "Verifying update integrity…",
+        });
+      }
+
+      try {
+        await verifyDownloadedUpdate({
+          filePath: destPath,
+          expectedSize: verifiedSize,
+          expectedSha256: verifiedSha256,
+          expectedSignerSha256: verifiedSignerSha256,
+          format,
+        });
+      } catch (verificationError) {
+        try {
+          fs.rmSync(destPath, { force: true });
+        } catch {}
+
+        return {
+          ok: false,
+          state: "failed",
+          error: verificationError.message || "Update integrity verification failed.",
+        };
+      }
 
       const sendInstalling = () => {
         const mw = getMainWindow();
         if (mw && !mw.isDestroyed()) {
           mw.webContents.send("update-progress", {
+            state: "installing",
             percent: 100,
             label: "Installing…",
           });
@@ -446,7 +507,7 @@ function register(getMainWindow, { writeSecretMigration }) {
 
       return { ok: true };
     } catch (e) {
-      return { ok: false, error: e.message };
+      return { ok: false, state: "failed", error: e.message };
     } finally {
       _updateAbortController = null;
     }
