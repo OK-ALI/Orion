@@ -200,10 +200,7 @@ test("Phase 8 restore never writes Orion Cloud or touches unrelated library doma
   assert.doesNotMatch(restore, /history|watched|progress|preferences|credentials/i);
 });
 
-test("Phase 8 cloud discovery remains available without a local checkpoint and version stays 2.0.1", () => {
-  const packageJson = JSON.parse(read("package.json"));
-
+test("Phase 8 cloud discovery remains available without a local checkpoint", () => {
   assert.match(preflight, /if \(!steady\.hasCheckpoint && autoSyncEnabled\) void inspectEnrollment\(\)/);
   assert.match(preflight, /preview\.orderedKeys\.length === 0[\s\S]*phase: 'ready-restore'/);
-  assert.equal(packageJson.version, "2.0.1");
 });

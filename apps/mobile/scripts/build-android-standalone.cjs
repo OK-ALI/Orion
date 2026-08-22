@@ -161,6 +161,68 @@ const appConfigJson = path.join(projectDirectory, "app.json");
 const androidValuesDirectory = path.join(androidDirectory, "app", "src", "main", "res", "values");
 const androidStringsXml = path.join(androidValuesDirectory, "strings.xml");
 
+function ensureAndroidAppVersion() {
+  const appConfig = JSON.parse(fs.readFileSync(appConfigJson, "utf8")).expo || {};
+  const versionName =
+    typeof appConfig.version === "string" ? appConfig.version.trim() : "";
+  const versionCode = appConfig.android?.versionCode;
+
+  if (!versionName) {
+    throw new Error("Orion app version is missing from app.json.");
+  }
+
+  if (!Number.isInteger(versionCode) || versionCode < 1) {
+    throw new Error(
+      "Orion Android versionCode must be a positive integer in app.json.",
+    );
+  }
+
+  let contents = fs.readFileSync(androidAppBuildGradle, "utf8");
+
+  const versionCodeMatches =
+    contents.match(/^\s*versionCode\s+\d+\s*$/gm) || [];
+  const versionNameMatches =
+    contents.match(/^\s*versionName\s+"[^"]+"\s*$/gm) || [];
+
+  if (versionCodeMatches.length !== 1) {
+    throw new Error(
+      `Expected exactly one Android versionCode declaration, found ${versionCodeMatches.length}.`,
+    );
+  }
+
+  if (versionNameMatches.length !== 1) {
+    throw new Error(
+      `Expected exactly one Android versionName declaration, found ${versionNameMatches.length}.`,
+    );
+  }
+
+  contents = contents
+    .replace(
+      /^(\s*)versionCode\s+\d+\s*$/m,
+      `$1versionCode ${versionCode}`,
+    )
+    .replace(
+      /^(\s*)versionName\s+"[^"]+"\s*$/m,
+      `$1versionName "${versionName}"`,
+    );
+
+  fs.writeFileSync(androidAppBuildGradle, contents, "utf8");
+
+  const verified = fs.readFileSync(androidAppBuildGradle, "utf8");
+
+  if (
+    !verified.includes(`versionCode ${versionCode}`) ||
+    !verified.includes(`versionName "${versionName}"`)
+  ) {
+    throw new Error(
+      "Orion Android app version did not persist to generated Gradle.",
+    );
+  }
+
+  console.log(
+    `[Android] App version materialized: ${versionName} (versionCode ${versionCode}).`,
+  );
+}
 function syncCinemaNativeSources() {
   fs.mkdirSync(cinemaNativeTargetDirectory, { recursive: true });
   for (const fileName of cinemaNativeFiles) {
@@ -567,6 +629,7 @@ function prepareExpoEmbeddedUpdateManifest(entryFile) {
 
 
 try {
+  ensureAndroidAppVersion();
   syncCinemaNativeSources();
   syncGoogleIdentityNativeSources();
   syncGoogleDriveAuthorizationNativeSources();
