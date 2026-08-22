@@ -1,6 +1,7 @@
 export const ORION_RELEASE_TRUTH_SCHEMA_V1 = 1 as const;
 export const ORION_RELEASE_INTEGRITY_SCHEMA_V1 = 1 as const;
 export const ORION_RELEASE_INTEGRITY_MANIFEST_NAME_V1 = 'orion-release-integrity-v1.json' as const;
+export const ORION_ANDROID_RELEASE_SIGNER_SHA256_V1 = '4422ec4bc16b1c83c914a0ad1b688be8f7c158ff7f99bcd223a909966ac7a1bd' as const;
 export const ORION_MIN_ANDROID_API_V1 = 24 as const;
 export const ORION_MIN_ANDROID_LABEL_V1 = 'Android 7.0+' as const;
 

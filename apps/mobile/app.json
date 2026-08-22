@@ -47,6 +47,7 @@
       "./plugins/withOrionCinemaWebView",
       "./plugins/withOrionGoogleIdentity",
       "./plugins/withOrionGoogleDriveAuthorization",
+      "./plugins/withOrionUpdates",
       [
         "expo-build-properties",
         {

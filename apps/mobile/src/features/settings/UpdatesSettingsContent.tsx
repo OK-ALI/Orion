@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { fontSizes, radii, spacing } from '@orion/shared/tokens';
 import type { OrionReleaseChannelV1 } from '@orion/shared/types';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { MobileUpdateExecutionSection } from './MobileUpdateExecutionSection';
 import {
   checkMobileReleaseTruthV1,
   getMobileCurrentVersionV1,
@@ -133,6 +134,8 @@ export function UpdatesSettingsContent() {
 
       {error ? <Text style={[styles.error, { color: theme.textSecondary }]}>{error}</Text> : null}
 
+      <MobileUpdateExecutionSection result={result} />
+
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Check for Orion Mobile updates"
@@ -149,7 +152,7 @@ export function UpdatesSettingsContent() {
       </Pressable>
 
       <Text style={[styles.scopeNote, { color: theme.textMuted }]}>
-        Phase 9.1 checks release availability only. Installing APK, Play and runtime-compatible updates is added in the update-engine stage.
+        Verified direct APK execution now uses the Phase 9 update engine. Google Play distribution is intentionally out of scope for the current Orion release plan, and runtime-compatible Expo updates remain in the next update-engine candidate.
       </Text>
     </View>
   );

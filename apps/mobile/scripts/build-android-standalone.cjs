@@ -128,6 +128,28 @@ const googleDriveAuthorizationDependencies = [
   'implementation "com.google.android.gms:play-services-auth:21.6.0"',
 ];
 
+
+const orionUpdateNativeSourceDirectory = path.join(
+  projectDirectory,
+  "plugins",
+  "orion-updates-native",
+);
+const orionUpdateNativeTargetDirectory = path.join(
+  androidDirectory,
+  "app",
+  "src",
+  "main",
+  "java",
+  "com",
+  "okali",
+  "orion",
+  "updates",
+);
+const orionUpdateNativeFiles = ["OrionUpdateModule.kt", "OrionUpdatePackage.kt"];
+const androidManifest = path.join(androidDirectory, "app", "src", "main", "AndroidManifest.xml");
+const androidXmlDirectory = path.join(androidDirectory, "app", "src", "main", "res", "xml");
+const updateFilePathsXml = path.join(androidXmlDirectory, "orion_update_file_paths.xml");
+
 function syncCinemaNativeSources() {
   fs.mkdirSync(cinemaNativeTargetDirectory, { recursive: true });
   for (const fileName of cinemaNativeFiles) {
@@ -288,14 +310,89 @@ function ensureGoogleIdentityPackageRegistration() {
   console.log("[Android] Google Identity package registration verified.");
 }
 
+
+function syncOrionUpdateNativeSources() {
+  fs.mkdirSync(orionUpdateNativeTargetDirectory, { recursive: true });
+  for (const fileName of orionUpdateNativeFiles) {
+    const source = path.join(orionUpdateNativeSourceDirectory, fileName);
+    const target = path.join(orionUpdateNativeTargetDirectory, fileName);
+    if (!fs.existsSync(source)) {
+      throw new Error(`Missing authoritative Orion Updates native source: ${source}`);
+    }
+    fs.copyFileSync(source, target);
+    if (!fs.readFileSync(source).equals(fs.readFileSync(target))) {
+      throw new Error(`Orion Updates native source did not synchronize: ${fileName}`);
+    }
+  }
+  console.log(`[Android] Synchronized ${orionUpdateNativeFiles.length} Orion Updates sources.`);
+}
+
+function ensureOrionUpdatePackageRegistration() {
+  let contents = fs.readFileSync(androidMainApplication, "utf8");
+  const packageImport = "import com.okali.orion.updates.OrionUpdatePackage";
+  const packageRegistration = "add(OrionUpdatePackage())";
+  if (!contents.includes(packageImport)) {
+    const firstImport = contents.indexOf("import ");
+    if (firstImport < 0) {
+      throw new Error(`Unable to locate MainApplication imports: ${androidMainApplication}`);
+    }
+    contents = `${contents.slice(0, firstImport)}${packageImport}\n${contents.slice(firstImport)}`;
+  }
+  if (!contents.includes(packageRegistration)) {
+    const packageApply = /PackageList\(this\)\.packages\.apply\s*\{/;
+    if (!packageApply.test(contents)) {
+      throw new Error(`Unable to locate React Native package list: ${androidMainApplication}`);
+    }
+    contents = contents.replace(packageApply, (match) => `${match}\n          ${packageRegistration}`);
+  }
+  fs.writeFileSync(androidMainApplication, contents, "utf8");
+  const verified = fs.readFileSync(androidMainApplication, "utf8");
+  if (!verified.includes(packageImport) || !verified.includes(packageRegistration)) {
+    throw new Error("Orion Updates package registration did not persist.");
+  }
+  console.log("[Android] Orion Updates package registration verified.");
+}
+
+function ensureDirectUpdateManifest() {
+  let contents = fs.readFileSync(androidManifest, "utf8");
+  const permission = '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>';
+  if (!contents.includes(permission)) {
+    contents = contents.replace(/(<manifest\b[^>]*>)/, `$1\n  ${permission}`);
+  }
+  if (!contents.includes('${applicationId}.orion-updates')) {
+    const provider = [
+      '    <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.orion-updates" android:exported="false" android:grantUriPermissions="true">',
+      '      <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/orion_update_file_paths"/>',
+      '    </provider>',
+    ].join("\n");
+    contents = contents.replace("  </application>", `${provider}\n  </application>`);
+  }
+  fs.writeFileSync(androidManifest, contents, "utf8");
+  fs.mkdirSync(androidXmlDirectory, { recursive: true });
+  fs.writeFileSync(
+    updateFilePathsXml,
+    '<?xml version="1.0" encoding="utf-8"?>\n<paths xmlns:android="http://schemas.android.com/apk/res/android">\n  <cache-path name="orion_updates" path="orion-updates/"/>\n</paths>\n',
+    "utf8",
+  );
+  const verified = fs.readFileSync(androidManifest, "utf8");
+  if (!verified.includes(permission) || !verified.includes('${applicationId}.orion-updates')) {
+    throw new Error("Direct APK update manifest prerequisites did not persist.");
+  }
+  console.log("[Android] Direct APK update manifest prerequisites verified.");
+}
+
+
 try {
   syncCinemaNativeSources();
   syncGoogleIdentityNativeSources();
   syncGoogleDriveAuthorizationNativeSources();
+  syncOrionUpdateNativeSources();
   ensureGoogleIdentityGradleDependencies();
   ensureGoogleDriveAuthorizationGradleDependencies();
   ensureGoogleIdentityPackageRegistration();
   ensureGoogleDriveAuthorizationPackageRegistration();
+  ensureOrionUpdatePackageRegistration();
+  ensureDirectUpdateManifest();
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
