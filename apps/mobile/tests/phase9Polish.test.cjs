@@ -20,38 +20,30 @@ test('Phase 9 Notifications is grouped around access, alerts, quiet hours and de
   assert.doesNotMatch(settings, /remote push token|bounded and rotate|treated as a baseline/i);
 });
 
-test('Phase 9 Updates uses consumer-facing hierarchy instead of engineering diagnostics', () => {
+test('Phase 9 Updates uses one consumer-facing App Updates hierarchy', () => {
   const settings = read('src', 'features', 'settings', 'UpdatesSettingsContent.tsx');
   const appUpdate = read('src', 'features', 'settings', 'MobileUpdateExecutionSection.tsx');
-  const quickUpdate = read('src', 'features', 'settings', 'RuntimeUpdateExecutionSection.tsx');
+  const appState = read('src', 'services', 'mobileApplicationUpdateState.ts');
 
   assert.match(settings, />Update channel</);
   assert.match(settings, />Update options</);
-  const appState = read('src', 'services', 'mobileApplicationUpdateState.ts');
   assert.match(appState, /label: 'Up to date'/);
   assert.match(appUpdate, />App updates</);
-  assert.match(quickUpdate, />Quick updates</);
   assert.match(settings, /What's new/);
-  assert.match(settings, /showRetryAction=\{appUpdateState\.status !== 'failed'\}/);
   assert.match(appUpdate, /getMobileApplicationUpdatePresentationV1\(state\)/);
+  assert.doesNotMatch(settings, /Quick updates|Recovery|RuntimeUpdateExecutionSection|checkExpoRuntimeUpdateV1/);
   assert.doesNotMatch(settings, /Minimum Android|Installer|Signed APK updates remain|Google Play distribution/i);
-  assert.doesNotMatch(quickUpdate, /\{status\.message\}/);
-  assert.match(quickUpdate, /showRetryAction = true/);
-  assert.match(quickUpdate, /const statusMessage = runtimeStatusMessage\(status\)/);
 });
 
-test('Phase 9 update errors are translated before they reach the Settings UI', () => {
+test('Phase 9 app-update errors are translated before they reach the Settings UI', () => {
   const settings = read('src', 'features', 'settings', 'UpdatesSettingsContent.tsx');
   const appUpdate = read('src', 'features', 'settings', 'MobileUpdateExecutionSection.tsx');
-  const quickUpdate = read('src', 'features', 'settings', 'RuntimeUpdateExecutionSection.tsx');
   const appState = read('src', 'services', 'mobileApplicationUpdateState.ts');
 
   assert.match(settings, /getMobileApplicationUpdatePresentationV1/);
   assert.match(appState, /could not check for app updates/i);
   assert.match(appUpdate, /could not finish the app update/i);
-  assert.match(quickUpdate, /runtimeStatusMessage/);
-  assert.match(quickUpdate, /could not check for quick updates/i);
-  assert.doesNotMatch(quickUpdate, /<Text[^>]*>\s*\{status\.message\}/);
+  assert.doesNotMatch(settings, /quick update|runtime update|recovery version/i);
 });
 
 test('Phase 9 notification payloads use concise Orion product language', () => {

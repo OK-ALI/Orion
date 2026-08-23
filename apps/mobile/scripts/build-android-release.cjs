@@ -399,7 +399,7 @@ function main() {
   console.log(`[Android] Release APK size: ${(fs.statSync(distributionApk).size / (1024 * 1024)).toFixed(2)} MB`);
   console.log(`[Android] Release APK SHA-256: ${sha256(distributionApk)}`);
   console.log("[Android] Bundled JavaScript verified: assets/index.android.bundle");
-  console.log("[Android] Expo embedded manifest verified: assets/app.manifest");
+  console.log("[Android] Bundled app manifest verified: assets/app.manifest");
 }
 
 if (require.main === module) {

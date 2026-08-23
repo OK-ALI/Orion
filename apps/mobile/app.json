@@ -3,7 +3,7 @@
     "name": "Orion",
     "slug": "mobile",
     "scheme": "orion",
-    "version": "2.1.2",
+    "version": "2.1.7",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.okali.orion",
-      "versionCode": 4
+      "versionCode": 9
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -67,12 +67,8 @@
     },
     "runtimeVersion": "orion-mobile-native-r1",
     "updates": {
-      "enabled": true,
-      "url": "https://u.expo.dev/db8d113f-2d08-4a1c-b58a-19dceeeca94f",
-      "requestHeaders": {
-        "expo-channel-name": "stable"
-      },
-      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "enabled": false,
+      "checkAutomatically": "NEVER",
       "fallbackToCacheTimeout": 0,
       "useEmbeddedUpdate": true
     }

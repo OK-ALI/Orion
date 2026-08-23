@@ -54,15 +54,12 @@ test('P9-F5 Settings summary, App updates badge, announcement, and automatic che
   assert.match(announcement, /state\.status === 'permission-required'/);
 });
 
-test('P9-F5 keeps Quick Updates separate while application-update badges share canonical presentation copy', () => {
+test('P9-F5 exposes one App Updates surface after Expo runtime retirement', () => {
   const settings = readMobile('src/features/settings/UpdatesSettingsContent.tsx');
   const execution = readMobile('src/features/settings/MobileUpdateExecutionSection.tsx');
   const banner = readMobile('src/features/updates/MobileUpdateAnnouncementBanner.tsx');
   const state = readMobile('src/services/mobileApplicationUpdateState.ts');
 
-  assert.match(settings, /checkExpoRuntimeUpdateV1/);
-  assert.match(settings, /<RuntimeUpdateExecutionSection/);
-  assert.match(settings, /appStateOwnsSummary/);
   assert.match(settings, /appPresentation/);
   assert.match(execution, /presentation\.label/);
   assert.match(state, /label: 'Update ready'/);
@@ -70,4 +67,5 @@ test('P9-F5 keeps Quick Updates separate while application-update badges share c
   assert.match(state, /label: 'Unavailable'/);
   assert.match(state, /label: 'Downloading'/);
   assert.match(banner, /announcement\.installState === 'permission-required'/);
+  assert.doesNotMatch(settings, /checkExpoRuntimeUpdateV1|RuntimeUpdateExecutionSection|runtimeStatus|Quick update|Recovery/);
 });

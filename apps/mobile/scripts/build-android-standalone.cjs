@@ -474,50 +474,38 @@ function upsertAndroidMetaData(contents, name, value) {
   return contents.replace("  </application>", `${line}\n  </application>`);
 }
 
-function ensureExpoRuntimeUpdateConfiguration() {
+function removeAndroidMetaData(contents, name) {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`\\s*<meta-data\\s+android:name="${escapedName}"[^>]*/>`, "g");
+  return contents.replace(pattern, "");
+}
+
+function ensureExpoRuntimeUpdatesRetired() {
   const appConfig = JSON.parse(fs.readFileSync(appConfigJson, "utf8")).expo || {};
   const updates = appConfig.updates || {};
   const runtimeVersion = appConfig.runtimeVersion;
-  const updateUrl = updates.url;
-  const requestHeaders = updates.requestHeaders || {};
-  const selectedChannel = requestHeaders["expo-channel-name"];
 
-  if (updates.disableAntiBrickingMeasures === true) {
-    throw new Error("Orion runtime updates must keep Expo anti-bricking measures enabled.");
+  if (updates.enabled !== false) {
+    throw new Error("Orion production builds must keep Expo runtime updates disabled.");
+  }
+  if (updates.checkAutomatically !== "NEVER") {
+    throw new Error("Orion production builds must never check Expo runtime updates.");
+  }
+  if (updates.url != null || updates.requestHeaders != null) {
+    throw new Error("Orion production builds must not carry an Expo update URL or runtime channel headers.");
   }
   if (typeof runtimeVersion !== "string" || !runtimeVersion.trim()) {
-    throw new Error("Orion runtimeVersion is missing from app.json.");
-  }
-  if (typeof updateUrl !== "string" || !/^https:\/\/u\.expo\.dev\/[0-9a-f-]+$/i.test(updateUrl)) {
-    throw new Error("Orion Expo update URL is missing or invalid.");
-  }
-  if (selectedChannel !== "stable") {
-    throw new Error("Orion embedded runtime update channel must default to stable.");
-  }
-
-  const checkOnLaunchMap = {
-    ON_LOAD: "ALWAYS",
-    ON_ERROR_RECOVERY: "ERROR_RECOVERY_ONLY",
-    WIFI_ONLY: "WIFI_ONLY",
-    NEVER: "NEVER",
-  };
-  const checkOnLaunch = checkOnLaunchMap[updates.checkAutomatically || "ON_LOAD"];
-  if (!checkOnLaunch) {
-    throw new Error(`Unsupported Orion runtime update launch policy: ${updates.checkAutomatically}`);
+    throw new Error("Orion transitional bundled-manifest runtimeVersion is missing from app.json.");
   }
 
   let manifest = fs.readFileSync(androidManifest, "utf8");
-  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.ENABLED", updates.enabled === false ? "false" : "true");
-  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.EXPO_UPDATE_URL", updateUrl);
+  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.ENABLED", "false");
   manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.EXPO_RUNTIME_VERSION", "@string/expo_runtime_version");
-  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH", checkOnLaunch);
-  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS", String(updates.fallbackToCacheTimeout ?? 0));
-  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.HAS_EMBEDDED_UPDATE", updates.useEmbeddedUpdate === false ? "false" : "true");
-  manifest = upsertAndroidMetaData(
-    manifest,
-    "expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY",
-    JSON.stringify(requestHeaders),
-  );
+  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH", "NEVER");
+  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS", "0");
+  manifest = upsertAndroidMetaData(manifest, "expo.modules.updates.HAS_EMBEDDED_UPDATE", "true");
+  manifest = removeAndroidMetaData(manifest, "expo.modules.updates.EXPO_UPDATE_URL");
+  manifest = removeAndroidMetaData(manifest, "expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY");
   fs.writeFileSync(androidManifest, manifest, "utf8");
 
   fs.mkdirSync(androidValuesDirectory, { recursive: true });
@@ -531,26 +519,30 @@ function ensureExpoRuntimeUpdateConfiguration() {
   } else if (strings.includes("</resources>")) {
     strings = strings.replace("</resources>", `${runtimeLine}\n</resources>`);
   } else {
-    throw new Error("Unable to locate Android strings resources for Expo runtime version.");
+    throw new Error("Unable to locate Android strings resources for the transitional bundled manifest runtime version.");
   }
   fs.writeFileSync(androidStringsXml, strings, "utf8");
 
   const verifiedManifest = fs.readFileSync(androidManifest, "utf8");
-  const verifiedStrings = fs.readFileSync(androidStringsXml, "utf8");
-  for (const required of [
-    "expo.modules.updates.EXPO_UPDATE_URL",
-    "expo.modules.updates.EXPO_RUNTIME_VERSION",
-    "expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH",
-    "expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY",
-  ]) {
-    if (!verifiedManifest.includes(required)) {
-      throw new Error(`Expo runtime update Android metadata did not persist: ${required}`);
+  const required = [
+    'android:name="expo.modules.updates.ENABLED" android:value="false"',
+    'android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="NEVER"',
+    'android:name="expo.modules.updates.EXPO_RUNTIME_VERSION" android:value="@string/expo_runtime_version"',
+  ];
+  for (const marker of required) {
+    if (!verifiedManifest.includes(marker)) {
+      throw new Error(`Expo retirement Android metadata did not persist: ${marker}`);
     }
   }
-  if (!verifiedStrings.includes(runtimeVersion)) {
-    throw new Error("Expo runtime version Android resource did not persist.");
+  for (const forbidden of [
+    "expo.modules.updates.EXPO_UPDATE_URL",
+    "expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY",
+  ]) {
+    if (verifiedManifest.includes(forbidden)) {
+      throw new Error(`Retired Expo remote-update metadata is still present: ${forbidden}`);
+    }
   }
-  console.log(`[Android] Expo runtime updates configured for ${runtimeVersion} on stable.`);
+  console.log("[Android] Expo runtime updates retired; production will boot only the bundled app runtime.");
 }
 
 
@@ -640,7 +632,7 @@ try {
   ensureGoogleDriveAuthorizationPackageRegistration();
   ensureOrionUpdatePackageRegistration();
   ensureDirectUpdateManifest();
-  ensureExpoRuntimeUpdateConfiguration();
+  ensureExpoRuntimeUpdatesRetired();
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);

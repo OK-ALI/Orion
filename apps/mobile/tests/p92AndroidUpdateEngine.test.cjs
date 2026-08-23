@@ -62,12 +62,12 @@ test('P9.2 native JS bridge exposes direct APK execution only', () => {
   assert.doesNotMatch(bridge, /OrionPlayUpdateStatus/);
 });
 
-test('P9.2 Updates Settings keeps verified direct APK execution separate from runtime updates', () => {
+test('P9.2 Updates Settings uses the verified direct APK updater as the sole production update action', () => {
   const updates = read('src', 'features', 'settings', 'UpdatesSettingsContent.tsx');
   const execution = read('src', 'features', 'settings', 'MobileUpdateExecutionSection.tsx');
 
   assert.match(updates, /MobileUpdateExecutionSection/);
-  assert.match(updates, /RuntimeUpdateExecutionSection/);
+  assert.doesNotMatch(updates, /RuntimeUpdateExecutionSection|checkExpoRuntimeUpdateV1/);
   assert.match(execution, /installDirectApkV1/);
   assert.match(execution, /expectedSha256: integrity\.sha256/);
   assert.match(execution, /expectedSignerSha256: integrity\.signerSha256/);

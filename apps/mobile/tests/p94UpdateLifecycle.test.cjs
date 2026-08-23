@@ -40,23 +40,14 @@ test('P9.4 direct APK update preserves staged-rollout truth and retry without do
   assert.doesNotMatch(bridge, /downgrade|rollbackApk|installOlder/i);
 });
 
-test('P9.4 runtime lifecycle preserves rollback, retry and restart without bypassing Expo anti-bricking', () => {
-  const service = read('src', 'services', 'expoRuntimeUpdates.ts');
-  const runtime = read('src', 'features', 'settings', 'RuntimeUpdateExecutionSection.tsx');
+test('P9.4 production lifecycle retires Expo runtime actions and keeps bundled startup plus signed APK updates', () => {
+  const settings = read('src', 'features', 'settings', 'UpdatesSettingsContent.tsx');
   const config = JSON.parse(read('app.json')).expo;
 
-  assert.match(service, /OrionRuntimeRetryActionV1 = 'check' \| 'download' \| 'restart'/);
-  assert.match(service, /isRollBackToEmbedded/);
-  assert.match(service, /retryAction: 'check'/);
-  assert.match(service, /retryAction: 'download'/);
-  assert.match(runtime, /retryAction: 'restart'/);
-  assert.match(runtime, /status\.rollbackToEmbedded/);
-  assert.match(runtime, /Use recovery version/);
-  assert.match(runtime, /Get quick update/);
-  assert.match(runtime, /Restart Orion/);
-  assert.match(runtime, /label="Try again"/);
-  assert.equal(config.updates.useEmbeddedUpdate, true);
-  assert.notEqual(config.updates.disableAntiBrickingMeasures, true);
+  assert.equal(config.updates.enabled, false);
+  assert.equal(config.updates.checkAutomatically, 'NEVER');
+  assert.equal(config.updates.url, undefined);
+  assert.doesNotMatch(settings, /RuntimeUpdateExecutionSection|checkExpoRuntimeUpdateV1|Use recovery version|Get quick update|Restart Orion/);
 });
 
 test('P9.4 Updates surface keeps release notes visible, rollout-aware and retryable', () => {
@@ -69,6 +60,5 @@ test('P9.4 Updates surface keeps release notes visible, rollout-aware and retrya
   assert.match(state, /result\.rollout\.deferred/);
   assert.match(execution, /state\.result\?\.rollout\.deferred/);
   assert.match(execution, /A newer Orion version is still rolling out/);
-  assert.match(settings, /onRetryCheck=\{retryRuntimeCheck\}/);
   assert.match(settings, /appUpdateState\.status === 'failed' \? 'Try again' : 'Check for updates'/);
 });

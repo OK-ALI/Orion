@@ -5,18 +5,11 @@ import { fontSizes, radii, spacing } from '@orion/shared/tokens';
 import type { OrionReleaseChannelV1 } from '@orion/shared/types';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { MobileUpdateExecutionSection } from './MobileUpdateExecutionSection';
-import { RuntimeUpdateExecutionSection } from './RuntimeUpdateExecutionSection';
 import { MobileReleaseNotes } from './MobileReleaseNotes';
 import {
   getMobileUpdateChannelV1,
   setMobileUpdateChannelV1,
 } from '../../services/mobileReleaseTruth';
-import {
-  checkExpoRuntimeUpdateV1,
-  getExpoRuntimeUpdateStatusV1,
-  setExpoRuntimeUpdateChannelV1,
-  type OrionRuntimeUpdateStatusV1,
-} from '../../services/expoRuntimeUpdates';
 import { formatMobileReleaseNotesV1 } from '../../services/mobileUpdateLifecycle';
 import {
   checkMobileApplicationUpdateStateV1,
@@ -43,40 +36,14 @@ export function UpdatesSettingsContent() {
   const [appUpdateState, setAppUpdateState] = React.useState<MobileApplicationUpdateStateV1>(() =>
     getMobileApplicationUpdateStateV1(),
   );
-  const [runtimeStatus, setRuntimeStatus] = React.useState<OrionRuntimeUpdateStatusV1>(() =>
-    getExpoRuntimeUpdateStatusV1(getMobileUpdateChannelV1()),
-  );
 
   const runCheck = React.useCallback(async (nextChannel: OrionReleaseChannelV1 = channel) => {
     setChecking(true);
-    setRuntimeStatus((current) => ({
-      ...current,
-      channel: nextChannel,
-      state: 'checking',
-      retryAction: null,
-      message: null,
-    }));
-    const [releaseOutcome, runtimeOutcome] = await Promise.allSettled([
-      checkMobileApplicationUpdateStateV1(nextChannel),
-      checkExpoRuntimeUpdateV1(nextChannel),
-    ]);
-
-    if (releaseOutcome.status === 'rejected') {
-      // The canonical application-update owner translates and publishes release-check failures.
-      setAppUpdateState(getMobileApplicationUpdateStateV1());
+    try {
+      await checkMobileApplicationUpdateStateV1(nextChannel);
+    } finally {
+      setChecking(false);
     }
-
-    if (runtimeOutcome.status === 'fulfilled') {
-      setRuntimeStatus(runtimeOutcome.value);
-    } else {
-      setRuntimeStatus({
-        ...getExpoRuntimeUpdateStatusV1(nextChannel),
-        state: 'failed',
-        retryAction: 'check',
-        message: runtimeOutcome.reason instanceof Error ? runtimeOutcome.reason.message : 'Unable to check runtime updates.',
-      });
-    }
-    setChecking(false);
   }, [channel]);
 
 
@@ -85,29 +52,9 @@ export function UpdatesSettingsContent() {
     runCheck(channel);
   }, [channel, runCheck]);
 
-  const retryRuntimeCheck = React.useCallback(async () => {
-    setRuntimeStatus((current) => ({
-      ...current,
-      channel,
-      state: 'checking',
-      retryAction: null,
-      message: 'Checking runtime compatibility…',
-    }));
-    try {
-      setRuntimeStatus(await checkExpoRuntimeUpdateV1(channel));
-    } catch (runtimeError) {
-      setRuntimeStatus({
-        ...getExpoRuntimeUpdateStatusV1(channel),
-        state: 'failed',
-        retryAction: 'check',
-        message: runtimeError instanceof Error ? runtimeError.message : 'Unable to check runtime updates.',
-      });
-    }
-  }, [channel]);
 
   const chooseChannel = (next: OrionReleaseChannelV1) => {
     setMobileUpdateChannelV1(next);
-    setExpoRuntimeUpdateChannelV1(next);
     setChannel(next);
   };
 
@@ -121,17 +68,9 @@ export function UpdatesSettingsContent() {
     ? 'Recommended for everyday use.'
     : 'Get newer test builds before they reach Stable.';
 
-  const appStateOwnsSummary = ['failed', 'permission-required', 'downloading', 'verifying', 'installing']
-    .includes(appUpdateState.status);
   const summaryState = checking
     ? { label: 'Checking', description: 'Looking for Orion updates…' }
-    : appStateOwnsSummary
-      ? appPresentation
-      : runtimeStatus.state === 'restart-required'
-        ? { label: 'Restart needed', description: 'A quick update is ready. Restart Orion to finish.' }
-        : runtimeStatus.state === 'available'
-          ? { label: 'Quick update ready', description: 'A small Orion update is ready for this device.' }
-          : appPresentation;
+    : appPresentation;
 
 
   return (
@@ -186,13 +125,6 @@ export function UpdatesSettingsContent() {
       <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Update options</Text>
       <View style={[styles.updateGroup, { borderTopColor: theme.border, borderBottomColor: theme.border }]}>
         <MobileUpdateExecutionSection state={appUpdateState} />
-        <View style={[styles.updateDivider, { backgroundColor: theme.border }]} />
-        <RuntimeUpdateExecutionSection
-          status={runtimeStatus}
-          onStatusChange={setRuntimeStatus}
-          onRetryCheck={retryRuntimeCheck}
-          showRetryAction={appUpdateState.status !== 'failed'}
-        />
       </View>
 
       {releaseNotes ? (
@@ -242,7 +174,6 @@ const styles = StyleSheet.create({
   channelButtonText: { fontSize: fontSizes.sm, fontWeight: '900' },
   channelDescription: { fontSize: fontSizes.xs, lineHeight: 18, paddingHorizontal: 2 },
   updateGroup: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth },
-  updateDivider: { height: StyleSheet.hairlineWidth, marginHorizontal: spacing[3] },
   notes: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: spacing[3], gap: spacing[2] },
   notesHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   notesTitle: { fontSize: fontSizes.sm, fontWeight: '900' },

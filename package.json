@@ -26,9 +26,5 @@
     "react-native-reanimated": "4.5.1",
     "react-native-worklets": "0.10.1",
     "turbo": "^2.5.0"
-  },
-  "scripts": {
-    "patch:expo-updates": "node scripts/patch-expo-updates-embedded-registration.cjs",
-    "postinstall": "node scripts/patch-expo-updates-embedded-registration.cjs"
   }
 }

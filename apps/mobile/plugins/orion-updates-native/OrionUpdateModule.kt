@@ -51,7 +51,10 @@ class OrionUpdateModule(
 
   @Suppress("DEPRECATION")
   private fun installedPackageInfo(): PackageInfo =
-    reactContext.packageManager.getPackageInfo(reactContext.packageName, signingFlags())
+    reactContext.packageManager.getPackageInfo(
+      reactContext.packageName,
+      signingFlags() or PackageManager.GET_PERMISSIONS,
+    )
 
   @Suppress("DEPRECATION")
   private fun archivePackageInfo(file: File): PackageInfo? =
