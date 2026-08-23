@@ -111,6 +111,42 @@ const FINALIZE_NEW = `    try {
       throw IOException("Error while adding new update to database", e)
     }`;
 
+const LOADER_TASK_IMPORT_STATUS_OLD = `import expo.modules.updates.db.entity.UpdateEntity
+import expo.modules.updates.launcher.DatabaseLauncher`;
+const LOADER_TASK_IMPORT_STATUS_NEW = `import expo.modules.updates.db.entity.UpdateEntity
+import expo.modules.updates.db.enums.UpdateStatus
+import expo.modules.updates.launcher.DatabaseLauncher`;
+
+const LOADER_TASK_EMBEDDED_SELECTION_OLD = `      val launchableUpdate = launcher.getLaunchableUpdate(database)
+      val manifestFilters = ManifestMetadata.getManifestFilters(database, configuration)
+      if (selectionPolicy.shouldLoadNewUpdate(
+          embeddedUpdate,
+          launchableUpdate,
+          manifestFilters
+        )
+      ) {
+        try {`;
+
+const LOADER_TASK_EMBEDDED_SELECTION_NEW = `      val launchableUpdate = launcher.getLaunchableUpdate(database)
+      val embeddedRegistrationNeedsRepair = launchableUpdate?.let {
+        it.status == UpdateStatus.EMBEDDED &&
+          it.id == embeddedUpdate.id &&
+          database.updateDao().loadLaunchAssetForUpdate(it.id) == null
+      } ?: false
+      val manifestFilters = ManifestMetadata.getManifestFilters(database, configuration)
+      if (
+        embeddedRegistrationNeedsRepair ||
+        selectionPolicy.shouldLoadNewUpdate(
+          embeddedUpdate,
+          launchableUpdate,
+          manifestFilters
+        )
+      ) {
+        if (embeddedRegistrationNeedsRepair) {
+          logger.warn("Detected an incomplete embedded update registration with no launch asset. Retrying embedded registration before launch.")
+        }
+        try {`;
+
 const REPLACEMENTS = [
   [IMPORT_ROOM_OLD, IMPORT_ROOM_NEW, "Room transaction import"],
   [IMPORT_CANCELLATION_OLD, IMPORT_CANCELLATION_NEW, "cancellation import"],
@@ -171,6 +207,47 @@ function transformLoaderSource(source) {
   return usesCrlf ? normalized.replace(/\n/g, "\r\n") : normalized;
 }
 
+function isFixedLoaderTaskSource(source) {
+  const normalized = source.replace(/\r\n/g, "\n");
+  const required = [
+    "import expo.modules.updates.db.enums.UpdateStatus",
+    "val embeddedRegistrationNeedsRepair = launchableUpdate?.let {",
+    "it.status == UpdateStatus.EMBEDDED",
+    "it.id == embeddedUpdate.id",
+    "database.updateDao().loadLaunchAssetForUpdate(it.id) == null",
+    "embeddedRegistrationNeedsRepair ||",
+    "Detected an incomplete embedded update registration with no launch asset.",
+  ];
+  return required.every((marker) => normalized.includes(marker));
+}
+
+function transformLoaderTaskSource(source) {
+  if (isFixedLoaderTaskSource(source)) {
+    return source;
+  }
+
+  const usesCrlf = source.includes("\r\n");
+  let normalized = source.replace(/\r\n/g, "\n");
+  normalized = replaceExactlyOnce(
+    normalized,
+    LOADER_TASK_IMPORT_STATUS_OLD,
+    LOADER_TASK_IMPORT_STATUS_NEW,
+    "LoaderTask UpdateStatus import"
+  );
+  normalized = replaceExactlyOnce(
+    normalized,
+    LOADER_TASK_EMBEDDED_SELECTION_OLD,
+    LOADER_TASK_EMBEDDED_SELECTION_NEW,
+    "LoaderTask legacy embedded-registration healing"
+  );
+
+  if (!isFixedLoaderTaskSource(normalized)) {
+    throw new Error("P9-F6 Expo legacy-state healing verification failed after transformation.");
+  }
+
+  return usesCrlf ? normalized.replace(/\n/g, "\r\n") : normalized;
+}
+
 function resolveExpoUpdatesPackage(rootDirectory) {
   const mobileDirectory = path.join(rootDirectory, "apps", "mobile");
   const packageJsonPath = require.resolve("expo-updates/package.json", {
@@ -197,15 +274,41 @@ function applyPatch(rootDirectory = path.resolve(__dirname, "..")) {
     "loader",
     "Loader.kt"
   );
+  const loaderTaskPath = path.join(
+    packageRoot,
+    "android",
+    "src",
+    "main",
+    "java",
+    "expo",
+    "modules",
+    "updates",
+    "loader",
+    "LoaderTask.kt"
+  );
 
   if (!fs.existsSync(loaderPath)) {
     throw new Error(`P9-F6 Expo backport refused: Loader.kt not found at ${loaderPath}`);
   }
+  if (!fs.existsSync(loaderTaskPath)) {
+    throw new Error(`P9-F6 Expo backport refused: LoaderTask.kt not found at ${loaderTaskPath}`);
+  }
 
-  const source = fs.readFileSync(loaderPath, "utf8");
-  if (isFixedLoaderSource(source)) {
-    console.log(`[Orion P9-F6] expo-updates ${packageJson.version} already contains the atomic embedded-registration fix.`);
-    return { changed: false, loaderPath, version: packageJson.version };
+  const loaderSource = fs.readFileSync(loaderPath, "utf8");
+  const loaderTaskSource = fs.readFileSync(loaderTaskPath, "utf8");
+  const loaderAlreadyFixed = isFixedLoaderSource(loaderSource);
+  const loaderTaskAlreadyFixed = isFixedLoaderTaskSource(loaderTaskSource);
+
+  if (loaderAlreadyFixed && loaderTaskAlreadyFixed) {
+    console.log(
+      `[Orion P9-F6] expo-updates ${packageJson.version} already contains the atomic embedded-registration fix and Orion legacy-state healing.`
+    );
+    return {
+      changed: false,
+      loaderPath,
+      loaderTaskPath,
+      version: packageJson.version,
+    };
   }
 
   if (packageJson.version !== VULNERABLE_EXPO_UPDATES_VERSION) {
@@ -214,18 +317,31 @@ function applyPatch(rootDirectory = path.resolve(__dirname, "..")) {
     );
   }
 
-  const patched = transformLoaderSource(source);
-  fs.writeFileSync(loaderPath, patched, "utf8");
+  if (!loaderAlreadyFixed) {
+    fs.writeFileSync(loaderPath, transformLoaderSource(loaderSource), "utf8");
+  }
+  if (!loaderTaskAlreadyFixed) {
+    fs.writeFileSync(loaderTaskPath, transformLoaderTaskSource(loaderTaskSource), "utf8");
+  }
 
-  const verify = fs.readFileSync(loaderPath, "utf8");
-  if (!isFixedLoaderSource(verify)) {
-    throw new Error("P9-F6 Expo backport write verification failed.");
+  const verifyLoader = fs.readFileSync(loaderPath, "utf8");
+  const verifyLoaderTask = fs.readFileSync(loaderTaskPath, "utf8");
+  if (!isFixedLoaderSource(verifyLoader)) {
+    throw new Error("P9-F6 Expo atomic embedded-registration write verification failed.");
+  }
+  if (!isFixedLoaderTaskSource(verifyLoaderTask)) {
+    throw new Error("P9-F6 Expo legacy-state healing write verification failed.");
   }
 
   console.log(
-    `[Orion P9-F6] Applied Expo upstream embedded-registration fix ${UPSTREAM_FIX_COMMIT} (PR #${UPSTREAM_FIX_PR}) to expo-updates ${packageJson.version}.`
+    `[Orion P9-F6] Applied Expo upstream embedded-registration fix ${UPSTREAM_FIX_COMMIT} (PR #${UPSTREAM_FIX_PR}) plus Orion legacy-state healing to expo-updates ${packageJson.version}.`
   );
-  return { changed: true, loaderPath, version: packageJson.version };
+  return {
+    changed: true,
+    loaderPath,
+    loaderTaskPath,
+    version: packageJson.version,
+  };
 }
 
 if (require.main === module) {
@@ -244,11 +360,15 @@ module.exports = {
   applyPatch,
   isFixedLoaderSource,
   transformLoaderSource,
+  isFixedLoaderTaskSource,
+  transformLoaderTaskSource,
   __test: {
     IMPORT_ROOM_OLD,
     IMPORT_CANCELLATION_OLD,
     PROCESS_UPDATE_OLD,
     DOWNLOAD_SIGNATURE_OLD,
     FINALIZE_OLD,
+    LOADER_TASK_IMPORT_STATUS_OLD,
+    LOADER_TASK_EMBEDDED_SELECTION_OLD,
   },
 };

@@ -30,13 +30,33 @@ test("P9-F6 backport transforms the audited vulnerable Expo loader shape", () =>
   );
 });
 
-test("P9-F6 current expo-updates Loader.kt contains the atomic embedded-registration fix", () => {
+test("P9-F6 legacy-state healing transforms the audited Expo LoaderTask shape", () => {
+  const fixture = [
+    patcher.__test.LOADER_TASK_IMPORT_STATUS_OLD,
+    patcher.__test.LOADER_TASK_EMBEDDED_SELECTION_OLD,
+  ].join("\n\n");
+
+  const fixed = patcher.transformLoaderTaskSource(fixture);
+
+  assert.equal(patcher.isFixedLoaderTaskSource(fixed), true);
+  assert.match(fixed, /it\.status == UpdateStatus\.EMBEDDED/);
+  assert.match(fixed, /loadLaunchAssetForUpdate\(it\.id\) == null/);
+  assert.match(fixed, /embeddedRegistrationNeedsRepair \|\|/);
+  assert.match(
+    fixed,
+    /Detected an incomplete embedded update registration with no launch asset\./
+  );
+  assert.doesNotMatch(fixed, /deleteUpdates/);
+});
+
+test("P9-F6 current expo-updates sources contain prevention and legacy-state healing", () => {
   const packageJsonPath = require.resolve("expo-updates/package.json", {
     paths: [path.join(rootDirectory, "apps", "mobile")],
   });
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+  const packageRoot = path.dirname(packageJsonPath);
   const loaderPath = path.join(
-    path.dirname(packageJsonPath),
+    packageRoot,
     "android",
     "src",
     "main",
@@ -47,11 +67,26 @@ test("P9-F6 current expo-updates Loader.kt contains the atomic embedded-registra
     "loader",
     "Loader.kt"
   );
-  const source = fs.readFileSync(loaderPath, "utf8");
+  const loaderTaskPath = path.join(
+    packageRoot,
+    "android",
+    "src",
+    "main",
+    "java",
+    "expo",
+    "modules",
+    "updates",
+    "loader",
+    "LoaderTask.kt"
+  );
+  const loaderSource = fs.readFileSync(loaderPath, "utf8");
+  const loaderTaskSource = fs.readFileSync(loaderTaskPath, "utf8");
 
   assert.equal(packageJson.version, patcher.VULNERABLE_EXPO_UPDATES_VERSION);
-  assert.equal(patcher.isFixedLoaderSource(source), true);
+  assert.equal(patcher.isFixedLoaderSource(loaderSource), true);
+  assert.equal(patcher.isFixedLoaderTaskSource(loaderTaskSource), true);
 });
+
 
 test("P9-F6 root install lifecycle reapplies the audited Expo backport", () => {
   const packageJson = JSON.parse(

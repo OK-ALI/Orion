@@ -1,6 +1,6 @@
 {
   "name": "@orion/desktop",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Orion Desktop — Electron + React app",
   "author": "Orion",
   "license": "GPL-3.0",
