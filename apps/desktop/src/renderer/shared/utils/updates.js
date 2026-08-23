@@ -14,6 +14,39 @@ export const GITHUB_REPO = "OK-ALI/Orion";
 
 const HIDDEN_RELEASE_DIRECTIVE_RE = /<!--\s*orion-(?:mobile|desktop)-rollout\s*:\s*\d{1,3}\s*-->/gi;
 
+const desktopUpdateCheckListeners = new Set();
+let latestDesktopUpdateCheckEvent = null;
+
+function publishDesktopUpdateCheckEvent(event) {
+  latestDesktopUpdateCheckEvent = event;
+
+  for (const listener of desktopUpdateCheckListeners) {
+    try {
+      listener(event);
+    } catch (error) {
+      console.error("Desktop update-check listener failed:", error);
+    }
+  }
+}
+
+export function subscribeToDesktopUpdateChecks(listener) {
+  if (typeof listener !== "function") return () => {};
+
+  desktopUpdateCheckListeners.add(listener);
+
+  if (latestDesktopUpdateCheckEvent) {
+    try {
+      listener(latestDesktopUpdateCheckEvent);
+    } catch (error) {
+      console.error("Desktop update-check listener failed:", error);
+    }
+  }
+
+  return () => {
+    desktopUpdateCheckListeners.delete(listener);
+  };
+}
+
 export function formatOrionReleaseNotes(notes = "") {
   return String(notes || "")
     .replace(HIDDEN_RELEASE_DIRECTIVE_RE, "")
@@ -293,43 +326,71 @@ function buildIntegrityByFormat(release, integrityResult) {
 }
 
 export async function checkForUpdates(channel = "stable") {
-  const currentVersion = await getCurrentVersion();
-  const releaseTruth = await fetchOrionReleaseTruth(channel);
-  const data = releaseTruth.desktop.release;
+  const requestedChannel = normalizeOrionReleaseChannelV1(channel);
 
-  if (!data) {
-    throw new Error(`No ${releaseTruth.channel} Desktop release found`);
+  publishDesktopUpdateCheckEvent({
+    phase: "checking",
+    channel: requestedChannel,
+    result: null,
+    error: null,
+  });
+
+  try {
+    const currentVersion = await getCurrentVersion();
+    const releaseTruth = await fetchOrionReleaseTruth(requestedChannel);
+    const data = releaseTruth.desktop.release;
+
+    if (!data) {
+      throw new Error(`No ${releaseTruth.channel} Desktop release found`);
+    }
+
+    const assets = {};
+    const assetNames = {};
+
+    for (const artifact of data.artifacts || []) {
+      const format = formatForArtifact(artifact);
+      if (!format) continue;
+      assets[format] = artifact.url;
+      assetNames[format] = artifact.name;
+    }
+
+    const integrityResult = await fetchReleaseIntegrity(data);
+
+    const integrity = {
+      status: integrityResult.status,
+      reason: integrityResult.reason,
+      manifestUrl: integrityResult.manifestUrl,
+      byFormat: buildIntegrityByFormat(data, integrityResult),
+    };
+
+    const result = {
+      latest: data.version || currentVersion,
+      current: currentVersion,
+      url: data.url,
+      changelog: formatOrionReleaseNotes(data.notes),
+      assets,
+      assetNames,
+      integrity,
+      channel: releaseTruth.channel,
+      releaseTruth,
+      hasUpdate: compareOrionVersionsV1(data.version, currentVersion) > 0,
+    };
+
+    publishDesktopUpdateCheckEvent({
+      phase: "complete",
+      channel: releaseTruth.channel,
+      result,
+      error: null,
+    });
+
+    return result;
+  } catch (error) {
+    publishDesktopUpdateCheckEvent({
+      phase: "failed",
+      channel: requestedChannel,
+      result: null,
+      error,
+    });
+    throw error;
   }
-
-  const assets = {};
-  const assetNames = {};
-
-  for (const artifact of data.artifacts || []) {
-    const format = formatForArtifact(artifact);
-    if (!format) continue;
-    assets[format] = artifact.url;
-    assetNames[format] = artifact.name;
-  }
-
-  const integrityResult = await fetchReleaseIntegrity(data);
-
-  const integrity = {
-    status: integrityResult.status,
-    reason: integrityResult.reason,
-    manifestUrl: integrityResult.manifestUrl,
-    byFormat: buildIntegrityByFormat(data, integrityResult),
-  };
-
-  return {
-    latest: data.version || currentVersion,
-    current: currentVersion,
-    url: data.url,
-    changelog: formatOrionReleaseNotes(data.notes),
-    assets,
-    assetNames,
-    integrity,
-    channel: releaseTruth.channel,
-    releaseTruth,
-    hasUpdate: compareOrionVersionsV1(data.version, currentVersion) > 0,
-  };
 }

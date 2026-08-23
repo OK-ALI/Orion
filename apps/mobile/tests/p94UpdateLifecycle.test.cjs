@@ -33,9 +33,9 @@ test('P9.4 direct APK update preserves staged-rollout truth and retry without do
   const execution = read('src', 'features', 'settings', 'MobileUpdateExecutionSection.tsx');
   const bridge = read('src', 'services', 'nativeUpdateEngine.ts');
 
-  assert.match(execution, /result\?\.rollout\.deferred/);
-  assert.match(execution, /engineState === 'failed' \? 'Retry update' : 'Download & install'/);
-  assert.match(execution, /result\.integrity\.status === 'ready'/);
+  assert.match(execution, /state\.result\?\.rollout\.deferred/);
+  assert.match(execution, /state\.status === 'failed' \? 'Retry update' : 'Download & install'/);
+  assert.match(execution, /isMobileApplicationUpdateInstallReadyV1\(state\)/);
   assert.match(bridge, /installDirectApkV1/);
   assert.doesNotMatch(bridge, /downgrade|rollbackApk|installOlder/i);
 });
@@ -61,10 +61,14 @@ test('P9.4 runtime lifecycle preserves rollback, retry and restart without bypas
 
 test('P9.4 Updates surface keeps release notes visible, rollout-aware and retryable', () => {
   const settings = read('src', 'features', 'settings', 'UpdatesSettingsContent.tsx');
+  const execution = read('src', 'features', 'settings', 'MobileUpdateExecutionSection.tsx');
+  const state = read('src', 'services', 'mobileApplicationUpdateState.ts');
 
   assert.match(settings, /formatMobileReleaseNotesV1\(published\?\.notes\)/);
   assert.match(settings, /What's new/);
-  assert.match(settings, /result\?\.rollout\.deferred/);
+  assert.match(state, /result\.rollout\.deferred/);
+  assert.match(execution, /state\.result\?\.rollout\.deferred/);
+  assert.match(execution, /A newer Orion version is still rolling out/);
   assert.match(settings, /onRetryCheck=\{retryRuntimeCheck\}/);
-  assert.match(settings, /error \? 'Try again' : 'Check for updates'/);
+  assert.match(settings, /appUpdateState\.status === 'failed' \? 'Try again' : 'Check for updates'/);
 });

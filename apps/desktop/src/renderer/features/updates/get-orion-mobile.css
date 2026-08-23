@@ -350,14 +350,12 @@
 .gom-message-error {
   border-left-color: var(--danger);
 }
-.gom-release-notes p {
-  max-height: 120px;
+.gom-release-notes-body {
+  max-height: 180px;
   overflow: auto;
-  white-space: pre-wrap;
-  margin: 8px 0 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.6;
+  margin-top: 8px;
+  padding-right: 8px;
+  scrollbar-gutter: stable;
 }
 
 .gom-actions {

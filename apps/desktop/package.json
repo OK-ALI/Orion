@@ -1,6 +1,6 @@
 {
   "name": "@orion/desktop",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Orion Desktop — Electron + React app",
   "author": "Orion",
   "license": "GPL-3.0",
@@ -92,7 +92,10 @@
       "target": [
         "nsis",
         "zip"
-      ]
+      ],
+      "signtoolOptions": {
+        "certificateSha1": "563AE69B35B819BBC845A37D850241D19EE6B6C5"
+      }
     },
     "nsis": {
       "oneClick": false,

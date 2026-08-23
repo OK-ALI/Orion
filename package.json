@@ -1,6 +1,6 @@
 {
   "name": "orion",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "private": true,
   "description": "Orion — A Multiverse of Stories",
   "author": "Orion",
@@ -26,5 +26,9 @@
     "react-native-reanimated": "4.5.1",
     "react-native-worklets": "0.10.1",
     "turbo": "^2.5.0"
+  },
+  "scripts": {
+    "patch:expo-updates": "node scripts/patch-expo-updates-embedded-registration.cjs",
+    "postinstall": "node scripts/patch-expo-updates-embedded-registration.cjs"
   }
 }

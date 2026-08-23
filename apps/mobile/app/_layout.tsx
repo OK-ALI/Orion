@@ -27,6 +27,7 @@ import { StartupIntro } from '../src/components/StartupIntro';
 import { GlobalSearchShortcut } from '../src/components/GlobalSearchShortcut';
 import { MobileNotificationCoordinator } from '../src/features/notifications/MobileNotificationCoordinator';
 import { MobileNotificationResponseRouter } from '../src/features/notifications/MobileNotificationResponseRouter';
+import { MobileUpdateAnnouncementBanner } from '../src/features/updates/MobileUpdateAnnouncementBanner';
 
 
 // Keep the splash screen visible while we fetch resources
@@ -130,6 +131,7 @@ function ThemedApplication() {
                   <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 </Stack>
                 <GlobalSearchShortcut />
+                <MobileUpdateAnnouncementBanner />
                 <OfflineBanner />
               </View>
               </GestureHandlerRootView>

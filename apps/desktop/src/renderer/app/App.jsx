@@ -23,6 +23,7 @@ import GoogleLoginOverlay from "../components/setup/GoogleLoginOverlay";
 import "../styles/mini-player.css";
 
 import { checkForUpdates } from "../shared/utils/updates";
+import { useDesktopUpdateAnnouncement } from "./hooks/useDesktopUpdateAnnouncement";
 import { useNavigation } from "./hooks/useNavigation";
 import { useLibraryState } from "./hooks/useLibraryState";
 import { useDownloads } from "./hooks/useDownloads";
@@ -299,17 +300,15 @@ export default function App() {
     });
   }, []);
 
+  useDesktopUpdateAnnouncement({ setUpdateBanner, setShowUpdateModal });
+
   // ── Startup update check ─────────────────────────────────────────────────
   useEffect(() => {
     const autoCheck = storage.get("autoCheckUpdates");
     if (autoCheck === false || autoCheck === 0) return;
     const updateChannel = storage.get(STORAGE_KEYS.UPDATE_CHANNEL) === "preview" ? "preview" : "stable";
     checkForUpdates(updateChannel)
-      .then((r) => {
-        if (r.hasUpdate) setUpdateBanner(r);
-      })
       .catch(() => {}); // silently ignore network errors on startup
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const {

@@ -8,6 +8,7 @@ import {
 } from "../../components/common/Icons";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
 import { fetchOrionMobileDistributionStatus } from "../../shared/utils/updates";
+import { renderChangelog } from "./changelog";
 import "./get-orion-mobile.css";
 
 
@@ -220,7 +221,7 @@ export default function GetOrionMobilePage() {
           ) : releaseNotes ? (
             <div className="gom-release-notes">
               <span className="gom-section-kicker">WHAT'S NEW</span>
-              <p>{releaseNotes}</p>
+              <div className="gom-release-notes-body">{renderChangelog(releaseNotes)}</div>
             </div>
           ) : (
             <div className="gom-message">

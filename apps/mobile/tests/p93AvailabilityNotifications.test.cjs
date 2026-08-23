@@ -73,10 +73,13 @@ test('P9.3 keeps Notifications active with category, quiet-hour and device-test 
 
 test('P9.3 coordinator covers update, sync, offline recovery, source-health and watchlist availability signals', () => {
   const coordinator = read('src', 'features', 'notifications', 'MobileNotificationCoordinator.tsx');
+  const appUpdateState = read('src', 'services', 'mobileApplicationUpdateState.ts');
   const sourceHealth = read('src', 'services', 'sourceHealth.ts');
   const availability = read('src', 'services', 'mobileAvailabilityChecks.ts');
 
-  assert.match(coordinator, /checkMobileReleaseTruthV1/);
+  assert.match(coordinator, /checkMobileApplicationUpdateStateV1/);
+  assert.doesNotMatch(coordinator, /checkMobileReleaseTruthV1/);
+  assert.match(appUpdateState, /checkMobileReleaseTruthV1/);
   assert.match(coordinator, /useMyListSteadyStateSync/);
   assert.match(coordinator, /useWatchedSteadyStateSync/);
   assert.match(coordinator, /useViewingActivitySteadyStateSync/);

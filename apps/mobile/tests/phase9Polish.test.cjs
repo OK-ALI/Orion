@@ -27,12 +27,13 @@ test('Phase 9 Updates uses consumer-facing hierarchy instead of engineering diag
 
   assert.match(settings, />Update channel</);
   assert.match(settings, />Update options</);
-  assert.match(settings, /Up to date/);
+  const appState = read('src', 'services', 'mobileApplicationUpdateState.ts');
+  assert.match(appState, /label: 'Up to date'/);
   assert.match(appUpdate, />App updates</);
   assert.match(quickUpdate, />Quick updates</);
   assert.match(settings, /What's new/);
-  assert.match(settings, /showRetryAction=\{!error\}/);
-  assert.match(appUpdate, /result\?\.state === 'current'\) return 'No update'/);
+  assert.match(settings, /showRetryAction=\{appUpdateState\.status !== 'failed'\}/);
+  assert.match(appUpdate, /getMobileApplicationUpdatePresentationV1\(state\)/);
   assert.doesNotMatch(settings, /Minimum Android|Installer|Signed APK updates remain|Google Play distribution/i);
   assert.doesNotMatch(quickUpdate, /\{status\.message\}/);
   assert.match(quickUpdate, /showRetryAction = true/);
@@ -43,9 +44,10 @@ test('Phase 9 update errors are translated before they reach the Settings UI', (
   const settings = read('src', 'features', 'settings', 'UpdatesSettingsContent.tsx');
   const appUpdate = read('src', 'features', 'settings', 'MobileUpdateExecutionSection.tsx');
   const quickUpdate = read('src', 'features', 'settings', 'RuntimeUpdateExecutionSection.tsx');
+  const appState = read('src', 'services', 'mobileApplicationUpdateState.ts');
 
-  assert.match(settings, /friendlyAppCheckError/);
-  assert.match(settings, /could not check for app updates/i);
+  assert.match(settings, /getMobileApplicationUpdatePresentationV1/);
+  assert.match(appState, /could not check for app updates/i);
   assert.match(appUpdate, /could not finish the app update/i);
   assert.match(quickUpdate, /runtimeStatusMessage/);
   assert.match(quickUpdate, /could not check for quick updates/i);

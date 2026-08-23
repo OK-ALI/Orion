@@ -13,11 +13,11 @@ vi.mock("../../../src/renderer/shared/utils/updates", () => ({
   fetchOrionMobileDistributionStatus: vi.fn(),
 }));
 
-function distribution({ channel = "stable", version = null, apk = null, installerReady = Boolean(apk) } = {}) {
+function distribution({ channel = "stable", version = null, apk = null, installerReady = Boolean(apk), notes = null } = {}) {
   const release = version ? {
     version,
     publishedAt: "2026-08-22T00:00:00Z",
-    notes: `${version} release notes`,
+    notes: notes ?? `${version} release notes`,
     url: `https://github.com/OK-ALI/Orion/releases/tag/v${version}`,
   } : null;
   const artifact = apk ? {
@@ -116,6 +116,32 @@ describe("Get Orion Mobile distribution page", () => {
     expect(screen.queryByRole("button", { name: /Download APK/i })).not.toBeInTheDocument();
     expect(screen.queryByAltText("Orion Mobile Android installation QR code")).not.toBeInTheDocument();
     expect(QRCode.toDataURL).not.toHaveBeenCalled();
+  });
+
+
+  it("renders GitHub Markdown as structured Orion release notes without raw syntax leakage", async () => {
+    fetchOrionMobileDistributionStatus.mockResolvedValue(distribution({
+      channel: "preview",
+      version: "2.1.1",
+      apk: "orion-mobile-v2.1.1.apk",
+      notes: [
+        "## Highlights",
+        "- Unified update state",
+        "### Details",
+        "1. Cleaner release notes",
+      ].join("\n"),
+    }));
+    QRCode.toDataURL.mockResolvedValue("data:image/png;base64,ORION");
+    window.localStorage.setItem("orion_updateChannel", '"preview"');
+
+    render(<GetOrionMobilePage />);
+
+    expect(await screen.findByText("Highlights")).toBeInTheDocument();
+    expect(screen.getByText("Unified update state")).toBeInTheDocument();
+    expect(screen.getByText("Details")).toBeInTheDocument();
+    expect(screen.getByText("Cleaner release notes")).toBeInTheDocument();
+    expect(screen.queryByText("## Highlights")).not.toBeInTheDocument();
+    expect(screen.queryByText("### Details")).not.toBeInTheDocument();
   });
 
 });

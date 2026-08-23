@@ -21,7 +21,7 @@ interface TrailerModalProps {
 
 const IDENTITY = {
   applicationId: 'com.okali.orion',
-  applicationVersion: '2.1.0',
+  applicationVersion: '2.1.1',
   origin: 'https://com.okali.orion',
   referrer: 'https://com.okali.orion/',
 };
@@ -147,7 +147,7 @@ export function TrailerModal({ visible, onClose, title, candidates }: TrailerMod
                   source={session.transport === 'direct'
                     ? { uri: directEmbedUrl, headers: { Referer: IDENTITY.referrer } }
                     : { html, baseUrl: IDENTITY.origin }}
-                  applicationNameForUserAgent="Orion/2.1.0"
+                  applicationNameForUserAgent="Orion/2.1.1"
                   originWhitelist={['*']}
                   javaScriptEnabled domStorageEnabled allowsInlineMediaPlayback allowsFullscreenVideo
                   mediaPlaybackRequiresUserAction={false}

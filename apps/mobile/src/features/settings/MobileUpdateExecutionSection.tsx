@@ -2,84 +2,68 @@ import React from 'react';
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { fontSizes, radii, spacing } from '@orion/shared/tokens';
-import type { OrionUpdateStateV1 } from '@orion/shared/types';
 import { useOrionTheme } from '../../context/ThemeContext';
-import type { MobileReleaseCheckV1 } from '../../services/mobileReleaseTruth';
 import {
-  getAndroidUpdateEnvironmentV1,
+  getMobileApplicationUpdatePresentationV1,
+  isMobileApplicationUpdateInstallReadyV1,
+  publishMobileApplicationUpdateEngineEventV1,
+  refreshMobileApplicationUpdateEnvironmentV1,
+  type MobileApplicationUpdateStateV1,
+} from '../../services/mobileApplicationUpdateState';
+import {
   installDirectApkV1,
   openDirectInstallPermissionSettingsV1,
   subscribeAndroidUpdateStateV1,
-  type OrionAndroidUpdateEnvironmentV1,
   type OrionNativeUpdateEventV1,
 } from '../../services/nativeUpdateEngine';
 
-function appUpdateStatusLabel(
-  result: MobileReleaseCheckV1 | null,
-  environment: OrionAndroidUpdateEnvironmentV1 | null,
-  engineState: OrionUpdateStateV1,
-): string {
-  if (engineState === 'downloading') return 'Downloading';
-  if (engineState === 'verifying') return 'Verifying';
-  if (engineState === 'installing') return 'Installing';
-  if (engineState === 'failed') return 'Needs attention';
-  if (result?.state === 'current') return 'No update';
-  if (result?.rollout.deferred && result.state !== 'available') return 'Rolling out';
-  if (!environment) return 'Checking';
-  if (!environment.productionSignerMatched || !environment.requestInstallPackagesDeclared) return 'Unavailable';
-  if (result?.state === 'available' && result.integrity.status === 'ready') return 'Update ready';
-  return 'Ready';
-}
-
 function appUpdateFeedback(
-  result: MobileReleaseCheckV1 | null,
-  engineState: OrionUpdateStateV1,
-  hasRawMessage: boolean,
+  state: MobileApplicationUpdateStateV1,
+  rawMessage: string | null,
 ): string | null {
-  if (result?.rollout.deferred) {
-    return result.state === 'available' && result.rollout.offeredVersion
+  if (rawMessage === 'permission-required') {
+    return 'Android needs permission before Orion can install this update.';
+  }
+  if (rawMessage === 'direct-build-required') {
+    return 'App updates are not available in this build.';
+  }
+  if (state.result?.rollout.deferred) {
+    const result = state.result;
+    return result?.state === 'available' && result.rollout.offeredVersion
       ? `A newer Orion version is still rolling out. v${result.rollout.offeredVersion} is the newest update available to this device.`
       : 'A newer Orion version is rolling out and has not reached this device yet.';
   }
-  if (result?.state === 'available' && result.integrity.status !== 'ready') {
+  if (state.result?.state === 'available' && state.result.integrity.status !== 'ready') {
     return 'This update is not ready to install safely yet.';
   }
-  if (engineState === 'failed' || hasRawMessage) {
+  if (state.status === 'failed' || rawMessage) {
     return 'Orion could not finish the app update. Try again.';
   }
   return null;
 }
 
-export function MobileUpdateExecutionSection({ result }: { result: MobileReleaseCheckV1 | null }) {
+export function MobileUpdateExecutionSection({ state }: { state: MobileApplicationUpdateStateV1 }) {
   const { theme } = useOrionTheme();
-  const [environment, setEnvironment] = React.useState<OrionAndroidUpdateEnvironmentV1 | null>(null);
-  const [engineState, setEngineState] = React.useState<OrionUpdateStateV1>('idle');
-  const [progress, setProgress] = React.useState<number | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
-  const busy = ['downloading', 'verifying', 'installing'].includes(engineState);
+  const busy = ['downloading', 'verifying', 'installing'].includes(state.status);
+  const presentation = getMobileApplicationUpdatePresentationV1(state);
 
   const refreshEnvironment = React.useCallback(async () => {
-    try {
-      setEnvironment(await getAndroidUpdateEnvironmentV1());
-      setMessage(null);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to inspect Android update support.');
-    }
+    await refreshMobileApplicationUpdateEnvironmentV1();
   }, []);
 
   React.useEffect(() => {
-    refreshEnvironment();
+    void refreshEnvironment();
     const unsubscribe = subscribeAndroidUpdateStateV1((event: OrionNativeUpdateEventV1) => {
-      setEngineState(event.state);
-      setProgress(typeof event.progress === 'number' ? event.progress : null);
+      publishMobileApplicationUpdateEngineEventV1(event);
       if (event.error) {
         setMessage(event.error);
       } else if (['downloading', 'verifying', 'ready', 'installing'].includes(event.state)) {
         setMessage(null);
       }
     });
-    const appState = AppState.addEventListener('change', (state) => {
-      if (state === 'active') refreshEnvironment();
+    const appState = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') void refreshEnvironment();
     });
     return () => {
       unsubscribe();
@@ -88,8 +72,8 @@ export function MobileUpdateExecutionSection({ result }: { result: MobileRelease
   }, [refreshEnvironment]);
 
   const runDirectUpdate = async () => {
-    const apk = result?.releaseTruth.mobile.apk;
-    const integrity = result?.integrity.artifact;
+    const apk = state.result?.releaseTruth.mobile.apk;
+    const integrity = state.result?.integrity.artifact;
     if (!apk || !integrity) return;
     setMessage(null);
     try {
@@ -102,31 +86,23 @@ export function MobileUpdateExecutionSection({ result }: { result: MobileRelease
       });
       if (response.code === 'permission-required') {
         setMessage('permission-required');
+        await refreshMobileApplicationUpdateEnvironmentV1();
       } else if (response.code === 'direct-build-required') {
         setMessage('direct-build-required');
+        await refreshMobileApplicationUpdateEnvironmentV1();
       }
-    } catch (error) {
-      setEngineState('failed');
-      setMessage(error instanceof Error ? error.message : 'Direct update failed.');
+    } catch {
+      publishMobileApplicationUpdateEngineEventV1({
+        state: 'failed',
+        error: 'Orion could not finish the app update. Try again.',
+      });
     }
   };
 
-  const permissionRequired = !!environment
-    && environment.requestInstallPackagesDeclared
-    && !environment.canRequestPackageInstalls;
-  const directReady = result?.state === 'available'
-    && !!environment
-    && environment.productionSignerMatched
-    && environment.requestInstallPackagesDeclared
-    && environment.canRequestPackageInstalls
-    && result.integrity.status === 'ready';
-  const showPermissionAction = result?.state === 'available' && permissionRequired;
-  const statusLabel = appUpdateStatusLabel(result, environment, engineState);
-  const feedback = message === 'permission-required'
-    ? 'Android needs permission before Orion can install this update.'
-    : message === 'direct-build-required'
-      ? 'App updates are not available in this build.'
-      : appUpdateFeedback(result, engineState, !!message);
+  const showPermissionAction = state.status === 'permission-required';
+  const directReady = isMobileApplicationUpdateInstallReadyV1(state)
+    && !['downloading', 'verifying', 'installing'].includes(state.status);
+  const feedback = appUpdateFeedback(state, message);
 
   return (
     <View style={styles.root}>
@@ -139,26 +115,20 @@ export function MobileUpdateExecutionSection({ result }: { result: MobileRelease
           <Text style={[styles.description, { color: theme.textSecondary }]}>Orion verifies every app update before installation.</Text>
         </View>
         <View style={[styles.statusChip, { backgroundColor: theme.surfaceHover, borderColor: theme.border }]}>
-          <Text style={[styles.statusChipText, { color: engineState === 'failed' ? theme.warning : theme.accent }]}>{statusLabel}</Text>
+          <Text style={[styles.statusChipText, { color: state.status === 'failed' ? theme.warning : theme.accent }]}>{presentation.label}</Text>
         </View>
       </View>
 
       {busy ? (
         <View style={styles.progressRow}>
-          <Text style={[styles.message, { color: theme.textSecondary }]}>
-            {engineState === 'downloading'
-              ? 'Downloading update…'
-              : engineState === 'verifying'
-                ? 'Verifying update…'
-                : 'Opening Android installer…'}
-          </Text>
-          {progress !== null ? (
-            <Text style={[styles.progress, { color: theme.accent }]}>{Math.round(progress * 100)}%</Text>
+          <Text style={[styles.message, { color: theme.textSecondary }]}>{presentation.description}</Text>
+          {state.progress !== null ? (
+            <Text style={[styles.progress, { color: theme.accent }]}>{Math.round(state.progress * 100)}%</Text>
           ) : null}
         </View>
       ) : null}
 
-      {feedback ? <Text style={[styles.message, { color: engineState === 'failed' ? theme.warning : theme.textSecondary }]}>{feedback}</Text> : null}
+      {feedback ? <Text style={[styles.message, { color: state.status === 'failed' ? theme.warning : theme.textSecondary }]}>{feedback}</Text> : null}
 
       {showPermissionAction ? (
         <ActionButton
@@ -172,7 +142,7 @@ export function MobileUpdateExecutionSection({ result }: { result: MobileRelease
         />
       ) : directReady ? (
         <ActionButton
-          label={engineState === 'failed' ? 'Retry update' : 'Download & install'}
+          label={state.status === 'failed' ? 'Retry update' : 'Download & install'}
           icon="download-outline"
           disabled={busy}
           onPress={runDirectUpdate}

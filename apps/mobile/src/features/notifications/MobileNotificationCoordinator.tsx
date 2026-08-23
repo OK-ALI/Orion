@@ -13,7 +13,8 @@ import {
   initializeMobileNotificationsV1,
   subscribeMobileNotificationPreferencesV1,
 } from '../../services/mobileNotifications';
-import { checkMobileReleaseTruthV1, getMobileUpdateChannelV1 } from '../../services/mobileReleaseTruth';
+import { getMobileUpdateChannelV1 } from '../../services/mobileReleaseTruth';
+import { checkMobileApplicationUpdateStateV1 } from '../../services/mobileApplicationUpdateState';
 import { mmkvStorageAdapter } from '../../services/storageAdapter';
 import { subscribeMobileSourceHealthV2 } from '../../services/sourceHealth';
 
@@ -33,6 +34,7 @@ export function MobileNotificationCoordinator() {
   const [preferenceRevision, setPreferenceRevision] = useState(0);
   const availabilityBusyRef = useRef(false);
   const updateBusyRef = useRef(false);
+  const updateSessionCheckCompletedRef = useRef(false);
   const networkInitializedRef = useRef(false);
   const previouslyUnavailableRef = useRef(false);
   const syncPreviousRef = useRef<Record<SyncDomain, string>>({
@@ -118,23 +120,37 @@ export function MobileNotificationCoordinator() {
   }, [network.internetReachable, network.online, saved, savedOrder]);
 
   const runUpdateCheck = useCallback(async () => {
-    const preferences = getMobileNotificationPreferencesV1();
-    if (!preferences.enabled || !preferences.categories.appUpdates) return;
     if (!network.online || network.internetReachable === false || updateBusyRef.current) return;
     const now = Date.now();
     const last = Number(mmkvStorageAdapter.get(UPDATE_POLL_KEY) || 0);
-    if (Number.isFinite(last) && now - last < UPDATE_POLL_INTERVAL_MS) return;
+    if (
+      updateSessionCheckCompletedRef.current
+      && Number.isFinite(last)
+      && now - last < UPDATE_POLL_INTERVAL_MS
+    ) return;
+
     updateBusyRef.current = true;
+    updateSessionCheckCompletedRef.current = true;
     mmkvStorageAdapter.set(UPDATE_POLL_KEY, String(now));
     try {
-      const result = await checkMobileReleaseTruthV1(getMobileUpdateChannelV1());
-      const release = result.releaseTruth.mobile.release;
-      if (result.state !== 'available' || result.integrity.status !== 'ready' || !release) return;
+      const updateState = await checkMobileApplicationUpdateStateV1(getMobileUpdateChannelV1());
+      if (updateState.status === 'failed') {
+        mmkvStorageAdapter.set(UPDATE_POLL_KEY, String(Date.now() - UPDATE_POLL_INTERVAL_MS + UPDATE_FAILURE_RETRY_MS));
+        return;
+      }
+
+      const result = updateState.result;
+      const release = result?.releaseTruth.mobile.release;
+      const actionable = updateState.status === 'available' || updateState.status === 'permission-required';
+      if (!actionable || !result || !release) return;
+
       await deliverMobileNotificationV1({
         category: 'appUpdates',
         dedupeKey: `mobile-update:${result.channel}:${release.version}`,
         title: 'Orion update available',
-        body: `Orion Mobile ${release.version} is ready to install. Open Updates to see what is new.`,
+        body: updateState.status === 'permission-required'
+          ? `Orion Mobile ${release.version} is available. Open Updates to allow installation.`
+          : `Orion Mobile ${release.version} is ready to install. Open Updates to see what is new.`,
         target: { target: 'settings', section: 'updates' },
       });
     } catch {

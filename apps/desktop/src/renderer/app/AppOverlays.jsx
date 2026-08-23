@@ -88,7 +88,7 @@ export default function AppOverlays({ model }) {
                 cursor: "pointer",
               }}
             >
-              Install Update
+              View Update
             </button>
             <button
               onClick={() => setUpdateBanner(null)}

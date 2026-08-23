@@ -55,7 +55,7 @@ test("P9.1 Mobile activates Updates with local channel persistence and honest in
   assert.match(service, /resolveOrionReleaseTruthV1/);
   assert.match(service, /Platform\.Version/);
   assert.match(content, /Update channel/);
-  assert.match(content, /<MobileUpdateExecutionSection result=\{result\} \/>/);
+  assert.match(content, /<MobileUpdateExecutionSection state=\{appUpdateState\} \/>/);
   assert.match(content, /Last checked/);
   assert.match(settings, /<UpdatesSettingsContent \/>/);
 });
