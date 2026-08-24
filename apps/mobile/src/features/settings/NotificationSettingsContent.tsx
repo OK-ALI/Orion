@@ -25,6 +25,7 @@ const CATEGORY_ORDER: readonly MobileNotificationCategoryV1[] = [
   'offlineRecovery',
   'providerHealth',
   'watchlist',
+  'downloads',
 ];
 
 type QuietTimeField = 'start' | 'end';

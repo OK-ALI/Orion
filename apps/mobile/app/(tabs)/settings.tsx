@@ -28,6 +28,7 @@ import { SettingsSectionNavigator } from "../../src/features/settings/SettingsSe
 import { AccountSettingsContent } from "../../src/features/settings/AccountSettingsContent";
 import { UpdatesSettingsContent } from "../../src/features/settings/UpdatesSettingsContent";
 import { NotificationSettingsContent } from "../../src/features/settings/NotificationSettingsContent";
+import { DownloadSettingsContent } from "../../src/features/downloads/DownloadSettingsContent";
 import {
   PERFORMANCE_PROFILE_LABELS,
   PERFORMANCE_PROFILE_OPTIONS,
@@ -94,6 +95,7 @@ export default function MobileSettingsScreen() {
   const accessibility = MOBILE_SETTINGS_SECTION_BY_ID.accessibility;
   const notifications = MOBILE_SETTINGS_SECTION_BY_ID.notifications;
   const updates = MOBILE_SETTINGS_SECTION_BY_ID.updates;
+  const downloads = MOBILE_SETTINGS_SECTION_BY_ID.downloads;
   const scrollRef = React.useRef<ScrollView>(null);
   const sectionOffsets = React.useRef<Partial<Record<MobileSettingsSectionId, number>>>({});
   const pendingDeepLinkSectionRef = React.useRef<MobileSettingsSectionId | null>(null);
@@ -354,6 +356,17 @@ export default function MobileSettingsScreen() {
           onLayout={recordSectionLayout('updates')}
         >
           <UpdatesSettingsContent />
+        </SettingsSection>
+
+        <SettingsSection
+          sectionId="downloads"
+          icon="download-outline"
+          title={downloads.label}
+          description="Offline location, quality and subtitle defaults."
+          theme={theme}
+          onLayout={recordSectionLayout('downloads')}
+        >
+          <DownloadSettingsContent />
         </SettingsSection>
 
         <View style={[styles.notice, { backgroundColor: theme.elevated, borderColor: theme.border }]}>

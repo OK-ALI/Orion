@@ -20,6 +20,7 @@ import { useMediaDetailWatched } from './useMediaDetailWatched';
 import { EpisodeWatchedButton, MovieWatchedBadge, SeasonWatchedControl, WatchedFeedback } from './WatchedControls';
 import { MovieCollectionTab } from './MovieCollectionTab';
 import { isVerifiedPlaybackEvidence } from '../library/playbackLibrary';
+import { createMobileDownloadTargetV1, type MobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 
 function EpisodeOverview({ overview, theme }: { overview: string; theme: any }) {
   const [expanded, setExpanded] = useState(false);
@@ -81,7 +82,7 @@ export default function MediaDetailScreen() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'info' | 'episodes' | 'cast' | 'recommended' | 'collection'>('info');
-  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [downloadTarget, setDownloadTarget] = useState<MobileDownloadTargetV1 | null>(null);
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [showTrailerModal, setShowTrailerModal] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState(1);
@@ -673,7 +674,18 @@ export default function MediaDetailScreen() {
                               style={({ pressed }) => [styles.epDownloadBtn, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && { opacity: 0.7 }]}
                               onPress={(e) => {
                                 e.stopPropagation();
-                                setShowDownloadModal(true);
+                                setDownloadTarget(createMobileDownloadTargetV1({
+                                  id,
+                                  mediaType: type,
+                                  title: ep.name,
+                                  year,
+                                  seriesTitle: title,
+                                  season: selectedSeason,
+                                  episode: ep.episode_number,
+                                  episodeTitle: ep.name,
+                                  posterPath: data.poster_path || null,
+                                  backdropPath: ep.still_path || data.backdrop_path || null,
+                                }));
                               }}
                             >
                               <Ionicons name="lock-closed-outline" size={12} color={theme.textMuted} />
@@ -692,11 +704,9 @@ export default function MediaDetailScreen() {
         </View>
       </Animated.ScrollView>
       <DownloadModal
-        visible={showDownloadModal}
-        onClose={() => setShowDownloadModal(false)}
-        title={title}
-        tmdbId={id}
-        type={type}
+        visible={Boolean(downloadTarget)}
+        onClose={() => setDownloadTarget(null)}
+        target={downloadTarget}
       />
       <Modal visible={showMoreSheet} transparent animationType="fade" onRequestClose={() => setShowMoreSheet(false)}>
         <View style={styles.moreOverlay}>
@@ -735,14 +745,22 @@ export default function MediaDetailScreen() {
               <Ionicons name="share-social-outline" size={20} color={theme.text} />
               <Text style={[styles.moreActionText, { color: theme.text }]}>Share title</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Mobile downloads information" style={styles.moreAction} onPress={() => {
+            <Pressable accessibilityRole="button" accessibilityLabel="Mobile download options" style={styles.moreAction} onPress={() => {
               setShowMoreSheet(false);
-              setShowDownloadModal(true);
+              setDownloadTarget(createMobileDownloadTargetV1({
+                id,
+                mediaType: type,
+                title,
+                year,
+                seriesTitle: type === 'tv' ? title : null,
+                posterPath: data.poster_path || null,
+                backdropPath: data.backdrop_path || null,
+              }));
             }}>
               <Ionicons name="lock-closed-outline" size={20} color={theme.textMuted} />
               <View style={{ flex: 1 }}>
-                <Text style={[styles.moreActionText, { color: theme.text }]}>Mobile downloads</Text>
-                <Text style={[styles.moreActionDescription, { color: theme.textMuted }]}>Locked during native downloader research</Text>
+                <Text style={[styles.moreActionText, { color: theme.text }]}>Download options</Text>
+                <Text style={[styles.moreActionDescription, { color: theme.textMuted }]}>{type === 'tv' ? 'Choose an episode for offline playback' : 'Save for offline playback when available'}</Text>
               </View>
             </Pressable>
             <View style={[styles.moreNotice, { backgroundColor: theme.surface, borderColor: theme.border }]}>

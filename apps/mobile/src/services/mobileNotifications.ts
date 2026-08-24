@@ -6,14 +6,16 @@ export type MobileNotificationCategoryV1 =
   | 'syncFailures'
   | 'offlineRecovery'
   | 'providerHealth'
-  | 'watchlist';
+  | 'watchlist'
+  | 'downloads';
 
 export type MobileNotificationPermissionV1 = 'unsupported' | 'undetermined' | 'granted' | 'denied';
 
 export type MobileNotificationTargetV1 =
   | { target: 'home' }
   | { target: 'settings'; section: 'account' | 'updates' | 'notifications' }
-  | { target: 'media'; mediaId: string; mediaType: 'movie' | 'tv' };
+  | { target: 'media'; mediaId: string; mediaType: 'movie' | 'tv' }
+  | { target: 'downloads' };
 
 export interface MobileNotificationPreferencesV1 {
   schemaVersion: 1;
@@ -58,6 +60,10 @@ export const MOBILE_NOTIFICATION_CATEGORY_COPY_V1: Readonly<Record<
     label: 'My List releases',
     description: 'Saved movies, shows and anime release or become available to watch.',
   }),
+  downloads: Object.freeze({
+    label: 'Downloads',
+    description: 'Completion and problem alerts.',
+  }),
 });
 
 const PREFERENCES_KEY = 'orion.mobile.notifications.preferences.v1';
@@ -74,6 +80,7 @@ export const DEFAULT_MOBILE_NOTIFICATION_PREFERENCES_V1: MobileNotificationPrefe
     offlineRecovery: true,
     providerHealth: false,
     watchlist: false,
+    downloads: true,
   }),
   quietHours: Object.freeze({
     enabled: false,
@@ -111,6 +118,7 @@ function normalizePreferences(value: any): MobileNotificationPreferencesV1 {
       offlineRecovery: value.categories?.offlineRecovery !== false,
       providerHealth: value.categories?.providerHealth === true,
       watchlist: value.categories?.watchlist === true,
+      downloads: value.categories?.downloads !== false,
     },
     quietHours: {
       enabled: value.quietHours?.enabled === true,
@@ -235,6 +243,7 @@ async function ensureAndroidChannelsV1(): Promise<void> {
     ['orion-updates', 'Orion updates', Notifications.AndroidImportance.DEFAULT],
     ['orion-sync', 'Orion sync', Notifications.AndroidImportance.DEFAULT],
     ['orion-availability', 'Orion availability', Notifications.AndroidImportance.DEFAULT],
+    ['orion-downloads', 'Orion downloads', Notifications.AndroidImportance.DEFAULT],
     ['orion-status', 'Orion status', Notifications.AndroidImportance.LOW],
   ] as const;
   for (const [id, name, importance] of channels) {
@@ -295,6 +304,7 @@ function channelForCategory(category: MobileNotificationCategoryV1): string {
   if (category === 'appUpdates') return 'orion-updates';
   if (category === 'syncFailures') return 'orion-sync';
   if (category === 'watchlist') return 'orion-availability';
+  if (category === 'downloads') return 'orion-downloads';
   return 'orion-status';
 }
 
@@ -364,6 +374,7 @@ export function resolveMobileNotificationTargetV1(data: unknown): MobileNotifica
   if (!data || typeof data !== 'object') return null;
   const value = data as Record<string, unknown>;
   if (value.target === 'home') return { target: 'home' };
+  if (value.target === 'downloads') return { target: 'downloads' };
   if (
     value.target === 'settings'
     && (value.section === 'account' || value.section === 'updates' || value.section === 'notifications')

@@ -22,6 +22,8 @@ export function MobileNotificationResponseRouter() {
         router.push('/');
       } else if (target.target === 'settings') {
         router.push({ pathname: '/(tabs)/settings', params: { section: target.section } });
+      } else if (target.target === 'downloads') {
+        router.push('/(tabs)/downloads');
       } else {
         router.push({
           pathname: '/media/[id]',

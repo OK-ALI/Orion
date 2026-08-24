@@ -136,9 +136,10 @@ test("Phase 7 Settings uses a scalable active-only section architecture", () => 
   assert.match(architecture, /id: 'appearance', label: 'Appearance', status: 'active'/);
   assert.match(architecture, /id: 'accessibility', label: 'Accessibility', status: 'active'/);
   assert.match(architecture, /id: 'updates', label: 'Updates', status: 'active'/);
-  for (const id of ["sync", "playback", "connect", "downloads"]) {
+  for (const id of ["sync", "playback", "connect"]) {
     assert.match(architecture, new RegExp(`id: '${id}', label: '[^']+', status: 'reserved'`));
   }
+  assert.match(architecture, /id: 'downloads', label: 'Downloads', status: 'active'/);
 
   assert.match(settings, /MOBILE_SETTINGS_SECTION_BY_ID\.account/);
   assert.match(settings, /<AccountSettingsContent \/>/);
@@ -146,6 +147,8 @@ test("Phase 7 Settings uses a scalable active-only section architecture", () => 
   assert.match(settings, /MOBILE_SETTINGS_SECTION_BY_ID\.accessibility/);
   assert.match(settings, /MOBILE_SETTINGS_SECTION_BY_ID\.updates/);
   assert.match(settings, /<UpdatesSettingsContent \/>/);
+  assert.match(settings, /MOBILE_SETTINGS_SECTION_BY_ID\.downloads/);
+  assert.match(settings, /<DownloadSettingsContent \/>/);
   assert.match(settings, /Follow system appearance/);
   assert.match(settings, /Reduced motion/);
   assert.match(settings, /Additional settings stay hidden until their Mobile features are ready\./);

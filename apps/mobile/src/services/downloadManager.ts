@@ -1,24 +1,28 @@
 /**
- * Mobile downloader boundary.
+ * Mobile downloader presentation boundary.
  *
- * Protected/segmented downloads are deliberately unavailable until Orion has
- * a native, resumable background engine. This module must never simulate
- * progress, cache browser Blob URLs, or report an embed page as a media file.
+ * P10.1 establishes durable contracts, preferences and repository ownership.
+ * Long-running transfer execution remains unavailable until the Android-native
+ * Phase 10 engine is present. This module must never simulate progress or
+ * report an unfinished asset as complete.
  */
+
+import type { OfflineMediaEntryV1 } from '@orion/shared/types';
+import { listOfflineMediaEntriesV1 } from '../features/downloads/downloadRepository';
 
 export const MOBILE_DOWNLOADER_AVAILABLE = false;
 
 export interface MobileDownloadCapability {
   available: false;
-  state: "locked";
+  state: 'waiting-for-engine';
   reason: string;
 }
 
 export function getMobileDownloadCapability(): MobileDownloadCapability {
   return {
     available: false,
-    state: "locked",
-    reason: "Native protected-stream downloads are under development.",
+    state: 'waiting-for-engine',
+    reason: 'Downloads are not available on this build yet.',
   };
 }
 
@@ -26,10 +30,10 @@ export async function startDownloadItem(): Promise<never> {
   throw new Error(getMobileDownloadCapability().reason);
 }
 
-export async function getDownloadedItems(): Promise<[]> {
-  return [];
+export async function getDownloadedItems(): Promise<OfflineMediaEntryV1[]> {
+  return listOfflineMediaEntriesV1();
 }
 
-export async function deleteDownloadItem(): Promise<[]> {
-  return [];
+export async function deleteDownloadItem(): Promise<never> {
+  throw new Error('Download deletion will be available with the native download engine.');
 }

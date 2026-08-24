@@ -31,7 +31,7 @@ export const MOBILE_SETTINGS_SECTIONS: readonly MobileSettingsSectionDefinition[
   { id: 'notifications', label: 'Notifications', status: 'active' },
   { id: 'updates', label: 'Updates', status: 'active' },
   { id: 'connect', label: 'Connect', status: 'reserved' },
-  { id: 'downloads', label: 'Downloads', status: 'reserved' },
+  { id: 'downloads', label: 'Downloads', status: 'active' },
 ] as const;
 
 export const MOBILE_ACTIVE_SETTINGS_SECTIONS = MOBILE_SETTINGS_SECTIONS.filter(
