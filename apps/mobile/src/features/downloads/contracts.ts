@@ -7,14 +7,18 @@ import type {
 
 export type {
   MobileDownloadAssetV1,
+  MobileDownloadCandidatePreflightV1,
   MobileDownloadCandidateV1,
   MobileDownloadDestinationModeV1,
   MobileDownloadJobStateV1,
   MobileDownloadJobV1,
   MobileDownloadMediaIdentityV1,
   MobileDownloadPreferencesV1,
+  MobileDownloadPreflightStateV1,
+  MobileDownloadReachabilityV1,
   MobileDownloadProgressV1,
   MobileDownloadQualityV1,
+  MobileDownloadStorageRequirementV1,
   MobileDownloadStorageTargetV1,
   OfflineMediaEntryV1,
 } from '@orion/shared/types';

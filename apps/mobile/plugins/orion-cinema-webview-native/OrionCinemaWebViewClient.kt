@@ -54,6 +54,18 @@ class OrionCinemaWebViewClient(
   override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
     val decision = classify(request.url, request.isForMainFrame, isPopup = false)
     emit(view, decision)
+    val current = manifest
+    if (decision.decision != "blocked" && current != null) {
+      OrionDownloadRequestContextBroker.observeRequest(
+        reactContext = reactContext,
+        request = request,
+        sourceId = current.sourceId,
+        sessionId = current.sessionId,
+        providerClass = current.providerClass,
+        downloadCaptureEnabled = current.downloadCaptureEnabled,
+        allowedMediaOrigins = current.mediaOrigins,
+      )
+    }
     return if (decision.decision == "blocked") emptyBlockedResponse() else null
   }
 
@@ -202,6 +214,8 @@ private data class ShieldRule(
 private data class ShieldManifest(
   val sourceId: String,
   val sessionId: String,
+  val providerClass: String?,
+  val downloadCaptureEnabled: Boolean,
   val mode: String,
   val allowedNavigationOrigins: List<String>,
   val requiredOrigins: List<String>,
@@ -234,6 +248,8 @@ private data class ShieldManifest(
         ShieldManifest(
           json.optString("sourceId", ""),
           json.optString("sessionId", ""),
+          json.optString("providerClass", "").trim().takeIf { it.isNotEmpty() },
+          json.optBoolean("downloadCaptureEnabled", false),
           json.optString("mode", "observe"),
           strings("allowedNavigationOrigins"),
           strings("requiredOrigins"),

@@ -11,6 +11,8 @@ const NativeCinemaWebView = Platform.OS === "android"
 export interface OrionCinemaWebViewProps extends WebViewProps {
   shieldManifest: ProviderRequestManifestV1;
   shieldSessionId: string;
+  downloadCaptureEnabled?: boolean;
+  downloadProviderClass?: string | null;
   onNativeShieldEvidence?(payload: string): void;
   onNativeSingleTap?(): void;
 }
@@ -20,9 +22,22 @@ export interface OrionCinemaWebViewProps extends WebViewProps {
  * playback. The custom manager is deliberately opt-in through nativeConfig.
  */
 export const OrionCinemaWebView = forwardRef<WebViewType, OrionCinemaWebViewProps>(
-  ({ shieldManifest, shieldSessionId, onNativeShieldEvidence, onNativeSingleTap, ...props }, ref) => {
+  ({
+    shieldManifest,
+    shieldSessionId,
+    downloadCaptureEnabled = false,
+    downloadProviderClass = null,
+    onNativeShieldEvidence,
+    onNativeSingleTap,
+    ...props
+  }, ref) => {
     const lastSingleTapSequence = useRef(0);
-    const serializedManifest = useMemo(() => JSON.stringify({ ...shieldManifest, sessionId: shieldSessionId }), [shieldManifest, shieldSessionId]);
+    const serializedManifest = useMemo(() => JSON.stringify({
+      ...shieldManifest,
+      sessionId: shieldSessionId,
+      downloadCaptureEnabled,
+      providerClass: downloadProviderClass,
+    }), [downloadCaptureEnabled, downloadProviderClass, shieldManifest, shieldSessionId]);
     const nativeConfig = useMemo(() => NativeCinemaWebView
       ? {
         component: NativeCinemaWebView as never,

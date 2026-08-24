@@ -8,6 +8,35 @@ export type MobileDownloadExpiryV1 = 'stable' | 'session' | 'time-bounded' | 'ex
 export type MobileDownloadQualityV1 = 'best' | '1080p' | '720p' | '480p';
 export type MobileDownloadSubtitlePreferenceV1 = 'preferred' | 'none';
 
+export type MobileDownloadPreflightStateV1 =
+  | 'checking'
+  | 'ready'
+  | 'unsupported'
+  | 'protected'
+  | 'expired'
+  | 'unreachable'
+  | 'action-required';
+export type MobileDownloadReachabilityV1 = 'reachable' | 'unreachable' | 'unknown';
+export type MobileDownloadStorageRequirementV1 = 'known' | 'unknown';
+
+export interface MobileDownloadCandidatePreflightV1 {
+  schemaVersion: 1;
+  candidateId: string;
+  state: MobileDownloadPreflightStateV1;
+  reachability: MobileDownloadReachabilityV1;
+  resolvedManifestKind: Exclude<MobileDownloadManifestKindV1, 'extensionless'>;
+  expiry: MobileDownloadExpiryV1;
+  protection: MobileDownloadProtectionV1;
+  requestContextReady: boolean;
+  descendantCount: number;
+  requiredBytes: number | null;
+  storageRequirement: MobileDownloadStorageRequirementV1;
+  orionLibraryFreeBytes: number | null;
+  reasonCode: string | null;
+  reason: string | null;
+  checkedAt: number;
+}
+
 export type MobileDownloadJobStateV1 =
   | 'queued'
   | 'preflighting'
@@ -57,6 +86,7 @@ export interface MobileDownloadCandidateV1 {
   expiry: MobileDownloadExpiryV1;
   protection: MobileDownloadProtectionV1;
   availableQualities: MobileDownloadQualityV1[];
+  preflight: MobileDownloadCandidatePreflightV1;
   capturedAt: number;
 }
 

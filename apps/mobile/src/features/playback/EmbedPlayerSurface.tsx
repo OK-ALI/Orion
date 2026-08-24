@@ -60,6 +60,8 @@ import { PresentationSheet } from '../../components/player/PresentationSheet';
 import { EmbeddedPlayerHud } from './EmbeddedPlayerHud';
 import { mergeShieldEvidence, parseShieldEvidenceEnvelope } from './shieldEvidenceEnvelope';
 import { PlayerStateOverlay } from '../../components/player/PlayerStateOverlay';
+import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
+import { beginMobileDownloadCaptureSessionV1 } from '../downloads/downloadCandidateCapture';
 
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
   embedUrl: string;
@@ -196,6 +198,19 @@ export function EmbedPlayerSurface({
     recordPlayback,
     onVerifiedCompletion: onVerifiedPlaybackCompletion,
   });
+  const playbackSessionId = telemetry.getSession().id;
+  const downloadTarget = useMemo(() => createMobileDownloadTargetV1({
+    id,
+    mediaType: type,
+    title: type === 'tv' ? (seriesTitle || title || 'Series') : (title || 'Movie'),
+    year,
+    seriesTitle: type === 'tv' ? (seriesTitle || title || null) : null,
+    season: type === 'tv' && Number.isFinite(Number(season)) ? Math.max(0, Math.trunc(Number(season))) : null,
+    episode: type === 'tv' && Number.isFinite(Number(episode)) ? Math.max(0, Math.trunc(Number(episode))) : null,
+    episodeTitle: type === 'tv' ? (episodeTitle || title || null) : null,
+    posterPath: posterPath || null,
+    backdropPath: backdropPath || null,
+  }), [backdropPath, episode, episodeTitle, id, posterPath, season, seriesTitle, title, type, year]);
   const sourceSheetOverlay = ['sources', 'subtitles', 'shield', 'diagnostics'].includes(controller.state.overlay);
   const showControls = controller.state.hudState !== 'hidden';
   const presentation = controller.state.presentation;
@@ -205,11 +220,11 @@ export function EmbedPlayerSurface({
     else if (sourceSheetOverlay) controller.closeOverlay();
   };
   const telemetryScript = useMemo(() => createEmbeddedTelemetryScript({
-    sessionId: telemetry.getSession().id,
+    sessionId: playbackSessionId,
     sourceId,
     strategy: source?.progressStrategy || 'none',
     expectedOrigins: telemetryExpectedOrigins,
-  }), [sourceId]);
+  }), [playbackSessionId, sourceId]);
   const providerPresentationScript = useMemo(
     () => createProviderPresentationScript(sourceId),
     [sourceId],
@@ -228,6 +243,17 @@ export function EmbedPlayerSurface({
       if (Platform.OS !== 'web' && previousLock != null) ScreenOrientation.lockAsync(previousLock).catch(() => {});
     };
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android' || source?.supportsDownloads !== true) return undefined;
+    return beginMobileDownloadCaptureSessionV1({
+      playbackSessionId,
+      sourceId,
+      providerClass: source.releaseStatus,
+      itemKey: downloadTarget.itemKey,
+      media: downloadTarget.media,
+    });
+  }, [downloadTarget, playbackSessionId, source?.releaseStatus, source?.supportsDownloads, sourceId]);
 
   useEffect(() => {
     loadStartedAt.current = Date.now();
@@ -261,7 +287,7 @@ export function EmbedPlayerSurface({
     const command = (expression: string) => webViewRef.current?.injectJavaScript(`(() => { const media = document.querySelector('video'); if (media) { ${expression}; return true; } return false; })(); true;`);
     const adapter: MobilePlayerSurfaceAdapter = {
       surface: 'embed',
-      sessionId: telemetry.getSession().id,
+      sessionId: playbackSessionId,
       getSnapshot: () => controller.state.playback,
       play: () => command('media.play().catch(() => {})'),
       pause: () => command('media.pause()'),
@@ -623,7 +649,7 @@ export function EmbedPlayerSurface({
           />
         ) : (
           <OrionCinemaWebView
-          key={`${sourceId}:${telemetry.getSession().id}:${surfaceRetryKey}`}
+          key={`${sourceId}:${playbackSessionId}:${surfaceRetryKey}`}
           ref={webViewRef}
           shieldManifest={shieldManifest || {
             schemaVersion: 1,
@@ -637,7 +663,9 @@ export function EmbedPlayerSurface({
             popupPolicy: 'block',
             rules: [],
           }}
-            shieldSessionId={telemetry.getSession().id}
+            shieldSessionId={playbackSessionId}
+            downloadCaptureEnabled={source?.supportsDownloads === true}
+            downloadProviderClass={source?.releaseStatus || null}
             onNativeShieldEvidence={handleNativeShieldEvidence}
             onNativeSingleTap={controller.toggleChromeFromUserTap}
             source={{ uri: shieldedEmbedUrl }}
