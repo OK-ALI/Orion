@@ -57,8 +57,8 @@ test('P10.3 media and episode surfaces graduate from Offline info to Download', 
   assert.doesNotMatch(detail, />Offline info<\/Text>/);
 });
 
-test('P10.3 fragment destination boundary stays truthful at user start', () => {
-  assert.match(start, /preferences\.defaultDestination !== 'orion-library'/);
-  assert.match(start, /Stream downloads currently save to Orion Library only/);
+test('P10.4C fragment destination boundary stays truthful at user start', () => {
+  assert.match(start, /destination === 'device-storage'/);
+  assert.match(start, /candidate\.capabilities\.deviceStorage/);
   assert.doesNotMatch(start, /chooseNativeDeviceStorageTargetV1/);
 });

@@ -1,6 +1,3 @@
-import { SUBTITLE_LANGUAGES } from '@orion/shared/tokens';
-import * as SecureStore from 'expo-secure-store';
-
 export interface SubtitleTrack {
   id: string;
   file_id: string;
@@ -25,12 +22,12 @@ export interface SubtitleSearchOutcome {
   state: SubtitleSearchState;
 }
 
-const SUBDL_KEY_STORAGE = 'orion_mobile_subdl_api_key';
-
-export async function setSubtitleProviderKey(provider: 'subdl', value: string | null) {
-  if (provider !== 'subdl') return;
-  if (value) await SecureStore.setItemAsync(SUBDL_KEY_STORAGE, value);
-  else await SecureStore.deleteItemAsync(SUBDL_KEY_STORAGE);
+/**
+ * Compatibility shim retained for older callers. Provider credentials are no longer
+ * accepted or persisted on-device; Orion Mobile talks only to the subtitle broker.
+ */
+export async function setSubtitleProviderKey(_provider: 'subdl', _value: string | null): Promise<void> {
+  return;
 }
 
 export const SUPPORTED_LANGUAGES = [
@@ -63,22 +60,37 @@ const LANG_MAP: Record<string, string> = {
   ru: 'Russian',
 };
 
-function isSafeSubtitleUrl(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:';
-  } catch {
-    return false;
-  }
-}
-
 function classifyNetworkFailure(error: unknown): 'offline' | 'provider-failure' {
   const message = String(error || '').toLowerCase();
   return /network|offline|failed to fetch|timed out|timeout/.test(message) ? 'offline' : 'provider-failure';
 }
 
-/** Fetch subtitle search results without surfacing provider URLs to presentation callers. */
+function subtitleBrokerBaseUrl(): string | null {
+  const raw = process.env.EXPO_PUBLIC_ORION_SUBTITLE_BROKER_URL?.trim();
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'https:') return null;
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+}
+
+function safeBrokerSubtitleUrl(value: unknown, brokerOrigin: string): value is string {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.origin === brokerOrigin && url.pathname.startsWith('/v1/subtitles/file/');
+  } catch {
+    return false;
+  }
+}
+
+/** Fetch subtitle search results through Orion's server-side credential broker. */
 export async function searchSubtitlesWithOutcome(params: {
   tmdbId: string;
   mediaType: 'movie' | 'tv';
@@ -86,103 +98,64 @@ export async function searchSubtitlesWithOutcome(params: {
   episode?: number;
   languages?: string;
 }): Promise<SubtitleSearchOutcome> {
+  const brokerBase = subtitleBrokerBaseUrl();
+  if (!brokerBase) return { tracks: [], state: 'provider-failure' };
+
   const { tmdbId, mediaType, season = 1, episode = 1, languages = 'en' } = params;
-  const results: SubtitleTrack[] = [];
-  const storedSubdlApiKey = await SecureStore.getItemAsync(SUBDL_KEY_STORAGE).catch(() => null);
-  const bundledSubdlApiKey = process.env.EXPO_PUBLIC_SUBDL_API_KEY?.trim() || null;
-  const subdlApiKey = storedSubdlApiKey || bundledSubdlApiKey;
-  let sawProviderFailure = false;
-  let sawOffline = false;
-  let sawInvalidFile = false;
-
-  // 1. Fetch from SubDL API if Key present
-  if (subdlApiKey) {
-    try {
-      let subdlUrl = `https://api.subdl.com/api/v1/subtitles?api_key=${encodeURIComponent(subdlApiKey)}&tmdb_id=${tmdbId}&type=${mediaType}&languages=${languages}`;
-      if (mediaType === 'tv') {
-        subdlUrl += `&season_number=${season}&episode_number=${episode}`;
-      }
-
-      const res = await fetch(subdlUrl);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.status && Array.isArray(json.subtitles)) {
-          json.subtitles.forEach((sub: any, idx: number) => {
-            const rawLang = sub.lang || languages;
-            const cleanLang = rawLang.toLowerCase();
-            const langLabel = sub.language_name || LANG_MAP[cleanLang] || cleanLang.toUpperCase();
-            const release = sub.release_name || sub.film_name || sub.name || `${langLabel} Subtitle`;
-
-            const url = sub.url ? (sub.url.startsWith('http') ? sub.url : `https://dl.subdl.com${sub.url}`) : undefined;
-            if (!url || !isSafeSubtitleUrl(url)) {
-              sawInvalidFile = true;
-              return;
-            }
-            results.push({
-              id: `subdl_${sub.id || idx}`,
-              file_id: `subdl_${sub.url || idx}`,
-              lang: cleanLang,
-              langLabel,
-              release_name: release,
-              url,
-              provider: 'subdl',
-            });
-          });
-        }
-      } else {
-        sawProviderFailure = true;
-      }
-    } catch (err) {
-      sawOffline ||= classifyNetworkFailure(err) === 'offline';
-      sawProviderFailure ||= classifyNetworkFailure(err) === 'provider-failure';
-    }
+  const brokerOrigin = new URL(brokerBase).origin;
+  const searchUrl = new URL(`${brokerBase}/v1/subtitles/search`);
+  searchUrl.searchParams.set('tmdb_id', tmdbId);
+  searchUrl.searchParams.set('type', mediaType);
+  searchUrl.searchParams.set('language', languages);
+  if (mediaType === 'tv') {
+    searchUrl.searchParams.set('season', String(season));
+    searchUrl.searchParams.set('episode', String(episode));
   }
 
-  // 2. Wyzie's public search endpoint does not require a bundled credential.
   try {
-    let wyzieUrl = `https://sub.wyzie.ru/search?id=${tmdbId}`;
-    if (mediaType === 'tv') {
-      wyzieUrl += `&season=${season}&episode=${episode}`;
+    const res = await fetch(searchUrl.toString(), { headers: { Accept: 'application/json' } });
+    if (!res.ok) {
+      if (res.status === 404) return { tracks: [], state: 'no-results' };
+      return { tracks: [], state: 'provider-failure' };
     }
 
-      const res = await fetch(wyzieUrl);
-      if (res.ok) {
-      const json = await res.json();
-      if (Array.isArray(json)) {
-        json.forEach((sub: any, idx: number) => {
-          const rawLang = sub.display || sub.language || 'en';
-          const cleanLang = rawLang.toLowerCase();
-          const langLabel = sub.display || LANG_MAP[cleanLang] || cleanLang.toUpperCase();
-          const release = sub.release || sub.filename || sub.media || sub.title || `${langLabel} Subtitle`;
+    const json = await res.json();
+    const rawTracks = Array.isArray(json?.subtitles) ? json.subtitles : [];
+    let sawInvalidFile = false;
+    const tracks: SubtitleTrack[] = [];
 
-          if (!isSafeSubtitleUrl(sub.url)) {
-            sawInvalidFile = true;
-            return;
-          }
-          results.push({
-            id: `wyzie_${sub.id || idx}`,
-            file_id: `wyzie_${sub.url || idx}`,
-            lang: cleanLang,
-            langLabel,
-            release_name: release,
-            url: sub.url,
-            provider: 'wyzie',
-          });
-        });
+    rawTracks.forEach((sub: any, idx: number) => {
+      const provider = sub?.provider === 'subdl' || sub?.provider === 'wyzie' ? sub.provider : null;
+      if (!provider || !safeBrokerSubtitleUrl(sub?.url, brokerOrigin)) {
+        sawInvalidFile = true;
+        return;
       }
-    } else {
-      sawProviderFailure = true;
-    }
-  } catch (err) {
-    sawOffline ||= classifyNetworkFailure(err) === 'offline';
-    sawProviderFailure ||= classifyNetworkFailure(err) === 'provider-failure';
-  }
+      const rawLang = String(sub.lang || languages || 'und');
+      const cleanLang = rawLang.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 12) || 'und';
+      const langLabel = String(sub.langLabel || LANG_MAP[cleanLang] || cleanLang.toUpperCase());
+      const release = String(sub.release_name || `${langLabel} Subtitle`);
+      const id = String(sub.id || `${provider}_${idx}`).replace(/[^a-zA-Z0-9._:-]/g, '').slice(0, 100);
+      tracks.push({
+        id,
+        file_id: String(sub.file_id || id).replace(/[^a-zA-Z0-9._:-]/g, '').slice(0, 120),
+        lang: cleanLang,
+        langLabel,
+        release_name: release,
+        url: sub.url,
+        provider,
+      });
+    });
 
-  if (results.length) return { tracks: results, state: 'available' };
-  if (sawOffline) return { tracks: [], state: 'offline' };
-  if (sawProviderFailure) return { tracks: [], state: 'provider-failure' };
-  if (sawInvalidFile) return { tracks: [], state: 'invalid-file' };
-  return { tracks: [], state: 'no-results' };
+    if (tracks.length) return { tracks, state: 'available' };
+    if (sawInvalidFile) return { tracks: [], state: 'invalid-file' };
+    const state = json?.state;
+    if (state === 'language-unavailable') return { tracks: [], state };
+    if (state === 'offline') return { tracks: [], state };
+    if (state === 'provider-failure') return { tracks: [], state };
+    return { tracks: [], state: 'no-results' };
+  } catch (err) {
+    return { tracks: [], state: classifyNetworkFailure(err) };
+  }
 }
 
 /** Backwards-compatible legacy track-only result. */

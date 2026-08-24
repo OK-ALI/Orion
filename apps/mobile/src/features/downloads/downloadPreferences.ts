@@ -32,11 +32,14 @@ export function normalizeMobileDownloadPreferencesV1(value: unknown): MobileDown
     return defaults();
   }
   const input = value as Partial<MobileDownloadPreferencesV1>;
-  const defaultDestination: MobileDownloadDestinationModeV1 = 'orion-library';
   const normalizedDeviceStorageTarget = normalizeMobileDownloadStorageTargetV1(input.deviceStorageTarget);
-  const deviceStorageTarget = normalizedDeviceStorageTarget?.mode === 'device-storage'
+  const deviceStorageTarget = normalizedDeviceStorageTarget?.mode === 'device-storage' &&
+    normalizedDeviceStorageTarget.writable && normalizedDeviceStorageTarget.persistedPermission && normalizedDeviceStorageTarget.targetId
     ? normalizedDeviceStorageTarget
     : null;
+  const defaultDestination: MobileDownloadDestinationModeV1 = input.defaultDestination === 'device-storage' && deviceStorageTarget
+    ? 'device-storage'
+    : 'orion-library';
   return {
     schemaVersion: 1,
     defaultDestination,

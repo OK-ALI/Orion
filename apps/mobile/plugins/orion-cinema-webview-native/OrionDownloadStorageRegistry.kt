@@ -75,6 +75,15 @@ internal object OrionDownloadStorageRegistry {
     }
   }
 
+  fun deleteDocument(context: Context, uri: Uri): Boolean {
+    if (uri.scheme != "content") return false
+    return try {
+      DocumentsContract.deleteDocument(context.contentResolver, uri)
+    } catch (_: Throwable) {
+      false
+    }
+  }
+
   fun freeBytes(context: Context, handle: String): Long? {
     val tree = resolveTreeUri(context, handle) ?: return null
     val docId = try { DocumentsContract.getTreeDocumentId(tree) } catch (_: Throwable) { return null }

@@ -21,10 +21,9 @@ function orionLibraryTarget(): MobileDownloadStorageTargetV1 {
 }
 
 /**
- * Starts only the HLS/DASH Orion Library path proven by the P10.3 fragment
- * engine. Media request URLs, headers and cookies remain native-only. Subtitle
- * provider URLs are handed to native transiently and never enter public job
- * snapshots or the Download UI.
+ * Starts the Android-owned HLS/DASH fragment engine for either Orion Library
+ * or a persisted SAF Device Storage target. Media request URLs, headers and
+ * cookies remain native-only. Subtitle provider URLs are transient native input.
  */
 export async function startMobileDownloadFromSelectionV1(input: StartMobileDownloadSelectionInputV1): Promise<string> {
   const { target, selection, preferences } = input;
@@ -35,8 +34,17 @@ export async function startMobileDownloadFromSelectionV1(input: StartMobileDownl
   if (selection.resolvedMethod !== 'fragments' || !['hls', 'dash'].includes(candidate.preflight.resolvedManifestKind)) {
     throw new Error('Mobile downloads require a ready HLS or DASH stream. Try another source.');
   }
-  if (preferences.defaultDestination !== 'orion-library') {
-    throw new Error('Stream downloads currently save to Orion Library only.');
+  const destination = preferences.defaultDestination;
+  const storageTarget = destination === 'device-storage' ? preferences.deviceStorageTarget : orionLibraryTarget();
+  if (destination === 'device-storage') {
+    if (!candidate.capabilities.deviceStorage) {
+      throw new Error(candidate.capabilities.deviceStorageBlockedReason || 'This stream cannot be finalized safely to Device Storage.');
+    }
+    if (!storageTarget?.targetId || !storageTarget.writable || !storageTarget.persistedPermission) {
+      throw new Error('Choose a Device Storage folder before starting this download.');
+    }
+  } else if (!candidate.capabilities.orionLibrary) {
+    throw new Error('This source is not ready for Orion Library storage.');
   }
 
   const selectedSubtitleAssetIds = [...new Set(input.selectedSubtitleAssetIds || [])].slice(0, 2);
@@ -47,8 +55,8 @@ export async function startMobileDownloadFromSelectionV1(input: StartMobileDownl
     jobId: createJobId(),
     candidateId: candidate.candidateId,
     media: { ...target.media },
-    destination: 'orion-library',
-    storageTarget: orionLibraryTarget(),
+    destination,
+    storageTarget: storageTarget || orionLibraryTarget(),
     requestedQuality: preferences.preferredQuality,
     selectedSubtitleAssetIds,
     state: 'queued',

@@ -81,10 +81,31 @@ class OrionDownloadEngineModule(
         promise.reject("DOWNLOAD_FRAGMENT_SOURCE_REQUIRED", "Mobile downloads require a ready HLS or DASH stream. Try another source.")
         return
       }
-      if (job.optString("destination") != "orion-library") {
+      val destination = job.optString("destination")
+      if (destination !in setOf("orion-library", "device-storage")) {
         OrionDownloadTransferRuntime.release(jobId)
-        promise.reject("DOWNLOAD_ORION_LIBRARY_REQUIRED", "Stream downloads currently save to Orion Library only.")
+        promise.reject("DOWNLOAD_DESTINATION_INVALID", "Choose a valid Orion download location.")
         return
+      }
+      if (android.os.StatFs(reactContext.filesDir.absolutePath).availableBytes < MIN_FREE_RESERVE_BYTES) {
+        OrionDownloadTransferRuntime.release(jobId)
+        promise.reject("DOWNLOAD_STORAGE_INSUFFICIENT", "Orion needs more free device space before this download can start.")
+        return
+      }
+      if (destination == "device-storage") {
+        val targetId = job.optJSONObject("storageTarget")?.optString("targetId").orEmpty()
+        val target = OrionDownloadStorageRegistry.describe(reactContext, targetId)
+        if (target == null || !target.writable || !target.persistedPermission) {
+          OrionDownloadTransferRuntime.release(jobId)
+          promise.reject("DOWNLOAD_STORAGE_TARGET_REQUIRED", "Choose the Device Storage folder again before starting this download.")
+          return
+        }
+        val freeBytes = OrionDownloadStorageRegistry.freeBytes(reactContext, targetId)
+        if (freeBytes != null && freeBytes < MIN_FREE_RESERVE_BYTES) {
+          OrionDownloadTransferRuntime.release(jobId)
+          promise.reject("DOWNLOAD_STORAGE_INSUFFICIENT", "Device Storage does not have enough free space to start this download.")
+          return
+        }
       }
       val created = OrionDownloadJobStore.createJob(payload, transfer)
       if (created == null) {
@@ -250,5 +271,6 @@ class OrionDownloadEngineModule(
   companion object {
     private const val EVENT_NAME = "OrionDownloadEngineSnapshot"
     private const val REQUEST_STORAGE_TREE = 45103
+    private const val MIN_FREE_RESERVE_BYTES = 32L * 1024L * 1024L
   }
 }

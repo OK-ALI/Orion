@@ -118,9 +118,24 @@ internal object OrionDownloadNotifications {
 
   private fun mediaTitle(job: JSONObject?): String {
     val media = job?.optJSONObject("media")
-    val series = optionalText(media, "seriesTitle")
-    val title = optionalText(media, "title")
-    return (series ?: title ?: "Orion download").take(80)
+    val mediaType = optionalText(media, "mediaType")
+    val title = optionalText(media, "title") ?: "Orion download"
+    val series = optionalText(media, "seriesTitle") ?: title
+    val season = optionalInteger(media, "season")
+    val episode = optionalInteger(media, "episode")
+    val year = optionalInteger(media, "year")
+    return when {
+      mediaType == "tv" && season != null && episode != null -> "$series · S$season E$episode"
+      mediaType == "movie" && year != null -> "$title · $year"
+      mediaType == "tv" -> series
+      else -> title
+    }.take(80)
+  }
+
+  private fun optionalInteger(json: JSONObject?, key: String): Int? {
+    if (json == null || json.isNull(key)) return null
+    val value = json.optInt(key, Int.MIN_VALUE)
+    return value.takeIf { it >= 0 }
   }
 
   private fun optionalText(json: JSONObject?, key: String): String? {

@@ -92,10 +92,6 @@ internal object OrionDownloadTransferEngine {
     bound: BoundTransferContext,
   ) {
     val jobId = job.optString("jobId")
-    if (job.optString("destination") != "orion-library") {
-      OrionDownloadJobStore.markActionRequired(jobId, "fragment-device-storage-not-finalizable", "This stream can currently be saved to Orion Library only.")
-      return
-    }
     val rootBody = fetchAuthorizedText(bound, bound.root.url, bound.root.url)
     if (rootBody == null || !rootBody.contains("#EXTM3U", ignoreCase = true)) {
       OrionDownloadJobStore.markFailed(jobId, "hls-manifest-unavailable", "Orion could not read the selected HLS playlist.", retryable = true)
@@ -159,10 +155,6 @@ internal object OrionDownloadTransferEngine {
     bound: BoundTransferContext,
   ) {
     val jobId = job.optString("jobId")
-    if (job.optString("destination") != "orion-library") {
-      OrionDownloadJobStore.markActionRequired(jobId, "fragment-device-storage-not-finalizable", "This stream can currently be saved to Orion Library only.")
-      return
-    }
     val rootBody = fetchAuthorizedText(bound, bound.root.url, bound.root.url)
     if (rootBody == null || !rootBody.contains(Regex("<MPD(?:\\s|>)", RegexOption.IGNORE_CASE))) {
       OrionDownloadJobStore.markFailed(jobId, "dash-manifest-unavailable", "Orion could not read the selected DASH manifest.", retryable = true)
@@ -244,7 +236,7 @@ internal object OrionDownloadTransferEngine {
                 OrionDownloadTransferRuntime.release(jobId)
               }
               "context-rejected" -> OrionDownloadJobStore.markActionRequired(jobId, "request-context-rejected", "Open the title and start playback again to refresh the download source.")
-              "storage-blocked" -> OrionDownloadJobStore.markStorageBlocked(jobId, "Orion Library needs more free space to continue this download.")
+              "storage-blocked" -> OrionDownloadJobStore.markStorageBlocked(jobId, "Orion needs more free device space to continue this download.")
               else -> {
                 OrionDownloadJobStore.markRecovering(jobId, outcome.code ?: "fragment-transfer-failed", "Download paused while Orion retries the selected stream.")
                 OrionDownloadRecoveryScheduler.schedule(context, jobId, delayMinutes = 1L)
@@ -543,6 +535,21 @@ internal object OrionDownloadTransferEngine {
     kind: String,
     fragments: List<OrionFragmentRequest>,
   ): Boolean {
+    return if (job.optString("destination") == "device-storage") {
+      finalizeFragmentedToDeviceStorage(context, job, partialDir, verifiedBytes, fragments)
+    } else {
+      finalizeFragmentedToOrionLibrary(context, job, partialDir, verifiedBytes, kind, fragments)
+    }
+  }
+
+  private fun finalizeFragmentedToOrionLibrary(
+    context: android.content.Context,
+    job: org.json.JSONObject,
+    partialDir: java.io.File,
+    verifiedBytes: Long,
+    kind: String,
+    fragments: List<OrionFragmentRequest>,
+  ): Boolean {
     val jobId = job.optString("jobId")
     val media = job.optJSONObject("media") ?: org.json.JSONObject()
     val completedRoot = java.io.File(context.filesDir, "orion-downloads/library")
@@ -595,7 +602,7 @@ internal object OrionDownloadTransferEngine {
       .put("mimeType", if (kind == "hls") "application/vnd.apple.mpegurl" else "application/dash+xml")
       .put("verifiedSizeBytes", verifiedBytes + subtitleResult.bytes)
       .put("sha256", org.json.JSONObject.NULL)
-      .put("tracks", subtitleResult.tracks)
+      .put("tracks", finalizedTracks(fragments, subtitleResult.tracks))
       .put("sourceId", job.optString("_sourceId", "unknown"))
       .put("playInOrion", false)
       .put("externallyVisible", false)
@@ -606,6 +613,89 @@ internal object OrionDownloadTransferEngine {
     return true
   }
 
+  private fun finalizeFragmentedToDeviceStorage(
+    context: android.content.Context,
+    job: org.json.JSONObject,
+    partialDir: java.io.File,
+    verifiedBytes: Long,
+    fragments: List<OrionFragmentRequest>,
+  ): Boolean {
+    val jobId = job.optString("jobId")
+    val media = job.optJSONObject("media") ?: org.json.JSONObject()
+    val staging = java.io.File(context.cacheDir, "orion-downloads/device-finalize/$jobId")
+    if (staging.exists()) staging.deleteRecursively()
+    staging.mkdirs()
+    val subtitleResult = finalizeSelectedSubtitles(job, staging)
+    val outcome = OrionDownloadPortableFinalizer.finalizeToDeviceStorage(
+      context = context,
+      job = job,
+      partialDir = partialDir,
+      fragments = fragments,
+      verifiedBytes = verifiedBytes,
+      fileName = safeFileName(media) + ".mp4",
+      subtitleDirectory = java.io.File(staging, "subtitles"),
+      subtitleEntries = subtitleResult.bundleEntries,
+      subtitleTracks = subtitleResult.tracks,
+    )
+    staging.deleteRecursively()
+    if (!outcome.ok || outcome.locatorValue.isNullOrBlank()) {
+      val code = outcome.failureCode ?: "portable-finalization-failed"
+      val message = outcome.failureMessage ?: "Orion could not create a safe portable file for this stream."
+      if (outcome.actionRequired) OrionDownloadJobStore.markActionRequired(jobId, code, message)
+      else OrionDownloadJobStore.markFailed(jobId, code, message, retryable = outcome.retryable)
+      return false
+    }
+
+    partialDir.deleteRecursively()
+    val assetId = "asset-$jobId"
+    val now = System.currentTimeMillis()
+    val asset = org.json.JSONObject()
+      .put("schemaVersion", 1)
+      .put("assetId", assetId)
+      .put("jobId", jobId)
+      .put("media", org.json.JSONObject(media.toString()))
+      .put("destination", "device-storage")
+      .put("storageTarget", org.json.JSONObject(job.optJSONObject("storageTarget")?.toString() ?: "{}"))
+      .put("locator", org.json.JSONObject().put("kind", "content-uri").put("value", outcome.locatorValue))
+      .put("container", "mp4")
+      .put("mimeType", "video/mp4")
+      .put("verifiedSizeBytes", outcome.mediaBytes + outcome.sidecarBytes)
+      .put("sha256", org.json.JSONObject.NULL)
+      .put("tracks", outcome.tracks)
+      .put("sourceId", job.optString("_sourceId", "unknown"))
+      .put("playInOrion", true)
+      .put("externallyVisible", true)
+      .put("verifiedAt", now)
+    val offline = offlineEntry(job, media, assetId, now)
+    OrionDownloadJobStore.markCompleted(jobId, asset, offline)
+    OrionDownloadNotifications.notify(context, OrionDownloadJobStore.publicJob(jobId))
+    return true
+  }
+
+  private fun finalizedTracks(
+    fragments: List<OrionFragmentRequest>,
+    subtitleTracks: org.json.JSONArray,
+  ): org.json.JSONArray {
+    val tracks = org.json.JSONArray()
+
+    if (fragments.any { fragment -> fragment.role == "audio" || fragment.role == "audio-init" }) {
+      tracks.put(org.json.JSONObject()
+        .put("id", "audio-default")
+        .put("kind", "audio")
+        .put("language", org.json.JSONObject.NULL)
+        .put("label", "Audio")
+        .put("format", org.json.JSONObject.NULL)
+        .put("default", true))
+    }
+
+    for (index in 0 until subtitleTracks.length()) {
+      subtitleTracks.optJSONObject(index)?.let { track ->
+        tracks.put(org.json.JSONObject(track.toString()))
+      }
+    }
+
+    return tracks
+  }
   private fun finalizeSelectedSubtitles(job: org.json.JSONObject, finalDir: java.io.File): SubtitleFinalizeResult {
     val sources = job.optJSONArray("_subtitleSources") ?: org.json.JSONArray()
     if (sources.length() == 0) return SubtitleFinalizeResult(org.json.JSONArray(), org.json.JSONArray(), 0L)

@@ -54,6 +54,7 @@ function withCinemaSources(config) {
       'OrionDownloadNotifications.kt',
       'OrionDownloadRecoveryWorker.kt',
       'OrionDownloadStorageRegistry.kt',
+      'OrionDownloadPortableFinalizer.kt',
       'OrionDownloadTransferRuntime.kt',
     ]) {
       fs.copyFileSync(path.join(NATIVE_SOURCE, name), path.join(packageRoot, name));

@@ -178,7 +178,7 @@ test("subtitle references remain opaque and external fallback validates outcomes
   assert.match(discovery, /opaqueId/);
   assert.match(discovery, /getInternalSubtitleTrack/);
   assert.match(discovery, /searchSubtitlesWithOutcome/);
-  assert.match(subtitleService, /isSafeSubtitleUrl/);
+  assert.match(subtitleService, /safeBrokerSubtitleUrl/);
   assert.match(subtitleService, /SubtitleSearchOutcome/);
   assert.match(subtitleService, /invalid-file/);
 });

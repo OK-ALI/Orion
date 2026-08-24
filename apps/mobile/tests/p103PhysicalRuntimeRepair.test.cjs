@@ -24,7 +24,8 @@ test('P10.3 source intent retains the selected method and auto-returns only on r
   assert.match(capture, /method: MobileDownloadTransferMethodV1/);
   assert.match(capture, /autoReturnIssued: boolean/);
   assert.match(capture, /markMobileDownloadSourceAutoReturnIssuedV1/);
-  assert.match(hook, /selectMobileDownloadCandidateForItemV1\(itemKey, intent\.method, snapshots, 'orion-library'\)/);
+  assert.match(hook, /getMobileDownloadPreferencesV1\(\)\.defaultDestination/);
+  assert.match(hook, /selectMobileDownloadCandidateForItemV1\(itemKey, intent\.method, snapshots, destination\)/);
   assert.match(hook, /router\.back\(\)/);
   assert.doesNotMatch(hook, /setTimeout|setInterval|sleep/);
   assert.match(detail, /requestMobileDownloadSourceResolutionV1\(target\.itemKey, method\)/);
@@ -52,8 +53,12 @@ test('P10.3 subtitle discovery uses SubDL and Wyzie and keeps provider URLs outs
   assert.match(subtitles, /resolveMobileDownloadSubtitleSourcesForNativeV1/);
   assert.match(subtitles, /SUBTITLE_DISCOVERY_TIMEOUT_MS = 8_000/);
   assert.match(subtitles, /sourceRegistry\.clear\(\)/);
-  assert.match(provider, /EXPO_PUBLIC_SUBDL_API_KEY/);
-  assert.match(provider, /https:\/\/sub\.wyzie\.ru\/search/);
+  assert.match(provider, /EXPO_PUBLIC_ORION_SUBTITLE_BROKER_URL/);
+  assert.match(provider, /\/v1\/subtitles\/search/);
+  assert.match(provider, /\/v1\/subtitles\/file\//);
+  assert.doesNotMatch(provider, /EXPO_PUBLIC_SUBDL_API_KEY|EXPO_PUBLIC_WYZIE_API_KEY/);
+  assert.doesNotMatch(provider, /api\.subdl\.com|sub\.wyzie\.(?:ru|io)/);
+  assert.doesNotMatch(provider, /SecureStore/);
   assert.match(modal, /Searching SubDL and Wyzie/);
   assert.match(modal, /Subtitles ready/);
   assert.match(modal, /subtitleCheckPending/);
@@ -72,7 +77,7 @@ test('P10.3 native subtitle packaging is private, bounded and optional during fr
   assert.match(runtime, /MAX_SUBTITLE_BYTES = 5 \* 1024 \* 1024/);
   assert.match(runtime, /finalizeSelectedSubtitles/);
   assert.match(runtime, /\.put\("subtitles", subtitleResult\.bundleEntries\)/);
-  assert.match(runtime, /\.put\("tracks", subtitleResult\.tracks\)/);
+  assert.match(runtime, /\.put\("tracks", finalizedTracks\(fragments, subtitleResult\.tracks\)\)/);
   assert.doesNotMatch(runtime, /\.put\("url", url\)/);
 });
 
@@ -89,7 +94,8 @@ test('P10.3 retires experimental Direct residue and renders real operational dow
   assert.match(activity, /Resume/);
   assert.match(activity, /Retry/);
   assert.match(activity, /Cancel/);
-  assert.match(activity, /Verified · Stored in Orion Library/);
+  assert.match(activity, /Verified/);
+  assert.match(activity, /Orion Library/);
   assert.match(activity, /theme\.success/);
   assert.match(activity, /flexWrap: 'wrap'/);
   assert.match(screen, /useOrionTheme/);
@@ -123,4 +129,27 @@ test('P10.3 foreground notification uses real media title and native progress tr
   assert.match(notifications, /BigTextStyle/);
   assert.match(notifications, /"paused"/);
   assert.match(screen, /'paused'/);
+});
+
+
+test('P10.4C Device Storage activation remains fragment-only, SAF-scoped and portable-finalizer backed', () => {
+  const capture = read('src', 'features', 'downloads', 'downloadCandidateCapture.ts');
+  const start = read('src', 'features', 'downloads', 'downloadStart.ts');
+  const modal = read('src', 'components', 'DownloadModal.tsx');
+  const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
+  const broker = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadRequestContextBroker.kt');
+  const runtime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
+  assert.match(capture, /candidate\.capabilities\.deviceStorage === true/);
+  assert.doesNotMatch(capture, /destination !== 'orion-library'\) return null/);
+  assert.match(start, /preferences\.deviceStorageTarget/);
+  assert.match(start, /candidate\.capabilities\.deviceStorage/);
+  assert.match(modal, />Device Storage</);
+  assert.match(modal, /chooseNativeDeviceStorageTargetV1/);
+  assert.match(module, /destination !in setOf\("orion-library", "device-storage"\)/);
+  assert.match(module, /OrionDownloadStorageRegistry\.describe/);
+  assert.match(broker, /ready && resolvedKind in setOf\("hls", "dash"\)/);
+  assert.match(runtime, /finalizeFragmentedToDeviceStorage/);
+  assert.match(runtime, /OrionDownloadPortableFinalizer\.finalizeToDeviceStorage/);
+  assert.match(runtime, /\.put\("locator", org\.json\.JSONObject\(\)\.put\("kind", "content-uri"\)/);
+  assert.doesNotMatch(runtime, /fragment-device-storage-not-finalizable/);
 });

@@ -18,9 +18,12 @@ import {
 import type { MobileDownloadCandidateSnapshotV1, MobileDownloadTransferMethodV1 } from '../features/downloads/downloadCandidateCapture';
 import {
   getMobileDownloadPreferencesV1,
+  setMobileDownloadDefaultDestinationV1,
+  setMobileDownloadDeviceStorageTargetV1,
   subscribeMobileDownloadPreferencesV1,
 } from '../features/downloads/downloadPreferences';
 import { startMobileDownloadFromSelectionV1 } from '../features/downloads/downloadStart';
+import { chooseNativeDeviceStorageTargetV1 } from '../features/downloads/nativeDownloadEngine';
 import {
   discoverMobileDownloadSubtitlesV1,
   getPreferredMobileDownloadSubtitleIdsV1,
@@ -46,6 +49,7 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
   const [subtitles, setSubtitles] = useState<MobileDownloadSubtitleDiscoveryV1>(EMPTY_SUBTITLES);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [choosingFolder, setChoosingFolder] = useState(false);
 
   useEffect(() => subscribeMobileDownloadPreferencesV1(setPreferences), []);
   useEffect(() => subscribeMobileDownloadCandidatesV1(setCandidateSnapshots), []);
@@ -63,8 +67,9 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     : target?.media.title || 'Download';
   const supportingTitle = isEpisode ? target?.media.episodeTitle : null;
   const needsEpisode = target?.media.mediaType === 'tv' && !isEpisode;
+  const destination = preferences.defaultDestination;
   const selectedCandidate = target
-    ? selectMobileDownloadCandidateForItemV1(target.itemKey, transferMethod, candidateSnapshots, 'orion-library')
+    ? selectMobileDownloadCandidateForItemV1(target.itemKey, transferMethod, candidateSnapshots, destination)
     : null;
   const latestCandidate = target ? candidateSnapshots.find((entry) => entry.itemKey === target.itemKey)?.candidate ?? null : null;
   const methodOptions: readonly { id: MobileDownloadTransferMethodV1; title: string; description: string }[] = [
@@ -106,13 +111,16 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     if (!latestCandidate) {
       return { tone: 'neutral' as const, icon: 'play-circle-outline' as const, title: 'Playback source required', detail: 'Open the player. Orion will return here automatically as soon as a ready HLS or DASH stream is resolved.' };
     }
+    if (destination === 'device-storage' && latestCandidate.preflight.state === 'ready' && !latestCandidate.capabilities.deviceStorage) {
+      return { tone: 'warning' as const, icon: 'folder-open-outline' as const, title: 'Device Storage unavailable for this stream', detail: latestCandidate.capabilities.deviceStorageBlockedReason || 'Save this stream to Orion Library or try another source.' };
+    }
     const state = latestCandidate.preflight.state;
     const kind = latestCandidate.preflight.resolvedManifestKind;
     if (state === 'checking') return { tone: 'warning' as const, icon: 'sync-outline' as const, title: 'Resolving stream…', detail: `Checking ${latestCandidate.sourceId} for a downloadable HLS or DASH stream.` };
     if (state === 'expired' || state === 'action-required') return { tone: 'warning' as const, icon: 'refresh-circle-outline' as const, title: 'Source needs refresh', detail: latestCandidate.preflight.reason || 'Open the player and choose a source again.' };
     if (state === 'protected' || state === 'unreachable' || state === 'unsupported' || kind === 'direct') return { tone: 'danger' as const, icon: 'alert-circle-outline' as const, title: 'This source is not download-ready', detail: kind === 'direct' ? 'This source exposed only a Direct file. Mobile downloads now require HLS or DASH. Try another source.' : latestCandidate.preflight.reason || 'Try another playback source.' };
     return { tone: 'neutral' as const, icon: 'play-circle-outline' as const, title: 'Playback source required', detail: 'Open the player and choose a source that exposes a ready HLS or DASH stream.' };
-  }, [latestCandidate, preferences.preferredQuality, selectedCandidate]);
+  }, [destination, latestCandidate, preferences.preferredQuality, selectedCandidate]);
 
   const statusColor = sourceStatus.tone === 'success' ? theme.success : sourceStatus.tone === 'warning' ? theme.warning : sourceStatus.tone === 'danger' ? theme.danger : theme.textMuted;
 
@@ -129,6 +137,28 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     if (subtitles.state === 'provider-failure') return { icon: 'alert-circle-outline' as const, color: theme.warning, title: 'Subtitle providers unavailable', detail: 'Video can still download without subtitles.' };
     return { icon: 'checkmark-circle-outline' as const, color: theme.textMuted, title: 'No matching subtitles found', detail: 'Video is still ready to download without subtitles.' };
   }, [preferences.subtitlePreference, selectedCandidate, selectedSubtitleIds, subtitles, theme.success, theme.textMuted, theme.warning]);
+
+
+  const selectDestination = async (next: 'orion-library' | 'device-storage') => {
+    if (next === 'orion-library') {
+      setMobileDownloadDefaultDestinationV1('orion-library');
+      return;
+    }
+    if (preferences.deviceStorageTarget?.targetId && preferences.deviceStorageTarget.writable && preferences.deviceStorageTarget.persistedPermission) {
+      setMobileDownloadDefaultDestinationV1('device-storage');
+      return;
+    }
+    if (choosingFolder) return;
+    setChoosingFolder(true);
+    try {
+      const picked = await chooseNativeDeviceStorageTargetV1();
+      if (!picked) return;
+      setMobileDownloadDeviceStorageTargetV1(picked);
+      setMobileDownloadDefaultDestinationV1('device-storage');
+    } finally {
+      setChoosingFolder(false);
+    }
+  };
 
   const handleResolveSource = () => {
     if (!target || needsEpisode || starting) return;
@@ -177,18 +207,12 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
             {needsEpisode ? <StatusCard icon="list-outline" color={theme.accent} title="Choose an episode" detail="Open an episode below this title to download it for offline playback." theme={theme} /> : null}
 
             <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Save to</Text>
-            <View style={[styles.optionCard, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
-              <Ionicons name="albums-outline" size={21} color={theme.accent} />
-              <View style={styles.optionCopy}>
-                <Text style={[styles.optionTitle, { color: theme.text }]}>Orion Library</Text>
-                <Text style={[styles.description, { color: theme.textSecondary }]}>Managed by Orion for verified HLS/DASH offline packages.</Text>
-              </View>
-              <Ionicons name="radio-button-on" size={20} color={theme.accent} />
-            </View>
-            <View style={[styles.compactNotice, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Ionicons name="folder-open-outline" size={18} color={theme.textMuted} />
-              <Text style={[styles.compactNoticeText, { color: theme.textMuted }]}>Device Storage returns after Orion has a safe portable fragment finalizer.</Text>
-            </View>
+            <Pressable accessibilityRole="radio" accessibilityState={{ checked: destination === 'orion-library' }} onPress={() => void selectDestination('orion-library')} style={({ pressed }) => [styles.optionCard, { backgroundColor: destination === 'orion-library' ? theme.accentSoft : pressed ? theme.surfaceHover : theme.surface, borderColor: destination === 'orion-library' ? theme.accent : theme.border }]}>
+              <Ionicons name="albums-outline" size={21} color={destination === 'orion-library' ? theme.accent : theme.textSecondary} /><View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>Orion Library</Text><Text style={[styles.description, { color: theme.textSecondary }]}>Managed fragmented media for Orion offline playback.</Text></View><Ionicons name={destination === 'orion-library' ? 'radio-button-on' : 'radio-button-off'} size={20} color={destination === 'orion-library' ? theme.accent : theme.textMuted} />
+            </Pressable>
+            <Pressable accessibilityRole="radio" accessibilityState={{ checked: destination === 'device-storage' }} onPress={() => void selectDestination('device-storage')} style={({ pressed }) => [styles.optionCard, { backgroundColor: destination === 'device-storage' ? theme.accentSoft : pressed ? theme.surfaceHover : theme.surface, borderColor: destination === 'device-storage' ? theme.accent : theme.border }]}>
+              <Ionicons name="folder-open-outline" size={21} color={destination === 'device-storage' ? theme.accent : theme.textSecondary} /><View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>Device Storage</Text><Text style={[styles.description, { color: theme.textSecondary }]}>{preferences.deviceStorageTarget ? `Portable MP4 · ${preferences.deviceStorageTarget.displayName}` : choosingFolder ? 'Opening Android folder picker…' : 'Choose an Android folder for a portable MP4.'}</Text></View><Ionicons name={destination === 'device-storage' ? 'radio-button-on' : 'radio-button-off'} size={20} color={destination === 'device-storage' ? theme.accent : theme.textMuted} />
+            </Pressable>
 
             <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Download method</Text>
             <View style={styles.optionGrid}>

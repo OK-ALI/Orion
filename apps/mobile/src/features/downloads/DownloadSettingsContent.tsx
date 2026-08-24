@@ -6,10 +6,13 @@ import type { MobileDownloadPreferencesV1, MobileDownloadQualityV1, MobileDownlo
 import { useOrionTheme } from '../../context/ThemeContext';
 import {
   getMobileDownloadPreferencesV1,
+  setMobileDownloadDefaultDestinationV1,
+  setMobileDownloadDeviceStorageTargetV1,
   setMobileDownloadPreferredQualityV1,
   setMobileDownloadSubtitlePreferenceV1,
   subscribeMobileDownloadPreferencesV1,
 } from './downloadPreferences';
+import { chooseNativeDeviceStorageTargetV1 } from './nativeDownloadEngine';
 
 const QUALITY_OPTIONS: ReadonlyArray<{ id: MobileDownloadQualityV1; label: string }> = [
   { id: 'best', label: 'Best available' },
@@ -25,23 +28,38 @@ const SUBTITLE_OPTIONS: ReadonlyArray<{ id: MobileDownloadSubtitlePreferenceV1; 
 export function DownloadSettingsContent() {
   const { theme } = useOrionTheme();
   const [preferences, setPreferences] = useState<MobileDownloadPreferencesV1>(getMobileDownloadPreferencesV1);
+  const [choosingFolder, setChoosingFolder] = useState(false);
   useEffect(() => subscribeMobileDownloadPreferencesV1(setPreferences), []);
+
+  const chooseDeviceStorage = async () => {
+    if (choosingFolder) return;
+    setChoosingFolder(true);
+    try {
+      const target = await chooseNativeDeviceStorageTargetV1();
+      if (!target) return;
+      setMobileDownloadDeviceStorageTargetV1(target);
+      setMobileDownloadDefaultDestinationV1('device-storage');
+    } finally {
+      setChoosingFolder(false);
+    }
+  };
 
   return (
     <View style={styles.root}>
       <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Default location</Text>
-      <View style={[styles.destinationCard, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
+      <Pressable accessibilityRole="radio" accessibilityState={{ checked: preferences.defaultDestination === 'orion-library' }} onPress={() => setMobileDownloadDefaultDestinationV1('orion-library')} style={({ pressed }) => [styles.destinationCard, { backgroundColor: preferences.defaultDestination === 'orion-library' ? theme.accentSoft : pressed ? theme.surfaceHover : theme.surface, borderColor: preferences.defaultDestination === 'orion-library' ? theme.accent : theme.border }]}>
         <View style={[styles.iconBox, { backgroundColor: theme.surface, borderColor: theme.border }]}><Ionicons name="albums-outline" size={20} color={theme.accent} /></View>
-        <View style={styles.optionCopy}>
-          <Text style={[styles.optionTitle, { color: theme.text }]}>Orion Library</Text>
-          <Text style={[styles.description, { color: theme.textSecondary }]}>HLS and DASH downloads stay managed inside Orion for verified offline playback.</Text>
-        </View>
-        <Ionicons name="checkmark-circle" size={20} color={theme.success} />
-      </View>
-      <View style={[styles.notice, { backgroundColor: theme.surfaceHover, borderColor: theme.border }]}>
-        <Ionicons name="folder-open-outline" size={18} color={theme.textMuted} />
-        <Text style={[styles.noticeText, { color: theme.textSecondary }]}>Device Storage is paused until Orion can finalize fragmented streams into a safe portable file.</Text>
-      </View>
+        <View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>Orion Library</Text><Text style={[styles.description, { color: theme.textSecondary }]}>Managed by Orion for verified fragmented offline media.</Text></View>
+        <Ionicons name={preferences.defaultDestination === 'orion-library' ? 'radio-button-on' : 'radio-button-off'} size={20} color={preferences.defaultDestination === 'orion-library' ? theme.accent : theme.textMuted} />
+      </Pressable>
+      <Pressable accessibilityRole="radio" accessibilityState={{ checked: preferences.defaultDestination === 'device-storage' }} onPress={() => preferences.deviceStorageTarget ? setMobileDownloadDefaultDestinationV1('device-storage') : void chooseDeviceStorage()} style={({ pressed }) => [styles.destinationCard, { backgroundColor: preferences.defaultDestination === 'device-storage' ? theme.accentSoft : pressed ? theme.surfaceHover : theme.surface, borderColor: preferences.defaultDestination === 'device-storage' ? theme.accent : theme.border }]}>
+        <View style={[styles.iconBox, { backgroundColor: theme.surface, borderColor: theme.border }]}><Ionicons name="folder-open-outline" size={20} color={theme.accent} /></View>
+        <View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>Device Storage</Text><Text style={[styles.description, { color: theme.textSecondary }]}>{preferences.deviceStorageTarget ? `Portable MP4 · ${preferences.deviceStorageTarget.displayName}` : 'Choose an Android folder for portable MP4 downloads.'}</Text></View>
+        <Ionicons name={preferences.defaultDestination === 'device-storage' ? 'radio-button-on' : 'radio-button-off'} size={20} color={preferences.defaultDestination === 'device-storage' ? theme.accent : theme.textMuted} />
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Choose Device Storage folder" disabled={choosingFolder} onPress={() => void chooseDeviceStorage()} style={({ pressed }) => [styles.notice, { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: theme.border }]}>
+        <Ionicons name="folder-outline" size={18} color={theme.textMuted} /><Text style={[styles.noticeText, { color: theme.textSecondary }]}>{choosingFolder ? 'Opening Android folder picker…' : preferences.deviceStorageTarget ? `Change folder · ${preferences.deviceStorageTarget.displayName}` : 'Choose Device Storage folder'}</Text>
+      </Pressable>
 
       <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Preferred quality</Text>
       <View accessibilityRole="radiogroup" style={styles.pillRow}>

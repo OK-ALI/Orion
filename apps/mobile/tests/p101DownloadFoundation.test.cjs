@@ -154,7 +154,7 @@ test('P10.1 preserves exact TV episode identity instead of a boolean-only modal 
   assert.match(modal, /target: MobileDownloadTargetV1 \| null/);
 });
 
-test('P10.1 destination foundation remains compatible while P10.3 safely narrows active Mobile storage to Orion Library', () => {
+test('P10.4C activates dual destination selection only through the Android-owned SAF finalizer', () => {
   const architecture = readMobile('src', 'features', 'settings', 'settingsArchitecture.ts');
   const settings = readMobile('app', '(tabs)', 'settings.tsx');
   const downloadSettings = readMobile('src', 'features', 'downloads', 'DownloadSettingsContent.tsx');
@@ -164,13 +164,14 @@ test('P10.1 destination foundation remains compatible while P10.3 safely narrows
   assert.match(architecture, /id: 'downloads', label: 'Downloads', status: 'active'/);
   assert.match(settings, /<DownloadSettingsContent \/>/);
   assert.match(downloadSettings, />Orion Library</);
-  assert.match(downloadSettings, /Device Storage is paused until Orion can finalize fragmented streams/);
+  assert.match(downloadSettings, />Device Storage</);
+  assert.match(downloadSettings, /chooseNativeDeviceStorageTargetV1/);
+  assert.match(downloadSettings, /setMobileDownloadDefaultDestinationV1\('device-storage'\)/);
   assert.match(downloadSettings, />Preferred quality</);
   assert.match(downloadSettings, />Subtitles</);
   assert.doesNotMatch(downloadSettings, /notification/i);
 
-  // P10.1 established the honest-unavailable boundary. Later P10.x stages may
-  // activate it only when the Android-owned engine is physically present.
+  // Device Storage stays behind the real Android native engine and SAF picker.
   assert.match(manager, /isNativeDownloadEngineAvailableV1/);
   assert.match(manager, /MOBILE_DOWNLOADER_AVAILABLE = isNativeDownloadEngineAvailableV1\(\)/);
   assert.match(manager, /state: 'waiting-for-engine'/);
@@ -343,7 +344,7 @@ test('P10.1 download preferences survive module restart and future schemas fail 
 
   const secondProcess = loadPreferences();
   const restored = secondProcess.getMobileDownloadPreferencesV1();
-  assert.equal(restored.defaultDestination, 'orion-library');
+  assert.equal(restored.defaultDestination, 'device-storage');
   assert.equal(restored.deviceStorageTarget.targetId, 'saf:downloads');
   assert.equal(restored.preferredQuality, '1080p');
   assert.equal(restored.subtitlePreference, 'none');
@@ -360,4 +361,28 @@ test('P10.1 download preferences survive module restart and future schemas fail 
     preferredQuality: 'best',
     subtitlePreference: 'preferred',
   });
+});
+
+test('P10.4 Downloads surface projects media-first identity, native transfer truth and dual-storage readiness', () => {
+  const screen = readMobile('app', '(tabs)', 'downloads.tsx');
+  const activity = readMobile('src', 'features', 'downloads', 'DownloadActivityList.tsx');
+  const preferences = readMobile('src', 'features', 'downloads', 'downloadPreferences.ts');
+
+  assert.match(screen, /listMobileDownloadAssetsV1/);
+  assert.match(screen, />Stored</);
+  assert.match(screen, /Device Storage creates a verified portable MP4/);
+  assert.match(activity, /createMobileDownloadProgressSnapshotV1/);
+  assert.match(activity, /imgUrl/);
+  assert.match(activity, /posterPath/);
+  assert.match(activity, /episodeTitle/);
+  assert.match(activity, /groupKey/);
+  assert.match(activity, /Search downloads/);
+  for (const label of ['All', 'Active', 'Completed', 'Failed', 'Movies', 'Series', 'Newest', 'Oldest', 'Name', 'Progress', 'Size']) {
+    assert.match(activity, new RegExp(label));
+  }
+  assert.match(activity, /bytesPerSecond/);
+  assert.match(activity, /etaSeconds/);
+  assert.match(activity, /completedFragments/);
+  assert.match(activity, /elapsed/);
+  assert.match(preferences, /input\.defaultDestination === 'device-storage' && deviceStorageTarget/);
 });

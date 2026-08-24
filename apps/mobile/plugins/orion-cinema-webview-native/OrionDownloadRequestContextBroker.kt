@@ -468,11 +468,11 @@ internal object OrionDownloadRequestContextBroker {
     }
 
     val ready = state == "ready" && context.downloadAllowed
-    val deviceStorageReady = ready && resolvedKind == "direct"
+    val deviceStorageReady = ready && resolvedKind in setOf("hls", "dash")
     val deviceReason = when {
       !context.downloadAllowed -> "This provider is not enabled for Mobile downloads."
       state != "ready" -> reason ?: "This candidate is not ready to download."
-      resolvedKind != "direct" -> "Stream fragments currently save to Orion Library."
+      resolvedKind !in setOf("hls", "dash") -> "Device Storage requires a ready HLS or DASH stream that Orion can finalize safely."
       else -> null
     }
     val preflight = Arguments.createMap().apply {

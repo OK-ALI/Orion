@@ -13,7 +13,7 @@ test('P10.3 Auto is HLS/DASH-only and Direct is retired from Mobile execution', 
   const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
   assert.match(capture, /MobileDownloadTransferMethodV1 = 'auto' \| 'fragments'/);
   assert.doesNotMatch(capture, /MobileDownloadTransferMethodV1 = .*'direct'/);
-  assert.match(capture, /destination !== 'orion-library'\) return null/);
+  assert.match(capture, /candidate\.capabilities\.deviceStorage === true/);
   assert.match(capture, /resolvedManifestKind === 'hls' \|\| candidate\.preflight\.resolvedManifestKind === 'dash'/);
   assert.doesNotMatch(modal, /title: 'Direct file'/);
   assert.match(modal, /Choose the best ready HLS or DASH stream/);
@@ -75,13 +75,13 @@ test('P10.3 fragmented finalization persists no raw network locations', () => {
   assert.match(store, /if \(key\.startsWith\("_"\)\) remove\.add\(key\)/);
 });
 
-test('P10.3 fragmented Mobile storage is Orion Library-only until portable finalization exists', () => {
+test('P10.4C fragmented Mobile storage supports capability-gated Device Storage', () => {
   const start = read('src', 'features', 'downloads', 'downloadStart.ts');
   const settings = read('src', 'features', 'downloads', 'DownloadSettingsContent.tsx');
   const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
-  assert.match(start, /preferences\.defaultDestination !== 'orion-library'/);
-  assert.match(settings, /Device Storage is paused until Orion can finalize fragmented streams/);
-  assert.match(module, /DOWNLOAD_ORION_LIBRARY_REQUIRED/);
+  assert.match(start, /destination === 'device-storage'/);
+  assert.match(settings, /Choose Device Storage folder/);
+  assert.match(module, /DOWNLOAD_DESTINATION_INVALID/);
 });
 
 test('P10.3 fragment source remains generated from tracked plugin ownership', () => {

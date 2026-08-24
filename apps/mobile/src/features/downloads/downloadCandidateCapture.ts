@@ -303,10 +303,16 @@ export interface MobileDownloadCandidateSelectionV1 {
   candidate: MobileDownloadCandidateV1;
 }
 
-function isReadyDownloadCandidate(candidate: MobileDownloadCandidateV1): boolean {
+function isReadyDownloadCandidate(
+  candidate: MobileDownloadCandidateV1,
+  destination: 'orion-library' | 'device-storage',
+): boolean {
+  const destinationReady = destination === 'device-storage'
+    ? candidate.capabilities.deviceStorage === true
+    : candidate.capabilities.orionLibrary === true;
   return candidate.preflight.state === 'ready' &&
     candidate.preflight.requestContextReady === true &&
-    candidate.capabilities.orionLibrary === true;
+    destinationReady;
 }
 
 
@@ -327,11 +333,10 @@ export function selectMobileDownloadCandidateForItemV1(
   values: readonly MobileDownloadCandidateSnapshotV1[] = snapshots,
   destination: 'orion-library' | 'device-storage' = 'orion-library',
 ): MobileDownloadCandidateSelectionV1 | null {
-  if (destination !== 'orion-library') return null;
   const fragmentCandidate = values
     .filter((entry) => entry.itemKey === itemKey)
     .map((entry) => entry.candidate)
-    .filter(isReadyDownloadCandidate)
+    .filter((candidate) => isReadyDownloadCandidate(candidate, destination))
     .filter((candidate) => candidate.preflight.resolvedManifestKind === 'hls' || candidate.preflight.resolvedManifestKind === 'dash')
     .sort((left, right) => scoreMobileDownloadCandidateV1(right) - scoreMobileDownloadCandidateV1(left) || right.capturedAt - left.capturedAt)[0];
   return fragmentCandidate ? { method, resolvedMethod: 'fragments', candidate: fragmentCandidate } : null;

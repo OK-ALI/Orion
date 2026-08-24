@@ -77,3 +77,64 @@ test('P10.3 React projection is driven from native engine snapshots', () => {
   assert.match(coordinator, /initializeNativeDownloadEngineV1/);
   assert.match(layout, /<MobileDownloadEngineCoordinator \/>/);
 });
+
+test('P10.4 foreground download notification preserves canonical Movie and episode identity', () => {
+  const notifications = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadNotifications.kt');
+  assert.match(notifications, /optionalInteger\(media, "year"\)/);
+  assert.match(notifications, /mediaType == "movie" && year != null/);
+  assert.match(notifications, /\$title · \$year/);
+  assert.match(notifications, /optionalInteger\(media, "season"\)/);
+  assert.match(notifications, /optionalInteger\(media, "episode"\)/);
+  assert.match(notifications, /\$series · S\$season E\$episode/);
+});
+test('P10.4 fragmented completion preserves truthful audio and subtitle track metadata', () => {
+  const runtime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
+
+  assert.match(
+    runtime,
+    /fragments\.any \{ fragment -> fragment\.role == "audio" \|\| fragment\.role == "audio-init" \}/,
+  );
+  assert.match(runtime, /\.put\("id", "audio-default"\)/);
+  assert.match(runtime, /\.put\("kind", "audio"\)/);
+  assert.match(runtime, /\.put\("language", org\.json\.JSONObject\.NULL\)/);
+  assert.match(runtime, /\.put\("label", "Audio"\)/);
+  assert.match(runtime, /\.put\("format", org\.json\.JSONObject\.NULL\)/);
+  assert.match(runtime, /\.put\("tracks", finalizedTracks\(fragments, subtitleResult\.tracks\)\)/);
+  assert.match(runtime, /subtitleTracks\.optJSONObject\(index\)/);
+  assert.match(runtime, /\.put\("sourceId", job\.optString\("_sourceId", "unknown"\)\)/);
+});
+
+test('P10.4C portable fragmented finalizer stays native, SAF-scoped and generated from tracked ownership', () => {
+  const plugin = read('plugins', 'withOrionCinemaWebView.js');
+  const finalizer = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadPortableFinalizer.kt');
+  const storage = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadStorageRegistry.kt');
+
+  assert.match(plugin, /'OrionDownloadPortableFinalizer\.kt'/);
+  assert.match(finalizer, /MediaExtractor/);
+  assert.match(finalizer, /MediaMuxer/);
+  assert.match(finalizer, /finalizeToDeviceStorage/);
+  assert.match(finalizer, /OrionDownloadStorageRegistry\.freeBytes/);
+  assert.match(finalizer, /OrionDownloadStorageRegistry\.createDocument/);
+  assert.match(finalizer, /OrionDownloadStorageRegistry\.deleteDocument/);
+  assert.match(finalizer, /videoTracks == 0/);
+  assert.match(finalizer, /hasSeparateAudio && audioTracks == 0/);
+  assert.match(finalizer, /verifyOutput\(output, requireAudio = hasSeparateAudio\)/);
+  assert.doesNotMatch(finalizer, /android\.permission\.WRITE_EXTERNAL_STORAGE/);
+  assert.doesNotMatch(finalizer, /provider cookies|Authorization/i);
+  assert.match(storage, /DocumentsContract\.deleteDocument/);
+});
+
+test('P10.4C native Device Storage execution validates target, remuxes fragments and preserves subtitle sidecars', () => {
+  const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
+  const broker = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadRequestContextBroker.kt');
+  const runtime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
+  const finalizer = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadPortableFinalizer.kt');
+  assert.match(module, /OrionDownloadStorageRegistry\.describe/);
+  assert.match(module, /DOWNLOAD_STORAGE_TARGET_REQUIRED/);
+  assert.match(broker, /deviceStorageReady = ready && resolvedKind in setOf\("hls", "dash"\)/);
+  assert.match(runtime, /finalizeFragmentedToDeviceStorage/);
+  assert.match(runtime, /outcome\.mediaBytes \+ outcome\.sidecarBytes/);
+  assert.match(finalizer, /publishSubtitleSidecars/);
+  assert.match(finalizer, /verifyPublishedBytes/);
+  assert.match(finalizer, /subtitle-finalization-write-failed/);
+});
