@@ -6,6 +6,7 @@ import android.view.View
 import androidx.annotation.NonNull
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.facebook.react.uimanager.ThemedReactContext
+import com.facebook.react.uimanager.ViewManagerDelegate
 import com.facebook.react.uimanager.annotations.ReactProp
 import com.reactnativecommunity.webview.RNCWebViewManager
 import com.reactnativecommunity.webview.RNCWebViewWrapper
@@ -14,11 +15,15 @@ import java.util.WeakHashMap
 
 /** Narrow opt-in manager used only by shielded Cinema playback WebViews. */
 class OrionCinemaWebViewManager : RNCWebViewManager() {
+  private val fabricDelegate = OrionCinemaWebViewManagerDelegate(this)
+
   private val clients = WeakHashMap<RNCWebViewWrapper, OrionCinemaWebViewClient>()
   private val tapIdentities = WeakHashMap<RNCWebViewWrapper, TapIdentity>()
   private val tapObservers = WeakHashMap<RNCWebViewWrapper, ConfirmedTapObserver>()
 
   override fun getName(): String = "OrionCinemaWebView"
+
+  override fun getDelegate(): ViewManagerDelegate<RNCWebViewWrapper> = fabricDelegate
 
   override fun addEventEmitters(@NonNull reactContext: ThemedReactContext, viewWrapper: RNCWebViewWrapper) {
     val client = OrionCinemaWebViewClient(reactContext, viewWrapper.id)

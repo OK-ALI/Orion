@@ -40,6 +40,7 @@ function withCinemaSources(config) {
       'OrionCinemaWebViewClient.kt',
       'OrionCinemaWebChromeClient.kt',
       'OrionCinemaWebViewManager.kt',
+      'OrionCinemaWebViewManagerDelegate.java',
       'OrionCinemaWebViewPackage.kt',
       'OrionPlayerSystemUiModule.kt',
       'OrionDownloadCaptureModule.kt',

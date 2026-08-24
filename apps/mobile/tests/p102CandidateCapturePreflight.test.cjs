@@ -269,13 +269,38 @@ test('P10.2 physical trace distinguishes manifest observer rejection and classif
   assert.doesNotMatch(traceSource, /https?:\/\/|uri\.toString\(\)|request\.url\.toString\(\)/i);
 });
 
-test('P10.2 physical trace repair uses 2.1.12 code14 identity', () => {
+
+
+test('P10.2 custom Cinema prop is forwarded through a Java Fabric delegate without Kotlin command bridge clashes', () => {
+  const manager = readMobile('plugins', 'orion-cinema-webview-native', 'OrionCinemaWebViewManager.kt');
+  const delegate = readMobile('plugins', 'orion-cinema-webview-native', 'OrionCinemaWebViewManagerDelegate.java');
+  const wrapper = readMobile('src', 'features', 'playback', 'OrionCinemaWebView.tsx');
+  const plugin = readMobile('plugins', 'withOrionCinemaWebView.js');
+
+  assert.match(wrapper, /props:\s*\{\s*orionShieldSession:\s*serializedManifest\s*\}/);
+  assert.match(manager, /private val fabricDelegate = OrionCinemaWebViewManagerDelegate\(this\)/);
+  assert.match(manager, /override fun getDelegate\(\): ViewManagerDelegate<RNCWebViewWrapper> = fabricDelegate/);
+  assert.match(manager, /@ReactProp\(name = "orionShieldSession"\)/);
+  assert.doesNotMatch(manager, /object\s*:\s*RNCWebViewManagerDelegate/);
+
+  assert.match(delegate, /extends RNCWebViewManagerDelegate<RNCWebViewWrapper,\s*OrionCinemaWebViewManager>/);
+  assert.match(delegate, /"orionShieldSession"\.equals\(propName\)/);
+  assert.match(delegate, /orionManager\.setOrionShieldSession\(view,\s*value instanceof String \? \(String\) value : null\)/);
+  assert.match(delegate, /super\.setProperty\(view,\s*propName,\s*value\)/);
+  assert.doesNotMatch(
+    delegate,
+    /\b(?:public|protected|private)\s+void\s+(?:receiveCommand|javaCompat_receiveCommand)\s*\(/,
+  );
+  assert.match(plugin, /'OrionCinemaWebViewManagerDelegate\.java'/);
+});
+
+test('P10.2 Fabric prop repair uses 2.1.13 code15 identity', () => {
   const mobilePackage = JSON.parse(readMobile('package.json'));
   const app = JSON.parse(readMobile('app.json')).expo;
   const rootLock = JSON.parse(fs.readFileSync(path.resolve(mobileRoot, '..', '..', 'package-lock.json'), 'utf8'));
 
-  assert.equal(mobilePackage.version, '2.1.12');
-  assert.equal(app.version, '2.1.12');
-  assert.equal(app.android.versionCode, 14);
-  assert.equal(rootLock.packages['apps/mobile'].version, '2.1.12');
+  assert.equal(mobilePackage.version, '2.1.13');
+  assert.equal(app.version, '2.1.13');
+  assert.equal(app.android.versionCode, 15);
+  assert.equal(rootLock.packages['apps/mobile'].version, '2.1.13');
 });
