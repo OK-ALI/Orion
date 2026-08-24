@@ -93,7 +93,7 @@ test('P10.2 request-context broker is job-scoped and exact-descendant constraine
   assert.match(broker, /context\.boundJobId != jobId \|\| context\.requestContextId != requestContextId/);
   assert.match(broker, /context\.authorizedUrls\.contains\(normalized\)/);
   assert.match(broker, /context\.authorizedUrls\.contains\(parent\)/);
-  assert.match(broker, /originAllowed\(context, child\)/);
+  assert.match(broker, /descendantAllowed\(context, child\)/);
   assert.match(broker, /authorizeDiscoveredDescendant/);
   assert.match(broker, /descendant-origin-not-approved/);
   assert.match(broker, /deniedCount > 0/);
@@ -214,11 +214,16 @@ test('P10.2 JavaScript normalization strips malicious native hitchhiker fields a
   assert.equal(capture.normalizeMobileDownloadCandidateEventV1({ ...payload, playbackSessionId: 'stale' }, session), null);
 });
 
-test('P10.2 does not prematurely enable transfer execution', () => {
+test('P10.2 capture boundary remains separate when later native transfer execution is activated', () => {
   const manager = readMobile('src', 'services', 'downloadManager.ts');
-  assert.match(manager, /MOBILE_DOWNLOADER_AVAILABLE = false/);
+  const capture = readMobile('src', 'features', 'downloads', 'downloadCandidateCapture.ts');
+
+  // P10.2 still owns capture/preflight only. P10.3 may activate availability,
+  // but presentation cannot turn the capture bridge into the transfer engine.
+  assert.match(manager, /MOBILE_DOWNLOADER_AVAILABLE = isNativeDownloadEngineAvailableV1\(\)/);
   assert.match(manager, /state: 'waiting-for-engine'/);
   assert.doesNotMatch(manager, /OrionDownloadCapture|bindMobileDownloadRequestContextV1/);
+  assert.doesNotMatch(capture, /NativeModules\.OrionDownloadEngine|startNativeDownloadJobV1|\.startJob\(/);
 });
 
 test('P10.2 physical diagnostic is bounded and excludes request secrets', () => {
@@ -294,13 +299,64 @@ test('P10.2 custom Cinema prop is forwarded through a Java Fabric delegate witho
   assert.match(plugin, /'OrionCinemaWebViewManagerDelegate\.java'/);
 });
 
-test('P10.2 Fabric prop repair uses 2.1.13 code15 identity', () => {
+test('P10.2 Fabric prop repair remains above its 2.1.13 code15 acceptance floor', () => {
   const mobilePackage = JSON.parse(readMobile('package.json'));
   const app = JSON.parse(readMobile('app.json')).expo;
   const rootLock = JSON.parse(fs.readFileSync(path.resolve(mobileRoot, '..', '..', 'package-lock.json'), 'utf8'));
+  const [major = 0, minor = 0, patch = 0] = String(mobilePackage.version).split('.').map(Number);
+  const atOrAboveRepairVersion =
+    major > 2 ||
+    (major === 2 && minor > 1) ||
+    (major === 2 && minor === 1 && patch >= 13);
 
-  assert.equal(mobilePackage.version, '2.1.13');
-  assert.equal(app.version, '2.1.13');
-  assert.equal(app.android.versionCode, 15);
-  assert.equal(rootLock.packages['apps/mobile'].version, '2.1.13');
+  assert.equal(app.version, mobilePackage.version);
+  assert.equal(rootLock.packages['apps/mobile'].version, mobilePackage.version);
+  assert.equal(Number.isInteger(app.android.versionCode), true);
+  assert.ok(app.android.versionCode >= 15);
+  assert.equal(atOrAboveRepairVersion, true);
+});
+
+
+test('P10.3 capture parity amendment probes opaque playback responses within a strict native budget', () => {
+  const broker = readMobile('plugins', 'orion-cinema-webview-native', 'OrionDownloadRequestContextBroker.kt');
+  assert.match(broker, /MAX_OPAQUE_PROBES_PER_SESSION = 36/);
+  assert.match(broker, /shouldProbeOpaqueRoot/);
+  assert.match(broker, /sec-fetch-dest/);
+  assert.match(broker, /approvedMediaOrigin/);
+  assert.match(broker, /context\.opaqueProbe && result\.resolvedKind !in setOf\("hls", "dash"\)/);
+  assert.match(broker, /playback.*stream.*video.*media.*source/);
+  assert.match(broker, /js\|mjs\|css\|json\|html\?/);
+  const safeEmit = broker.slice(broker.indexOf('val preflight = Arguments.createMap()'), broker.indexOf('private fun classifyObservedRoot'));
+  assert.doesNotMatch(safeEmit, /putString\("(?:url|rawUrl|cookie|authorization|headers?)"/i);
+});
+
+
+test('P10.3 capture parity scoring prefers verified HLS over DASH and never promotes Direct', () => {
+  const filePath = path.join(mobileRoot, 'src', 'features', 'downloads', 'downloadCandidateCapture.ts');
+  const capture = loadTypeScriptModule(filePath, {
+    'react-native': { Platform: { OS: 'android' }, NativeModules: {}, DeviceEventEmitter: { addListener: () => ({ remove() {} }) } },
+  });
+  const candidate = (kind) => ({
+    preflight: { resolvedManifestKind: kind, protection: 'clear', descendantCount: 100 },
+    capabilities: { resumable: true },
+    expiry: 'session',
+  });
+  assert.ok(capture.scoreMobileDownloadCandidateV1(candidate('hls')) > capture.scoreMobileDownloadCandidateV1(candidate('dash')));
+  assert.ok(capture.scoreMobileDownloadCandidateV1(candidate('dash')) > capture.scoreMobileDownloadCandidateV1(candidate('direct')));
+});
+
+
+test('P10.3 cross-origin manifest descendants stay exact, public-network-only and credential-scoped', () => {
+  const broker = readMobile('plugins', 'orion-cinema-webview-native', 'OrionDownloadRequestContextBroker.kt');
+  assert.match(broker, /if \(!context\.authorizedUrls\.contains\(parent\)\) return false/);
+  assert.match(broker, /descendantAllowed\(context, child\)/);
+  assert.match(broker, /isSafePublicHttpUrl/);
+  assert.match(broker, /InetAddress\.getAllByName/);
+  assert.match(broker, /isLoopbackAddress/);
+  assert.match(broker, /isSiteLocalAddress/);
+  assert.match(broker, /100 && second in 64\.\.127/);
+  assert.match(broker, /observedRequestMaterial/);
+  assert.match(broker, /safeCrossOriginHeaders/);
+  assert.match(broker, /captureCookie\(normalized, emptyMap\(\)\)/);
+  assert.doesNotMatch(broker.slice(broker.indexOf('private fun safeCrossOriginHeaders'), broker.indexOf('private fun sanitizeReferer')), /authorization|cookie/i);
 });

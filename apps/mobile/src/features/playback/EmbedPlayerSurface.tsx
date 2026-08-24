@@ -62,6 +62,7 @@ import { mergeShieldEvidence, parseShieldEvidenceEnvelope } from './shieldEviden
 import { PlayerStateOverlay } from '../../components/player/PlayerStateOverlay';
 import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import { beginMobileDownloadCaptureSessionV1 } from '../downloads/downloadCandidateCapture';
+import { useDownloadSourceAutoReturnV1 } from '../downloads/useDownloadSourceAutoReturn';
 
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
   embedUrl: string;
@@ -211,6 +212,7 @@ export function EmbedPlayerSurface({
     posterPath: posterPath || null,
     backdropPath: backdropPath || null,
   }), [backdropPath, episode, episodeTitle, id, posterPath, season, seriesTitle, title, type, year]);
+  useDownloadSourceAutoReturnV1(downloadTarget.itemKey);
   const sourceSheetOverlay = ['sources', 'subtitles', 'shield', 'diagnostics'].includes(controller.state.overlay);
   const showControls = controller.state.hudState !== 'hidden';
   const presentation = controller.state.presentation;

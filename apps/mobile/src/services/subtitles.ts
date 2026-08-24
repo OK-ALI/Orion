@@ -88,7 +88,9 @@ export async function searchSubtitlesWithOutcome(params: {
 }): Promise<SubtitleSearchOutcome> {
   const { tmdbId, mediaType, season = 1, episode = 1, languages = 'en' } = params;
   const results: SubtitleTrack[] = [];
-  const subdlApiKey = await SecureStore.getItemAsync(SUBDL_KEY_STORAGE).catch(() => null);
+  const storedSubdlApiKey = await SecureStore.getItemAsync(SUBDL_KEY_STORAGE).catch(() => null);
+  const bundledSubdlApiKey = process.env.EXPO_PUBLIC_SUBDL_API_KEY?.trim() || null;
+  const subdlApiKey = storedSubdlApiKey || bundledSubdlApiKey;
   let sawProviderFailure = false;
   let sawOffline = false;
   let sawInvalidFile = false;

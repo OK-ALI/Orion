@@ -9,6 +9,8 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.net.HttpURLConnection
+import java.net.Inet6Address
+import java.net.InetAddress
 import java.net.URL
 import java.security.MessageDigest
 import java.util.LinkedHashMap
@@ -33,13 +35,20 @@ internal object OrionDownloadRequestContextBroker {
   private const val CONNECT_TIMEOUT_MS = 6_000
   private const val READ_TIMEOUT_MS = 6_000
   private const val MAX_MANIFEST_BYTES = 256 * 1024
-  private const val MAX_DESCENDANTS = 512
+  private const val MAX_PREFLIGHT_DESCENDANTS = 512
+  private const val MAX_JOB_AUTHORIZED_URLS = 20_000
   private const val MAX_CONTEXTS = 24
+  private const val MAX_OPAQUE_PROBES_PER_SESSION = 36
+  private const val MAX_OBSERVED_REQUESTS_PER_SESSION = 256
+  private const val MAX_PUBLIC_ORIGIN_CACHE = 128
 
   private val executor = Executors.newFixedThreadPool(2)
   private val contexts = LinkedHashMap<String, CapturedContext>()
   private val candidateByFingerprint = mutableMapOf<String, String>()
   private val physicalTraceKeys = linkedSetOf<String>()
+  private val opaqueProbeCounts = mutableMapOf<String, Int>()
+  private val observedRequestMaterial = mutableMapOf<String, LinkedHashMap<String, CapturedRequestMaterial>>()
+  private val publicOriginSafetyCache = LinkedHashMap<String, Boolean>()
 
   fun observeRequest(
     reactContext: ReactContext,
@@ -78,20 +87,26 @@ internal object OrionDownloadRequestContextBroker {
       )
       return
     }
-    val manifestKind = classifyObservedRoot(uri, request.requestHeaders)
-    if (manifestKind == null) {
-      tracePhysicalOnce(
-        key = "$sessionId:shape-rejected",
-        message = "stage=shape-rejected source=${sourceId.take(40)}",
-      )
-      return
+    var opaqueProbe = false
+    val rawUrl = uri.toString()
+    rememberObservedRequest(sessionId, rawUrl, request.requestHeaders)
+
+    val manifestKind = classifyObservedRoot(uri, request.requestHeaders) ?: run {
+      if (!shouldProbeOpaqueRoot(uri, request.requestHeaders, allowedMediaOrigins, sessionId)) {
+        tracePhysicalOnce(
+          key = "$sessionId:shape-rejected",
+          message = "stage=shape-rejected source=${sourceId.take(40)}",
+        )
+        return
+      }
+      opaqueProbe = true
+      "extensionless"
     }
     tracePhysicalOnce(
       key = "$sessionId:classified:$manifestKind",
       message = "stage=classified source=${sourceId.take(40)} kind=$manifestKind",
     )
 
-    val rawUrl = uri.toString()
     val fingerprint = sha256("$sessionId\n$sourceId\n$rawUrl")
     val candidateId: String
     val context: CapturedContext
@@ -99,6 +114,15 @@ internal object OrionDownloadRequestContextBroker {
       cleanupExpiredLocked(System.currentTimeMillis())
       val existingId = candidateByFingerprint[fingerprint]
       if (existingId != null && contexts.containsKey(existingId)) return
+      if (opaqueProbe) {
+        val used = opaqueProbeCounts[sessionId] ?: 0
+        if (used >= MAX_OPAQUE_PROBES_PER_SESSION) return
+        opaqueProbeCounts[sessionId] = used + 1
+        tracePhysicalOnce(
+          key = "$sessionId:opaque-probe",
+          message = "stage=opaque-probe budget=$MAX_OPAQUE_PROBES_PER_SESSION",
+        )
+      }
       candidateId = "mob-${fingerprint.take(24)}"
       val requestContextId = UUID.randomUUID().toString()
       val capturedAt = System.currentTimeMillis()
@@ -117,6 +141,7 @@ internal object OrionDownloadRequestContextBroker {
         expiresAt = expiry.expiresAt,
         capturedAt = capturedAt,
         allowedOrigins = buildAllowedOrigins(rawUrl, allowedMediaOrigins),
+        opaqueProbe = opaqueProbe,
       )
       contexts[candidateId] = context
       candidateByFingerprint[fingerprint] = candidateId
@@ -140,6 +165,8 @@ internal object OrionDownloadRequestContextBroker {
 
   fun releaseSession(sessionId: String) {
     synchronized(this) {
+      opaqueProbeCounts.remove(sessionId)
+      observedRequestMaterial.remove(sessionId)
       val remove = contexts.values
         .filter { it.sessionId == sessionId && it.boundJobId == null }
         .map { it.candidateId }
@@ -154,7 +181,30 @@ internal object OrionDownloadRequestContextBroker {
     }
   }
 
-  /** Native-only authorization gate for future P10.3 transfer execution. */
+  /** Native-only root handoff for P10.3. Raw request material never crosses React. */
+  internal fun resolveRootForJob(
+    jobId: String,
+    requestContextId: String,
+    candidateId: String,
+  ): AuthorizedTransferSeed? {
+    synchronized(this) {
+      cleanupExpiredLocked(System.currentTimeMillis())
+      val context = contexts[candidateId] ?: return null
+      if (context.boundJobId != jobId || context.requestContextId != requestContextId) return null
+      if (context.preflightState != "ready" || !context.requestContextReady) return null
+      val normalized = normalizeHttpUrl(context.rawUrl) ?: return null
+      if (!context.authorizedUrls.contains(normalized)) return null
+      return AuthorizedTransferSeed(
+        sourceId = context.sourceId,
+        resolvedKind = context.resolvedKind,
+        resumable = context.resumable,
+        requiredBytes = context.requiredBytes,
+        request = authorizedRequestFor(context, normalized),
+      )
+    }
+  }
+
+  /** Native-only authorization gate for P10.3 transfer execution. */
   internal fun resolveForJob(
     jobId: String,
     requestContextId: String,
@@ -167,17 +217,15 @@ internal object OrionDownloadRequestContextBroker {
       if (context.boundJobId != jobId || context.requestContextId != requestContextId) return null
       val normalized = normalizeHttpUrl(rawUrl) ?: return null
       if (!context.authorizedUrls.contains(normalized)) return null
-      return AuthorizedRequest(
-        url = normalized,
-        headers = context.requestHeaders.toMap(),
-        cookieHeader = context.cookieHeader,
-      )
+      return authorizedRequestFor(context, normalized)
     }
   }
 
   /**
    * Native transfer code may extend the exact allowlist only from an already
-   * authorized manifest and only to an origin admitted by that capture.
+   * authorized manifest and only to a destination explicitly discovered by
+   * that manifest. Cross-origin descendants must resolve to a public network
+   * target; credentials are scoped to the exact observed child request.
    */
   internal fun authorizeDiscoveredDescendant(
     jobId: String,
@@ -192,8 +240,8 @@ internal object OrionDownloadRequestContextBroker {
       val parent = normalizeHttpUrl(parentUrl) ?: return false
       if (!context.authorizedUrls.contains(parent)) return false
       val child = resolveHttpUrl(parent, childUrl) ?: return false
-      if (!originAllowed(context, child)) return false
-      if (context.authorizedUrls.size >= MAX_DESCENDANTS + 1) return false
+      if (!descendantAllowed(context, child)) return false
+      if (context.authorizedUrls.size >= MAX_JOB_AUTHORIZED_URLS) return false
       context.authorizedUrls.add(child)
       return true
     }
@@ -218,6 +266,14 @@ internal object OrionDownloadRequestContextBroker {
 
     try {
       val result = performPreflight(context)
+      if (context.opaqueProbe && result.resolvedKind !in setOf("hls", "dash")) {
+        synchronized(this) { removeLocked(context.candidateId) }
+        tracePhysicalOnce(
+          key = "${context.sessionId}:opaque-rejected",
+          message = "stage=opaque-rejected source=${context.sourceId.take(40)}",
+        )
+        return
+      }
       val freeBytes = orionLibraryFreeBytes(reactContext)
       var state = result.state
       var reasonCode = result.reasonCode
@@ -402,18 +458,22 @@ internal object OrionDownloadRequestContextBroker {
       current.resolvedKind = resolvedKind
       current.protection = protection
       current.requestContextReady = state == "ready"
+      current.resumable = resumable
+      current.requiredBytes = requiredBytes
       current.authorizedUrls.clear()
       if (state == "ready") {
         normalizeHttpUrl(context.rawUrl)?.let(current.authorizedUrls::add)
-        descendants.take(MAX_DESCENDANTS).forEach(current.authorizedUrls::add)
+        descendants.take(MAX_PREFLIGHT_DESCENDANTS).forEach(current.authorizedUrls::add)
       }
     }
 
     val ready = state == "ready" && context.downloadAllowed
+    val deviceStorageReady = ready && resolvedKind == "direct"
     val deviceReason = when {
       !context.downloadAllowed -> "This provider is not enabled for Mobile downloads."
       state != "ready" -> reason ?: "This candidate is not ready to download."
-      else -> "Device Storage remains unavailable until scoped-storage destination validation is complete."
+      resolvedKind != "direct" -> "Stream fragments currently save to Orion Library."
+      else -> null
     }
     val preflight = Arguments.createMap().apply {
       putInt("schemaVersion", 1)
@@ -445,11 +505,11 @@ internal object OrionDownloadRequestContextBroker {
       putArray("availableQualities", Arguments.createArray().apply { pushString("best") })
       putMap("capabilities", Arguments.createMap().apply {
         putBoolean("orionLibrary", ready)
-        putBoolean("deviceStorage", false)
+        putBoolean("deviceStorage", deviceStorageReady)
         putBoolean("resumable", ready && resumable)
         putBoolean("subtitles", false)
         putBoolean("audioSelection", false)
-        putString("deviceStorageBlockedReason", deviceReason.take(180))
+        if (deviceReason == null) putNull("deviceStorageBlockedReason") else putString("deviceStorageBlockedReason", deviceReason.take(180))
       })
       putMap("preflight", preflight)
       putDouble("capturedAt", context.capturedAt.toDouble())
@@ -465,7 +525,7 @@ internal object OrionDownloadRequestContextBroker {
         append(" reachability=").append(reachability)
         append(" protection=").append(protection)
         append(" expiry=").append(context.expiry)
-        append(" descendants=").append(min(descendants.size, MAX_DESCENDANTS))
+        append(" descendants=").append(min(descendants.size, MAX_PREFLIGHT_DESCENDANTS))
         append(" contextReady=").append(ready)
         append(" storage=").append(if (requiredBytes == null) "unknown" else "known")
         append(" reason=").append(reasonCode?.take(48) ?: "none")
@@ -493,14 +553,47 @@ internal object OrionDownloadRequestContextBroker {
     if (path.matches(Regex(".*\\.(mpd)(?:$|/).*"))) return "dash"
     if (path.matches(Regex(".*\\.(mp4|webm|mkv|m4v|mov)(?:$|/).*"))) return "direct"
     if (path.matches(Regex(".*\\.(m4s|ts|aac|m4a|mp3|vtt|srt|ass|ssa)(?:$|/).*"))) return null
-    val accept = headers.entries.firstOrNull { it.key.equals("accept", true) }?.value?.lowercase(Locale.US).orEmpty()
+    val accept = headerValue(headers, "accept").lowercase(Locale.US)
     if (accept.contains("mpegurl") || accept.contains("dash+xml") || accept.contains("video/") || accept.contains("application/octet-stream")) {
       return "extensionless"
     }
     val hint = "${uri.lastPathSegment.orEmpty()}?${uri.query.orEmpty()}".lowercase(Locale.US)
-    if (listOf("manifest", "playlist", "master", "stream", "video").any(hint::contains)) return "extensionless"
+    if (listOf("manifest", "playlist", "master", "playback", "stream", "video", "media", "source").any(hint::contains)) return "extensionless"
     return null
   }
+
+  /**
+   * Android WebView does not expose a response-header observer equivalent to
+   * Electron's onHeadersReceived. For active playback only, Orion therefore
+   * performs a bounded native preflight of opaque XHR/media requests that the
+   * provider itself issued. Non-media responses are discarded natively and
+   * never become React candidates.
+   */
+  private fun shouldProbeOpaqueRoot(
+    uri: Uri,
+    headers: Map<String, String>,
+    allowedMediaOrigins: List<String>,
+    sessionId: String,
+  ): Boolean {
+    val path = uri.path.orEmpty().lowercase(Locale.US)
+    if (path.matches(Regex(".*\\.(?:js|mjs|css|json|html?|xml|wasm|map|ico|avif|gif|jpe?g|png|webp|svg|woff2?|ttf|otf|eot|m4s|ts|aac|m4a|mp3|vtt|srt|ass|ssa)(?:$|/).*"))) return false
+
+    val accept = headerValue(headers, "accept").lowercase(Locale.US)
+    if (accept.contains("text/html") || accept.contains("javascript") || accept.contains("text/css") || accept.contains("image/") || accept.contains("font/")) return false
+
+    val destination = headerValue(headers, "sec-fetch-dest").lowercase(Locale.US)
+    if (destination in setOf("document", "iframe", "image", "script", "style", "font")) return false
+
+    val requestOrigin = originOf(uri.toString())
+    val approvedMediaOrigin = requestOrigin != null && allowedMediaOrigins.mapNotNull(::normalizeOrigin).contains(requestOrigin)
+    val dynamicFetch = destination.isBlank() || destination in setOf("empty", "video", "audio")
+    if (!approvedMediaOrigin && !dynamicFetch) return false
+
+    return true
+  }
+
+  private fun headerValue(headers: Map<String, String>, name: String): String =
+    headers.entries.firstOrNull { it.key.equals(name, true) }?.value.orEmpty()
 
   private fun resolveKind(observed: String, contentType: String, body: String?): String {
     if (observed != "extensionless") return resolvedKindForObserved(observed)
@@ -532,12 +625,12 @@ internal object OrionDownloadRequestContextBroker {
     val found = linkedSetOf<String>()
     var denied = 0
     body.lineSequence().forEach { rawLine ->
-      if (found.size >= MAX_DESCENDANTS) return@forEach
+      if (found.size >= MAX_PREFLIGHT_DESCENDANTS) return@forEach
       val line = rawLine.trim()
       if (line.isEmpty()) return@forEach
       if (!line.startsWith("#")) denied += addDescendant(baseUrl, line, context, found)
       Regex("URI=\"([^\"]+)\"", RegexOption.IGNORE_CASE).findAll(line).forEach { match ->
-        if (found.size < MAX_DESCENDANTS) denied += addDescendant(baseUrl, match.groupValues[1], context, found)
+        if (found.size < MAX_PREFLIGHT_DESCENDANTS) denied += addDescendant(baseUrl, match.groupValues[1], context, found)
       }
     }
     return DescendantDiscovery(found, denied)
@@ -547,23 +640,114 @@ internal object OrionDownloadRequestContextBroker {
     val found = linkedSetOf<String>()
     var denied = 0
     Regex("<BaseURL[^>]*>([^<]+)</BaseURL>", RegexOption.IGNORE_CASE).findAll(body).forEach { match ->
-      if (found.size < MAX_DESCENDANTS) denied += addDescendant(baseUrl, match.groupValues[1].trim(), context, found)
+      if (found.size < MAX_PREFLIGHT_DESCENDANTS) denied += addDescendant(baseUrl, match.groupValues[1].trim(), context, found)
     }
     Regex("(?:media|initialization|sourceURL)=\"([^\"]+)\"", RegexOption.IGNORE_CASE).findAll(body).forEach { match ->
       val value = match.groupValues[1]
-      if (!value.contains('$') && found.size < MAX_DESCENDANTS) denied += addDescendant(baseUrl, value, context, found)
+      if (!value.contains('$') && found.size < MAX_PREFLIGHT_DESCENDANTS) denied += addDescendant(baseUrl, value, context, found)
     }
     return DescendantDiscovery(found, denied)
   }
 
-  /** Returns 1 only when a valid HTTP child is denied by the approved-origin boundary. */
+  /** Returns 1 only when a manifest child fails the exact public-network descendant boundary. */
   private fun addDescendant(baseUrl: String, child: String, context: CapturedContext, target: MutableSet<String>): Int {
     val resolved = resolveHttpUrl(baseUrl, child) ?: return 0
-    if (!originAllowed(context, resolved)) return 1
+    if (!descendantAllowed(context, resolved)) return 1
     target.add(resolved)
     return 0
   }
 
+
+  private fun rememberObservedRequest(sessionId: String, rawUrl: String, headers: Map<String, String>) {
+    val normalized = normalizeHttpUrl(rawUrl) ?: return
+    val requestCookie = headers.entries.firstOrNull { it.key.equals("cookie", true) }?.value?.takeIf { it.isNotBlank() }
+    val material = CapturedRequestMaterial(headers.toMap(), requestCookie)
+    synchronized(this) {
+      val requests = observedRequestMaterial.getOrPut(sessionId) { LinkedHashMap() }
+      requests.remove(normalized)
+      requests[normalized] = material
+      while (requests.size > MAX_OBSERVED_REQUESTS_PER_SESSION) {
+        val oldest = requests.keys.firstOrNull() ?: break
+        requests.remove(oldest)
+      }
+    }
+  }
+
+  private fun authorizedRequestFor(context: CapturedContext, normalized: String): AuthorizedRequest {
+    val observed = observedRequestMaterial[context.sessionId]?.get(normalized)
+    if (observed != null) {
+      return AuthorizedRequest(
+        normalized,
+        observed.headers.toMap(),
+        observed.cookieHeader ?: captureCookie(normalized, observed.headers),
+      )
+    }
+    val sameOrigin = originOf(normalized) == originOf(context.rawUrl)
+    return if (sameOrigin) {
+      AuthorizedRequest(normalized, context.requestHeaders.toMap(), context.cookieHeader)
+    } else {
+      AuthorizedRequest(
+        normalized,
+        safeCrossOriginHeaders(context.requestHeaders),
+        captureCookie(normalized, emptyMap()),
+      )
+    }
+  }
+
+  private fun safeCrossOriginHeaders(headers: Map<String, String>): Map<String, String> {
+    val safe = linkedMapOf<String, String>()
+    headers.forEach { (name, value) ->
+      when (name.lowercase(Locale.US)) {
+        "accept", "accept-language", "user-agent", "origin" -> safe[name] = value
+        "referer" -> sanitizeReferer(value)?.let { safe[name] = it }
+      }
+    }
+    return safe
+  }
+
+  private fun sanitizeReferer(raw: String): String? = try {
+    val url = URL(raw)
+    if (url.protocol != "http" && url.protocol != "https") null
+    else "${url.protocol.lowercase(Locale.US)}://${url.authority.lowercase(Locale.US)}/"
+  } catch (_: Throwable) { null }
+
+  private fun descendantAllowed(context: CapturedContext, rawUrl: String): Boolean =
+    originAllowed(context, rawUrl) || isSafePublicHttpUrl(rawUrl)
+
+  private fun isSafePublicHttpUrl(rawUrl: String): Boolean {
+    val origin = originOf(rawUrl) ?: return false
+    synchronized(this) { publicOriginSafetyCache[origin]?.let { return it } }
+    val safe = try {
+      val url = URL(rawUrl)
+      val host = url.host?.trim()?.lowercase(Locale.US).orEmpty()
+      if (host.isEmpty() || host == "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) false
+      else {
+        val addresses = InetAddress.getAllByName(host)
+        addresses.isNotEmpty() && addresses.all { !isPrivateAddress(it) }
+      }
+    } catch (_: Throwable) { false }
+    synchronized(this) {
+      if (publicOriginSafetyCache.size >= MAX_PUBLIC_ORIGIN_CACHE) publicOriginSafetyCache.clear()
+      publicOriginSafetyCache[origin] = safe
+    }
+    return safe
+  }
+
+  private fun isPrivateAddress(address: InetAddress): Boolean {
+    if (address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress || address.isSiteLocalAddress || address.isMulticastAddress) return true
+    if (address is Inet6Address) {
+      val bytes = address.address
+      if (bytes.isNotEmpty() && (bytes[0].toInt() and 0xfe) == 0xfc) return true
+    }
+    val bytes = address.address
+    if (bytes.size == 4) {
+      val first = bytes[0].toInt() and 0xff
+      val second = bytes[1].toInt() and 0xff
+      if (first == 100 && second in 64..127) return true
+      if (first == 198 && second in 18..19) return true
+    }
+    return false
+  }
 
   private fun originAllowed(context: CapturedContext, rawUrl: String): Boolean {
     val origin = originOf(rawUrl) ?: return false
@@ -676,7 +860,15 @@ internal object OrionDownloadRequestContextBroker {
 
 internal data class BoundContextResult(val requestContextId: String, val expiresAt: Long?)
 internal data class AuthorizedRequest(val url: String, val headers: Map<String, String>, val cookieHeader: String?)
+internal data class AuthorizedTransferSeed(
+  val sourceId: String,
+  val resolvedKind: String,
+  val resumable: Boolean,
+  val requiredBytes: Long?,
+  val request: AuthorizedRequest,
+)
 private data class DescendantDiscovery(val allowed: Set<String>, val deniedCount: Int)
+private data class CapturedRequestMaterial(val headers: Map<String, String>, val cookieHeader: String?)
 private data class ExpiryResult(val kind: String, val expiresAt: Long?)
 private data class CapturedContext(
   val candidateId: String,
@@ -692,12 +884,15 @@ private data class CapturedContext(
   val expiresAt: Long?,
   val capturedAt: Long,
   val allowedOrigins: Set<String>,
+  val opaqueProbe: Boolean = false,
   val authorizedUrls: MutableSet<String> = linkedSetOf(),
   var boundJobId: String? = null,
   var preflightState: String = "checking",
   var resolvedKind: String = "unknown",
   var protection: String = "unknown",
   var requestContextReady: Boolean = false,
+  var resumable: Boolean = false,
+  var requiredBytes: Long? = null,
   val downloadAllowed: Boolean = true,
 )
 

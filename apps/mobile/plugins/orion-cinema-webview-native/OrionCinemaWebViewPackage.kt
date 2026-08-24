@@ -9,6 +9,7 @@ class OrionCinemaWebViewPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> = listOf(
     OrionPlayerSystemUiModule(reactContext),
     OrionDownloadCaptureModule(reactContext),
+    OrionDownloadEngineModule(reactContext),
   )
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> = listOf(OrionCinemaWebViewManager())
 }

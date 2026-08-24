@@ -802,33 +802,49 @@ Acceptance:
 
 **Primary contracts:** `V3-P10-005`, `V3-P10-006`, `V3-P10-008`, `V3-P10-009`, `V3-P10-014`.
 
-Implement:
+**Stage status (2026-08-24): COMPLETE at the P10.3 native-engine boundary.** `V3-P10-005`, `V3-P10-006`, `V3-P10-008` and `V3-P10-009` are accepted. `V3-P10-014` remains open because its Device Storage fragment-finalization and complete dual-destination product boundary continue in P10.4.
 
-- foreground download ownership,
-- foreground-service progress notification backed by the same durable native job truth as in-app progress,
-- Phase 9 notification-domain bridge for optional download completion, failure and action-needed events,
-- WorkManager recovery,
-- durable queue,
-- direct range jobs,
-- HLS/DASH fragment jobs,
-- bounded concurrency,
+Accepted implementation:
+
+- Android-owned foreground download ownership with one durable native job truth,
+- foreground-service progress notification backed by the same native job state as in-app progress,
+- Phase 9 `Downloads` notification-domain bridge for optional completion, failure and action-needed events,
+- WorkManager recovery with connected-network, battery-not-low and storage-not-low constraints,
+- durable queue and verified-fragment persistence across process loss,
+- production HLS/DASH fragment jobs with bounded concurrency and deterministic accounting,
+- `Auto` ranks ready HLS ahead of DASH and never falls back to Direct,
+- historical Direct transfer code is retained only as non-production diagnostic/test history and is rejected from the Mobile production start path,
+- finite/VOD HLS and DASH are supported; changing/live/open-ended manifests fail closed rather than pretending safe finalization or persisting an unbounded refresh loop,
 - pause/resume/retry/retry-all/cancel,
-- network/battery/storage policy,
-- reboot/process-death recovery,
-- integrity verification,
-- atomic finalization,
-- partial-job repair.
+- network recovery and partial-job repair,
+- reboot/process-death recovery of durable job/fragment truth; ephemeral request credentials are never persisted and a lost/expired playback context becomes an honest source-refresh action instead of secret persistence,
+- free-space guarding in Orion-managed storage plus scoped SAF destination registration foundation,
+- integrity verification before completion,
+- atomic fragmented-bundle finalization,
+- no false `100%` before verified completion.
 
-Acceptance:
+Acceptance evidence:
 
-- focused native/bridge tests,
-- in-app / foreground-notification progress parity and background-continuity proof,
-- proof that Android-required active-transfer notification visibility survives optional download-alert disablement,
-- full relevant Mobile gates,
-- signed distribution APK for physical native validation when needed,
-- ADB may install/replace a signed same-signer distribution build for stage-level feature validation,
-- such ADB installation is not updater-lifecycle evidence,
-- no debug APK acceptance.
+- Candidate 6 focused P10.2/P10.3 proof: `52/52`,
+- complete Mobile gate: `384/384`, source-size `169`, Expo Doctor `20/20`, production web export,
+- Android native compile: `BUILD SUCCESSFUL`, `373` actionable tasks,
+- signed production Preview `2.1.16/code18` installed through Orion's own Phase 9 updater,
+- provider capture matrix physically green for VidSrc, Videasy, VidKing, VixSrc and VSEmbed, all returning ready HLS candidates,
+- real VidSrc and Videasy fragmented transfers,
+- real foreground notification title/progress/fragment count/size/speed/ETA,
+- physical pause/resume and paused-job Active semantics,
+- physical network-loss recovery with verified-fragment retention,
+- physical Movie and TV episode completion into `Verified · Stored in Orion Library`,
+- `Verifying` / `Finalizing` was observed during physical validation; the final `Verified` state is screenshot-backed,
+- optional Retry All, battery/storage WorkManager constraints and Phase 9 completion/failure/action-needed alert bridging were added in Candidate 6 after the signed transfer candidate and are covered by the complete automated/native gates; their product-facing matrix remains part of P10.4/P10.6,
+- no debug APK acceptance and no ADB installation substituted for the production updater proof.
+
+Architectural reconciliation:
+
+- the earlier `direct range jobs` wording is superseded for Mobile production by the physically accepted fragment-only boundary; Direct remains detectable/history-only but is not a production transfer fallback,
+- the earlier generic `playlist refresh` expectation is narrowed to safe finite HLS/DASH; live/changing/open-ended manifests remain unsupported until Orion has a bounded finalizable refresh contract,
+- `restart/reboot continuation` means durable job/fragment truth survives and recovery is rescheduled; Orion does not persist raw signed URLs, cookies, Authorization headers or other ephemeral playback credentials merely to force automatic continuation,
+- for Orion Library fragmented assets, integrity means complete non-empty fragment coverage, expected byte-range checks where applicable, finalized bundle/index metadata and verified-size truth before completion; a monolithic-container validation rule applies only when a future finalizer actually emits such a container.
 
 ## P10.4 - Downloads product experience and Desktop parity
 

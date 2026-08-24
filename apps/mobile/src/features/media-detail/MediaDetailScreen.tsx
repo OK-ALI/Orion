@@ -21,17 +21,15 @@ import { EpisodeWatchedButton, MovieWatchedBadge, SeasonWatchedControl, WatchedF
 import { MovieCollectionTab } from './MovieCollectionTab';
 import { isVerifiedPlaybackEvidence } from '../library/playbackLibrary';
 import { createMobileDownloadTargetV1, type MobileDownloadTargetV1 } from '../downloads/downloadIdentity';
-
+import { cancelMobileDownloadSourceResolutionV1, requestMobileDownloadSourceResolutionV1, type MobileDownloadTransferMethodV1 } from '../downloads/downloadCandidateCapture';
 function EpisodeOverview({ overview, theme }: { overview: string; theme: any }) {
   const [expanded, setExpanded] = useState(false);
   const [measured, setMeasured] = useState(false);
   const [canExpand, setCanExpand] = useState(false);
-
   const handleMeasure = useCallback((event: any) => {
     setCanExpand(event.nativeEvent.lines.length > 2);
     setMeasured(true);
   }, []);
-
   return (
     <View style={styles.episodeOverviewBlock}>
       {!measured && (
@@ -71,7 +69,6 @@ function EpisodeOverview({ overview, theme }: { overview: string; theme: any }) 
     </View>
   );
 }
-
 export default function MediaDetailScreen() {
   const { id, type } = useLocalSearchParams<{ id: string; type: 'movie' | 'tv' }>();
   const router = useRouter();
@@ -83,6 +80,7 @@ export default function MediaDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'info' | 'episodes' | 'cast' | 'recommended' | 'collection'>('info');
   const [downloadTarget, setDownloadTarget] = useState<MobileDownloadTargetV1 | null>(null);
+  const pendingDownloadTargetRef = useRef<MobileDownloadTargetV1 | null>(null);
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [showTrailerModal, setShowTrailerModal] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState(1);
@@ -114,17 +112,9 @@ export default function MediaDetailScreen() {
   const castList = useMemo(() => data?.credits?.cast || [], [data?.credits?.cast]);
   const topCast = useMemo(() => castList.slice(0, 15), [castList]);
   const fullCast = useMemo(() => castList.slice(0, 25), [castList]);
-  const recommendedItems = useMemo(
-    () => (data?.recommendations?.results || [])
-      .filter((item: any) => item.poster_path)
-      .map((item: TmdbMediaItem) => ({ ...item, media_type: type } as TmdbMediaItem)),
-    [data?.recommendations?.results, type],
-  );
+  const recommendedItems = useMemo(() => (data?.recommendations?.results || []).filter((item: any) => item.poster_path).map((item: TmdbMediaItem) => ({ ...item, media_type: type } as TmdbMediaItem)), [data?.recommendations?.results, type]);
   const castRenderBudget = useMemo(() => getRailRenderBudget(width, 106 + spacing[3], resolvedProfile), [resolvedProfile, width]);
-  const recommendationRenderBudget = useMemo(
-    () => getRailRenderBudget(width, 140 + spacing[4] + spacing[3], resolvedProfile),
-    [resolvedProfile, width],
-  );
+  const recommendationRenderBudget = useMemo(() => getRailRenderBudget(width, 140 + spacing[4] + spacing[3], resolvedProfile), [resolvedProfile, width]);
   const collectionRef = useMemo(() => {
     if (!isMovie || !data?.belongs_to_collection?.id) return null;
     return {
@@ -135,8 +125,6 @@ export default function MediaDetailScreen() {
   const fitCollectionTabs = isMovie && !!collectionRef && !isTablet && fontScale <= 1.05;
   const openCollectionMovie = useCallback((movieId: number) => {
     if (String(movieId) === String(id)) return;
-    // Push rather than replace so Android/Orion Back restores the originating
-    // Media Detail instance, including its selected tab and scroll context.
     router.push({
       pathname: '/media/[id]',
       params: { id: String(movieId), type: 'movie' },
@@ -144,12 +132,38 @@ export default function MediaDetailScreen() {
   }, [id, router]);
   useFocusEffect(
     useCallback(() => {
-      // Progress is deliberately read through the stable playback-actions lane so
-      // Media Detail does not subscribe to every telemetry persistence write.
-      // Refresh only when the screen becomes active again after playback.
       setProgressRefreshVersion((version) => version + 1);
+      const pendingDownloadTarget = pendingDownloadTargetRef.current;
+      if (pendingDownloadTarget) {
+        pendingDownloadTargetRef.current = null;
+        setDownloadTarget(pendingDownloadTarget);
+      }
     }, []),
   );
+  const closeDownloadOptions = useCallback(() => {
+    if (downloadTarget) cancelMobileDownloadSourceResolutionV1(downloadTarget.itemKey);
+    setDownloadTarget(null);
+  }, [downloadTarget]);
+  const resolveDownloadSource = useCallback((target: MobileDownloadTargetV1, method: MobileDownloadTransferMethodV1) => {
+    requestMobileDownloadSourceResolutionV1(target.itemKey, method);
+    pendingDownloadTargetRef.current = target;
+    setDownloadTarget(null);
+    router.push({
+      pathname: '/player/[id]',
+      params: {
+        id: String(target.media.id),
+        type: target.media.mediaType,
+        title: target.media.title,
+        year: target.media.year ?? undefined,
+        seriesTitle: target.media.seriesTitle || undefined,
+        season: target.media.season ?? undefined,
+        episode: target.media.episode ?? undefined,
+        episodeTitle: target.media.episodeTitle || undefined,
+        posterPath: target.media.posterPath || undefined,
+        backdropPath: target.media.backdropPath || undefined,
+      },
+    });
+  }, [router]);
   useEffect(() => {
     async function loadDetails() {
       setLoading(true);
@@ -234,15 +248,10 @@ export default function MediaDetailScreen() {
   })();
   const allTrailers = normalizeTrailerCandidates(mainVideoResults, seasonVideos, preferredLanguage, originalLanguage);
   const trailerObj = allTrailers[0];
-  // This content crosses the image-to-page fade. Once that fade reaches a light
-  // theme surface, cinema-white metadata no longer has sufficient contrast.
   const heroText = theme.dark ? '#ffffff' : theme.text;
   const heroSecondary = theme.dark ? 'rgba(255,255,255,0.82)' : theme.textSecondary;
   const heroSurface = theme.dark ? 'rgba(255,255,255,0.10)' : theme.surface;
   const heroBorder = theme.dark ? 'rgba(255,255,255,0.18)' : theme.border;
-  // Dark themes keep the cinematic black fade. Light themes fade the artwork
-  // directly into their own page surface so Projector Silver never develops a
-  // muddy grey band behind the title/metadata area.
   const backdropFadeColors = theme.dark
     ? ['rgba(5,5,10,0.10)', 'rgba(5,5,10,0.52)', 'rgba(5,5,10,0.84)', theme.background] as const
     : [`${theme.background}00`, `${theme.background}52`, `${theme.background}E8`, theme.background] as const;
@@ -668,8 +677,8 @@ export default function MediaDetailScreen() {
                             />
                             <Pressable
                               accessibilityRole="button"
-                              accessibilityLabel={`Offline information for Episode ${ep.episode_number}`}
-                              accessibilityHint="Shows the current Mobile downloads availability status"
+                              accessibilityLabel={`Download Episode ${ep.episode_number}`}
+                              accessibilityHint="Opens download options for this episode"
                               hitSlop={4}
                               style={({ pressed }) => [styles.epDownloadBtn, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && { opacity: 0.7 }]}
                               onPress={(e) => {
@@ -688,8 +697,8 @@ export default function MediaDetailScreen() {
                                 }));
                               }}
                             >
-                              <Ionicons name="lock-closed-outline" size={12} color={theme.textMuted} />
-                              <Text numberOfLines={1} style={[styles.epDownloadBtnText, { color: theme.textMuted }]}>Offline info</Text>
+                              <Ionicons name="download-outline" size={12} color={theme.accent} />
+                              <Text numberOfLines={1} style={[styles.epDownloadBtnText, { color: theme.text }]}>Download</Text>
                             </Pressable>
                           </View>
                         </View>
@@ -705,7 +714,8 @@ export default function MediaDetailScreen() {
       </Animated.ScrollView>
       <DownloadModal
         visible={Boolean(downloadTarget)}
-        onClose={() => setDownloadTarget(null)}
+        onClose={closeDownloadOptions}
+        onResolveSource={resolveDownloadSource}
         target={downloadTarget}
       />
       <Modal visible={showMoreSheet} transparent animationType="fade" onRequestClose={() => setShowMoreSheet(false)}>
@@ -757,15 +767,15 @@ export default function MediaDetailScreen() {
                 backdropPath: data.backdrop_path || null,
               }));
             }}>
-              <Ionicons name="lock-closed-outline" size={20} color={theme.textMuted} />
+              <Ionicons name="download-outline" size={20} color={theme.accent} />
               <View style={{ flex: 1 }}>
-                <Text style={[styles.moreActionText, { color: theme.text }]}>Download options</Text>
-                <Text style={[styles.moreActionDescription, { color: theme.textMuted }]}>{type === 'tv' ? 'Choose an episode for offline playback' : 'Save for offline playback when available'}</Text>
+                <Text style={[styles.moreActionText, { color: theme.text }]}>Download</Text>
+                <Text style={[styles.moreActionDescription, { color: theme.textMuted }]}>{type === 'tv' ? 'Choose an episode for offline playback' : 'Resolve the active source and save for offline playback'}</Text>
               </View>
             </Pressable>
             <View style={[styles.moreNotice, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <Ionicons name="server-outline" size={18} color={theme.textMuted} />
-              <Text style={[styles.moreActionDescription, { color: theme.textMuted }]}>Streaming sources are selected inside the player so the active session stays consistent.</Text>
+              <Text style={[styles.moreActionDescription, { color: theme.textMuted }]}>Downloads resolve the active source inside the player, then return here ready to start when the source supports offline transfer.</Text>
             </View>
           </View>
         </View>

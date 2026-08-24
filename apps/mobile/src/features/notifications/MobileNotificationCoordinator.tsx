@@ -17,6 +17,7 @@ import { getMobileUpdateChannelV1 } from '../../services/mobileReleaseTruth';
 import { checkMobileApplicationUpdateStateV1 } from '../../services/mobileApplicationUpdateState';
 import { mmkvStorageAdapter } from '../../services/storageAdapter';
 import { subscribeMobileSourceHealthV2 } from '../../services/sourceHealth';
+import { readMobileDownloadRepositoryV1, subscribeMobileDownloadRepositoryV1 } from '../downloads/downloadRepository';
 
 const UPDATE_POLL_KEY = 'orion.mobile.notifications.updatePoll.v1';
 const UPDATE_POLL_INTERVAL_MS = 6 * 60 * 60_000;
@@ -24,6 +25,14 @@ const UPDATE_FAILURE_RETRY_MS = 15 * 60_000;
 const COORDINATOR_TICK_MS = 60_000;
 
 type SyncDomain = 'My List' | 'Watched' | 'Viewing Activity';
+
+function downloadMediaLabel(job: ReturnType<typeof readMobileDownloadRepositoryV1>['jobs'][number]): string {
+  const media = job.media;
+  if (media.mediaType === 'tv' && media.season !== null && media.episode !== null) {
+    return `${media.seriesTitle || media.title} · S${media.season} E${media.episode}`;
+  }
+  return media.year ? `${media.title} · ${media.year}` : media.title;
+}
 
 export function MobileNotificationCoordinator() {
   const network = useNetworkStatus();
@@ -43,9 +52,55 @@ export function MobileNotificationCoordinator() {
     'Viewing Activity': viewingActivity.phase,
   });
 
+  const downloadPreviousRef = useRef<Map<string, string> | null>(null);
+
   useEffect(() => subscribeMobileNotificationPreferencesV1(() => {
     setPreferenceRevision((value) => value + 1);
   }), []);
+
+  useEffect(() => {
+    const baseline = readMobileDownloadRepositoryV1();
+    downloadPreviousRef.current = new Map(baseline.jobs.map((job) => [job.jobId, job.state]));
+    return subscribeMobileDownloadRepositoryV1((snapshot) => {
+      const previous = downloadPreviousRef.current;
+      downloadPreviousRef.current = new Map(snapshot.jobs.map((job) => [job.jobId, job.state]));
+      if (!previous) return;
+
+      for (const job of snapshot.jobs) {
+        if (previous.get(job.jobId) === job.state) continue;
+        const label = downloadMediaLabel(job);
+        if (job.state === 'completed') {
+          void deliverMobileNotificationV1({
+            category: 'downloads',
+            dedupeKey: `download-completed:${job.jobId}`,
+            title: 'Download complete',
+            body: `${label} is verified and stored in Orion Library.`,
+            target: { target: 'downloads' },
+          });
+          continue;
+        }
+        if (job.state === 'failed') {
+          void deliverMobileNotificationV1({
+            category: 'downloads',
+            dedupeKey: `download-failed:${job.jobId}:${job.failure?.code || 'failed'}`,
+            title: 'Download failed',
+            body: `${label} could not finish downloading. Open Downloads to retry.`,
+            target: { target: 'downloads' },
+          });
+          continue;
+        }
+        if (job.state === 'storage-blocked' || job.state === 'action-required' || job.state === 'expired') {
+          void deliverMobileNotificationV1({
+            category: 'downloads',
+            dedupeKey: `download-action:${job.jobId}:${job.state}:${job.failure?.code || 'attention'}`,
+            title: 'Download needs attention',
+            body: `${label} needs an action before it can continue. Open Downloads for details.`,
+            target: { target: 'downloads' },
+          });
+        }
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!getMobileNotificationPreferencesV1().enabled) return;

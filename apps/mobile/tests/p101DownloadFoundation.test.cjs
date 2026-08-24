@@ -154,7 +154,7 @@ test('P10.1 preserves exact TV episode identity instead of a boolean-only modal 
   assert.match(modal, /target: MobileDownloadTargetV1 \| null/);
 });
 
-test('P10.1 exposes dual destination settings while keeping the real engine honestly unavailable', () => {
+test('P10.1 destination foundation remains compatible while P10.3 safely narrows active Mobile storage to Orion Library', () => {
   const architecture = readMobile('src', 'features', 'settings', 'settingsArchitecture.ts');
   const settings = readMobile('app', '(tabs)', 'settings.tsx');
   const downloadSettings = readMobile('src', 'features', 'downloads', 'DownloadSettingsContent.tsx');
@@ -163,16 +163,21 @@ test('P10.1 exposes dual destination settings while keeping the real engine hone
 
   assert.match(architecture, /id: 'downloads', label: 'Downloads', status: 'active'/);
   assert.match(settings, /<DownloadSettingsContent \/>/);
-  assert.match(downloadSettings, /label: 'Orion Library'/);
-  assert.match(downloadSettings, /label: 'Device Storage'/);
+  assert.match(downloadSettings, />Orion Library</);
+  assert.match(downloadSettings, /Device Storage is paused until Orion can finalize fragmented streams/);
   assert.match(downloadSettings, />Preferred quality</);
   assert.match(downloadSettings, />Subtitles</);
   assert.doesNotMatch(downloadSettings, /notification/i);
 
-  assert.match(manager, /MOBILE_DOWNLOADER_AVAILABLE = false/);
+  // P10.1 established the honest-unavailable boundary. Later P10.x stages may
+  // activate it only when the Android-owned engine is physically present.
+  assert.match(manager, /isNativeDownloadEngineAvailableV1/);
+  assert.match(manager, /MOBILE_DOWNLOADER_AVAILABLE = isNativeDownloadEngineAvailableV1\(\)/);
   assert.match(manager, /state: 'waiting-for-engine'/);
-  assert.match(modal, /accessibilityState=\{\{ disabled: true \}\}/);
-  assert.match(modal, /disabled/);
+  assert.match(manager, /state: 'ready'/);
+  assert.match(modal, /!capability\.available/);
+  assert.match(modal, /const subtitleCheckPending =/);
+  assert.match(modal, /disabled=\{needsEpisode \|\| starting \|\| subtitleCheckPending \|\| !capability\.available\}/);
   assert.doesNotMatch(manager, /setInterval|Math\.random/);
 });
 
@@ -199,7 +204,7 @@ test('P10.1 replaces engineering-only Downloads copy with Orion product foundati
   assert.match(screen, /MobilePageHeader/);
   assert.match(screen, /Your offline library starts here/);
   assert.match(screen, /Orion Library/);
-  assert.match(screen, /Device Storage/);
+  assert.match(screen, /DownloadActivityList/);
   assert.match(screen, /subscribeMobileDownloadRepositoryV1/);
   assert.doesNotMatch(screen, /STABILIZATION BOUNDARY|Protected and segmented streams require|engineering/i);
   assert.doesNotMatch(modal, /LOCKED DURING STABILIZATION|native downloader research/i);
@@ -338,7 +343,7 @@ test('P10.1 download preferences survive module restart and future schemas fail 
 
   const secondProcess = loadPreferences();
   const restored = secondProcess.getMobileDownloadPreferencesV1();
-  assert.equal(restored.defaultDestination, 'device-storage');
+  assert.equal(restored.defaultDestination, 'orion-library');
   assert.equal(restored.deviceStorageTarget.targetId, 'saf:downloads');
   assert.equal(restored.preferredQuality, '1080p');
   assert.equal(restored.subtitlePreference, 'none');

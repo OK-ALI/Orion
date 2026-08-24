@@ -14,6 +14,7 @@ import type {
 
 const EVENT_NAME = 'OrionDownloadCandidate';
 const MAX_REASON_LENGTH = 180;
+const SOURCE_RESOLUTION_RETENTION_MS = 2 * 60_000;
 
 const MANIFEST_KINDS = new Set<MobileDownloadManifestKindV1>(['direct', 'hls', 'dash', 'extensionless', 'unknown']);
 const RESOLVED_MANIFEST_KINDS = new Set<MobileDownloadCandidatePreflightV1['resolvedManifestKind']>(['direct', 'hls', 'dash', 'unknown']);
@@ -58,6 +59,8 @@ type Listener = (snapshots: readonly MobileDownloadCandidateSnapshotV1[]) => voi
 let activeSession: ActiveCaptureSessionV1 | null = null;
 let eventSubscription: { remove(): void } | null = null;
 let snapshots: MobileDownloadCandidateSnapshotV1[] = [];
+let pendingSourceResolution: { itemKey: string; method: MobileDownloadTransferMethodV1; expiresAt: number; autoReturnIssued: boolean } | null = null;
+const retainedSourceSessions = new Map<string, Set<string>>();
 const listeners = new Set<Listener>();
 
 function nativeModule(): NativeDownloadCaptureModule | null {
@@ -185,6 +188,67 @@ function publish(): void {
   listeners.forEach((listener) => listener(current));
 }
 
+
+function releaseRetainedSessions(itemKey: string): void {
+  const sessions = retainedSourceSessions.get(itemKey);
+  if (sessions) {
+    for (const sessionId of sessions) nativeModule()?.releaseSession(sessionId);
+  }
+  retainedSourceSessions.delete(itemKey);
+}
+
+function pendingSourceResolutionActive(itemKey?: string): boolean {
+  if (!pendingSourceResolution) return false;
+  if (pendingSourceResolution.expiresAt <= Date.now()) {
+    const expiredItemKey = pendingSourceResolution.itemKey;
+    pendingSourceResolution = null;
+    releaseRetainedSessions(expiredItemKey);
+    snapshots = snapshots.filter((entry) => entry.itemKey !== expiredItemKey);
+    publish();
+    return false;
+  }
+  return itemKey === undefined || pendingSourceResolution.itemKey === itemKey;
+}
+
+/**
+ * Explicitly retains only the selected title's short-lived playback candidate
+ * while the user returns from Player to the Download sheet. Native request
+ * material remains opaque and bounded by the broker's own expiry rules.
+ */
+export function requestMobileDownloadSourceResolutionV1(itemKey: string, method: MobileDownloadTransferMethodV1 = 'auto'): void {
+  const clean = text(itemKey, 180);
+  if (!clean) return;
+  if (pendingSourceResolution && pendingSourceResolution.itemKey !== clean) {
+    releaseRetainedSessions(pendingSourceResolution.itemKey);
+    snapshots = snapshots.filter((entry) => entry.itemKey !== pendingSourceResolution?.itemKey);
+  }
+  pendingSourceResolution = { itemKey: clean, method, expiresAt: Date.now() + SOURCE_RESOLUTION_RETENTION_MS, autoReturnIssued: false };
+  ensureEventSubscription();
+}
+
+
+export function getMobileDownloadSourceResolutionIntentV1(itemKey: string): { method: MobileDownloadTransferMethodV1; autoReturnIssued: boolean } | null {
+  if (!pendingSourceResolutionActive(itemKey) || !pendingSourceResolution) return null;
+  return { method: pendingSourceResolution.method, autoReturnIssued: pendingSourceResolution.autoReturnIssued };
+}
+
+export function markMobileDownloadSourceAutoReturnIssuedV1(itemKey: string): boolean {
+  if (!pendingSourceResolutionActive(itemKey) || !pendingSourceResolution || pendingSourceResolution.autoReturnIssued) return false;
+  pendingSourceResolution.autoReturnIssued = true;
+  return true;
+}
+
+export function completeMobileDownloadSourceResolutionV1(itemKey: string): void {
+  if (pendingSourceResolution?.itemKey === itemKey) pendingSourceResolution = null;
+  releaseRetainedSessions(itemKey);
+  snapshots = snapshots.filter((entry) => entry.itemKey !== itemKey);
+  publish();
+}
+
+export function cancelMobileDownloadSourceResolutionV1(itemKey: string): void {
+  completeMobileDownloadSourceResolutionV1(itemKey);
+}
+
 function ensureEventSubscription(): void {
   if (eventSubscription || Platform.OS !== 'android') return;
   eventSubscription = DeviceEventEmitter.addListener(EVENT_NAME, (payload) => {
@@ -199,6 +263,7 @@ function ensureEventSubscription(): void {
 }
 
 export function beginMobileDownloadCaptureSessionV1(input: BeginMobileDownloadCaptureSessionInputV1): () => void {
+  pendingSourceResolutionActive();
   activeSession = {
     playbackSessionId: input.playbackSessionId,
     sourceId: input.sourceId,
@@ -206,21 +271,70 @@ export function beginMobileDownloadCaptureSessionV1(input: BeginMobileDownloadCa
     itemKey: input.itemKey,
     media: { ...input.media },
   };
-  snapshots = [];
+  // A source switch must never let Auto silently select a stale provider.
+  snapshots = snapshots.filter((entry) => entry.itemKey !== input.itemKey);
   ensureEventSubscription();
   publish();
 
   return () => {
     if (activeSession?.playbackSessionId !== input.playbackSessionId) return;
-    nativeModule()?.releaseSession(input.playbackSessionId);
+    if (pendingSourceResolutionActive(input.itemKey)) {
+      const sessions = retainedSourceSessions.get(input.itemKey) || new Set<string>();
+      sessions.add(input.playbackSessionId);
+      retainedSourceSessions.set(input.itemKey, sessions);
+    } else {
+      nativeModule()?.releaseSession(input.playbackSessionId);
+      snapshots = snapshots.filter((entry) => entry.itemKey !== input.itemKey);
+    }
     activeSession = null;
-    snapshots = [];
     publish();
   };
 }
 
 export function getMobileDownloadCandidateSnapshotsV1(): readonly MobileDownloadCandidateSnapshotV1[] {
   return snapshots.slice();
+}
+
+export type MobileDownloadTransferMethodV1 = 'auto' | 'fragments';
+
+export interface MobileDownloadCandidateSelectionV1 {
+  method: MobileDownloadTransferMethodV1;
+  resolvedMethod: 'fragments';
+  candidate: MobileDownloadCandidateV1;
+}
+
+function isReadyDownloadCandidate(candidate: MobileDownloadCandidateV1): boolean {
+  return candidate.preflight.state === 'ready' &&
+    candidate.preflight.requestContextReady === true &&
+    candidate.capabilities.orionLibrary === true;
+}
+
+
+export function scoreMobileDownloadCandidateV1(candidate: MobileDownloadCandidateV1): number {
+  const kind = candidate.preflight.resolvedManifestKind;
+  let score = kind === 'hls' ? 200 : kind === 'dash' ? 150 : 0;
+  if (candidate.preflight.protection === 'clear') score += 20;
+  if (candidate.capabilities.resumable) score += 10;
+  if (candidate.expiry === 'stable') score += 8;
+  else if (candidate.expiry === 'session') score += 4;
+  score += Math.min(20, Math.floor(candidate.preflight.descendantCount / 25));
+  return score;
+}
+
+export function selectMobileDownloadCandidateForItemV1(
+  itemKey: string,
+  method: MobileDownloadTransferMethodV1 = 'auto',
+  values: readonly MobileDownloadCandidateSnapshotV1[] = snapshots,
+  destination: 'orion-library' | 'device-storage' = 'orion-library',
+): MobileDownloadCandidateSelectionV1 | null {
+  if (destination !== 'orion-library') return null;
+  const fragmentCandidate = values
+    .filter((entry) => entry.itemKey === itemKey)
+    .map((entry) => entry.candidate)
+    .filter(isReadyDownloadCandidate)
+    .filter((candidate) => candidate.preflight.resolvedManifestKind === 'hls' || candidate.preflight.resolvedManifestKind === 'dash')
+    .sort((left, right) => scoreMobileDownloadCandidateV1(right) - scoreMobileDownloadCandidateV1(left) || right.capturedAt - left.capturedAt)[0];
+  return fragmentCandidate ? { method, resolvedMethod: 'fragments', candidate: fragmentCandidate } : null;
 }
 
 export function getLatestMobileDownloadCandidateForItemV1(itemKey: string): MobileDownloadCandidateV1 | null {

@@ -9,6 +9,7 @@ import { useOrionTheme } from '../../src/context/ThemeContext';
 import { useResponsiveLayout } from '../../src/services/responsive';
 import { MobilePageHeader } from '../../src/components/MobilePageHeader';
 import { getMobileDownloadCapability } from '../../src/services/downloadManager';
+import { DownloadActivityList } from '../../src/features/downloads/DownloadActivityList';
 import {
   listMobileDownloadJobsV1,
   listOfflineMediaEntriesV1,
@@ -23,6 +24,7 @@ const ACTIVE_STATES = new Set([
   'queued',
   'preflighting',
   'downloading',
+  'paused',
   'recovering',
   'verifying',
   'finalizing',
@@ -45,7 +47,7 @@ export default function DownloadsScreen() {
   useEffect(() => subscribeMobileDownloadPreferencesV1(setPreferences), []);
 
   const activeCount = useMemo(() => jobs.filter((job) => ACTIVE_STATES.has(job.state)).length, [jobs]);
-  const destinationLabel = preferences.defaultDestination === 'device-storage' ? 'Device Storage' : 'Orion Library';
+  const destinationLabel = 'Orion Library';
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -60,7 +62,7 @@ export default function DownloadsScreen() {
       <MobilePageHeader
         eyebrow="OFFLINE"
         title="Downloads"
-        subtitle="Keep movies and episodes ready for offline playback."
+        subtitle="Keep verified movies and episodes stored for Orion's Offline Library."
       />
 
       <ScrollView
@@ -89,7 +91,7 @@ export default function DownloadsScreen() {
         <View style={[styles.destinationCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={[styles.destinationIcon, { backgroundColor: theme.surfaceHover, borderColor: theme.border }]}>
             <Ionicons
-              name={preferences.defaultDestination === 'device-storage' ? 'folder-open-outline' : 'albums-outline'}
+              name="albums-outline"
               size={21}
               color={theme.accent}
             />
@@ -142,10 +144,7 @@ export default function DownloadsScreen() {
             </Pressable>
           </View>
         ) : (
-          <View style={[styles.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>Download activity</Text>
-            <Text style={[styles.emptyBody, { color: theme.textSecondary }]}>Queue and Offline Library presentation will use the durable download repository as native engine stages land.</Text>
-          </View>
+          <DownloadActivityList jobs={jobs} offlineEntries={offlineEntries} />
         )}
       </ScrollView>
     </View>

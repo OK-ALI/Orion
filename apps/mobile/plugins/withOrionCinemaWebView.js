@@ -1,6 +1,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {
+  withAndroidManifest,
+  withAppBuildGradle,
   withDangerousMod,
   withMainApplication,
 } = require('@expo/config-plugins');
@@ -45,6 +47,14 @@ function withCinemaSources(config) {
       'OrionPlayerSystemUiModule.kt',
       'OrionDownloadCaptureModule.kt',
       'OrionDownloadRequestContextBroker.kt',
+      'OrionDownloadEngineModule.kt',
+      'OrionDownloadForegroundService.kt',
+      'OrionDownloadFragmentPlanner.kt',
+      'OrionDownloadJobStore.kt',
+      'OrionDownloadNotifications.kt',
+      'OrionDownloadRecoveryWorker.kt',
+      'OrionDownloadStorageRegistry.kt',
+      'OrionDownloadTransferRuntime.kt',
     ]) {
       fs.copyFileSync(path.join(NATIVE_SOURCE, name), path.join(packageRoot, name));
     }
@@ -52,7 +62,54 @@ function withCinemaSources(config) {
   }]);
 }
 
+function withDownloadEngineGradle(config) {
+  return withAppBuildGradle(config, (nextConfig) => {
+    const marker = 'implementation "androidx.work:work-runtime-ktx:2.10.1"';
+    if (!nextConfig.modResults.contents.includes(marker)) {
+      nextConfig.modResults.contents = nextConfig.modResults.contents.replace(
+        /dependencies\s*\{/,
+        (match) => `${match}\n    // ORION_P10_DOWNLOAD_ENGINE_DEPENDENCIES\n    ${marker}`,
+      );
+    }
+    return nextConfig;
+  });
+}
+
+function withDownloadEngineManifest(config) {
+  return withAndroidManifest(config, (nextConfig) => {
+    const manifest = nextConfig.modResults.manifest;
+    const permissions = manifest['uses-permission'] || [];
+    for (const name of [
+      'android.permission.FOREGROUND_SERVICE',
+      'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
+    ]) {
+      if (!permissions.some((item) => item?.$?.['android:name'] === name)) {
+        permissions.push({ $: { 'android:name': name } });
+      }
+    }
+    manifest['uses-permission'] = permissions;
+    const application = manifest.application?.[0];
+    if (!application) throw new Error('Unable to locate Android application for Orion downloads.');
+    const services = application.service || [];
+    const serviceName = 'com.okali.orion.playback.OrionDownloadForegroundService';
+    if (!services.some((item) => item?.$?.['android:name'] === serviceName)) {
+      services.push({
+        $: {
+          'android:name': serviceName,
+          'android:exported': 'false',
+          'android:foregroundServiceType': 'dataSync',
+          'android:stopWithTask': 'false',
+        },
+      });
+    }
+    application.service = services;
+    return nextConfig;
+  });
+}
+
 module.exports = function withOrionCinemaWebView(config) {
   config = withCinemaMainApplication(config);
+  config = withDownloadEngineGradle(config);
+  config = withDownloadEngineManifest(config);
   return withCinemaSources(config);
 };
