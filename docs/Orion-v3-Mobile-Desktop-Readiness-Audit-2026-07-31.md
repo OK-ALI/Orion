@@ -1,18 +1,18 @@
 # Orion v3 Mobile and Desktop Readiness Audit
 
 **Audit date:** July 31, 2026  
-**Current application baseline:** Orion Desktop 2.0.1 and Orion Mobile 2.0.1  
+**Starting audit baseline:** Orion Desktop 2.0.1 and Orion Mobile 2.0.1
 **Proposed release:** Orion 3.0 with Mobile Companion support  
-**Status:** Reference audit and implementation roadmap; not a completed-release claim
+**Status:** Living reference audit and implementation roadmap; Phase 9 completion does not imply Orion 3.0 release readiness
 
 ## Living Roadmap Status
 
-> **Overall Orion v3 implementation completion: 86%**
+> **Overall Orion v3 implementation completion: 87%**
 >
-> **Last verified:** August 22, 2026
+> **Last verified:** August 24, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phases 0 through 8 are COMPLETE & LOCKED. Phase 9 is active: P9.1 Distribution & Release Truth, P9.2 Update Engine & Integrity, and P9.3 Availability & Notifications are functionally and physically accepted. V3-P9-007 remains open before the dedicated Phase 9 product-polish pass and final audit/lock.
-> **Critical open blockers:** remaining V3-P9-007 work plus Phase 9 product polish/final lock; a real resumable Mobile downloader and Offline Library; the explicitly deferred Orion Connect expansion in Phase 11; and the complete Phase 12 release-validation matrix.
+> **Current stage:** Phases 0 through 9 are COMPLETE & LOCKED. Phase 10 Mobile downloads and Offline Library is the next active implementation phase; Phase 11 remains the deferred Orion Connect expansion and Phase 12 remains final release validation.
+> **Critical open blockers:** a real resumable Mobile downloader and Offline Library; the explicitly deferred Orion Connect expansion in Phase 11; and the complete Phase 12 release-validation matrix.
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
 
@@ -31,7 +31,22 @@ This section is the current source of truth for the Phase 7 and Phase 8 boundary
 
 Phase 8 intentionally keeps Continue Watching as a local derived view, application preferences platform-local, and Music Planet Desktop-only. These are accepted scope decisions, not missing Phase 8 work.
 
-**Phase 9 branch hygiene:** the verified implementation currently sits on `codex/orion-v3-p8.1-candidate-1`. This does not weaken either lock, but Phase 9 work should branch from reconciliation commit `ca8e04130b60b81f3533f70a1d190fc550129a42` (plus this audit amendment once committed) so the new milestone has an unambiguous rollback boundary.
+**Phase 9 branch and lock boundary:** Phase 9 finalization is on `codex/orion-v3-p9-distribution-updates`. The latest pre-P9-F10 pushed checkpoint is `919f7b31f23bdc2a14201a8e044ca6f0bec413d3` (`checkpoint: prepare Phase 9 mobile 2.1.10 banner validation target`). That checkpoint is identity-only relative to Mobile 2.1.9 for the banner/updater implementation: only `apps/mobile/app.json`, `apps/mobile/package.json`, and `package-lock.json` changed.
+
+### Canonical Phase 9 reconciliation - August 24, 2026
+
+This section is the current source of truth for the Phase 9 boundary. Older Phase 9 Progress Log rows preserve what was accepted at those earlier checkpoints, but any older statement that treats Expo runtime updates or Play Core as a required Orion Mobile production path is superseded by the architecture below.
+
+| Boundary | Canonical evidence | Verified result |
+|---|---|---|
+| Desktop distribution/update | Physically accepted configured 2.0.1 baseline -> real `v2.1.0` Preview detection -> Orion-owned download/self-update -> relaunch/current settlement; Get Orion Mobile exposed Preview version, Android `7.0+ / API 24`, installer readiness, direct signed APK action and installation QR | `V3-P9-001` through the Desktop portions of `V3-P9-007` accepted |
+| Mobile production updater architecture | GitHub Preview/Stable release truth -> integrity/signer/package/version checks -> Orion-native APK download -> Android Package Installer -> in-place package replacement -> relaunch/current settlement | Native signed GitHub/APK updater is the sole Orion Mobile production application-update boundary |
+| P9-F6 | Expo runtime update/recovery path was diagnosed and retired from production by architectural amendment; Play Core is not part of the current direct-GitHub distribution plan | **RETIRED BY ARCHITECTURAL AMENDMENT**, not fixed/green and not a remaining Phase 9 blocker |
+| P9-F9 native lifecycle | Physical `2.1.7/code9 -> 2.1.8/code10` lifecycle passed; later `2.1.8/code10 -> 2.1.9/code11` also completed through Orion with preserved install history/state and resumed `com.okali.orion/.MainActivity` | **COMPLETE**; `adb install` was not used as updater-lifecycle evidence |
+| Mobile 2.1.9 production artifact | APK SHA-256 `42C980B858DC93CC4DECB23F46CD93612D9DF6B473C49B266AE6FC26F7F683BF`; permanent signer SHA-256 `4422EC4BC16B1C83C914A0AD1B688BE8F7C158FF7F99BCD223A909966AC7A1BD`; integrity manifest SHA-256 `B2B4A273BDFA1BD8B19DEC5EF89C9110ABD3E22CFFDF9D885E9857DE59076822` | Installed through Orion and physically launched; banner implementation origin |
+| Post-F9 Mobile banner parity amendment | Installed Mobile `2.1.9/code11` detected real Preview `v2.1.10`; full-width Orion/Desktop red banner, safe-area/Menu clearance, portrait/landscape behavior, `View Update`, dismiss and cross-platform visual grammar were physically accepted | **PHYSICALLY GREEN** |
+| Mobile 2.1.10 trigger target | Source checkpoint `919f7b31f23bdc2a14201a8e044ca6f0bec413d3`; APK SHA-256 `7078FADC0D16E48FBD22BB57C9799018EB8B1B88B52231436B1B94969653C8B2`; code `12`; banner/updater source unchanged from 2.1.9 | Identity-only real Preview offer used to trigger the new banner. It is **not** claimed physically installed. |
+| Phase 9 scoring | `V3-P9-001` through `V3-P9-010` reconciled against implementation, automated, package/release and physical evidence | Phase 9 `100%`; weighted contribution `5.0%`; Orion v3 exact total `87.28%`, rounded to `87%` |
 
 ### Status legend
 
@@ -56,11 +71,11 @@ Phase 8 intentionally keeps Continue Watching as a local derived view, applicati
 | 6. Unified Mobile player experience | 10% | 100% | 10.0% | Complete / locked |
 | 7. Complete Mobile UX and performance | 8% | 100% | 8.0% | Complete / locked |
 | 8. Google identity and portable profiles | 6% | 100% | 6.0% | Complete |
-| 9. Distribution, updates, availability and notifications | 5% | 75% | 3.75% | In progress |
+| 9. Distribution, updates, availability and notifications | 5% | 100% | 5.0% | Complete / locked |
 | 10. Mobile downloads and Offline Library | 8% | 10% | 0.8% | Foundation only |
 | 11. Deferred Orion Connect expansion | 2% | 10% | 0.2% | Deferred |
 | 12. Release validation | 4% | 7% | 0.28% | Foundation only |
-| **Total** | **100%** |  | **86.03%, rounded to 86%** | **Not release-ready** |
+| **Total** | **100%** |  | **87.28%, rounded to 87%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -329,18 +344,18 @@ Phase 8 must not lock immediately after the final functional synchronization dom
 
 ### Phase 9 — Distribution, updates, availability and notifications
 
-- [x] **V3-P9-001:** Desktop updater/status foundations are established and remain integrated with the accepted Phase 9 release truth.
-- [x] **V3-P9-002:** Add a Desktop Mobile Download area with a distinct installation QR and signed direct APK link.
-- [x] **V3-P9-003:** Show stable/preview channel, latest Mobile version, minimum Android version and installer availability.
-- [x] **V3-P9-004:** Present checking, available, downloading, ready, restart-required, current, failed and unsupported states consistently.
-- [x] **V3-P9-005:** Support signed GitHub APK and runtime-compatible Expo update paths. Play Core is deferred by product decision while Orion Mobile remains direct-GitHub distributed.
-- [x] **V3-P9-006:** Validate checksums and signing identity before installation.
-- [ ] **V3-P9-007:** Add staged rollout, rollback, release notes, retry and restart UX.
-- [x] **V3-P9-008:** Add local-first Android checks for updates, sync failures, offline recovery, provider degradation, watchlist releases and availability changes.
-- [x] **V3-P9-009:** Add per-category controls, quiet hours, deduplication and deep links.
-- [x] **V3-P9-010:** Request notification permission contextually and persist notification preferences locally per device.
+- [x] **V3-P9-001:** Desktop updater/status foundations are established and physically accepted against the real Preview release path, including genuine Desktop self-update and current/up-to-date settlement.
+- [x] **V3-P9-002:** Desktop Get Orion Mobile provides a distinct installation QR and signed direct APK action; physical QR scanning reached the real GitHub APK.
+- [x] **V3-P9-003:** Stable/Preview channel, latest Mobile version, minimum Android version and installer availability are presented from shared release truth.
+- [x] **V3-P9-004:** Checking, available, rollout, downloading, verifying, installing, action-required, current, failed and unsupported states converge on canonical presentation truth; post-update badges settle correctly.
+- [x] **V3-P9-005:** Production update architecture is accepted: Desktop uses the signed Preview self-update path and Mobile uses the native permanently signed GitHub/APK updater. Expo runtime updates are retired from Orion Mobile production by architectural amendment, and Play Core is outside the current direct-GitHub distribution plan.
+- [x] **V3-P9-006:** Integrity manifest, artifact checksum, package/version identity and permanent Android signing identity are validated before Mobile installation.
+- [x] **V3-P9-007:** Staged rollout eligibility, rollback/recovery semantics, clean release notes, retry/failure handling and restart/relaunch UX are implemented and accepted across the production update paths.
+- [x] **V3-P9-008:** Local-first Android checks cover updates, sync failures, offline recovery, provider degradation, watchlist releases and availability changes.
+- [x] **V3-P9-009:** Per-category controls, quiet hours, deduplication and whitelisted deep links are implemented and physically accepted.
+- [x] **V3-P9-010:** Notification permission is requested contextually and per-device notification preferences persist locally.
 
-**Phase 9 product decision:** Google Play / Play Core is not part of the current Orion Mobile distribution plan. The accepted Android path is the permanently signed direct GitHub APK, with runtime-compatible Expo updates for compatible JavaScript/runtime delivery. This deferral is intentional scope, not an unimplemented P9.2 requirement.
+**Phase 9 production architecture:** Google Play / Play Core is not part of Orion Mobile's current distribution plan. Expo runtime updates/recovery are also retired from production under the P9-F6 architectural amendment. The sole production Mobile application-update path is the permanently signed direct GitHub APK lifecycle: canonical release discovery -> eligibility/rollout -> integrity/signer/package/version verification -> Orion-native download -> Android installer handoff -> in-place replacement -> relaunch/current settlement. P9-F9 is complete. The post-F9 Desktop-parity Mobile banner amendment is physically green. `v2.1.10` remains an identity-only trigger target and is not claimed physically installed.
 
 ### Phase 10 — Mobile downloads and Offline Library
 
@@ -430,8 +445,11 @@ Every roadmap update should add one row. Do not delete older entries.
 
 | Date | Checklist IDs | Change | Evidence | Overall completion |
 |---|---|---|---|---:|
-| 2026-08-22 | P9.3; V3-P9-008-V3-P9-010 | Accepted P9.3 Availability & Notifications: local-first availability checks, contextual notification permission, per-device category preferences, quiet hours, persistent deduplication, whitelisted deep links and physically accepted 12-hour AM/PM quiet-hours control. Broader Notifications/Updates restructuring and production-language polish remain reserved for the dedicated Phase 9 polish pass. | P9.2 + P9.3 focused regression 19/19 and initial full Mobile/Android candidate gates; final quiet-hours UX amendments passed focused 6/6, typecheck, source-size and `git diff --check`; production APK SHA-256 `3BA46D5E83B0A27DBD5E6CC84405D31D8D33028CD2E46E5202CA8CA9E4B588BA`; permanent signer SHA-256 `4422EC4BC16B1C83C914A0AD1B688BE8F7C158FF7F99BCD223A909966AC7A1BD`; same-signer `adb install -r` and S24 Ultra physical notification/deep-link/quiet-hours acceptance | 86% |
-| 2026-08-22 | P9.2; V3-P9-004-V3-P9-006; V3-P9-007 foundations | Accepted P9.2 Update Engine & Integrity: Desktop integrity hardening, signed direct Android APK execution, runtime-compatible Expo updates and recovery UX. Play Core is explicitly deferred by product decision because Orion Mobile is not planned for Google Play distribution. | Checkpoints `5c1bc4adea04b3446e801e092b2b3c6e9848b6fc`, `b0188a532506b82f71faaf483dd3552d100e6db1`, `5229a586923ec58b44c55b50de986a93c41afd17`; package/version/hash/permanent-signer verification; S24 Ultra physical update validation | 85% |
+| 2026-08-24 | P9-F10; V3-P9-001-V3-P9-010 | Reconciled the complete Phase 9 evidence into the Master Audit: all ten Phase 9 checklist contracts are complete under the accepted direct-distribution architecture; Phase 9 is scored at 100% / 5.0 weighted points and the Orion v3 exact total becomes 87.28% (87% rounded). | Canonical Phase 9 authorities plus the pre-P9-F10 pushed checkpoint `919f7b31f23bdc2a14201a8e044ca6f0bec413d3`; this row becomes canonical only with the exact audit/document checkpoint, successful push, local/remote SHA equality and clean worktree required by the Phase 9 lock contract. | 87% |
+| 2026-08-24 | P9-F9; V3-P9-004-V3-P9-007 | Completed and physically accepted the native Mobile updater lifecycle and final update-announcement consistency. Orion performed in-app signed APK replacement through Android Package Installer with preserved install history/state, settled Current/Up-to-date after relaunch, and later installed `2.1.9/code11` from `2.1.8/code10`. The Desktop-parity red Mobile banner was then physically accepted from installed 2.1.9 against the real identity-only `v2.1.10` Preview target in portrait and landscape, with Menu clearance, `View Update` and dismiss behavior accepted. | 2.1.9 APK SHA-256 `42C980B858DC93CC4DECB23F46CD93612D9DF6B473C49B266AE6FC26F7F683BF`; permanent signer `4422EC4BC16B1C83C914A0AD1B688BE8F7C158FF7F99BCD223A909966AC7A1BD`; 2.1.10 APK SHA-256 `7078FADC0D16E48FBD22BB57C9799018EB8B1B88B52231436B1B94969653C8B2`; user physical acceptance of the real production update/banner path. `2.1.10` is not claimed installed. | Phase 9 closure evidence; final Master Audit lock still pending at this checkpoint |
+| 2026-08-24 | P9-F6 architectural amendment; V3-P9-005 | Retired Expo runtime update/recovery from Orion Mobile production after the Phase 9 diagnosis. Play Core remains outside the current direct-GitHub distribution plan. The native permanently signed GitHub/APK updater is the sole Mobile production application-update and recovery boundary. | P9-F continuation override and production-update validation plan; historical Expo failure evidence retained without representing the retired path as green. | No percentage change by architecture text alone |
+| 2026-08-22 | P9.3; V3-P9-008-V3-P9-010 | Accepted P9.3 Availability & Notifications: local-first availability checks, contextual notification permission, per-device category preferences, quiet hours, persistent deduplication, whitelisted deep links and physically accepted 12-hour AM/PM quiet-hours control. The broader Notifications/Updates restructuring and production-language polish named here were subsequently closed by P9-F. | P9.2 + P9.3 focused regression 19/19 and initial full Mobile/Android candidate gates; final quiet-hours UX amendments passed focused 6/6, typecheck, source-size and `git diff --check`; production APK SHA-256 `3BA46D5E83B0A27DBD5E6CC84405D31D8D33028CD2E46E5202CA8CA9E4B588BA`; permanent signer SHA-256 `4422EC4BC16B1C83C914A0AD1B688BE8F7C158FF7F99BCD223A909966AC7A1BD`; same-signer `adb install -r` and S24 Ultra physical notification/deep-link/quiet-hours acceptance | 86% |
+| 2026-08-22 | P9.2; V3-P9-004-V3-P9-006; V3-P9-007 foundations | Historical P9.2 checkpoint: Desktop integrity hardening, signed direct Android APK execution, and the then-current runtime-compatible Expo update/recovery path were accepted at this stage. The Expo path was later retired by the P9-F6 architectural amendment; Play Core remains outside Orion's direct-GitHub distribution plan. | Checkpoints `5c1bc4adea04b3446e801e092b2b3c6e9848b6fc`, `b0188a532506b82f71faaf483dd3552d100e6db1`, `5229a586923ec58b44c55b50de986a93c41afd17`; package/version/hash/permanent-signer verification; S24 Ultra physical update validation | 85% |
 | 2026-08-22 | P9.1; V3-P9-001-V3-P9-006 foundations | Accepted P9.1 Distribution & Release Truth: dedicated Desktop Get Orion Mobile ownership, shared Stable/Preview truth, Mobile Updates productization, permanent Android release signing and integrity foundations without falsely publishing a Mobile release | docs/audits/ORION-V3-P9.1-DISTRIBUTION-RELEASE-TRUTH-AUDIT.md; Shared/Desktop/Mobile gates green; signed APK SHA-256 785EA4D68A5243B42D68C6D6897711D978931267E1A1007DC1A674F4F346824F; production-signer in-place S24 Ultra validation | 83% |
 | 2026-08-21 | V3-P8-001-V3-P8-010, P8.7 | Completed final Phase 8 cross-platform audit, physical bidirectional sync/conflict/isolation acceptance, canonical production gates and implementation lock | Lock `5b9cb7ad8824b24cecccc83f5cee52614c72a8ee`; final lock audit in `docs/audits` | 83% |
 | 2026-08-16 | V3-P7-001-V3-P7-011, V3-P7-022, V3-P7-023 | Locked the complete Mobile UX/performance boundary and preserved the accepted Phase 7 candidate history before Phase 8 | Implementation lock `437640f5e6c7d16d0dad2b020d34b06436731acd`; archive/readiness commit `ec65bec235087cba72ed6388b8fa4be1c09289ef`; candidate archive SHA-256 `27865B59D381A72D915B955DE912169EAFF29DA52499C920233656D15C4474B7` | Historical Phase 7 boundary; current total 83% |
@@ -542,30 +560,18 @@ by this checkpoint.
 - Never mark a checklist item complete based only on a screenshot or a build succeeding.
 - Never reduce the list of known blockers to increase the percentage.
 - Reopen a checked item if a regression invalidates its acceptance.
-- Keep package versions unchanged until Phase 12 passes.
+- Use `2.1.x` production identities when a real signed update-validation target is required; reserve Orion `3.0.0` for the final release milestone.
 - Preserve this document as the authoritative Orion v3 execution tracker.
 
 ## Executive Summary
 
-Orion Mobile now has six completed milestones: safety and observability,
-verified playback truth, evidence-backed History/Continue Watching, and reliable
-in-app trailers. Phase 4 is closed at the narrower boundary proven by physical
-testing: secure local pairing, encrypted device trust, reconnection and a usable
-unified remote foundation. Phase 5 is closed with a native Cinema shield, accepted
-source capability boundaries, health-aware failover, evidence-backed protection
-states and embedded text-track discovery. The missing shield count is deferred to
-the Phase 6 HUD boundary so it cannot destabilize working playback. Orion is not
-ready for an Orion 3.0 release yet.
+Orion v3 Phases 0 through 9 are complete and locked at their accepted evidence boundaries. The completed foundation now covers safety/observability, playback truth, History/Continue Watching, trailer reliability, the rebaselined secure Orion Connect foundation, streaming safety/source reliability, the unified Mobile player, complete Mobile UX/performance, Google identity/portable profiles, and Phase 9 distribution/updates/availability/notifications.
 
-Phase 6 now has the unified controller, Orion-controlled HUD, presentation-mode
-boundary, immersive Android lifecycle, responsive overlay controller and direct
-native shield-evidence delivery. Its next priority is physical provider/device
-acceptance plus the remaining safe captured-VTT grant. Phase 7 completes
-application-wide UX, accessibility and low-end performance after that boundary
-is accepted.
+Phase 9 closes with real production-path evidence rather than source-only claims. Desktop physically completed its configured `2.0.1 -> 2.1.0` Preview self-update and Get Orion Mobile QR/direct-APK flow. Mobile physically completed the native signed-APK updater lifecycle through `2.1.9/code11`, with integrity, signer, package/version validation, in-place Android replacement, preserved install history/state, relaunch/current settlement, and final Desktop-parity update-banner acceptance against the real identity-only `v2.1.10` Preview trigger.
 
-The five physical Smart Connect outcomes that did not pass are preserved as
-deferred Phase 11 work rather than being represented as Phase 4 successes:
+Expo runtime updates/recovery are retired from Orion Mobile production by the P9-F6 architectural amendment. Play Core is also outside Orion's current direct-GitHub distribution plan. These are accepted architecture boundaries, not open Phase 9 defects.
+
+The five physical Smart Connect outcomes that did not pass remain preserved as deferred Phase 11 work rather than being represented as Phase 4 successes:
 
 - Startup remote Play may not apply before an embedded provider becomes ready.
 - Desktop context can retain stale media after leaving playback.
@@ -573,37 +579,26 @@ deferred Phase 11 work rather than being represented as Phase 4 successes:
 - Pointer movement still needs latency refinement.
 - Mobile does not yet expose Desktop's healthy source catalog for source switching.
 
-Other essential release blockers are portable Google-backed profiles, signed
-Mobile distribution and updates, availability reporting, notification policy,
-the complete Mobile downloader and Offline Library, low-end Android validation
-and the complete upgrade/regression matrix. Casting remains a separate post-v3
-milestone. Mobile downloads stay visibly and honestly locked only until Phase 10
-proves candidate capture, fragment recovery, integrity and offline playback.
+Orion is still not ready for the Orion 3.0 release. The remaining major release blockers are Phase 10's real resumable Mobile downloader and Offline Library, the explicitly deferred Phase 11 Orion Connect expansion, and the complete Phase 12 clean-install/upgrade/regression matrix. Casting remains a separate post-v3 milestone.
 
 ## Code-Verified Baseline
 
-The dated Progress Log is the source of truth for individual build and test
-results. The latest recorded implementation gates include Mobile type checking,
-81 Mobile tests, source-size validation, production web export, Desktop contract
-and renderer gates, and bundled standalone APK inspection. Those automated
-results do not replace the provider, orientation, performance, security and
-clean-install physical matrices required by the remaining phases.
+The dated Progress Log is the source of truth for individual build, package, release and physical results. The latest Phase 9 evidence includes focused and full Desktop/Mobile application gates, source-size/export/release-build checks, signed production package verification, canonical integrity manifests, live Preview publication checks, genuine in-app update execution, post-update settlement and physical cross-platform update UX acceptance.
 
-Mobile and Desktop package versions remain `2.0.1`. Version numbers must not move
-until Phase 12 release validation succeeds.
+Phase 9 production identities progressed through the `2.1.x` Preview sequence. The last explicitly proven installed Mobile package is `2.1.9/code11`; `v2.1.10/code12` is an identity-only published trigger target used to validate the 2.1.9 banner and is not claimed physically installed. Orion `3.0.0` remains reserved for the final release milestone.
 
 ## Priority Audit
 
 | Priority | Area | Current condition | Required outcome |
 |---|---|---|---|
-| P0 | Provider shield | JavaScript/navigation filtering cannot inspect every Android WebView subrequest | Native interception with provider-specific block and dependency-allow rules |
-| P0 | Source reliability | Selectable providers do not yet share a complete health, failover, subtitle and diagnostics matrix | Validate every selectable source and skip evidence-backed failures safely |
-| P0 | Unified player | Provider and Orion overlays, touch ownership and video fitting remain inconsistent across orientations | One responsive HUD plus Fit, Fill, Stretch and Provider/Original modes |
-| P1 | Responsive UX | Several application surfaces still need adaptive and accessibility validation | Complete phone, tablet, foldable, landscape and 200% text layouts |
-| P1 | Low-end performance | Startup, image memory, background work and GPU cost lack representative-device targets | Automatic Efficiency/Balanced/Quality profiles backed by measurements |
-| P1 | Cross-device profile | Mobile has no compatible Google authentication or portable profile restoration | Orion-owned OAuth clients and offline-first Portable Profile v3 merging |
-| P1 | Distribution and updates | Mobile lacks the signed Desktop download flow and complete native/runtime update policy | Verified installers, staged updates, rollback and clear availability states |
-| P1 | Notifications | Operational and optional content events lack a user-controlled local-first policy | Categories, quiet hours, deduplication, contextual permission and deep links |
+| P0 | Provider shield | Phase 5 accepted the Android-native Cinema shield, provider-specific blocking/dependency rules and evidence-backed protection states at the physical playback boundary | Preserve the accepted shield unchanged and re-run the complete provider/protection regression matrix in Phase 12 |
+| P0 | Source reliability | Phase 5 accepted the selectable-provider capability/health boundary, health-aware failover and truthful Verified/Limited classifications | Preserve source capability truth and run the exhaustive provider/subtitle regression matrix in Phase 12 |
+| P0 | Unified player | Phase 6 is complete/locked with one Orion HUD/controller boundary, immersive ownership, responsive overlays and truthful presentation modes | Preserve the locked player boundary and revalidate provider/device regressions before final release |
+| P1 | Responsive UX | Phase 7 is complete/locked at the accepted cross-platform Mobile UX, accessibility and adaptive-layout boundary | Preserve six-theme, orientation, large-text and Reduced Motion behavior through release regression |
+| P1 | Low-end performance | Phase 7 is complete/locked at its accepted performance and product-polish boundary | Preserve the accepted performance controls and include representative-device checks in final release validation |
+| P1 | Cross-device profile | Phase 8 is complete/locked with Orion-owned OAuth, Portable Profile v3, bidirectional sync/conflict recovery and account/profile fencing | Preserve profile migration, conflict, offline and unknown-namespace behavior in Phase 12 |
+| P1 | Distribution and updates | Phase 9 accepted: Desktop signed self-update/Get Orion Mobile and Mobile native signed GitHub/APK lifecycle are complete; Expo runtime is retired and Play Core is outside current scope | Preserve integrity, rollout, rollback/recovery, banner, release-note and relaunch checks as recurring production regressions |
+| P1 | Notifications | Phase 9 accepted: local-first categories, quiet hours, deduplication, contextual permission and deep links are implemented and physically validated | Preserve category controls, permission, deduplication and deep-link behavior in Phase 12 release regression |
 | P1 | Mobile downloads | The visible Mobile page is intentionally locked and has no durable fragment engine or Offline Library | Android-owned candidate capture, resumable fragment jobs, integrity verification, scoped storage and unified offline playback |
 | Deferred | Connect expansion | Five physical Phase 4 findings and player-surface cursor ownership remain open | Resume only after the core Mobile viewing and ownership experience is complete |
 | Deferred | TV casting | Remote control foundations exist, but casting is a different protocol category | Separate post-v3 casting milestone |
@@ -1279,42 +1274,35 @@ Validate:
 
 ## 8. Mobile Updates
 
-Orion Mobile requires two independent update paths.
+Orion Mobile production updates now use one accepted application-update boundary: the native permanently signed GitHub/APK updater. Expo runtime updates/recovery are retired from production by the P9-F6 architectural amendment, and Google Play Core is not part of the current direct-GitHub distribution plan.
 
-### JavaScript and asset updates
+### Release discovery and eligibility
 
-Use `expo-updates` with:
+- Resolve Stable/Preview release truth through Orion's canonical release model.
+- Enforce channel, semantic version, Android minimum, staged rollout/eligibility and release-note truth before offering an update.
+- For Mobile-only Preview releases, publish exactly the APK plus the strict integrity manifest.
+- Treat release notes as consumer product content; raw Markdown leakage is a defect.
 
-- Explicit runtime version.
-- Preview and production channels.
-- Staged rollout.
-- Rollback.
-- Clear update status and release notes.
+### Integrity and installation
 
-OTA updates cannot add or replace incompatible native modules.
+- Validate the strict integrity manifest and artifact `name`, `size`, `sha256` and `signerSha256` values.
+- Verify package identity, newer `versionName`/`versionCode`, permanent signing lineage and APK signature before installer handoff.
+- Download and verify the APK inside Orion, then hand the verified artifact to Android Package Installer.
+- Perform an in-place package replacement so application data and install history are preserved.
+- `adb install` is not accepted as updater-lifecycle evidence.
 
-### Native application updates
+### Post-install settlement and recovery
 
-For Play installations:
+- Reconcile foreground return, relaunch and true cold relaunch into Current/Up-to-date state.
+- Preserve truthful action-required, retry/failure and recovery/rollback semantics rather than hiding failures.
+- If Android installer completion races an immediate Package Manager query, re-query read-only and compare `versionName`, `versionCode`, `lastUpdateTime` and preserved `firstInstallTime`; do not uninstall, clear data or substitute `adb install`.
 
-- Google Play Core flexible updates by default.
-- Immediate updates only for critical security or incompatibility cases.
+### Accepted Phase 9 physical boundary
 
-For signed side-loaded builds:
-
-- Stable HTTPS release manifest.
-- Version and minimum-supported version.
-- SHA-256 checksum.
-- Same Android signing certificate.
-- Android-controlled installation confirmation.
-
-Detect the installation source and choose the correct update flow.
-
-Official references:
-
-- [Expo Updates](https://docs.expo.dev/versions/latest/sdk/updates/)
-- [Expo runtime versions](https://docs.expo.dev/eas-update/runtime-versions/)
-- [Android in-app updates](https://developer.android.com/guide/playcore/in-app-updates)
+- P9-F9 proved the full native lifecycle from `2.1.7/code9 -> 2.1.8/code10` and later `2.1.8/code10 -> 2.1.9/code11` through Orion.
+- The last explicitly proven installed Mobile package is `2.1.9/code11`.
+- `v2.1.10/code12` is an identity-only real Preview trigger target whose banner/updater source is unchanged from 2.1.9; it was used to make installed 2.1.9 render the real update offer.
+- The post-F9 full-width red Mobile update banner is physically accepted in portrait and landscape with safe-area/Menu clearance, actionable `View Update`, explicit dismiss and Desktop-consistent visual grammar.
 
 ## 9. Desktop Orion 3.0 Mobile Companion Center
 
@@ -1588,10 +1576,11 @@ apps/desktop/src/main/smart-connect/
 
 ### Phase 9: Distribution, updates, availability and notifications
 
-- Add a separate Desktop Mobile-download area with signed APK/install QR flow.
-- Add verified GitHub, Play Core and runtime-compatible update channels with staged rollout and rollback.
-- Expose installer, version, compatibility and provider-availability status clearly on both platforms.
-- Add local-first notification categories, quiet hours, deduplication, deep links and contextual permission prompts.
+- Provide a separate Desktop Get Orion Mobile area with signed direct APK/install QR flow and shared Stable/Preview release truth.
+- Use the accepted production update paths: signed Desktop Preview self-update and Mobile native permanently signed GitHub/APK update with staged rollout, integrity/signer/package/version verification, rollback/recovery semantics, retry/failure handling and relaunch settlement.
+- Keep Expo runtime updates/recovery retired from Mobile production and keep Play Core outside the current direct-GitHub distribution scope.
+- Expose installer, version, compatibility, update-state and provider-availability status clearly and consistently on both platforms.
+- Provide local-first notification categories, quiet hours, deduplication, whitelisted deep links and contextual permission prompts.
 
 ### Phase 10: Mobile downloads and Offline Library
 
