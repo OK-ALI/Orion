@@ -4,6 +4,7 @@
 **Status:** CANONICAL PHASE 10 EXECUTION AUTHORITY
 **Date established:** August 24, 2026
 **Product/UX amendment:** August 24, 2026 - theme-aware responsive Downloads UX, hierarchical offline library, subtitle parity, offline-state handling and settings ownership
+**Notification ownership amendment:** August 24, 2026 - Downloads extends the locked Phase 9 notification architecture; optional download alerts are controlled from Settings -> Notifications, while required active foreground-transfer visibility remains native/system-owned
 **Phase 9 locked floor:** `e24edf23a119d44a95e98579a9aea793a02f5d5b`
 **Phase 10 roadmap weight:** `8%`
 **Canonical starting completion:** `10%`
@@ -432,8 +433,13 @@ Its exact final options must be based on current Desktop settings plus Mobile-sp
 - Wi-Fi / metered-network policy,
 - battery/background behavior where user-controllable,
 - storage management,
-- partial-download cleanup/recovery policy where appropriate,
-- notification/progress preferences only if they remain consistent with the locked Phase 9 notification architecture.
+- partial-download cleanup/recovery policy where appropriate.
+
+Notification ownership is intentionally outside the Downloads settings drawer.
+
+Download notification preferences belong to the existing Phase 9 notification architecture under `Settings -> Notifications`, through a `Downloads` category/toggle for optional completion, failure and action-needed alerts. Phase 10 must not duplicate that preference in Downloads settings.
+
+The native foreground-service progress notification is operational transfer visibility. It is fed by the same durable native job truth as the in-app Downloads UI and remains present whenever Android requires it for an active foreground service, regardless of optional alert preference or quiet-hours policy.
 
 Rules:
 - settings copy is concise and consumer-facing,
@@ -571,13 +577,14 @@ Phase 10 must be Android-owned for long-running download execution.
 
 Expected ownership shape, subject to P10.0 current-source audit:
 
-- foreground service for active transfers and user-visible progress,
+- foreground service for active transfers and user-visible progress, including the system-required active-transfer notification,
 - WorkManager for durable recovery/restart/reboot continuation,
 - native durable job store,
 - narrow request-context broker,
 - Media3-compatible components where appropriate,
 - React Native service/UI adapter,
-- existing Orion player integration for final playback.
+- existing Orion player integration for final playback,
+- Phase 9 notification-domain integration for optional download completion, failure and action-needed events.
 
 The exact class/file names are not canonical until the current local ownership audit confirms the safest placement.
 
@@ -758,6 +765,8 @@ Implement:
 - honest disabled/unavailable actions,
 - Desktop option parity decisions,
 - settings/default destination ownership,
+- Downloads notification category/preference ownership under the existing `Settings -> Notifications` architecture,
+- no duplicate notification preference in the Downloads settings drawer,
 - testable capability presentation.
 
 Acceptance:
@@ -765,6 +774,7 @@ Acceptance:
 - focused contract/state/storage tests,
 - migration/restart tests,
 - six-theme UI contract checks,
+- notification-setting ownership tests proving the Downloads alert preference lives only under Notifications,
 - no real download claim yet unless engine path is proven.
 
 ## P10.2 - Candidate capture, preflight and request-context security
@@ -795,6 +805,8 @@ Acceptance:
 Implement:
 
 - foreground download ownership,
+- foreground-service progress notification backed by the same durable native job truth as in-app progress,
+- Phase 9 notification-domain bridge for optional download completion, failure and action-needed events,
 - WorkManager recovery,
 - durable queue,
 - direct range jobs,
@@ -810,6 +822,8 @@ Implement:
 Acceptance:
 
 - focused native/bridge tests,
+- in-app / foreground-notification progress parity and background-continuity proof,
+- proof that Android-required active-transfer notification visibility survives optional download-alert disablement,
 - full relevant Mobile gates,
 - signed distribution APK for physical native validation when needed,
 - ADB may install/replace a signed same-signer distribution build for stage-level feature validation,
@@ -839,7 +853,8 @@ Implement:
 - external-file reconciliation,
 - supported metadata/artwork/audio/subtitle preservation,
 - Desktop-style subtitle selection capability adapted to Mobile,
-- Downloads settings drawer with essential user-facing controls,
+- Downloads settings drawer with essential user-facing controls but no notification preference,
+- `Downloads` notification category/toggle in the existing `Settings -> Notifications` surface for optional completion/failure/action-needed alerts,
 - all applicable Desktop downloader options mapped to Mobile.
 
 Acceptance:
@@ -856,6 +871,7 @@ Acceptance:
 - Movie / TV / Anime title hierarchy is physically usable,
 - Download modal/sheet options remain readable and touch-safe,
 - Downloads settings drawer is physically usable,
+- Notifications surface exposes the Downloads alert preference without duplicating it in Downloads settings,
 - no new visual language.
 
 ## P10.5 - Offline Library and unified Orion playback
@@ -958,6 +974,13 @@ Offline playback:
 - Continue Watching,
 - watched state,
 - true no-network operation.
+
+Notifications:
+- in-app and foreground-notification progress parity,
+- optional Downloads alert preference on/off,
+- completion/failure/action-needed event behavior,
+- Android-required foreground notification remains visible during active foreground transfer,
+- no duplicate Downloads notification preference outside `Settings -> Notifications`.
 
 UX:
 - portrait,
