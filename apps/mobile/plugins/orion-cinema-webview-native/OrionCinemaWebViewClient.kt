@@ -3,6 +3,7 @@ package com.okali.orion.playback
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import android.webkit.SafeBrowsingResponse
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -30,9 +31,19 @@ class OrionCinemaWebViewClient(
   private var latestDecision: ShieldDecision? = null
   private var flushScheduled = false
   private var nativeSequence = 0L
+  private var lastP102ManifestTraceKey: String? = null
 
   fun setShieldManifest(serialized: String?) {
     manifest = ShieldManifest.parse(serialized)
+    val current = manifest ?: return
+    val traceKey = "${current.sessionId}:${current.sourceId}:${current.downloadCaptureEnabled}"
+    if (lastP102ManifestTraceKey != traceKey) {
+      lastP102ManifestTraceKey = traceKey
+      Log.i(
+        "OrionP102Trace",
+        "stage=manifest source=${current.sourceId.take(40)} capture=${current.downloadCaptureEnabled} mediaOrigins=${current.mediaOrigins.size}",
+      )
+    }
   }
 
   fun recordPopupBlocked(view: WebView) {

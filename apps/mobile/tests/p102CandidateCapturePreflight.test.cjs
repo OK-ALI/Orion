@@ -239,13 +239,43 @@ test('P10.2 physical diagnostic is bounded and excludes request secrets', () => 
   assert.doesNotMatch(diagnostic, /rawUrl|requestHeaders|cookieHeader|requestContextId|authorization|signedUrl/i);
 });
 
-test('P10.2 physical distribution candidate uses 2.1.11 code13 identity', () => {
+
+
+test('P10.2 physical trace distinguishes manifest observer rejection and classification without leaking request material', () => {
+  const client = readMobile('plugins', 'orion-cinema-webview-native', 'OrionCinemaWebViewClient.kt');
+  const broker = readMobile('plugins', 'orion-cinema-webview-native', 'OrionDownloadRequestContextBroker.kt');
+
+  assert.match(client, /OrionP102Trace/);
+  assert.match(client, /stage=manifest/);
+  assert.match(client, /capture=/);
+  assert.match(broker, /stage=observer/);
+  assert.match(broker, /stage=shape-rejected/);
+  assert.match(broker, /stage=classified/);
+  assert.match(broker, /stage=scheme-rejected/);
+  assert.match(broker, /stage=method-rejected/);
+
+  const clientTraceStart = client.indexOf('Log.i(\n        "OrionP102Trace"');
+  const clientTraceEnd = client.indexOf('\n      )', clientTraceStart);
+  assert.ok(clientTraceStart >= 0 && clientTraceEnd > clientTraceStart);
+
+  const brokerTraceCalls = [...broker.matchAll(/tracePhysicalOnce\([\s\S]*?\n\s*\)/g)]
+    .map((match) => match[0])
+    .filter((block) => block.includes('message ='));
+
+  assert.ok(brokerTraceCalls.length >= 5);
+  const traceSource = `${client.slice(clientTraceStart, clientTraceEnd)}\n${brokerTraceCalls.join('\n')}`;
+
+  assert.doesNotMatch(traceSource, /rawUrl|requestHeaders|cookieHeader|requestContextId|authorization|signedUrl/i);
+  assert.doesNotMatch(traceSource, /https?:\/\/|uri\.toString\(\)|request\.url\.toString\(\)/i);
+});
+
+test('P10.2 physical trace repair uses 2.1.12 code14 identity', () => {
   const mobilePackage = JSON.parse(readMobile('package.json'));
   const app = JSON.parse(readMobile('app.json')).expo;
   const rootLock = JSON.parse(fs.readFileSync(path.resolve(mobileRoot, '..', '..', 'package-lock.json'), 'utf8'));
 
-  assert.equal(mobilePackage.version, '2.1.11');
-  assert.equal(app.version, '2.1.11');
-  assert.equal(app.android.versionCode, 13);
-  assert.equal(rootLock.packages['apps/mobile'].version, '2.1.11');
+  assert.equal(mobilePackage.version, '2.1.12');
+  assert.equal(app.version, '2.1.12');
+  assert.equal(app.android.versionCode, 14);
+  assert.equal(rootLock.packages['apps/mobile'].version, '2.1.12');
 });

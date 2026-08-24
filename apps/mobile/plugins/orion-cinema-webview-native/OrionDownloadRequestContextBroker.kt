@@ -39,6 +39,7 @@ internal object OrionDownloadRequestContextBroker {
   private val executor = Executors.newFixedThreadPool(2)
   private val contexts = LinkedHashMap<String, CapturedContext>()
   private val candidateByFingerprint = mutableMapOf<String, String>()
+  private val physicalTraceKeys = linkedSetOf<String>()
 
   fun observeRequest(
     reactContext: ReactContext,
@@ -49,13 +50,46 @@ internal object OrionDownloadRequestContextBroker {
     downloadCaptureEnabled: Boolean,
     allowedMediaOrigins: List<String>,
   ) {
+    tracePhysicalOnce(
+      key = "$sessionId:${if (request.isForMainFrame) "main" else "subresource"}",
+      message = buildString {
+        append("stage=observer")
+        append(" source=").append(sourceId.take(40))
+        append(" capture=").append(downloadCaptureEnabled)
+        append(" frame=").append(if (request.isForMainFrame) "main" else "subresource")
+        append(" method=").append(request.method?.uppercase(Locale.US)?.take(12) ?: "unknown")
+      },
+    )
     if (!downloadCaptureEnabled || request.isForMainFrame) return
     val uri = request.url ?: return
     val scheme = uri.scheme?.lowercase(Locale.US)
-    if (scheme != "http" && scheme != "https") return
-    val manifestKind = classifyObservedRoot(uri, request.requestHeaders) ?: return
+    if (scheme != "http" && scheme != "https") {
+      tracePhysicalOnce(
+        key = "$sessionId:scheme-rejected",
+        message = "stage=scheme-rejected source=${sourceId.take(40)}",
+      )
+      return
+    }
     val method = request.method?.uppercase(Locale.US).orEmpty()
-    if (method.isNotEmpty() && method != "GET") return
+    if (method.isNotEmpty() && method != "GET") {
+      tracePhysicalOnce(
+        key = "$sessionId:method-rejected",
+        message = "stage=method-rejected source=${sourceId.take(40)} method=${method.take(12)}",
+      )
+      return
+    }
+    val manifestKind = classifyObservedRoot(uri, request.requestHeaders)
+    if (manifestKind == null) {
+      tracePhysicalOnce(
+        key = "$sessionId:shape-rejected",
+        message = "stage=shape-rejected source=${sourceId.take(40)}",
+      )
+      return
+    }
+    tracePhysicalOnce(
+      key = "$sessionId:classified:$manifestKind",
+      message = "stage=classified source=${sourceId.take(40)} kind=$manifestKind",
+    )
 
     val rawUrl = uri.toString()
     val fingerprint = sha256("$sessionId\n$sourceId\n$rawUrl")
@@ -443,6 +477,14 @@ internal object OrionDownloadRequestContextBroker {
         .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
         .emit(EVENT_NAME, payload)
     }
+  }
+
+  private fun tracePhysicalOnce(key: String, message: String) {
+    val shouldLog = synchronized(this) {
+      if (physicalTraceKeys.size >= 96) physicalTraceKeys.clear()
+      physicalTraceKeys.add(key)
+    }
+    if (shouldLog) Log.i("OrionP102Trace", message.take(220))
   }
 
   private fun classifyObservedRoot(uri: Uri, headers: Map<String, String>): String? {
