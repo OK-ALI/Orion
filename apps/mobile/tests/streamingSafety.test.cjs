@@ -73,7 +73,7 @@ test("standalone Android builds synchronize the authoritative Cinema shield clie
 
   const buildScript = read("apps", "mobile", "scripts", "build-android-standalone.cjs");
   assert.match(buildScript, /syncCinemaNativeSources/);
-  assert.match(buildScript, /OrionCinemaWebChromeClient\.kt/);
+  assert.match(buildScript, /cinemaConfigPlugin\.CINEMA_NATIVE_FILES/);
   assert.match(buildScript, /fs\.copyFileSync/);
 });
 
@@ -178,7 +178,10 @@ test("subtitle references remain opaque and external fallback validates outcomes
   assert.match(discovery, /opaqueId/);
   assert.match(discovery, /getInternalSubtitleTrack/);
   assert.match(discovery, /searchSubtitlesWithOutcome/);
-  assert.match(subtitleService, /safeBrokerSubtitleUrl/);
+  assert.match(subtitleService, /expo-secure-store/);
   assert.match(subtitleService, /SubtitleSearchOutcome/);
   assert.match(subtitleService, /invalid-file/);
+  assert.match(subtitleService, /api\.subdl\.com\/api\/v1\/subtitles/);
+  assert.match(subtitleService, /sub\.wyzie\.io\/search/);
+  assert.doesNotMatch(subtitleService, /EXPO_PUBLIC_SUBDL_API_KEY|EXPO_PUBLIC_WYZIE_API_KEY/);
 });

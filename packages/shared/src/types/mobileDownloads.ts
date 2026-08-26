@@ -7,6 +7,13 @@ export type MobileDownloadProtectionV1 = 'clear' | 'unknown' | 'protected';
 export type MobileDownloadExpiryV1 = 'stable' | 'session' | 'time-bounded' | 'expired' | 'unknown';
 export type MobileDownloadQualityV1 = 'best' | '1080p' | '720p' | '480p';
 export type MobileDownloadSubtitlePreferenceV1 = 'preferred' | 'none';
+export type MobileDownloadFinalizationStageV1 =
+  | 'preparing'
+  | 'remuxing'
+  | 'verifying-output'
+  | 'publishing-media'
+  | 'confirming-publication'
+  | 'publishing-subtitles';
 
 export type MobileDownloadPreflightStateV1 =
   | 'checking'
@@ -107,6 +114,10 @@ export interface MobileDownloadProgressV1 {
   percent: number | null;
   bytesPerSecond: number | null;
   etaSeconds: number | null;
+  /** Safe presentation-only stage. Absent on older/native snapshots and outside finalization. */
+  finalizationStage?: MobileDownloadFinalizationStageV1 | null;
+  /** Stable wall-clock start for the current finalization stage. */
+  finalizationStageStartedAt?: number | null;
 }
 
 export interface MobileDownloadFailureV1 {
@@ -146,13 +157,38 @@ export interface MobileDownloadTrackV1 {
 }
 
 export interface MobileDownloadAssetLocatorV1 {
-  kind: 'managed' | 'content-uri' | 'file-uri';
+  kind: 'managed' | 'content-uri' | 'file-uri' | 'native-owned';
   value: string;
+}
+
+export type MobileDownloadArtifactAvailabilityV1 = 'checking' | 'verified' | 'missing' | 'unavailable';
+export type MobileDownloadArtifactRoleV1 = 'primary' | 'subtitle';
+
+export interface MobileDownloadArtifactActionsV1 {
+  open: boolean;
+  locate: boolean;
+  delete: boolean;
+}
+
+/** Presentation-safe ownership metadata. Physical locators remain native-private. */
+export interface MobileDownloadOwnedArtifactV1 {
+  schemaVersion: 1;
+  artifactId: string;
+  role: MobileDownloadArtifactRoleV1;
+  displayName: string;
+  mimeType: string | null;
+  expectedSizeBytes: number | null;
+  observedSizeBytes: number | null;
+  availability: MobileDownloadArtifactAvailabilityV1;
+  lastCheckedAt: number | null;
+  actions: MobileDownloadArtifactActionsV1;
 }
 
 export interface MobileDownloadAssetV1 {
   schemaVersion: 1;
   assetId: string;
+  /** Opaque native ownership revision used to fence destructive management actions. */
+  managementToken: string;
   jobId: string;
   media: MobileDownloadMediaIdentityV1;
   destination: MobileDownloadDestinationModeV1;
@@ -167,6 +203,45 @@ export interface MobileDownloadAssetV1 {
   playInOrion: boolean;
   externallyVisible: boolean;
   verifiedAt: number;
+  /** Derived from the primary owned artifact. */
+  availability: MobileDownloadArtifactAvailabilityV1;
+  artifacts: MobileDownloadOwnedArtifactV1[];
+  actions: MobileDownloadArtifactActionsV1;
+}
+
+export interface MobileDownloadAssetSelectionV1 {
+  assetId: string;
+  managementToken: string;
+}
+
+export interface MobileDownloadManagementFailureV1 {
+  assetId: string;
+  artifactId: string | null;
+  code: string;
+  message: string;
+}
+
+export type MobileDownloadManagementDispositionV1 =
+  | 'physically-deleted'
+  | 'already-missing'
+  | 'removed-from-orion'
+  | 'retained-unavailable'
+  | 'retained-failed';
+
+export interface MobileDownloadManagementOutcomeV1 {
+  assetId: string;
+  disposition: MobileDownloadManagementDispositionV1;
+}
+
+export interface MobileDownloadManagementResultV1 {
+  schemaVersion: 1;
+  requestedAssetIds: string[];
+  deletedAssetIds: string[];
+  retainedAssetIds: string[];
+  reclaimedBytes: number;
+  failures: MobileDownloadManagementFailureV1[];
+  /** Truthful per-copy detail; deletedAssetIds remains the compatibility list of removed durable records. */
+  outcomes: MobileDownloadManagementOutcomeV1[];
 }
 
 export interface OfflineMediaEntryV1 {

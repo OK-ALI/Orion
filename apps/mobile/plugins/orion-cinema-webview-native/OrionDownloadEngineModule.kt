@@ -10,12 +10,15 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.Executors
 
 class OrionDownloadEngineModule(
   private val reactContext: ReactApplicationContext,
 ) : ReactContextBaseJavaModule(reactContext) {
   private var storagePromise: Promise? = null
+  private val ioExecutor = Executors.newSingleThreadExecutor()
   private val snapshotListener: (JSONObject) -> Unit = { snapshot -> emitSnapshot(snapshot) }
   private val activityListener: ActivityEventListener = object : BaseActivityEventListener() {
     override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
@@ -46,6 +49,7 @@ class OrionDownloadEngineModule(
     OrionDownloadJobStore.initialize(reactContext)
     OrionDownloadJobStore.addListener(snapshotListener)
     reactContext.addActivityEventListener(activityListener)
+    ioExecutor.execute { OrionDownloadArtifactManager.reconcile(reactContext) }
   }
 
   override fun getName(): String = "OrionDownloadEngine"
@@ -63,6 +67,10 @@ class OrionDownloadEngineModule(
 
   @ReactMethod
   fun startJob(payloadJson: String, promise: Promise) {
+    ioExecutor.execute { startJobInternal(payloadJson, promise) }
+  }
+
+  private fun startJobInternal(payloadJson: String, promise: Promise) {
     try {
       val payload = JSONObject(payloadJson)
       val job = payload.optJSONObject("job") ?: run {
@@ -87,6 +95,7 @@ class OrionDownloadEngineModule(
         promise.reject("DOWNLOAD_DESTINATION_INVALID", "Choose a valid Orion download location.")
         return
       }
+      OrionDownloadArtifactManager.reconcile(reactContext)
       if (android.os.StatFs(reactContext.filesDir.absolutePath).availableBytes < MIN_FREE_RESERVE_BYTES) {
         OrionDownloadTransferRuntime.release(jobId)
         promise.reject("DOWNLOAD_STORAGE_INSUFFICIENT", "Orion needs more free device space before this download can start.")
@@ -110,9 +119,15 @@ class OrionDownloadEngineModule(
       val created = OrionDownloadJobStore.createJob(payload, transfer)
       if (created == null) {
         OrionDownloadTransferRuntime.release(jobId)
-        promise.reject("DOWNLOAD_JOB_INVALID", "Orion could not create this download job.")
+        val itemKey = payload.optString("itemKey").trim()
+        if (itemKey.isNotBlank() && OrionDownloadJobStore.blockingDuplicate(itemKey, destination) != null) {
+          promise.reject("DOWNLOAD_DUPLICATE", "This title is already downloaded or active in the selected location.")
+        } else {
+          promise.reject("DOWNLOAD_JOB_INVALID", "Orion could not create this download job.")
+        }
         return
       }
+      OrionDownloadSubtitleRuntime.register(jobId, payload.optJSONArray("subtitleSources"), job.optJSONArray("selectedSubtitleAssetIds"))
       OrionDownloadRecoveryScheduler.schedule(reactContext, jobId)
       OrionDownloadForegroundService.start(reactContext, jobId)
       promise.resolve(Arguments.createMap().apply {
@@ -135,6 +150,13 @@ class OrionDownloadEngineModule(
     val job = OrionDownloadJobStore.getJob(clean)
     if (job == null) {
       promise.reject("DOWNLOAD_JOB_NOT_FOUND", "Download job was not found.")
+      return
+    }
+    if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, clean)) {
+      OrionDownloadJobStore.clearControl(clean)
+      OrionDownloadJobStore.setState(clean, "recovering")
+      OrionDownloadForegroundService.start(reactContext, clean, recovery = true)
+      promise.resolve(true)
       return
     }
     val candidateId = job.optString("candidateId")
@@ -178,6 +200,13 @@ class OrionDownloadEngineModule(
       val stored = OrionDownloadJobStore.getJob(jobId) ?: continue
       val candidateId = stored.optString("candidateId")
       OrionDownloadJobStore.incrementRetry(jobId)
+      if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, jobId)) {
+        OrionDownloadJobStore.clearControl(jobId)
+        OrionDownloadJobStore.setState(jobId, "recovering")
+        OrionDownloadForegroundService.start(reactContext, jobId, recovery = true)
+        restarted += 1
+        continue
+      }
       if (OrionDownloadTransferRuntime.ensure(candidateId, jobId) == null) {
         OrionDownloadJobStore.markActionRequired(
           jobId,
@@ -202,8 +231,64 @@ class OrionDownloadEngineModule(
   @ReactMethod
   fun cancelJob(jobId: String) {
     val clean = jobId.trim()
-    OrionDownloadJobStore.requestControl(clean, "cancel")
-    OrionDownloadForegroundService.start(reactContext, clean, recovery = true)
+    if (clean.isBlank()) return
+    OrionDownloadTransferEngine.cancelJob(reactContext, clean)
+  }
+
+  @ReactMethod
+  fun reconcileDownloads(promise: Promise) {
+    ioExecutor.execute {
+      try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.reconcile(reactContext))) }
+      catch (_: Throwable) { promise.reject("DOWNLOAD_RECONCILIATION_FAILED", "Orion could not check saved downloads right now.") }
+    }
+  }
+
+  @ReactMethod
+  fun deleteAssets(selectionsJson: String, promise: Promise) {
+    ioExecutor.execute {
+      try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.deleteSelected(reactContext, parseAssetSelections(selectionsJson)))) }
+      catch (_: Throwable) { promise.reject("DOWNLOAD_DELETE_FAILED", "Orion could not finish deleting the selected downloads.") }
+    }
+  }
+
+  @ReactMethod
+  fun deleteAllDownloads(promise: Promise) {
+    ioExecutor.execute {
+      try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.deleteAll(reactContext))) }
+      catch (_: Throwable) { promise.reject("DOWNLOAD_DELETE_ALL_FAILED", "Orion could not finish deleting all downloads.") }
+    }
+  }
+
+  @ReactMethod
+  fun removeStaleRecords(assetIdsJson: String, promise: Promise) {
+    ioExecutor.execute {
+      try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.deleteAssets(reactContext, parseAssetIds(assetIdsJson), staleOnly = true))) }
+      catch (_: Throwable) { promise.reject("DOWNLOAD_STALE_REMOVE_FAILED", "Orion could not remove the selected stale records.") }
+    }
+  }
+
+  @ReactMethod
+  fun removeUnavailableRecords(assetIdsJson: String, promise: Promise) {
+    ioExecutor.execute {
+      try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.removeUnavailableRecords(reactContext, parseAssetIds(assetIdsJson)))) }
+      catch (_: Throwable) { promise.reject("DOWNLOAD_UNAVAILABLE_REMOVE_FAILED", "Orion could not remove the selected unavailable records.") }
+    }
+  }
+
+  @ReactMethod
+  fun openAsset(assetId: String, promise: Promise) {
+    ioExecutor.execute {
+      try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.open(reactContext, assetId.trim(), locate = false))) }
+      catch (_: Throwable) { promise.reject("DOWNLOAD_OPEN_FAILED", "Orion could not open this download.") }
+    }
+  }
+
+  @ReactMethod
+  fun locateAsset(assetId: String, promise: Promise) {
+    ioExecutor.execute {
+      try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.open(reactContext, assetId.trim(), locate = true))) }
+      catch (_: Throwable) { promise.reject("DOWNLOAD_LOCATE_FAILED", "Orion could not locate this download.") }
+    }
   }
 
   @ReactMethod
@@ -236,6 +321,7 @@ class OrionDownloadEngineModule(
     OrionDownloadJobStore.removeListener(snapshotListener)
     reactContext.removeActivityEventListener(activityListener)
     storagePromise = null
+    ioExecutor.shutdownNow()
     super.invalidate()
   }
 
@@ -249,6 +335,33 @@ class OrionDownloadEngineModule(
   }
 
   private fun toWritableMap(value: JSONObject) = Arguments.makeNativeMap(jsonObjectToMap(value))
+
+  private fun parseAssetIds(value: String): Set<String> = try {
+    val input = org.json.JSONArray(value)
+    val output = linkedSetOf<String>()
+    for (index in 0 until input.length()) {
+      input.optString(index).trim().takeIf { it.matches(Regex("^[A-Za-z0-9._:-]{1,140}$")) }?.let(output::add)
+    }
+    output
+  } catch (_: Throwable) { emptySet() }
+
+  private fun parseAssetSelections(value: String): List<OrionDownloadManagementSelection> {
+    return try {
+      val input = JSONObject(value)
+      if (input.optInt("schemaVersion", 0) != 1) emptyList()
+      else {
+        val selections = input.optJSONArray("selections") ?: JSONArray()
+        buildList {
+          for (index in 0 until selections.length()) {
+            val selection = selections.optJSONObject(index) ?: continue
+            val assetId = selection.optString("assetId").trim()
+            if (!assetId.matches(Regex("^[A-Za-z0-9._:-]{1,140}$"))) continue
+            add(OrionDownloadManagementSelection(assetId, selection.optString("managementToken").trim().take(128)))
+          }
+        }
+      }
+    } catch (_: Throwable) { emptyList() }
+  }
 
   private fun jsonObjectToMap(value: JSONObject): Map<String, Any?> {
     val output = linkedMapOf<String, Any?>()

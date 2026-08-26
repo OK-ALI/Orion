@@ -3,6 +3,7 @@ package com.okali.orion.playback
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.MessageDigest
 
 internal object OrionDownloadJobStore {
   private const val PREFS = "orion_download_jobs_v1"
@@ -10,17 +11,24 @@ internal object OrionDownloadJobStore {
   private val listeners = linkedSetOf<(JSONObject) -> Unit>()
   private var appContext: Context? = null
 
+  internal data class ArtifactManagementCommit(
+    val removedAssetIds: Set<String>,
+    val rejectedAssetIds: Set<String>,
+  )
+
   @Synchronized
   fun initialize(context: Context) {
     appContext = context.applicationContext
     val state = readStateLocked()
     if (state.optInt("schemaVersion", 0) != 1) persistLocked(emptyState())
     else {
+      var changed = migrateOwnedArtifactsLocked(state)
       val retiredDirectJobs = retireDirectExperimentalArtifactsLocked(state)
       if (retiredDirectJobs.isNotEmpty()) {
-        persistLocked(state)
+        changed = true
         deleteRetiredDirectFilesLocked(context.applicationContext, retiredDirectJobs)
       }
+      if (changed) persistLocked(state)
     }
   }
 
@@ -40,6 +48,7 @@ internal object OrionDownloadJobStore {
   @Synchronized
   fun getJob(jobId: String): JSONObject? {
     val state = readStateLocked()
+    migrateOwnedArtifactsLocked(state)
     val jobs = state.getJSONArray("jobs")
     for (index in 0 until jobs.length()) {
       val job = jobs.optJSONObject(index) ?: continue
@@ -60,7 +69,8 @@ internal object OrionDownloadJobStore {
     val storageTarget = sanitizeStorageTarget(input.optJSONObject("storageTarget"), destination) ?: return null
     val quality = input.optString("requestedQuality").takeIf { it in setOf("best", "1080p", "720p", "480p") } ?: "best"
     val subtitles = sanitizeStringArray(input.optJSONArray("selectedSubtitleAssetIds"))
-    val subtitleSources = sanitizeSubtitleSources(payload.optJSONArray("subtitleSources"), subtitles)
+    val groupKey = cleanText(payload.optString("groupKey"), 140) ?: mediaGroupKey(media)
+    val itemKey = cleanText(payload.optString("itemKey"), 180) ?: mediaItemKey(media)
     val now = System.currentTimeMillis()
 
     val safe = JSONObject()
@@ -81,17 +91,25 @@ internal object OrionDownloadJobStore {
       .put("updatedAt", now)
       .put("startedAt", JSONObject.NULL)
       .put("completedAt", JSONObject.NULL)
-      .put("_groupKey", cleanText(payload.optString("groupKey"), 140) ?: mediaGroupKey(media))
-      .put("_itemKey", cleanText(payload.optString("itemKey"), 180) ?: mediaItemKey(media))
+      .put("_groupKey", groupKey)
+      .put("_itemKey", itemKey)
       .put("_sourceId", transfer.sourceId.take(60))
       .put("_transferKind", transfer.transferKind)
       .put("_resumable", transfer.resumable)
       .put("_expectedBytes", transfer.requiredBytes ?: JSONObject.NULL)
-      .put("_subtitleSources", subtitleSources)
       .put("_control", "run")
+      .put("_executionGeneration", 0L)
 
     val state = readStateLocked()
+    migrateOwnedArtifactsLocked(state)
     val jobs = state.getJSONArray("jobs")
+    for (index in 0 until jobs.length()) {
+      val current = jobs.optJSONObject(index) ?: continue
+      if (current.optString("jobId") == jobId) continue
+      if (current.optString("_itemKey") != itemKey || current.optString("destination") != destination) continue
+      val availability = primaryAvailabilityForJobLocked(state, current.optString("jobId"))
+      if (OrionDownloadOwnershipPolicy.blocksDuplicate(current.optString("state"), availability)) return null
+    }
     val next = JSONArray().put(safe)
     for (index in 0 until jobs.length()) {
       val current = jobs.optJSONObject(index) ?: continue
@@ -111,11 +129,13 @@ internal object OrionDownloadJobStore {
       if (stateName == "downloading" && job.isNull("startedAt")) job.put("startedAt", now)
       if (stateName == "completed") job.put("completedAt", now)
       if (failure == null) job.put("failure", JSONObject.NULL) else job.put("failure", sanitizeFailure(failure) ?: JSONObject.NULL)
-      if (stateName == "completed") {
-        val progress = job.optJSONObject("progress") ?: emptyProgress()
-        progress.put("percent", 100)
-        job.put("progress", progress)
+      val progress = job.optJSONObject("progress") ?: emptyProgress()
+      if (stateName != "finalizing") {
+        progress.put("finalizationStage", JSONObject.NULL)
+        progress.put("finalizationStageStartedAt", JSONObject.NULL)
       }
+      if (stateName == "completed") progress.put("percent", 100)
+      job.put("progress", progress)
     }
   }
 
@@ -137,6 +157,9 @@ internal object OrionDownloadJobStore {
         totalFragments != null && totalFragments > 0 && completedFragments != null -> (completedFragments.toDouble() * 100.0 / totalFragments.toDouble()).coerceIn(0.0, 99.0)
         else -> Double.NaN
       }
+      val previousProgress = job.optJSONObject("progress")
+      val previousStage = previousProgress?.opt("finalizationStage") ?: JSONObject.NULL
+      val previousStageStartedAt = previousProgress?.opt("finalizationStageStartedAt") ?: JSONObject.NULL
       val progress = JSONObject()
         .put("bytesDownloaded", bytesDownloaded.coerceAtLeast(0L))
         .put("totalBytes", totalBytes ?: JSONObject.NULL)
@@ -145,8 +168,29 @@ internal object OrionDownloadJobStore {
         .put("percent", if (percent.isNaN()) JSONObject.NULL else percent)
         .put("bytesPerSecond", bytesPerSecond ?: JSONObject.NULL)
         .put("etaSeconds", etaSeconds ?: JSONObject.NULL)
+        .put("finalizationStage", previousStage)
+        .put("finalizationStageStartedAt", previousStageStartedAt)
       job.put("progress", progress)
       job.put("updatedAt", System.currentTimeMillis())
+    }
+  }
+
+  @Synchronized
+  fun setFinalizationStage(jobId: String, stage: String, expectedGeneration: Long? = null) {
+    if (stage !in FINALIZATION_STAGES) return
+    mutateJobLocked(jobId, notify = true) { job ->
+      if (job.optString("state") != "finalizing" || job.optString("_control") == "cancel") return@mutateJobLocked
+      if (expectedGeneration != null && job.optLong("_executionGeneration", 0L) != expectedGeneration) return@mutateJobLocked
+      val progress = job.optJSONObject("progress") ?: emptyProgress()
+      val now = System.currentTimeMillis()
+      if (progress.optString("finalizationStage") != stage || progress.isNull("finalizationStageStartedAt")) {
+        progress.put("finalizationStageStartedAt", now)
+      }
+      progress.put("finalizationStage", stage)
+      progress.put("bytesPerSecond", JSONObject.NULL)
+      progress.put("etaSeconds", JSONObject.NULL)
+      job.put("progress", progress)
+      job.put("updatedAt", now)
     }
   }
 
@@ -160,11 +204,304 @@ internal object OrionDownloadJobStore {
 
   @Synchronized
   fun clearControl(jobId: String) {
-    mutateJobLocked(jobId, notify = false) { job -> job.put("_control", "run") }
+    mutateJobLocked(jobId, notify = false) { job ->
+      if (job.optString("state") != "cancelled") job.put("_control", "run")
+    }
   }
 
   @Synchronized
   fun control(jobId: String): String = getJob(jobId)?.optString("_control", "run") ?: "cancel"
+
+  @Synchronized
+  fun setFinalizationPlan(jobId: String, kind: String, roles: List<String>) {
+    if (kind !in setOf("hls", "dash") || roles.isEmpty() || roles.size > 20_000) return
+    val safeRoles = JSONArray()
+    roles.forEach { role ->
+      val safe = cleanText(role, 24) ?: return@forEach
+      safeRoles.put(safe)
+    }
+    if (safeRoles.length() != roles.size) return
+    mutateJobLocked(jobId, notify = false) { job ->
+      val current = job.optJSONObject("_finalizationPlan")
+      if (current?.optBoolean("sealed", false) == true && current.optInt("fragmentCount") == roles.size) return@mutateJobLocked
+      job.put("_finalizationPlan", JSONObject()
+        .put("schemaVersion", 1)
+        .put("kind", kind)
+        .put("fragmentCount", safeRoles.length())
+        .put("roles", safeRoles)
+        .put("sealed", false)
+        .put("fragments", JSONArray())
+        .put("subtitles", JSONArray()))
+    }
+  }
+
+  @Synchronized
+  fun sealFinalizationPlan(
+    jobId: String,
+    kind: String,
+    proofs: List<OrionLocalArtifactProof>,
+    subtitleProofs: List<OrionLocalArtifactProof>,
+  ) {
+    if (kind !in setOf("hls", "dash") || proofs.isEmpty() || proofs.size > 20_000) return
+    val fragments = JSONArray()
+    proofs.sortedBy { it.index }.forEach { proof ->
+      fragments.put(JSONObject()
+        .put("index", proof.index)
+        .put("role", proof.role.take(24))
+        .put("sizeBytes", proof.sizeBytes)
+        .put("sha256", proof.sha256))
+    }
+    val subtitles = JSONArray()
+    subtitleProofs.sortedBy { it.index }.forEach { proof ->
+      subtitles.put(JSONObject()
+        .put("index", proof.index)
+        .put("role", proof.role.take(24))
+        .put("sizeBytes", proof.sizeBytes)
+        .put("sha256", proof.sha256))
+    }
+    mutateJobLocked(jobId, notify = false) { job ->
+      val roles = JSONArray()
+      proofs.sortedBy { it.index }.forEach { roles.put(it.role.take(24)) }
+      job.put("_finalizationPlan", JSONObject()
+        .put("schemaVersion", 1)
+        .put("kind", kind)
+        .put("fragmentCount", proofs.size)
+        .put("roles", roles)
+        .put("sealed", true)
+        .put("sealedAt", System.currentTimeMillis())
+        .put("fragments", fragments)
+        .put("subtitles", subtitles))
+    }
+  }
+
+  @Synchronized
+  fun finalizationPlan(jobId: String): JSONObject? = getJob(jobId)?.optJSONObject("_finalizationPlan")?.let { JSONObject(it.toString()) }
+
+  @Synchronized
+  fun executionGeneration(jobId: String): Long? {
+    val job = getJob(jobId) ?: return null
+    if (job.optString("state") in setOf("cancelled", "completed")) return null
+    return job.optLong("_executionGeneration", 0L)
+  }
+
+  @Synchronized
+  fun cancelAndFence(jobId: String): Long? {
+    val state = readStateLocked()
+    val jobs = state.optJSONArray("jobs") ?: return null
+    for (index in 0 until jobs.length()) {
+      val job = jobs.optJSONObject(index) ?: continue
+      if (job.optString("jobId") != jobId) continue
+      if (job.optString("state") == "completed") return null
+      if (job.optString("state") == "cancelled") return job.optLong("_executionGeneration", 0L)
+      val generation = job.optLong("_executionGeneration", 0L) + 1L
+      job.put("_executionGeneration", generation)
+      job.put("_control", "cancel")
+      job.put("state", "cancelled")
+      job.put("failure", JSONObject.NULL)
+      job.put("updatedAt", System.currentTimeMillis())
+      val progress = job.optJSONObject("progress") ?: emptyProgress()
+      progress.put("finalizationStage", JSONObject.NULL)
+      progress.put("finalizationStageStartedAt", JSONObject.NULL)
+      job.put("progress", progress)
+      job.remove("_finalizationPlan")
+      persistAndNotifyLocked(state)
+      return generation
+    }
+    return null
+  }
+
+  @Synchronized
+  fun ownershipAssets(assetIds: Set<String>? = null): JSONArray {
+    val state = readStateLocked()
+    migrateOwnedArtifactsLocked(state)
+    val output = JSONArray()
+    val assets = state.optJSONArray("assets") ?: JSONArray()
+    for (index in 0 until assets.length()) {
+      val asset = assets.optJSONObject(index) ?: continue
+      if (assetIds != null && !assetIds.contains(asset.optString("assetId"))) continue
+      output.put(JSONObject(asset.toString()))
+    }
+    return output
+  }
+
+  @Synchronized
+  fun updateArtifactStates(updates: JSONArray) {
+    if (updates.length() == 0) return
+    val state = readStateLocked()
+    val assets = state.optJSONArray("assets") ?: JSONArray()
+    val byId = linkedMapOf<String, JSONObject>()
+    for (index in 0 until updates.length()) {
+      val update = updates.optJSONObject(index) ?: continue
+      val id = cleanId(update.optString("artifactId")) ?: continue
+      byId[id] = update
+    }
+    if (byId.isEmpty()) return
+    var changed = false
+    for (assetIndex in 0 until assets.length()) {
+      val asset = assets.optJSONObject(assetIndex) ?: continue
+      val artifacts = asset.optJSONArray("_artifacts") ?: continue
+      for (artifactIndex in 0 until artifacts.length()) {
+        val artifact = artifacts.optJSONObject(artifactIndex) ?: continue
+        val update = byId[artifact.optString("artifactId")] ?: continue
+        val fingerprint = update.optString("_locatorFingerprint")
+        if (fingerprint.isNotEmpty() && artifact.optJSONObject("_locator")?.toString() != fingerprint) continue
+        val availability = update.optString("availability").takeIf { it in ARTIFACT_AVAILABILITY } ?: continue
+        artifact.put("availability", availability)
+        artifact.put("observedSizeBytes", if (update.isNull("observedSizeBytes")) JSONObject.NULL else update.optLong("observedSizeBytes").coerceAtLeast(0L))
+        artifact.put("lastCheckedAt", update.optLong("lastCheckedAt", System.currentTimeMillis()))
+        changed = true
+      }
+    }
+    if (changed) persistAndNotifyLocked(state)
+  }
+
+  fun ownershipFingerprint(asset: JSONObject): String {
+    val artifacts = asset.optJSONArray("_artifacts") ?: JSONArray()
+    val parts = mutableListOf<String>()
+    for (index in 0 until artifacts.length()) {
+      val artifact = artifacts.optJSONObject(index) ?: continue
+      parts.add(listOf(
+        artifact.optString("artifactId"),
+        artifact.optString("role"),
+        artifact.optJSONObject("_locator")?.toString().orEmpty(),
+      ).joinToString(":"))
+    }
+    return listOf(
+      asset.optString("assetId"),
+      asset.optString("jobId"),
+      asset.optString("destination"),
+      parts.sorted().joinToString("|"),
+    ).joinToString("|")
+  }
+
+  fun managementToken(asset: JSONObject): String = MessageDigest.getInstance("SHA-256")
+    .digest(ownershipFingerprint(asset).toByteArray(Charsets.UTF_8))
+    .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
+  @Synchronized
+  fun applyArtifactManagement(
+    updates: JSONArray,
+    expectedOwnership: Map<String, String>,
+    requiredPrimaryAvailability: OrionArtifactAvailability? = null,
+  ): ArtifactManagementCommit {
+    if (updates.length() == 0 && expectedOwnership.isEmpty()) {
+      return ArtifactManagementCommit(emptySet(), emptySet())
+    }
+    val state = readStateLocked()
+    migrateOwnedArtifactsLocked(state)
+    val assets = state.optJSONArray("assets") ?: JSONArray()
+    val updatesById = linkedMapOf<String, JSONObject>()
+    for (index in 0 until updates.length()) {
+      val update = updates.optJSONObject(index) ?: continue
+      cleanId(update.optString("artifactId"))?.let { updatesById[it] = update }
+    }
+    var changed = false
+    for (assetIndex in 0 until assets.length()) {
+      val artifacts = assets.optJSONObject(assetIndex)?.optJSONArray("_artifacts") ?: continue
+      for (artifactIndex in 0 until artifacts.length()) {
+        val artifact = artifacts.optJSONObject(artifactIndex) ?: continue
+        val update = updatesById[artifact.optString("artifactId")] ?: continue
+        val fingerprint = update.optString("_locatorFingerprint")
+        if (fingerprint.isNotEmpty() && artifact.optJSONObject("_locator")?.toString() != fingerprint) continue
+        val availability = update.optString("availability").takeIf { it in ARTIFACT_AVAILABILITY } ?: continue
+        artifact.put("availability", availability)
+        artifact.put("observedSizeBytes", if (update.isNull("observedSizeBytes")) JSONObject.NULL else update.optLong("observedSizeBytes").coerceAtLeast(0L))
+        artifact.put("lastCheckedAt", update.optLong("lastCheckedAt", System.currentTimeMillis()))
+        changed = true
+      }
+    }
+
+    val approved = linkedSetOf<String>()
+    val rejected = linkedSetOf<String>()
+    for ((assetId, fingerprint) in expectedOwnership) {
+      val asset = (0 until assets.length()).mapNotNull { assets.optJSONObject(it) }.firstOrNull { it.optString("assetId") == assetId }
+      if (asset == null || ownershipFingerprint(asset) != fingerprint) {
+        rejected.add(assetId)
+        continue
+      }
+      if (requiredPrimaryAvailability != null) {
+        val artifacts = asset.optJSONArray("_artifacts") ?: JSONArray()
+        val primary = (0 until artifacts.length()).mapNotNull { artifacts.optJSONObject(it) }.firstOrNull { it.optString("role") == "primary" }
+        if (OrionArtifactAvailability.fromWire(primary?.optString("availability").orEmpty()) != requiredPrimaryAvailability) {
+          rejected.add(assetId)
+          continue
+        }
+      }
+      approved.add(assetId)
+    }
+
+    if (approved.isNotEmpty()) {
+      val removedJobs = linkedSetOf<String>()
+      val keptAssets = JSONArray()
+      for (index in 0 until assets.length()) {
+        val asset = assets.optJSONObject(index) ?: continue
+        if (approved.contains(asset.optString("assetId"))) removedJobs.add(asset.optString("jobId")) else keptAssets.put(asset)
+      }
+      val keptJobs = JSONArray()
+      val jobs = state.optJSONArray("jobs") ?: JSONArray()
+      for (index in 0 until jobs.length()) {
+        val job = jobs.optJSONObject(index) ?: continue
+        if (!removedJobs.contains(job.optString("jobId"))) keptJobs.put(job)
+      }
+      state.put("assets", keptAssets)
+      state.put("jobs", keptJobs)
+      state.put("offlineEntries", removeAssetsFromOfflineEntries(state.optJSONArray("offlineEntries") ?: JSONArray(), approved, keptAssets))
+      changed = true
+    }
+    if (changed) persistAndNotifyLocked(state)
+    return ArtifactManagementCommit(approved, rejected)
+  }
+
+  @Synchronized
+  fun removeAssets(assetIds: Set<String>) {
+    if (assetIds.isEmpty()) return
+    val state = readStateLocked()
+    val assets = state.optJSONArray("assets") ?: JSONArray()
+    val removedJobs = linkedSetOf<String>()
+    val keptAssets = JSONArray()
+    for (index in 0 until assets.length()) {
+      val asset = assets.optJSONObject(index) ?: continue
+      if (assetIds.contains(asset.optString("assetId"))) removedJobs.add(asset.optString("jobId")) else keptAssets.put(asset)
+    }
+    if (removedJobs.isEmpty()) return
+    val keptJobs = JSONArray()
+    val jobs = state.optJSONArray("jobs") ?: JSONArray()
+    for (index in 0 until jobs.length()) {
+      val job = jobs.optJSONObject(index) ?: continue
+      if (!removedJobs.contains(job.optString("jobId"))) keptJobs.put(job)
+    }
+    state.put("assets", keptAssets)
+    state.put("jobs", keptJobs)
+    state.put("offlineEntries", removeAssetsFromOfflineEntries(state.optJSONArray("offlineEntries") ?: JSONArray(), assetIds, keptAssets))
+    persistAndNotifyLocked(state)
+  }
+
+  @Synchronized
+  fun blockingDuplicate(itemKey: String, destination: String): JSONObject? {
+    val state = readStateLocked()
+    migrateOwnedArtifactsLocked(state)
+    val jobs = state.optJSONArray("jobs") ?: JSONArray()
+    for (index in 0 until jobs.length()) {
+      val job = jobs.optJSONObject(index) ?: continue
+      if (job.optString("_itemKey") != itemKey || job.optString("destination") != destination) continue
+      val availability = primaryAvailabilityForJobLocked(state, job.optString("jobId"))
+      if (OrionDownloadOwnershipPolicy.blocksDuplicate(job.optString("state"), availability)) {
+        return publicJob(job)
+      }
+    }
+    return null
+  }
+
+  @Synchronized
+  fun hasActiveJobs(excludingJobId: String? = null): Boolean {
+    val jobs = readStateLocked().optJSONArray("jobs") ?: JSONArray()
+    for (index in 0 until jobs.length()) {
+      val job = jobs.optJSONObject(index) ?: continue
+      if (excludingJobId != null && job.optString("jobId") == excludingJobId) continue
+      if (job.optString("state") in ACTIVE_EXECUTION_STATES) return true
+    }
+    return false
+  }
 
   @Synchronized
   fun incrementRetry(jobId: String) {
@@ -201,35 +538,43 @@ internal object OrionDownloadJobStore {
 
   @Synchronized
   fun markCancelled(jobId: String) {
-    mutateJobLocked(jobId) { job ->
-      job.put("state", "cancelled")
-      job.put("failure", JSONObject.NULL)
-      job.put("updatedAt", System.currentTimeMillis())
-      job.remove("_subtitleSources")
-    }
+    cancelAndFence(jobId)
   }
 
   @Synchronized
-  fun markCompleted(jobId: String, asset: JSONObject, offlineEntry: JSONObject) {
+  fun markCompleted(jobId: String, expectedGeneration: Long, asset: JSONObject, offlineEntry: JSONObject): Boolean {
     val state = readStateLocked()
     val jobs = state.getJSONArray("jobs")
+    var committed = false
     for (index in 0 until jobs.length()) {
       val job = jobs.optJSONObject(index) ?: continue
       if (job.optString("jobId") != jobId) continue
+      if (!OrionDownloadExecutionFence.canCommit(
+          expectedGeneration,
+          job.optLong("_executionGeneration", 0L),
+          job.optString("state"),
+          job.optString("_control", "run"),
+        )) return false
       job.put("state", "completed")
       job.put("failure", JSONObject.NULL)
       job.put("completedAt", System.currentTimeMillis())
       job.put("updatedAt", System.currentTimeMillis())
       val progress = job.optJSONObject("progress") ?: emptyProgress()
       progress.put("percent", 100)
+      progress.put("finalizationStage", JSONObject.NULL)
+      progress.put("finalizationStageStartedAt", JSONObject.NULL)
       job.put("progress", progress)
       job.put("_control", "run")
-      job.remove("_subtitleSources")
+      job.remove("_finalizationPlan")
+      committed = true
       break
     }
+    if (!committed) return false
+    ensureOwnedArtifactsLocked(asset)
     state.put("assets", upsertById(state.getJSONArray("assets"), asset, "assetId"))
     state.put("offlineEntries", mergeOfflineEntry(state.getJSONArray("offlineEntries"), offlineEntry))
     persistAndNotifyLocked(state)
+    return true
   }
 
   @Synchronized
@@ -275,13 +620,17 @@ internal object OrionDownloadJobStore {
   }
 
   private fun publicSnapshotLocked(state: JSONObject): JSONObject {
+    migrateOwnedArtifactsLocked(state)
     val jobs = JSONArray()
     val sourceJobs = state.optJSONArray("jobs") ?: JSONArray()
     for (index in 0 until sourceJobs.length()) sourceJobs.optJSONObject(index)?.let { jobs.put(publicJob(it)) }
+    val assets = JSONArray()
+    val sourceAssets = state.optJSONArray("assets") ?: JSONArray()
+    for (index in 0 until sourceAssets.length()) sourceAssets.optJSONObject(index)?.let { assets.put(publicAsset(it)) }
     return JSONObject()
       .put("schemaVersion", 1)
       .put("jobs", jobs)
-      .put("assets", JSONArray((state.optJSONArray("assets") ?: JSONArray()).toString()))
+      .put("assets", assets)
       .put("offlineEntries", JSONArray((state.optJSONArray("offlineEntries") ?: JSONArray()).toString()))
       .put("updatedAt", System.currentTimeMillis())
   }
@@ -295,6 +644,55 @@ internal object OrionDownloadJobStore {
       if (key.startsWith("_")) remove.add(key)
     }
     remove.forEach(copy::remove)
+    return copy
+  }
+
+  private fun publicAsset(asset: JSONObject): JSONObject {
+    val copy = JSONObject(asset.toString())
+    val assetId = copy.optString("assetId")
+    val artifacts = copy.optJSONArray("_artifacts") ?: JSONArray()
+    val publicArtifacts = JSONArray()
+    var primaryAvailability = "checking"
+    var verifiedBytes = 0L
+    var canOpen = false
+    var canLocate = false
+    for (index in 0 until artifacts.length()) {
+      val artifact = artifacts.optJSONObject(index) ?: continue
+      val role = artifact.optString("role").takeIf { it == "primary" || it == "subtitle" } ?: continue
+      val availability = artifact.optString("availability").takeIf { it in ARTIFACT_AVAILABILITY } ?: "checking"
+      val locatorKind = artifact.optJSONObject("_locator")?.optString("kind").orEmpty()
+      val observed = if (artifact.isNull("observedSizeBytes")) null else artifact.optLong("observedSizeBytes").coerceAtLeast(0L)
+      if (availability == "verified" && observed != null) verifiedBytes = safeAddBytes(verifiedBytes, observed)
+      val open = role == "primary" && availability == "verified" && locatorKind == "content-uri"
+      val locate = role == "primary" && availability == "verified" && locatorKind == "content-uri" &&
+        !asset.optJSONObject("storageTarget")?.optString("targetId").isNullOrBlank()
+      if (role == "primary") {
+        primaryAvailability = availability
+        canOpen = open
+        canLocate = locate
+      }
+      publicArtifacts.put(JSONObject()
+        .put("schemaVersion", 1)
+        .put("artifactId", artifact.optString("artifactId"))
+        .put("role", role)
+        .put("displayName", artifact.optString("displayName", if (role == "primary") "Downloaded media" else "Subtitle"))
+        .put("mimeType", if (artifact.isNull("mimeType")) JSONObject.NULL else artifact.opt("mimeType"))
+        .put("expectedSizeBytes", if (artifact.isNull("expectedSizeBytes")) JSONObject.NULL else artifact.optLong("expectedSizeBytes").coerceAtLeast(0L))
+        .put("observedSizeBytes", observed ?: JSONObject.NULL)
+        .put("availability", availability)
+        .put("lastCheckedAt", if (artifact.isNull("lastCheckedAt")) JSONObject.NULL else artifact.optLong("lastCheckedAt"))
+        .put("actions", JSONObject().put("open", open).put("locate", locate).put("delete", true)))
+    }
+    val privateKeys = mutableListOf<String>()
+    val keys = copy.keys()
+    while (keys.hasNext()) keys.next().takeIf { it.startsWith("_") }?.let(privateKeys::add)
+    privateKeys.forEach(copy::remove)
+    copy.put("locator", JSONObject().put("kind", "native-owned").put("value", assetId))
+    copy.put("managementToken", managementToken(asset))
+    copy.put("availability", primaryAvailability)
+    copy.put("verifiedSizeBytes", verifiedBytes)
+    copy.put("artifacts", publicArtifacts)
+    copy.put("actions", JSONObject().put("open", canOpen).put("locate", canLocate).put("delete", true))
     return copy
   }
 
@@ -355,38 +753,104 @@ internal object OrionDownloadJobStore {
     return output
   }
 
-  private fun sanitizeSubtitleSources(input: JSONArray?, selectedIds: JSONArray): JSONArray {
+  private fun migrateOwnedArtifactsLocked(state: JSONObject): Boolean {
+    val assets = state.optJSONArray("assets") ?: return false
+    var changed = false
+    for (index in 0 until assets.length()) {
+      val asset = assets.optJSONObject(index) ?: continue
+      val artifacts = asset.optJSONArray("_artifacts")
+      if (artifacts != null && (0 until artifacts.length()).any { artifacts.optJSONObject(it)?.optString("role") == "primary" }) continue
+      synthesizePrimaryArtifactLocked(asset, "checking")
+      changed = true
+    }
+    return changed
+  }
+
+  private fun ensureOwnedArtifactsLocked(asset: JSONObject) {
+    val artifacts = asset.optJSONArray("_artifacts")
+    if (artifacts != null && (0 until artifacts.length()).any { artifacts.optJSONObject(it)?.optString("role") == "primary" }) return
+    synthesizePrimaryArtifactLocked(asset, "verified")
+  }
+
+  private fun synthesizePrimaryArtifactLocked(asset: JSONObject, availability: String) {
+    val assetId = cleanId(asset.optString("assetId")) ?: return
+    val locator = asset.optJSONObject("locator") ?: return
+    val locatorKind = locator.optString("kind").takeIf { it in setOf("managed", "content-uri", "file-uri") } ?: return
+    val locatorValue = locator.optString("value").takeIf { it.isNotBlank() } ?: return
+    val media = asset.optJSONObject("media") ?: JSONObject()
+    val displayName = cleanText(media.optString("episodeTitle"), 160)
+      ?: cleanText(media.optString("title"), 160)
+      ?: "Downloaded media"
+    val size = asset.optLong("verifiedSizeBytes", 0L).coerceAtLeast(0L)
+    val primary = JSONObject()
+      .put("schemaVersion", 1)
+      .put("artifactId", "$assetId:primary")
+      .put("role", "primary")
+      .put("displayName", displayName)
+      .put("mimeType", if (asset.isNull("mimeType")) JSONObject.NULL else asset.opt("mimeType"))
+      .put("expectedSizeBytes", size)
+      .put("observedSizeBytes", if (availability == "verified") size else JSONObject.NULL)
+      .put("availability", availability)
+      .put("lastCheckedAt", if (availability == "verified") System.currentTimeMillis() else JSONObject.NULL)
+      .put("_locator", JSONObject().put("kind", locatorKind).put("value", locatorValue))
+    val output = JSONArray().put(primary)
+    val existing = asset.optJSONArray("_artifacts") ?: JSONArray()
+    for (index in 0 until existing.length()) {
+      val artifact = existing.optJSONObject(index) ?: continue
+      if (artifact.optString("role") != "primary") output.put(artifact)
+    }
+    asset.put("_artifacts", output)
+  }
+
+  private fun primaryAvailabilityForJobLocked(state: JSONObject, jobId: String): OrionArtifactAvailability? {
+    val assets = state.optJSONArray("assets") ?: return null
+    for (index in 0 until assets.length()) {
+      val asset = assets.optJSONObject(index) ?: continue
+      if (asset.optString("jobId") != jobId) continue
+      val artifacts = asset.optJSONArray("_artifacts") ?: continue
+      for (artifactIndex in 0 until artifacts.length()) {
+        val artifact = artifacts.optJSONObject(artifactIndex) ?: continue
+        if (artifact.optString("role") == "primary") return OrionArtifactAvailability.fromWire(artifact.optString("availability"))
+      }
+    }
+    return null
+  }
+
+  private fun removeAssetsFromOfflineEntries(entries: JSONArray, removedAssetIds: Set<String>, remainingAssets: JSONArray): JSONArray {
+    val availabilityByAsset = linkedMapOf<String, String>()
+    for (index in 0 until remainingAssets.length()) {
+      val asset = remainingAssets.optJSONObject(index) ?: continue
+      val artifacts = asset.optJSONArray("_artifacts") ?: JSONArray()
+      val primary = (0 until artifacts.length()).mapNotNull { artifacts.optJSONObject(it) }.firstOrNull { it.optString("role") == "primary" }
+      availabilityByAsset[asset.optString("assetId")] = primary?.optString("availability", "checking") ?: "checking"
+    }
     val output = JSONArray()
-    if (input == null) return output
-    val selected = linkedSetOf<String>()
-    for (index in 0 until selectedIds.length()) cleanText(selectedIds.optString(index), 100)?.let(selected::add)
-    for (index in 0 until input.length()) {
-      if (output.length() >= 2) break
-      val source = input.optJSONObject(index) ?: continue
-      val id = cleanText(source.optString("id"), 100) ?: continue
-      if (!selected.contains(id)) continue
-      val provider = source.optString("provider").takeIf { it == "subdl" || it == "wyzie" } ?: continue
-      val url = cleanText(source.optString("url"), 1200) ?: continue
-      val safeUrl = try {
-        val parsed = java.net.URI(url)
-        parsed.scheme == "https" && !parsed.host.isNullOrBlank()
-      } catch (_: Throwable) { false }
-      if (!safeUrl) continue
-      val language = cleanText(source.optString("language"), 12) ?: "und"
-      val languageLabel = cleanText(source.optString("languageLabel"), 60) ?: language.uppercase()
-      val label = cleanText(source.optString("label"), 120) ?: "$languageLabel subtitle"
-      val format = source.optString("format").takeIf { it in setOf("vtt", "srt", "ass", "unknown") } ?: "unknown"
-      output.put(JSONObject()
-        .put("id", id)
-        .put("provider", provider)
-        .put("language", language)
-        .put("languageLabel", languageLabel)
-        .put("label", label)
-        .put("format", format)
-        .put("url", url))
+    for (index in 0 until entries.length()) {
+      val entry = entries.optJSONObject(index) ?: continue
+      val ids = entry.optJSONArray("assetIds") ?: JSONArray()
+      val kept = mutableListOf<String>()
+      for (assetIndex in 0 until ids.length()) {
+        val id = ids.optString(assetIndex)
+        if (!removedAssetIds.contains(id) && availabilityByAsset.containsKey(id)) kept.add(id)
+      }
+      if (kept.isEmpty()) continue
+      val primary = kept.firstOrNull { availabilityByAsset[it] == "verified" }
+        ?: kept.firstOrNull { availabilityByAsset[it] in setOf("checking", "unavailable") }
+        ?: kept.first()
+      entry.put("assetIds", JSONArray(kept))
+      entry.put("primaryAssetId", primary)
+      entry.put("updatedAt", System.currentTimeMillis())
+      output.put(entry)
     }
     return output
   }
+
+  private fun safeAddBytes(left: Long, right: Long): Long = when {
+    right <= 0L -> left
+    left > Long.MAX_VALUE - right -> Long.MAX_VALUE
+    else -> left + right
+  }
+
 
   private fun retireDirectExperimentalArtifactsLocked(state: JSONObject): Set<String> {
     val jobs = state.optJSONArray("jobs") ?: JSONArray()
@@ -480,12 +944,29 @@ internal object OrionDownloadJobStore {
     .put("percent", JSONObject.NULL)
     .put("bytesPerSecond", JSONObject.NULL)
     .put("etaSeconds", JSONObject.NULL)
+    .put("finalizationStage", JSONObject.NULL)
+    .put("finalizationStageStartedAt", JSONObject.NULL)
 
   private fun failure(code: String, message: String, retryable: Boolean, actionRequired: Boolean): JSONObject = JSONObject()
     .put("code", code.take(80))
     .put("message", message.take(220))
     .put("retryable", retryable)
     .put("actionRequired", actionRequired)
+
+  private val FINALIZATION_STAGES = setOf(
+    "preparing", "remuxing", "verifying-output", "publishing-media", "confirming-publication", "publishing-subtitles",
+  )
+
+  private val ARTIFACT_AVAILABILITY = setOf("checking", "verified", "missing", "unavailable")
+
+  private val ACTIVE_EXECUTION_STATES = setOf(
+    "queued", "preflighting", "downloading", "paused", "recovering", "verifying", "finalizing",
+  )
+
+  private val DUPLICATE_BLOCKING_STATES = setOf(
+    "queued", "preflighting", "downloading", "paused", "recovering", "verifying", "finalizing",
+    "storage-blocked", "action-required", "expired", "completed",
+  )
 
   private fun cleanId(value: String): String? = value.trim().takeIf { it.matches(Regex("^[A-Za-z0-9._:-]{1,120}$")) }
   private fun cleanText(value: String, max: Int): String? = value.replace(Regex("[\\u0000-\\u001f\\u007f]"), "").trim().take(max).takeIf { it.isNotBlank() }

@@ -61,3 +61,10 @@ export function createMobileDownloadTargetV1(input: CreateMobileDownloadTargetIn
     },
   };
 }
+
+export function mobileDownloadItemKeyFromMediaV1(media: MobileDownloadMediaIdentityV1): string {
+  const groupKey = `${media.libraryKind}:${String(media.id)}`;
+  return media.mediaType === 'tv' && media.season !== null && media.episode !== null
+    ? `${groupKey}:s${media.season}:e${media.episode}`
+    : groupKey;
+}

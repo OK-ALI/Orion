@@ -23,6 +23,14 @@ class OrionDownloadRecoveryWorker(
     val job = OrionDownloadJobStore.getJob(jobId) ?: return Result.success()
     val state = job.optString("state")
     if (state in setOf("completed", "cancelled", "unsupported", "protected")) return Result.success()
+    if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(applicationContext, jobId)) {
+      return try {
+        OrionDownloadForegroundService.start(applicationContext, jobId, recovery = true)
+        Result.success()
+      } catch (_: Throwable) {
+        Result.retry()
+      }
+    }
     val candidateId = job.optString("candidateId")
     val runtime = OrionDownloadTransferRuntime.ensure(candidateId, jobId)
     if (runtime == null) {
@@ -49,17 +57,16 @@ class OrionDownloadRecoveryWorker(
 internal object OrionDownloadRecoveryScheduler {
   private const val PREFIX = "orion-download-recovery-"
 
-  fun schedule(context: Context, jobId: String, delayMinutes: Long = 15L) {
+  fun schedule(context: Context, jobId: String, delayMinutes: Long = 15L, localOnly: Boolean = false) {
+    val constraints = Constraints.Builder()
+      .setRequiresBatteryNotLow(true)
+      .setRequiresStorageNotLow(true)
+      .apply { if (!localOnly) setRequiredNetworkType(NetworkType.CONNECTED) }
+      .build()
     val request = OneTimeWorkRequestBuilder<OrionDownloadRecoveryWorker>()
       .setInputData(workDataOf(OrionDownloadRecoveryWorker.KEY_JOB_ID to jobId))
       .setInitialDelay(delayMinutes.coerceAtLeast(1L), TimeUnit.MINUTES)
-      .setConstraints(
-        Constraints.Builder()
-          .setRequiredNetworkType(NetworkType.CONNECTED)
-          .setRequiresBatteryNotLow(true)
-          .setRequiresStorageNotLow(true)
-          .build(),
-      )
+      .setConstraints(constraints)
       .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30L, TimeUnit.SECONDS)
       .build()
     WorkManager.getInstance(context).enqueueUniqueWork(PREFIX + jobId, ExistingWorkPolicy.REPLACE, request)

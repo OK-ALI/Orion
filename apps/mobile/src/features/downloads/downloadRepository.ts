@@ -1,9 +1,12 @@
 import type {
   MobileDownloadAssetV1,
+  MobileDownloadArtifactActionsV1,
+  MobileDownloadArtifactAvailabilityV1,
   MobileDownloadFailureV1,
   MobileDownloadJobV1,
   MobileDownloadMediaIdentityV1,
   MobileDownloadTrackV1,
+  MobileDownloadOwnedArtifactV1,
   OfflineMediaEntryV1,
 } from '@orion/shared/types';
 import { mmkvStorageAdapter } from '../../services/storageAdapter';
@@ -118,6 +121,73 @@ function normalizeTracks(value: unknown): MobileDownloadTrackV1[] {
   return tracks;
 }
 
+const ARTIFACT_AVAILABILITY = new Set<MobileDownloadArtifactAvailabilityV1>([
+  'checking', 'verified', 'missing', 'unavailable',
+]);
+
+function artifactAvailability(value: unknown): MobileDownloadArtifactAvailabilityV1 | null {
+  return typeof value === 'string' && ARTIFACT_AVAILABILITY.has(value as MobileDownloadArtifactAvailabilityV1)
+    ? value as MobileDownloadArtifactAvailabilityV1
+    : null;
+}
+
+function normalizeArtifactActions(value: unknown, fallback: Partial<MobileDownloadArtifactActionsV1> = {}): MobileDownloadArtifactActionsV1 {
+  const input = record(value);
+  return {
+    open: input?.open === true || fallback.open === true,
+    locate: input?.locate === true || fallback.locate === true,
+    delete: input?.delete !== false && fallback.delete !== false,
+  };
+}
+
+function normalizeOwnedArtifacts(
+  value: unknown,
+  legacy: {
+    assetId: string;
+    title: string;
+    mimeType: string | null;
+    verifiedSizeBytes: number;
+    externallyVisible: boolean;
+  },
+): MobileDownloadOwnedArtifactV1[] {
+  const artifacts: MobileDownloadOwnedArtifactV1[] = [];
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const input = record(item);
+      if (!input || input.schemaVersion !== 1) continue;
+      const artifactId = stringValue(input.artifactId);
+      const displayName = stringValue(input.displayName);
+      const availability = artifactAvailability(input.availability);
+      if (!artifactId || !displayName || !availability || (input.role !== 'primary' && input.role !== 'subtitle')) continue;
+      artifacts.push({
+        schemaVersion: 1,
+        artifactId,
+        role: input.role,
+        displayName,
+        mimeType: nullableString(input.mimeType),
+        expectedSizeBytes: finite(input.expectedSizeBytes) === null ? null : Math.max(0, finite(input.expectedSizeBytes)!),
+        observedSizeBytes: finite(input.observedSizeBytes) === null ? null : Math.max(0, finite(input.observedSizeBytes)!),
+        availability,
+        lastCheckedAt: finite(input.lastCheckedAt),
+        actions: normalizeArtifactActions(input.actions, { delete: true }),
+      });
+    }
+  }
+  if (artifacts.some((artifact) => artifact.role === 'primary')) return artifacts;
+  return [{
+    schemaVersion: 1,
+    artifactId: `${legacy.assetId}:primary`,
+    role: 'primary',
+    displayName: legacy.title,
+    mimeType: legacy.mimeType,
+    expectedSizeBytes: legacy.verifiedSizeBytes,
+    observedSizeBytes: null,
+    availability: 'checking',
+    lastCheckedAt: null,
+    actions: { open: false, locate: false, delete: true },
+  }, ...artifacts];
+}
+
 export function normalizeMobileDownloadJobV1(value: unknown): MobileDownloadJobV1 | null {
   const input = record(value);
   if (!input || input.schemaVersion !== 1) return null;
@@ -160,6 +230,7 @@ export function normalizeMobileDownloadAssetV1(value: unknown): MobileDownloadAs
   const input = record(value);
   if (!input || input.schemaVersion !== 1) return null;
   const assetId = stringValue(input.assetId);
+  const managementToken = stringValue(input.managementToken) || '';
   const jobId = stringValue(input.jobId);
   const media = normalizeMedia(input.media);
   const storageTarget = normalizeMobileDownloadStorageTargetV1(input.storageTarget);
@@ -170,26 +241,77 @@ export function normalizeMobileDownloadAssetV1(value: unknown): MobileDownloadAs
   if (!assetId || !jobId || !media || !storageTarget || !locator || !locatorValue || !container || !sourceId) return null;
   if (input.destination !== 'orion-library' && input.destination !== 'device-storage') return null;
   if (storageTarget.mode !== input.destination) return null;
-  if (locator.kind !== 'managed' && locator.kind !== 'content-uri' && locator.kind !== 'file-uri') return null;
+  if (locator.kind !== 'managed' && locator.kind !== 'content-uri' && locator.kind !== 'file-uri' && locator.kind !== 'native-owned') return null;
+
+  const legacySize = Math.max(0, finite(input.verifiedSizeBytes) ?? 0);
+  const mimeType = nullableString(input.mimeType);
+  const externallyVisible = input.externallyVisible === true;
+  const artifacts = normalizeOwnedArtifacts(input.artifacts, {
+    assetId,
+    title: media.episodeTitle || media.title,
+    mimeType,
+    verifiedSizeBytes: legacySize,
+    externallyVisible,
+  });
+  const primary = artifacts.find((artifact) => artifact.role === 'primary')!;
+  const availability = artifactAvailability(input.availability) || primary.availability;
+  const verifiedSizeBytes = artifacts.reduce((total, artifact) => (
+    artifact.availability === 'verified' ? total + Math.max(0, artifact.observedSizeBytes ?? 0) : total
+  ), 0);
+  const actions = normalizeArtifactActions(input.actions, {
+    open: primary.actions.open,
+    locate: primary.actions.locate,
+    delete: true,
+  });
 
   return {
     schemaVersion: 1,
     assetId,
+    managementToken,
     jobId,
     media,
     destination: input.destination,
     storageTarget,
-    locator: { kind: locator.kind, value: locatorValue },
+    locator: { kind: 'native-owned', value: assetId },
     container,
-    mimeType: nullableString(input.mimeType),
-    verifiedSizeBytes: Math.max(0, finite(input.verifiedSizeBytes) ?? 0),
+    mimeType,
+    verifiedSizeBytes,
     sha256: nullableString(input.sha256),
     tracks: normalizeTracks(input.tracks),
     sourceId,
     playInOrion: input.playInOrion === true,
-    externallyVisible: input.externallyVisible === true,
+    externallyVisible,
     verifiedAt: finite(input.verifiedAt) ?? 0,
+    availability,
+    artifacts,
+    actions,
   };
+}
+
+export interface MobileDownloadLibrarySummaryV1 {
+  completedTitleCount: number;
+  storedBytes: number;
+  needsAttentionCount: number;
+}
+
+export function deriveMobileDownloadLibrarySummaryV1(
+  assets: readonly MobileDownloadAssetV1[],
+  offlineEntries: readonly OfflineMediaEntryV1[],
+): MobileDownloadLibrarySummaryV1 {
+  const assetById = new Map(assets.map((asset) => [asset.assetId, asset]));
+  const completedGroups = new Set<string>();
+  let needsAttentionCount = 0;
+  for (const entry of offlineEntries) {
+    const copies = entry.assetIds.map((assetId) => assetById.get(assetId)).filter((asset): asset is MobileDownloadAssetV1 => Boolean(asset));
+    if (copies.some((asset) => asset.availability === 'verified')) completedGroups.add(entry.groupKey);
+  }
+  for (const asset of assets) {
+    if (asset.availability === 'missing' || asset.availability === 'unavailable') needsAttentionCount += 1;
+  }
+  const storedBytes = assets.reduce((total, asset) => total + asset.artifacts.reduce((artifactTotal, artifact) => (
+    artifact.availability === 'verified' ? artifactTotal + Math.max(0, artifact.observedSizeBytes ?? 0) : artifactTotal
+  ), 0), 0);
+  return { completedTitleCount: completedGroups.size, storedBytes, needsAttentionCount };
 }
 
 export function normalizeOfflineMediaEntryV1(value: unknown): OfflineMediaEntryV1 | null {

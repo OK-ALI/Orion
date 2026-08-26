@@ -70,7 +70,7 @@ test('P10.3 fragmented finalization persists no raw network locations', () => {
   const store = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadJobStore.kt');
   assert.match(runtime, /orion-fragment-bundle\.json/);
   assert.match(runtime, /\.put\("name", file\.name\)/);
-  assert.match(runtime, /\.put\("role", fragment\.role\.take\(24\)\)/);
+  assert.match(runtime, /\.put\("role", role\.take\(24\)\)/);
   assert.doesNotMatch(runtime, /\.put\("url", fragment\.url\)/);
   assert.match(store, /if \(key\.startsWith\("_"\)\) remove\.add\(key\)/);
 });

@@ -30,19 +30,17 @@ class OrionDownloadForegroundService : Service() {
     when (intent?.action) {
       ACTION_PAUSE -> {
         OrionDownloadJobStore.requestControl(jobId, "pause")
-        OrionDownloadNotifications.notify(applicationContext, OrionDownloadJobStore.publicJob(jobId))
+        OrionDownloadNotifications.reconcile(applicationContext)
         return START_NOT_STICKY
       }
       ACTION_CANCEL -> {
-        OrionDownloadJobStore.requestControl(jobId, "cancel")
-        OrionDownloadNotifications.notify(applicationContext, OrionDownloadJobStore.publicJob(jobId))
+        OrionDownloadTransferEngine.cancelJob(applicationContext, jobId)
         return START_NOT_STICKY
       }
       ACTION_RESUME -> OrionDownloadJobStore.clearControl(jobId)
     }
 
-    val current = OrionDownloadJobStore.publicJob(jobId)
-    startForeground(OrionDownloadNotifications.notificationId(), OrionDownloadNotifications.foreground(applicationContext, current))
+    startForeground(OrionDownloadNotifications.notificationId(), OrionDownloadNotifications.foreground(applicationContext))
 
     if (activeJobs.add(jobId)) {
       executor.execute {
@@ -50,8 +48,7 @@ class OrionDownloadForegroundService : Service() {
           OrionDownloadTransferEngine.runJob(applicationContext, jobId)
         } finally {
           activeJobs.remove(jobId)
-          if (activeJobs.isEmpty()) {
-            OrionDownloadNotifications.cancel(applicationContext)
+          if (!OrionDownloadNotifications.reconcile(applicationContext)) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
           }

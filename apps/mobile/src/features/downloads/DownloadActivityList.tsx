@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { fontSizes, radii, spacing } from '@orion/shared/tokens';
@@ -6,15 +6,18 @@ import { imgUrl } from '@orion/shared/api';
 import type { MobileDownloadAssetV1, MobileDownloadJobV1, OfflineMediaEntryV1 } from '@orion/shared/types';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { createMobileDownloadProgressSnapshotV1 } from './contracts';
+import { downloadElapsedSecondsV1 } from './downloadTelemetry';
 import { cancelNativeDownloadJobV1, pauseNativeDownloadJobV1, resumeNativeDownloadJobV1, retryNativeDownloadJobV1 } from './nativeDownloadEngine';
 
 interface DownloadActivityListProps {
   jobs: MobileDownloadJobV1[];
   assets: MobileDownloadAssetV1[];
   offlineEntries: OfflineMediaEntryV1[];
+  active?: boolean;
+  onManageAssets?: (assetIds: readonly string[]) => void;
 }
 
-type DownloadTab = 'all' | 'active' | 'completed' | 'failed';
+type DownloadTab = 'all' | 'active' | 'completed' | 'attention' | 'failed';
 type DownloadMediaFilter = 'all' | 'movies' | 'series';
 type DownloadSort = 'newest' | 'oldest' | 'name' | 'progress' | 'size';
 
@@ -29,6 +32,7 @@ const TABS: ReadonlyArray<{ id: DownloadTab; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'active', label: 'Active' },
   { id: 'completed', label: 'Completed' },
+  { id: 'attention', label: 'Needs attention' },
   { id: 'failed', label: 'Failed' },
 ];
 const FILTERS: ReadonlyArray<{ id: DownloadMediaFilter; label: string }> = [
@@ -63,10 +67,20 @@ function formatDurationSeconds(value: number | null): string | null {
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
 
-function elapsedText(job: MobileDownloadJobV1): string | null {
-  if (job.startedAt === null) return null;
-  const end = job.completedAt ?? job.updatedAt;
-  return formatDurationSeconds(Math.max(0, end - job.startedAt) / 1000);
+export function downloadElapsedTextV1(job: MobileDownloadJobV1, nowMs: number): string | null {
+  return formatDurationSeconds(downloadElapsedSecondsV1(job, nowMs));
+}
+
+function finalizationStageLabel(stage: ReturnType<typeof createMobileDownloadProgressSnapshotV1>['finalizationStage']): string {
+  switch (stage) {
+    case 'preparing': return 'Preparing media';
+    case 'remuxing': return 'Creating portable MP4';
+    case 'verifying-output': return 'Checking MP4';
+    case 'publishing-media': return 'Saving to Device Storage';
+    case 'confirming-publication': return 'Confirming saved file';
+    case 'publishing-subtitles': return 'Preserving subtitles';
+    default: return 'Finalizing';
+  }
 }
 
 function mediaPrimaryTitle(media: MobileDownloadJobV1['media']): string {
@@ -154,7 +168,7 @@ function sortGroups(groups: CompletedGroup[], sort: DownloadSort): CompletedGrou
   });
 }
 
-export function DownloadActivityList({ jobs, assets, offlineEntries }: DownloadActivityListProps) {
+export function DownloadActivityList({ jobs, assets, offlineEntries, active = true, onManageAssets }: DownloadActivityListProps) {
   const { theme } = useOrionTheme();
   const [busyJob, setBusyJob] = useState<string | null>(null);
   const [tab, setTab] = useState<DownloadTab>('all');
@@ -162,21 +176,32 @@ export function DownloadActivityList({ jobs, assets, offlineEntries }: DownloadA
   const [sort, setSort] = useState<DownloadSort>('newest');
   const [query, setQuery] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  const hasFinalizingWork = jobs.some((job) => job.state === 'finalizing');
+  useEffect(() => {
+    if (!active || !hasFinalizingWork) return undefined;
+    setNowMs(Date.now());
+    const timer = setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [active, hasFinalizingWork]);
 
   const assetById = useMemo(() => new Map(assets.map((asset) => [asset.assetId, asset])), [assets]);
   const normalizedQuery = query.trim().toLowerCase();
   const operationalJobs = useMemo(() => jobs.filter((job) => job.state !== 'completed' && job.state !== 'cancelled'), [jobs]);
   const activeJobs = useMemo(() => operationalJobs.filter((job) => ACTIVE_STATES.has(job.state)), [operationalJobs]);
   const failedJobs = useMemo(() => operationalJobs.filter((job) => FAILED_STATES.has(job.state)), [operationalJobs]);
-  const completedGroups = useMemo(() => buildCompletedGroups(offlineEntries, assetById), [assetById, offlineEntries]);
+  const verifiedEntries = useMemo(() => offlineEntries.filter((entry) => entry.assetIds.some((assetId) => assetById.get(assetId)?.availability === 'verified')), [assetById, offlineEntries]);
+  const attentionAssets = useMemo(() => assets.filter((asset) => asset.availability === 'missing' || asset.availability === 'unavailable'), [assets]);
+  const completedGroups = useMemo(() => buildCompletedGroups(verifiedEntries, assetById), [assetById, verifiedEntries]);
 
   const visibleJobs = useMemo(() => {
-    const source = tab === 'active' ? activeJobs : tab === 'failed' ? failedJobs : tab === 'completed' ? [] : operationalJobs;
+    const source = tab === 'active' ? activeJobs : tab === 'failed' ? failedJobs : tab === 'completed' || tab === 'attention' ? [] : operationalJobs;
     return sortJobs(source.filter((job) => mediaMatchesFilter(job.media, mediaFilter) && mediaMatchesQuery(job.media, normalizedQuery)), sort);
   }, [activeJobs, failedJobs, mediaFilter, normalizedQuery, operationalJobs, sort, tab]);
 
   const visibleGroups = useMemo(() => {
-    if (tab === 'active' || tab === 'failed') return [];
+    if (tab === 'active' || tab === 'failed' || tab === 'attention') return [];
     return sortGroups(completedGroups.filter((group) => (
       mediaMatchesFilter(group.representative.media, mediaFilter)
       && group.entries.some((entry) => mediaMatchesQuery(entry.media, normalizedQuery))
@@ -184,9 +209,10 @@ export function DownloadActivityList({ jobs, assets, offlineEntries }: DownloadA
   }, [completedGroups, mediaFilter, normalizedQuery, sort, tab]);
 
   const counts: Record<DownloadTab, number> = {
-    all: operationalJobs.length + completedGroups.length,
+    all: operationalJobs.length + completedGroups.length + attentionAssets.length,
     active: activeJobs.length,
     completed: completedGroups.length,
+    attention: attentionAssets.length,
     failed: failedJobs.length,
   };
 
@@ -271,7 +297,8 @@ export function DownloadActivityList({ jobs, assets, offlineEntries }: DownloadA
 
       {visibleJobs.map((job) => {
         const progress = createMobileDownloadProgressSnapshotV1(job);
-        const percent = progress.percent === null ? null : Math.max(0, Math.min(99, Math.round(progress.percent)));
+        const finalizing = job.state === 'finalizing';
+        const percent = finalizing || progress.percent === null ? null : Math.max(0, Math.min(99, Math.round(progress.percent)));
         const warning = FAILED_STATES.has(job.state) || job.state === 'recovering';
         const tone = warning ? theme.warning : job.state === 'paused' ? theme.textMuted : theme.accent;
         const canPause = job.state === 'downloading' || job.state === 'recovering';
@@ -282,17 +309,23 @@ export function DownloadActivityList({ jobs, assets, offlineEntries }: DownloadA
         const total = formatBytes(progress.totalBytes);
         const speed = formatBytes(progress.bytesPerSecond);
         const eta = formatDurationSeconds(progress.etaSeconds);
-        const elapsed = elapsedText(job);
+        const elapsed = downloadElapsedTextV1(job, nowMs);
         const fragmentText = progress.completedFragments !== null && progress.totalFragments !== null
           ? `${progress.completedFragments}/${progress.totalFragments} fragments`
           : null;
-        const metrics = [
-          downloaded ? (total ? `${downloaded} / ${total}` : downloaded) : null,
-          speed ? `${speed}/s` : null,
-          eta ? `${eta} left` : null,
-          elapsed ? `${elapsed} elapsed` : null,
-          fragmentText,
-        ].filter(Boolean);
+        const metrics = finalizing
+          ? [
+              job.destination === 'device-storage' ? 'Transfer complete · building portable file' : 'Transfer complete · preparing offline files',
+              elapsed ? `${elapsed} elapsed` : null,
+            ].filter(Boolean)
+          : [
+              downloaded ? (total ? `${downloaded} / ${total}` : downloaded) : null,
+              speed ? `${speed}/s` : null,
+              eta ? `${eta} left` : null,
+              elapsed ? `${elapsed} elapsed` : null,
+              fragmentText,
+            ].filter(Boolean);
+        const statusLabel = finalizing ? finalizationStageLabel(progress.finalizationStage) : progress.statusLabel;
 
         return (
           <View key={job.jobId} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -303,7 +336,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries }: DownloadA
               <View style={styles.copy}>
                 <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>{mediaPrimaryTitle(job.media)}</Text>
                 {mediaSecondaryTitle(job.media) ? <Text numberOfLines={1} style={[styles.secondaryTitle, { color: theme.textSecondary }]}>{mediaSecondaryTitle(job.media)}</Text> : null}
-                <Text style={[styles.meta, { color: tone }]}>{progress.statusLabel}{percent !== null ? ` · ${percent}%` : ''}</Text>
+                <Text style={[styles.meta, { color: tone }]}>{statusLabel}{percent !== null ? ` · ${percent}%` : ''}</Text>
                 {job.failure?.message ? <Text numberOfLines={2} style={[styles.failureText, { color: theme.textSecondary }]}>{job.failure.message}</Text> : null}
                 {metrics.length ? <Text numberOfLines={2} style={[styles.metrics, { color: theme.textSecondary }]}>{metrics.join(' · ')}</Text> : null}
               </View>
@@ -320,6 +353,31 @@ export function DownloadActivityList({ jobs, assets, offlineEntries }: DownloadA
           </View>
         );
       })}
+
+      {tab === 'attention' || tab === 'all' ? attentionAssets.map((asset) => {
+        const missing = asset.availability === 'missing';
+        const poster = imgUrl(asset.media.posterPath ?? null, 'w342');
+        return (
+          <View key={asset.assetId} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.warning }]}>
+            <View style={styles.mediaRow}>
+              <View style={[styles.posterShell, { backgroundColor: theme.surfaceHover, borderColor: theme.border }]}>
+                {poster ? <Image accessible={false} source={{ uri: poster }} style={styles.poster} /> : <Ionicons name={asset.media.mediaType === 'movie' ? 'film-outline' : 'tv-outline'} size={24} color={theme.textMuted} />}
+              </View>
+              <View style={styles.copy}>
+                <Text numberOfLines={2} style={[styles.title, { color: theme.text }]}>{mediaPrimaryTitle(asset.media)}</Text>
+                {mediaSecondaryTitle(asset.media) ? <Text numberOfLines={2} style={[styles.secondaryTitle, { color: theme.textSecondary }]}>{mediaSecondaryTitle(asset.media)}</Text> : null}
+                <Text style={[styles.meta, { color: theme.warning }]}>{missing ? 'Missing' : 'Unavailable'} · {asset.destination === 'device-storage' ? 'Device Storage' : 'Orion Library'}</Text>
+                <Text style={[styles.metrics, { color: theme.textSecondary }]}>{missing ? 'The media artifact no longer exists. Remove the stale record or download it again.' : 'Reconnect the storage provider or reselect the folder, then refresh.'}</Text>
+              </View>
+            </View>
+            {onManageAssets ? (
+              <View style={styles.actions}>
+                <ActionButton label={missing ? 'Review stale record' : 'Reconnect options'} icon={missing ? 'document-text-outline' : 'folder-open-outline'} onPress={() => onManageAssets([asset.assetId])} />
+              </View>
+            ) : null}
+          </View>
+        );
+      }) : null}
 
       {visibleGroups.map((group) => {
         const entry = group.representative;
@@ -368,16 +426,22 @@ export function DownloadActivityList({ jobs, assets, offlineEntries }: DownloadA
                         <Text numberOfLines={1} style={[styles.episodeTitle, { color: theme.text }]}>{episode.episodeTitle || `Episode ${episode.media.episode ?? ''}`}</Text>
                         <Text style={[styles.episodeMeta, { color: theme.textSecondary }]}>{[episodeSize, 'Verified', assetById.get(episode.primaryAssetId)?.destination === 'device-storage' ? 'Device Storage' : 'Orion Library'].filter(Boolean).join(' · ')}</Text>
                       </View>
+                      {onManageAssets ? <Pressable accessibilityRole="button" accessibilityLabel={`Manage ${episode.episodeTitle || `episode ${episode.media.episode ?? ''}`}`} onPress={() => onManageAssets(episode.assetIds)} style={({ pressed }) => [styles.moreButton, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.elevated }]}><Ionicons name="ellipsis-horizontal" size={19} color={theme.textSecondary} /></Pressable> : null}
                     </View>
                   );
                 })}
+              </View>
+            ) : null}
+            {onManageAssets ? (
+              <View style={styles.actions}>
+                <ActionButton label={episodic ? 'Manage series' : 'Manage copy'} icon="ellipsis-horizontal" onPress={() => onManageAssets(group.entries.flatMap((candidate) => candidate.assetIds))} />
               </View>
             ) : null}
           </View>
         );
       })}
 
-      {visibleJobs.length === 0 && visibleGroups.length === 0 ? (
+      {visibleJobs.length === 0 && visibleGroups.length === 0 && (tab !== 'attention' || attentionAssets.length === 0) ? (
         <View style={[styles.noResults, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Ionicons name="search-outline" size={22} color={theme.textMuted} />
           <Text style={[styles.noResultsTitle, { color: theme.text }]}>No downloads here</Text>
@@ -425,6 +489,7 @@ const styles = StyleSheet.create({
   episodeBadgeText: { fontSize: 10, fontWeight: '900' },
   episodeTitle: { fontSize: fontSizes.xs, fontWeight: '800' },
   episodeMeta: { fontSize: 10, marginTop: 2 },
+  moreButton: { width: 48, height: 48, borderWidth: 1, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   noResults: { minHeight: 130, borderWidth: 1, borderRadius: radii.xl, alignItems: 'center', justifyContent: 'center', padding: spacing[4] },
   noResultsTitle: { fontSize: fontSizes.sm, fontWeight: '900', marginTop: spacing[2] },
   noResultsText: { fontSize: fontSizes.xs, textAlign: 'center', marginTop: 3 },

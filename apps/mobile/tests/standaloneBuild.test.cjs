@@ -6,6 +6,9 @@ const test = require("node:test");
 const scriptPath = path.resolve(__dirname, "..", "scripts", "build-android-standalone.cjs");
 const source = fs.readFileSync(scriptPath, "utf8");
 
+const cinemaPluginPath = path.resolve(__dirname, "..", "plugins", "withOrionCinemaWebView.js");
+const cinemaPluginSource = fs.readFileSync(cinemaPluginPath, "utf8");
+
 test("standalone Android build embeds JavaScript before assembling Debug", () => {
   assert.match(source, /export:embed/);
   assert.match(source, /index\.android\.bundle/);
@@ -34,4 +37,31 @@ test("standalone Android build synchronizes the Google Identity native bridge wi
   assert.match(source, /googleid:googleid:1\.2\.0/);
   assert.match(source, /add\(OrionGoogleIdentityPackage\(\)\)/);
   assert.doesNotMatch(source, /expo[^\n]*prebuild/i);
+});
+
+test("standalone Android release prep consumes the authoritative Cinema native source manifest", () => {
+  assert.match(cinemaPluginSource, /const CINEMA_NATIVE_FILES = Object\.freeze\(\[/);
+  assert.match(cinemaPluginSource, /module\.exports\.CINEMA_NATIVE_FILES = CINEMA_NATIVE_FILES/);
+  assert.match(source, /cinemaConfigPlugin\.CINEMA_NATIVE_FILES/);
+  assert.doesNotMatch(source, /const cinemaNativeFiles = \[/);
+  for (const fileName of [
+    "OrionDownloadEngineModule.kt",
+    "OrionDownloadForegroundService.kt",
+    "OrionDownloadJobStore.kt",
+    "OrionDownloadArtifactManager.kt",
+    "OrionDownloadFinalizationManifest.kt",
+    "OrionDownloadExecutionFence.kt",
+    "OrionDownloadNotificationContract.kt",
+    "OrionDownloadOwnershipPolicy.kt",
+    "OrionPortableCadence.kt",
+    "OrionDownloadPortableFinalizer.kt",
+    "OrionDownloadRecoveryWorker.kt",
+    "OrionDownloadSubtitleRuntime.kt",
+    "OrionDownloadTransferRuntime.kt",
+  ]) {
+    assert.match(cinemaPluginSource, new RegExp(fileName.replace(".", "\\.")));
+  }
+  assert.match(cinemaPluginSource, /OrionDownloadManagementPolicyTest\.kt/);
+  assert.match(source, /--sync-native-only/);
+  assert.match(source, /createHash\("sha256"\)/);
 });

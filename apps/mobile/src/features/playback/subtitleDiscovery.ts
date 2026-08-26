@@ -12,6 +12,10 @@ function opaqueId(sessionId: string, provider: string, input: string | number): 
 
 function formatFrom(value?: string): EmbeddedSubtitleTrackV1['format'] {
   const input = String(value || '').toLowerCase();
+  try {
+    const explicit = new URL(input).searchParams.get('format');
+    if (explicit === 'vtt' || explicit === 'srt' || explicit === 'ass') return explicit;
+  } catch {}
   if (/\.vtt(?:$|\?)/.test(input)) return 'vtt';
   if (/\.srt(?:$|\?)/.test(input)) return 'srt';
   if (/\.(ass|ssa)(?:$|\?)/.test(input)) return 'ass';
@@ -80,13 +84,14 @@ export async function discoverExternalSubtitleTracks(input: {
       id: opaqueId(input.sessionId, result.provider, result.id || index),
       language: result.lang || 'und',
       label: result.release_name || result.langLabel || 'External subtitle',
-      format: formatFrom(result.url),
+      format: result.format && result.format !== 'unknown' ? result.format : formatFrom(result.url),
       provider: result.provider,
       discoveryMethod: 'external' as const,
       availability: result.url ? 'available' as const : 'limited' as const,
       url: result.url,
     })));
-    return { state: tracks.length ? 'available' : outcome.state, tracks };
+    const state: SubtitleDiscoveryState = outcome.state === 'invalid-key' || outcome.state === 'quota-or-rate-limited' ? 'provider-failure' : outcome.state;
+    return { state: tracks.length ? 'available' : state, tracks };
   } catch (error) {
     const message = String(error || '').toLowerCase();
     return { state: /network|offline/.test(message) ? 'offline' : 'provider-failure', tracks: [] };

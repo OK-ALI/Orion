@@ -1,4 +1,8 @@
 import type {
+  MobileDownloadFinalizationStageV1,
+  MobileDownloadArtifactAvailabilityV1,
+  MobileDownloadOwnedArtifactV1,
+  MobileDownloadManagementResultV1,
   MobileDownloadJobStateV1,
   MobileDownloadJobV1,
   MobileDownloadProgressV1,
@@ -10,6 +14,12 @@ export type {
   MobileDownloadCandidatePreflightV1,
   MobileDownloadCandidateV1,
   MobileDownloadDestinationModeV1,
+  MobileDownloadFinalizationStageV1,
+  MobileDownloadArtifactAvailabilityV1,
+  MobileDownloadOwnedArtifactV1,
+  MobileDownloadManagementDispositionV1,
+  MobileDownloadManagementOutcomeV1,
+  MobileDownloadManagementResultV1,
   MobileDownloadJobStateV1,
   MobileDownloadJobV1,
   MobileDownloadMediaIdentityV1,
@@ -85,7 +95,7 @@ export const MOBILE_DOWNLOAD_ALLOWED_TRANSITIONS_V1: Readonly<
     'cancelled',
   ),
   verifying: transitions('finalizing', 'failed', 'action-required', 'cancelled'),
-  finalizing: transitions('completed', 'failed', 'action-required'),
+  finalizing: transitions('completed', 'failed', 'action-required', 'cancelled'),
   completed: transitions(),
   failed: transitions('queued', 'preflighting', 'recovering', 'cancelled'),
   unsupported: transitions('preflighting', 'cancelled'),
@@ -110,6 +120,21 @@ export function canTransitionMobileDownloadJobStateV1(
 
 function finiteNonNegative(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+const FINALIZATION_STAGES_V1 = new Set<MobileDownloadFinalizationStageV1>([
+  'preparing',
+  'remuxing',
+  'verifying-output',
+  'publishing-media',
+  'confirming-publication',
+  'publishing-subtitles',
+]);
+
+function finalizationStage(value: unknown): MobileDownloadFinalizationStageV1 | null {
+  return typeof value === 'string' && FINALIZATION_STAGES_V1.has(value as MobileDownloadFinalizationStageV1)
+    ? value as MobileDownloadFinalizationStageV1
+    : null;
 }
 
 export function normalizeMobileDownloadStorageTargetV1(value: unknown): MobileDownloadStorageTargetV1 | null {
@@ -142,6 +167,8 @@ export function normalizeMobileDownloadProgressV1(value: unknown): MobileDownloa
     percent: percent === null ? null : Math.min(100, percent),
     bytesPerSecond: finiteNonNegative(input.bytesPerSecond),
     etaSeconds: finiteNonNegative(input.etaSeconds),
+    finalizationStage: finalizationStage(input.finalizationStage),
+    finalizationStageStartedAt: finiteNonNegative(input.finalizationStageStartedAt),
   };
 }
 
@@ -157,6 +184,8 @@ export interface MobileDownloadProgressSnapshotV1 {
   totalFragments: number | null;
   bytesPerSecond: number | null;
   etaSeconds: number | null;
+  finalizationStage: MobileDownloadFinalizationStageV1 | null;
+  finalizationStageStartedAt: number | null;
   isComplete: boolean;
   isTerminal: boolean;
 }
@@ -216,6 +245,8 @@ export function createMobileDownloadProgressSnapshotV1(job: MobileDownloadJobV1)
     totalFragments: progress.totalFragments,
     bytesPerSecond: progress.bytesPerSecond,
     etaSeconds: progress.etaSeconds,
+    finalizationStage: progress.finalizationStage ?? null,
+    finalizationStageStartedAt: progress.finalizationStageStartedAt ?? null,
     isComplete,
     isTerminal: TERMINAL_JOB_STATES_V1.has(job.state),
   };

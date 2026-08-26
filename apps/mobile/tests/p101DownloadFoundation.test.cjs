@@ -178,7 +178,7 @@ test('P10.4C activates dual destination selection only through the Android-owned
   assert.match(manager, /state: 'ready'/);
   assert.match(modal, /!capability\.available/);
   assert.match(modal, /const subtitleCheckPending =/);
-  assert.match(modal, /disabled=\{needsEpisode \|\| starting \|\| subtitleCheckPending \|\| !capability\.available\}/);
+  assert.match(modal, /disabled=\{needsEpisode \|\| starting \|\| subtitleCheckPending \|\| Boolean\(duplicateJob\) \|\| !capability\.available\}/);
   assert.doesNotMatch(manager, /setInterval|Math\.random/);
 });
 
@@ -367,10 +367,12 @@ test('P10.4 Downloads surface projects media-first identity, native transfer tru
   const screen = readMobile('app', '(tabs)', 'downloads.tsx');
   const activity = readMobile('src', 'features', 'downloads', 'DownloadActivityList.tsx');
   const preferences = readMobile('src', 'features', 'downloads', 'downloadPreferences.ts');
+  const downloadSettings = readMobile('src', 'features', 'downloads', 'DownloadSettingsContent.tsx');
 
   assert.match(screen, /listMobileDownloadAssetsV1/);
   assert.match(screen, />Stored</);
-  assert.match(screen, /Device Storage creates a verified portable MP4/);
+  assert.doesNotMatch(screen, /Device Storage creates a verified portable MP4/);
+  assert.match(downloadSettings, /Device Storage creates a verified portable MP4 when the stream can be finalized safely/);
   assert.match(activity, /createMobileDownloadProgressSnapshotV1/);
   assert.match(activity, /imgUrl/);
   assert.match(activity, /posterPath/);

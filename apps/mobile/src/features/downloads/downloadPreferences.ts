@@ -37,9 +37,9 @@ export function normalizeMobileDownloadPreferencesV1(value: unknown): MobileDown
     normalizedDeviceStorageTarget.writable && normalizedDeviceStorageTarget.persistedPermission && normalizedDeviceStorageTarget.targetId
     ? normalizedDeviceStorageTarget
     : null;
-  const defaultDestination: MobileDownloadDestinationModeV1 = input.defaultDestination === 'device-storage' && deviceStorageTarget
-    ? 'device-storage'
-    : 'orion-library';
+  // Normal P10.4 downloads are Orion Library only. Keep a valid legacy SAF target
+  // so existing Device Storage copies can still be managed and future export can reuse it.
+  const defaultDestination: MobileDownloadDestinationModeV1 = 'orion-library';
   return {
     schemaVersion: 1,
     defaultDestination,
@@ -54,7 +54,12 @@ export function normalizeMobileDownloadPreferencesV1(value: unknown): MobileDown
 export function getMobileDownloadPreferencesV1(): MobileDownloadPreferencesV1 {
   try {
     const raw = mmkvStorageAdapter.get(MOBILE_DOWNLOAD_PREFERENCES_KEY_V1);
-    return normalizeMobileDownloadPreferencesV1(raw ? JSON.parse(raw) : null);
+    const parsed = raw ? JSON.parse(raw) : null;
+    const normalized = normalizeMobileDownloadPreferencesV1(parsed);
+    if (parsed?.defaultDestination === 'device-storage') {
+      mmkvStorageAdapter.set(MOBILE_DOWNLOAD_PREFERENCES_KEY_V1, JSON.stringify(normalized));
+    }
+    return normalized;
   } catch {
     return defaults();
   }
@@ -68,9 +73,9 @@ function persist(preferences: MobileDownloadPreferencesV1): MobileDownloadPrefer
 }
 
 export function setMobileDownloadDefaultDestinationV1(
-  defaultDestination: MobileDownloadDestinationModeV1,
+  _defaultDestination: MobileDownloadDestinationModeV1,
 ): MobileDownloadPreferencesV1 {
-  return persist({ ...getMobileDownloadPreferencesV1(), defaultDestination });
+  return persist({ ...getMobileDownloadPreferencesV1(), defaultDestination: 'orion-library' });
 }
 
 export function setMobileDownloadPreferredQualityV1(

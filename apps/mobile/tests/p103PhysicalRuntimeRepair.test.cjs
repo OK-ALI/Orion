@@ -44,7 +44,7 @@ test('P10.3 Download modal gives theme-aware readiness acknowledgement without r
   assert.doesNotMatch(modal, /rawUrl|requestHeaders|cookieHeader|Authorization|signedUrl/);
 });
 
-test('P10.3 subtitle discovery uses SubDL and Wyzie and keeps provider URLs outside presentation', () => {
+test('P10.3 subtitle discovery uses user-owned SubDL and Wyzie keys and keeps provider URLs outside presentation', () => {
   const subtitles = read('src', 'features', 'downloads', 'downloadSubtitles.ts');
   const provider = read('src', 'services', 'subtitles.ts');
   const modal = read('src', 'components', 'DownloadModal.tsx');
@@ -53,12 +53,12 @@ test('P10.3 subtitle discovery uses SubDL and Wyzie and keeps provider URLs outs
   assert.match(subtitles, /resolveMobileDownloadSubtitleSourcesForNativeV1/);
   assert.match(subtitles, /SUBTITLE_DISCOVERY_TIMEOUT_MS = 8_000/);
   assert.match(subtitles, /sourceRegistry\.clear\(\)/);
-  assert.match(provider, /EXPO_PUBLIC_ORION_SUBTITLE_BROKER_URL/);
-  assert.match(provider, /\/v1\/subtitles\/search/);
-  assert.match(provider, /\/v1\/subtitles\/file\//);
-  assert.doesNotMatch(provider, /EXPO_PUBLIC_SUBDL_API_KEY|EXPO_PUBLIC_WYZIE_API_KEY/);
-  assert.doesNotMatch(provider, /api\.subdl\.com|sub\.wyzie\.(?:ru|io)/);
-  assert.doesNotMatch(provider, /SecureStore/);
+  assert.match(provider, /expo-secure-store/);
+  assert.match(provider, /api\.subdl\.com\/api\/v1\/subtitles/);
+  assert.match(provider, /sub\.wyzie\.io\/search/);
+  assert.match(provider, /api-key-required/);
+  assert.match(provider, /invalid-key/);
+  assert.doesNotMatch(provider, /EXPO_PUBLIC_SUBDL_API_KEY|EXPO_PUBLIC_WYZIE_API_KEY|EXPO_PUBLIC_ORION_SUBTITLE_BROKER_URL\s*=/);
   assert.match(modal, /Searching SubDL and Wyzie/);
   assert.match(modal, /Subtitles ready/);
   assert.match(modal, /subtitleCheckPending/);
@@ -70,15 +70,19 @@ test('P10.3 native subtitle packaging is private, bounded and optional during fr
   const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
   const store = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadJobStore.kt');
   const runtime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
+  const subtitleRuntime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadSubtitleRuntime.kt');
   assert.match(module, /DOWNLOAD_FRAGMENT_SOURCE_REQUIRED/);
-  assert.match(store, /_subtitleSources/);
+  assert.match(module, /OrionDownloadSubtitleRuntime\.register/);
+  assert.doesNotMatch(store, /_subtitleSources/);
   assert.match(store, /if \(key\.startsWith\("_"\)\) remove\.add\(key\)/);
-  assert.match(store, /parsed\.scheme == "https"/);
-  assert.match(runtime, /MAX_SUBTITLE_BYTES = 5 \* 1024 \* 1024/);
+  assert.match(subtitleRuntime, /MAX_SOURCE_BYTES = 5L \* 1024L \* 1024L/);
+  assert.match(subtitleRuntime, /MAX_EXTRACTED_BYTES = 10L \* 1024L \* 1024L/);
+  assert.match(subtitleRuntime, /ZipInputStream/);
+  assert.match(subtitleRuntime, /selection\.json/);
   assert.match(runtime, /finalizeSelectedSubtitles/);
   assert.match(runtime, /\.put\("subtitles", subtitleResult\.bundleEntries\)/);
-  assert.match(runtime, /\.put\("tracks", finalizedTracks\(fragments, subtitleResult\.tracks\)\)/);
-  assert.doesNotMatch(runtime, /\.put\("url", url\)/);
+  assert.match(runtime, /\.put\("tracks", finalizedTracks\(roles, subtitleResult\.tracks\)\)/);
+  assert.doesNotMatch(store, /\.put\("url"/);
 });
 
 test('P10.3 retires experimental Direct residue and renders real operational download controls', () => {

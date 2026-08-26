@@ -1,5 +1,6 @@
 const path = require("node:path");
 const fs = require("node:fs");
+const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
 
 const androidDirectory = path.resolve(__dirname, "..", "android");
@@ -63,13 +64,35 @@ const cinemaNativeTargetDirectory = path.join(
   "orion",
   "playback",
 );
-const cinemaNativeFiles = [
-  "OrionCinemaWebViewClient.kt",
-  "OrionCinemaWebChromeClient.kt",
-  "OrionCinemaWebViewManager.kt",
-  "OrionCinemaWebViewPackage.kt",
-  "OrionPlayerSystemUiModule.kt",
-];
+const cinemaConfigPlugin = require(path.join(
+  projectDirectory,
+  "plugins",
+  "withOrionCinemaWebView.js",
+));
+const cinemaNativeFiles = cinemaConfigPlugin.CINEMA_NATIVE_FILES;
+if (!Array.isArray(cinemaNativeFiles) || cinemaNativeFiles.length === 0) {
+  throw new Error("Orion Cinema native source manifest is missing or empty.");
+}
+const cinemaNativeTestSourceDirectory = path.join(
+  projectDirectory,
+  "plugins",
+  "orion-cinema-webview-native-tests",
+);
+const cinemaNativeTestTargetDirectory = path.join(
+  androidDirectory,
+  "app",
+  "src",
+  "test",
+  "java",
+  "com",
+  "okali",
+  "orion",
+  "playback",
+);
+const cinemaNativeTestFiles = cinemaConfigPlugin.CINEMA_NATIVE_TEST_FILES;
+if (!Array.isArray(cinemaNativeTestFiles) || cinemaNativeTestFiles.length === 0) {
+  throw new Error("Orion Cinema native test source manifest is missing or empty.");
+}
 
 const googleIdentityNativeSourceDirectory = path.join(
   projectDirectory,
@@ -224,6 +247,7 @@ function ensureAndroidAppVersion() {
   );
 }
 function syncCinemaNativeSources() {
+  const sha256 = (filePath) => crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
   fs.mkdirSync(cinemaNativeTargetDirectory, { recursive: true });
   for (const fileName of cinemaNativeFiles) {
     const source = path.join(cinemaNativeSourceDirectory, fileName);
@@ -232,11 +256,23 @@ function syncCinemaNativeSources() {
       throw new Error(`Missing authoritative Cinema native source: ${source}`);
     }
     fs.copyFileSync(source, target);
-    if (!fs.readFileSync(source).equals(fs.readFileSync(target))) {
+    if (sha256(source) !== sha256(target)) {
       throw new Error(`Cinema native source did not synchronize: ${fileName}`);
     }
   }
-  console.log(`[Android] Synchronized ${cinemaNativeFiles.length} Cinema shield sources.`);
+  fs.mkdirSync(cinemaNativeTestTargetDirectory, { recursive: true });
+  for (const fileName of cinemaNativeTestFiles) {
+    const source = path.join(cinemaNativeTestSourceDirectory, fileName);
+    const target = path.join(cinemaNativeTestTargetDirectory, fileName);
+    if (!fs.existsSync(source)) {
+      throw new Error(`Missing authoritative Cinema native test source: ${source}`);
+    }
+    fs.copyFileSync(source, target);
+    if (sha256(source) !== sha256(target)) {
+      throw new Error(`Cinema native test source did not synchronize: ${fileName}`);
+    }
+  }
+  console.log(`[Android] Synchronized and SHA-256 verified ${cinemaNativeFiles.length} Cinema native sources and ${cinemaNativeTestFiles.length} JVM tests.`);
 }
 
 function syncGoogleIdentityNativeSources() {
@@ -619,6 +655,17 @@ function prepareExpoEmbeddedUpdateManifest(entryFile) {
   console.log("[Android] Expo embedded update manifest prepared: app.manifest");
 }
 
+
+if (process.argv.includes("--sync-native-only")) {
+  try {
+    syncCinemaNativeSources();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+  console.log("[Android] Native synchronization complete; bundling and Gradle assembly were not started.");
+  process.exit(0);
+}
 
 try {
   ensureAndroidAppVersion();

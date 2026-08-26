@@ -45,7 +45,7 @@ test('P10.3 Candidate 1 direct transfer is resumable and does not falsely comple
   assert.match(runtime, /integrity-size-mismatch/);
   assert.match(runtime, /setState\(jobId, "verifying"\)/);
   assert.match(runtime, /setState\(jobId, "finalizing"\)/);
-  assert.match(runtime, /markCompleted\(jobId, asset, offline\)/);
+  assert.match(runtime, /markCompleted\(jobId, generation, asset, offline\)/);
   assert.match(runtime, /\"hls\" -> runHls/);
   assert.match(runtime, /\"dash\" -> runDash/);
 });
@@ -92,14 +92,14 @@ test('P10.4 fragmented completion preserves truthful audio and subtitle track me
 
   assert.match(
     runtime,
-    /fragments\.any \{ fragment -> fragment\.role == "audio" \|\| fragment\.role == "audio-init" \}/,
+    /roles\.any \{ role -> role == "audio" \|\| role == "audio-init" \}/,
   );
   assert.match(runtime, /\.put\("id", "audio-default"\)/);
   assert.match(runtime, /\.put\("kind", "audio"\)/);
   assert.match(runtime, /\.put\("language", org\.json\.JSONObject\.NULL\)/);
   assert.match(runtime, /\.put\("label", "Audio"\)/);
   assert.match(runtime, /\.put\("format", org\.json\.JSONObject\.NULL\)/);
-  assert.match(runtime, /\.put\("tracks", finalizedTracks\(fragments, subtitleResult\.tracks\)\)/);
+  assert.match(runtime, /\.put\("tracks", finalizedTracks\(roles, subtitleResult\.tracks\)\)/);
   assert.match(runtime, /subtitleTracks\.optJSONObject\(index\)/);
   assert.match(runtime, /\.put\("sourceId", job\.optString\("_sourceId", "unknown"\)\)/);
 });
@@ -110,6 +110,7 @@ test('P10.4C portable fragmented finalizer stays native, SAF-scoped and generate
   const storage = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadStorageRegistry.kt');
 
   assert.match(plugin, /'OrionDownloadPortableFinalizer\.kt'/);
+  assert.match(plugin, /'OrionPortableCadence\.kt'/);
   assert.match(finalizer, /MediaExtractor/);
   assert.match(finalizer, /MediaMuxer/);
   assert.match(finalizer, /finalizeToDeviceStorage/);
@@ -117,8 +118,8 @@ test('P10.4C portable fragmented finalizer stays native, SAF-scoped and generate
   assert.match(finalizer, /OrionDownloadStorageRegistry\.createDocument/);
   assert.match(finalizer, /OrionDownloadStorageRegistry\.deleteDocument/);
   assert.match(finalizer, /videoTracks == 0/);
-  assert.match(finalizer, /hasSeparateAudio && audioTracks == 0/);
-  assert.match(finalizer, /verifyOutput\(output, requireAudio = hasSeparateAudio\)/);
+  assert.match(finalizer, /expectsSeparateAudio && audioTracks == 0/);
+  assert.match(finalizer, /verifyOutput\(output, plans, remuxed\.stats\)/);
   assert.doesNotMatch(finalizer, /android\.permission\.WRITE_EXTERNAL_STORAGE/);
   assert.doesNotMatch(finalizer, /provider cookies|Authorization/i);
   assert.match(storage, /DocumentsContract\.deleteDocument/);

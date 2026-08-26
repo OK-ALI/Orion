@@ -9,7 +9,42 @@ const {
 
 const PACKAGE_PATH = ['com', 'okali', 'orion', 'playback'];
 const NATIVE_SOURCE = path.join(__dirname, 'orion-cinema-webview-native');
+const NATIVE_TEST_SOURCE = path.join(__dirname, 'orion-cinema-webview-native-tests');
 const PACKAGE_IMPORT = 'com.okali.orion.playback.OrionCinemaWebViewPackage';
+const CINEMA_NATIVE_FILES = Object.freeze([
+  'OrionCinemaWebViewClient.kt',
+  'OrionCinemaWebChromeClient.kt',
+  'OrionCinemaWebViewManager.kt',
+  'OrionCinemaWebViewManagerDelegate.java',
+  'OrionCinemaWebViewPackage.kt',
+  'OrionPlayerSystemUiModule.kt',
+  'OrionDownloadCaptureModule.kt',
+  'OrionDownloadRequestContextBroker.kt',
+  'OrionDownloadEngineModule.kt',
+  'OrionDownloadForegroundService.kt',
+  'OrionDownloadFragmentPlanner.kt',
+  'OrionDownloadArtifactManager.kt',
+  'OrionDownloadExecutionFence.kt',
+  'OrionDownloadFinalizationManifest.kt',
+  'OrionDownloadJobStore.kt',
+  'OrionDownloadNotificationContract.kt',
+  'OrionDownloadNotifications.kt',
+  'OrionDownloadOwnershipPolicy.kt',
+  'OrionDownloadRecoveryWorker.kt',
+  'OrionDownloadStorageRegistry.kt',
+  'OrionDownloadSubtitleRuntime.kt',
+  'OrionPortableCadence.kt',
+  'OrionPortableVerification.kt',
+  'OrionDownloadPortableFinalizer.kt',
+  'OrionDownloadTransferRuntime.kt',
+]);
+const CINEMA_NATIVE_TEST_FILES = Object.freeze([
+  'OrionPortableCadenceTest.kt',
+  'OrionDownloadManagementPolicyTest.kt',
+  'OrionDownloadRetryPolicyTest.kt',
+  'OrionDownloadCancellationFenceTest.kt',
+  'OrionDownloadNotificationContractTest.kt',
+]);
 
 function withCinemaMainApplication(config) {
   return withMainApplication(config, (nextConfig) => {
@@ -38,26 +73,16 @@ function withCinemaSources(config) {
       'app', 'src', 'main', 'java', ...PACKAGE_PATH,
     );
     fs.mkdirSync(packageRoot, { recursive: true });
-    for (const name of [
-      'OrionCinemaWebViewClient.kt',
-      'OrionCinemaWebChromeClient.kt',
-      'OrionCinemaWebViewManager.kt',
-      'OrionCinemaWebViewManagerDelegate.java',
-      'OrionCinemaWebViewPackage.kt',
-      'OrionPlayerSystemUiModule.kt',
-      'OrionDownloadCaptureModule.kt',
-      'OrionDownloadRequestContextBroker.kt',
-      'OrionDownloadEngineModule.kt',
-      'OrionDownloadForegroundService.kt',
-      'OrionDownloadFragmentPlanner.kt',
-      'OrionDownloadJobStore.kt',
-      'OrionDownloadNotifications.kt',
-      'OrionDownloadRecoveryWorker.kt',
-      'OrionDownloadStorageRegistry.kt',
-      'OrionDownloadPortableFinalizer.kt',
-      'OrionDownloadTransferRuntime.kt',
-    ]) {
+    for (const name of CINEMA_NATIVE_FILES) {
       fs.copyFileSync(path.join(NATIVE_SOURCE, name), path.join(packageRoot, name));
+    }
+    const testPackageRoot = path.join(
+      nextConfig.modRequest.platformProjectRoot,
+      'app', 'src', 'test', 'java', ...PACKAGE_PATH,
+    );
+    fs.mkdirSync(testPackageRoot, { recursive: true });
+    for (const name of CINEMA_NATIVE_TEST_FILES) {
+      fs.copyFileSync(path.join(NATIVE_TEST_SOURCE, name), path.join(testPackageRoot, name));
     }
     return nextConfig;
   }]);
@@ -70,6 +95,13 @@ function withDownloadEngineGradle(config) {
       nextConfig.modResults.contents = nextConfig.modResults.contents.replace(
         /dependencies\s*\{/,
         (match) => `${match}\n    // ORION_P10_DOWNLOAD_ENGINE_DEPENDENCIES\n    ${marker}`,
+      );
+    }
+    const testMarker = 'testImplementation "junit:junit:4.13.2"';
+    if (!nextConfig.modResults.contents.includes(testMarker)) {
+      nextConfig.modResults.contents = nextConfig.modResults.contents.replace(
+        /dependencies\s*\{/,
+        (match) => `${match}\n    // ORION_P10_PORTABLE_CADENCE_TEST_DEPENDENCY\n    ${testMarker}`,
       );
     }
     return nextConfig;
@@ -114,3 +146,6 @@ module.exports = function withOrionCinemaWebView(config) {
   config = withDownloadEngineManifest(config);
   return withCinemaSources(config);
 };
+
+module.exports.CINEMA_NATIVE_FILES = CINEMA_NATIVE_FILES;
+module.exports.CINEMA_NATIVE_TEST_FILES = CINEMA_NATIVE_TEST_FILES;

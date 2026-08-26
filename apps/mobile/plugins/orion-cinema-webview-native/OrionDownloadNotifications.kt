@@ -31,26 +31,48 @@ internal object OrionDownloadNotifications {
     )
   }
 
-  fun foreground(context: Context, job: JSONObject?): Notification {
+  fun foreground(context: Context): Notification = foreground(context, notificationJobs())
+
+  private fun foreground(context: Context, jobs: List<JSONObject>): Notification {
     ensureChannel(context)
+    val job = jobs.firstOrNull()
     val title = mediaTitle(job)
     val state = optionalText(job, "state") ?: "queued"
     val progress = job?.optJSONObject("progress")
     val percent = progress?.optDouble("percent", Double.NaN) ?: Double.NaN
-    val indeterminate = percent.isNaN()
+    val stage = optionalText(progress, "finalizationStage")
+    val presentation = OrionDownloadNotificationContract.presentation(state, stage)
+    val indeterminate = state == "finalizing" || percent.isNaN()
     val value = if (indeterminate) 0 else percent.coerceIn(0.0, 99.0).roundToInt()
+    val headline = if (state == "finalizing") presentation.headline else progressHeadline(state, progress, value, indeterminate)
+    val detail = if (presentation.showTransferMetrics) progressDetail(state, progress, value, indeterminate) else presentation.detail
 
     val builder = NotificationCompat.Builder(context, CHANNEL_ID)
       .setSmallIcon(R.mipmap.ic_launcher)
-      .setContentTitle(title)
-      .setContentText(progressHeadline(state, progress, value, indeterminate))
-      .setStyle(NotificationCompat.BigTextStyle().bigText(progressDetail(state, progress, value, indeterminate)))
+      .setContentTitle(if (jobs.size > 1) "Orion Downloads · ${jobs.size} active" else title)
+      .setContentText(headline)
       .setContentIntent(openDownloadsIntent(context))
       .setOnlyAlertOnce(true)
-      .setOngoing(state in setOf("queued", "preflighting", "downloading", "paused", "recovering", "verifying", "finalizing"))
+      .setOngoing(jobs.isNotEmpty())
       .setCategory(NotificationCompat.CATEGORY_PROGRESS)
       .setPriority(NotificationCompat.PRIORITY_LOW)
       .setProgress(100, value, indeterminate)
+
+    if (jobs.size > 1) {
+      val now = System.currentTimeMillis()
+      val style = NotificationCompat.InboxStyle()
+        .setBigContentTitle("Orion Downloads · ${jobs.size} active")
+      jobs.forEach { style.addLine(summaryLine(it, now)) }
+      builder.setContentText("$title · $headline").setStyle(style).setNumber(jobs.size)
+    } else {
+      builder.setStyle(NotificationCompat.BigTextStyle().bigText(detail))
+    }
+
+    if (state == "finalizing") {
+      longOrNull(progress, "finalizationStageStartedAt")?.takeIf { it > 0L }?.let { startedAt ->
+        builder.setWhen(startedAt).setShowWhen(true).setUsesChronometer(true)
+      }
+    }
 
     val jobId = optionalText(job, "jobId").orEmpty()
     if (jobId.isNotBlank()) {
@@ -77,9 +99,20 @@ internal object OrionDownloadNotifications {
     return builder.build()
   }
 
-  fun notify(context: Context, job: JSONObject?) {
-    val manager = context.getSystemService(NotificationManager::class.java) ?: return
-    manager.notify(SUMMARY_NOTIFICATION_ID, foreground(context, job))
+  fun reconcile(context: Context): Boolean {
+    val jobs = notificationJobs()
+    val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+    if (jobs.isEmpty()) {
+      manager.cancel(SUMMARY_NOTIFICATION_ID)
+      return false
+    }
+    manager.notify(SUMMARY_NOTIFICATION_ID, foreground(context, jobs))
+    return true
+  }
+
+  fun transitionFinalizationStage(context: Context, jobId: String, stage: String, generation: Long? = null) {
+    OrionDownloadJobStore.setFinalizationStage(jobId, stage, generation)
+    reconcile(context)
   }
 
   fun cancel(context: Context) {
@@ -88,6 +121,36 @@ internal object OrionDownloadNotifications {
   }
 
   fun notificationId(): Int = SUMMARY_NOTIFICATION_ID
+
+  private fun notificationJobs(): List<JSONObject> {
+    val jobs = OrionDownloadJobStore.snapshot().optJSONArray("jobs") ?: return emptyList()
+    val byId = linkedMapOf<String, JSONObject>()
+    val candidates = mutableListOf<OrionDownloadNotificationJob>()
+    for (index in 0 until jobs.length()) {
+      val job = jobs.optJSONObject(index) ?: continue
+      val jobId = optionalText(job, "jobId") ?: continue
+      byId[jobId] = job
+      candidates += OrionDownloadNotificationJob(
+        jobId = jobId,
+        state = optionalText(job, "state").orEmpty(),
+        createdAt = longOrNull(job, "createdAt") ?: Long.MAX_VALUE,
+      )
+    }
+    return OrionDownloadNotificationContract.survivingJobs(candidates).mapNotNull { byId[it.jobId] }
+  }
+
+  private fun summaryLine(job: JSONObject, now: Long): String {
+    val state = optionalText(job, "state") ?: "queued"
+    val progress = job.optJSONObject("progress")
+    val stage = optionalText(progress, "finalizationStage")
+    val presentation = OrionDownloadNotificationContract.presentation(state, stage)
+    val elapsed = if (state == "finalizing") {
+      longOrNull(progress, "finalizationStageStartedAt")?.takeIf { it > 0L && now >= it }?.let {
+        " · ${formatElapsed((now - it) / 1_000L)} elapsed"
+      }.orEmpty()
+    } else ""
+    return "${mediaTitle(job)} · ${presentation.headline}$elapsed".take(180)
+  }
 
   private fun openDownloadsIntent(context: Context): PendingIntent {
     val intent = Intent(context, MainActivity::class.java).apply {
@@ -192,6 +255,12 @@ internal object OrionDownloadNotifications {
     else -> "${seconds / 3600L}h ${(seconds % 3600L) / 60L}m"
   }
 
+  private fun formatElapsed(seconds: Long): String = when {
+    seconds < 60L -> "${seconds}s"
+    seconds < 3600L -> "${seconds / 60L}m ${seconds % 60L}s"
+    else -> "${seconds / 3600L}h ${(seconds % 3600L) / 60L}m"
+  }
+
   private fun statusText(state: String): String = when (state) {
     "queued" -> "Queued"
     "preflighting" -> "Checking download"
@@ -199,7 +268,7 @@ internal object OrionDownloadNotifications {
     "paused" -> "Paused"
     "recovering" -> "Recovering"
     "verifying" -> "Verifying"
-    "finalizing" -> "Finalizing"
+    "finalizing" -> OrionDownloadNotificationContract.finalizationStageLabel(null)
     "completed" -> "Completed"
     "storage-blocked" -> "Storage needed"
     "action-required" -> "Action needed"

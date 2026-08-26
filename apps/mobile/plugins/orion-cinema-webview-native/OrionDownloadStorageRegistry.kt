@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Environment
 import android.os.StatFs
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import java.security.MessageDigest
 
 internal object OrionDownloadStorageRegistry {
@@ -18,6 +19,18 @@ internal object OrionDownloadStorageRegistry {
     val writable: Boolean,
     val persistedPermission: Boolean,
   )
+
+  sealed class DocumentProbe {
+    data class Verified(val sizeBytes: Long) : DocumentProbe()
+    data object Missing : DocumentProbe()
+    data object Unavailable : DocumentProbe()
+  }
+
+  sealed class DocumentDeleteResult {
+    data object Deleted : DocumentDeleteResult()
+    data object AlreadyMissing : DocumentDeleteResult()
+    data object Unavailable : DocumentDeleteResult()
+  }
 
   fun registerTree(context: Context, uri: Uri): StorageTarget? {
     if (uri.scheme != "content") return null
@@ -75,14 +88,67 @@ internal object OrionDownloadStorageRegistry {
     }
   }
 
-  fun deleteDocument(context: Context, uri: Uri): Boolean {
-    if (uri.scheme != "content") return false
+  fun deleteDocument(context: Context, uri: Uri): DocumentDeleteResult {
+    if (uri.scheme != "content") return DocumentDeleteResult.Unavailable
     return try {
-      DocumentsContract.deleteDocument(context.contentResolver, uri)
+      if (DocumentsContract.deleteDocument(context.contentResolver, uri)) DocumentDeleteResult.Deleted
+      else classifyFailedDelete(context, uri)
+    } catch (_: java.io.FileNotFoundException) {
+      DocumentDeleteResult.AlreadyMissing
+    } catch (_: SecurityException) {
+      DocumentDeleteResult.Unavailable
     } catch (_: Throwable) {
-      false
+      classifyFailedDelete(context, uri)
     }
   }
+
+  fun documentSize(context: Context, uri: Uri): Long? {
+    if (uri.scheme != "content") return null
+    val resolver = context.contentResolver
+    val queried = try {
+      resolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+        if (!cursor.moveToFirst() || cursor.isNull(0)) null else cursor.getLong(0).takeIf { it > 0L }
+      }
+    } catch (_: Throwable) {
+      null
+    }
+    if (queried != null) return queried
+    return try {
+      resolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+        descriptor.statSize.takeIf { it > 0L }
+      }
+    } catch (_: Throwable) {
+      null
+    }
+  }
+
+  fun probeDocument(context: Context, uri: Uri): DocumentProbe {
+    if (uri.scheme != "content") return DocumentProbe.Unavailable
+    return try {
+      val resolver = context.contentResolver
+      val queried = resolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+        if (!cursor.moveToFirst()) return DocumentProbe.Missing
+        if (cursor.isNull(0)) null else cursor.getLong(0).coerceAtLeast(0L)
+      }
+      val size = queried ?: resolver.openFileDescriptor(uri, "r")?.use { descriptor -> descriptor.statSize.takeIf { it >= 0L } }
+      if (size == null) DocumentProbe.Unavailable else DocumentProbe.Verified(size)
+    } catch (_: java.io.FileNotFoundException) {
+      DocumentProbe.Missing
+    } catch (_: SecurityException) {
+      DocumentProbe.Unavailable
+    } catch (_: Throwable) {
+      DocumentProbe.Unavailable
+    }
+  }
+
+  private fun classifyFailedDelete(context: Context, uri: Uri): DocumentDeleteResult =
+    when (OrionDownloadOwnershipPolicy.classifyDeleteFailure(
+      conclusiveMissing = probeDocument(context, uri) == DocumentProbe.Missing,
+      accessUnavailable = false,
+    )) {
+      OrionArtifactDeleteResult.ALREADY_MISSING -> DocumentDeleteResult.AlreadyMissing
+      else -> DocumentDeleteResult.Unavailable
+    }
 
   fun freeBytes(context: Context, handle: String): Long? {
     val tree = resolveTreeUri(context, handle) ?: return null

@@ -1,18 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { fontSizes, radii, spacing } from '@orion/shared/tokens';
 import type { MobileDownloadPreferencesV1, MobileDownloadQualityV1, MobileDownloadSubtitlePreferenceV1 } from '@orion/shared/types';
 import { useOrionTheme } from '../../context/ThemeContext';
 import {
   getMobileDownloadPreferencesV1,
-  setMobileDownloadDefaultDestinationV1,
-  setMobileDownloadDeviceStorageTargetV1,
   setMobileDownloadPreferredQualityV1,
   setMobileDownloadSubtitlePreferenceV1,
   subscribeMobileDownloadPreferencesV1,
 } from './downloadPreferences';
-import { chooseNativeDeviceStorageTargetV1 } from './nativeDownloadEngine';
+import { getSubtitleProviderKey, setSubtitleProviderKey } from '../../services/subtitles';
 
 const QUALITY_OPTIONS: ReadonlyArray<{ id: MobileDownloadQualityV1; label: string }> = [
   { id: 'best', label: 'Best available' },
@@ -21,45 +19,54 @@ const QUALITY_OPTIONS: ReadonlyArray<{ id: MobileDownloadQualityV1; label: strin
   { id: '480p', label: '480p' },
 ];
 const SUBTITLE_OPTIONS: ReadonlyArray<{ id: MobileDownloadSubtitlePreferenceV1; label: string; description: string }> = [
-  { id: 'preferred', label: 'Preferred subtitles', description: 'Check SubDL and Wyzie and attach the best English match when available.' },
-  { id: 'none', label: 'No automatic subtitles', description: 'Download the video without an automatic subtitle selection.' },
+  { id: 'preferred', label: 'Preferred subtitles', description: 'Search configured SubDL and Wyzie providers and attach the best English match.' },
+  { id: 'none', label: 'No automatic subtitles', description: 'Download video without an automatic subtitle selection.' },
 ];
 
 export function DownloadSettingsContent() {
   const { theme } = useOrionTheme();
   const [preferences, setPreferences] = useState<MobileDownloadPreferencesV1>(getMobileDownloadPreferencesV1);
-  const [choosingFolder, setChoosingFolder] = useState(false);
-  useEffect(() => subscribeMobileDownloadPreferencesV1(setPreferences), []);
+  const [subdlKey, setSubdlKey] = useState('');
+  const [wyzieKey, setWyzieKey] = useState('');
+  const [keyStatus, setKeyStatus] = useState('Keys are stored in protected device storage.');
+  const [savingKeys, setSavingKeys] = useState(false);
 
-  const chooseDeviceStorage = async () => {
-    if (choosingFolder) return;
-    setChoosingFolder(true);
+  useEffect(() => subscribeMobileDownloadPreferencesV1(setPreferences), []);
+  useEffect(() => {
+    let active = true;
+    Promise.all([getSubtitleProviderKey('subdl'), getSubtitleProviderKey('wyzie')]).then(([subdl, wyzie]) => {
+      if (!active) return;
+      setSubdlKey(subdl || '');
+      setWyzieKey(wyzie || '');
+    });
+    return () => { active = false; };
+  }, []);
+
+  const saveSubtitleKeys = async () => {
+    if (savingKeys) return;
+    setSavingKeys(true);
     try {
-      const target = await chooseNativeDeviceStorageTargetV1();
-      if (!target) return;
-      setMobileDownloadDeviceStorageTargetV1(target);
-      setMobileDownloadDefaultDestinationV1('device-storage');
+      await Promise.all([
+        setSubtitleProviderKey('subdl', subdlKey || null),
+        setSubtitleProviderKey('wyzie', wyzieKey || null),
+      ]);
+      setKeyStatus(subdlKey.trim() || wyzieKey.trim() ? 'Subtitle provider keys saved securely.' : 'No provider keys configured. Subtitle discovery will stay off.');
+    } catch (error) {
+      setKeyStatus(error instanceof Error ? error.message : 'Orion could not save subtitle provider keys.');
     } finally {
-      setChoosingFolder(false);
+      setSavingKeys(false);
     }
   };
 
   return (
     <View style={styles.root}>
-      <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Default location</Text>
-      <Pressable accessibilityRole="radio" accessibilityState={{ checked: preferences.defaultDestination === 'orion-library' }} onPress={() => setMobileDownloadDefaultDestinationV1('orion-library')} style={({ pressed }) => [styles.destinationCard, { backgroundColor: preferences.defaultDestination === 'orion-library' ? theme.accentSoft : pressed ? theme.surfaceHover : theme.surface, borderColor: preferences.defaultDestination === 'orion-library' ? theme.accent : theme.border }]}>
+      <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Offline storage</Text>
+      <View style={[styles.destinationCard, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
         <View style={[styles.iconBox, { backgroundColor: theme.surface, borderColor: theme.border }]}><Ionicons name="albums-outline" size={20} color={theme.accent} /></View>
-        <View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>Orion Library</Text><Text style={[styles.description, { color: theme.textSecondary }]}>Managed by Orion for verified fragmented offline media.</Text></View>
-        <Ionicons name={preferences.defaultDestination === 'orion-library' ? 'radio-button-on' : 'radio-button-off'} size={20} color={preferences.defaultDestination === 'orion-library' ? theme.accent : theme.textMuted} />
-      </Pressable>
-      <Pressable accessibilityRole="radio" accessibilityState={{ checked: preferences.defaultDestination === 'device-storage' }} onPress={() => preferences.deviceStorageTarget ? setMobileDownloadDefaultDestinationV1('device-storage') : void chooseDeviceStorage()} style={({ pressed }) => [styles.destinationCard, { backgroundColor: preferences.defaultDestination === 'device-storage' ? theme.accentSoft : pressed ? theme.surfaceHover : theme.surface, borderColor: preferences.defaultDestination === 'device-storage' ? theme.accent : theme.border }]}>
-        <View style={[styles.iconBox, { backgroundColor: theme.surface, borderColor: theme.border }]}><Ionicons name="folder-open-outline" size={20} color={theme.accent} /></View>
-        <View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>Device Storage</Text><Text style={[styles.description, { color: theme.textSecondary }]}>{preferences.deviceStorageTarget ? `Portable MP4 · ${preferences.deviceStorageTarget.displayName}` : 'Choose an Android folder for portable MP4 downloads.'}</Text></View>
-        <Ionicons name={preferences.defaultDestination === 'device-storage' ? 'radio-button-on' : 'radio-button-off'} size={20} color={preferences.defaultDestination === 'device-storage' ? theme.accent : theme.textMuted} />
-      </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="Choose Device Storage folder" disabled={choosingFolder} onPress={() => void chooseDeviceStorage()} style={({ pressed }) => [styles.notice, { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: theme.border }]}>
-        <Ionicons name="folder-outline" size={18} color={theme.textMuted} /><Text style={[styles.noticeText, { color: theme.textSecondary }]}>{choosingFolder ? 'Opening Android folder picker…' : preferences.deviceStorageTarget ? `Change folder · ${preferences.deviceStorageTarget.displayName}` : 'Choose Device Storage folder'}</Text>
-      </Pressable>
+        <View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>Orion Library</Text><Text style={[styles.description, { color: theme.textSecondary }]}>New downloads stay inside Orion for reliable offline playback.</Text></View>
+        <Ionicons name="checkmark-circle" size={20} color={theme.accent} />
+      </View>
+      <Text style={[styles.explainer, { color: theme.textMuted }]}>Portable Device Storage files are no longer part of the normal download flow. Existing copies remain manageable; a dedicated export flow can reuse the preserved portable-media engine later.</Text>
 
       <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Preferred quality</Text>
       <View accessibilityRole="radiogroup" style={styles.pillRow}>
@@ -76,16 +83,29 @@ export function DownloadSettingsContent() {
           return <Pressable key={option.id} accessibilityRole="radio" accessibilityLabel={option.label} accessibilityState={{ checked: selected }} onPress={() => setPreferences(setMobileDownloadSubtitlePreferenceV1(option.id))} style={({ pressed }) => [styles.compactRow, { backgroundColor: selected ? theme.accentSoft : pressed ? theme.surfaceHover : 'transparent', borderColor: selected ? theme.accent : theme.border }]}><View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>{option.label}</Text><Text style={[styles.description, { color: theme.textSecondary }]}>{option.description}</Text></View><Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={20} color={selected ? theme.accent : theme.textMuted} /></Pressable>;
         })}
       </View>
+
+      <View style={[styles.providerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <Text style={[styles.optionTitle, { color: theme.text }]}>Subtitle providers</Text>
+        <Text style={[styles.description, { color: theme.textSecondary }]}>Add your own SubDL and/or Wyzie key. Configured providers are searched automatically.</Text>
+        <TextInput accessibilityLabel="SubDL API key" value={subdlKey} onChangeText={setSubdlKey} placeholder="SubDL API key" placeholderTextColor={theme.textMuted} secureTextEntry autoCapitalize="none" autoCorrect={false} style={[styles.keyInput, { color: theme.text, backgroundColor: theme.elevated, borderColor: theme.border }]} />
+        <TextInput accessibilityLabel="Wyzie API key" value={wyzieKey} onChangeText={setWyzieKey} placeholder="wyzie-…" placeholderTextColor={theme.textMuted} secureTextEntry autoCapitalize="none" autoCorrect={false} style={[styles.keyInput, { color: theme.text, backgroundColor: theme.elevated, borderColor: theme.border }]} />
+        <Text style={[styles.keyStatus, { color: theme.textMuted }]}>{keyStatus}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Save subtitle provider keys" disabled={savingKeys} onPress={() => void saveSubtitleKeys()} style={({ pressed }) => [styles.saveButton, { backgroundColor: pressed ? theme.accentSoft : theme.accent, borderColor: theme.accent }]}>
+          <Ionicons name="key-outline" size={17} color={theme.onAccent} /><Text style={[styles.saveButtonText, { color: theme.onAccent }]}>{savingKeys ? 'Saving…' : 'Save provider keys'}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { gap: spacing[3] }, groupTitle: { fontSize: fontSizes.md, fontWeight: '900', marginTop: spacing[2] }, optionGrid: { gap: spacing[2] },
-  destinationCard: { minHeight: 82, borderWidth: 1, borderRadius: radii.xl, padding: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  compactRow: { minHeight: 72, borderWidth: 1, borderRadius: radii.xl, paddingHorizontal: spacing[3], paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  iconBox: { width: 40, height: 40, borderRadius: radii.lg, borderWidth: 1, alignItems: 'center', justifyContent: 'center' }, optionCopy: { flex: 1, minWidth: 0 },
-  optionTitle: { fontSize: fontSizes.sm, fontWeight: '900' }, description: { fontSize: fontSizes.xs, lineHeight: 17, marginTop: 3 },
+  destinationCard: { minHeight: 72, borderWidth: 1, borderRadius: radii.xl, padding: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  compactRow: { minHeight: 66, borderWidth: 1, borderRadius: radii.xl, paddingHorizontal: spacing[3], paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  iconBox: { width: 38, height: 38, borderRadius: radii.lg, borderWidth: 1, alignItems: 'center', justifyContent: 'center' }, optionCopy: { flex: 1, minWidth: 0 },
+  optionTitle: { fontSize: fontSizes.sm, fontWeight: '900' }, description: { fontSize: fontSizes.xs, lineHeight: 17, marginTop: 3 }, explainer: { fontSize: 11, lineHeight: 17 },
   notice: { borderWidth: 1, borderRadius: radii.lg, padding: spacing[3], flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2] }, noticeText: { flex: 1, fontSize: fontSizes.xs, lineHeight: 18 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] }, pill: { minHeight: 42, borderWidth: 1, borderRadius: radii.full, paddingHorizontal: spacing[3], alignItems: 'center', justifyContent: 'center' }, pillText: { fontSize: fontSizes.xs, fontWeight: '800' },
+  providerCard: { borderWidth: 1, borderRadius: radii.xl, padding: spacing[3], gap: spacing[2] }, keyInput: { minHeight: 44, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: spacing[3], fontSize: fontSizes.sm }, keyStatus: { fontSize: 11, lineHeight: 16 },
+  saveButton: { minHeight: 44, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] }, saveButtonText: { fontSize: fontSizes.xs, fontWeight: '900' },
 });
