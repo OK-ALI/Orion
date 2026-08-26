@@ -291,6 +291,15 @@ class OrionDownloadEngineModule(
     }
   }
 
+
+  @ReactMethod
+  fun resolveOfflinePlayback(assetId: String, promise: Promise) {
+    ioExecutor.execute {
+      try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.resolveOfflinePlayback(reactContext, assetId))) }
+      catch (_: Throwable) { promise.reject("OFFLINE_PLAYBACK_RESOLVE_FAILED", "Orion could not resolve this offline download.") }
+    }
+  }
+
   @ReactMethod
   fun chooseDeviceStorageTarget(promise: Promise) {
     if (storagePromise != null) {

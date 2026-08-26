@@ -28,7 +28,6 @@ export const styles = StyleSheet.create({
   moreNotice: { flexDirection: 'row', gap: spacing[3], paddingTop: spacing[4] },
   backButton: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 25,
     left: 20,
     zIndex: 100,
     width: 36,
@@ -39,6 +38,23 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  topDownloadButton: {
+    position: 'absolute',
+    right: 20,
+    zIndex: 100,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  topDownloadGlass: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(5, 5, 10, 0.28)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
   },
   backdropContainer: {
     height: 280,

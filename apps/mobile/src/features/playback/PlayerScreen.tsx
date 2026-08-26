@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   DEFAULT_CINEMA_SOURCE_ID,
@@ -49,6 +49,7 @@ import {
   type NextEpisodeCandidate,
 } from './playbackCompletion';
 import { resolvePlaybackRouteIdentity } from './routePlaybackIdentity';
+import { resolveNativeOfflinePlaybackV1, type NativeOfflinePlaybackSourceV1 } from '../downloads/nativeDownloadEngine';
 
 type PlayerRouteParams = {
   id: string;
@@ -62,6 +63,7 @@ type PlayerRouteParams = {
   backdropPath?: string;
   episodeTitle?: string;
   offlineUri?: string;
+  offlineAssetId?: string;
   isOffline?: string;
   nextSourceId?: string;
 };
@@ -70,10 +72,14 @@ export default function PlayerScreen() {
   const router = useRouter();
   const {
     id, type, title, season, episode, year, seriesTitle,
-    posterPath, backdropPath, episodeTitle, offlineUri, isOffline, nextSourceId,
+    posterPath, backdropPath, episodeTitle, offlineUri, offlineAssetId, isOffline, nextSourceId,
   } =
     useLocalSearchParams<PlayerRouteParams>();
   const { getPlaybackProgress } = useLibraryPlaybackActions();
+  const offlineRequested = isOffline === 'true';
+  const [offlineSource, setOfflineSource] = useState<NativeOfflinePlaybackSourceV1 | null>(null);
+  const [offlineResolveError, setOfflineResolveError] = useState<string | null>(null);
+  const [offlineResolveAttempt, setOfflineResolveAttempt] = useState(0);
   const routePlaybackIdentity = resolvePlaybackRouteIdentity(type, season, episode);
   const resolvedSeason = routePlaybackIdentity.season;
   const resolvedEpisode = routePlaybackIdentity.episode;
@@ -135,25 +141,56 @@ export default function PlayerScreen() {
   useEffect(() => {
     const health = getMobileSourceHealth(sourceId, type);
     updateMobileDiagnostics({
-      activeSourceId: isOffline === 'true' ? 'local' : sourceId,
-      sourceHealth: isOffline === 'true' ? 'ready' : (health?.state ?? 'unknown'),
+      activeSourceId: offlineRequested ? 'local' : sourceId,
+      sourceHealth: offlineRequested ? 'ready' : (health?.state ?? 'unknown'),
       playbackState: 'loading',
-      playbackSurface: isOffline === 'true' ? 'native' : 'embed',
+      playbackSurface: offlineRequested ? 'native' : 'embed',
       playbackEvidence: null,
       lastTelemetryAt: null,
     });
-  }, [isOffline, sourceId, type]);
+  }, [offlineRequested, sourceId, type]);
 
   useEffect(() => {
+    if (!offlineRequested) {
+      setOfflineSource(null);
+      setOfflineResolveError(null);
+      return undefined;
+    }
+    if (!offlineAssetId) {
+      setOfflineSource(null);
+      setOfflineResolveError(offlineUri ? null : 'Offline download identity is missing.');
+      return undefined;
+    }
+    let cancelled = false;
+    setOfflineSource(null);
+    setOfflineResolveError(null);
+    resolveNativeOfflinePlaybackV1(offlineAssetId)
+      .then((source) => {
+        if (!cancelled) setOfflineSource(source);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setOfflineResolveError(error instanceof Error ? error.message : 'Orion could not prepare this offline download for playback.');
+      });
+    return () => { cancelled = true; };
+  }, [offlineAssetId, offlineRequested, offlineResolveAttempt, offlineUri]);
+
+  useEffect(() => {
+    if (offlineRequested) {
+      setImdbId(null);
+      return undefined;
+    }
     let cancelled = false;
     tmdbFetch<any>(`/${type}/${id}/external_ids`)
       .then((result) => { if (!cancelled) setImdbId(result?.imdb_id || null); })
       .catch(() => { if (!cancelled) setImdbId(null); });
     return () => { cancelled = true; };
-  }, [id, type]);
+  }, [id, offlineRequested, type]);
+
+  const resolvedOfflineUri = offlineSource?.uri || (offlineRequested && !offlineAssetId ? offlineUri : undefined);
 
   const activeStreamUrl = useMemo(() => {
-    if (isOffline === 'true' && offlineUri) return offlineUri;
+    if (offlineRequested) return resolvedOfflineUri || '';
     const resumeParams: Record<string, string | number> = {
       ...getSourceResumeParams(sourceId, resumeTime),
     };
@@ -167,7 +204,7 @@ export default function PlayerScreen() {
       resolvedEpisode || 1,
       resumeParams,
     );
-  }, [id, imdbId, isOffline, offlineUri, resolvedEpisode, resolvedSeason, resumeTime, sourceId, type]);
+  }, [id, imdbId, offlineRequested, resolvedEpisode, resolvedOfflineUri, resolvedSeason, resumeTime, sourceId, type]);
 
   const launchHandoff = useCallback(({
     targetSourceId,
@@ -346,7 +383,7 @@ export default function PlayerScreen() {
   }, [initialSavedTime, sourceId]);
 
   const handleVerifiedPlaybackCompletion = useCallback((_snapshot: VerifiedPlaybackSnapshot) => {
-    if (type !== 'tv' || isOffline === 'true'
+    if (type !== 'tv' || offlineRequested
       || resolvedSeason == null || resolvedEpisode == null) return;
     const seasonNumber = resolvedSeason;
     const episodeNumber = resolvedEpisode;
@@ -365,7 +402,7 @@ export default function PlayerScreen() {
         if (next) setNextEpisodePrompt(next);
       })
       .catch(() => {});
-  }, [id, isOffline, resolvedEpisode, resolvedSeason, type]);
+  }, [id, offlineRequested, resolvedEpisode, resolvedSeason, type]);
 
   const playNextEpisode = useCallback(() => {
     const next = nextEpisodePrompt;
@@ -424,8 +461,36 @@ export default function PlayerScreen() {
     initialResumeTime: resumeTime,
   };
 
-  const surface = initialChoicePending ? null : isOffline === 'true' && offlineUri ? (
-    <NativePlayerSurface key={`local-${offlineUri}`} streamUrl={offlineUri} {...commonProps} sourceId="local" />
+  const surface = initialChoicePending ? null : offlineRequested ? (
+    resolvedOfflineUri ? (
+      <NativePlayerSurface
+        key={`local-${offlineAssetId || resolvedOfflineUri}`}
+        streamUrl={resolvedOfflineUri}
+        streamContentType={offlineSource?.contentType}
+        {...commonProps}
+        sourceId="local"
+      />
+    ) : offlineResolveError ? (
+      <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <Text style={{ color: '#fff', fontSize: 17, fontWeight: '800', textAlign: 'center' }}>Offline playback unavailable</Text>
+        <Text style={{ color: 'rgba(255,255,255,0.68)', fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 8 }}>{offlineResolveError}</Text>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={{ minHeight: 42, paddingHorizontal: 18, borderRadius: 21, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: '#fff', fontWeight: '800' }}>Back</Text>
+          </Pressable>
+          {offlineAssetId ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Retry offline playback" onPress={() => setOfflineResolveAttempt((value) => value + 1)} style={{ minHeight: 42, paddingHorizontal: 18, borderRadius: 21, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: '#000', fontWeight: '900' }}>Retry</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    ) : (
+      <View accessibilityLabel="Preparing offline playback" style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <ActivityIndicator size="large" color="#fff" />
+        <Text style={{ color: 'rgba(255,255,255,0.78)', fontSize: 13, fontWeight: '700' }}>Preparing offline playback…</Text>
+      </View>
+    )
   ) : (
     <EmbedPlayerSurface
       key={`${sourceId}-${activeStreamUrl}`}

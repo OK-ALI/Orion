@@ -202,6 +202,23 @@ export default function DownloadsScreen() {
             offlineEntries={offlineEntries}
             active={isFocused}
             onManageAssets={(assetIds) => setManagement({ mode: 'manage', assetIds: [...assetIds] })}
+            onPlayOffline={(entry, assetId) => router.push({
+              pathname: '/player/[id]',
+              params: {
+                id: String(entry.media.id),
+                type: entry.media.mediaType,
+                title: entry.media.episodeTitle || entry.media.title,
+                year: entry.media.year ?? undefined,
+                seriesTitle: entry.media.seriesTitle || undefined,
+                season: entry.media.season ?? undefined,
+                episode: entry.media.episode ?? undefined,
+                episodeTitle: entry.media.episodeTitle || undefined,
+                posterPath: entry.posterPath || entry.media.posterPath || undefined,
+                backdropPath: entry.backdropPath || entry.media.backdropPath || undefined,
+                isOffline: 'true',
+                offlineAssetId: assetId,
+              },
+            })}
           />
         )}
       </ScrollView>

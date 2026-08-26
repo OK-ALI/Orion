@@ -3,6 +3,8 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { spacing } from '@orion/shared/tokens';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { tmdbFetch, imgUrl } from '@orion/shared/api';
 import { TmdbMediaItem } from '@orion/shared/types';
@@ -73,6 +75,7 @@ export default function MediaDetailScreen() {
   const { id, type } = useLocalSearchParams<{ id: string; type: 'movie' | 'tv' }>();
   const router = useRouter();
   const { theme } = useOrionTheme();
+  const insets = useSafeAreaInsets();
   const { resolvedProfile } = usePerformanceProfile();
   const { toggleSave, isSaved } = useLibraryVisual();
   const { getPlaybackProgress } = useLibraryPlaybackActions();
@@ -262,10 +265,46 @@ export default function MediaDetailScreen() {
         accessibilityLabel="Go back"
         hitSlop={6}
         onPress={() => router.back()}
-        style={styles.backButton}
+        style={[styles.backButton, { top: Math.max(insets.top + 8, 16) }]}
       >
         <Ionicons name="arrow-back" size={20} color="#fff" />
       </Pressable>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={isMovie ? `Download ${title}` : `Download episodes of ${title}`}
+        accessibilityHint={isMovie ? 'Opens download options' : 'Opens the episode list where you can choose episodes to download'}
+        hitSlop={6}
+        onPress={() => {
+          if (isMovie) {
+            setDownloadTarget(createMobileDownloadTargetV1({
+              id,
+              mediaType: type,
+              title,
+              year,
+              posterPath: data.poster_path || null,
+              backdropPath: data.backdrop_path || null,
+            }));
+            return;
+          }
+
+          handleTabChange('episodes');
+        }}
+        style={({ pressed }) => [
+          styles.topDownloadButton,
+          { top: Math.max(insets.top + 8, 16) },
+          pressed && styles.pressed,
+        ]}
+      >
+        <BlurView
+          intensity={34}
+          tint={theme.dark ? 'dark' : 'light'}
+          style={styles.topDownloadGlass}
+        >
+          <Ionicons name="download-outline" size={20} color="#fff" />
+        </BlurView>
+      </Pressable>
+
       <Animated.ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
         <View style={styles.backdropContainer}>
           {backdrop ? (
@@ -755,28 +794,7 @@ export default function MediaDetailScreen() {
               <Ionicons name="share-social-outline" size={20} color={theme.text} />
               <Text style={[styles.moreActionText, { color: theme.text }]}>Share title</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Mobile download options" style={styles.moreAction} onPress={() => {
-              setShowMoreSheet(false);
-              setDownloadTarget(createMobileDownloadTargetV1({
-                id,
-                mediaType: type,
-                title,
-                year,
-                seriesTitle: type === 'tv' ? title : null,
-                posterPath: data.poster_path || null,
-                backdropPath: data.backdrop_path || null,
-              }));
-            }}>
-              <Ionicons name="download-outline" size={20} color={theme.accent} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.moreActionText, { color: theme.text }]}>Download</Text>
-                <Text style={[styles.moreActionDescription, { color: theme.textMuted }]}>{type === 'tv' ? 'Choose an episode for offline playback' : 'Resolve the active source and save for offline playback'}</Text>
-              </View>
-            </Pressable>
-            <View style={[styles.moreNotice, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <Ionicons name="server-outline" size={18} color={theme.textMuted} />
-              <Text style={[styles.moreActionDescription, { color: theme.textMuted }]}>Downloads resolve the active source inside the player, then return here ready to start when the source supports offline transfer.</Text>
-            </View>
+
           </View>
         </View>
       </Modal>

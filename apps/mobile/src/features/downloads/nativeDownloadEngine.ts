@@ -11,6 +11,31 @@ import {
 
 const EVENT_NAME = 'OrionDownloadEngineSnapshot';
 
+export type MobileDownloadReconciliationStateV1 = 'checking' | 'ready' | 'unavailable';
+type MobileDownloadReconciliationListenerV1 = (state: MobileDownloadReconciliationStateV1) => void;
+
+let mobileDownloadReconciliationStateV1: MobileDownloadReconciliationStateV1 = 'checking';
+let mobileDownloadReconciliationGenerationV1 = 0;
+const mobileDownloadReconciliationListenersV1 = new Set<MobileDownloadReconciliationListenerV1>();
+
+function publishMobileDownloadReconciliationStateV1(state: MobileDownloadReconciliationStateV1): void {
+  if (mobileDownloadReconciliationStateV1 === state) return;
+  mobileDownloadReconciliationStateV1 = state;
+  for (const listener of mobileDownloadReconciliationListenersV1) listener(state);
+}
+
+export function getMobileDownloadReconciliationStateV1(): MobileDownloadReconciliationStateV1 {
+  return mobileDownloadReconciliationStateV1;
+}
+
+export function subscribeMobileDownloadReconciliationV1(
+  listener: MobileDownloadReconciliationListenerV1,
+): () => void {
+  mobileDownloadReconciliationListenersV1.add(listener);
+  listener(mobileDownloadReconciliationStateV1);
+  return () => mobileDownloadReconciliationListenersV1.delete(listener);
+}
+
 interface NativeDownloadEngineModule {
   getSnapshot(): Promise<unknown>;
   startJob(payloadJson: string): Promise<{ ok: boolean; jobId?: string }>;
@@ -26,6 +51,7 @@ interface NativeDownloadEngineModule {
   removeUnavailableRecords(assetIdsJson: string): Promise<unknown>;
   openAsset(assetId: string): Promise<unknown>;
   locateAsset(assetId: string): Promise<unknown>;
+  resolveOfflinePlayback(assetId: string): Promise<unknown>;
   chooseDeviceStorageTarget(): Promise<{
     ok: boolean;
     targetId?: string;
@@ -172,9 +198,27 @@ export function formatNativeDownloadManagementResultV1(
 }
 
 export async function reconcileNativeDownloadsV1(): Promise<void> {
+  const generation = ++mobileDownloadReconciliationGenerationV1;
   const module = nativeModule();
-  if (!module) return;
-  applyNativeDownloadSnapshotV1(await module.reconcileDownloads());
+  if (!module) {
+    if (generation === mobileDownloadReconciliationGenerationV1) {
+      publishMobileDownloadReconciliationStateV1('unavailable');
+    }
+    return;
+  }
+
+  publishMobileDownloadReconciliationStateV1('checking');
+  try {
+    const snapshot = await module.reconcileDownloads();
+    if (generation !== mobileDownloadReconciliationGenerationV1) return;
+    applyNativeDownloadSnapshotV1(snapshot);
+    publishMobileDownloadReconciliationStateV1('ready');
+  } catch (error) {
+    if (generation === mobileDownloadReconciliationGenerationV1) {
+      publishMobileDownloadReconciliationStateV1('unavailable');
+    }
+    throw error;
+  }
 }
 
 export async function deleteNativeDownloadAssetsV1(selections: readonly MobileDownloadAssetSelectionV1[]): Promise<MobileDownloadManagementResultV1> {
@@ -207,6 +251,45 @@ export async function removeUnavailableNativeDownloadRecordsV1(assetIds: readonl
   const module = nativeModule();
   if (!module) throw new Error('Android download engine is unavailable.');
   return normalizeManagementResult(await module.removeUnavailableRecords(JSON.stringify([...new Set(assetIds)])));
+}
+
+
+export interface NativeOfflinePlaybackSourceV1 {
+  schemaVersion: 1;
+  assetId: string;
+  uri: string;
+  contentType: 'hls';
+  sourceKind: 'hls' | 'dash';
+  fragmentCount: number;
+  subtitleCount: number;
+}
+
+export async function resolveNativeOfflinePlaybackV1(assetId: string): Promise<NativeOfflinePlaybackSourceV1> {
+  const module = nativeModule();
+  if (!module) throw new Error('Android download engine is unavailable.');
+  const clean = assetId.trim();
+  if (!/^[A-Za-z0-9._:-]{1,140}$/.test(clean)) throw new Error('Offline download identity is invalid.');
+  const raw = await module.resolveOfflinePlayback(clean);
+  const result = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  if (result.ok !== true) {
+    throw new Error(typeof result.message === 'string' && result.message.trim()
+      ? result.message
+      : 'Orion could not prepare this offline download for playback.');
+  }
+  const uri = typeof result.uri === 'string' ? result.uri.trim() : '';
+  const sourceKind = result.sourceKind === 'hls' || result.sourceKind === 'dash' ? result.sourceKind : null;
+  if (!uri.startsWith('file://') || result.contentType !== 'hls' || !sourceKind) {
+    throw new Error('Offline playback source is invalid.');
+  }
+  return {
+    schemaVersion: 1,
+    assetId: clean,
+    uri,
+    contentType: 'hls',
+    sourceKind,
+    fragmentCount: Math.max(0, Math.trunc(Number(result.fragmentCount) || 0)),
+    subtitleCount: Math.max(0, Math.trunc(Number(result.subtitleCount) || 0)),
+  };
 }
 
 async function runNativeAssetAction(method: 'openAsset' | 'locateAsset', assetId: string): Promise<void> {

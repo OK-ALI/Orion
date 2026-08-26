@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, View } from 'react-native';
 import { useEvent, useEventListener } from 'expo';
 import { useRouter } from 'expo-router';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer, VideoView, type SubtitleTrack, type VideoSource } from 'expo-video';
 import { ALL_CINEMA_SOURCES } from '@orion/shared/sources';
 import { PlayerHUD } from '../../components/player/PlayerHUD';
 import { SourcesSheet } from '../../components/player/SourcesSheet';
 import { PresentationSheet } from '../../components/player/PresentationSheet';
+import { OfflineSubtitleSheet, offlineSubtitleTrackKey } from './OfflineSubtitleSheet';
 import { PlayerStateOverlay } from '../../components/player/PlayerStateOverlay';
 import { WatchdogWarning } from '../../components/player/WatchdogWarning';
 import { useLibraryPlaybackActions } from '../../context/LibraryContext';
@@ -23,10 +24,12 @@ import type { MobilePlayerPresentation, MobilePlayerSurfaceAdapter } from '@orio
 
 interface NativePlayerSurfaceProps extends PlaybackSurfaceProps {
   streamUrl: string;
+  streamContentType?: 'hls';
 }
 
 export function NativePlayerSurface({
   streamUrl,
+  streamContentType,
   title,
   seriesTitle,
   year,
@@ -48,6 +51,8 @@ export function NativePlayerSurface({
   const { recordPlayback } = useLibraryPlaybackActions();
   const controller = useMobilePlayerController();
   const [watchdogDismissed, setWatchdogDismissed] = useState(false);
+  const [subtitleTracks, setSubtitleTracks] = useState<SubtitleTrack[]>([]);
+  const [selectedSubtitleKey, setSelectedSubtitleKey] = useState<string | null>(null);
   const [pendingManualSource, setPendingManualSource] = useState<{
     id: string;
     label: string;
@@ -85,8 +90,12 @@ export function NativePlayerSurface({
     recordPlayback,
     onVerifiedCompletion: onVerifiedPlaybackCompletion,
   });
+  const videoSource = useMemo<VideoSource>(
+    () => streamContentType ? { uri: streamUrl, contentType: streamContentType } : streamUrl,
+    [streamContentType, streamUrl],
+  );
 
-  const player = useVideoPlayer(streamUrl, (instance) => {
+  const player = useVideoPlayer(videoSource, (instance) => {
     instance.timeUpdateEventInterval = 1;
     if (initialResumeTime > 0) instance.currentTime = initialResumeTime;
     instance.play();
@@ -103,6 +112,20 @@ export function NativePlayerSurface({
   const contentFit = presentation === 'fill' ? 'cover' : presentation === 'stretch' ? 'fill' : 'contain';
   const controlsVisible = controller.state.hudState !== 'hidden';
   usePlayerImmersiveSystemUi(true, playingEvent.isPlaying, !controlsVisible);
+
+  useEffect(() => {
+    const next = (player.availableSubtitleTracks || []).slice(0, 8);
+    const signature = next.map((track) => offlineSubtitleTrackKey(track) || '').join('||');
+    setSubtitleTracks((current) => {
+      const currentSignature = current.map((track) => offlineSubtitleTrackKey(track) || '').join('||');
+      return currentSignature === signature ? current : [...next];
+    });
+    setSelectedSubtitleKey(offlineSubtitleTrackKey(player.subtitleTrack));
+  }, [player, statusEvent.status, timeEvent.currentTime, streamUrl]);
+
+  useEffect(() => {
+    if (controller.state.overlay === 'subtitles' && subtitleTracks.length === 0) controller.closeOverlay();
+  }, [controller.closeOverlay, controller.state.overlay, subtitleTracks.length]);
 
   useEffect(() => {
     const adapter: MobilePlayerSurfaceAdapter = {
@@ -127,12 +150,12 @@ export function NativePlayerSurface({
       canPause: true,
       canSeek: true,
       canSourceSwitch: true,
-      canSubtitles: false,
+      canSubtitles: subtitleTracks.length > 0,
       canShield: false,
       canFullscreen: true,
       canPresentation: true,
     }, getPresentationPreference('native', sourceId));
-  }, [player, sourceId]);
+  }, [player, sourceId, subtitleTracks.length]);
 
   useEventListener(player, 'playToEnd', () => {
     telemetry.emitTelemetry({
@@ -224,6 +247,12 @@ export function NativePlayerSurface({
     onAutomaticFailover(telemetry.getVerifiedSnapshot());
   };
 
+  const selectSubtitleTrack = (track: SubtitleTrack | null) => {
+    player.subtitleTrack = track;
+    setSelectedSubtitleKey(offlineSubtitleTrackKey(track));
+    controller.closeOverlay();
+  };
+
   return (
     <View style={styles.container}>
       <VideoView player={player} style={styles.video} contentFit={contentFit} nativeControls={false} />
@@ -241,6 +270,7 @@ export function NativePlayerSurface({
         onDismiss={controller.dismiss}
         onToggle={controller.toggleChromeFromUserTap}
         onOpenSources={() => controller.openOverlay('sources')}
+        onOpenSubtitles={subtitleTracks.length > 0 ? () => controller.openOverlay('subtitles') : undefined}
         onOpenPresentation={() => controller.openOverlay('presentation')}
       />
       {controller.state.overlay === 'sources' && (
@@ -252,6 +282,13 @@ export function NativePlayerSurface({
           onClose={controller.closeOverlay}
         />
       )}
+      <OfflineSubtitleSheet
+        visible={controller.state.overlay === 'subtitles'}
+        tracks={subtitleTracks}
+        selectedKey={selectedSubtitleKey}
+        onSelect={selectSubtitleTrack}
+        onClose={controller.closeOverlay}
+      />
       <PresentationSheet
         visible={controller.state.overlay === 'presentation'}
         value={presentation}

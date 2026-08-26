@@ -39,6 +39,16 @@ internal data class OrionPortableFinalizeOutcome(
   val publishedArtifacts: List<OrionPublishedArtifact> = emptyList(),
 )
 
+
+internal data class OrionOfflinePlaybackPresentation(
+  val ok: Boolean,
+  val uri: String? = null,
+  val contentType: String? = null,
+  val sourceKind: String? = null,
+  val failureCode: String? = null,
+  val failureMessage: String? = null,
+)
+
 /**
  * Native-only portable finalizer for already verified finite HLS/DASH fragments.
  *
@@ -61,6 +71,27 @@ internal object OrionDownloadPortableFinalizer {
   private data class RoleSource(
     val role: String,
     val segments: List<SegmentInput>,
+  )
+
+  private data class OfflineSegment(
+    val media: File,
+    val initialization: File?,
+    val durationUs: Long,
+  )
+
+  private data class OfflineRolePresentation(
+    val role: String,
+    val segments: List<OfflineSegment>,
+    val totalDurationUs: Long,
+    val mediaBytes: Long,
+  )
+
+  private data class OfflineSubtitlePresentation(
+    val id: String,
+    val language: String,
+    val label: String,
+    val playlist: File,
+    val isDefault: Boolean,
   )
 
   private data class TrackPlan(
@@ -105,6 +136,105 @@ internal object OrionDownloadPortableFinalizer {
     val stats: TrackWriteStats? = null,
     val failureCode: String? = null,
   )
+
+
+  fun prepareOfflinePlaybackPresentation(
+    context: Context,
+    assetId: String,
+    bundleDir: File,
+    index: JSONObject,
+    tracks: JSONArray = JSONArray(),
+  ): OrionOfflinePlaybackPresentation {
+    val sourceKind = index.optString("kind").takeIf { it == "hls" || it == "dash" }
+      ?: return offlinePresentationFailure("offline-bundle-kind-invalid", "Offline stream kind is invalid.")
+    val files = index.optJSONArray("files") ?: return offlinePresentationFailure(
+      "offline-bundle-files-missing",
+      "Offline stream index is incomplete.",
+    )
+    if (files.length() !in 1..20_000) {
+      return offlinePresentationFailure("offline-bundle-files-invalid", "Offline stream fragment count is invalid.")
+    }
+    val roles = mutableListOf<String>()
+    for (indexPosition in 0 until files.length()) {
+      val role = files.optJSONObject(indexPosition)?.optString("role").orEmpty()
+      if (role !in setOf("video", "video-init", "audio", "audio-init")) {
+        return offlinePresentationFailure("offline-bundle-role-invalid", "Offline stream fragment roles are invalid.")
+      }
+      roles.add(role)
+    }
+
+    val videoSource = collectRoleSource(bundleDir, roles, "video")
+      ?: return offlinePresentationFailure("offline-video-missing", "Offline video fragments are unavailable.")
+    val expectsSeparateAudio = roles.any { it == "audio" || it == "audio-init" }
+    val audioSource = collectRoleSource(bundleDir, roles, "audio")
+    if (expectsSeparateAudio && audioSource == null) {
+      return offlinePresentationFailure("offline-audio-missing", "Offline audio fragments are unavailable.")
+    }
+
+    val plans = try { collectTracks(videoSource, audioSource) } catch (_: Throwable) { emptyList() }
+    val videoPlan = plans.firstOrNull { it.source == videoSource && it.mime.startsWith("video/") }
+      ?: return offlinePresentationFailure("offline-video-track-missing", "Offline video track could not be inspected.")
+    val audioPlan = if (audioSource != null) {
+      plans.firstOrNull { it.source == audioSource && it.mime.startsWith("audio/") }
+        ?: return offlinePresentationFailure("offline-audio-track-missing", "Offline audio track could not be inspected.")
+    } else null
+
+    val video = inspectOfflineRole(videoSource, videoPlan)
+      ?: return offlinePresentationFailure("offline-video-cadence-invalid", "Offline video timing could not be validated.")
+    val audio = if (audioSource != null && audioPlan != null) {
+      inspectOfflineRole(audioSource, audioPlan)
+        ?: return offlinePresentationFailure("offline-audio-timeline-invalid", "Offline audio timing could not be validated.")
+    } else null
+    if (audio != null && !OrionPortableCadence.withinAvDrift(video.totalDurationUs, audio.totalDurationUs)) {
+      return offlinePresentationFailure("offline-av-drift-invalid", "Offline audio and video timelines do not align safely.")
+    }
+
+    val safeAssetId = assetId.replace(Regex("[^A-Za-z0-9._-]"), "_").take(140).ifBlank { "asset" }
+    val outputDir = File(context.cacheDir, "orion-downloads/offline-playback/$safeAssetId")
+    if (!outputDir.exists() && !outputDir.mkdirs()) {
+      return offlinePresentationFailure("offline-presentation-cache-failed", "Orion could not prepare temporary offline playback metadata.")
+    }
+    val videoPlaylist = File(outputDir, "video.m3u8")
+    if (!writeOfflineMediaPlaylist(videoPlaylist, video)) {
+      return offlinePresentationFailure("offline-video-playlist-failed", "Orion could not prepare the offline video playlist.")
+    }
+
+    val audioPlaylist = if (audio != null) {
+      File(outputDir, "audio.m3u8").also { playlist ->
+        if (!writeOfflineMediaPlaylist(playlist, audio)) {
+          return offlinePresentationFailure("offline-audio-playlist-failed", "Orion could not prepare the offline audio playlist.")
+        }
+      }
+    } else null
+
+    val presentationDurationUs = maxOf(video.totalDurationUs, audio?.totalDurationUs ?: 0L).coerceAtLeast(1L)
+    val subtitles = prepareOfflineSubtitlePresentations(
+      bundleDir = bundleDir,
+      index = index,
+      tracks = tracks,
+      outputDir = outputDir,
+      durationUs = presentationDurationUs,
+    ) ?: return offlinePresentationFailure(
+      "offline-subtitles-invalid",
+      "Downloaded subtitles could not be prepared safely for offline playback.",
+    )
+
+    var playbackFile = videoPlaylist
+    if (audio != null || subtitles.isNotEmpty()) {
+      val masterPlaylist = File(outputDir, "master.m3u8")
+      if (!writeOfflineMasterPlaylist(masterPlaylist, videoPlaylist, audioPlaylist, video, audio, subtitles)) {
+        return offlinePresentationFailure("offline-master-playlist-failed", "Orion could not prepare the offline playback playlist.")
+      }
+      playbackFile = masterPlaylist
+    }
+
+    return OrionOfflinePlaybackPresentation(
+      ok = true,
+      uri = android.net.Uri.fromFile(playbackFile).toString(),
+      contentType = "hls",
+      sourceKind = sourceKind,
+    )
+  }
 
   fun finalizeToDeviceStorage(
     context: Context,
@@ -430,6 +560,297 @@ internal object OrionDownloadPortableFinalizer {
       } ?: false
     } catch (_: Throwable) { false }
   }
+
+
+  private fun inspectOfflineRole(source: RoleSource, plan: TrackPlan): OfflineRolePresentation? {
+    val kind = if (plan.mime.startsWith("video/")) OrionPortableCadence.Kind.VIDEO else OrionPortableCadence.Kind.AUDIO
+    val fallbackStepUs = nominalSampleStepUs(plan)
+    var timeline: OrionPortableCadence.Timeline? = null
+    var totalDurationUs = 0L
+    var mediaBytes = 0L
+    val segments = mutableListOf<OfflineSegment>()
+    for (segment in source.segments) {
+      val timestamps = inspectOfflineTrack(segment, plan) ?: return null
+      val analysis = OrionPortableCadence.analyze(timestamps, kind, fallbackStepUs) ?: return null
+      if (kind == OrionPortableCadence.Kind.VIDEO && analysis.reordered && Build.VERSION.SDK_INT < Build.VERSION_CODES.N_MR1) return null
+      val placement = OrionPortableCadence.place(analysis, timeline) ?: return null
+      val durationUs = safePositiveAdd(analysis.durationUs, analysis.representativeStepUs) ?: return null
+      totalDurationUs = safePositiveAdd(totalDurationUs, durationUs) ?: return null
+      mediaBytes = safePositiveAdd(mediaBytes, segment.media.length().coerceAtLeast(0L)) ?: return null
+      segments += OfflineSegment(segment.media, segment.initialization, durationUs)
+      timeline = placement.next
+    }
+    if (segments.isEmpty() || totalDurationUs <= 0L) return null
+    return OfflineRolePresentation(source.role, segments, totalDurationUs, mediaBytes)
+  }
+
+  private fun inspectOfflineTrack(segment: SegmentInput, plan: TrackPlan): LongArray? = withExtractor(segment) { extractor ->
+    val inputTrack = findTrack(extractor, plan) ?: return@withExtractor null
+    extractor.selectTrack(inputTrack)
+    val values = OrionBoundedLongCollector(OrionPortableCadence.MAX_SAMPLES_PER_FRAGMENT)
+    while (extractor.sampleTrackIndex >= 0) {
+      if (extractor.sampleTrackIndex != inputTrack || !values.add(extractor.sampleTime)) return@withExtractor null
+      if (!extractor.advance()) break
+    }
+    values.toLongArray().takeIf { it.isNotEmpty() }
+  }
+
+  private fun writeOfflineMediaPlaylist(file: File, role: OfflineRolePresentation): Boolean = try {
+    val targetDuration = kotlin.math.ceil(
+      role.segments.maxOf { it.durationUs }.toDouble() / 1_000_000.0,
+    ).toInt().coerceAtLeast(1)
+    val hasInitialization = role.segments.any { it.initialization != null }
+    val body = StringBuilder()
+      .append("#EXTM3U\n")
+      .append("#EXT-X-VERSION:").append(if (hasInitialization) 7 else 3).append('\n')
+      .append("#EXT-X-PLAYLIST-TYPE:VOD\n")
+      .append("#EXT-X-TARGETDURATION:").append(targetDuration).append('\n')
+      .append("#EXT-X-MEDIA-SEQUENCE:0\n")
+    var currentInitialization: String? = null
+    for (segment in role.segments) {
+      val initialization = segment.initialization?.let(::localPlaybackUri)
+      if (initialization != null && initialization != currentInitialization) {
+        body.append("#EXT-X-MAP:URI=\"").append(initialization).append("\"\n")
+        currentInitialization = initialization
+      }
+      body.append("#EXTINF:")
+        .append(java.lang.String.format(java.util.Locale.US, "%.6f", segment.durationUs.toDouble() / 1_000_000.0))
+        .append(",\n")
+        .append(localPlaybackUri(segment.media)).append('\n')
+    }
+    body.append("#EXT-X-ENDLIST\n")
+    file.writeText(body.toString(), Charsets.UTF_8)
+    file.isFile && file.length() > 0L
+  } catch (_: Throwable) { false }
+
+
+  private fun prepareOfflineSubtitlePresentations(
+    bundleDir: File,
+    index: JSONObject,
+    tracks: JSONArray,
+    outputDir: File,
+    durationUs: Long,
+  ): List<OfflineSubtitlePresentation>? {
+    val entries = index.optJSONArray("subtitles") ?: JSONArray()
+    if (entries.length() == 0) return emptyList()
+    if (entries.length() !in 1..2) return null
+    val output = mutableListOf<OfflineSubtitlePresentation>()
+    for (subtitleIndex in 0 until entries.length()) {
+      val entry = entries.optJSONObject(subtitleIndex) ?: return null
+      val id = entry.optString("id").takeIf { it.matches(Regex("^[A-Za-z0-9._:-]{1,100}$")) } ?: return null
+      val relativeName = entry.optString("name").takeIf { it.matches(Regex("^subtitles/[A-Za-z0-9._-]{1,120}$")) } ?: return null
+      val source = File(bundleDir, relativeName)
+      if (!OrionDownloadOwnershipPolicy.canonicalContained(bundleDir, source) || !source.isFile || source.length() <= 0L) return null
+      val metadata = findOfflineSubtitleTrack(tracks, id)
+      val language = cleanOfflineSubtitleText(
+        metadata?.optString("language").orEmpty().ifBlank { entry.optString("language") },
+        12,
+      ) ?: "und"
+      val label = cleanOfflineSubtitleText(metadata?.optString("label").orEmpty(), 120)
+        ?: "${language.uppercase(java.util.Locale.US)} subtitle"
+      val format = metadata?.optString("format").orEmpty().lowercase(java.util.Locale.US)
+        .takeIf { it in setOf("vtt", "srt", "ass") }
+        ?: source.extension.lowercase(java.util.Locale.US).takeIf { it in setOf("vtt", "srt", "ass") }
+        ?: return null
+      val vtt = File(outputDir, "subtitle-${subtitleIndex.toString().padStart(2, '0')}.vtt")
+      if (!writeOfflineWebVtt(source, vtt, format)) return null
+      val playlist = File(outputDir, "subtitle-${subtitleIndex.toString().padStart(2, '0')}.m3u8")
+      if (!writeOfflineSubtitlePlaylist(playlist, vtt, durationUs)) return null
+      output += OfflineSubtitlePresentation(
+        id = id,
+        language = language,
+        label = label,
+        playlist = playlist,
+        isDefault = metadata?.optBoolean("default", subtitleIndex == 0) ?: (subtitleIndex == 0),
+      )
+    }
+    if (output.none { it.isDefault } || output.count { it.isDefault } > 1) {
+      return output.mapIndexed { indexPosition, item -> item.copy(isDefault = indexPosition == 0) }
+    }
+    return output
+  }
+
+  private fun findOfflineSubtitleTrack(tracks: JSONArray, id: String): JSONObject? {
+    for (index in 0 until tracks.length()) {
+      val track = tracks.optJSONObject(index) ?: continue
+      if (track.optString("kind") == "subtitle" && track.optString("id") == id) return track
+    }
+    return null
+  }
+
+  private fun writeOfflineWebVtt(source: File, destination: File, format: String): Boolean {
+    return try {
+      val text = source.readText(Charsets.UTF_8)
+      if (text.length > 5 * 1024 * 1024) return false
+      val normalized = when (format) {
+        "vtt" -> normalizeOfflineWebVtt(text)
+        "srt" -> offlineSrtToWebVtt(text)
+        "ass" -> offlineAssToWebVtt(text)
+        else -> null
+      } ?: return false
+      destination.writeText(normalized, Charsets.UTF_8)
+      destination.isFile && destination.length() > 0L
+    } catch (_: Throwable) { false }
+  }
+
+  private fun normalizeOfflineWebVtt(input: String): String? {
+    val normalized = input.removePrefix("\uFEFF").replace("\r\n", "\n").replace('\r', '\n').trim()
+    if (!normalized.startsWith("WEBVTT")) return null
+    return "$normalized\n"
+  }
+
+  private fun offlineSrtToWebVtt(input: String): String? {
+    val normalized = input.removePrefix("\uFEFF").replace("\r\n", "\n").replace('\r', '\n').trim()
+    if (normalized.isBlank()) return null
+    val timing = Regex("""(\d{1,2}:\d{2}:\d{2}),(\d{3})""")
+    val body = normalized.lineSequence().joinToString("\n") { line ->
+      if (!line.contains("-->")) line else timing.replace(line) { match ->
+        "${match.groupValues[1]}.${match.groupValues[2]}"
+      }
+    }
+    if (!body.contains("-->")) return null
+    return "WEBVTT\n\n$body\n"
+  }
+
+  private fun offlineAssToWebVtt(input: String): String? {
+    val normalized = input.removePrefix("\uFEFF").replace("\r\n", "\n").replace('\r', '\n')
+    var inEvents = false
+    var eventFormat: List<String>? = null
+    val cues = StringBuilder("WEBVTT\n\n")
+    var cueCount = 0
+    for (rawLine in normalized.lineSequence()) {
+      val line = rawLine.trim()
+      if (line.equals("[Events]", ignoreCase = true)) {
+        inEvents = true
+        eventFormat = null
+        continue
+      }
+      if (!inEvents) continue
+      if (line.startsWith("[") && line.endsWith("]")) break
+      if (line.startsWith("Format:", ignoreCase = true)) {
+        eventFormat = line.substringAfter(':').split(',').map { it.trim().lowercase(java.util.Locale.US) }
+        continue
+      }
+      if (!line.startsWith("Dialogue:", ignoreCase = true)) continue
+      val format = eventFormat ?: continue
+      val startIndex = format.indexOf("start")
+      val endIndex = format.indexOf("end")
+      val textIndex = format.indexOf("text")
+      if (startIndex < 0 || endIndex < 0 || textIndex < 0) continue
+      val values = line.substringAfter(':').trimStart().split(',', ignoreCase = false, limit = format.size)
+      if (values.size != format.size) continue
+      val start = offlineAssTimestamp(values[startIndex].trim()) ?: continue
+      val end = offlineAssTimestamp(values[endIndex].trim()) ?: continue
+      if (end <= start) continue
+      val cueText = values[textIndex]
+        .replace("\\N", "\n")
+        .replace("\\n", "\n")
+        .replace("\\h", " ")
+        .replace(Regex("""\{[^}]*}"""), "")
+        .trim()
+      if (cueText.isBlank()) continue
+      cueCount += 1
+      cues.append(cueCount).append('\n')
+        .append(formatOfflineWebVttTime(start)).append(" --> ").append(formatOfflineWebVttTime(end)).append('\n')
+        .append(cueText).append("\n\n")
+    }
+    return cues.toString().takeIf { cueCount > 0 }
+  }
+
+  private fun offlineAssTimestamp(value: String): Long? {
+    val match = Regex("""^(\d{1,2}):(\d{2}):(\d{2})[.](\d{1,3})$""").matchEntire(value) ?: return null
+    val hours = match.groupValues[1].toLongOrNull() ?: return null
+    val minutes = match.groupValues[2].toLongOrNull() ?: return null
+    val seconds = match.groupValues[3].toLongOrNull() ?: return null
+    if (minutes !in 0..59 || seconds !in 0..59) return null
+    val millis = match.groupValues[4].padEnd(3, '0').take(3).toLongOrNull() ?: return null
+    return (((hours * 60L + minutes) * 60L + seconds) * 1000L) + millis
+  }
+
+  private fun formatOfflineWebVttTime(milliseconds: Long): String {
+    val total = milliseconds.coerceAtLeast(0L)
+    val hours = total / 3_600_000L
+    val minutes = (total / 60_000L) % 60L
+    val seconds = (total / 1000L) % 60L
+    val millis = total % 1000L
+    return java.lang.String.format(java.util.Locale.US, "%02d:%02d:%02d.%03d", hours, minutes, seconds, millis)
+  }
+
+  private fun writeOfflineSubtitlePlaylist(file: File, subtitle: File, durationUs: Long): Boolean = try {
+    val durationSeconds = durationUs.toDouble() / 1_000_000.0
+    val targetDuration = kotlin.math.ceil(durationSeconds).toInt().coerceAtLeast(1)
+    val body = StringBuilder()
+      .append("#EXTM3U\n")
+      .append("#EXT-X-VERSION:3\n")
+      .append("#EXT-X-PLAYLIST-TYPE:VOD\n")
+      .append("#EXT-X-TARGETDURATION:").append(targetDuration).append('\n')
+      .append("#EXT-X-MEDIA-SEQUENCE:0\n")
+      .append("#EXTINF:")
+      .append(java.lang.String.format(java.util.Locale.US, "%.6f", durationSeconds.coerceAtLeast(0.001)))
+      .append(",\n")
+      .append(localPlaybackUri(subtitle)).append('\n')
+      .append("#EXT-X-ENDLIST\n")
+    file.writeText(body.toString(), Charsets.UTF_8)
+    file.isFile && file.length() > 0L
+  } catch (_: Throwable) { false }
+
+  private fun cleanOfflineSubtitleText(value: String, max: Int): String? =
+    value.replace(Regex("[\\u0000-\\u001f\\u007f]"), "").trim().take(max).takeIf { it.isNotBlank() }
+
+  private fun hlsQuoted(value: String): String =
+    value.replace('\\', ' ').replace('"', '\'').replace('\r', ' ').replace('\n', ' ').trim().take(120)
+
+  private fun writeOfflineMasterPlaylist(
+    file: File,
+    videoPlaylist: File,
+    audioPlaylist: File?,
+    video: OfflineRolePresentation,
+    audio: OfflineRolePresentation?,
+    subtitles: List<OfflineSubtitlePresentation>,
+  ): Boolean = try {
+    val durationUs = maxOf(video.totalDurationUs, audio?.totalDurationUs ?: 0L).coerceAtLeast(1L)
+    val bytes = safePositiveAdd(video.mediaBytes, audio?.mediaBytes ?: 0L)
+      ?: throw IllegalStateException("Offline media byte count overflow")
+    val bandwidth = ((bytes.toDouble() * 8_000_000.0) / durationUs.toDouble())
+      .toLong().coerceIn(1L, 1_000_000_000L)
+    val body = StringBuilder()
+      .append("#EXTM3U\n")
+      .append("#EXT-X-VERSION:7\n")
+    if (audioPlaylist != null && audio != null) {
+      body.append("#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"orion-audio\",NAME=\"Audio\",DEFAULT=YES,AUTOSELECT=YES,URI=\"")
+        .append(localPlaybackUri(audioPlaylist)).append("\"\n")
+    }
+    subtitles.forEach { subtitle ->
+      body.append("#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"orion-subtitles\",NAME=\"")
+        .append(hlsQuoted(subtitle.label))
+        .append("\",LANGUAGE=\"")
+        .append(hlsQuoted(subtitle.language))
+        .append("\",DEFAULT=")
+        .append(if (subtitle.isDefault) "YES" else "NO")
+        .append(",AUTOSELECT=YES,FORCED=NO,URI=\"")
+        .append(localPlaybackUri(subtitle.playlist))
+        .append("\"\n")
+    }
+    body.append("#EXT-X-STREAM-INF:BANDWIDTH=").append(bandwidth)
+    if (audioPlaylist != null && audio != null) body.append(",AUDIO=\"orion-audio\"")
+    if (subtitles.isNotEmpty()) body.append(",SUBTITLES=\"orion-subtitles\"")
+    body.append('\n').append(localPlaybackUri(videoPlaylist)).append('\n')
+    file.writeText(body.toString(), Charsets.UTF_8)
+    file.isFile && file.length() > 0L
+  } catch (_: Throwable) { false }
+
+  private fun localPlaybackUri(file: File): String = android.net.Uri.fromFile(file).toString()
+
+  private fun safePositiveAdd(left: Long, right: Long): Long? {
+    if (left < 0L || right < 0L || left > Long.MAX_VALUE - right) return null
+    return left + right
+  }
+
+  private fun offlinePresentationFailure(code: String, message: String) = OrionOfflinePlaybackPresentation(
+    ok = false,
+    failureCode = code,
+    failureMessage = message,
+  )
 
   private fun collectRoleSource(partialDir: File, roles: List<String>, role: String): RoleSource? {
     var initialization: File? = null

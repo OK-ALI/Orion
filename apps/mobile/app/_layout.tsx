@@ -26,6 +26,7 @@ import { MobileDiagnosticsBridge } from '../src/components/MobileDiagnosticsBrid
 import { StartupIntro } from '../src/components/StartupIntro';
 import { GlobalSearchShortcut } from '../src/components/GlobalSearchShortcut';
 import { MobileDownloadEngineCoordinator } from '../src/features/downloads/MobileDownloadEngineCoordinator';
+import { MobileDownloadAvailabilityProvider } from '../src/features/downloads/MobileDownloadAvailabilityContext';
 import { MobileNotificationCoordinator } from '../src/features/notifications/MobileNotificationCoordinator';
 import { MobileNotificationResponseRouter } from '../src/features/notifications/MobileNotificationResponseRouter';
 import { MobileUpdateAnnouncementBanner } from '../src/features/updates/MobileUpdateAnnouncementBanner';
@@ -114,9 +115,10 @@ function ThemedApplication() {
         ? null
         : (
       <LibraryProvider key={libraryProfile.scopeId} storage={libraryProfile.storage}>
-        <MyListSteadyStateSyncProvider>
-          <WatchedSteadyStateSyncProvider>
-            <ViewingActivitySteadyStateSyncProvider>
+        <MobileDownloadAvailabilityProvider>
+          <MyListSteadyStateSyncProvider>
+            <WatchedSteadyStateSyncProvider>
+              <ViewingActivitySteadyStateSyncProvider>
               <GestureHandlerRootView style={{ flex: 1 }}>
               <View style={[styles.container, { backgroundColor: theme.background }]}>
                 <MobileDownloadEngineCoordinator />
@@ -137,9 +139,10 @@ function ThemedApplication() {
                 <OfflineBanner />
               </View>
               </GestureHandlerRootView>
-            </ViewingActivitySteadyStateSyncProvider>
-          </WatchedSteadyStateSyncProvider>
-        </MyListSteadyStateSyncProvider>
+              </ViewingActivitySteadyStateSyncProvider>
+            </WatchedSteadyStateSyncProvider>
+          </MyListSteadyStateSyncProvider>
+        </MobileDownloadAvailabilityProvider>
       </LibraryProvider>
     );
 

@@ -15,6 +15,7 @@ interface DownloadActivityListProps {
   offlineEntries: OfflineMediaEntryV1[];
   active?: boolean;
   onManageAssets?: (assetIds: readonly string[]) => void;
+  onPlayOffline?: (entry: OfflineMediaEntryV1, assetId: string) => void;
 }
 
 type DownloadTab = 'all' | 'active' | 'completed' | 'attention' | 'failed';
@@ -118,6 +119,19 @@ function entrySize(entry: OfflineMediaEntryV1, assetById: Map<string, MobileDown
   return entry.assetIds.reduce((total, assetId) => total + (assetById.get(assetId)?.verifiedSizeBytes || 0), 0);
 }
 
+function verifiedOrionLibraryAssetId(
+  entry: OfflineMediaEntryV1,
+  assetById: Map<string, MobileDownloadAssetV1>,
+): string | null {
+  const primary = assetById.get(entry.primaryAssetId);
+  if (primary?.destination === 'orion-library' && primary.availability === 'verified') return primary.assetId;
+  for (const assetId of entry.assetIds) {
+    const asset = assetById.get(assetId);
+    if (asset?.destination === 'orion-library' && asset.availability === 'verified') return asset.assetId;
+  }
+  return null;
+}
+
 function jobSortValue(job: MobileDownloadJobV1, sort: DownloadSort): number | string {
   if (sort === 'oldest') return job.createdAt;
   if (sort === 'name') return mediaPrimaryTitle(job.media).toLocaleLowerCase();
@@ -168,7 +182,7 @@ function sortGroups(groups: CompletedGroup[], sort: DownloadSort): CompletedGrou
   });
 }
 
-export function DownloadActivityList({ jobs, assets, offlineEntries, active = true, onManageAssets }: DownloadActivityListProps) {
+export function DownloadActivityList({ jobs, assets, offlineEntries, active = true, onManageAssets, onPlayOffline }: DownloadActivityListProps) {
   const { theme } = useOrionTheme();
   const [busyJob, setBusyJob] = useState<string | null>(null);
   const [tab, setTab] = useState<DownloadTab>('all');
@@ -385,6 +399,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
         const expanded = expandedGroups.has(group.groupKey);
         const poster = imgUrl(entry.posterPath ?? entry.media.posterPath ?? null, 'w342');
         const size = formatBytes(group.sizeBytes);
+        const playableAssetId = verifiedOrionLibraryAssetId(entry, assetById);
         return (
           <View key={group.groupKey} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Pressable
@@ -417,6 +432,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
                   return (a.media.episode ?? 0) - (b.media.episode ?? 0);
                 }).map((episode) => {
                   const episodeSize = formatBytes(entrySize(episode, assetById));
+                  const episodePlayableAssetId = verifiedOrionLibraryAssetId(episode, assetById);
                   return (
                     <View key={episode.entryId} style={styles.episodeRow}>
                       <View style={[styles.episodeBadge, { backgroundColor: theme.accentSoft }]}>
@@ -426,15 +442,19 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
                         <Text numberOfLines={1} style={[styles.episodeTitle, { color: theme.text }]}>{episode.episodeTitle || `Episode ${episode.media.episode ?? ''}`}</Text>
                         <Text style={[styles.episodeMeta, { color: theme.textSecondary }]}>{[episodeSize, 'Verified', assetById.get(episode.primaryAssetId)?.destination === 'device-storage' ? 'Device Storage' : 'Orion Library'].filter(Boolean).join(' · ')}</Text>
                       </View>
+                      {episodePlayableAssetId && onPlayOffline ? <Pressable accessibilityRole="button" accessibilityLabel={`Play ${episode.episodeTitle || `episode ${episode.media.episode ?? ''}`} offline`} onPress={() => onPlayOffline(episode, episodePlayableAssetId)} style={({ pressed }) => [styles.moreButton, { borderColor: theme.accent, backgroundColor: pressed ? theme.accentSoft : theme.elevated }]}><Ionicons name="play" size={18} color={theme.accent} /></Pressable> : null}
                       {onManageAssets ? <Pressable accessibilityRole="button" accessibilityLabel={`Manage ${episode.episodeTitle || `episode ${episode.media.episode ?? ''}`}`} onPress={() => onManageAssets(episode.assetIds)} style={({ pressed }) => [styles.moreButton, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.elevated }]}><Ionicons name="ellipsis-horizontal" size={19} color={theme.textSecondary} /></Pressable> : null}
                     </View>
                   );
                 })}
               </View>
             ) : null}
-            {onManageAssets ? (
+            {((!episodic && playableAssetId && onPlayOffline) || onManageAssets) ? (
               <View style={styles.actions}>
-                <ActionButton label={episodic ? 'Manage series' : 'Manage copy'} icon="ellipsis-horizontal" onPress={() => onManageAssets(group.entries.flatMap((candidate) => candidate.assetIds))} />
+                {!episodic && playableAssetId && onPlayOffline ? (
+                  <ActionButton label="Play Offline" icon="play" accessibilityLabel={`Play ${mediaPrimaryTitle(entry.media)} offline`} onPress={() => onPlayOffline(entry, playableAssetId)} />
+                ) : null}
+                {onManageAssets ? <ActionButton label={episodic ? 'Manage series' : 'Manage copy'} icon="ellipsis-horizontal" onPress={() => onManageAssets(group.entries.flatMap((candidate) => candidate.assetIds))} /> : null}
               </View>
             ) : null}
           </View>
@@ -451,8 +471,8 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
     </View>
   );
 
-  function ActionButton({ label, icon, disabled, onPress }: { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; disabled?: boolean; onPress: () => void }) {
-    return <Pressable accessibilityRole="button" accessibilityLabel={`${label} download`} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.action, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.elevated, opacity: disabled ? 0.55 : 1 }]}><Ionicons name={icon} size={15} color={theme.textSecondary} /><Text style={[styles.actionText, { color: theme.textSecondary }]}>{label}</Text></Pressable>;
+  function ActionButton({ label, icon, accessibilityLabel, disabled, onPress }: { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; accessibilityLabel?: string; disabled?: boolean; onPress: () => void }) {
+    return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel || `${label} download`} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.action, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.elevated, opacity: disabled ? 0.55 : 1 }]}><Ionicons name={icon} size={15} color={theme.textSecondary} /><Text style={[styles.actionText, { color: theme.textSecondary }]}>{label}</Text></Pressable>;
   }
 }
 

@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLibraryVisual } from '../context/LibraryContext';
 import { useOrionTheme } from '../context/ThemeContext';
+import { useMobileDownloadAvailability } from '../features/downloads/MobileDownloadAvailabilityContext';
 
 
 function normalizeDisplayYear(value: unknown): string | undefined {
@@ -30,6 +31,7 @@ export function MediaCard({ item, onPress, width = 140, height = 210, style, wat
   const { isSaved, toggleSave, isItemFullyWatched } = useLibraryVisual();
   const { theme } = useOrionTheme();
   const isMovie = item.media_type === 'movie' || !item.name;
+  const offlineAvailability = useMobileDownloadAvailability(item.id, isMovie ? 'movie' : 'tv');
   const title = isMovie ? item.title : item.name;
   const portableYear = normalizeDisplayYear((item as TmdbMediaItem & { year?: string | number }).year);
   const year = normalizeDisplayYear(isMovie ? item.release_date : item.first_air_date) ?? portableYear;
@@ -44,6 +46,10 @@ export function MediaCard({ item, onPress, width = 140, height = 210, style, wat
     year || undefined,
     itemWatched ? 'Watched' : undefined,
     itemSaved ? 'In My List' : undefined,
+    isMovie && offlineAvailability.downloaded ? 'Available offline' : undefined,
+    !isMovie && offlineAvailability.episodeCount > 0
+      ? `${offlineAvailability.episodeCount} ${offlineAvailability.episodeCount === 1 ? 'episode' : 'episodes'} downloaded`
+      : undefined,
     contextLabel || undefined,
   ].filter(Boolean).join(', ');
 
@@ -95,6 +101,26 @@ export function MediaCard({ item, onPress, width = 140, height = 210, style, wat
             <View pointerEvents="none" style={[styles.typeBadge, { backgroundColor: theme.accent }]}>
               <Text style={[styles.typeBadgeText, { color: theme.onAccent }]}>{typeBadgeText}</Text>
             </View>
+
+            {(isMovie ? offlineAvailability.downloaded : offlineAvailability.episodeCount > 0) && (
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.downloadedBadgeWrapper,
+                  !isMovie && styles.downloadedBadgeCountWrapper,
+                  { borderColor: theme.border },
+                ]}
+              >
+                <BlurView intensity={42} tint={theme.dark ? 'dark' : 'light'} style={styles.downloadedBadge}>
+                  <Ionicons name="download-outline" size={12} color={theme.text} />
+                  {!isMovie && (
+                    <Text style={[styles.downloadedBadgeText, { color: theme.text }]}>
+                      {offlineAvailability.episodeCount}
+                    </Text>
+                  )}
+                </BlurView>
+              </View>
+            )}
 
             {contextLabel && (
               <View pointerEvents="none" style={[styles.contextBadge, { backgroundColor: theme.elevated, borderColor: theme.accent }]}>
@@ -191,6 +217,33 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  downloadedBadgeWrapper: {
+    position: 'absolute',
+    top: 36,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+    elevation: 3,
+  },
+  downloadedBadgeCountWrapper: {
+    width: 34,
+  },
+  downloadedBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(5, 5, 10, 0.42)',
+  },
+  downloadedBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
   },
   contextBadge: {
     position: 'absolute',

@@ -11,6 +11,9 @@ import java.io.File
 internal object OrionDownloadArtifactManager {
   private val reconciliationLock = Any()
   @Volatile private var reconciling = false
+  private const val MAX_FRAGMENT_INDEX_BYTES = 2L * 1024L * 1024L
+  private const val MAX_FRAGMENT_COUNT = 20_000
+  private val FRAGMENT_ROLES = setOf("video", "video-init", "audio", "audio-init")
 
   fun reconcile(context: Context, assetIds: Set<String>? = null): JSONObject {
     synchronized(reconciliationLock) {
@@ -40,6 +43,61 @@ internal object OrionDownloadArtifactManager {
     } finally {
       synchronized(reconciliationLock) { reconciling = false }
     }
+  }
+
+
+  fun resolveOfflinePlayback(context: Context, assetId: String): JSONObject {
+    val clean = assetId.trim()
+    if (!clean.matches(Regex("^[A-Za-z0-9._:-]{1,140}$"))) {
+      return playbackResult(false, clean, "offline-asset-id-invalid", "Offline download identity is invalid.")
+    }
+
+    reconcile(context, setOf(clean))
+    val asset = OrionDownloadJobStore.ownershipAssets(setOf(clean)).optJSONObject(0)
+      ?: return playbackResult(false, clean, "offline-asset-not-found", "Offline download was not found.")
+    if (asset.optString("destination") != "orion-library" || asset.optJSONObject("storageTarget")?.optString("mode") != "orion-library") {
+      return playbackResult(false, clean, "offline-asset-not-managed", "This download is not an Orion Library offline asset.")
+    }
+
+    val primary = ownedPrimary(asset)
+      ?: return playbackResult(false, clean, "offline-primary-missing", "Offline media is not tracked.")
+    if (primary.optString("availability") != "verified") {
+      return playbackResult(false, clean, "offline-primary-not-verified", "Offline media is not currently verified.")
+    }
+    val locatorKind = primary.optJSONObject("_locator")?.optString("kind").orEmpty()
+    if (locatorKind !in setOf("managed", "managed-relative")) {
+      return playbackResult(false, clean, "offline-primary-not-managed", "Offline media is not stored in Orion Library.")
+    }
+    val bundleDir = managedTarget(context, asset, primary)
+      ?: return playbackResult(false, clean, "offline-primary-locator-invalid", "Offline media ownership could not be resolved.")
+    val validated = validateManagedFragmentBundle(bundleDir)
+      ?: return playbackResult(false, clean, "offline-bundle-invalid", "Offline media fragments are missing or inconsistent.")
+
+    val presentation = OrionDownloadPortableFinalizer.prepareOfflinePlaybackPresentation(
+      context = context,
+      assetId = clean,
+      bundleDir = bundleDir,
+      index = validated.index,
+      tracks = asset.optJSONArray("tracks") ?: JSONArray(),
+    )
+    if (!presentation.ok || presentation.uri.isNullOrBlank()) {
+      return playbackResult(
+        false,
+        clean,
+        presentation.failureCode ?: "offline-presentation-unavailable",
+        presentation.failureMessage ?: "Orion could not prepare this offline download for playback.",
+      )
+    }
+
+    return JSONObject()
+      .put("schemaVersion", 1)
+      .put("ok", true)
+      .put("assetId", clean)
+      .put("uri", presentation.uri)
+      .put("contentType", presentation.contentType ?: "hls")
+      .put("sourceKind", presentation.sourceKind ?: validated.index.optString("kind"))
+      .put("fragmentCount", validated.index.optInt("fragmentCount", 0))
+      .put("subtitleCount", validated.index.optJSONArray("subtitles")?.length() ?: 0)
   }
 
   fun deleteSelected(context: Context, selections: List<OrionDownloadManagementSelection>): JSONObject {
@@ -239,7 +297,12 @@ internal object OrionDownloadArtifactManager {
       "managed", "managed-relative" -> {
         val target = managedTarget(context, asset, artifact) ?: return OrionArtifactAvailability.UNAVAILABLE to null
         if (!target.exists()) OrionArtifactAvailability.MISSING to null
-        else OrionArtifactAvailability.VERIFIED to managedSize(target, artifact.optString("role") == "primary")
+        else if (artifact.optString("role") == "primary" && target.isDirectory) {
+          val validated = validateManagedFragmentBundle(target)
+          val expectedSize = artifact.optLong("expectedSizeBytes", -1L)
+          if (validated == null || expectedSize <= 0L || validated.primaryBytes != expectedSize) OrionArtifactAvailability.UNAVAILABLE to null
+          else OrionArtifactAvailability.VERIFIED to validated.primaryBytes
+        } else OrionArtifactAvailability.VERIFIED to managedSize(target, artifact.optString("role") == "primary")
       }
       else -> OrionArtifactAvailability.UNAVAILABLE to null
     }
@@ -288,6 +351,60 @@ internal object OrionDownloadArtifactManager {
     val target = File(root, relative)
     return target.takeIf { OrionDownloadOwnershipPolicy.canonicalContained(root, it) }
   }
+
+
+  private data class ValidatedFragmentBundle(
+    val index: JSONObject,
+    val primaryBytes: Long,
+  )
+
+  private fun validateManagedFragmentBundle(directory: File): ValidatedFragmentBundle? {
+    if (!directory.isDirectory || !directory.name.endsWith(".fragments")) return null
+    val indexFile = File(directory, "orion-fragment-bundle.json")
+    if (!indexFile.isFile || indexFile.length() <= 0L || indexFile.length() > MAX_FRAGMENT_INDEX_BYTES) return null
+    val index = try { JSONObject(indexFile.readText(Charsets.UTF_8)) } catch (_: Throwable) { return null }
+    if (index.optInt("schemaVersion", 0) != 1) return null
+    if (index.optString("kind") !in setOf("hls", "dash")) return null
+    val files = index.optJSONArray("files") ?: return null
+    val fragmentCount = index.optInt("fragmentCount", -1)
+    if (fragmentCount != files.length() || fragmentCount !in 1..MAX_FRAGMENT_COUNT) return null
+
+    var total = indexFile.length().coerceAtLeast(0L)
+    var videoSegments = 0
+    for (fragmentIndex in 0 until files.length()) {
+      val entry = files.optJSONObject(fragmentIndex) ?: return null
+      val expectedName = "f${fragmentIndex.toString().padStart(6, '0')}.bin"
+      if (entry.optString("name") != expectedName) return null
+      val role = entry.optString("role")
+      if (role !in FRAGMENT_ROLES) return null
+      if (role == "video") videoSegments += 1
+      val expectedSize = entry.optLong("size", -1L)
+      if (expectedSize <= 0L) return null
+      val file = File(directory, expectedName)
+      if (!OrionDownloadOwnershipPolicy.canonicalContained(directory, file) || !file.isFile || file.length() != expectedSize) return null
+      total = safeAdd(total, expectedSize)
+    }
+    if (videoSegments == 0) return null
+
+    val subtitles = index.optJSONArray("subtitles") ?: JSONArray()
+    if (subtitles.length() > 2) return null
+    for (subtitleIndex in 0 until subtitles.length()) {
+      val entry = subtitles.optJSONObject(subtitleIndex) ?: return null
+      val name = entry.optString("name")
+      if (!name.matches(Regex("^subtitles/[A-Za-z0-9._-]{1,120}$"))) return null
+      val expectedSize = entry.optLong("size", -1L)
+      val file = File(directory, name)
+      if (expectedSize <= 0L || !OrionDownloadOwnershipPolicy.canonicalContained(directory, file) || !file.isFile || file.length() != expectedSize) return null
+    }
+    return ValidatedFragmentBundle(index, total)
+  }
+
+  private fun playbackResult(ok: Boolean, assetId: String, code: String?, message: String?): JSONObject = JSONObject()
+    .put("schemaVersion", 1)
+    .put("ok", ok)
+    .put("assetId", assetId)
+    .put("code", code ?: JSONObject.NULL)
+    .put("message", message ?: JSONObject.NULL)
 
   private fun managedSize(target: File, primary: Boolean): Long {
     if (target.isFile) return target.length().coerceAtLeast(0L)
