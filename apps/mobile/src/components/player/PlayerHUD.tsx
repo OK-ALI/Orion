@@ -333,10 +333,12 @@ export function PlayerHUD({
                   <Text style={[styles.sourceText, { color: theme.textSecondary }]}>Subtitles</Text>
                 </Pressable>
               )}
-              <Pressable style={[styles.sourceButton, { backgroundColor: theme.surface }]} onPress={onOpenSources}>
-                <Ionicons name="server-outline" size={18} color={theme.textSecondary} />
-                <Text style={[styles.sourceText, { color: theme.textSecondary }]}>Source</Text>
-              </Pressable>
+              {onOpenSources && (
+                <Pressable style={[styles.sourceButton, { backgroundColor: theme.surface }]} onPress={onOpenSources}>
+                  <Ionicons name="server-outline" size={18} color={theme.textSecondary} />
+                  <Text style={[styles.sourceText, { color: theme.textSecondary }]}>Source</Text>
+                </Pressable>
+              )}
             </View>
           </BlurView>
         </View>

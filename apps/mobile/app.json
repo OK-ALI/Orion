@@ -3,7 +3,7 @@
     "name": "Orion",
     "slug": "mobile",
     "scheme": "orion",
-    "version": "2.1.26",
+    "version": "2.1.27",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.okali.orion",
-      "versionCode": 28
+      "versionCode": 29
     },
     "web": {
       "favicon": "./assets/favicon.png"

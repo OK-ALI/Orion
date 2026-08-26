@@ -26,23 +26,22 @@ test('P10.5-C2 routes opaque asset identity instead of durable physical offline 
   assert.doesNotMatch(downloads, /offlineUri:/);
 });
 
-test('P10.5-C2 resolves native offline playback before mounting the native surface and bypasses online metadata lookup', () => {
+test('P10.5-C5 mounts the dedicated native offline surface by opaque asset ID and bypasses online metadata lookup', () => {
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
-  const surface = read('src', 'features', 'playback', 'NativePlayerSurface.tsx');
+  const surface = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
 
   assert.match(screen, /offlineAssetId\?: string/);
-  assert.match(screen, /resolveNativeOfflinePlaybackV1\(offlineAssetId\)/);
   assert.match(screen, /if \(offlineRequested\) \{\s*setImdbId\(null\);\s*return undefined;/);
-  assert.match(screen, /if \(offlineRequested\) return resolvedOfflineUri \|\| '';/);
-  assert.match(screen, /streamContentType=\{offlineSource\?\.contentType\}/);
-  assert.match(screen, /Preparing offline playback/);
+  assert.match(screen, /if \(offlineRequested\) return '';/);
+  assert.match(screen, /<OrionOfflinePlayerSurface/);
+  assert.match(screen, /assetId=\{offlineAssetId\}/);
+  assert.match(screen, /\) : \(\s*<EmbedPlayerSurface/);
   assert.match(screen, /PlayerStateOverlay/);
   assert.match(screen, /controller|setLoading/);
-  assert.match(screen, /onRetry=\{\(\) => setOfflineResolveAttempt/);
+  assert.doesNotMatch(screen, /resolveNativeOfflinePlaybackV1|resolvedOfflineUri|streamContentType/);
   assert.doesNotMatch(screen, /offlineUri/);
 
-  assert.match(surface, /streamContentType\?: 'hls'/);
-  assert.match(surface, /useMemo<VideoSource>/);
-  assert.match(surface, /\{ uri: streamUrl, contentType: streamContentType \}/);
-  assert.match(surface, /useVideoPlayer\(videoSource,/);
+  assert.match(surface, /requireNativeComponent<NativeOfflinePlayerProps>\('OrionOfflinePlayerView'\)/);
+  assert.match(surface, /assetId=\{assetId\}/);
+  assert.doesNotMatch(surface, /streamUrl|offlineUri|useVideoPlayer/);
 });

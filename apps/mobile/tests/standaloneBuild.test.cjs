@@ -43,6 +43,8 @@ test("standalone Android release prep consumes the authoritative Cinema native s
   assert.match(cinemaPluginSource, /const CINEMA_NATIVE_FILES = Object\.freeze\(\[/);
   assert.match(cinemaPluginSource, /module\.exports\.CINEMA_NATIVE_FILES = CINEMA_NATIVE_FILES/);
   assert.match(source, /cinemaConfigPlugin\.CINEMA_NATIVE_FILES/);
+  assert.match(source, /cinemaConfigPlugin\.CINEMA_ANDROID_DEPENDENCIES/);
+  assert.match(source, /ensureCinemaGradleDependencies/);
   assert.doesNotMatch(source, /const cinemaNativeFiles = \[/);
   for (const fileName of [
     "OrionDownloadEngineModule.kt",
@@ -62,6 +64,8 @@ test("standalone Android release prep consumes the authoritative Cinema native s
     assert.match(cinemaPluginSource, new RegExp(fileName.replace(".", "\\.")));
   }
   assert.match(cinemaPluginSource, /OrionDownloadManagementPolicyTest\.kt/);
+  assert.match(cinemaPluginSource, /androidx\.media3:media3-exoplayer:1\.9\.0/);
+  assert.match(cinemaPluginSource, /androidx\.media3:media3-ui:1\.9\.0/);
   assert.match(source, /--sync-native-only/);
   assert.match(source, /createHash\("sha256"\)/);
 });

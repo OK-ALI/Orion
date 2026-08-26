@@ -11,6 +11,11 @@ const PACKAGE_PATH = ['com', 'okali', 'orion', 'playback'];
 const NATIVE_SOURCE = path.join(__dirname, 'orion-cinema-webview-native');
 const NATIVE_TEST_SOURCE = path.join(__dirname, 'orion-cinema-webview-native-tests');
 const PACKAGE_IMPORT = 'com.okali.orion.playback.OrionCinemaWebViewPackage';
+const CINEMA_ANDROID_DEPENDENCY_MARKER = '// ORION_P105_OFFLINE_PLAYER_DEPENDENCIES';
+const CINEMA_ANDROID_DEPENDENCIES = Object.freeze([
+  'implementation "androidx.media3:media3-exoplayer:1.9.0"',
+  'implementation "androidx.media3:media3-ui:1.9.0"',
+]);
 const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionCinemaWebViewClient.kt',
   'OrionCinemaWebChromeClient.kt',
@@ -33,6 +38,10 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionDownloadRecoveryWorker.kt',
   'OrionDownloadStorageRegistry.kt',
   'OrionDownloadSubtitleRuntime.kt',
+  'OrionOfflineMediaSourcePolicy.kt',
+  'OrionOfflineMediaSourceFactory.kt',
+  'OrionOfflinePlayerView.kt',
+  'OrionOfflinePlayerViewManager.kt',
   'OrionOfflinePlaybackTimeline.kt',
   'OrionPortableCadence.kt',
   'OrionPortableVerification.kt',
@@ -40,6 +49,7 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionDownloadTransferRuntime.kt',
 ]);
 const CINEMA_NATIVE_TEST_FILES = Object.freeze([
+  'OrionOfflineMediaSourcePolicyTest.kt',
   'OrionOfflinePlaybackTimelineTest.kt',
   'OrionPortableCadenceTest.kt',
   'OrionDownloadManagementPolicyTest.kt',
@@ -92,6 +102,15 @@ function withCinemaSources(config) {
 
 function withDownloadEngineGradle(config) {
   return withAppBuildGradle(config, (nextConfig) => {
+    if (!nextConfig.modResults.contents.includes(CINEMA_ANDROID_DEPENDENCY_MARKER)) {
+      nextConfig.modResults.contents = nextConfig.modResults.contents.replace(
+        /dependencies\s*\{/,
+        (match) => `${match}\n${[
+          CINEMA_ANDROID_DEPENDENCY_MARKER,
+          ...CINEMA_ANDROID_DEPENDENCIES,
+        ].map((line) => `    ${line}`).join('\n')}`,
+      );
+    }
     const marker = 'implementation "androidx.work:work-runtime-ktx:2.10.1"';
     if (!nextConfig.modResults.contents.includes(marker)) {
       nextConfig.modResults.contents = nextConfig.modResults.contents.replace(
@@ -151,3 +170,5 @@ module.exports = function withOrionCinemaWebView(config) {
 
 module.exports.CINEMA_NATIVE_FILES = CINEMA_NATIVE_FILES;
 module.exports.CINEMA_NATIVE_TEST_FILES = CINEMA_NATIVE_TEST_FILES;
+module.exports.CINEMA_ANDROID_DEPENDENCY_MARKER = CINEMA_ANDROID_DEPENDENCY_MARKER;
+module.exports.CINEMA_ANDROID_DEPENDENCIES = CINEMA_ANDROID_DEPENDENCIES;

@@ -47,17 +47,19 @@ test('P10.5-C4 keeps offline presentation local, ID-authoritative and remux-free
   assert.doesNotMatch(resolver, /MediaMuxer|portable\.mp4|https?:\/\/|localhost/);
 });
 
-test('P10.5-C4 preparation failures use the shared player state and retain Retry and Back', () => {
+test('P10.5-C5 native preparation failures use the shared player state and retain Retry and Back', () => {
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
+  const surface = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
   const overlay = read('src', 'components', 'player', 'PlayerStateOverlay.tsx');
 
   assert.match(screen, /function OfflinePlaybackPreparationSurface/);
   assert.match(screen, /useMobilePlayerController\(\)/);
   assert.match(screen, /setLoading\(state\)/);
   assert.match(screen, /state = error \? 'failed' : 'preparing'/);
-  assert.match(screen, /<PlayerStateOverlay/);
-  assert.match(screen, /onBack=\{\(\) => router\.back\(\)\}/);
-  assert.match(screen, /setOfflineResolveAttempt\(\(value\) => value \+ 1\)/);
+  assert.match(surface, /<PlayerStateOverlay/);
+  assert.match(surface, /onBack=\{nativeState\.state === 'failed'/);
+  assert.match(surface, /onRetry=\{nativeState\.state === 'failed'/);
+  assert.match(surface, /controller\.setLoading/);
   assert.doesNotMatch(screen, /Offline playback unavailable/);
   assert.doesNotMatch(screen, /offlineUri/);
   assert.match(overlay, /onBack\?: \(\) => void/);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import {
   DEFAULT_CINEMA_SOURCE_ID,
   getSourceResumeParams,
@@ -17,7 +18,7 @@ import {
 } from '../../services/sourceHealth';
 import { reportMobileDiagnosticError, updateMobileDiagnostics } from '../../services/mobileDiagnostics';
 import { EmbedPlayerSurface } from './EmbedPlayerSurface';
-import { NativePlayerSurface } from './NativePlayerSurface';
+import { OrionOfflinePlayerSurface } from './OrionOfflinePlayerSurface';
 import { ResumePlaybackPrompt } from './ResumePlaybackPrompt';
 import {
   resolveResumeChoiceTime,
@@ -50,7 +51,6 @@ import {
   type NextEpisodeCandidate,
 } from './playbackCompletion';
 import { resolvePlaybackRouteIdentity } from './routePlaybackIdentity';
-import { resolveNativeOfflinePlaybackV1, type NativeOfflinePlaybackSourceV1 } from '../downloads/nativeDownloadEngine';
 
 type PlayerRouteParams = {
   id: string;
@@ -70,13 +70,9 @@ type PlayerRouteParams = {
 
 function OfflinePlaybackPreparationSurface({
   error,
-  canRetry,
-  onRetry,
   onBack,
 }: {
   error: string | null;
-  canRetry: boolean;
-  onRetry: () => void;
   onBack: () => void;
 }) {
   const { setLoading } = useMobilePlayerController();
@@ -92,7 +88,6 @@ function OfflinePlaybackPreparationSurface({
         state={state}
         detail={error || 'Orion is validating the downloaded media for local playback.'}
         onBack={error ? onBack : undefined}
-        onRetry={error && canRetry ? onRetry : undefined}
       />
     </View>
   );
@@ -107,9 +102,6 @@ export default function PlayerScreen() {
     useLocalSearchParams<PlayerRouteParams>();
   const { getPlaybackProgress } = useLibraryPlaybackActions();
   const offlineRequested = isOffline === 'true';
-  const [offlineSource, setOfflineSource] = useState<NativeOfflinePlaybackSourceV1 | null>(null);
-  const [offlineResolveError, setOfflineResolveError] = useState<string | null>(null);
-  const [offlineResolveAttempt, setOfflineResolveAttempt] = useState(0);
   const routePlaybackIdentity = resolvePlaybackRouteIdentity(type, season, episode);
   const resolvedSeason = routePlaybackIdentity.season;
   const resolvedEpisode = routePlaybackIdentity.episode;
@@ -169,6 +161,22 @@ export default function PlayerScreen() {
 
   useEffect(() => { hydrateMobileSourceHealth(); }, []);
   useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    let disposed = false;
+    let previousLock: ScreenOrientation.OrientationLock | null = null;
+    ScreenOrientation.getOrientationLockAsync()
+      .then((lock) => {
+        previousLock = lock;
+        if (!disposed) return ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+        return undefined;
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      if (previousLock != null) ScreenOrientation.lockAsync(previousLock).catch(() => {});
+    };
+  }, []);
+  useEffect(() => {
     const health = getMobileSourceHealth(sourceId, type);
     updateMobileDiagnostics({
       activeSourceId: offlineRequested ? 'local' : sourceId,
@@ -179,34 +187,6 @@ export default function PlayerScreen() {
       lastTelemetryAt: null,
     });
   }, [offlineRequested, sourceId, type]);
-
-  useEffect(() => {
-    if (!offlineRequested) {
-      setOfflineSource(null);
-      setOfflineResolveError(null);
-      return undefined;
-    }
-    if (!offlineAssetId) {
-      setOfflineSource(null);
-      setOfflineResolveError('Offline download identity is missing.');
-      updateMobileDiagnostics({ playbackState: 'error' });
-      return undefined;
-    }
-    let cancelled = false;
-    setOfflineSource(null);
-    setOfflineResolveError(null);
-    updateMobileDiagnostics({ playbackState: 'loading' });
-    resolveNativeOfflinePlaybackV1(offlineAssetId)
-      .then((source) => {
-        if (!cancelled) setOfflineSource(source);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setOfflineResolveError(error instanceof Error ? error.message : 'Orion could not prepare this offline download for playback.');
-        updateMobileDiagnostics({ playbackState: 'error' });
-      });
-    return () => { cancelled = true; };
-  }, [offlineAssetId, offlineRequested, offlineResolveAttempt]);
 
   useEffect(() => {
     if (offlineRequested) {
@@ -220,10 +200,8 @@ export default function PlayerScreen() {
     return () => { cancelled = true; };
   }, [id, offlineRequested, type]);
 
-  const resolvedOfflineUri = offlineSource?.uri;
-
   const activeStreamUrl = useMemo(() => {
-    if (offlineRequested) return resolvedOfflineUri || '';
+    if (offlineRequested) return '';
     const resumeParams: Record<string, string | number> = {
       ...getSourceResumeParams(sourceId, resumeTime),
     };
@@ -237,7 +215,7 @@ export default function PlayerScreen() {
       resolvedEpisode || 1,
       resumeParams,
     );
-  }, [id, imdbId, offlineRequested, resolvedEpisode, resolvedOfflineUri, resolvedSeason, resumeTime, sourceId, type]);
+  }, [id, imdbId, offlineRequested, resolvedEpisode, resolvedSeason, resumeTime, sourceId, type]);
 
   const launchHandoff = useCallback(({
     targetSourceId,
@@ -495,20 +473,17 @@ export default function PlayerScreen() {
   };
 
   const surface = initialChoicePending ? null : offlineRequested ? (
-    resolvedOfflineUri ? (
-      <NativePlayerSurface
-        key={`local-${offlineAssetId}`}
-        streamUrl={resolvedOfflineUri}
-        streamContentType={offlineSource?.contentType}
+    offlineAssetId ? (
+      <OrionOfflinePlayerSurface
+        key={`orion-offline-${offlineAssetId}`}
+        assetId={offlineAssetId}
         {...commonProps}
         sourceId="local"
       />
     ) : (
       <OfflinePlaybackPreparationSurface
-        error={offlineResolveError}
-        canRetry={Boolean(offlineAssetId)}
+        error="Offline download identity is missing."
         onBack={() => router.back()}
-        onRetry={() => setOfflineResolveAttempt((value) => value + 1)}
       />
     )
   ) : (

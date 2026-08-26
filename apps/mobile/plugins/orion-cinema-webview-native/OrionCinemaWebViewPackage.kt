@@ -11,5 +11,8 @@ class OrionCinemaWebViewPackage : ReactPackage {
     OrionDownloadCaptureModule(reactContext),
     OrionDownloadEngineModule(reactContext),
   )
-  override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> = listOf(OrionCinemaWebViewManager())
+  override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> = listOf(
+    OrionCinemaWebViewManager(),
+    OrionOfflinePlayerViewManager(),
+  )
 }

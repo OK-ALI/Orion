@@ -7,6 +7,39 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
+internal data class OrionOfflinePlayerPart(
+  val fragmentIndex: Int,
+  val file: File,
+)
+
+internal data class OrionOfflinePlayerSubtitle(
+  val id: String,
+  val language: String,
+  val label: String,
+  val format: String,
+  val isDefault: Boolean,
+  val file: File,
+)
+
+internal data class OrionOfflinePlayerAsset(
+  val assetId: String,
+  val sourceKind: String,
+  val fragmentCount: Int,
+  val videoParts: List<OrionOfflinePlayerPart>,
+  val audioParts: List<OrionOfflinePlayerPart>,
+  val videoMediaCount: Int,
+  val audioMediaCount: Int,
+  val subtitles: List<OrionOfflinePlayerSubtitle>,
+)
+
+internal data class OrionOfflinePlayerResolution(
+  val asset: OrionOfflinePlayerAsset? = null,
+  val stage: String,
+  val code: String? = null,
+  val message: String? = null,
+  val failedFragmentIndex: Int? = null,
+)
+
 /** Bounded native owner for reconciliation and ID-only download management. */
 internal object OrionDownloadArtifactManager {
   private val reconciliationLock = Any()
@@ -98,6 +131,108 @@ internal object OrionDownloadArtifactManager {
       .put("sourceKind", presentation.sourceKind ?: validated.index.optString("kind"))
       .put("fragmentCount", validated.index.optInt("fragmentCount", 0))
       .put("subtitleCount", validated.index.optJSONArray("subtitles")?.length() ?: 0)
+  }
+
+  fun resolveOfflinePlayerAsset(context: Context, assetId: String): OrionOfflinePlayerResolution {
+    val clean = assetId.trim()
+    fun failure(stage: String, code: String, message: String, index: Int? = null) =
+      OrionOfflinePlayerResolution(stage = stage, code = code, message = message, failedFragmentIndex = index)
+
+    if (!clean.matches(Regex("^[A-Za-z0-9._:-]{1,140}$"))) {
+      return failure("asset-id", "offline-asset-id-invalid", "Offline download identity is invalid.")
+    }
+    reconcile(context, setOf(clean))
+    val asset = OrionDownloadJobStore.ownershipAssets(setOf(clean)).optJSONObject(0)
+      ?: return failure("asset-record", "offline-asset-not-found", "Offline download was not found.")
+    if (asset.optString("destination") != "orion-library" || asset.optJSONObject("storageTarget")?.optString("mode") != "orion-library") {
+      return failure("destination", "offline-asset-not-managed", "This download is not an Orion Library offline asset.")
+    }
+    val primary = ownedPrimary(asset)
+      ?: return failure("ownership", "offline-primary-missing", "Offline media is not tracked.")
+    if (primary.optString("availability") != "verified") {
+      return failure("availability", "offline-primary-not-verified", "Offline media is not currently verified.")
+    }
+    if (primary.optJSONObject("_locator")?.optString("kind").orEmpty() !in setOf("managed", "managed-relative")) {
+      return failure("locator", "offline-primary-not-managed", "Offline media is not stored in Orion Library.")
+    }
+    val bundleDir = managedTarget(context, asset, primary)
+      ?: return failure("containment", "offline-primary-locator-invalid", "Offline media ownership could not be resolved.")
+    val validated = validateManagedFragmentBundle(bundleDir)
+      ?: return failure("bundle-integrity", "offline-bundle-invalid", "Offline media fragments are missing or inconsistent.")
+    val entries = validated.index.optJSONArray("files")
+      ?: return failure("bundle-index", "offline-bundle-files-missing", "Offline stream index is incomplete.")
+    val fragments = mutableListOf<OrionOfflineMediaSourcePolicy.IndexedFragment>()
+    for (index in 0 until entries.length()) {
+      val entry = entries.optJSONObject(index)
+        ?: return failure("fragment-entry", "offline-fragment-entry-invalid", "Offline stream index is invalid.", index)
+      fragments += OrionOfflineMediaSourcePolicy.IndexedFragment(
+        index = index,
+        name = entry.optString("name"),
+        role = entry.optString("role"),
+        sizeBytes = entry.optLong("size", -1L),
+      )
+    }
+    val plan = OrionOfflineMediaSourcePolicy.build(validated.index.optString("kind"), fragments)
+      ?: return failure("source-plan", "offline-source-plan-invalid", "Offline media roles cannot be opened safely.")
+    fun materialize(parts: List<OrionOfflineMediaSourcePolicy.IndexedFragment>): List<OrionOfflinePlayerPart>? {
+      val output = mutableListOf<OrionOfflinePlayerPart>()
+      for (part in parts) {
+        val file = File(bundleDir, part.name)
+        if (!OrionDownloadOwnershipPolicy.canonicalContained(bundleDir, file) || !file.isFile || file.length() != part.sizeBytes) return null
+        output += OrionOfflinePlayerPart(part.index, file)
+      }
+      return output
+    }
+    val videoParts = materialize(plan.videoParts)
+      ?: return failure("video-parts", "offline-video-fragment-invalid", "Offline video fragments could not be opened safely.")
+    val audioParts = materialize(plan.audioParts)
+      ?: return failure("audio-parts", "offline-audio-fragment-invalid", "Offline audio fragments could not be opened safely.")
+    val subtitleEntries = validated.index.optJSONArray("subtitles") ?: JSONArray()
+    val trackMetadata = asset.optJSONArray("tracks") ?: JSONArray()
+    val subtitles = mutableListOf<OrionOfflinePlayerSubtitle>()
+    for (subtitleIndex in 0 until subtitleEntries.length()) {
+      val entry = subtitleEntries.optJSONObject(subtitleIndex)
+        ?: return failure("subtitle-entry", "offline-subtitle-entry-invalid", "Downloaded subtitles could not be opened safely.")
+      val id = entry.optString("id").takeIf { it.matches(Regex("^[A-Za-z0-9._:-]{1,100}$")) }
+        ?: return failure("subtitle-id", "offline-subtitle-id-invalid", "Downloaded subtitles could not be opened safely.")
+      val name = entry.optString("name")
+      val file = File(bundleDir, name)
+      if (!OrionDownloadOwnershipPolicy.canonicalContained(bundleDir, file) || !file.isFile || file.length() != entry.optLong("size", -1L)) {
+        return failure("subtitle-file", "offline-subtitle-file-invalid", "Downloaded subtitles could not be opened safely.")
+      }
+      val metadata = (0 until trackMetadata.length())
+        .mapNotNull { trackMetadata.optJSONObject(it) }
+        .firstOrNull { it.optString("kind") == "subtitle" && it.optString("id") == id }
+      val format = metadata?.optString("format").orEmpty().lowercase().takeIf { it in setOf("vtt", "srt", "ass") }
+        ?: file.extension.lowercase().takeIf { it in setOf("vtt", "srt", "ass") }
+        ?: return failure("subtitle-format", "offline-subtitle-format-invalid", "Downloaded subtitles could not be opened safely.")
+      val language = metadata?.optString("language").orEmpty().ifBlank { entry.optString("language") }
+        .replace(Regex("[^A-Za-z0-9-]"), "").take(12).ifBlank { "und" }
+      val label = metadata?.optString("label").orEmpty()
+        .replace(Regex("[\\u0000-\\u001f\\u007f]"), "").trim().take(120)
+        .ifBlank { "${language.uppercase()} subtitle" }
+      subtitles += OrionOfflinePlayerSubtitle(
+        id = id,
+        language = language,
+        label = label,
+        format = format,
+        isDefault = metadata?.optBoolean("default", subtitleIndex == 0) ?: (subtitleIndex == 0),
+        file = file,
+      )
+    }
+    return OrionOfflinePlayerResolution(
+      asset = OrionOfflinePlayerAsset(
+        assetId = clean,
+        sourceKind = plan.sourceKind,
+        fragmentCount = fragments.size,
+        videoParts = videoParts,
+        audioParts = audioParts,
+        videoMediaCount = plan.videoMediaCount,
+        audioMediaCount = plan.audioMediaCount,
+        subtitles = subtitles,
+      ),
+      stage = "ready",
+    )
   }
 
   fun deleteSelected(context: Context, selections: List<OrionDownloadManagementSelection>): JSONObject {

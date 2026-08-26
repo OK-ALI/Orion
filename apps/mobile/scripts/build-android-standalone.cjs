@@ -93,6 +93,15 @@ const cinemaNativeTestFiles = cinemaConfigPlugin.CINEMA_NATIVE_TEST_FILES;
 if (!Array.isArray(cinemaNativeTestFiles) || cinemaNativeTestFiles.length === 0) {
   throw new Error("Orion Cinema native test source manifest is missing or empty.");
 }
+const cinemaAndroidDependencyMarker = cinemaConfigPlugin.CINEMA_ANDROID_DEPENDENCY_MARKER;
+const cinemaAndroidDependencies = cinemaConfigPlugin.CINEMA_ANDROID_DEPENDENCIES;
+if (
+  typeof cinemaAndroidDependencyMarker !== "string"
+  || !Array.isArray(cinemaAndroidDependencies)
+  || cinemaAndroidDependencies.length === 0
+) {
+  throw new Error("Orion Cinema Android dependency manifest is missing or empty.");
+}
 
 const googleIdentityNativeSourceDirectory = path.join(
   projectDirectory,
@@ -273,6 +282,29 @@ function syncCinemaNativeSources() {
     }
   }
   console.log(`[Android] Synchronized and SHA-256 verified ${cinemaNativeFiles.length} Cinema native sources and ${cinemaNativeTestFiles.length} JVM tests.`);
+}
+
+function ensureCinemaGradleDependencies() {
+  let contents = fs.readFileSync(androidAppBuildGradle, "utf8");
+  if (!contents.includes(cinemaAndroidDependencyMarker)) {
+    const dependencyMatch = /dependencies\s*\{/;
+    if (!dependencyMatch.test(contents)) {
+      throw new Error(`Unable to locate Android app dependencies block: ${androidAppBuildGradle}`);
+    }
+    const block = [
+      cinemaAndroidDependencyMarker,
+      ...cinemaAndroidDependencies,
+    ].map((line) => `    ${line}`).join("\n");
+    contents = contents.replace(dependencyMatch, (match) => `${match}\n${block}`);
+    fs.writeFileSync(androidAppBuildGradle, contents, "utf8");
+  }
+  const verified = fs.readFileSync(androidAppBuildGradle, "utf8");
+  for (const dependency of cinemaAndroidDependencies) {
+    if (!verified.includes(dependency)) {
+      throw new Error(`Orion Cinema Android dependency is missing: ${dependency}`);
+    }
+  }
+  console.log("[Android] Orion Cinema Gradle dependencies verified.");
 }
 
 function syncGoogleIdentityNativeSources() {
@@ -659,6 +691,7 @@ function prepareExpoEmbeddedUpdateManifest(entryFile) {
 if (process.argv.includes("--sync-native-only")) {
   try {
     syncCinemaNativeSources();
+    ensureCinemaGradleDependencies();
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
@@ -670,6 +703,7 @@ if (process.argv.includes("--sync-native-only")) {
 try {
   ensureAndroidAppVersion();
   syncCinemaNativeSources();
+  ensureCinemaGradleDependencies();
   syncGoogleIdentityNativeSources();
   syncGoogleDriveAuthorizationNativeSources();
   syncOrionUpdateNativeSources();
