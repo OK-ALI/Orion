@@ -29,7 +29,7 @@ test('P10.5 offline resolver stays ID-only, Orion-owned and fail-closed', () => 
   assert.doesNotMatch(bridge.slice(bridgeStart, bridgeEnd), /writeMobileDownloadRepositoryV1/);
 });
 
-test('P10.5 offline presentation reuses cadence inspection and never invokes MP4 remux', () => {
+test('P10.5 offline presentation uses its playback timeline and never invokes MP4 remux', () => {
   const finalizer = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadPortableFinalizer.kt');
   const resolverStart = finalizer.indexOf('fun prepareOfflinePlaybackPresentation(');
   const resolverEnd = finalizer.indexOf('fun finalizeToDeviceStorage(', resolverStart);
@@ -38,8 +38,7 @@ test('P10.5 offline presentation reuses cadence inspection and never invokes MP4
 
   assert.match(resolver, /collectRoleSource\(bundleDir, roles, "video"\)/);
   assert.match(resolver, /inspectOfflineRole\(videoSource, videoPlan\)/);
-  assert.match(finalizer, /OrionPortableCadence\.analyze\(timestamps, kind, fallbackStepUs\)/);
-  assert.match(finalizer, /OrionPortableCadence\.place\(analysis, timeline\)/);
+  assert.match(resolver, /OrionOfflinePlaybackTimeline\.withinAvDrift/);
   assert.match(finalizer, /#EXT-X-PLAYLIST-TYPE:VOD/);
   assert.match(finalizer, /#EXT-X-MAP:URI=/);
   assert.match(finalizer, /#EXT-X-MEDIA:TYPE=AUDIO/);

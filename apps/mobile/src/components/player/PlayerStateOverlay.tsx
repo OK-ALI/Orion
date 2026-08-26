@@ -15,11 +15,13 @@ const COPY: Record<Exclude<MobilePlayerLoadingState, null>, { title: string; bod
 
 interface PlayerStateOverlayProps {
   state: MobilePlayerLoadingState;
+  detail?: string;
+  onBack?: () => void;
   onRetry?: () => void;
   onSwitchSource?: () => void;
 }
 
-export function PlayerStateOverlay({ state, onRetry, onSwitchSource }: PlayerStateOverlayProps) {
+export function PlayerStateOverlay({ state, detail, onBack, onRetry, onSwitchSource }: PlayerStateOverlayProps) {
   const { theme } = useOrionTheme();
   if (!state) return null;
   const content = COPY[state];
@@ -32,10 +34,11 @@ export function PlayerStateOverlay({ state, onRetry, onSwitchSource }: PlayerSta
         )}
         <View style={styles.copy}>
           <Text style={[styles.title, { color: theme.text }]}>{content.title}</Text>
-          <Text style={[styles.body, { color: theme.textSecondary }]}>{content.body}</Text>
+          <Text style={[styles.body, { color: theme.textSecondary }]}>{detail || content.body}</Text>
         </View>
         {!busy && (
           <View style={styles.actions}>
+            {onBack && <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={onBack} style={[styles.action, { borderColor: theme.border, borderWidth: 1 }]}><Text style={[styles.actionText, { color: theme.text }]}>Back</Text></Pressable>}
             {onRetry && <Pressable accessibilityRole="button" onPress={onRetry} style={[styles.action, { backgroundColor: theme.accent }]}><Text style={[styles.actionText, { color: theme.onAccent }]}>Retry</Text></Pressable>}
             {onSwitchSource && <Pressable accessibilityRole="button" onPress={onSwitchSource} style={[styles.action, { borderColor: theme.border, borderWidth: 1 }]}><Text style={[styles.actionText, { color: theme.text }]}>Switch source</Text></Pressable>}
           </View>

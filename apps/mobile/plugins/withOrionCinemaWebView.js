@@ -33,12 +33,14 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionDownloadRecoveryWorker.kt',
   'OrionDownloadStorageRegistry.kt',
   'OrionDownloadSubtitleRuntime.kt',
+  'OrionOfflinePlaybackTimeline.kt',
   'OrionPortableCadence.kt',
   'OrionPortableVerification.kt',
   'OrionDownloadPortableFinalizer.kt',
   'OrionDownloadTransferRuntime.kt',
 ]);
 const CINEMA_NATIVE_TEST_FILES = Object.freeze([
+  'OrionOfflinePlaybackTimelineTest.kt',
   'OrionPortableCadenceTest.kt',
   'OrionDownloadManagementPolicyTest.kt',
   'OrionDownloadRetryPolicyTest.kt',

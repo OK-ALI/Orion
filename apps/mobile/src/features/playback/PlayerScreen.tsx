@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   DEFAULT_CINEMA_SOURCE_ID,
@@ -42,8 +42,9 @@ import {
 } from './mobileSources';
 import { classifyCinemaSourceFailure } from './sourceFailure';
 import type { VerifiedPlaybackSnapshot } from './playerTypes';
-import { MobilePlayerControllerProvider } from './MobilePlayerController';
+import { MobilePlayerControllerProvider, useMobilePlayerController } from './MobilePlayerController';
 import { NextEpisodePrompt } from './NextEpisodePrompt';
+import { PlayerStateOverlay } from '../../components/player/PlayerStateOverlay';
 import {
   getNextReleasedEpisode,
   type NextEpisodeCandidate,
@@ -62,17 +63,46 @@ type PlayerRouteParams = {
   posterPath?: string;
   backdropPath?: string;
   episodeTitle?: string;
-  offlineUri?: string;
   offlineAssetId?: string;
   isOffline?: string;
   nextSourceId?: string;
 };
 
+function OfflinePlaybackPreparationSurface({
+  error,
+  canRetry,
+  onRetry,
+  onBack,
+}: {
+  error: string | null;
+  canRetry: boolean;
+  onRetry: () => void;
+  onBack: () => void;
+}) {
+  const { setLoading } = useMobilePlayerController();
+  const state = error ? 'failed' : 'preparing';
+
+  useEffect(() => {
+    setLoading(state);
+  }, [setLoading, state]);
+
+  return (
+    <View accessibilityLabel={error ? 'Offline playback needs attention' : 'Preparing offline playback'} style={{ flex: 1, backgroundColor: '#000' }}>
+      <PlayerStateOverlay
+        state={state}
+        detail={error || 'Orion is validating the downloaded media for local playback.'}
+        onBack={error ? onBack : undefined}
+        onRetry={error && canRetry ? onRetry : undefined}
+      />
+    </View>
+  );
+}
+
 export default function PlayerScreen() {
   const router = useRouter();
   const {
     id, type, title, season, episode, year, seriesTitle,
-    posterPath, backdropPath, episodeTitle, offlineUri, offlineAssetId, isOffline, nextSourceId,
+    posterPath, backdropPath, episodeTitle, offlineAssetId, isOffline, nextSourceId,
   } =
     useLocalSearchParams<PlayerRouteParams>();
   const { getPlaybackProgress } = useLibraryPlaybackActions();
@@ -158,12 +188,14 @@ export default function PlayerScreen() {
     }
     if (!offlineAssetId) {
       setOfflineSource(null);
-      setOfflineResolveError(offlineUri ? null : 'Offline download identity is missing.');
+      setOfflineResolveError('Offline download identity is missing.');
+      updateMobileDiagnostics({ playbackState: 'error' });
       return undefined;
     }
     let cancelled = false;
     setOfflineSource(null);
     setOfflineResolveError(null);
+    updateMobileDiagnostics({ playbackState: 'loading' });
     resolveNativeOfflinePlaybackV1(offlineAssetId)
       .then((source) => {
         if (!cancelled) setOfflineSource(source);
@@ -171,9 +203,10 @@ export default function PlayerScreen() {
       .catch((error) => {
         if (cancelled) return;
         setOfflineResolveError(error instanceof Error ? error.message : 'Orion could not prepare this offline download for playback.');
+        updateMobileDiagnostics({ playbackState: 'error' });
       });
     return () => { cancelled = true; };
-  }, [offlineAssetId, offlineRequested, offlineResolveAttempt, offlineUri]);
+  }, [offlineAssetId, offlineRequested, offlineResolveAttempt]);
 
   useEffect(() => {
     if (offlineRequested) {
@@ -187,7 +220,7 @@ export default function PlayerScreen() {
     return () => { cancelled = true; };
   }, [id, offlineRequested, type]);
 
-  const resolvedOfflineUri = offlineSource?.uri || (offlineRequested && !offlineAssetId ? offlineUri : undefined);
+  const resolvedOfflineUri = offlineSource?.uri;
 
   const activeStreamUrl = useMemo(() => {
     if (offlineRequested) return resolvedOfflineUri || '';
@@ -464,32 +497,19 @@ export default function PlayerScreen() {
   const surface = initialChoicePending ? null : offlineRequested ? (
     resolvedOfflineUri ? (
       <NativePlayerSurface
-        key={`local-${offlineAssetId || resolvedOfflineUri}`}
+        key={`local-${offlineAssetId}`}
         streamUrl={resolvedOfflineUri}
         streamContentType={offlineSource?.contentType}
         {...commonProps}
         sourceId="local"
       />
-    ) : offlineResolveError ? (
-      <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <Text style={{ color: '#fff', fontSize: 17, fontWeight: '800', textAlign: 'center' }}>Offline playback unavailable</Text>
-        <Text style={{ color: 'rgba(255,255,255,0.68)', fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 8 }}>{offlineResolveError}</Text>
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={{ minHeight: 42, paddingHorizontal: 18, borderRadius: 21, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ color: '#fff', fontWeight: '800' }}>Back</Text>
-          </Pressable>
-          {offlineAssetId ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Retry offline playback" onPress={() => setOfflineResolveAttempt((value) => value + 1)} style={{ minHeight: 42, paddingHorizontal: 18, borderRadius: 21, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ color: '#000', fontWeight: '900' }}>Retry</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
     ) : (
-      <View accessibilityLabel="Preparing offline playback" style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-        <ActivityIndicator size="large" color="#fff" />
-        <Text style={{ color: 'rgba(255,255,255,0.78)', fontSize: 13, fontWeight: '700' }}>Preparing offline playback…</Text>
-      </View>
+      <OfflinePlaybackPreparationSurface
+        error={offlineResolveError}
+        canRetry={Boolean(offlineAssetId)}
+        onBack={() => router.back()}
+        onRetry={() => setOfflineResolveAttempt((value) => value + 1)}
+      />
     )
   ) : (
     <EmbedPlayerSurface

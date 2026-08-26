@@ -36,7 +36,10 @@ test('P10.5-C2 resolves native offline playback before mounting the native surfa
   assert.match(screen, /if \(offlineRequested\) return resolvedOfflineUri \|\| '';/);
   assert.match(screen, /streamContentType=\{offlineSource\?\.contentType\}/);
   assert.match(screen, /Preparing offline playback/);
-  assert.match(screen, /Retry offline playback/);
+  assert.match(screen, /PlayerStateOverlay/);
+  assert.match(screen, /controller|setLoading/);
+  assert.match(screen, /onRetry=\{\(\) => setOfflineResolveAttempt/);
+  assert.doesNotMatch(screen, /offlineUri/);
 
   assert.match(surface, /streamContentType\?: 'hls'/);
   assert.match(surface, /useMemo<VideoSource>/);

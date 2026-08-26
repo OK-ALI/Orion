@@ -180,12 +180,12 @@ internal object OrionDownloadPortableFinalizer {
     } else null
 
     val video = inspectOfflineRole(videoSource, videoPlan)
-      ?: return offlinePresentationFailure("offline-video-cadence-invalid", "Offline video timing could not be validated.")
+      ?: return offlinePresentationFailure("offline-video-timeline-invalid", "Offline video timing could not be validated.")
     val audio = if (audioSource != null && audioPlan != null) {
       inspectOfflineRole(audioSource, audioPlan)
         ?: return offlinePresentationFailure("offline-audio-timeline-invalid", "Offline audio timing could not be validated.")
     } else null
-    if (audio != null && !OrionPortableCadence.withinAvDrift(video.totalDurationUs, audio.totalDurationUs)) {
+    if (audio != null && !OrionOfflinePlaybackTimeline.withinAvDrift(video.totalDurationUs, audio.totalDurationUs)) {
       return offlinePresentationFailure("offline-av-drift-invalid", "Offline audio and video timelines do not align safely.")
     }
 
@@ -563,36 +563,42 @@ internal object OrionDownloadPortableFinalizer {
 
 
   private fun inspectOfflineRole(source: RoleSource, plan: TrackPlan): OfflineRolePresentation? {
-    val kind = if (plan.mime.startsWith("video/")) OrionPortableCadence.Kind.VIDEO else OrionPortableCadence.Kind.AUDIO
     val fallbackStepUs = nominalSampleStepUs(plan)
-    var timeline: OrionPortableCadence.Timeline? = null
-    var totalDurationUs = 0L
     var mediaBytes = 0L
     val segments = mutableListOf<OfflineSegment>()
     for (segment in source.segments) {
-      val timestamps = inspectOfflineTrack(segment, plan) ?: return null
-      val analysis = OrionPortableCadence.analyze(timestamps, kind, fallbackStepUs) ?: return null
-      if (kind == OrionPortableCadence.Kind.VIDEO && analysis.reordered && Build.VERSION.SDK_INT < Build.VERSION_CODES.N_MR1) return null
-      val placement = OrionPortableCadence.place(analysis, timeline) ?: return null
-      val durationUs = safePositiveAdd(analysis.durationUs, analysis.representativeStepUs) ?: return null
-      totalDurationUs = safePositiveAdd(totalDurationUs, durationUs) ?: return null
+      val analysis = inspectOfflineTrack(segment, plan, fallbackStepUs) ?: return null
       mediaBytes = safePositiveAdd(mediaBytes, segment.media.length().coerceAtLeast(0L)) ?: return null
-      segments += OfflineSegment(segment.media, segment.initialization, durationUs)
-      timeline = placement.next
+      segments += OfflineSegment(segment.media, segment.initialization, analysis.durationUs)
     }
-    if (segments.isEmpty() || totalDurationUs <= 0L) return null
+    val totalDurationUs = OrionOfflinePlaybackTimeline.totalDurationUs(
+      segments.map { it.durationUs }.toLongArray(),
+    ) ?: return null
     return OfflineRolePresentation(source.role, segments, totalDurationUs, mediaBytes)
   }
 
-  private fun inspectOfflineTrack(segment: SegmentInput, plan: TrackPlan): LongArray? = withExtractor(segment) { extractor ->
+  private fun inspectOfflineTrack(
+    segment: SegmentInput,
+    plan: TrackPlan,
+    fallbackStepUs: Long,
+  ): OrionOfflinePlaybackTimeline.Analysis? = withExtractor(segment) { extractor ->
     val inputTrack = findTrack(extractor, plan) ?: return@withExtractor null
     extractor.selectTrack(inputTrack)
-    val values = OrionBoundedLongCollector(OrionPortableCadence.MAX_SAMPLES_PER_FRAGMENT)
+    val timestamps = OrionBoundedLongCollector(OrionOfflinePlaybackTimeline.MAX_SAMPLES_PER_SEGMENT)
+    val sampleSizes = OrionBoundedLongCollector(OrionOfflinePlaybackTimeline.MAX_SAMPLES_PER_SEGMENT)
     while (extractor.sampleTrackIndex >= 0) {
-      if (extractor.sampleTrackIndex != inputTrack || !values.add(extractor.sampleTime)) return@withExtractor null
+      if (
+        extractor.sampleTrackIndex != inputTrack ||
+        !timestamps.add(extractor.sampleTime) ||
+        !sampleSizes.add(extractor.sampleSize)
+      ) return@withExtractor null
       if (!extractor.advance()) break
     }
-    values.toLongArray().takeIf { it.isNotEmpty() }
+    OrionOfflinePlaybackTimeline.analyze(
+      timestampsUs = timestamps.toLongArray(),
+      sampleSizes = sampleSizes.toLongArray(),
+      fallbackStepUs = fallbackStepUs,
+    )
   }
 
   private fun writeOfflineMediaPlaylist(file: File, role: OfflineRolePresentation): Boolean = try {
