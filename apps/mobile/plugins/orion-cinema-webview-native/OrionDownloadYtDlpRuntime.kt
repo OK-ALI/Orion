@@ -33,11 +33,9 @@ internal sealed class OrionYtDlpOutcome {
 /**
  * Native-only yt-dlp process boundary for P10.5.
  *
- * This runner is intentionally not routed from OrionDownloadTransferEngine yet.
- * Candidate 2 proves wrapper initialization, fixed Orion-owned options, progress,
- * cancellation and private staging without weakening the existing per-request
- * authorization boundary. Production routing follows only after secure manifest
- * handoff is proven.
+ * Candidate 3 requires an explicit broker-backed authority envelope instead of
+ * a generic transfer context. HLS/DASH authority is fail-closed until Orion can
+ * enforce the broker boundary across yt-dlp's internal network discovery.
  */
 internal object OrionDownloadYtDlpRuntime {
   private const val SOCKET_TIMEOUT_SECONDS = 20
@@ -51,12 +49,21 @@ internal object OrionDownloadYtDlpRuntime {
   fun execute(
     context: Context,
     jobId: String,
-    bound: BoundTransferContext,
+    authority: OrionYtDlpAuthority,
     onProgress: (OrionYtDlpProgress) -> Unit = {},
   ): OrionYtDlpOutcome {
     val cleanJobId = cleanJobId(jobId) ?: return OrionYtDlpOutcome.Failed("yt-dlp-job-invalid", false)
-    if (bound.jobId != cleanJobId) return OrionYtDlpOutcome.Failed("yt-dlp-context-mismatch", false)
-    val rootUrl = safeHttpUrl(bound.root.url) ?: return OrionYtDlpOutcome.Failed("yt-dlp-root-invalid", false)
+    if (authority.jobId != cleanJobId) return OrionYtDlpOutcome.Failed("yt-dlp-authority-mismatch", false)
+    if (authority.transferKind !in setOf("hls", "dash")) {
+      return OrionYtDlpOutcome.Failed("yt-dlp-authority-kind-invalid", false)
+    }
+    val rootUrl = safeHttpUrl(authority.rootUrl) ?: return OrionYtDlpOutcome.Failed("yt-dlp-root-invalid", false)
+    if (authority.scopedCredentialsRequired) {
+      return OrionYtDlpOutcome.Failed("yt-dlp-scoped-credentials-required", false)
+    }
+    if (authority.networkEnforcementRequired) {
+      return OrionYtDlpOutcome.Failed("yt-dlp-network-enforcement-required", false)
+    }
     if (!activeJobs.add(cleanJobId)) return OrionYtDlpOutcome.Failed("yt-dlp-job-active", false)
 
     val workDir = stagingDir(context, cleanJobId)
@@ -74,7 +81,7 @@ internal object OrionDownloadYtDlpRuntime {
       val appContext = context.applicationContext
       FFmpeg.getInstance().init(appContext)
       YoutubeDL.getInstance().init(appContext)
-      val request = buildRequest(rootUrl, bound.root, workDir)
+      val request = buildRequest(rootUrl, authority, workDir)
       val response = YoutubeDL.getInstance().execute(request, processId, false) { percent, eta, _ ->
         when (OrionDownloadJobStore.control(cleanJobId)) {
           "pause", "cancel" -> YoutubeDL.getInstance().destroyProcessById(processId)
@@ -115,7 +122,7 @@ internal object OrionDownloadYtDlpRuntime {
   fun stagingDir(context: Context, jobId: String): File =
     File(context.filesDir, "orion-downloads/partial/${cleanJobId(jobId) ?: "invalid"}-ytdlp")
 
-  private fun buildRequest(rootUrl: String, requestContext: AuthorizedRequest, workDir: File): YoutubeDLRequest {
+  private fun buildRequest(rootUrl: String, authority: OrionYtDlpAuthority, workDir: File): YoutubeDLRequest {
     val request = YoutubeDLRequest(rootUrl)
       .addOption("--no-playlist")
       .addOption("--newline")
@@ -127,14 +134,10 @@ internal object OrionDownloadYtDlpRuntime {
       .addOption("--restrict-filenames")
       .addOption("--output", File(workDir, "media.%(ext)s").absolutePath)
 
-    requestContext.headers.forEach { (name, value) ->
+    authority.safeGlobalHeaders.forEach { (name, value) ->
       val safeName = safeHeaderName(name) ?: return@forEach
-      if (!replayHeader(safeName)) return@forEach
       val safeValue = safeHeaderValue(value) ?: return@forEach
       request.addOption("--add-header", "$safeName:$safeValue")
-    }
-    safeHeaderValue(requestContext.cookieHeader)?.let { cookie ->
-      request.addOption("--add-header", "Cookie:$cookie")
     }
     return request
   }
@@ -163,11 +166,6 @@ internal object OrionDownloadYtDlpRuntime {
     ?.takeIf { it.length <= MAX_HEADER_VALUE_LENGTH }
     ?.takeIf { !it.contains('\r') && !it.contains('\n') && !it.contains('\u0000') }
     ?.takeIf { it.isNotBlank() }
-
-  private fun replayHeader(name: String): Boolean = when (name.lowercase(Locale.US)) {
-    "host", "content-length", "connection", "range", "cookie", "accept-encoding" -> false
-    else -> true
-  }
 
   private fun cleanJobId(raw: String): String? = raw.trim()
     .takeIf { it.matches(Regex("^[A-Za-z0-9._:-]{1,120}$")) }

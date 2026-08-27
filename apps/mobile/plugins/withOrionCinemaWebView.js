@@ -51,6 +51,7 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionPortableCadence.kt',
   'OrionPortableVerification.kt',
   'OrionDownloadPortableFinalizer.kt',
+  'OrionDownloadYtDlpAuthority.kt',
   'OrionDownloadYtDlpRuntime.kt',
   'OrionDownloadTransferRuntime.kt',
 ]);
