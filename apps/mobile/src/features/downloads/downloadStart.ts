@@ -34,9 +34,7 @@ export async function startMobileDownloadFromSelectionV1(input: StartMobileDownl
   if (selection.resolvedMethod !== 'fragments' || !['hls', 'dash'].includes(candidate.preflight.resolvedManifestKind)) {
     throw new Error('Mobile downloads require a ready HLS or DASH stream. Try another source.');
   }
-  const destination: MobileDownloadJobV1['destination'] = preferences.deviceStorageTarget
-    ? 'device-storage'
-    : 'orion-library';
+  const destination: MobileDownloadJobV1['destination'] = preferences.defaultDestination;
   const storageTarget = destination === 'device-storage'
     ? preferences.deviceStorageTarget
     : orionLibraryTarget();

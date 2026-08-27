@@ -90,14 +90,12 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     : target?.media.title || 'Download';
   const supportingTitle = isEpisode ? target?.media.episodeTitle : null;
   const needsEpisode = target?.media.mediaType === 'tv' && !isEpisode;
-  const destination: MobileDownloadJobV1['destination'] = preferences.deviceStorageTarget
-    ? 'device-storage'
-    : 'orion-library';
+  const destination: MobileDownloadJobV1['destination'] = preferences.defaultDestination;
   const destinationTitle = destination === 'device-storage'
-    ? preferences.deviceStorageTarget?.displayName || 'Device Storage'
+    ? 'Device Storage'
     : 'Orion Library';
   const destinationDetail = destination === 'device-storage'
-    ? 'Portable media saved to your persisted Android storage folder.'
+    ? `Portable media saved to your persisted Android storage folder.${preferences.deviceStorageTarget?.displayName ? ` Folder: ${preferences.deviceStorageTarget.displayName}.` : ''}`
     : 'Managed offline media for reliable playback inside Orion.';
   const duplicateJob = target ? repositoryJobs.find((job) => (
     job.destination === destination
