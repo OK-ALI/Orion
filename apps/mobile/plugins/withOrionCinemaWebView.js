@@ -30,6 +30,7 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionPlayerSystemUiModule.kt',
   'OrionDownloadCaptureModule.kt',
   'OrionDownloadRequestContextBroker.kt',
+  'OrionDownloadAuthorizedHttp.kt',
   'OrionDownloadEngineModule.kt',
   'OrionDownloadForegroundService.kt',
   'OrionDownloadFragmentPlanner.kt',

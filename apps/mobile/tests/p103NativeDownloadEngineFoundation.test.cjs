@@ -40,7 +40,9 @@ test('P10.3 native durable store strips private transfer fields from React snaps
 
 test('P10.3 Candidate 1 direct transfer is resumable and does not falsely complete', () => {
   const runtime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
-  assert.match(runtime, /Range", "bytes=\$existing-/);
+  const authorizedHttp = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadAuthorizedHttp.kt');
+  assert.match(runtime, /val resumeStart = existing\.takeIf \{ it > 0L && bound\.resumable \}[\s\S]{0,500}OrionDownloadAuthorizedHttp\.openRequest\([^,\r\n]+,\s*resumeStart,\s*null\)/);
+  assert.match(authorizedHttp, /"bytes=\$rangeStart-"/);
   assert.match(runtime, /status != java\.net\.HttpURLConnection\.HTTP_PARTIAL/);
   assert.match(runtime, /integrity-size-mismatch/);
   assert.match(runtime, /setState\(jobId, "verifying"\)/);

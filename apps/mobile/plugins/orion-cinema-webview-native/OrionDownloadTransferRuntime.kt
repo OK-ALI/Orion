@@ -53,12 +53,9 @@ internal object OrionDownloadTransferRuntime {
 }
 
 internal object OrionDownloadTransferEngine {
-  private const val CONNECT_TIMEOUT_MS = 15_000
-  private const val READ_TIMEOUT_MS = 20_000
   private const val BUFFER_SIZE = 64 * 1024
   private const val MAX_FRAGMENT_CONCURRENCY = 4
   private const val MIN_FREE_RESERVE_BYTES = 32L * 1024L * 1024L
-  private const val MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 
   fun runJob(context: android.content.Context, jobId: String) {
     OrionDownloadJobStore.initialize(context)
@@ -168,7 +165,7 @@ internal object OrionDownloadTransferEngine {
     bound: BoundTransferContext,
   ) {
     val jobId = job.optString("jobId")
-    val rootBody = fetchAuthorizedText(bound, bound.root.url, bound.root.url)
+    val rootBody = OrionDownloadAuthorizedHttp.fetchText(bound, bound.root.url, bound.root.url)
     if (rootBody == null || !rootBody.contains("#EXTM3U", ignoreCase = true)) {
       OrionDownloadJobStore.markFailed(jobId, "hls-manifest-unavailable", "Orion could not read the selected HLS playlist.", retryable = true)
       return
@@ -181,7 +178,7 @@ internal object OrionDownloadTransferEngine {
       if (!acceptHlsPlan(jobId, media)) return
       fragments.addAll(media.fragments)
     } else {
-      val videoBody = fetchAuthorizedText(bound, bound.root.url, master.videoPlaylistUrl)
+      val videoBody = OrionDownloadAuthorizedHttp.fetchText(bound, bound.root.url, master.videoPlaylistUrl)
       if (videoBody == null) {
         OrionDownloadJobStore.markFailed(jobId, "hls-variant-unavailable", "Orion could not read the selected HLS quality playlist.", retryable = true)
         return
@@ -191,7 +188,7 @@ internal object OrionDownloadTransferEngine {
       fragments.addAll(video.fragments)
 
       master.audioPlaylistUrl?.let { audioUrl ->
-        val audioBody = fetchAuthorizedText(bound, bound.root.url, audioUrl)
+        val audioBody = OrionDownloadAuthorizedHttp.fetchText(bound, bound.root.url, audioUrl)
         if (audioBody == null) {
           OrionDownloadJobStore.markFailed(jobId, "hls-audio-unavailable", "Orion could not read the selected HLS audio playlist.", retryable = true)
           return
@@ -231,7 +228,7 @@ internal object OrionDownloadTransferEngine {
     bound: BoundTransferContext,
   ) {
     val jobId = job.optString("jobId")
-    val rootBody = fetchAuthorizedText(bound, bound.root.url, bound.root.url)
+    val rootBody = OrionDownloadAuthorizedHttp.fetchText(bound, bound.root.url, bound.root.url)
     if (rootBody == null || !rootBody.contains(Regex("<MPD(?:\\s|>)", RegexOption.IGNORE_CASE))) {
       OrionDownloadJobStore.markFailed(jobId, "dash-manifest-unavailable", "Orion could not read the selected DASH manifest.", retryable = true)
       return
@@ -400,13 +397,13 @@ internal object OrionDownloadTransferEngine {
     if (android.os.StatFs(context.filesDir.absolutePath).availableBytes < MIN_FREE_RESERVE_BYTES) {
       return FragmentOutcome("storage-blocked")
     }
-    val request = authorizedChild(bound, bound.root.url, fragment.url) ?: return FragmentOutcome("context-rejected")
+    val request = OrionDownloadAuthorizedHttp.authorizedChild(bound, bound.root.url, fragment.url) ?: return FragmentOutcome("context-rejected")
     val part = java.io.File(partialDir, fragmentName(index) + ".part")
     val finalFile = fragmentFile(partialDir, index)
     if (part.exists()) part.delete()
     var connection: java.net.HttpURLConnection? = null
     return try {
-      connection = openRequest(request, fragment.rangeStart, fragment.rangeEndInclusive)
+      connection = OrionDownloadAuthorizedHttp.openRequest(request, fragment.rangeStart, fragment.rangeEndInclusive)
       val status = connection.responseCode
       if (status == java.net.HttpURLConnection.HTTP_UNAUTHORIZED || status == java.net.HttpURLConnection.HTTP_FORBIDDEN) {
         return FragmentOutcome("context-rejected")
@@ -460,64 +457,6 @@ internal object OrionDownloadTransferEngine {
     }
   }
 
-  private fun fetchAuthorizedText(bound: BoundTransferContext, parentUrl: String, childUrl: String): String? {
-    var request = if (childUrl == bound.root.url) bound.root else authorizedChild(bound, parentUrl, childUrl) ?: return null
-    repeat(4) {
-      val connection = openRequest(request, null, null)
-      try {
-        val status = connection.responseCode
-        if (status in 300..399) {
-          val location = connection.getHeaderField("Location") ?: return null
-          val redirectUrl = try { java.net.URL(java.net.URL(request.url), location).toExternalForm() } catch (_: Throwable) { return null }
-          request = authorizedChild(bound, request.url, redirectUrl) ?: return null
-          return@repeat
-        }
-        if (status !in 200..299) return null
-        val stream = try { connection.inputStream } catch (_: Throwable) { connection.errorStream } ?: return null
-        return stream.use { input ->
-          val output = java.io.ByteArrayOutputStream()
-          val buffer = ByteArray(8192)
-          var remaining = MAX_MANIFEST_BYTES
-          while (remaining > 0) {
-            val read = input.read(buffer, 0, kotlin.math.min(buffer.size, remaining))
-            if (read <= 0) break
-            output.write(buffer, 0, read)
-            remaining -= read
-          }
-          output.toString(Charsets.UTF_8.name())
-        }
-      } finally {
-        try { connection.disconnect() } catch (_: Throwable) {}
-      }
-    }
-    return null
-  }
-
-  private fun authorizedChild(bound: BoundTransferContext, parentUrl: String, childUrl: String): AuthorizedRequest? {
-    OrionDownloadRequestContextBroker.resolveForJob(bound.jobId, bound.requestContextId, bound.candidateId, childUrl)?.let { return it }
-    if (!OrionDownloadRequestContextBroker.authorizeDiscoveredDescendant(
-        bound.jobId,
-        bound.requestContextId,
-        bound.candidateId,
-        parentUrl,
-        childUrl,
-      )) return null
-    return OrionDownloadRequestContextBroker.resolveForJob(bound.jobId, bound.requestContextId, bound.candidateId, childUrl)
-  }
-
-  private fun openRequest(request: AuthorizedRequest, rangeStart: Long?, rangeEndInclusive: Long?): java.net.HttpURLConnection {
-    val connection = java.net.URL(request.url).openConnection() as java.net.HttpURLConnection
-    connection.instanceFollowRedirects = false
-    connection.connectTimeout = CONNECT_TIMEOUT_MS
-    connection.readTimeout = READ_TIMEOUT_MS
-    connection.useCaches = false
-    connection.requestMethod = "GET"
-    request.headers.forEach { (name, value) -> if (replayHeader(name)) connection.setRequestProperty(name, value) }
-    if (!request.cookieHeader.isNullOrBlank()) connection.setRequestProperty("Cookie", request.cookieHeader)
-    if (rangeStart != null && rangeEndInclusive != null) connection.setRequestProperty("Range", "bytes=$rangeStart-$rangeEndInclusive")
-    return connection
-  }
-
   private fun runDirect(
     context: android.content.Context,
     job: org.json.JSONObject,
@@ -530,18 +469,9 @@ internal object OrionDownloadTransferEngine {
     var existing = if (partial.isFile) partial.length().coerceAtLeast(0L) else 0L
     val request = bound.root
 
-    val connection = java.net.URL(request.url).openConnection() as java.net.HttpURLConnection
+    val resumeStart = existing.takeIf { it > 0L && bound.resumable }
+    val connection = OrionDownloadAuthorizedHttp.openRequest(request, resumeStart, null)
     try {
-      connection.instanceFollowRedirects = false
-      connection.connectTimeout = CONNECT_TIMEOUT_MS
-      connection.readTimeout = READ_TIMEOUT_MS
-      connection.useCaches = false
-      connection.requestMethod = "GET"
-      request.headers.forEach { (name, value) ->
-        if (replayHeader(name)) connection.setRequestProperty(name, value)
-      }
-      if (!request.cookieHeader.isNullOrBlank()) connection.setRequestProperty("Cookie", request.cookieHeader)
-      if (existing > 0L && bound.resumable) connection.setRequestProperty("Range", "bytes=$existing-")
 
       val status = connection.responseCode
       if (status == java.net.HttpURLConnection.HTTP_UNAUTHORIZED || status == java.net.HttpURLConnection.HTTP_FORBIDDEN) {
@@ -947,11 +877,6 @@ internal object OrionDownloadTransferEngine {
 
   private fun fragmentName(index: Int): String = "f${index.toString().padStart(6, '0')}.bin"
   private fun fragmentFile(directory: java.io.File, index: Int): java.io.File = java.io.File(directory, fragmentName(index))
-
-  private fun replayHeader(name: String): Boolean = when (name.lowercase(java.util.Locale.US)) {
-    "host", "content-length", "connection", "range", "cookie", "accept-encoding" -> false
-    else -> true
-  }
 
   private fun managedOwnedArtifacts(
     assetId: String,
