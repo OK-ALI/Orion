@@ -8,12 +8,30 @@ const test = require("node:test");
 const mobileRoot = path.resolve(__dirname, "..");
 const read = (relative) => fs.readFileSync(path.join(mobileRoot, relative), "utf8");
 
-test("landscape playback prompt stays bounded and wraps actions", () => {
+test("landscape playback prompt stays bounded in a deterministic two-column grid", () => {
   const source = read("src/features/playback/ResumePlaybackPrompt.tsx");
   assert.match(source, /Math\.min\(width - spacing\[6\], 640\)/);
   assert.match(source, /maxWidth: 640/);
-  assert.match(source, /flexBasis: 220/);
+  assert.match(source, /actionButtonCompact/);
+  assert.match(source, /flexBasis: '48%'/);
+  assert.match(source, /flexShrink: 0/);
   assert.match(source, /justifyContent: 'center'/);
+});
+
+test("start over remains an explicit zero-position request through every player surface", () => {
+  const screen = read("src/features/playback/PlayerScreen.tsx");
+  const types = read("src/features/playback/playerTypes.ts");
+  const embed = read("src/features/playback/EmbedPlayerSurface.tsx");
+  const native = read("src/features/playback/NativePlayerSurface.tsx");
+  const script = read("src/features/playback/mobileAdBlocker.ts");
+
+  assert.match(screen, /setForceStartFromBeginning\(choice === 'start-over'\)/);
+  assert.match(screen, /forceStartFromBeginning,/);
+  assert.match(types, /forceStartFromBeginning\?: boolean/);
+  assert.match(embed, /initialResumeTime > 0 \|\| forceStartFromBeginning/);
+  assert.match(embed, /sourceId === 'vidlink' \|\| forceStartFromBeginning/);
+  assert.match(native, /initialResumeTime > 0 \|\| forceStartFromBeginning/);
+  assert.doesNotMatch(script, /video\.duration > 0 && \$\{safeTime\} > 0/);
 });
 
 test("History uses a two-level phone layout instead of squeezing metadata", () => {

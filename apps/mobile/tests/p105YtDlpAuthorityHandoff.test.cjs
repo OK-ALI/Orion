@@ -22,7 +22,20 @@ test('P10.5 Candidate 3 creates a broker-backed fail-closed yt-dlp authority han
   assert.doesNotMatch(authority, /safeGlobalHeaders\s*=.*cookie/i);
 
   assert.match(runtime, /authority: OrionYtDlpAuthority/);
-  assert.doesNotMatch(runtime, /bound: BoundTransferContext/);
+
+  // Candidate 5 may orchestrate a BoundTransferContext above the raw process
+  // boundary. Candidate 3's invariant is that the raw execute() boundary
+  // itself accepts only OrionYtDlpAuthority.
+  const rawExecuteStart = runtime.indexOf('  fun execute(\n');
+  const rawExecuteEnd = runtime.indexOf('  fun stop(', rawExecuteStart);
+  assert.ok(
+    rawExecuteStart >= 0 && rawExecuteEnd > rawExecuteStart,
+    'raw yt-dlp execute() boundary must remain identifiable',
+  );
+  const rawExecute = runtime.slice(rawExecuteStart, rawExecuteEnd);
+  assert.match(rawExecute, /authority: OrionYtDlpAuthority/);
+  assert.doesNotMatch(rawExecute, /bound: BoundTransferContext/);
+
   assert.match(runtime, /authority\.scopedCredentialsRequired/);
   assert.match(runtime, /yt-dlp-scoped-credentials-required/);
   assert.match(runtime, /authority\.networkEnforcementRequired/);
@@ -34,5 +47,5 @@ test('P10.5 Candidate 3 creates a broker-backed fail-closed yt-dlp authority han
   const init = runtime.indexOf('FFmpeg.getInstance().init(appContext)');
   assert.ok(guard >= 0 && init >= 0 && guard < init, 'network enforcement guard must fail closed before process initialization');
 
-  assert.doesNotMatch(transfer, /OrionDownloadYtDlpRuntime/);
+  assert.doesNotMatch(transfer, /OrionDownloadYtDlpRuntime\.execute\(/);
 });

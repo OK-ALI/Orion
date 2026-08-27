@@ -122,6 +122,7 @@ export default function PlayerScreen() {
     : Math.max(0, Number(existingProgress?.currentTime) || 0);
   const [initialChoicePending, setInitialChoicePending] = useState(initialSavedTime > 30);
   const [resumeTime, setResumeTime] = useState(initialSavedTime > 30 ? 0 : initialSavedTime);
+  const [forceStartFromBeginning, setForceStartFromBeginning] = useState(false);
   const [nextEpisodePrompt, setNextEpisodePrompt] = useState<NextEpisodeCandidate | null>(null);
   const completionHandledRef = useRef(new Set<string>());
   const nextEpisodeRequestRef = useRef(0);
@@ -157,6 +158,7 @@ export default function PlayerScreen() {
       : Math.max(0, Number(routeProgress?.currentTime) || 0);
     setInitialChoicePending(savedTime > 30);
     setResumeTime(savedTime > 30 ? 0 : savedTime);
+    setForceStartFromBeginning(false);
   }, [getPlaybackProgress, id, playbackIdentity, publishHandoff, resolvedEpisode, resolvedSeason, type]);
 
   useEffect(() => { hydrateMobileSourceHealth(); }, []);
@@ -164,7 +166,7 @@ export default function PlayerScreen() {
     if (Platform.OS === 'web') return undefined;
     let disposed = false;
     let previousLock: ScreenOrientation.OrientationLock | null = null;
-    ScreenOrientation.getOrientationLockAsync()
+    const lifecycle = ScreenOrientation.getOrientationLockAsync()
       .then((lock) => {
         previousLock = lock;
         if (!disposed) return ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
@@ -173,7 +175,11 @@ export default function PlayerScreen() {
       .catch(() => {});
     return () => {
       disposed = true;
-      if (previousLock != null) ScreenOrientation.lockAsync(previousLock).catch(() => {});
+      // Wait for any in-flight landscape lock before restoring the route's
+      // previous policy. This prevents a late lock from winning after Back.
+      lifecycle.then(() => {
+        if (previousLock != null) ScreenOrientation.lockAsync(previousLock).catch(() => {});
+      }).catch(() => {});
     };
   }, []);
   useEffect(() => {
@@ -232,6 +238,7 @@ export default function PlayerScreen() {
     fromSessionId: string | null;
     attemptedSourceIds?: string[];
   }) => {
+    setForceStartFromBeginning(false);
     if ((requestedTime || 0) > 0 && !mobileSourceCanReceiveContinuity(targetSourceId)) {
       // Truthful Mobile capability boundary: outgoing-only sources may report
       // verified progress, but Orion never fabricates an incoming seek for them.
@@ -277,6 +284,7 @@ export default function PlayerScreen() {
     const requestedTime = requestedTimeOverride !== undefined
       ? requestedTimeOverride
       : getFreshVerifiedPosition(snapshot);
+    setForceStartFromBeginning(reason === 'manual' && requestedTimeOverride === 0);
     if (reason === 'automatic') {
       if (requestedTime == null) {
         reportMobileDiagnosticError({
@@ -390,6 +398,7 @@ export default function PlayerScreen() {
       ? resolveResumeChoiceTime(choice, initialSavedTime)
       : 0;
     setResumeTime(chosenTime);
+    setForceStartFromBeginning(choice === 'start-over');
     setInitialChoicePending(false);
   }, [initialSavedTime, sourceId]);
 
@@ -422,6 +431,7 @@ export default function PlayerScreen() {
     setNextEpisodePrompt(null);
     publishHandoff(null);
     setResumeTime(0);
+    setForceStartFromBeginning(false);
     setInitialChoicePending(false);
     router.replace({
       pathname: '/player/[id]',
@@ -470,6 +480,7 @@ export default function PlayerScreen() {
     season: resolvedSeason == null ? undefined : String(resolvedSeason),
     episode: resolvedEpisode == null ? undefined : String(resolvedEpisode),
     initialResumeTime: resumeTime,
+    forceStartFromBeginning,
   };
 
   const surface = initialChoicePending ? null : offlineRequested ? (

@@ -90,7 +90,15 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     : target?.media.title || 'Download';
   const supportingTitle = isEpisode ? target?.media.episodeTitle : null;
   const needsEpisode = target?.media.mediaType === 'tv' && !isEpisode;
-  const destination = 'orion-library' as const;
+  const destination: MobileDownloadJobV1['destination'] = preferences.deviceStorageTarget
+    ? 'device-storage'
+    : 'orion-library';
+  const destinationTitle = destination === 'device-storage'
+    ? preferences.deviceStorageTarget?.displayName || 'Device Storage'
+    : 'Orion Library';
+  const destinationDetail = destination === 'device-storage'
+    ? 'Portable media saved to your persisted Android storage folder.'
+    : 'Managed offline media for reliable playback inside Orion.';
   const duplicateJob = target ? repositoryJobs.find((job) => (
     job.destination === destination
     && DUPLICATE_BLOCKING_STATES.has(job.state)
@@ -231,10 +239,10 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
 
             <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Save to</Text>
             <View style={[styles.optionCard, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
-              <Ionicons name="albums-outline" size={21} color={theme.accent} />
+              <Ionicons name={destination === 'device-storage' ? 'folder-outline' : 'albums-outline'} size={21} color={theme.accent} />
               <View style={styles.optionCopy}>
-                <Text style={[styles.optionTitle, { color: theme.text }]}>Orion Library</Text>
-                <Text style={[styles.description, { color: theme.textSecondary }]}>Managed offline media for reliable playback inside Orion.</Text>
+                <Text style={[styles.optionTitle, { color: theme.text }]}>{destinationTitle}</Text>
+                <Text style={[styles.description, { color: theme.textSecondary }]}>{destinationDetail}</Text>
               </View>
               <Ionicons name="checkmark-circle" size={20} color={theme.accent} />
             </View>
@@ -257,7 +265,7 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
             </View>
 
             <StatusCard icon={sourceStatus.icon} color={statusColor} title={sourceStatus.title} detail={sourceStatus.detail} theme={theme} />
-            {duplicateJob ? <StatusCard icon="copy-outline" color={theme.warning} title={duplicateJob.state === 'completed' ? 'Already downloaded here' : 'Download already active'} detail={duplicateJob.state === 'completed' ? 'This title already has a verified Orion Library copy.' : 'Wait for, cancel, or resolve the existing Orion Library download before starting another copy.'} theme={theme} /> : null}
+            {duplicateJob ? <StatusCard icon="copy-outline" color={theme.warning} title={duplicateJob.state === 'completed' ? 'Already downloaded here' : 'Download already active'} detail={duplicateJob.state === 'completed' ? `This title already has a verified ${destinationTitle} copy.` : `Wait for, cancel, or resolve the existing ${destinationTitle} download before starting another copy.`} theme={theme} /> : null}
             <StatusCard icon={subtitleStatus.icon} color={subtitleStatus.color} title={subtitleStatus.title} detail={subtitleStatus.detail} theme={theme} />
             {preferences.subtitlePreference === 'preferred' && selectedCandidate && subtitles.state === 'ready' ? (
               <View style={styles.subtitleSection}>

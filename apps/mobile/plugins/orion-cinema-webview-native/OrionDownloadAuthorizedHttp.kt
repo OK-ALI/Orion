@@ -142,6 +142,96 @@ internal object OrionDownloadAuthorizedHttp {
     )
   }
 
+  fun openFollowingRedirects(
+    bound: BoundTransferContext,
+    parentUrl: String,
+    childUrl: String,
+    rangeStart: Long?,
+    rangeEndInclusive: Long?,
+  ): java.net.HttpURLConnection? {
+    var request =
+      if (childUrl == bound.root.url) {
+        bound.root
+      } else {
+        authorizedChild(
+          bound,
+          parentUrl,
+          childUrl,
+        ) ?: return null
+      }
+
+    repeat(4) {
+      val connection =
+        try {
+          openRequest(
+            request,
+            rangeStart,
+            rangeEndInclusive,
+          )
+        } catch (_: Throwable) {
+          return null
+        }
+
+      val status =
+        try {
+          connection.responseCode
+        } catch (_: Throwable) {
+          try {
+            connection.disconnect()
+          } catch (_: Throwable) {
+          }
+
+          return null
+        }
+
+      if (status !in 300..399) {
+        return connection
+      }
+
+      val location =
+        connection.getHeaderField(
+          "Location",
+        )
+
+      if (location.isNullOrBlank()) {
+        try {
+          connection.disconnect()
+        } catch (_: Throwable) {
+        }
+
+        return null
+      }
+
+      val redirectUrl =
+        try {
+          java.net.URL(
+            java.net.URL(request.url),
+            location,
+          ).toExternalForm()
+        } catch (_: Throwable) {
+          try {
+            connection.disconnect()
+          } catch (_: Throwable) {
+          }
+
+          return null
+        }
+
+      try {
+        connection.disconnect()
+      } catch (_: Throwable) {
+      }
+
+      request =
+        authorizedChild(
+          bound,
+          request.url,
+          redirectUrl,
+        ) ?: return null
+    }
+
+    return null
+  }
   fun openRequest(
     request: AuthorizedRequest,
     rangeStart: Long?,

@@ -29,6 +29,38 @@ internal data class OrionOfflineMediaSourceBuild(
 @OptIn(UnstableApi::class)
 internal object OrionOfflineMediaSourceFactory {
   fun build(context: Context, asset: OrionOfflinePlayerAsset): OrionOfflineMediaSourceBuild? {
+    val subtitleConfigurations = asset.subtitles.map { subtitle ->
+      val mime = when (subtitle.format) {
+        "vtt" -> MimeTypes.TEXT_VTT
+        "srt" -> MimeTypes.APPLICATION_SUBRIP
+        "ass" -> MimeTypes.TEXT_SSA
+        else -> return null
+      }
+      MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(subtitle.file))
+        .setId(subtitle.id)
+        .setLabel(subtitle.label)
+        .setLanguage(subtitle.language)
+        .setMimeType(mime)
+        .setSelectionFlags(if (subtitle.isDefault) C.SELECTION_FLAG_DEFAULT else 0)
+        .build()
+    }
+
+    val mediaFile = asset.mediaFile
+    if (mediaFile != null) {
+      if (!mediaFile.isFile || mediaFile.length() <= 0L) return null
+      val item = MediaItem.Builder()
+        .setMediaId("orion-offline-file")
+        .setUri(Uri.fromFile(mediaFile))
+        .setSubtitleConfigurations(subtitleConfigurations)
+        .build()
+      return OrionOfflineMediaSourceBuild(
+        DefaultMediaSourceFactory(
+          DefaultDataSource.Factory(context),
+        ).createMediaSource(item),
+        asset.subtitles,
+      )
+    }
+
     val streams = linkedMapOf<String, List<OrionOfflinePlayerPart>>()
     val videoUri = Uri.Builder()
       .scheme("orion-offline")
@@ -52,21 +84,6 @@ internal object OrionOfflineMediaSourceFactory {
     // Unknown orion-offline:// URIs are handled by the exact-fragment source;
     // validated file:// subtitle URIs stay on Media3's normal local data source.
     val routedFactory = DefaultDataSource.Factory(context, fragmentFactory)
-    val subtitleConfigurations = asset.subtitles.map { subtitle ->
-      val mime = when (subtitle.format) {
-        "vtt" -> MimeTypes.TEXT_VTT
-        "srt" -> MimeTypes.APPLICATION_SUBRIP
-        "ass" -> MimeTypes.TEXT_SSA
-        else -> return null
-      }
-      MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(subtitle.file))
-        .setId(subtitle.id)
-        .setLabel(subtitle.label)
-        .setLanguage(subtitle.language)
-        .setMimeType(mime)
-        .setSelectionFlags(if (subtitle.isDefault) C.SELECTION_FLAG_DEFAULT else 0)
-        .build()
-    }
     fun progressive(uri: Uri, id: String): MediaSource = ProgressiveMediaSource.Factory(fragmentFactory)
       .createMediaSource(MediaItem.Builder().setMediaId(id).setUri(uri).build())
 

@@ -62,6 +62,7 @@ internal object OrionDownloadTransferEngine {
     val job = OrionDownloadJobStore.getJob(jobId) ?: return
     if (job.optString("state") in setOf("completed", "cancelled", "unsupported", "protected")) return
     if (runVerifiedLocalFinalization(context, jobId)) return
+    if (runVerifiedYtDlpFinalization(context, jobId)) return
     if (OrionDownloadJobStore.getJob(jobId)?.optString("state") == "cancelled") return
     val candidateId = job.optString("candidateId")
     val bound = OrionDownloadTransferRuntime.ensure(candidateId, jobId)
@@ -86,6 +87,148 @@ internal object OrionDownloadTransferEngine {
     }
   }
 
+  private fun runVerifiedYtDlpFinalization(
+    context: android.content.Context,
+    jobId: String,
+  ): Boolean {
+    val job =
+      OrionDownloadJobStore.getJob(jobId)
+        ?: return false
+
+    val selectedSubtitleCount =
+      job.optJSONArray(
+        "selectedSubtitleAssetIds",
+      )?.length() ?: 0
+
+    if (
+      job.optString("_transferKind") !in
+      setOf(
+        "hls",
+        "dash",
+      ) ||
+      (
+        selectedSubtitleCount > 0 &&
+        job.optString("destination") != "orion-library"
+      ) ||
+      job.optString("state") == "cancelled"
+    ) {
+      return false
+    }
+
+    val staging =
+      OrionDownloadYtDlpRuntime.stagingDir(
+        context,
+        jobId,
+      )
+
+    val files =
+      staging.listFiles()
+        .orEmpty()
+        .filter {
+          it.isFile &&
+          it.length() > 0L &&
+          !it.name.endsWith(".part", true) &&
+          !it.name.endsWith(".ytdl", true)
+        }
+
+    val media =
+      files.singleOrNull {
+        it.extension.equals(
+          "mp4",
+          ignoreCase = true,
+        )
+      } ?: return false
+
+    if (
+      files.size != 1 ||
+      !OrionDownloadOwnershipPolicy.canonicalContained(
+        staging,
+        media,
+      )
+    ) {
+      return false
+    }
+
+    if (
+      !OrionDownloadSubtitleRuntime
+        .hasLocalSelection(
+          context,
+          jobId,
+          selectedSubtitleCount,
+        )
+    ) {
+      OrionDownloadJobStore.markFailed(
+        jobId,
+        "local-finalization-subtitles-invalid",
+        "Selected local subtitle files are missing or corrupt.",
+        retryable = false,
+      )
+
+      return true
+    }
+
+    val verifiedBytes =
+      media.length()
+
+    OrionDownloadJobStore.setState(
+      jobId,
+      "verifying",
+    )
+
+    OrionDownloadJobStore.setProgress(
+      jobId,
+      verifiedBytes,
+      verifiedBytes,
+      null,
+      null,
+      null,
+      0L,
+    )
+
+    OrionDownloadJobStore.setState(
+      jobId,
+      "finalizing",
+    )
+
+    OrionDownloadRecoveryScheduler.schedule(
+      context,
+      jobId,
+      delayMinutes = 1L,
+      localOnly = true,
+    )
+
+    finalizeDirect(
+      context = context,
+      job = job,
+      partial = media,
+      verifiedBytes = verifiedBytes,
+      destination = job.optString("destination"),
+    )
+
+    val completed =
+      OrionDownloadJobStore
+        .getJob(jobId)
+        ?.optString("state") ==
+      "completed"
+
+    if (completed) {
+      try {
+        staging.deleteRecursively()
+      } catch (_: Throwable) {
+      }
+
+      OrionDownloadRecoveryScheduler.cancel(
+        context,
+        jobId,
+      )
+
+      OrionDownloadTransferRuntime.release(
+        jobId,
+      )
+    }
+
+    return true
+  }
   fun hasCompleteLocalFinalization(context: android.content.Context, jobId: String): Boolean {
     val plan = OrionDownloadJobStore.finalizationPlan(jobId) ?: return false
     val count = plan.optInt("fragmentCount", 0)
@@ -150,7 +293,9 @@ internal object OrionDownloadTransferEngine {
     if (job.optString("state") == "completed") return
     OrionDownloadJobStore.cancelAndFence(jobId) ?: return
     OrionDownloadRecoveryScheduler.cancel(context, jobId)
+    try { OrionDownloadYtDlpRuntime.stop(jobId) } catch (_: Throwable) {}
     OrionDownloadTransferRuntime.release(jobId)
+    try { OrionDownloadYtDlpRuntime.stagingDir(context, jobId).deleteRecursively() } catch (_: Throwable) {}
     try { java.io.File(context.filesDir, "orion-downloads/partial/$jobId-fragments").deleteRecursively() } catch (_: Throwable) {}
     try { java.io.File(context.filesDir, "orion-downloads/partial/$jobId.part").delete() } catch (_: Throwable) {}
     try { java.io.File(context.cacheDir, "orion-downloads/device-finalize/$jobId").deleteRecursively() } catch (_: Throwable) {}
@@ -160,6 +305,358 @@ internal object OrionDownloadTransferEngine {
   }
 
   private fun runHls(
+    context: android.content.Context,
+    job: org.json.JSONObject,
+    bound: BoundTransferContext,
+  ) {
+    val jobId =
+      job.optString("jobId")
+
+    val selectedSubtitleCount =
+      job.optJSONArray(
+        "selectedSubtitleAssetIds",
+      )?.length() ?: 0
+
+    val existingPlan =
+      OrionDownloadJobStore
+        .finalizationPlan(jobId)
+
+    val hasLegacyHlsPlan =
+      existingPlan
+        ?.optString("kind") ==
+      "hls"
+
+    val destination =
+      job.optString("destination")
+
+    if (
+      (
+        selectedSubtitleCount > 0 &&
+        destination == "device-storage"
+      ) ||
+      hasLegacyHlsPlan
+    ) {
+      runHlsFragmented(
+        context,
+        job,
+        bound,
+      )
+
+      return
+    }
+
+    runHlsYtDlp(
+      context,
+      job,
+      bound,
+    )
+  }
+
+  private fun runHlsYtDlp(
+    context: android.content.Context,
+    job: org.json.JSONObject,
+    bound: BoundTransferContext,
+  ) {
+    val jobId =
+      job.optString("jobId")
+
+    val quality =
+      job.optString(
+        "requestedQuality",
+        "best",
+      )
+
+    OrionDownloadSubtitleRuntime.prepare(
+      context,
+      jobId,
+    )
+
+    val selectedSubtitleCount =
+      job.optJSONArray(
+        "selectedSubtitleAssetIds",
+      )?.length() ?: 0
+
+    if (
+      !OrionDownloadSubtitleRuntime
+        .hasLocalSelection(
+          context,
+          jobId,
+          selectedSubtitleCount,
+        )
+    ) {
+      OrionDownloadJobStore.markActionRequired(
+        jobId,
+        "subtitle-staging-incomplete",
+        "One or more selected subtitles could not be preserved. Choose subtitles again and restart the download.",
+      )
+
+      return
+    }
+
+    OrionDownloadJobStore.clearControl(
+      jobId,
+    )
+
+    OrionDownloadJobStore.setState(
+      jobId,
+      "downloading",
+    )
+
+    OrionDownloadJobStore.setProcessProgress(
+      jobId,
+      0.0,
+      null,
+    )
+
+    var lastProgressAt =
+      0L
+
+    val outcome =
+      OrionDownloadYtDlpRuntime
+        .executeHlsGateway(
+          context = context,
+          jobId = jobId,
+          bound = bound,
+          requestedQuality = quality,
+        ) { progress ->
+          val now =
+            System.currentTimeMillis()
+
+          if (
+            now - lastProgressAt >= 500L ||
+            progress.percent >= 99f
+          ) {
+            OrionDownloadJobStore
+              .setProcessProgress(
+                jobId,
+                progress.percent.toDouble(),
+                progress.etaSeconds,
+              )
+
+            OrionDownloadNotifications
+              .reconcile(context)
+
+            lastProgressAt =
+              now
+          }
+        }
+
+    when (outcome) {
+      is OrionYtDlpOutcome.Completed -> {
+        val outputs =
+          outcome.files
+
+        val media =
+          outputs.singleOrNull {
+            it.isFile &&
+            it.length() > 0L &&
+            it.extension.equals(
+              "mp4",
+              ignoreCase = true,
+            )
+          }
+
+        if (
+          outputs.size != 1 ||
+          media == null
+        ) {
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            "yt-dlp-output-contract-invalid",
+            "yt-dlp completed without exactly one finalized MP4.",
+            retryable = false,
+          )
+
+          return
+        }
+
+        val staging =
+          OrionDownloadYtDlpRuntime
+            .stagingDir(
+              context,
+              jobId,
+            )
+
+        if (
+          !OrionDownloadOwnershipPolicy
+            .canonicalContained(
+              staging,
+              media,
+            )
+        ) {
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            "yt-dlp-output-ownership-invalid",
+            "The finalized media file was outside Orion's staging boundary.",
+            retryable = false,
+          )
+
+          return
+        }
+
+        val verifiedBytes =
+          media.length()
+
+        OrionDownloadJobStore.setState(
+          jobId,
+          "verifying",
+        )
+
+        OrionDownloadJobStore.setProgress(
+          jobId,
+          verifiedBytes,
+          verifiedBytes,
+          null,
+          null,
+          null,
+          0L,
+        )
+
+        OrionDownloadJobStore.setState(
+          jobId,
+          "finalizing",
+        )
+
+        OrionDownloadRecoveryScheduler.schedule(
+          context,
+          jobId,
+          delayMinutes = 1L,
+          localOnly = true,
+        )
+
+        finalizeDirect(
+          context = context,
+          job = job,
+          partial = media,
+          verifiedBytes = verifiedBytes,
+          destination =
+            job.optString("destination"),
+        )
+
+        val completed =
+          OrionDownloadJobStore
+            .getJob(jobId)
+            ?.optString("state") ==
+          "completed"
+
+        if (completed) {
+          try {
+            staging.deleteRecursively()
+          } catch (_: Throwable) {
+          }
+
+          OrionDownloadRecoveryScheduler.cancel(
+            context,
+            jobId,
+          )
+
+          OrionDownloadTransferRuntime.release(
+            jobId,
+          )
+        }
+      }
+
+      OrionYtDlpOutcome.Paused -> {
+        OrionDownloadJobStore.setState(
+          jobId,
+          "paused",
+        )
+
+        OrionDownloadRecoveryScheduler.cancel(
+          context,
+          jobId,
+        )
+
+        OrionDownloadNotifications
+          .reconcile(context)
+      }
+
+      OrionYtDlpOutcome.Cancelled -> {
+        if (
+          OrionDownloadJobStore
+            .getJob(jobId)
+            ?.optString("state") !=
+          "cancelled"
+        ) {
+          OrionDownloadJobStore
+            .markCancelled(jobId)
+        }
+
+        OrionDownloadRecoveryScheduler.cancel(
+          context,
+          jobId,
+        )
+
+        try {
+          OrionDownloadYtDlpRuntime
+            .stagingDir(
+              context,
+              jobId,
+            )
+            .deleteRecursively()
+        } catch (_: Throwable) {
+        }
+
+        OrionDownloadSubtitleRuntime.cleanup(
+          context,
+          jobId,
+        )
+
+        OrionDownloadTransferRuntime.release(
+          jobId,
+        )
+
+        OrionDownloadNotifications
+          .reconcile(context)
+      }
+
+      is OrionYtDlpOutcome.Failed -> {
+        if (outcome.retryable) {
+          OrionDownloadJobStore.markRecovering(
+            jobId,
+            outcome.code,
+            "Download paused while Orion prepares to retry the yt-dlp transfer.",
+          )
+
+          OrionDownloadRecoveryScheduler.schedule(
+            context,
+            jobId,
+            delayMinutes = 1L,
+          )
+        } else {
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            outcome.code,
+            "Orion could not complete the yt-dlp HLS transfer.",
+            retryable = false,
+          )
+
+          try {
+            OrionDownloadYtDlpRuntime
+              .stagingDir(
+                context,
+                jobId,
+              )
+              .deleteRecursively()
+          } catch (_: Throwable) {
+          }
+
+          OrionDownloadSubtitleRuntime.cleanup(
+            context,
+            jobId,
+          )
+
+          OrionDownloadTransferRuntime.release(
+            jobId,
+          )
+        }
+
+        OrionDownloadNotifications
+          .reconcile(context)
+      }
+    }
+  }
+  private fun runHlsFragmented(
     context: android.content.Context,
     job: org.json.JSONObject,
     bound: BoundTransferContext,
@@ -223,6 +720,358 @@ internal object OrionDownloadTransferEngine {
   }
 
   private fun runDash(
+    context: android.content.Context,
+    job: org.json.JSONObject,
+    bound: BoundTransferContext,
+  ) {
+    val jobId =
+      job.optString("jobId")
+
+    val selectedSubtitleCount =
+      job.optJSONArray(
+        "selectedSubtitleAssetIds",
+      )?.length() ?: 0
+
+    val existingPlan =
+      OrionDownloadJobStore
+        .finalizationPlan(jobId)
+
+    val hasLegacyDashPlan =
+      existingPlan
+        ?.optString("kind") ==
+      "dash"
+
+    val destination =
+      job.optString("destination")
+
+    if (
+      (
+        selectedSubtitleCount > 0 &&
+        destination == "device-storage"
+      ) ||
+      hasLegacyDashPlan
+    ) {
+      runDashFragmented(
+        context,
+        job,
+        bound,
+      )
+
+      return
+    }
+
+    runDashYtDlp(
+      context,
+      job,
+      bound,
+    )
+  }
+
+  private fun runDashYtDlp(
+    context: android.content.Context,
+    job: org.json.JSONObject,
+    bound: BoundTransferContext,
+  ) {
+    val jobId =
+      job.optString("jobId")
+
+    val quality =
+      job.optString(
+        "requestedQuality",
+        "best",
+      )
+
+    OrionDownloadSubtitleRuntime.prepare(
+      context,
+      jobId,
+    )
+
+    val selectedSubtitleCount =
+      job.optJSONArray(
+        "selectedSubtitleAssetIds",
+      )?.length() ?: 0
+
+    if (
+      !OrionDownloadSubtitleRuntime
+        .hasLocalSelection(
+          context,
+          jobId,
+          selectedSubtitleCount,
+        )
+    ) {
+      OrionDownloadJobStore.markActionRequired(
+        jobId,
+        "subtitle-staging-incomplete",
+        "One or more selected subtitles could not be preserved. Choose subtitles again and restart the download.",
+      )
+
+      return
+    }
+
+    OrionDownloadJobStore.clearControl(
+      jobId,
+    )
+
+    OrionDownloadJobStore.setState(
+      jobId,
+      "downloading",
+    )
+
+    OrionDownloadJobStore.setProcessProgress(
+      jobId,
+      0.0,
+      null,
+    )
+
+    var lastProgressAt =
+      0L
+
+    val outcome =
+      OrionDownloadYtDlpRuntime
+        .executeDashGateway(
+          context = context,
+          jobId = jobId,
+          bound = bound,
+          requestedQuality = quality,
+        ) { progress ->
+          val now =
+            System.currentTimeMillis()
+
+          if (
+            now - lastProgressAt >= 500L ||
+            progress.percent >= 99f
+          ) {
+            OrionDownloadJobStore
+              .setProcessProgress(
+                jobId,
+                progress.percent.toDouble(),
+                progress.etaSeconds,
+              )
+
+            OrionDownloadNotifications
+              .reconcile(context)
+
+            lastProgressAt =
+              now
+          }
+        }
+
+    when (outcome) {
+      is OrionYtDlpOutcome.Completed -> {
+        val outputs =
+          outcome.files
+
+        val media =
+          outputs.singleOrNull {
+            it.isFile &&
+            it.length() > 0L &&
+            it.extension.equals(
+              "mp4",
+              ignoreCase = true,
+            )
+          }
+
+        if (
+          outputs.size != 1 ||
+          media == null
+        ) {
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            "yt-dlp-output-contract-invalid",
+            "yt-dlp completed without exactly one finalized MP4.",
+            retryable = false,
+          )
+
+          return
+        }
+
+        val staging =
+          OrionDownloadYtDlpRuntime
+            .stagingDir(
+              context,
+              jobId,
+            )
+
+        if (
+          !OrionDownloadOwnershipPolicy
+            .canonicalContained(
+              staging,
+              media,
+            )
+        ) {
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            "yt-dlp-output-ownership-invalid",
+            "The finalized media file was outside Orion's staging boundary.",
+            retryable = false,
+          )
+
+          return
+        }
+
+        val verifiedBytes =
+          media.length()
+
+        OrionDownloadJobStore.setState(
+          jobId,
+          "verifying",
+        )
+
+        OrionDownloadJobStore.setProgress(
+          jobId,
+          verifiedBytes,
+          verifiedBytes,
+          null,
+          null,
+          null,
+          0L,
+        )
+
+        OrionDownloadJobStore.setState(
+          jobId,
+          "finalizing",
+        )
+
+        OrionDownloadRecoveryScheduler.schedule(
+          context,
+          jobId,
+          delayMinutes = 1L,
+          localOnly = true,
+        )
+
+        finalizeDirect(
+          context = context,
+          job = job,
+          partial = media,
+          verifiedBytes = verifiedBytes,
+          destination =
+            job.optString("destination"),
+        )
+
+        val completed =
+          OrionDownloadJobStore
+            .getJob(jobId)
+            ?.optString("state") ==
+          "completed"
+
+        if (completed) {
+          try {
+            staging.deleteRecursively()
+          } catch (_: Throwable) {
+          }
+
+          OrionDownloadRecoveryScheduler.cancel(
+            context,
+            jobId,
+          )
+
+          OrionDownloadTransferRuntime.release(
+            jobId,
+          )
+        }
+      }
+
+      OrionYtDlpOutcome.Paused -> {
+        OrionDownloadJobStore.setState(
+          jobId,
+          "paused",
+        )
+
+        OrionDownloadRecoveryScheduler.cancel(
+          context,
+          jobId,
+        )
+
+        OrionDownloadNotifications
+          .reconcile(context)
+      }
+
+      OrionYtDlpOutcome.Cancelled -> {
+        if (
+          OrionDownloadJobStore
+            .getJob(jobId)
+            ?.optString("state") !=
+          "cancelled"
+        ) {
+          OrionDownloadJobStore
+            .markCancelled(jobId)
+        }
+
+        OrionDownloadRecoveryScheduler.cancel(
+          context,
+          jobId,
+        )
+
+        try {
+          OrionDownloadYtDlpRuntime
+            .stagingDir(
+              context,
+              jobId,
+            )
+            .deleteRecursively()
+        } catch (_: Throwable) {
+        }
+
+        OrionDownloadSubtitleRuntime.cleanup(
+          context,
+          jobId,
+        )
+
+        OrionDownloadTransferRuntime.release(
+          jobId,
+        )
+
+        OrionDownloadNotifications
+          .reconcile(context)
+      }
+
+      is OrionYtDlpOutcome.Failed -> {
+        if (outcome.retryable) {
+          OrionDownloadJobStore.markRecovering(
+            jobId,
+            outcome.code,
+            "Download paused while Orion prepares to retry the yt-dlp transfer.",
+          )
+
+          OrionDownloadRecoveryScheduler.schedule(
+            context,
+            jobId,
+            delayMinutes = 1L,
+          )
+        } else {
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            outcome.code,
+            "Orion could not complete the yt-dlp DASH transfer.",
+            retryable = false,
+          )
+
+          try {
+            OrionDownloadYtDlpRuntime
+              .stagingDir(
+                context,
+                jobId,
+              )
+              .deleteRecursively()
+          } catch (_: Throwable) {
+          }
+
+          OrionDownloadSubtitleRuntime.cleanup(
+            context,
+            jobId,
+          )
+
+          OrionDownloadTransferRuntime.release(
+            jobId,
+          )
+        }
+
+        OrionDownloadNotifications
+          .reconcile(context)
+      }
+    }
+  }
+  private fun runDashFragmented(
     context: android.content.Context,
     job: org.json.JSONObject,
     bound: BoundTransferContext,
@@ -793,9 +1642,20 @@ internal object OrionDownloadTransferEngine {
     val media = job.optJSONObject("media") ?: org.json.JSONObject()
     val sourceId = job.optString("_sourceId", "unknown")
     val fileName = safeFileName(media) + ".mp4"
+    val selectedSubtitleCount =
+      job.optJSONArray(
+        "selectedSubtitleAssetIds",
+      )?.length() ?: 0
     val locatorKind: String
     val locatorValue: String
     var externallyVisible = false
+    var subtitleResult =
+      SubtitleFinalizeResult(
+        org.json.JSONArray(),
+        org.json.JSONArray(),
+        0L,
+      )
+    var sidecarRoot: java.io.File? = null
 
     if (destination == "device-storage") {
       val targetId = job.optJSONObject("storageTarget")?.optString("targetId").orEmpty()
@@ -819,6 +1679,45 @@ internal object OrionDownloadTransferEngine {
     } else {
       val completedDir = java.io.File(context.filesDir, "orion-downloads/library")
       completedDir.mkdirs()
+
+      if (selectedSubtitleCount > 0) {
+        val candidateSidecars =
+          java.io.File(
+            completedDir,
+            "$jobId.sidecars",
+          )
+
+        if (candidateSidecars.exists()) {
+          candidateSidecars.deleteRecursively()
+        }
+
+        subtitleResult =
+          finalizeSelectedSubtitles(
+            context,
+            jobId,
+            candidateSidecars,
+          )
+
+        if (
+          subtitleResult.tracks.length() != selectedSubtitleCount ||
+          subtitleResult.bundleEntries.length() != selectedSubtitleCount
+        ) {
+          candidateSidecars.deleteRecursively()
+
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            "subtitle-finalization-incomplete",
+            "One or more selected subtitles could not be finalized beside the downloaded media.",
+            retryable = true,
+          )
+
+          return
+        }
+
+        sidecarRoot =
+          candidateSidecars
+      }
+
       val finalFile = java.io.File(completedDir, "$jobId.mp4")
       if (finalFile.exists()) finalFile.delete()
       if (!partial.renameTo(finalFile)) {
@@ -826,6 +1725,7 @@ internal object OrionDownloadTransferEngine {
           partial.inputStream().use { input -> finalFile.outputStream().use { output -> input.copyTo(output, BUFFER_SIZE) } }
           partial.delete()
         } catch (_: Throwable) {
+          sidecarRoot?.deleteRecursively()
           OrionDownloadJobStore.markFailed(jobId, "finalization-write-failed", "Orion could not finalize this download.", retryable = true)
           return
         }
@@ -836,6 +1736,13 @@ internal object OrionDownloadTransferEngine {
 
     val assetId = "asset-$jobId"
     val now = System.currentTimeMillis()
+    val totalVerifiedBytes =
+      if (verifiedBytes > Long.MAX_VALUE - subtitleResult.bytes) {
+        Long.MAX_VALUE
+      } else {
+        verifiedBytes + subtitleResult.bytes
+      }
+
     val asset = org.json.JSONObject()
       .put("schemaVersion", 1)
       .put("assetId", assetId)
@@ -846,16 +1753,59 @@ internal object OrionDownloadTransferEngine {
       .put("locator", org.json.JSONObject().put("kind", locatorKind).put("value", locatorValue))
       .put("container", "mp4")
       .put("mimeType", "video/mp4")
-      .put("verifiedSizeBytes", verifiedBytes)
+      .put("verifiedSizeBytes", totalVerifiedBytes)
       .put("sha256", org.json.JSONObject.NULL)
-      .put("tracks", org.json.JSONArray())
+      .put("tracks", subtitleResult.tracks)
       .put("sourceId", sourceId)
       .put("playInOrion", true)
       .put("externallyVisible", externallyVisible)
       .put("verifiedAt", now)
+
+    if (destination == "orion-library") {
+      asset.put(
+        "_artifacts",
+        directManagedArtifacts(
+          assetId = assetId,
+          jobId = jobId,
+          media = media,
+          subtitleEntries = subtitleResult.bundleEntries,
+          mediaBytes = verifiedBytes,
+          now = now,
+        ),
+      )
+    }
+
     val offline = offlineEntry(job, media, assetId, now)
-    val generation = OrionDownloadJobStore.executionGeneration(jobId) ?: return
-    OrionDownloadJobStore.markCompleted(jobId, generation, asset, offline)
+    val generation =
+      OrionDownloadJobStore.executionGeneration(jobId)
+        ?: run {
+          if (destination == "orion-library") {
+            java.io.File(context.filesDir, "orion-downloads/library/$jobId.mp4").delete()
+            sidecarRoot?.deleteRecursively()
+          }
+          return
+        }
+
+    if (
+      !OrionDownloadJobStore.markCompleted(
+        jobId,
+        generation,
+        asset,
+        offline,
+      )
+    ) {
+      if (destination == "orion-library") {
+        java.io.File(context.filesDir, "orion-downloads/library/$jobId.mp4").delete()
+        sidecarRoot?.deleteRecursively()
+      }
+      return
+    }
+
+    OrionDownloadSubtitleRuntime.cleanup(
+      context,
+      jobId,
+    )
+
     OrionDownloadNotifications.reconcile(context)
   }
 
@@ -877,6 +1827,89 @@ internal object OrionDownloadTransferEngine {
 
   private fun fragmentName(index: Int): String = "f${index.toString().padStart(6, '0')}.bin"
   private fun fragmentFile(directory: java.io.File, index: Int): java.io.File = java.io.File(directory, fragmentName(index))
+
+  private fun directManagedArtifacts(
+    assetId: String,
+    jobId: String,
+    media: org.json.JSONObject,
+    subtitleEntries: org.json.JSONArray,
+    mediaBytes: Long,
+    now: Long,
+  ): org.json.JSONArray {
+    val artifacts =
+      org.json.JSONArray()
+
+    artifacts.put(
+      ownedArtifact(
+        artifactId = "$assetId:primary",
+        role = "primary",
+        displayName = safeFileName(media),
+        mimeType = "video/mp4",
+        sizeBytes = mediaBytes,
+        locatorKind = "managed-relative",
+        locatorValue = "$jobId.mp4",
+        now = now,
+      ),
+    )
+
+    for (index in 0 until subtitleEntries.length()) {
+      val entry =
+        subtitleEntries.optJSONObject(index)
+          ?: continue
+
+      val relative =
+        entry.optString("name")
+
+      if (
+        !relative.matches(
+          Regex("^subtitles/[A-Za-z0-9._-]{1,120}$"),
+        )
+      ) {
+        continue
+      }
+
+      val trackId =
+        entry.optString("id")
+
+      if (
+        !trackId.matches(
+          Regex("^[A-Za-z0-9._:-]{1,100}$"),
+        )
+      ) {
+        continue
+      }
+
+      artifacts.put(
+        ownedArtifact(
+          artifactId = "$assetId:subtitle:$index",
+          role = "subtitle",
+          displayName =
+            relative.substringAfterLast('/'),
+          mimeType =
+            subtitleMime(
+              relative.substringAfterLast(
+                '.',
+                "srt",
+              ),
+            ),
+          sizeBytes =
+            entry.optLong(
+              "size",
+              0L,
+            ).coerceAtLeast(0L),
+          locatorKind = "managed-relative",
+          locatorValue =
+            "$jobId.sidecars/$relative",
+          now = now,
+        ).put(
+          "_trackId",
+          trackId,
+        ),
+      )
+    }
+
+    return artifacts
+  }
 
   private fun managedOwnedArtifacts(
     assetId: String,

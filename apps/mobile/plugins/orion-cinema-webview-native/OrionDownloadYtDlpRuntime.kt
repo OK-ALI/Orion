@@ -46,6 +46,212 @@ internal object OrionDownloadYtDlpRuntime {
   private const val MAX_HEADER_VALUE_LENGTH = 8 * 1024
   private val activeJobs = ConcurrentHashMap.newKeySet<String>()
 
+  fun executeHlsGateway(
+    context: Context,
+    jobId: String,
+    bound: BoundTransferContext,
+    requestedQuality: String,
+    onProgress: (OrionYtDlpProgress) -> Unit = {},
+  ): OrionYtDlpOutcome {
+    val cleanJobId =
+      cleanJobId(jobId)
+        ?: return OrionYtDlpOutcome.Failed(
+          "yt-dlp-job-invalid",
+          false,
+        )
+
+    if (
+      bound.jobId != cleanJobId ||
+      bound.transferKind != "hls"
+    ) {
+      return OrionYtDlpOutcome.Failed(
+        "yt-dlp-hls-boundary-mismatch",
+        false,
+      )
+    }
+
+    when (
+      OrionDownloadJobStore.control(
+        cleanJobId,
+      )
+    ) {
+      "pause" ->
+        return OrionYtDlpOutcome.Paused
+
+      "cancel" ->
+        return OrionYtDlpOutcome.Cancelled
+    }
+
+    val providerAuthority =
+      OrionDownloadYtDlpAuthorityBroker
+        .issue(bound)
+        ?: return OrionYtDlpOutcome.Failed(
+          "yt-dlp-authority-unavailable",
+          false,
+        )
+
+    val gateway =
+      OrionDownloadYtDlpGatewaySession
+        .start(cleanJobId)
+        ?: return OrionYtDlpOutcome.Failed(
+          "yt-dlp-gateway-unavailable",
+          true,
+        )
+
+    return try {
+      val entry =
+        OrionDownloadYtDlpHlsGateway
+          .prepare(
+            bound = bound,
+            requestedQuality =
+              requestedQuality,
+            session = gateway,
+          )
+          ?: return OrionYtDlpOutcome.Failed(
+            "yt-dlp-hls-gateway-prepare-failed",
+            true,
+          )
+
+      when (
+        OrionDownloadJobStore.control(
+          cleanJobId,
+        )
+      ) {
+        "pause" ->
+          return OrionYtDlpOutcome.Paused
+
+        "cancel" ->
+          return OrionYtDlpOutcome.Cancelled
+      }
+
+      val executionAuthority =
+        OrionDownloadYtDlpAuthorityBroker
+          .enforceViaLoopbackGateway(
+            authority =
+              providerAuthority,
+            localRootUrl =
+              entry.rootUrl,
+          )
+          ?: return OrionYtDlpOutcome.Failed(
+            "yt-dlp-gateway-authority-invalid",
+            false,
+          )
+
+      execute(
+        context = context,
+        jobId = cleanJobId,
+        authority =
+          executionAuthority,
+        onProgress =
+          onProgress,
+      )
+    } finally {
+      gateway.close()
+    }
+  }
+  fun executeDashGateway(
+    context: Context,
+    jobId: String,
+    bound: BoundTransferContext,
+    requestedQuality: String,
+    onProgress: (OrionYtDlpProgress) -> Unit = {},
+  ): OrionYtDlpOutcome {
+    val cleanJobId =
+      cleanJobId(jobId)
+        ?: return OrionYtDlpOutcome.Failed(
+          "yt-dlp-job-invalid",
+          false,
+        )
+
+    if (
+      bound.jobId != cleanJobId ||
+      bound.transferKind != "dash"
+    ) {
+      return OrionYtDlpOutcome.Failed(
+        "yt-dlp-dash-boundary-mismatch",
+        false,
+      )
+    }
+
+    when (
+      OrionDownloadJobStore.control(
+        cleanJobId,
+      )
+    ) {
+      "pause" ->
+        return OrionYtDlpOutcome.Paused
+
+      "cancel" ->
+        return OrionYtDlpOutcome.Cancelled
+    }
+
+    val providerAuthority =
+      OrionDownloadYtDlpAuthorityBroker
+        .issue(bound)
+        ?: return OrionYtDlpOutcome.Failed(
+          "yt-dlp-authority-unavailable",
+          false,
+        )
+
+    val gateway =
+      OrionDownloadYtDlpGatewaySession
+        .start(cleanJobId)
+        ?: return OrionYtDlpOutcome.Failed(
+          "yt-dlp-gateway-unavailable",
+          true,
+        )
+
+    return try {
+      val entry =
+        OrionDownloadYtDlpDashGateway
+          .prepare(
+            bound = bound,
+            requestedQuality =
+              requestedQuality,
+            session = gateway,
+          )
+          ?: return OrionYtDlpOutcome.Failed(
+            "yt-dlp-dash-gateway-prepare-failed",
+            true,
+          )
+
+      when (
+        OrionDownloadJobStore.control(
+          cleanJobId,
+        )
+      ) {
+        "pause" ->
+          return OrionYtDlpOutcome.Paused
+
+        "cancel" ->
+          return OrionYtDlpOutcome.Cancelled
+      }
+
+      val executionAuthority =
+        OrionDownloadYtDlpAuthorityBroker
+          .enforceViaLoopbackGateway(
+            authority =
+              providerAuthority,
+            localRootUrl =
+              entry.rootUrl,
+          )
+          ?: return OrionYtDlpOutcome.Failed(
+            "yt-dlp-gateway-authority-invalid",
+            false,
+          )
+
+      execute(
+        context = context,
+        jobId = cleanJobId,
+        authority =
+          executionAuthority,
+        onProgress =
+          onProgress,
+      )
+    } finally {
+      gateway.close()
+    }
+  }
   fun execute(
     context: Context,
     jobId: String,
@@ -127,6 +333,8 @@ internal object OrionDownloadYtDlpRuntime {
       .addOption("--no-playlist")
       .addOption("--newline")
       .addOption("--continue")
+      .addOption("--merge-output-format", "mp4")
+      .addOption("--remux-video", "mp4")
       .addOption("--socket-timeout", SOCKET_TIMEOUT_SECONDS)
       .addOption("--retries", RETRIES)
       .addOption("--fragment-retries", FRAGMENT_RETRIES)

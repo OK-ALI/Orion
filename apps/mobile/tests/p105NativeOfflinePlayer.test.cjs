@@ -70,12 +70,16 @@ test('P10.5-C5.1 maps local role streams and modern subtitle configurations into
 
 test('P10.5-C5 shares Orion controls, Retry and Back and owns route orientation before preparation', () => {
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
+  const embed = read('src', 'features', 'playback', 'EmbedPlayerSurface.tsx');
   const offline = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
   const overlay = read('src', 'components', 'player', 'PlayerStateOverlay.tsx');
 
   assert.match(screen, /ScreenOrientation\.getOrientationLockAsync\(\)/);
   assert.match(screen, /ScreenOrientation\.lockAsync\(ScreenOrientation\.OrientationLock\.LANDSCAPE\)/);
+  assert.match(screen, /const lifecycle = ScreenOrientation\.getOrientationLockAsync\(\)/);
+  assert.match(screen, /lifecycle\.then\(\(\) =>/);
   assert.ok(screen.indexOf('ScreenOrientation.getOrientationLockAsync()') < screen.indexOf('const surface ='));
+  assert.doesNotMatch(embed, /ScreenOrientation\.getOrientationLockAsync\(\)/);
   assert.match(offline, /<PlayerHUD/);
   assert.match(offline, /<PlayerStateOverlay/);
   assert.match(offline, /onBack=\{nativeState\.state === 'failed' \? \(\) => router\.back\(\)/);

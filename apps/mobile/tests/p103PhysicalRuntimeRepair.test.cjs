@@ -106,9 +106,14 @@ test('P10.3 retires experimental Direct residue and renders real operational dow
 });
 
 test('P10.3 runtime repair stays under the Mobile source-size ceiling on touched large surfaces', () => {
-  const detail = read('src', 'features', 'media-detail', 'MediaDetailScreen.tsx').split(/\r?\n/).length - 1;
+  const detailSource = read('src', 'features', 'media-detail', 'MediaDetailScreen.tsx');
+  const detail = detailSource.split(/\r?\n/).length - 1;
+  const episodeOverview = read('src', 'features', 'media-detail', 'EpisodeOverview.tsx').split(/\r?\n/).length - 1;
   const player = read('src', 'features', 'playback', 'EmbedPlayerSurface.tsx').split(/\r?\n/).length - 1;
   assert.ok(detail <= 800, `MediaDetailScreen is ${detail} lines`);
+  assert.ok(episodeOverview <= 160, `EpisodeOverview is ${episodeOverview} lines`);
+  assert.match(detailSource, /import \{ EpisodeOverview \} from '\.\/EpisodeOverview'/);
+  assert.doesNotMatch(detailSource, /function EpisodeOverview\(/);
   assert.ok(player <= 800, `EmbedPlayerSurface is ${player} lines`);
 });
 
@@ -136,7 +141,7 @@ test('P10.3 foreground notification uses real media title and native progress tr
 });
 
 
-test('P10.4C Device Storage activation remains fragment-only, SAF-scoped and portable-finalizer backed', () => {
+test('P10.4C Device Storage activation remains persisted-target, SAF-scoped and portable-finalizer backed', () => {
   const capture = read('src', 'features', 'downloads', 'downloadCandidateCapture.ts');
   const start = read('src', 'features', 'downloads', 'downloadStart.ts');
   const modal = read('src', 'components', 'DownloadModal.tsx');
@@ -147,8 +152,11 @@ test('P10.4C Device Storage activation remains fragment-only, SAF-scoped and por
   assert.doesNotMatch(capture, /destination !== 'orion-library'\) return null/);
   assert.match(start, /preferences\.deviceStorageTarget/);
   assert.match(start, /candidate\.capabilities\.deviceStorage/);
-  assert.match(modal, />Device Storage</);
-  assert.match(modal, /chooseNativeDeviceStorageTargetV1/);
+  assert.match(start, /storageTarget\.persistedPermission/);
+  assert.match(modal, /preferences\.deviceStorageTarget/);
+  assert.match(modal, /destinationTitle/);
+  assert.match(modal, /Portable media saved to your persisted Android storage folder/);
+  assert.doesNotMatch(modal, /chooseNativeDeviceStorageTargetV1/);
   assert.match(module, /destination !in setOf\("orion-library", "device-storage"\)/);
   assert.match(module, /OrionDownloadStorageRegistry\.describe/);
   assert.match(broker, /ready && resolvedKind in setOf\("hls", "dash"\)/);

@@ -58,6 +58,8 @@ test('P10.3 media and episode surfaces graduate from Offline info to Download', 
 });
 
 test('P10.4C fragment destination boundary stays truthful at user start', () => {
+  assert.match(modal, /preferences\.deviceStorageTarget/);
+  assert.match(start, /preferences\.deviceStorageTarget/);
   assert.match(start, /destination === 'device-storage'/);
   assert.match(start, /candidate\.capabilities\.deviceStorage/);
   assert.doesNotMatch(start, /chooseNativeDeviceStorageTargetV1/);

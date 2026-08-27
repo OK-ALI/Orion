@@ -42,6 +42,7 @@ export function NativePlayerSurface({
   season,
   episode,
   initialResumeTime = 0,
+  forceStartFromBeginning = false,
   onSourceChange,
   onAutomaticFailover,
   onPlaybackSnapshot,
@@ -97,7 +98,7 @@ export function NativePlayerSurface({
 
   const player = useVideoPlayer(videoSource, (instance) => {
     instance.timeUpdateEventInterval = 1;
-    if (initialResumeTime > 0) instance.currentTime = initialResumeTime;
+    if (initialResumeTime > 0 || forceStartFromBeginning) instance.currentTime = initialResumeTime;
     instance.play();
   });
   const statusEvent = useEvent(player, 'statusChange', { status: player.status });

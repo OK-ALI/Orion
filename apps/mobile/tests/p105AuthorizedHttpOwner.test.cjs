@@ -9,7 +9,7 @@ function read(...parts) {
   return fs.readFileSync(path.join(mobileRoot, ...parts), "utf8");
 }
 
-test("P10.5 Candidate 4 extracts one broker-backed authorized HTTP execution owner without routing yt-dlp", () => {
+test("P10.5 Candidate 4 HTTP owner remains broker-backed under Candidate 5 gateway-routed yt-dlp", () => {
   const plugin = read("plugins", "withOrionCinemaWebView.js");
   const broker = read("plugins", "orion-cinema-webview-native", "OrionDownloadRequestContextBroker.kt");
   const http = read("plugins", "orion-cinema-webview-native", "OrionDownloadAuthorizedHttp.kt");
@@ -54,10 +54,9 @@ test("P10.5 Candidate 4 extracts one broker-backed authorized HTTP execution own
   assert.doesNotMatch(transfer, /setRequestProperty\(\s*"Cookie"/);
   assert.doesNotMatch(transfer, /instanceFollowRedirects = false/);
 
-  assert.doesNotMatch(
-    transfer,
-    /OrionDownloadYtDlpRuntime|OrionDownloadYtDlpAuthorityBroker/,
-  );
+  assert.doesNotMatch(transfer, /OrionDownloadYtDlpAuthorityBroker/);
+  assert.match(transfer, /\.executeHlsGateway\(/);
+  assert.match(transfer, /\.executeDashGateway\(/);
 
   assert.match(broker, /internal fun resolveForJob\(/);
   assert.match(broker, /internal fun authorizeDiscoveredDescendant\(/);

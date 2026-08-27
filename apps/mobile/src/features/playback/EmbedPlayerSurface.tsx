@@ -105,6 +105,7 @@ export function EmbedPlayerSurface({
   season,
   episode,
   initialResumeTime = 0,
+  forceStartFromBeginning = false,
   onSourceChange,
   onAutomaticFailover,
   onPlaybackSnapshot,
@@ -232,19 +233,6 @@ export function EmbedPlayerSurface({
     [sourceId],
   );
   const injectedScript = `${mobileAdBlockerScript}\n${providerPresentationScript}\n${telemetryScript}`;
-
-  useEffect(() => {
-    let previousLock: ScreenOrientation.OrientationLock | null = null;
-    if (Platform.OS !== 'web') ScreenOrientation.getOrientationLockAsync()
-      .then((lock) => {
-        previousLock = lock;
-        return ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-      })
-      .catch(() => {});
-    return () => {
-      if (Platform.OS !== 'web' && previousLock != null) ScreenOrientation.lockAsync(previousLock).catch(() => {});
-    };
-  }, []);
 
   useEffect(() => {
     if (Platform.OS !== 'android' || source?.supportsDownloads !== true) return undefined;
@@ -615,9 +603,9 @@ export function EmbedPlayerSurface({
         onPlaybackSnapshot?.(snapshot);
       }
       const shouldUseTopLevelVerifiedSeek = sourceContinuity.canReceivePosition
-        && (source?.resumeStrategy === 'verified-seek' || sourceId === 'vidlink');
+        && (source?.resumeStrategy === 'verified-seek' || sourceId === 'vidlink' || forceStartFromBeginning);
       if (shouldUseTopLevelVerifiedSeek
-        && initialResumeTime > 0
+        && (initialResumeTime > 0 || forceStartFromBeginning)
         && !resumeRequested.current) {
         resumeRequested.current = true;
         webViewRef.current?.injectJavaScript(createVerifiedResumeScript(

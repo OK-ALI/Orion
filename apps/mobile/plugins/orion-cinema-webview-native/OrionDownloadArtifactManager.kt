@@ -30,6 +30,7 @@ internal data class OrionOfflinePlayerAsset(
   val videoMediaCount: Int,
   val audioMediaCount: Int,
   val subtitles: List<OrionOfflinePlayerSubtitle>,
+  val mediaFile: File? = null,
 )
 
 internal data class OrionOfflinePlayerResolution(
@@ -103,6 +104,37 @@ internal object OrionDownloadArtifactManager {
     }
     val bundleDir = managedTarget(context, asset, primary)
       ?: return playbackResult(false, clean, "offline-primary-locator-invalid", "Offline media ownership could not be resolved.")
+
+    if (bundleDir.isFile) {
+      val expectedSize =
+        primary.optLong(
+          "expectedSizeBytes",
+          -1L,
+        )
+      if (
+        asset.optString("container") != "mp4" ||
+        asset.optString("mimeType") != "video/mp4" ||
+        !bundleDir.extension.equals("mp4", ignoreCase = true) ||
+        expectedSize <= 0L ||
+        bundleDir.length() != expectedSize
+      ) {
+        return playbackResult(false, clean, "offline-file-invalid", "Offline media file is missing or inconsistent.")
+      }
+      val artifacts = asset.optJSONArray("_artifacts") ?: JSONArray()
+      val subtitleCount = (0 until artifacts.length())
+        .mapNotNull { artifacts.optJSONObject(it) }
+        .count { it.optString("role") == "subtitle" }
+      return JSONObject()
+        .put("schemaVersion", 1)
+        .put("ok", true)
+        .put("assetId", clean)
+        .put("uri", Uri.fromFile(bundleDir).toString())
+        .put("contentType", "progressive")
+        .put("sourceKind", "file")
+        .put("fragmentCount", 1)
+        .put("subtitleCount", subtitleCount)
+    }
+
     val validated = validateManagedFragmentBundle(bundleDir)
       ?: return playbackResult(false, clean, "offline-bundle-invalid", "Offline media fragments are missing or inconsistent.")
 
@@ -157,6 +189,163 @@ internal object OrionDownloadArtifactManager {
     }
     val bundleDir = managedTarget(context, asset, primary)
       ?: return failure("containment", "offline-primary-locator-invalid", "Offline media ownership could not be resolved.")
+
+    if (bundleDir.isFile) {
+      val expectedSize =
+        primary.optLong(
+          "expectedSizeBytes",
+          -1L,
+        )
+      if (
+        asset.optString("container") != "mp4" ||
+        asset.optString("mimeType") != "video/mp4" ||
+        !bundleDir.extension.equals("mp4", ignoreCase = true) ||
+        expectedSize <= 0L ||
+        bundleDir.length() != expectedSize
+      ) {
+        return failure("file-integrity", "offline-file-invalid", "Offline media file is missing or inconsistent.")
+      }
+
+      val artifacts =
+        asset.optJSONArray("_artifacts")
+          ?: JSONArray()
+      val trackMetadata =
+        asset.optJSONArray("tracks")
+          ?: JSONArray()
+      val subtitleArtifacts =
+        (0 until artifacts.length())
+          .mapNotNull {
+            artifacts.optJSONObject(it)
+          }
+          .filter {
+            it.optString("role") == "subtitle"
+          }
+
+      if (subtitleArtifacts.size > 2) {
+        return failure("subtitle-count", "offline-subtitle-count-invalid", "Downloaded subtitles could not be opened safely.")
+      }
+
+      val subtitles =
+        mutableListOf<OrionOfflinePlayerSubtitle>()
+
+      subtitleArtifacts.forEachIndexed {
+          subtitleIndex,
+          artifact ->
+        val id =
+          artifact.optString("_trackId")
+            .takeIf {
+              it.matches(
+                Regex("^[A-Za-z0-9._:-]{1,100}$"),
+              )
+            }
+            ?: return failure("subtitle-id", "offline-subtitle-id-invalid", "Downloaded subtitles could not be opened safely.")
+
+        if (
+          artifact.optString("availability") != "verified"
+        ) {
+          return failure("subtitle-availability", "offline-subtitle-not-verified", "Downloaded subtitles are not currently verified.")
+        }
+
+        val file =
+          managedTarget(
+            context,
+            asset,
+            artifact,
+          )
+            ?: return failure("subtitle-file", "offline-subtitle-file-invalid", "Downloaded subtitles could not be opened safely.")
+
+        val expectedSubtitleSize =
+          artifact.optLong(
+            "expectedSizeBytes",
+            -1L,
+          )
+
+        if (
+          !file.isFile ||
+          expectedSubtitleSize <= 0L ||
+          file.length() != expectedSubtitleSize
+        ) {
+          return failure("subtitle-file", "offline-subtitle-file-invalid", "Downloaded subtitles could not be opened safely.")
+        }
+
+        val metadata =
+          (0 until trackMetadata.length())
+            .mapNotNull {
+              trackMetadata.optJSONObject(it)
+            }
+            .firstOrNull {
+              it.optString("kind") == "subtitle" &&
+              it.optString("id") == id
+            }
+            ?: return failure("subtitle-track", "offline-subtitle-track-invalid", "Downloaded subtitle metadata is incomplete.")
+
+        val format =
+          metadata.optString("format")
+            .lowercase()
+            .takeIf {
+              it in setOf(
+                "vtt",
+                "srt",
+                "ass",
+              )
+            }
+            ?: return failure("subtitle-format", "offline-subtitle-format-invalid", "Downloaded subtitles could not be opened safely.")
+
+        val language =
+          metadata.optString("language")
+            .replace(
+              Regex("[^A-Za-z0-9-]"),
+              "",
+            )
+            .take(12)
+            .ifBlank {
+              "und"
+            }
+
+        val label =
+          metadata.optString("label")
+            .replace(
+              Regex("[\\u0000-\\u001f\\u007f]"),
+              "",
+            )
+            .trim()
+            .take(120)
+            .ifBlank {
+              "${language.uppercase()} subtitle"
+            }
+
+        subtitles +=
+          OrionOfflinePlayerSubtitle(
+            id = id,
+            language = language,
+            label = label,
+            format = format,
+            isDefault =
+              metadata.optBoolean(
+                "default",
+                subtitleIndex == 0,
+              ),
+            file = file,
+          )
+      }
+
+      return OrionOfflinePlayerResolution(
+        asset =
+          OrionOfflinePlayerAsset(
+            assetId = clean,
+            sourceKind = "file",
+            fragmentCount = 1,
+            videoParts = emptyList(),
+            audioParts = emptyList(),
+            videoMediaCount = 1,
+            audioMediaCount = 0,
+            subtitles = subtitles,
+            mediaFile = bundleDir,
+          ),
+        stage = "ready",
+      )
+    }
+
     val validated = validateManagedFragmentBundle(bundleDir)
       ?: return failure("bundle-integrity", "offline-bundle-invalid", "Offline media fragments are missing or inconsistent.")
     val entries = validated.index.optJSONArray("files")
@@ -437,7 +626,16 @@ internal object OrionDownloadArtifactManager {
           val expectedSize = artifact.optLong("expectedSizeBytes", -1L)
           if (validated == null || expectedSize <= 0L || validated.primaryBytes != expectedSize) OrionArtifactAvailability.UNAVAILABLE to null
           else OrionArtifactAvailability.VERIFIED to validated.primaryBytes
-        } else OrionArtifactAvailability.VERIFIED to managedSize(target, artifact.optString("role") == "primary")
+        } else if (artifact.optString("role") == "primary" && target.isFile) {
+          val expectedSize = artifact.optLong("expectedSizeBytes", -1L)
+          if (expectedSize <= 0L || target.length() != expectedSize) OrionArtifactAvailability.UNAVAILABLE to null
+          else OrionArtifactAvailability.VERIFIED to expectedSize
+        } else {
+          val expectedSize = artifact.optLong("expectedSizeBytes", -1L)
+          val observed = managedSize(target, false)
+          if (expectedSize <= 0L || observed != expectedSize) OrionArtifactAvailability.UNAVAILABLE to null
+          else OrionArtifactAvailability.VERIFIED to observed
+        }
       }
       else -> OrionArtifactAvailability.UNAVAILABLE to null
     }

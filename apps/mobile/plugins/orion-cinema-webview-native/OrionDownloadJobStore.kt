@@ -176,6 +176,23 @@ internal object OrionDownloadJobStore {
   }
 
   @Synchronized
+  fun setProcessProgress(
+    jobId: String,
+    percent: Double,
+    etaSeconds: Long?,
+  ) {
+    mutateJobLocked(jobId, notify = true) { job ->
+      if (job.optString("state") == "completed") return@mutateJobLocked
+      val previous = job.optJSONObject("progress") ?: emptyProgress()
+      val progress = JSONObject(previous.toString())
+      progress.put("percent", percent.coerceIn(0.0, 99.0))
+      progress.put("bytesPerSecond", JSONObject.NULL)
+      progress.put("etaSeconds", etaSeconds?.coerceAtLeast(0L) ?: JSONObject.NULL)
+      job.put("progress", progress)
+      job.put("updatedAt", System.currentTimeMillis())
+    }
+  }
+  @Synchronized
   fun setFinalizationStage(jobId: String, stage: String, expectedGeneration: Long? = null) {
     if (stage !in FINALIZATION_STAGES) return
     mutateJobLocked(jobId, notify = true) { job ->

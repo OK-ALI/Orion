@@ -37,9 +37,10 @@ export function normalizeMobileDownloadPreferencesV1(value: unknown): MobileDown
     normalizedDeviceStorageTarget.writable && normalizedDeviceStorageTarget.persistedPermission && normalizedDeviceStorageTarget.targetId
     ? normalizedDeviceStorageTarget
     : null;
-  // Normal P10.4 downloads are Orion Library only. Keep a valid legacy SAF target
-  // so existing Device Storage copies can still be managed and future export can reuse it.
-  const defaultDestination: MobileDownloadDestinationModeV1 = 'orion-library';
+  const defaultDestination: MobileDownloadDestinationModeV1 =
+    input.defaultDestination === 'device-storage' && deviceStorageTarget
+      ? 'device-storage'
+      : 'orion-library';
   return {
     schemaVersion: 1,
     defaultDestination,
@@ -55,11 +56,7 @@ export function getMobileDownloadPreferencesV1(): MobileDownloadPreferencesV1 {
   try {
     const raw = mmkvStorageAdapter.get(MOBILE_DOWNLOAD_PREFERENCES_KEY_V1);
     const parsed = raw ? JSON.parse(raw) : null;
-    const normalized = normalizeMobileDownloadPreferencesV1(parsed);
-    if (parsed?.defaultDestination === 'device-storage') {
-      mmkvStorageAdapter.set(MOBILE_DOWNLOAD_PREFERENCES_KEY_V1, JSON.stringify(normalized));
-    }
-    return normalized;
+    return normalizeMobileDownloadPreferencesV1(parsed);
   } catch {
     return defaults();
   }
@@ -73,9 +70,9 @@ function persist(preferences: MobileDownloadPreferencesV1): MobileDownloadPrefer
 }
 
 export function setMobileDownloadDefaultDestinationV1(
-  _defaultDestination: MobileDownloadDestinationModeV1,
+  defaultDestination: MobileDownloadDestinationModeV1,
 ): MobileDownloadPreferencesV1 {
-  return persist({ ...getMobileDownloadPreferencesV1(), defaultDestination: 'orion-library' });
+  return persist({ ...getMobileDownloadPreferencesV1(), defaultDestination });
 }
 
 export function setMobileDownloadPreferredQualityV1(
@@ -93,7 +90,12 @@ export function setMobileDownloadSubtitlePreferenceV1(
 export function setMobileDownloadDeviceStorageTargetV1(
   deviceStorageTarget: MobileDownloadStorageTargetV1 | null,
 ): MobileDownloadPreferencesV1 {
-  return persist({ ...getMobileDownloadPreferencesV1(), deviceStorageTarget });
+  const current = getMobileDownloadPreferencesV1();
+  return persist({
+    ...current,
+    defaultDestination: deviceStorageTarget ? current.defaultDestination : 'orion-library',
+    deviceStorageTarget,
+  });
 }
 
 export function subscribeMobileDownloadPreferencesV1(listener: PreferenceListener): () => void {

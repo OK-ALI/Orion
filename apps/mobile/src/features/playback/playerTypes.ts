@@ -22,6 +22,7 @@ export interface PlaybackSurfaceProps {
   season?: string;
   episode?: string;
   initialResumeTime?: number;
+  forceStartFromBeginning?: boolean;
   onSourceChange: (
     sourceId: string,
     verifiedSnapshot: VerifiedPlaybackSnapshot | null,

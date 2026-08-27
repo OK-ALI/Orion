@@ -130,7 +130,10 @@ test('management UI routes all destructive and artifact actions through ID-only 
   assert.match(manager, /expectedSelections/);
   assert.match(manager, /asset-selection-stale/);
   assert.match(manager, /fun deleteAll/);
-  assert.doesNotMatch(bridge, /file:\/\/|content:\/\//);
+  const offlinePlaybackBoundary = bridge.indexOf('export interface NativeOfflinePlaybackSourceV1');
+  assert.ok(offlinePlaybackBoundary > 0, 'offline playback boundary should remain explicit');
+  const managementBridge = bridge.slice(0, offlinePlaybackBoundary);
+  assert.doesNotMatch(managementBridge, /file:\/\/|content:\/\//);
 });
 
 test('Delete Selected sends only the exact deduplicated confirmation snapshot', async () => {

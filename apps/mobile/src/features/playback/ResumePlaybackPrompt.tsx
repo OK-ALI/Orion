@@ -118,7 +118,12 @@ export function ResumePlaybackPrompt({
               <Pressable
                 accessibilityRole="button"
                 onPress={() => onChoose('resume')}
-                style={[styles.actionButton, styles.primary, { backgroundColor: theme.accent }]}
+                style={[
+                  styles.actionButton,
+                  compactLandscape && styles.actionButtonCompact,
+                  styles.primary,
+                  { backgroundColor: theme.accent },
+                ]}
               >
                 <Ionicons name="play" size={18} color={theme.onAccent} />
                 <Text style={[styles.primaryText, { color: theme.onAccent }]}>Resume from {formatPlaybackTime(savedTime)}</Text>
@@ -128,7 +133,12 @@ export function ResumePlaybackPrompt({
               <Pressable
                 accessibilityRole="button"
                 onPress={() => onChoose('replay-30')}
-                style={[styles.actionButton, styles.secondary, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                style={[
+                  styles.actionButton,
+                  compactLandscape && styles.actionButtonCompact,
+                  styles.secondary,
+                  { backgroundColor: theme.surface, borderColor: theme.border },
+                ]}
               >
                 <Ionicons name="play-back" size={18} color={theme.text} />
                 <Text style={[styles.secondaryText, { color: theme.text }]}>Replay last 30 seconds</Text>
@@ -139,6 +149,7 @@ export function ResumePlaybackPrompt({
               onPress={() => onChoose('start-over')}
               style={[
                 styles.actionButton,
+                compactLandscape && styles.actionButtonCompact,
                 resumeRestricted ? styles.primary : styles.secondary,
                 resumeRestricted
                   ? { backgroundColor: theme.accent }
@@ -158,6 +169,7 @@ export function ResumePlaybackPrompt({
               onPress={onCancel}
               style={[
                 styles.actionButton,
+                compactLandscape && styles.actionButtonCompact,
                 styles.secondary,
                 { backgroundColor: theme.surface, borderColor: theme.border },
               ]}
@@ -239,6 +251,11 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     minWidth: 0,
     flexBasis: 220,
+  },
+  actionButtonCompact: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    flexShrink: 0,
   },
   primary: { minHeight: 50 },
   primaryText: { fontSize: 14, fontWeight: '900', textAlign: 'center' },

@@ -270,7 +270,7 @@ export function createVerifiedResumeScript(seconds: number, handoffId: string): 
         if (done || window.__orionResumeHandoffId !== handoffId) return;
         attempts += 1;
         var video = document.querySelector('video');
-        if (video && Number.isFinite(video.duration) && video.duration > 0 && ${safeTime} > 0) {
+        if (video && Number.isFinite(video.duration) && video.duration > 0) {
           video.currentTime = Math.min(video.duration, ${safeTime});
           setTimeout(function() {
             if (Math.abs(Number(video.currentTime) - ${safeTime}) <= 5) report('applied', Number(video.currentTime));

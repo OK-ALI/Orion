@@ -1,5 +1,6 @@
 package com.okali.orion.playback
 
+import java.net.URL
 import java.util.Locale
 
 /**
@@ -8,8 +9,8 @@ import java.util.Locale
  * The envelope intentionally contains no cookies, Authorization header, Referer,
  * Origin or arbitrary provider headers. Those values are request-scoped by
  * OrionDownloadRequestContextBroker and must never become process-wide yt-dlp
- * options. HLS/DASH still require a future broker-enforced network interception
- * layer before production execution can be enabled.
+ * options. Raw HLS/DASH provider authority remains fail-closed; only an Orion
+ * loopback gateway may clear network enforcement for yt-dlp execution.
  */
 internal data class OrionYtDlpAuthority(
   val jobId: String,
@@ -54,6 +55,56 @@ internal object OrionDownloadYtDlpAuthorityBroker {
       safeGlobalHeaders = safeHeaders.toMap(),
       scopedCredentialsRequired = scopedCredentialsRequired,
       networkEnforcementRequired = true,
+    )
+  }
+
+  /**
+   * Converts a broker-issued provider authority into an execution authority
+   * only after Orion has replaced provider networking with a strict local
+   * loopback gateway.
+   *
+   * Provider credentials and global provider headers are deliberately removed.
+   */
+  fun enforceViaLoopbackGateway(
+    authority: OrionYtDlpAuthority,
+    localRootUrl: String,
+  ): OrionYtDlpAuthority? {
+    if (
+      authority.transferKind !in
+      setOf(
+        "hls",
+        "dash",
+      ) ||
+      !authority.networkEnforcementRequired
+    ) {
+      return null
+    }
+
+    val local =
+      try {
+        URL(localRootUrl)
+      } catch (_: Throwable) {
+        return null
+      }
+
+    if (
+      local.protocol.lowercase(Locale.US) != "http" ||
+      local.host != "127.0.0.1" ||
+      local.port !in 1..65535 ||
+      local.userInfo != null ||
+      local.query != null ||
+      local.ref != null ||
+      !local.path.startsWith('/') ||
+      local.path.length !in 2..512
+    ) {
+      return null
+    }
+
+    return authority.copy(
+      rootUrl = local.toExternalForm(),
+      safeGlobalHeaders = emptyMap(),
+      scopedCredentialsRequired = false,
+      networkEnforcementRequired = false,
     )
   }
 }

@@ -21,9 +21,9 @@ function orionLibraryTarget(): MobileDownloadStorageTargetV1 {
 }
 
 /**
- * Starts the Android-owned HLS/DASH fragment engine for Orion Library.
- * Media request URLs, headers and cookies remain native-only. Subtitle provider
- * URLs are transient native input. Portable Device Storage export is deferred.
+ * Starts the Android-owned HLS/DASH transfer engine for Orion Library or the
+ * persisted Device Storage target. Media request URLs, headers and cookies
+ * remain native-only. Subtitle provider URLs are transient native input.
  */
 export async function startMobileDownloadFromSelectionV1(input: StartMobileDownloadSelectionInputV1): Promise<string> {
   const { target, selection, preferences } = input;
@@ -34,10 +34,26 @@ export async function startMobileDownloadFromSelectionV1(input: StartMobileDownl
   if (selection.resolvedMethod !== 'fragments' || !['hls', 'dash'].includes(candidate.preflight.resolvedManifestKind)) {
     throw new Error('Mobile downloads require a ready HLS or DASH stream. Try another source.');
   }
-  const destination = 'orion-library' as const;
-  const storageTarget = orionLibraryTarget();
-  if (!candidate.capabilities.orionLibrary) {
+  const destination: MobileDownloadJobV1['destination'] = preferences.deviceStorageTarget
+    ? 'device-storage'
+    : 'orion-library';
+  const storageTarget = destination === 'device-storage'
+    ? preferences.deviceStorageTarget
+    : orionLibraryTarget();
+
+  if (destination === 'device-storage') {
+    if (!candidate.capabilities.deviceStorage) {
+      throw new Error('This source is not ready for Device Storage.');
+    }
+    if (!storageTarget || storageTarget.mode !== 'device-storage' || !storageTarget.writable || !storageTarget.persistedPermission) {
+      throw new Error('Choose a writable Device Storage folder in Downloads Settings before starting this download.');
+    }
+  } else if (!candidate.capabilities.orionLibrary) {
     throw new Error('This source is not ready for Orion Library storage.');
+  }
+
+  if (!storageTarget) {
+    throw new Error('The selected download destination is unavailable.');
   }
 
   const selectedSubtitleAssetIds = [...new Set(input.selectedSubtitleAssetIds || [])].slice(0, 2);

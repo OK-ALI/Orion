@@ -297,6 +297,13 @@ test("bounded verified seek is idempotent and reports its result", () => {
   assert.doesNotMatch(script, /prototype\.|set currentTime/);
 });
 
+test("verified seek treats start over as an explicit zero-position request", () => {
+  const script = createVerifiedResumeScript(0, "start-over-1");
+  assert.match(script, /video\.currentTime = Math\.min\(video\.duration, 0\)/);
+  assert.match(script, /Math\.abs\(Number\(video\.currentTime\) - 0\) <= 5/);
+  assert.doesNotMatch(script, /video\.duration > 0 && 0 > 0/);
+});
+
 test("resume prompt choices resolve to explicit playback positions", () => {
   assert.equal(resolveResumeChoiceTime("resume", 125.8), 125.8);
   assert.equal(resolveResumeChoiceTime("replay-30", 125.8), 95.8);

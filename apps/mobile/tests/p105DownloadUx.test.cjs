@@ -41,7 +41,9 @@ test('P10.5-A1 exposes mirrored safe-area top controls', () => {
 
   assert.match(styles, /topDownloadButton:\s*\{/);
   assert.match(styles, /right:\s*20/);
+  assert.match(styles, /topDownloadButton:[\s\S]*?width:\s*36,[\s\S]*?height:\s*36,[\s\S]*?borderRadius:\s*18/);
   assert.match(styles, /topDownloadGlass:\s*\{/);
+  assert.match(screen, /name="download-outline" size=\{18\}/);
 
   assert.doesNotMatch(
     styles,

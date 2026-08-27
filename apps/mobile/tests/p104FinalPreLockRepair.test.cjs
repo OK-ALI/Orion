@@ -90,40 +90,37 @@ test('P10.4 final pre-lock retry can finalize complete local fragments before ep
   assert.match(worker, /hasCompleteLocalFinalization/);
 });
 
-test('P10.4 final pre-lock duplicate exclusion stays native-atomic while normal downloads are Orion Library only', () => {
+test('P10.4 final pre-lock duplicate exclusion stays native-atomic and destination-aware', () => {
   const store = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadJobStore.kt');
   const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
   const modal = read('src', 'components', 'DownloadModal.tsx');
   assert.match(store, /current\.optString\("_itemKey"\) != itemKey \|\| current\.optString\("destination"\) != destination/);
   assert.match(store, /DUPLICATE_BLOCKING_STATES/);
   assert.match(module, /DOWNLOAD_DUPLICATE/);
-  assert.match(modal, /const destination = 'orion-library' as const/);
+  assert.match(modal, /preferences\.deviceStorageTarget/);
   assert.match(modal, /mobileDownloadItemKeyFromMediaV1\(job\.media\) === target\.itemKey/);
   assert.match(modal, /job\.destination === destination/);
   assert.match(modal, /Already downloaded here/);
-  assert.match(modal, /verified Orion Library copy/);
+  assert.match(modal, /verified \$\{destinationTitle\} copy/);
   assert.doesNotMatch(modal, /other storage location for a second intentional copy/);
 });
 
-test('P10.4 normal download entry is Orion Library only while legacy Device Storage metadata remains preservable', () => {
+test('P10.4 normal download entry defaults to Orion Library while a persisted Device Storage target remains usable', () => {
   const modal = read('src', 'components', 'DownloadModal.tsx');
   const preferences = read('src', 'features', 'downloads', 'downloadPreferences.ts');
-  const settings = read('src', 'features', 'downloads', 'DownloadSettingsContent.tsx');
   const start = read('src', 'features', 'downloads', 'downloadStart.ts');
-  const screen = read('app', '(tabs)', 'downloads.tsx');
   assert.match(preferences, /defaultDestination: 'orion-library'/);
-  assert.match(preferences, /const defaultDestination: MobileDownloadDestinationModeV1 = 'orion-library'/);
+  assert.match(preferences, /input\.defaultDestination === 'device-storage' && deviceStorageTarget/);
   assert.match(preferences, /deviceStorageTarget,/);
-  assert.match(preferences, /parsed\?\.defaultDestination === 'device-storage'/);
-  assert.match(start, /const destination = 'orion-library' as const/);
-  assert.match(start, /const storageTarget = orionLibraryTarget\(\)/);
-  assert.doesNotMatch(start, /candidate\.capabilities\.deviceStorage|Choose a Device Storage folder before starting this download/);
-  assert.match(modal, /const destination = 'orion-library' as const/);
-  assert.match(modal, />Orion Library<\/Text>/);
-  assert.doesNotMatch(modal, /selectDestination|chooseNativeDeviceStorageTargetV1|>Device Storage<\/Text>/);
-  assert.match(settings, /New downloads stay inside Orion for reliable offline playback/);
-  assert.doesNotMatch(settings, /chooseNativeDeviceStorageTargetV1|Choose Device Storage folder/);
-  assert.match(screen, /const destinationLabel = 'Orion Library'/);
+  assert.match(preferences, /setMobileDownloadDefaultDestinationV1/);
+  assert.match(start, /preferences\.deviceStorageTarget/);
+  assert.match(start, /destination === 'device-storage'/);
+  assert.match(start, /candidate\.capabilities\.deviceStorage/);
+  assert.match(start, /storageTarget\.persistedPermission/);
+  assert.match(modal, /preferences\.deviceStorageTarget/);
+  assert.match(modal, /destinationTitle/);
+  assert.match(modal, /selectMobileDownloadCandidateForItemV1\(target\.itemKey, transferMethod, candidateSnapshots, destination\)/);
+  assert.doesNotMatch(modal, /chooseNativeDeviceStorageTargetV1/);
 });
 
 test('P10.4 final pre-lock Cancel cleans non-completed native state without routing through Resume', () => {
@@ -225,7 +222,7 @@ test('P10.4 final pre-lock subtitles use protected user keys and bounded path-sa
   assert.match(plugin, /'OrionDownloadSubtitleRuntime\.kt'/);
 });
 
-test('P10.4 final pre-lock Downloads surface is denser and presents Orion Library as normal offline storage', () => {
+test('P10.4 final pre-lock Downloads surface is denser and presents truthful dual-destination storage', () => {
   const screen = read('app', '(tabs)', 'downloads.tsx');
   const settings = read('src', 'features', 'downloads', 'DownloadSettingsContent.tsx');
   const activity = read('src', 'features', 'downloads', 'DownloadActivityList.tsx');
@@ -233,8 +230,9 @@ test('P10.4 final pre-lock Downloads surface is denser and presents Orion Librar
   assert.match(screen, /summaryCard: \{[^}\n]*minHeight: 72/);
   assert.match(screen, /destinationCard: \{[^}\n]*minHeight: 68/);
   assert.match(screen, /const destinationLabel = 'Orion Library'/);
-  assert.match(settings, /Portable Device Storage files are no longer part of the normal download flow/);
-  assert.doesNotMatch(settings, /Device Storage creates a verified portable MP4 when the stream can be finalized safely/);
+  assert.match(settings, />Device Storage<\/Text>/);
+  assert.match(settings, /Device Storage creates a verified portable MP4 when the stream can be finalized safely/);
+  assert.match(settings, /chooseNativeDeviceStorageTargetV1/);
   assert.match(activity, /horizontal/);
   assert.match(activity, /flexWrap: 'wrap'/);
 });

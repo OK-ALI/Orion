@@ -6,10 +6,13 @@ import type { MobileDownloadPreferencesV1, MobileDownloadQualityV1, MobileDownlo
 import { useOrionTheme } from '../../context/ThemeContext';
 import {
   getMobileDownloadPreferencesV1,
+  setMobileDownloadDefaultDestinationV1,
+  setMobileDownloadDeviceStorageTargetV1,
   setMobileDownloadPreferredQualityV1,
   setMobileDownloadSubtitlePreferenceV1,
   subscribeMobileDownloadPreferencesV1,
 } from './downloadPreferences';
+import { chooseNativeDeviceStorageTargetV1 } from './nativeDownloadEngine';
 import { getSubtitleProviderKey, setSubtitleProviderKey } from '../../services/subtitles';
 
 const QUALITY_OPTIONS: ReadonlyArray<{ id: MobileDownloadQualityV1; label: string }> = [
@@ -29,6 +32,8 @@ export function DownloadSettingsContent() {
   const [subdlKey, setSubdlKey] = useState('');
   const [wyzieKey, setWyzieKey] = useState('');
   const [keyStatus, setKeyStatus] = useState('Keys are stored in protected device storage.');
+  const [storageStatus, setStorageStatus] = useState('');
+  const [choosingStorage, setChoosingStorage] = useState(false);
   const [savingKeys, setSavingKeys] = useState(false);
 
   useEffect(() => subscribeMobileDownloadPreferencesV1(setPreferences), []);
@@ -41,6 +46,40 @@ export function DownloadSettingsContent() {
     });
     return () => { active = false; };
   }, []);
+
+  const chooseDeviceStorage = async () => {
+    if (choosingStorage) return;
+    setChoosingStorage(true);
+    setStorageStatus('Opening Android folder picker…');
+    try {
+      const target = await chooseNativeDeviceStorageTargetV1();
+      if (!target) {
+        setStorageStatus('No Device Storage folder selected.');
+        return;
+      }
+      if (!target.writable || !target.persistedPermission) {
+        setStorageStatus('Orion could not keep writable access to that folder. Choose another folder.');
+        return;
+      }
+      setPreferences(setMobileDownloadDeviceStorageTargetV1(target));
+      setPreferences(setMobileDownloadDefaultDestinationV1('device-storage'));
+      setStorageStatus(`Device Storage ready: ${target.displayName}`);
+    } catch (error) {
+      setStorageStatus(error instanceof Error ? error.message : 'Orion could not choose a Device Storage folder.');
+    } finally {
+      setChoosingStorage(false);
+    }
+  };
+
+  const selectDeviceStorage = () => {
+    const target = preferences.deviceStorageTarget;
+    if (!target || !target.writable || !target.persistedPermission) {
+      void chooseDeviceStorage();
+      return;
+    }
+    setPreferences(setMobileDownloadDefaultDestinationV1('device-storage'));
+    setStorageStatus(`Device Storage ready: ${target.displayName}`);
+  };
 
   const saveSubtitleKeys = async () => {
     if (savingKeys) return;
@@ -58,15 +97,29 @@ export function DownloadSettingsContent() {
     }
   };
 
+  const deviceStorageSelected = preferences.defaultDestination === 'device-storage';
+  const deviceStorageTarget = preferences.deviceStorageTarget;
+
   return (
     <View style={styles.root}>
       <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Offline storage</Text>
-      <View style={[styles.destinationCard, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
+      <Pressable accessibilityRole="radio" accessibilityLabel="Orion Library download destination" accessibilityState={{ checked: !deviceStorageSelected }} onPress={() => setPreferences(setMobileDownloadDefaultDestinationV1('orion-library'))} style={({ pressed }) => [styles.destinationCard, { backgroundColor: !deviceStorageSelected ? theme.accentSoft : pressed ? theme.surfaceHover : theme.elevated, borderColor: !deviceStorageSelected ? theme.accent : theme.border }]}>
         <View style={[styles.iconBox, { backgroundColor: theme.surface, borderColor: theme.border }]}><Ionicons name="albums-outline" size={20} color={theme.accent} /></View>
-        <View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>Orion Library</Text><Text style={[styles.description, { color: theme.textSecondary }]}>New downloads stay inside Orion for reliable offline playback.</Text></View>
-        <Ionicons name="checkmark-circle" size={20} color={theme.accent} />
-      </View>
-      <Text style={[styles.explainer, { color: theme.textMuted }]}>Portable Device Storage files are no longer part of the normal download flow. Existing copies remain manageable; a dedicated export flow can reuse the preserved portable-media engine later.</Text>
+        <View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>Orion Library</Text><Text style={[styles.description, { color: theme.textSecondary }]}>Managed offline media for reliable playback inside Orion.</Text></View>
+        <Ionicons name={!deviceStorageSelected ? 'radio-button-on' : 'radio-button-off'} size={20} color={!deviceStorageSelected ? theme.accent : theme.textMuted} />
+      </Pressable>
+
+      <Pressable accessibilityRole="radio" accessibilityLabel="Device Storage download destination" accessibilityState={{ checked: deviceStorageSelected }} onPress={selectDeviceStorage} style={({ pressed }) => [styles.destinationCard, { backgroundColor: deviceStorageSelected ? theme.accentSoft : pressed ? theme.surfaceHover : theme.elevated, borderColor: deviceStorageSelected ? theme.accent : theme.border }]}>
+        <View style={[styles.iconBox, { backgroundColor: theme.surface, borderColor: theme.border }]}><Ionicons name="folder-open-outline" size={20} color={theme.accent} /></View>
+        <View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>Device Storage</Text><Text style={[styles.description, { color: theme.textSecondary }]}>Device Storage creates a verified portable MP4 when the stream can be finalized safely.</Text></View>
+        <Ionicons name={deviceStorageSelected ? 'radio-button-on' : 'radio-button-off'} size={20} color={deviceStorageSelected ? theme.accent : theme.textMuted} />
+      </Pressable>
+
+      <Text style={[styles.explainer, { color: theme.textMuted }]}>{deviceStorageTarget ? `Folder: ${deviceStorageTarget.displayName}` : 'Choose a writable Android folder before using Device Storage.'}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="Choose Device Storage folder" disabled={choosingStorage} onPress={() => void chooseDeviceStorage()} style={({ pressed }) => [styles.secondaryButton, { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: theme.border }]}>
+        <Ionicons name="folder-outline" size={17} color={theme.accent} /><Text style={[styles.secondaryButtonText, { color: theme.text }]}>{choosingStorage ? 'Choosing folder…' : deviceStorageTarget ? 'Change Device Storage folder' : 'Choose Device Storage folder'}</Text>
+      </Pressable>
+      {storageStatus ? <Text style={[styles.keyStatus, { color: theme.textMuted }]}>{storageStatus}</Text> : null}
 
       <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Preferred quality</Text>
       <View accessibilityRole="radiogroup" style={styles.pillRow}>
@@ -101,6 +154,8 @@ export function DownloadSettingsContent() {
 const styles = StyleSheet.create({
   root: { gap: spacing[3] }, groupTitle: { fontSize: fontSizes.md, fontWeight: '900', marginTop: spacing[2] }, optionGrid: { gap: spacing[2] },
   destinationCard: { minHeight: 72, borderWidth: 1, borderRadius: radii.xl, padding: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  secondaryButton: { minHeight: 44, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
+  secondaryButtonText: { fontSize: fontSizes.xs, fontWeight: '900' },
   compactRow: { minHeight: 66, borderWidth: 1, borderRadius: radii.xl, paddingHorizontal: spacing[3], paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
   iconBox: { width: 38, height: 38, borderRadius: radii.lg, borderWidth: 1, alignItems: 'center', justifyContent: 'center' }, optionCopy: { flex: 1, minWidth: 0 },
   optionTitle: { fontSize: fontSizes.sm, fontWeight: '900' }, description: { fontSize: fontSizes.xs, lineHeight: 17, marginTop: 3 }, explainer: { fontSize: 11, lineHeight: 17 },

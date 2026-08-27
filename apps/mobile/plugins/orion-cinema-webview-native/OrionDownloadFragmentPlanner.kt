@@ -31,6 +31,16 @@ internal data class OrionDashPlan(
   val issueCode: String? = null,
 )
 
+internal data class OrionDashRepresentationCoordinate(
+  val adaptationIndex: Int,
+  val representationIndex: Int,
+)
+
+internal data class OrionDashSelection(
+  val video: OrionDashRepresentationCoordinate?,
+  val audio: OrionDashRepresentationCoordinate?,
+)
+
 /** Pure native manifest planning. Raw network locations never cross React. */
 internal object OrionDownloadFragmentPlanner {
   private const val MAX_PLANNED_FRAGMENTS = 20_000
@@ -115,17 +125,136 @@ internal object OrionDownloadFragmentPlanner {
     return OrionHlsMediaPlan(fragments, body.contains("#EXT-X-ENDLIST", true))
   }
 
+  fun selectDashRepresentations(
+    body: String,
+    requestedQuality: String,
+  ): OrionDashSelection? {
+    return try {
+      val factory = secureDocumentBuilderFactory()
+      val document =
+        factory.newDocumentBuilder()
+          .parse(
+            ByteArrayInputStream(
+              body.toByteArray(
+                Charsets.UTF_8,
+              ),
+            ),
+          )
+
+      val mpd =
+        document.documentElement
+          ?: return null
+
+      if (localName(mpd) != "MPD") {
+        return null
+      }
+
+      val period =
+        directChildren(
+          mpd,
+          "Period",
+        ).firstOrNull()
+          ?: return null
+
+      val adaptationSets =
+        directChildren(
+          period,
+          "AdaptationSet",
+        )
+
+      val videoSets =
+        adaptationSets
+          .filter {
+            adaptationKind(it) ==
+            "video"
+          }
+
+      val audioSets =
+        adaptationSets
+          .filter {
+            adaptationKind(it) ==
+            "audio"
+          }
+
+      fun coordinate(
+        selected: Pair<Element, Element>?,
+      ): OrionDashRepresentationCoordinate? {
+        val pair =
+          selected
+            ?: return null
+
+        val adaptationIndex =
+          adaptationSets.indexOf(
+            pair.first,
+          )
+
+        val representations =
+          directChildren(
+            pair.first,
+            "Representation",
+          )
+
+        val representationIndex =
+          representations.indexOf(
+            pair.second,
+          )
+
+        if (
+          adaptationIndex < 0 ||
+          representationIndex < 0
+        ) {
+          return null
+        }
+
+        return OrionDashRepresentationCoordinate(
+          adaptationIndex =
+            adaptationIndex,
+          representationIndex =
+            representationIndex,
+        )
+      }
+
+      val video =
+        coordinate(
+          chooseRepresentation(
+            videoSets,
+            requestedQuality,
+            video = true,
+          ),
+        )
+
+      val audio =
+        coordinate(
+          chooseRepresentation(
+            audioSets,
+            requestedQuality,
+            video = false,
+          ),
+        )
+
+      if (
+        video == null &&
+        audio == null
+      ) {
+        null
+      } else {
+        OrionDashSelection(
+          video = video,
+          audio = audio,
+        )
+      }
+    } catch (_: Throwable) {
+      null
+    }
+  }
+
   fun parseDash(
     baseUrl: String,
     body: String,
     requestedQuality: String,
   ): OrionDashPlan {
     return try {
-      val factory = DocumentBuilderFactory.newInstance().apply {
-        isNamespaceAware = true
-        isExpandEntityReferences = false
-        try { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) } catch (_: Throwable) {}
-      }
+      val factory = secureDocumentBuilderFactory()
       val document = factory.newDocumentBuilder().parse(ByteArrayInputStream(body.toByteArray(Charsets.UTF_8)))
       val mpd = document.documentElement ?: return OrionDashPlan(emptyList(), "dash-invalid-manifest")
       if (localName(mpd) != "MPD") return OrionDashPlan(emptyList(), "dash-invalid-manifest")
@@ -297,6 +426,37 @@ internal object OrionDownloadFragmentPlanner {
     val child = directChildren(element, "BaseURL").firstOrNull()?.textContent?.trim().orEmpty()
     return if (child.isBlank()) parent else resolve(parent, child) ?: parent
   }
+
+  private fun secureDocumentBuilderFactory(): DocumentBuilderFactory =
+    DocumentBuilderFactory.newInstance()
+      .apply {
+        isNamespaceAware = true
+        isExpandEntityReferences = false
+
+        try {
+          isXIncludeAware = false
+        } catch (_: Throwable) {
+        }
+
+        for (
+          feature in
+          listOf(
+            "http://apache.org/xml/features/disallow-doctype-decl",
+            "http://xml.org/sax/features/external-general-entities",
+            "http://xml.org/sax/features/external-parameter-entities",
+            "http://apache.org/xml/features/nonvalidating/load-external-dtd",
+          )
+        ) {
+          try {
+            setFeature(
+              feature,
+              feature ==
+              "http://apache.org/xml/features/disallow-doctype-decl",
+            )
+          } catch (_: Throwable) {
+          }
+        }
+      }
 
   private fun directChildren(parent: Element, expected: String): List<Element> {
     val output = mutableListOf<Element>()
