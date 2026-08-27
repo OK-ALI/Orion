@@ -54,7 +54,8 @@
         "expo-build-properties",
         {
           "android": {
-            "usesCleartextTraffic": false
+            "usesCleartextTraffic": false,
+            "useLegacyPackaging": true
           }
         }
       ]
