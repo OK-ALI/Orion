@@ -11,7 +11,7 @@ import {
   deleteNativeDownloadAssetsV1,
   formatNativeDownloadManagementResultV1,
   locateNativeDownloadAssetV1,
-  openNativeDownloadAssetV1,
+  playNativeDownloadAssetLocallyV1,
   reconcileNativeDownloadsV1,
   removeUnavailableNativeDownloadRecordsV1,
 } from './nativeDownloadEngine';
@@ -128,15 +128,15 @@ export function DownloadManagementSheet({ visible, mode, assets, initialAssetIds
     }
   };
 
-  const runAssetAction = async (assetId: string, action: 'open' | 'locate') => {
+  const runAssetAction = async (assetId: string, action: 'play-local' | 'locate') => {
     if (busy) return;
     setBusy(true);
     setMessage(null);
     try {
-      if (action === 'open') await openNativeDownloadAssetV1(assetId);
+      if (action === 'play-local') await playNativeDownloadAssetLocallyV1(assetId);
       else await locateNativeDownloadAssetV1(assetId);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : `Orion could not ${action} this download.`);
+      setMessage(error instanceof Error ? error.message : 'Orion could not complete this download action.');
     } finally {
       setBusy(false);
     }
@@ -238,7 +238,7 @@ export function DownloadManagementSheet({ visible, mode, assets, initialAssetIds
                     </View>
                   </Pressable>
                   <View style={styles.rowActions}>
-                    {asset.actions.open ? <IconAction label="Open" icon="play-circle-outline" onPress={() => void runAssetAction(asset.assetId, 'open')} /> : null}
+                    {asset.actions.open ? <IconAction label="Play Locally" icon="open-outline" onPress={() => void runAssetAction(asset.assetId, 'play-local')} /> : null}
                     {asset.actions.locate ? <IconAction label="Locate" icon="folder-open-outline" onPress={() => void runAssetAction(asset.assetId, 'locate')} /> : null}
                     {asset.availability === 'unavailable' && asset.destination === 'device-storage' ? <IconAction label="Reselect folder" icon="folder-outline" onPress={() => void reselectDeviceFolder()} /> : null}
                   </View>

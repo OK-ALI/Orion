@@ -15,7 +15,8 @@ interface DownloadActivityListProps {
   offlineEntries: OfflineMediaEntryV1[];
   active?: boolean;
   onManageAssets?: (assetIds: readonly string[]) => void;
-  onPlayOffline?: (entry: OfflineMediaEntryV1, assetId: string) => void;
+  onPlayInOrion?: (entry: OfflineMediaEntryV1, assetId: string) => void;
+  onPlayLocally?: (assetId: string) => void;
 }
 
 type DownloadTab = 'all' | 'active' | 'completed' | 'attention' | 'failed';
@@ -182,7 +183,7 @@ function sortGroups(groups: CompletedGroup[], sort: DownloadSort): CompletedGrou
   });
 }
 
-export function DownloadActivityList({ jobs, assets, offlineEntries, active = true, onManageAssets, onPlayOffline }: DownloadActivityListProps) {
+export function DownloadActivityList({ jobs, assets, offlineEntries, active = true, onManageAssets, onPlayInOrion, onPlayLocally }: DownloadActivityListProps) {
   const { theme } = useOrionTheme();
   const [busyJob, setBusyJob] = useState<string | null>(null);
   const [tab, setTab] = useState<DownloadTab>('all');
@@ -319,7 +320,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
         const canResume = job.state === 'paused';
         const canRetry = FAILED_STATES.has(job.state) && job.failure?.retryable;
         const poster = imgUrl(job.media.posterPath ?? null, 'w342');
-        const downloaded = formatBytes(progress.bytesDownloaded);
+        const downloaded = progress.bytesDownloaded > 0 ? formatBytes(progress.bytesDownloaded) : null;
         const total = formatBytes(progress.totalBytes);
         const speed = formatBytes(progress.bytesPerSecond);
         const eta = formatDurationSeconds(progress.etaSeconds);
@@ -442,18 +443,20 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
                         <Text numberOfLines={1} style={[styles.episodeTitle, { color: theme.text }]}>{episode.episodeTitle || `Episode ${episode.media.episode ?? ''}`}</Text>
                         <Text style={[styles.episodeMeta, { color: theme.textSecondary }]}>{[episodeSize, 'Verified', assetById.get(episode.primaryAssetId)?.destination === 'device-storage' ? 'Device Storage' : 'Orion Library'].filter(Boolean).join(' · ')}</Text>
                       </View>
-                      {episodePlayableAssetId && onPlayOffline ? <Pressable accessibilityRole="button" accessibilityLabel={`Play ${episode.episodeTitle || `episode ${episode.media.episode ?? ''}`} offline`} onPress={() => onPlayOffline(episode, episodePlayableAssetId)} style={({ pressed }) => [styles.moreButton, { borderColor: theme.accent, backgroundColor: pressed ? theme.accentSoft : theme.elevated }]}><Ionicons name="play" size={18} color={theme.accent} /></Pressable> : null}
+                      {episodePlayableAssetId && onPlayInOrion ? <Pressable accessibilityRole="button" accessibilityLabel={`Play ${episode.episodeTitle || `episode ${episode.media.episode ?? ''}`} in Orion`} onPress={() => onPlayInOrion(episode, episodePlayableAssetId)} style={({ pressed }) => [styles.moreButton, { borderColor: theme.accent, backgroundColor: pressed ? theme.accentSoft : theme.elevated }]}><Ionicons name="play" size={18} color={theme.accent} /></Pressable> : null}
+                      {episodePlayableAssetId && onPlayLocally && assetById.get(episodePlayableAssetId)?.actions.open ? <Pressable accessibilityRole="button" accessibilityLabel={`Play ${episode.episodeTitle || `episode ${episode.media.episode ?? ''}`} locally`} onPress={() => onPlayLocally(episodePlayableAssetId)} style={({ pressed }) => [styles.moreButton, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.elevated }]}><Ionicons name="open-outline" size={18} color={theme.textSecondary} /></Pressable> : null}
                       {onManageAssets ? <Pressable accessibilityRole="button" accessibilityLabel={`Manage ${episode.episodeTitle || `episode ${episode.media.episode ?? ''}`}`} onPress={() => onManageAssets(episode.assetIds)} style={({ pressed }) => [styles.moreButton, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.elevated }]}><Ionicons name="ellipsis-horizontal" size={19} color={theme.textSecondary} /></Pressable> : null}
                     </View>
                   );
                 })}
               </View>
             ) : null}
-            {((!episodic && playableAssetId && onPlayOffline) || onManageAssets) ? (
+            {((!episodic && playableAssetId && (onPlayInOrion || onPlayLocally)) || onManageAssets) ? (
               <View style={styles.actions}>
-                {!episodic && playableAssetId && onPlayOffline ? (
-                  <ActionButton label="Play Offline" icon="play" accessibilityLabel={`Play ${mediaPrimaryTitle(entry.media)} offline`} onPress={() => onPlayOffline(entry, playableAssetId)} />
+                {!episodic && playableAssetId && onPlayInOrion ? (
+                  <ActionButton label="Play in Orion" icon="play" accessibilityLabel={`Play ${mediaPrimaryTitle(entry.media)} in Orion`} onPress={() => onPlayInOrion(entry, playableAssetId)} />
                 ) : null}
+                {!episodic && playableAssetId && onPlayLocally && assetById.get(playableAssetId)?.actions.open ? <ActionButton label="Play Locally" icon="open-outline" accessibilityLabel={`Play ${mediaPrimaryTitle(entry.media)} locally`} onPress={() => onPlayLocally(playableAssetId)} /> : null}
                 {onManageAssets ? <ActionButton label={episodic ? 'Manage series' : 'Manage copy'} icon="ellipsis-horizontal" onPress={() => onManageAssets(group.entries.flatMap((candidate) => candidate.assetIds))} /> : null}
               </View>
             ) : null}

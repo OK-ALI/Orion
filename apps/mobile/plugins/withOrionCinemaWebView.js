@@ -53,6 +53,8 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionPortableVerification.kt',
   'OrionDownloadPortableFinalizer.kt',
   'OrionDownloadYtDlpAuthority.kt',
+  'OrionYtDlpProgressParser.kt',
+  'OrionFinalizedMediaVerifier.kt',
   'OrionDownloadYtDlpRuntime.kt',
   'OrionDownloadYtDlpGateway.kt',
   'OrionDownloadYtDlpHlsGateway.kt',
@@ -69,6 +71,8 @@ const CINEMA_NATIVE_TEST_FILES = Object.freeze([
   'OrionDownloadYtDlpGatewayTest.kt',
   'OrionDownloadYtDlpHlsGatewayTest.kt',
   'OrionDownloadYtDlpDashGatewayTest.kt',
+  'OrionYtDlpProgressParserTest.kt',
+  'OrionFinalizedMediaPolicyTest.kt',
   'OrionDownloadNotificationContractTest.kt',
 ]);
 
@@ -110,6 +114,13 @@ function withCinemaSources(config) {
     for (const name of CINEMA_NATIVE_TEST_FILES) {
       fs.copyFileSync(path.join(NATIVE_TEST_SOURCE, name), path.join(testPackageRoot, name));
     }
+    const xmlRoot = path.join(nextConfig.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res', 'xml');
+    fs.mkdirSync(xmlRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(xmlRoot, 'orion_download_file_paths.xml'),
+      '<?xml version="1.0" encoding="utf-8"?>\n<paths xmlns:android="http://schemas.android.com/apk/res/android">\n  <files-path name="orion_downloads" path="orion-downloads/library/"/>\n</paths>\n',
+      'utf8',
+    );
     return nextConfig;
   }]);
 }
@@ -180,6 +191,25 @@ function withDownloadEngineManifest(config) {
       });
     }
     application.service = services;
+    const providers = application.provider || [];
+    const authority = '${applicationId}.orion-downloads';
+    if (!providers.some((item) => item?.$?.['android:authorities'] === authority)) {
+      providers.push({
+        $: {
+          'android:name': 'androidx.core.content.FileProvider',
+          'android:authorities': authority,
+          'android:exported': 'false',
+          'android:grantUriPermissions': 'true',
+        },
+        'meta-data': [{
+          $: {
+            'android:name': 'android.support.FILE_PROVIDER_PATHS',
+            'android:resource': '@xml/orion_download_file_paths',
+          },
+        }],
+      });
+    }
+    application.provider = providers;
     return nextConfig;
   });
 }

@@ -188,6 +188,7 @@ const orionUpdateNativeTargetDirectory = path.join(
 const orionUpdateNativeFiles = ["OrionUpdateModule.kt", "OrionUpdatePackage.kt"];
 const androidManifest = path.join(androidDirectory, "app", "src", "main", "AndroidManifest.xml");
 const androidXmlDirectory = path.join(androidDirectory, "app", "src", "main", "res", "xml");
+const downloadFilePathsXml = path.join(androidXmlDirectory, "orion_download_file_paths.xml");
 const updateFilePathsXml = path.join(androidXmlDirectory, "orion_update_file_paths.xml");
 const appConfigJson = path.join(projectDirectory, "app.json");
 const androidValuesDirectory = path.join(androidDirectory, "app", "src", "main", "res", "values");
@@ -305,6 +306,31 @@ function ensureCinemaGradleDependencies() {
     }
   }
   console.log("[Android] Orion Cinema Gradle dependencies verified.");
+}
+
+function ensureCinemaDownloadFileProvider() {
+  let contents = fs.readFileSync(androidManifest, "utf8");
+  if (!contents.includes('${applicationId}.orion-downloads')) {
+    const provider = [
+      '    <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.orion-downloads" android:exported="false" android:grantUriPermissions="true">',
+      '      <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/orion_download_file_paths"/>',
+      '    </provider>',
+    ].join("\n");
+    if (!contents.includes("  </application>")) throw new Error("Unable to locate Android application for Orion download sharing.");
+    contents = contents.replace("  </application>", `${provider}\n  </application>`);
+    fs.writeFileSync(androidManifest, contents, "utf8");
+  }
+  fs.mkdirSync(androidXmlDirectory, { recursive: true });
+  fs.writeFileSync(
+    downloadFilePathsXml,
+    '<?xml version="1.0" encoding="utf-8"?>\n<paths xmlns:android="http://schemas.android.com/apk/res/android">\n  <files-path name="orion_downloads" path="orion-downloads/library/"/>\n</paths>\n',
+    "utf8",
+  );
+  const verified = fs.readFileSync(androidManifest, "utf8");
+  if (!verified.includes('${applicationId}.orion-downloads') || !fs.existsSync(downloadFilePathsXml)) {
+    throw new Error("Orion download FileProvider prerequisites did not persist.");
+  }
+  console.log("[Android] Orion download FileProvider verified.");
 }
 
 function syncGoogleIdentityNativeSources() {
@@ -692,6 +718,7 @@ if (process.argv.includes("--sync-native-only")) {
   try {
     syncCinemaNativeSources();
     ensureCinemaGradleDependencies();
+    ensureCinemaDownloadFileProvider();
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
@@ -704,6 +731,7 @@ try {
   ensureAndroidAppVersion();
   syncCinemaNativeSources();
   ensureCinemaGradleDependencies();
+  ensureCinemaDownloadFileProvider();
   syncGoogleIdentityNativeSources();
   syncGoogleDriveAuthorizationNativeSources();
   syncOrionUpdateNativeSources();

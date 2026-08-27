@@ -50,6 +50,7 @@ interface NativeDownloadEngineModule {
   removeStaleRecords(assetIdsJson: string): Promise<unknown>;
   removeUnavailableRecords(assetIdsJson: string): Promise<unknown>;
   openAsset(assetId: string): Promise<unknown>;
+  playAssetLocally(assetId: string): Promise<unknown>;
   locateAsset(assetId: string): Promise<unknown>;
   resolveOfflinePlayback(assetId: string): Promise<unknown>;
   chooseDeviceStorageTarget(): Promise<{
@@ -254,14 +255,24 @@ export async function removeUnavailableNativeDownloadRecordsV1(assetIds: readonl
 }
 
 
+export interface NativeOfflineSubtitleV1 {
+  id: string;
+  language: string;
+  label: string;
+  format: 'vtt' | 'srt' | 'ass';
+  isDefault: boolean;
+  content: string;
+}
+
 export interface NativeOfflinePlaybackSourceV1 {
   schemaVersion: 1;
   assetId: string;
   uri: string;
-  contentType: 'hls';
-  sourceKind: 'hls' | 'dash';
+  contentType: 'progressive' | 'hls';
+  sourceKind: 'file' | 'hls' | 'dash';
   fragmentCount: number;
   subtitleCount: number;
+  subtitles: NativeOfflineSubtitleV1[];
 }
 
 export async function resolveNativeOfflinePlaybackV1(assetId: string): Promise<NativeOfflinePlaybackSourceV1> {
@@ -277,22 +288,48 @@ export async function resolveNativeOfflinePlaybackV1(assetId: string): Promise<N
       : 'Orion could not prepare this offline download for playback.');
   }
   const uri = typeof result.uri === 'string' ? result.uri.trim() : '';
-  const sourceKind = result.sourceKind === 'hls' || result.sourceKind === 'dash' ? result.sourceKind : null;
-  if (!uri.startsWith('file://') || result.contentType !== 'hls' || !sourceKind) {
+  const sourceKind = result.sourceKind === 'file' || result.sourceKind === 'hls' || result.sourceKind === 'dash'
+    ? result.sourceKind
+    : null;
+  const finalizedFile = sourceKind === 'file'
+    && result.contentType === 'progressive'
+    && uri.startsWith('content://');
+  const legacyFragments = (sourceKind === 'hls' || sourceKind === 'dash')
+    && result.contentType === 'hls'
+    && uri.startsWith('file://');
+  if (!sourceKind || (!finalizedFile && !legacyFragments)) {
     throw new Error('Offline playback source is invalid.');
+  }
+  const subtitleCount = Math.max(0, Math.trunc(Number(result.subtitleCount) || 0));
+  const subtitles: NativeOfflineSubtitleV1[] = finalizedFile && Array.isArray(result.subtitles) ? result.subtitles.map((entry): NativeOfflineSubtitleV1 => {
+    const value = entry && typeof entry === 'object' ? entry as Record<string, unknown> : {};
+    const id = typeof value.id === 'string' ? value.id.trim() : '';
+    const language = typeof value.language === 'string' ? value.language.trim() : '';
+    const label = typeof value.label === 'string' ? value.label.trim() : '';
+    const format: NativeOfflineSubtitleV1['format'] | null = value.format === 'vtt' || value.format === 'srt' || value.format === 'ass' ? value.format : null;
+    const content = typeof value.content === 'string' ? value.content : '';
+    if (!/^[A-Za-z0-9._:-]{1,100}$/.test(id) || !language || !label || !format
+      || !content || content.length > 10 * 1024 * 1024 || content.includes('\u0000')) {
+      throw new Error('Downloaded subtitles could not be opened safely.');
+    }
+    return { id, language: language.slice(0, 12), label: label.slice(0, 120), format, isDefault: value.default === true, content };
+  }) : [];
+  if (finalizedFile && (subtitleCount > 2 || subtitles.length !== subtitleCount)) {
+    throw new Error('Downloaded subtitles could not be opened safely.');
   }
   return {
     schemaVersion: 1,
     assetId: clean,
     uri,
-    contentType: 'hls',
+    contentType: finalizedFile ? 'progressive' : 'hls',
     sourceKind,
     fragmentCount: Math.max(0, Math.trunc(Number(result.fragmentCount) || 0)),
-    subtitleCount: Math.max(0, Math.trunc(Number(result.subtitleCount) || 0)),
+    subtitleCount,
+    subtitles,
   };
 }
 
-async function runNativeAssetAction(method: 'openAsset' | 'locateAsset', assetId: string): Promise<void> {
+async function runNativeAssetAction(method: 'openAsset' | 'playAssetLocally' | 'locateAsset', assetId: string): Promise<void> {
   const module = nativeModule();
   if (!module) throw new Error('Android download engine is unavailable.');
   const result = await module[method](assetId) as { ok?: boolean; message?: string };
@@ -301,6 +338,7 @@ async function runNativeAssetAction(method: 'openAsset' | 'locateAsset', assetId
 
 export const openNativeDownloadAssetV1 = (assetId: string) => runNativeAssetAction('openAsset', assetId);
 export const locateNativeDownloadAssetV1 = (assetId: string) => runNativeAssetAction('locateAsset', assetId);
+export const playNativeDownloadAssetLocallyV1 = (assetId: string) => runNativeAssetAction('playAssetLocally', assetId);
 
 export async function chooseNativeDeviceStorageTargetV1(): Promise<MobileDownloadStorageTargetV1 | null> {
   const module = nativeModule();

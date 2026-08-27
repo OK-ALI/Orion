@@ -178,15 +178,25 @@ internal object OrionDownloadJobStore {
   @Synchronized
   fun setProcessProgress(
     jobId: String,
-    percent: Double,
+    percent: Double?,
+    bytesDownloaded: Long,
+    totalBytes: Long?,
+    bytesPerSecond: Long?,
     etaSeconds: Long?,
   ) {
     mutateJobLocked(jobId, notify = true) { job ->
       if (job.optString("state") == "completed") return@mutateJobLocked
       val previous = job.optJSONObject("progress") ?: emptyProgress()
       val progress = JSONObject(previous.toString())
-      progress.put("percent", percent.coerceIn(0.0, 99.0))
-      progress.put("bytesPerSecond", JSONObject.NULL)
+      val derivedPercent = when {
+        percent != null && percent.isFinite() -> percent.coerceIn(0.0, 99.0)
+        totalBytes != null && totalBytes > 0L -> (bytesDownloaded.toDouble() * 100.0 / totalBytes.toDouble()).coerceIn(0.0, 99.0)
+        else -> null
+      }
+      progress.put("percent", derivedPercent ?: JSONObject.NULL)
+      progress.put("bytesDownloaded", bytesDownloaded.coerceAtLeast(0L))
+      progress.put("totalBytes", totalBytes?.takeIf { it > 0L } ?: JSONObject.NULL)
+      progress.put("bytesPerSecond", bytesPerSecond?.takeIf { it > 0L } ?: JSONObject.NULL)
       progress.put("etaSeconds", etaSeconds?.coerceAtLeast(0L) ?: JSONObject.NULL)
       job.put("progress", progress)
       job.put("updatedAt", System.currentTimeMillis())
@@ -680,7 +690,10 @@ internal object OrionDownloadJobStore {
       val locatorKind = artifact.optJSONObject("_locator")?.optString("kind").orEmpty()
       val observed = if (artifact.isNull("observedSizeBytes")) null else artifact.optLong("observedSizeBytes").coerceAtLeast(0L)
       if (availability == "verified" && observed != null) verifiedBytes = safeAddBytes(verifiedBytes, observed)
-      val open = role == "primary" && availability == "verified" && locatorKind == "content-uri"
+      val finalizedManagedMp4 = locatorKind == "managed-relative" &&
+        asset.optString("container") == "mp4" && asset.optString("mimeType") == "video/mp4"
+      val open = role == "primary" && availability == "verified" &&
+        (locatorKind == "content-uri" || finalizedManagedMp4)
       val locate = role == "primary" && availability == "verified" && locatorKind == "content-uri" &&
         !asset.optJSONObject("storageTarget")?.optString("targetId").isNullOrBlank()
       if (role == "primary") {

@@ -1,8 +1,10 @@
 package com.okali.orion.playback
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.core.content.FileProvider
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -47,6 +49,9 @@ internal object OrionDownloadArtifactManager {
   @Volatile private var reconciling = false
   private const val MAX_FRAGMENT_INDEX_BYTES = 2L * 1024L * 1024L
   private const val MAX_FRAGMENT_COUNT = 20_000
+  private const val MAX_FINALIZED_SUBTITLES = 2
+  private const val MAX_FINALIZED_SUBTITLE_BYTES = 10L * 1024L * 1024L
+  private const val MAX_FINALIZED_SUBTITLE_CHARS = 10 * 1024 * 1024
   private val FRAGMENT_ROLES = setOf("video", "video-init", "audio", "audio-init")
 
   fun reconcile(context: Context, assetIds: Set<String>? = null): JSONObject {
@@ -120,19 +125,20 @@ internal object OrionDownloadArtifactManager {
       ) {
         return playbackResult(false, clean, "offline-file-invalid", "Offline media file is missing or inconsistent.")
       }
-      val artifacts = asset.optJSONArray("_artifacts") ?: JSONArray()
-      val subtitleCount = (0 until artifacts.length())
-        .mapNotNull { artifacts.optJSONObject(it) }
-        .count { it.optString("role") == "subtitle" }
+      val subtitles = finalizedSubtitlePayload(context, asset)
+        ?: return playbackResult(false, clean, "offline-subtitle-invalid", "Downloaded subtitles could not be opened safely.")
+      val playbackUri = managedContentUri(context, bundleDir)
+        ?: return playbackResult(false, clean, "offline-file-uri-unavailable", "Orion could not authorize the local media file for playback.")
       return JSONObject()
         .put("schemaVersion", 1)
         .put("ok", true)
         .put("assetId", clean)
-        .put("uri", Uri.fromFile(bundleDir).toString())
+        .put("uri", playbackUri.toString())
         .put("contentType", "progressive")
         .put("sourceKind", "file")
         .put("fragmentCount", 1)
-        .put("subtitleCount", subtitleCount)
+        .put("subtitleCount", subtitles.length())
+        .put("subtitles", subtitles)
     }
 
     val validated = validateManagedFragmentBundle(bundleDir)
@@ -598,16 +604,31 @@ internal object OrionDownloadArtifactManager {
     val primary = ownedPrimary(asset) ?: return actionResult(false, "artifact-not-found", "Downloaded media is not tracked.")
     if (primary.optString("availability") != "verified") return actionResult(false, "artifact-not-verified", "This download is not currently available.")
     val locator = primary.optJSONObject("_locator") ?: return actionResult(false, "artifact-locator-missing", "This download cannot be opened.")
-    if (locator.optString("kind") != "content-uri") return actionResult(false, "artifact-action-unsupported", "This download cannot be opened outside Orion.")
-    val document = parseContentUri(locator.optString("value")) ?: return actionResult(false, "artifact-locator-invalid", "This download cannot be opened.")
-    if (locate) {
-      val targetId = asset.optJSONObject("storageTarget")?.optString("targetId").orEmpty()
-      val tree = OrionDownloadStorageRegistry.resolveTreeUri(context, targetId)
-      if (tree != null && launch(context, tree, null)) return actionResult(true, null, null)
+    val locatorKind = locator.optString("kind")
+    if (locatorKind == "content-uri") {
+      val document = parseContentUri(locator.optString("value")) ?: return actionResult(false, "artifact-locator-invalid", "This download cannot be opened.")
+      if (locate) {
+        val targetId = asset.optJSONObject("storageTarget")?.optString("targetId").orEmpty()
+        val tree = OrionDownloadStorageRegistry.resolveTreeUri(context, targetId)
+        if (tree != null && launch(context, tree, null, chooser = false)) return actionResult(true, null, null)
+      }
+      val mime = primary.optString("mimeType").takeIf { it.isNotBlank() && it != "null" } ?: asset.optString("mimeType", "video/mp4")
+      return if (launch(context, document, mime, chooser = true)) actionResult(true, null, null)
+      else actionResult(false, "artifact-action-unsupported", "No Android app can play this saved download.")
     }
-    val mime = primary.optString("mimeType").takeIf { it.isNotBlank() && it != "null" } ?: asset.optString("mimeType", "video/mp4")
-    return if (launch(context, document, mime)) actionResult(true, null, null)
-    else actionResult(false, "artifact-action-unsupported", "No Android app can open this saved download.")
+    if (locate || locatorKind != "managed-relative" || asset.optString("container") != "mp4") {
+      return actionResult(false, "artifact-action-unsupported", "This download cannot be opened outside Orion.")
+    }
+    val target = managedTarget(context, asset, primary)
+      ?: return actionResult(false, "artifact-locator-invalid", "This download cannot be opened.")
+    val expectedSize = primary.optLong("expectedSizeBytes", -1L)
+    if (!target.isFile || expectedSize <= 0L || target.length() != expectedSize || !target.extension.equals("mp4", true)) {
+      return actionResult(false, "artifact-integrity-invalid", "This download is no longer a verified MP4.")
+    }
+    val contentUri = managedContentUri(context, target)
+      ?: return actionResult(false, "artifact-action-unsupported", "Orion could not authorize this download for local playback.")
+    return if (launch(context, contentUri, "video/mp4", chooser = true)) actionResult(true, null, null)
+    else actionResult(false, "artifact-action-unsupported", "No Android app can play this saved download.")
   }
 
   private fun probeArtifact(context: Context, asset: JSONObject, artifact: JSONObject): Pair<OrionArtifactAvailability, Long?> {
@@ -756,15 +777,57 @@ internal object OrionDownloadArtifactManager {
     return (0 until artifacts.length()).mapNotNull { artifacts.optJSONObject(it) }.firstOrNull { it.optString("role") == "primary" }
   }
 
-  private fun launch(context: Context, uri: Uri, mimeType: String?): Boolean = try {
+  private fun managedContentUri(context: Context, file: File): Uri? = try {
+    FileProvider.getUriForFile(context, "${context.packageName}.orion-downloads", file)
+  } catch (_: Throwable) { null }
+
+  private fun finalizedSubtitlePayload(context: Context, asset: JSONObject): JSONArray? {
+    val artifacts = asset.optJSONArray("_artifacts") ?: return JSONArray()
+    val tracks = asset.optJSONArray("tracks") ?: JSONArray()
+    val trackById = (0 until tracks.length())
+      .mapNotNull { tracks.optJSONObject(it) }
+      .filter { it.optString("kind") == "subtitle" }
+      .associateBy { it.optString("id") }
+    val result = JSONArray()
+    for (index in 0 until artifacts.length()) {
+      val artifact = artifacts.optJSONObject(index) ?: return null
+      if (artifact.optString("role") != "subtitle") continue
+      if (result.length() >= MAX_FINALIZED_SUBTITLES || artifact.optString("availability") != "verified") return null
+      val trackId = artifact.optString("_trackId").takeIf { it.matches(Regex("^[A-Za-z0-9._:-]{1,100}$")) } ?: return null
+      val track = trackById[trackId] ?: return null
+      val file = managedTarget(context, asset, artifact) ?: return null
+      val expected = artifact.optLong("expectedSizeBytes", -1L)
+      val format = file.extension.lowercase().takeIf { it in setOf("vtt", "srt", "ass") } ?: return null
+      if (!file.isFile || expected <= 0L || expected > MAX_FINALIZED_SUBTITLE_BYTES || file.length() != expected) return null
+      val content = try { file.readText(Charsets.UTF_8) } catch (_: Throwable) { return null }
+      if (content.isBlank() || content.length > MAX_FINALIZED_SUBTITLE_CHARS || content.indexOf('\u0000') >= 0) return null
+      val language = track.optString("language", "und").take(12).ifBlank { "und" }
+      val label = track.optString("label", "${language.uppercase()} subtitle").take(120)
+      result.put(JSONObject()
+        .put("id", trackId)
+        .put("language", language)
+        .put("label", label)
+        .put("format", format)
+        .put("default", track.optBoolean("default", result.length() == 0))
+        .put("content", content))
+    }
+    return result
+  }
+
+  private fun launch(context: Context, uri: Uri, mimeType: String?, chooser: Boolean): Boolean = try {
     val intent = Intent(Intent.ACTION_VIEW).apply {
       setDataAndType(uri, mimeType)
+      clipData = ClipData.newRawUri("Orion download", uri)
       addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    if (intent.resolveActivity(context.packageManager) == null) false else {
-      context.startActivity(intent)
-      true
-    }
+    val launchIntent = if (chooser) Intent.createChooser(intent, "Play locally").apply {
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    } else intent
+    // Starting the chooser is the authoritative capability check. A preflight
+    // package-resolution preflights can return null under Android visibility rules
+    // even when a compatible player is available.
+    context.startActivity(launchIntent)
+    true
   } catch (_: Throwable) { false }
 
   private fun parseContentUri(value: String): Uri? = try { Uri.parse(value).takeIf { it.scheme == "content" } } catch (_: Throwable) { null }

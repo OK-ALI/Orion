@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { Alert, View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { spacing, radii, fontSizes } from '@orion/shared/tokens';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,7 +18,7 @@ import {
   listOfflineMediaEntriesV1,
   subscribeMobileDownloadRepositoryV1,
 } from '../../src/features/downloads/downloadRepository';
-import { reconcileNativeDownloadsV1 } from '../../src/features/downloads/nativeDownloadEngine';
+import { playNativeDownloadAssetLocallyV1, reconcileNativeDownloadsV1 } from '../../src/features/downloads/nativeDownloadEngine';
 import {
   getMobileDownloadPreferencesV1,
   subscribeMobileDownloadPreferencesV1,
@@ -202,7 +202,7 @@ export default function DownloadsScreen() {
             offlineEntries={offlineEntries}
             active={isFocused}
             onManageAssets={(assetIds) => setManagement({ mode: 'manage', assetIds: [...assetIds] })}
-            onPlayOffline={(entry, assetId) => router.push({
+            onPlayInOrion={(entry, assetId) => router.push({
               pathname: '/player/[id]',
               params: {
                 id: String(entry.media.id),
@@ -219,6 +219,14 @@ export default function DownloadsScreen() {
                 offlineAssetId: assetId,
               },
             })}
+            onPlayLocally={(assetId) => {
+              void playNativeDownloadAssetLocallyV1(assetId).catch((error: unknown) => {
+                Alert.alert(
+                  'Play Locally unavailable',
+                  error instanceof Error ? error.message : 'No compatible local video player is available.',
+                );
+              });
+            }}
           />
         )}
       </ScrollView>

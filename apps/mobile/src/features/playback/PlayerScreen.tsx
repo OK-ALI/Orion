@@ -18,7 +18,12 @@ import {
 } from '../../services/sourceHealth';
 import { reportMobileDiagnosticError, updateMobileDiagnostics } from '../../services/mobileDiagnostics';
 import { EmbedPlayerSurface } from './EmbedPlayerSurface';
+import { NativePlayerSurface } from './NativePlayerSurface';
 import { OrionOfflinePlayerSurface } from './OrionOfflinePlayerSurface';
+import {
+  resolveNativeOfflinePlaybackV1,
+  type NativeOfflinePlaybackSourceV1,
+} from '../downloads/nativeDownloadEngine';
 import { ResumePlaybackPrompt } from './ResumePlaybackPrompt';
 import {
   resolveResumeChoiceTime,
@@ -71,9 +76,11 @@ type PlayerRouteParams = {
 function OfflinePlaybackPreparationSurface({
   error,
   onBack,
+  onRetry,
 }: {
   error: string | null;
   onBack: () => void;
+  onRetry?: () => void;
 }) {
   const { setLoading } = useMobilePlayerController();
   const state = error ? 'failed' : 'preparing';
@@ -88,6 +95,7 @@ function OfflinePlaybackPreparationSurface({
         state={state}
         detail={error || 'Orion is validating the downloaded media for local playback.'}
         onBack={error ? onBack : undefined}
+        onRetry={error && onRetry ? onRetry : undefined}
       />
     </View>
   );
@@ -102,6 +110,9 @@ export default function PlayerScreen() {
     useLocalSearchParams<PlayerRouteParams>();
   const { getPlaybackProgress } = useLibraryPlaybackActions();
   const offlineRequested = isOffline === 'true';
+  const [offlineResolutionAttempt, setOfflineResolutionAttempt] = useState(0);
+  const [offlineSource, setOfflineSource] = useState<NativeOfflinePlaybackSourceV1 | null>(null);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
   const routePlaybackIdentity = resolvePlaybackRouteIdentity(type, season, episode);
   const resolvedSeason = routePlaybackIdentity.season;
   const resolvedEpisode = routePlaybackIdentity.episode;
@@ -162,6 +173,36 @@ export default function PlayerScreen() {
   }, [getPlaybackProgress, id, playbackIdentity, publishHandoff, resolvedEpisode, resolvedSeason, type]);
 
   useEffect(() => { hydrateMobileSourceHealth(); }, []);
+  useEffect(() => {
+    if (!offlineRequested || !offlineAssetId) {
+      setOfflineSource(null);
+      setOfflineError(offlineRequested ? 'Offline download identity is missing.' : null);
+      return undefined;
+    }
+    let disposed = false;
+    setOfflineSource(null);
+    setOfflineError(null);
+    resolveNativeOfflinePlaybackV1(offlineAssetId)
+      .then((source) => {
+        if (disposed) return;
+        setOfflineSource(source);
+        updateMobileDiagnostics({ playbackState: 'ready', playbackSurface: 'native' });
+      })
+      .catch((error: unknown) => {
+        if (disposed) return;
+        const message = error instanceof Error && error.message.trim()
+          ? error.message
+          : 'Orion could not prepare this offline download for playback.';
+        setOfflineError(message);
+        updateMobileDiagnostics({ playbackState: 'error', playbackSurface: 'native' });
+        reportMobileDiagnosticError({
+          area: 'offline-playback',
+          code: 'PREPARATION_FAILED',
+          message,
+        });
+      });
+    return () => { disposed = true; };
+  }, [offlineAssetId, offlineRequested, offlineResolutionAttempt]);
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
     let disposed = false;
@@ -484,7 +525,17 @@ export default function PlayerScreen() {
   };
 
   const surface = initialChoicePending ? null : offlineRequested ? (
-    offlineAssetId ? (
+    offlineAssetId && offlineSource?.sourceKind === 'file' ? (
+      <NativePlayerSurface
+        key={`orion-finalized-${offlineSource.assetId}-${offlineSource.uri}`}
+        streamUrl={offlineSource.uri}
+        streamContentType="progressive"
+        allowSourceSwitch={false}
+        offlineSubtitles={offlineSource.subtitles}
+        {...commonProps}
+        sourceId="local"
+      />
+    ) : offlineAssetId && offlineSource ? (
       <OrionOfflinePlayerSurface
         key={`orion-offline-${offlineAssetId}`}
         assetId={offlineAssetId}
@@ -493,8 +544,9 @@ export default function PlayerScreen() {
       />
     ) : (
       <OfflinePlaybackPreparationSurface
-        error="Offline download identity is missing."
+        error={offlineError}
         onBack={() => router.back()}
+        onRetry={offlineAssetId ? () => setOfflineResolutionAttempt((attempt) => attempt + 1) : undefined}
       />
     )
   ) : (

@@ -118,7 +118,8 @@ test('management UI routes all destructive and artifact actions through ID-only 
   assert.match(sheet, /Remove from Orion/);
   assert.match(sheet, /Conclusions?ly missing|Conclusively missing/);
   assert.doesNotMatch(sheet, /Remove stale record/);
-  assert.match(sheet, /Open/);
+  assert.match(sheet, /Play Locally/);
+  assert.match(sheet, /playNativeDownloadAssetLocallyV1/);
   assert.match(sheet, /Locate/);
   assert.match(sheet, /legacy copies have no exact subtitle ownership record/);
   assert.match(sheet, /interface ConfirmationSnapshot/);

@@ -22,6 +22,7 @@ test('P10.5 offline resolver stays ID-only, Orion-owned and fail-closed', () => 
   assert.match(manager, /entry\.optString\("name"\) != expectedName/);
   assert.match(manager, /file\.length\(\) != expectedSize/);
   assert.match(bridge, /resolveNativeOfflinePlaybackV1/);
+  assert.match(bridge, /uri\.startsWith\('content:\/\/'\)/);
   assert.match(bridge, /uri\.startsWith\('file:\/\/'\)/);
   const bridgeStart = bridge.indexOf('export async function resolveNativeOfflinePlaybackV1');
   const bridgeEnd = bridge.indexOf('async function runNativeAssetAction', bridgeStart);

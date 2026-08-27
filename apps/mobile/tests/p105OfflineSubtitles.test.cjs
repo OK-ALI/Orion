@@ -28,7 +28,7 @@ test('P10.5-C3 prepares downloaded subtitle sidecars as local HLS WebVTT renditi
   assert.doesNotMatch(resolver, /SubDL|Wyzie|subdl|wyzie/);
 });
 
-test('P10.5-C3 activates the existing Orion subtitle HUD only when Expo exposes local tracks', () => {
+test('P10.5-C3 activates the existing Orion subtitle HUD for embedded or verified local sidecar tracks', () => {
   const surface = read('src', 'features', 'playback', 'NativePlayerSurface.tsx');
   const hud = read('src', 'components', 'player', 'PlayerHUD.tsx');
 
@@ -39,7 +39,8 @@ test('P10.5-C3 activates the existing Orion subtitle HUD only when Expo exposes 
   assert.match(surface, /onOpenSubtitles=\{subtitleTracks\.length > 0/);
   assert.match(surface, /controller\.openOverlay\('subtitles'\)/);
   assert.match(surface, /<OfflineSubtitleSheet/);
-  assert.match(surface, /player\.subtitleTrack = track/);
+  assert.match(surface, /player\.subtitleTrack = sidecarId \? null : track/);
+  assert.match(surface, /parseOfflineSubtitleCues/);
 });
 
 test('P10.5-C3 subtitle selection remains local and does not add playback-time provider discovery', () => {

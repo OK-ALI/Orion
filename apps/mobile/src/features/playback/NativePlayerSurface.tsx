@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, View } from 'react-native';
+import { AppState, StyleSheet, Text, View } from 'react-native';
 import { useEvent, useEventListener } from 'expo';
 import { useRouter } from 'expo-router';
-import { useVideoPlayer, VideoView, type SubtitleTrack, type VideoSource } from 'expo-video';
+import { useVideoPlayer, VideoView, type ContentType, type SubtitleTrack, type VideoSource } from 'expo-video';
 import { ALL_CINEMA_SOURCES } from '@orion/shared/sources';
 import { PlayerHUD } from '../../components/player/PlayerHUD';
 import { SourcesSheet } from '../../components/player/SourcesSheet';
@@ -21,15 +21,24 @@ import { useMobilePlayerController } from './MobilePlayerController';
 import { getPresentationPreference, savePresentationPreference } from './presentationPreferences';
 import { usePlayerImmersiveSystemUi } from './immersiveSystemUi';
 import type { MobilePlayerPresentation, MobilePlayerSurfaceAdapter } from '@orion/shared/types';
+import type { NativeOfflineSubtitleV1 } from '../downloads/nativeDownloadEngine';
+import { activeOfflineSubtitleCue, parseOfflineSubtitleCues } from './offlineSubtitleCues';
+
+const SIDECAR_TRACK_PREFIX = 'orion-sidecar:';
+const EMPTY_OFFLINE_SUBTITLES: readonly NativeOfflineSubtitleV1[] = [];
 
 interface NativePlayerSurfaceProps extends PlaybackSurfaceProps {
   streamUrl: string;
-  streamContentType?: 'hls';
+  streamContentType?: ContentType;
+  allowSourceSwitch?: boolean;
+  offlineSubtitles?: readonly NativeOfflineSubtitleV1[];
 }
 
 export function NativePlayerSurface({
   streamUrl,
   streamContentType,
+  allowSourceSwitch = true,
+  offlineSubtitles = EMPTY_OFFLINE_SUBTITLES,
   title,
   seriesTitle,
   year,
@@ -52,8 +61,9 @@ export function NativePlayerSurface({
   const { recordPlayback } = useLibraryPlaybackActions();
   const controller = useMobilePlayerController();
   const [watchdogDismissed, setWatchdogDismissed] = useState(false);
-  const [subtitleTracks, setSubtitleTracks] = useState<SubtitleTrack[]>([]);
+  const [embeddedSubtitleTracks, setEmbeddedSubtitleTracks] = useState<SubtitleTrack[]>([]);
   const [selectedSubtitleKey, setSelectedSubtitleKey] = useState<string | null>(null);
+  const [selectedSidecarId, setSelectedSidecarId] = useState<string | null>(null);
   const [pendingManualSource, setPendingManualSource] = useState<{
     id: string;
     label: string;
@@ -95,6 +105,22 @@ export function NativePlayerSurface({
     () => streamContentType ? { uri: streamUrl, contentType: streamContentType } : streamUrl,
     [streamContentType, streamUrl],
   );
+  const sidecarCueMap = useMemo(() => new Map(offlineSubtitles.map((subtitle) => [
+    subtitle.id,
+    parseOfflineSubtitleCues(subtitle),
+  ])), [offlineSubtitles]);
+  const sidecarTracks = useMemo<SubtitleTrack[]>(() => offlineSubtitles.map((subtitle) => ({
+    id: `${SIDECAR_TRACK_PREFIX}${subtitle.id}`,
+    language: subtitle.language,
+    label: subtitle.label,
+    name: subtitle.label,
+    isDefault: subtitle.isDefault,
+    autoSelect: subtitle.isDefault,
+  })), [offlineSubtitles]);
+  const subtitleTracks = useMemo(
+    () => [...embeddedSubtitleTracks, ...sidecarTracks].slice(0, 8),
+    [embeddedSubtitleTracks, sidecarTracks],
+  );
 
   const player = useVideoPlayer(videoSource, (instance) => {
     instance.timeUpdateEventInterval = 1;
@@ -117,12 +143,21 @@ export function NativePlayerSurface({
   useEffect(() => {
     const next = (player.availableSubtitleTracks || []).slice(0, 8);
     const signature = next.map((track) => offlineSubtitleTrackKey(track) || '').join('||');
-    setSubtitleTracks((current) => {
+    setEmbeddedSubtitleTracks((current) => {
       const currentSignature = current.map((track) => offlineSubtitleTrackKey(track) || '').join('||');
       return currentSignature === signature ? current : [...next];
     });
-    setSelectedSubtitleKey(offlineSubtitleTrackKey(player.subtitleTrack));
-  }, [player, statusEvent.status, timeEvent.currentTime, streamUrl]);
+    if (!selectedSidecarId) setSelectedSubtitleKey(offlineSubtitleTrackKey(player.subtitleTrack));
+  }, [player, selectedSidecarId, statusEvent.status, timeEvent.currentTime, streamUrl]);
+
+  useEffect(() => {
+    const preferred = offlineSubtitles.find((subtitle) => subtitle.isDefault)?.id ?? null;
+    setSelectedSidecarId(preferred);
+    if (preferred) {
+      player.subtitleTrack = null;
+      setSelectedSubtitleKey(offlineSubtitleTrackKey(sidecarTracks.find((track) => track.id === `${SIDECAR_TRACK_PREFIX}${preferred}`)));
+    } else setSelectedSubtitleKey(offlineSubtitleTrackKey(player.subtitleTrack));
+  }, [offlineSubtitles, player, sidecarTracks, streamUrl]);
 
   useEffect(() => {
     if (controller.state.overlay === 'subtitles' && subtitleTracks.length === 0) controller.closeOverlay();
@@ -150,13 +185,13 @@ export function NativePlayerSurface({
       canPlay: true,
       canPause: true,
       canSeek: true,
-      canSourceSwitch: true,
+      canSourceSwitch: allowSourceSwitch,
       canSubtitles: subtitleTracks.length > 0,
       canShield: false,
       canFullscreen: true,
       canPresentation: true,
     }, getPresentationPreference('native', sourceId));
-  }, [player, sourceId, subtitleTracks.length]);
+  }, [allowSourceSwitch, player, sourceId, subtitleTracks.length]);
 
   useEventListener(player, 'playToEnd', () => {
     telemetry.emitTelemetry({
@@ -244,23 +279,34 @@ export function NativePlayerSurface({
     onSourceChange(pending.id, snapshot, 'manual', requestedTime);
   };
   const handleFailover = () => {
+    if (!allowSourceSwitch) return;
     telemetry.flush();
     onAutomaticFailover(telemetry.getVerifiedSnapshot());
   };
 
   const selectSubtitleTrack = (track: SubtitleTrack | null) => {
-    player.subtitleTrack = track;
+    const sidecarId = track?.id?.startsWith(SIDECAR_TRACK_PREFIX) ? track.id.slice(SIDECAR_TRACK_PREFIX.length) : null;
+    setSelectedSidecarId(sidecarId);
+    player.subtitleTrack = sidecarId ? null : track;
     setSelectedSubtitleKey(offlineSubtitleTrackKey(track));
     controller.closeOverlay();
   };
+  const activeSidecarCue = useMemo(() => selectedSidecarId
+    ? activeOfflineSubtitleCue(sidecarCueMap.get(selectedSidecarId) || [], Number(timeEvent.currentTime) || 0)
+    : null, [selectedSidecarId, sidecarCueMap, timeEvent.currentTime]);
 
   return (
     <View style={styles.container}>
       <VideoView player={player} style={styles.video} contentFit={contentFit} nativeControls={false} />
+      {activeSidecarCue ? (
+        <View pointerEvents="none" style={offlineSubtitleStyles.cueContainer}>
+          <Text accessibilityLiveRegion="polite" style={offlineSubtitleStyles.cueText}>{activeSidecarCue.text}</Text>
+        </View>
+      ) : null}
       <PlayerStateOverlay
         state={controller.state.loadingState}
         onRetry={() => player.play()}
-        onSwitchSource={() => controller.openOverlay('sources')}
+        onSwitchSource={allowSourceSwitch ? () => controller.openOverlay('sources') : undefined}
       />
       <PlayerHUD
         player={player}
@@ -270,11 +316,11 @@ export function NativePlayerSurface({
         onReveal={controller.reveal}
         onDismiss={controller.dismiss}
         onToggle={controller.toggleChromeFromUserTap}
-        onOpenSources={() => controller.openOverlay('sources')}
+        onOpenSources={allowSourceSwitch ? () => controller.openOverlay('sources') : undefined}
         onOpenSubtitles={subtitleTracks.length > 0 ? () => controller.openOverlay('subtitles') : undefined}
         onOpenPresentation={() => controller.openOverlay('presentation')}
       />
-      {controller.state.overlay === 'sources' && (
+      {allowSourceSwitch && controller.state.overlay === 'sources' && (
         <SourcesSheet
           currentSourceId={sourceId}
           onSelect={selectSource}
@@ -300,7 +346,7 @@ export function NativePlayerSurface({
         }}
         onClose={controller.closeOverlay}
       />
-      {!watchdogDismissed && (
+      {allowSourceSwitch && !watchdogDismissed && (
         <WatchdogWarning
           isBuffering={statusEvent.status === 'loading'}
           onFailover={handleFailover}
@@ -325,3 +371,29 @@ export function NativePlayerSurface({
     </View>
   );
 }
+
+const offlineSubtitleStyles = StyleSheet.create({
+  cueContainer: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    bottom: '11%',
+    alignItems: 'center',
+    zIndex: 4,
+  },
+  cueText: {
+    maxWidth: 920,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.78)',
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    lineHeight: 25,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    textAlign: 'center',
+    textShadowColor: '#000',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+});

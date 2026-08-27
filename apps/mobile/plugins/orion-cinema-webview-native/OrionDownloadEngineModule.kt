@@ -284,6 +284,14 @@ class OrionDownloadEngineModule(
   }
 
   @ReactMethod
+  fun playAssetLocally(assetId: String, promise: Promise) {
+    ioExecutor.execute {
+      try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.open(reactContext, assetId.trim(), locate = false))) }
+      catch (_: Throwable) { promise.reject("DOWNLOAD_LOCAL_PLAYBACK_FAILED", "Orion could not open this download in another player.") }
+    }
+  }
+
+  @ReactMethod
   fun locateAsset(assetId: String, promise: Promise) {
     ioExecutor.execute {
       try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.open(reactContext, assetId.trim(), locate = true))) }

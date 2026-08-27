@@ -10,11 +10,6 @@ import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
-internal data class OrionYtDlpProgress(
-  val percent: Float,
-  val etaSeconds: Long?,
-)
-
 internal sealed class OrionYtDlpOutcome {
   data class Completed(
     val files: List<File>,
@@ -288,13 +283,10 @@ internal object OrionDownloadYtDlpRuntime {
       FFmpeg.getInstance().init(appContext)
       YoutubeDL.getInstance().init(appContext)
       val request = buildRequest(rootUrl, authority, workDir)
-      val response = YoutubeDL.getInstance().execute(request, processId, false) { percent, eta, _ ->
+      val response = YoutubeDL.getInstance().execute(request, processId, false) { percent, eta, line ->
         when (OrionDownloadJobStore.control(cleanJobId)) {
           "pause", "cancel" -> YoutubeDL.getInstance().destroyProcessById(processId)
-          else -> onProgress(OrionYtDlpProgress(
-            percent = if (percent.isFinite()) percent.coerceIn(0f, 100f) else 0f,
-            etaSeconds = eta.takeIf { it >= 0L },
-          ))
+          else -> OrionYtDlpProgressParser.parse(line, percent, eta)?.let(onProgress)
         }
       }
       if (response.exitCode != 0) {
@@ -332,6 +324,7 @@ internal object OrionDownloadYtDlpRuntime {
     val request = YoutubeDLRequest(rootUrl)
       .addOption("--no-playlist")
       .addOption("--newline")
+      .addOption("--progress-template", OrionYtDlpProgressParser.PROGRESS_TEMPLATE)
       .addOption("--continue")
       .addOption("--merge-output-format", "mp4")
       .addOption("--remux-video", "mp4")

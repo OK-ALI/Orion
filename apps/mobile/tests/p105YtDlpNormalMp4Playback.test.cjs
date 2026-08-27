@@ -9,10 +9,10 @@ function read(...parts) {
   return fs.readFileSync(path.join(root, ...parts), "utf8");
 }
 
-test("P10.5 normal MP4 Orion Library assets are first-class offline player sources with side-loaded subtitles", () => {
+test("P10.5 finalized MP4 assets use normal progressive playback while legacy fragments retain Media3 compatibility", () => {
   const transfer = read("plugins", "orion-cinema-webview-native", "OrionDownloadTransferRuntime.kt");
   const artifacts = read("plugins", "orion-cinema-webview-native", "OrionDownloadArtifactManager.kt");
-  const sourceFactory = read("plugins", "orion-cinema-webview-native", "OrionOfflineMediaSourceFactory.kt");
+  const screen = read("src", "features", "playback", "PlayerScreen.tsx");
 
   assert.match(transfer, /OrionDownloadSubtitleRuntime\.prepare\(/);
   assert.match(transfer, /subtitle-finalization-incomplete/);
@@ -28,13 +28,10 @@ test("P10.5 normal MP4 Orion Library assets are first-class offline player sourc
   assert.match(artifacts, /asset\.optString\("container"\) != "mp4"/);
   assert.match(artifacts, /artifact\.optString\("_trackId"\)/);
   assert.match(artifacts, /sourceKind = "file"/);
-  assert.match(artifacts, /mediaFile = bundleDir/);
+  assert.match(artifacts, /managedContentUri\(context, bundleDir\)/);
   assert.match(artifacts, /target\.length\(\) != expectedSize/);
-
-  assert.match(sourceFactory, /val mediaFile = asset\.mediaFile/);
-  assert.match(sourceFactory, /Uri\.fromFile\(mediaFile\)/);
-  assert.match(sourceFactory, /setSubtitleConfigurations\(subtitleConfigurations\)/);
-  assert.match(sourceFactory, /DefaultMediaSourceFactory\([\s\S]{0,120}DefaultDataSource\.Factory\(context\)/);
-
-  assert.doesNotMatch(sourceFactory, /mediaFile[\s\S]{0,240}OrionOfflineFragmentDataSourceFactory/);
+  assert.match(screen, /offlineSource\?\.sourceKind === 'file'/);
+  assert.match(screen, /<NativePlayerSurface/);
+  assert.match(screen, /streamContentType="progressive"/);
+  assert.match(screen, /offlineAssetId && offlineSource \? \([\s\S]*<OrionOfflinePlayerSurface/);
 });

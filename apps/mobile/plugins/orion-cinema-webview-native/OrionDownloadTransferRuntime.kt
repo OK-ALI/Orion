@@ -167,13 +167,29 @@ internal object OrionDownloadTransferEngine {
       return true
     }
 
-    val verifiedBytes =
-      media.length()
-
     OrionDownloadJobStore.setState(
       jobId,
       "verifying",
     )
+
+    val mediaVerification =
+      OrionFinalizedMediaVerifier.verify(
+        media,
+        requireAudio = true,
+      )
+
+    if (!mediaVerification.ok) {
+      OrionDownloadJobStore.markFailed(
+        jobId,
+        mediaVerification.code,
+        mediaVerification.message,
+        retryable = false,
+      )
+
+      return true
+    }
+
+    val verifiedBytes = mediaVerification.sizeBytes
 
     OrionDownloadJobStore.setProgress(
       jobId,
@@ -405,6 +421,9 @@ internal object OrionDownloadTransferEngine {
     OrionDownloadJobStore.setProcessProgress(
       jobId,
       0.0,
+      0L,
+      null,
+      null,
       null,
     )
 
@@ -424,12 +443,15 @@ internal object OrionDownloadTransferEngine {
 
           if (
             now - lastProgressAt >= 500L ||
-            progress.percent >= 99f
+            (progress.percent ?: 0.0) >= 99.0
           ) {
             OrionDownloadJobStore
               .setProcessProgress(
                 jobId,
-                progress.percent.toDouble(),
+                progress.percent,
+                progress.bytesDownloaded,
+                progress.totalBytes,
+                progress.bytesPerSecond,
                 progress.etaSeconds,
               )
 
@@ -494,13 +516,29 @@ internal object OrionDownloadTransferEngine {
           return
         }
 
-        val verifiedBytes =
-          media.length()
-
         OrionDownloadJobStore.setState(
           jobId,
           "verifying",
         )
+
+        val mediaVerification =
+          OrionFinalizedMediaVerifier.verify(
+            media,
+            requireAudio = true,
+          )
+
+        if (!mediaVerification.ok) {
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            mediaVerification.code,
+            mediaVerification.message,
+            retryable = false,
+          )
+          return
+        }
+
+        val verifiedBytes =
+          mediaVerification.sizeBytes
 
         OrionDownloadJobStore.setProgress(
           jobId,
@@ -820,6 +858,9 @@ internal object OrionDownloadTransferEngine {
     OrionDownloadJobStore.setProcessProgress(
       jobId,
       0.0,
+      0L,
+      null,
+      null,
       null,
     )
 
@@ -839,12 +880,15 @@ internal object OrionDownloadTransferEngine {
 
           if (
             now - lastProgressAt >= 500L ||
-            progress.percent >= 99f
+            (progress.percent ?: 0.0) >= 99.0
           ) {
             OrionDownloadJobStore
               .setProcessProgress(
                 jobId,
-                progress.percent.toDouble(),
+                progress.percent,
+                progress.bytesDownloaded,
+                progress.totalBytes,
+                progress.bytesPerSecond,
                 progress.etaSeconds,
               )
 
@@ -909,13 +953,29 @@ internal object OrionDownloadTransferEngine {
           return
         }
 
-        val verifiedBytes =
-          media.length()
-
         OrionDownloadJobStore.setState(
           jobId,
           "verifying",
         )
+
+        val mediaVerification =
+          OrionFinalizedMediaVerifier.verify(
+            media,
+            requireAudio = true,
+          )
+
+        if (!mediaVerification.ok) {
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            mediaVerification.code,
+            mediaVerification.message,
+            retryable = false,
+          )
+          return
+        }
+
+        val verifiedBytes =
+          mediaVerification.sizeBytes
 
         OrionDownloadJobStore.setProgress(
           jobId,

@@ -6,15 +6,18 @@ const path = require('node:path');
 const mobileRoot = path.resolve(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(mobileRoot, ...parts), 'utf8');
 
-test('P10.5-C5 selects the dedicated asset-ID-only surface only for offline playback', () => {
+test('P10.5 selects finalized files into normal playback and reserves the dedicated surface for legacy fragments', () => {
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
   const offline = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
 
   assert.match(screen, /offlineAssetId\?: string/);
-  assert.match(screen, /offlineRequested \? \([\s\S]*<OrionOfflinePlayerSurface/);
+  assert.match(screen, /offlineSource\?\.sourceKind === 'file'/);
+  assert.match(screen, /<NativePlayerSurface/);
+  assert.match(screen, /streamContentType="progressive"/);
+  assert.match(screen, /offlineAssetId && offlineSource \? \([\s\S]*<OrionOfflinePlayerSurface/);
   assert.match(screen, /assetId=\{offlineAssetId\}/);
   assert.match(screen, /\) : \(\s*<EmbedPlayerSurface/);
-  assert.doesNotMatch(screen, /resolveNativeOfflinePlaybackV1|resolvedOfflineUri|streamContentType=\{offlineSource/);
+  assert.match(screen, /resolveNativeOfflinePlaybackV1\(offlineAssetId\)/);
   assert.doesNotMatch(screen, /offlineUri/);
   assert.match(offline, /requireNativeComponent<NativeOfflinePlayerProps>\('OrionOfflinePlayerView'\)/);
   assert.match(offline, /assetId=\{assetId\}/);

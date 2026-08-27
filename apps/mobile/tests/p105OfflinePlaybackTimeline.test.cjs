@@ -43,6 +43,7 @@ test('P10.5-C4 keeps offline presentation local, ID-authoritative and remux-free
   assert.match(module, /fun resolveOfflinePlayback\(assetId: String, promise: Promise\)/);
   assert.match(manager, /validateManagedFragmentBundle\(bundleDir\)/);
   assert.match(bridge, /resolveNativeOfflinePlaybackV1\(assetId: string\)/);
+  assert.match(bridge, /uri\.startsWith\('content:\/\/'\)/);
   assert.match(bridge, /uri\.startsWith\('file:\/\/'\)/);
   assert.doesNotMatch(resolver, /MediaMuxer|portable\.mp4|https?:\/\/|localhost/);
 });
