@@ -27,8 +27,18 @@ function normalizeYear(value: number | string | null | undefined): number | null
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizeMediaTitle(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const clean = value.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  if (!clean || /^(?:null|undefined)$/i.test(clean)) return null;
+  return clean;
+}
+
 export function createMobileDownloadTargetV1(input: CreateMobileDownloadTargetInputV1): MobileDownloadTargetV1 {
   const id = String(input.id);
+  const title = normalizeMediaTitle(input.title) || 'Orion Download';
+  const seriesTitle = normalizeMediaTitle(input.seriesTitle);
+  const episodeTitle = normalizeMediaTitle(input.episodeTitle);
   const season = typeof input.season === 'number' && Number.isFinite(input.season)
     ? Math.max(0, Math.trunc(input.season))
     : null;
@@ -49,13 +59,13 @@ export function createMobileDownloadTargetV1(input: CreateMobileDownloadTargetIn
       schemaVersion: 1,
       id: input.id,
       mediaType: input.mediaType,
-      title: input.title,
+      title,
       year: normalizeYear(input.year),
       season,
       episode,
       libraryKind,
-      seriesTitle: input.seriesTitle || (input.mediaType === 'tv' ? input.title : null),
-      episodeTitle: input.episodeTitle || null,
+      seriesTitle: seriesTitle || (input.mediaType === 'tv' ? title : null),
+      episodeTitle,
       posterPath: input.posterPath || null,
       backdropPath: input.backdropPath || null,
     },

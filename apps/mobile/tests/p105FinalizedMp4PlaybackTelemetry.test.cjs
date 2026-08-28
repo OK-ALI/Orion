@@ -57,42 +57,34 @@ test('yt-dlp completion requires a probed MP4 with video, expected audio, durati
   assert.match(transfer, /mediaVerification\.code/);
 });
 
-test('finalized files use progressive content URIs and legacy bundles alone keep fragment playback', () => {
+test('finalized SAF files use descriptor-backed native Media3 and legacy bundles keep fragment playback', () => {
   const manager = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadArtifactManager.kt');
   const bridge = read('src', 'features', 'downloads', 'nativeDownloadEngine.ts');
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
-  const native = read('src', 'features', 'playback', 'NativePlayerSurface.tsx');
+  const native = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
 
   assert.match(manager, /OrionFinalizedArtifactOwner\.authorize\(context, bundleDir, expectedSize\)/);
   assert.match(manager, /sourceKind", "file"/);
   assert.match(manager, /contentType", "progressive"/);
   assert.match(bridge, /sourceKind === 'file'/);
   assert.match(bridge, /uri\.startsWith\('content:\/\/'\)/);
-  assert.match(screen, /offlineSource\?\.sourceKind === 'file'/);
-  assert.match(screen, /<NativePlayerSurface/);
-  assert.match(screen, /streamContentType="progressive"/);
   assert.match(screen, /offlineAssetId && offlineSource \? \([\s\S]*<OrionOfflinePlayerSurface/);
-  assert.match(native, /allowSourceSwitch = true/);
-  assert.match(screen, /allowSourceSwitch=\{false\}/);
+  assert.doesNotMatch(screen, /<NativePlayerSurface/);
+  assert.match(native, /requireNativeComponent<NativeOfflinePlayerProps>/);
 });
 
-test('finalized files keep verified sidecar subtitles on the normal player path without exposing locators', () => {
+test('finalized files keep verified sidecar subtitles behind the native asset-id boundary', () => {
   const manager = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadArtifactManager.kt');
   const bridge = read('src', 'features', 'downloads', 'nativeDownloadEngine.ts');
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
-  const native = read('src', 'features', 'playback', 'NativePlayerSurface.tsx');
-  const cues = read('src', 'features', 'playback', 'offlineSubtitleCues.ts');
+  const native = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
 
-  assert.match(manager, /finalizedSubtitlePayload\(context, asset\)/);
-  assert.match(manager, /availability"\) != "verified"/);
+  assert.match(manager, /artifact\.optString\("availability"\) != "verified"/);
   assert.match(manager, /MAX_FINALIZED_SUBTITLE_BYTES/);
   assert.match(bridge, /interface NativeOfflineSubtitleV1/);
   assert.match(bridge, /subtitles: NativeOfflineSubtitleV1\[\]/);
-  assert.match(screen, /offlineSubtitles=\{offlineSource\.subtitles\}/);
-  assert.match(native, /parseOfflineSubtitleCues/);
-  assert.match(native, /activeOfflineSubtitleCue/);
-  assert.match(cues, /MAX_CUES = 20_000/);
-  assert.match(cues, /subtitle\.format === 'ass'/);
+  assert.match(screen, /assetId=\{offlineAssetId\}/);
+  assert.match(native, /onSubtitleTracksChange/);
   const subtitleContract = bridge.slice(
     bridge.indexOf('export interface NativeOfflineSubtitleV1'),
     bridge.indexOf('export interface NativeOfflinePlaybackSourceV1'),

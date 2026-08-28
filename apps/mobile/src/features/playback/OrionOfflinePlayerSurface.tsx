@@ -295,6 +295,10 @@ export function OrionOfflinePlayerSurface({
     controller.closeOverlay();
   };
 
+  const failureDetail = nativeState.state === 'failed'
+    ? `${nativeState.message || 'This offline download could not be played.'} (${nativeState.errorCategory || nativeState.code || 'playback'})`
+    : undefined;
+
   return (
     <View style={styles.container}>
       <NativeOfflinePlayer
@@ -308,7 +312,7 @@ export function OrionOfflinePlayerSurface({
       />
       <PlayerStateOverlay
         state={controller.state.loadingState}
-        detail={nativeState.state === 'failed' ? nativeState.message || 'This offline download could not be played.' : undefined}
+        detail={failureDetail}
         onBack={nativeState.state === 'failed' ? () => router.back() : undefined}
         onRetry={nativeState.state === 'failed' ? () => facade.retry() : undefined}
       />

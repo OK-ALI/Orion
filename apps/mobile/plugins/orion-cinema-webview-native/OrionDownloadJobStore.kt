@@ -334,6 +334,28 @@ internal object OrionDownloadJobStore {
   }
 
   @Synchronized
+  fun setPendingSubtitlePublications(jobId: String, expectedGeneration: Long, publications: JSONArray): Boolean {
+    var accepted = false
+    mutateJobLocked(jobId) { job ->
+      if (job.optLong("_executionGeneration", -1L) != expectedGeneration ||
+        job.optString("state") == "cancelled" || job.optString("_control", "run") == "cancel"
+      ) return@mutateJobLocked
+      job.put("_pendingSubtitlePublications", JSONArray(publications.toString()))
+      accepted = true
+    }
+    return accepted
+  }
+
+  @Synchronized
+  fun clearPendingSubtitlePublications(jobId: String, expectedGeneration: Long? = null) {
+    mutateJobLocked(jobId) { job ->
+      if (expectedGeneration == null || job.optLong("_executionGeneration", -1L) == expectedGeneration) {
+        job.remove("_pendingSubtitlePublications")
+      }
+    }
+  }
+
+  @Synchronized
   fun cancelAndFence(jobId: String): Long? {
     val state = readStateLocked()
     val jobs = state.optJSONArray("jobs") ?: return null
@@ -635,6 +657,7 @@ internal object OrionDownloadJobStore {
       job.put("_control", "run")
       job.remove("_finalizationPlan")
       job.remove("_pendingPublication")
+      job.remove("_pendingSubtitlePublications")
       committed = true
       break
     }

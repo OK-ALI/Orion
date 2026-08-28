@@ -9,6 +9,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.security.MessageDigest
+import org.json.JSONArray
 import org.json.JSONObject
 
 internal data class OrionFinalizedArtifactProof(
@@ -42,6 +43,22 @@ internal sealed class OrionFinalizedDocumentSettlement {
   data class Verified(val proof: OrionFinalizedDocumentProof) : OrionFinalizedDocumentSettlement()
   data class Failed(val code: String, val message: String, val retryable: Boolean, val actionRequired: Boolean = false) : OrionFinalizedDocumentSettlement()
   data object Cancelled : OrionFinalizedDocumentSettlement()
+}
+
+internal data class OrionFinalizedSubtitleDocumentProof(
+  val trackId: String,
+  val contentUri: Uri,
+  val targetId: String,
+  val displayName: String,
+  val mimeType: String,
+  val sizeBytes: Long,
+  val sha256: String,
+)
+
+internal sealed class OrionFinalizedSubtitleDocumentSettlement {
+  data class Verified(val proofs: List<OrionFinalizedSubtitleDocumentProof>) : OrionFinalizedSubtitleDocumentSettlement()
+  data class Failed(val code: String, val message: String, val retryable: Boolean, val actionRequired: Boolean = false) : OrionFinalizedSubtitleDocumentSettlement()
+  data object Cancelled : OrionFinalizedSubtitleDocumentSettlement()
 }
 
 /** Pure deterministic contracts used by production settlement and JVM tests. */
@@ -86,6 +103,32 @@ internal object OrionFinalizedArtifactPolicy {
       primary + (year?.takeIf { it in 1878..9999 }?.let { " ($it)" } ?: "")
     }
     return OrionSafDocumentNamePolicy.sanitize("$raw.mp4", "Orion Download.mp4")
+  }
+
+  fun metadataText(value: Any?): String? = (value as? String)
+    ?.replace(Regex("[\\u0000-\\u001f\\u007f]"), "")
+    ?.trim()
+    ?.takeIf { it.isNotBlank() && !it.equals("null", true) && !it.equals("undefined", true) }
+
+  fun subtitleDisplayName(
+    mediaDisplayName: String,
+    language: String?,
+    provider: String?,
+    format: String,
+    languageCollision: Boolean,
+  ): String? {
+    val extension = format.lowercase().takeIf { it in setOf("srt", "vtt", "ass") } ?: return null
+    val stem = mediaDisplayName.removeSuffix(".mp4").removeSuffix(".MP4").trim()
+      .ifBlank { "Orion Download" }
+    val languageTag = language.orEmpty().lowercase().replace(Regex("[^a-z0-9-]"), "").take(12).ifBlank { "und" }
+    val providerTag = provider.orEmpty().lowercase().takeIf { it in setOf("subdl", "wyzie") }
+    val identity = if (languageCollision && providerTag != null) ".$providerTag" else ""
+    val suffix = ".$extension"
+    return OrionSafDocumentNamePolicy.sanitizePreservingExtension(
+      "$stem.$languageTag$identity$suffix",
+      "Orion Download.$languageTag$identity$suffix",
+      suffix,
+    )
   }
 
   fun durableProofMatches(
@@ -168,12 +211,12 @@ internal object OrionFinalizedArtifactOwner {
       return documentFailed("storage-destination-unavailable", "Choose the Orion Library storage folder again and retry finalization.", true, true)
     }
     val finalName = OrionFinalizedArtifactPolicy.finalDisplayName(
-      title = media.optString("title").takeIf { it.isNotBlank() },
+      title = OrionFinalizedArtifactPolicy.metadataText(media.opt("title")),
       year = media.opt("year").takeUnless { it == null || it == JSONObject.NULL }?.toString()?.toIntOrNull(),
-      seriesTitle = media.optString("seriesTitle").takeIf { it.isNotBlank() },
+      seriesTitle = OrionFinalizedArtifactPolicy.metadataText(media.opt("seriesTitle")),
       season = media.opt("season").takeUnless { it == null || it == JSONObject.NULL }?.toString()?.toIntOrNull(),
       episode = media.opt("episode").takeUnless { it == null || it == JSONObject.NULL }?.toString()?.toIntOrNull(),
-      episodeTitle = media.optString("episodeTitle").takeIf { it.isNotBlank() },
+      episodeTitle = OrionFinalizedArtifactPolicy.metadataText(media.opt("episodeTitle")),
     )
 
     recoverPendingDocument(context, jobId, generation, targetId, requireAudio)?.let { recovered ->
@@ -340,6 +383,171 @@ internal object OrionFinalizedArtifactOwner {
     }
     return settlement
   }
+
+  fun publishSubtitlesToUserFolder(
+    context: Context,
+    jobId: String,
+    generation: Long,
+    targetId: String,
+    mediaDisplayName: String,
+    subtitleDirectory: File,
+    entries: JSONArray,
+  ): OrionFinalizedSubtitleDocumentSettlement {
+    if (entries.length() == 0) return OrionFinalizedSubtitleDocumentSettlement.Verified(emptyList())
+    if (entries.length() > 2 || OrionDownloadStorageRegistry.describe(context, targetId) == null) {
+      return subtitleFailed("subtitle-publication-target-unavailable", "Choose the Orion Library storage folder again before publishing subtitles.", true, true)
+    }
+    if (!cleanupPendingSubtitlePublications(context, jobId)) {
+      return subtitleFailed("subtitle-publication-cleanup-unavailable", "Orion could not safely clean up an earlier subtitle publication.", true, true)
+    }
+    val root = try { subtitleDirectory.canonicalFile } catch (_: Throwable) {
+      return subtitleFailed("subtitle-publication-source-invalid", "Selected subtitle staging could not be resolved.", false)
+    }
+    val languages = (0 until entries.length()).mapNotNull { index ->
+      entries.optJSONObject(index)?.optString("language")?.lowercase()?.takeIf { it.isNotBlank() }
+    }
+    val languageCounts = languages.groupingBy { it }.eachCount()
+    val pending = JSONArray()
+    val proofs = mutableListOf<OrionFinalizedSubtitleDocumentProof>()
+
+    for (index in 0 until entries.length()) {
+      if (!canContinue(jobId, generation)) {
+        cleanupPendingSubtitlePublications(context, jobId)
+        return OrionFinalizedSubtitleDocumentSettlement.Cancelled
+      }
+      val entry = entries.optJSONObject(index)
+        ?: return subtitlePublicationFailure(context, jobId, "subtitle-publication-metadata-invalid", "Selected subtitle metadata is incomplete.", false)
+      val trackId = entry.optString("id").takeIf { it.matches(Regex("^[A-Za-z0-9._:-]{1,100}$")) }
+        ?: return subtitlePublicationFailure(context, jobId, "subtitle-publication-metadata-invalid", "Selected subtitle metadata is incomplete.", false)
+      val relative = entry.optString("name").takeIf { it.matches(Regex("^subtitles/[A-Za-z0-9._-]{1,120}$")) }
+        ?: return subtitlePublicationFailure(context, jobId, "subtitle-publication-source-invalid", "Selected subtitle staging is invalid.", false)
+      val source = try { File(subtitleDirectory, relative).canonicalFile } catch (_: Throwable) { null }
+        ?: return subtitlePublicationFailure(context, jobId, "subtitle-publication-source-invalid", "Selected subtitle staging is invalid.", false)
+      val expectedBytes = entry.optLong("size", -1L)
+      if (!OrionDownloadOwnershipPolicy.canonicalContained(root, source) || !source.isFile ||
+        expectedBytes <= 0L || expectedBytes > 10L * 1024L * 1024L || source.length() != expectedBytes
+      ) return subtitlePublicationFailure(context, jobId, "subtitle-publication-source-invalid", "Selected subtitle staging is missing or inconsistent.", false)
+      val format = source.extension.lowercase().takeIf { it in setOf("srt", "vtt", "ass") }
+        ?: return subtitlePublicationFailure(context, jobId, "subtitle-publication-format-invalid", "Selected subtitle format is unsupported.", false)
+      val language = entry.optString("language").lowercase().replace(Regex("[^a-z0-9-]"), "").take(12).ifBlank { "und" }
+      val provider = entry.optString("provider").takeIf { it in setOf("subdl", "wyzie") }
+      val intendedName = OrionFinalizedArtifactPolicy.subtitleDisplayName(
+        mediaDisplayName,
+        language,
+        provider,
+        format,
+        (languageCounts[language] ?: 0) > 1,
+      ) ?: return subtitlePublicationFailure(context, jobId, "subtitle-publication-name-invalid", "Orion could not derive a safe subtitle filename.", false)
+      val mimeType = when (format) {
+        "srt" -> "application/x-subrip"
+        "ass" -> "text/x-ssa"
+        else -> "text/vtt"
+      }
+      val document = OrionDownloadStorageRegistry.createDocument(context, targetId, mimeType, intendedName)
+        ?: return subtitlePublicationFailure(context, jobId, "subtitle-publication-create-failed", "Orion could not create a selected subtitle beside the media file.", true, true)
+      val journal = JSONObject()
+        .put("trackId", trackId)
+        .put("targetId", targetId)
+        .put("uri", document.toString())
+        .put("intendedDisplayName", intendedName)
+        .put("actualDisplayName", intendedName)
+        .put("mimeType", mimeType)
+        .put("sizeBytes", expectedBytes)
+        .put("stage", "created")
+      pending.put(journal)
+      if (!OrionDownloadJobStore.setPendingSubtitlePublications(jobId, generation, pending)) {
+        OrionDownloadStorageRegistry.deleteDocument(context, document)
+        cleanupPendingSubtitlePublications(context, jobId)
+        return OrionFinalizedSubtitleDocumentSettlement.Cancelled
+      }
+      val sourceDigest = sha256(source)
+        ?: return subtitlePublicationFailure(context, jobId, "subtitle-publication-read-failed", "Orion could not read a selected subtitle.", true)
+      try {
+        val descriptor = context.contentResolver.openFileDescriptor(document, "rwt")
+          ?: throw java.io.IOException("provider-descriptor-null")
+        descriptor.use { pfd ->
+          FileInputStream(source).use { input ->
+            FileOutputStream(pfd.fileDescriptor).use { output ->
+              val buffer = ByteArray(HASH_BUFFER_BYTES)
+              var copied = 0L
+              while (true) {
+                if (!canContinue(jobId, generation)) throw InterruptedException("cancelled")
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count == 0) continue
+                output.write(buffer, 0, count)
+                copied = Math.addExact(copied, count.toLong())
+              }
+              output.flush()
+              output.fd.sync()
+              if (copied != expectedBytes) throw java.io.IOException("copy-size-mismatch")
+            }
+          }
+        }
+      } catch (_: InterruptedException) {
+        cleanupPendingSubtitlePublications(context, jobId)
+        return OrionFinalizedSubtitleDocumentSettlement.Cancelled
+      } catch (_: Throwable) {
+        return subtitlePublicationFailure(context, jobId, "subtitle-publication-write-failed", "Orion could not publish a selected subtitle.", true, true)
+      }
+      val info = OrionDownloadStorageRegistry.documentInfo(context, document)
+        ?: return subtitlePublicationFailure(context, jobId, "subtitle-publication-document-unavailable", "Orion could not inspect a published subtitle.", true, true)
+      val destinationDigest = sha256(context, document)
+      val probe = OrionDownloadStorageRegistry.probeDocument(context, document)
+      if (destinationDigest == null || destinationDigest.second != expectedBytes ||
+        !destinationDigest.first.equals(sourceDigest, true) ||
+        probe !is OrionDownloadStorageRegistry.DocumentProbe.Verified || probe.sizeBytes != expectedBytes
+      ) return subtitlePublicationFailure(context, jobId, "subtitle-publication-proof-mismatch", "A published subtitle did not match its verified source.", false)
+      journal
+        .put("actualDisplayName", info.displayName)
+        .put("sha256", destinationDigest.first)
+        .put("stage", "verified")
+      if (!OrionDownloadJobStore.setPendingSubtitlePublications(jobId, generation, pending)) {
+        cleanupPendingSubtitlePublications(context, jobId)
+        return OrionFinalizedSubtitleDocumentSettlement.Cancelled
+      }
+      proofs += OrionFinalizedSubtitleDocumentProof(
+        trackId = trackId,
+        contentUri = document,
+        targetId = targetId,
+        displayName = info.displayName,
+        mimeType = mimeType,
+        sizeBytes = expectedBytes,
+        sha256 = destinationDigest.first,
+      )
+    }
+    return OrionFinalizedSubtitleDocumentSettlement.Verified(proofs)
+  }
+
+  fun cleanupPendingSubtitlePublications(context: Context, jobId: String): Boolean {
+    val pending = OrionDownloadJobStore.getJob(jobId)?.optJSONArray("_pendingSubtitlePublications") ?: return true
+    var complete = true
+    for (index in 0 until pending.length()) {
+      val raw = pending.optJSONObject(index)?.optString("uri").orEmpty()
+      val uri = try { Uri.parse(raw).takeIf { it.scheme == "content" } } catch (_: Throwable) { null }
+      if (uri == null || OrionDownloadStorageRegistry.deleteDocument(context, uri) == OrionDownloadStorageRegistry.DocumentDeleteResult.Unavailable) {
+        complete = false
+      }
+    }
+    if (complete) OrionDownloadJobStore.clearPendingSubtitlePublications(jobId)
+    return complete
+  }
+
+  private fun subtitlePublicationFailure(
+    context: Context,
+    jobId: String,
+    code: String,
+    message: String,
+    retryable: Boolean,
+    actionRequired: Boolean = false,
+  ): OrionFinalizedSubtitleDocumentSettlement {
+    val cleaned = cleanupPendingSubtitlePublications(context, jobId)
+    return if (cleaned) subtitleFailed(code, message, retryable, actionRequired) else
+      subtitleFailed("subtitle-publication-cleanup-unavailable", "Orion could not safely remove an incomplete subtitle publication.", true, true)
+  }
+
+  private fun subtitleFailed(code: String, message: String, retryable: Boolean, actionRequired: Boolean = false) =
+    OrionFinalizedSubtitleDocumentSettlement.Failed(code, message, retryable, actionRequired)
 
   private fun recoverPendingDocument(
     context: Context,

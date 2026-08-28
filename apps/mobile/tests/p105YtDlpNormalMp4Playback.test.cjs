@@ -9,7 +9,7 @@ function read(...parts) {
   return fs.readFileSync(path.join(root, ...parts), "utf8");
 }
 
-test("P10.5 finalized MP4 assets use normal progressive playback while legacy fragments retain Media3 compatibility", () => {
+test("P10.5 finalized MP4 assets use descriptor-backed native playback while legacy fragments retain Media3 compatibility", () => {
   const transfer = read("plugins", "orion-cinema-webview-native", "OrionDownloadTransferRuntime.kt");
   const artifacts = read("plugins", "orion-cinema-webview-native", "OrionDownloadArtifactManager.kt");
   const screen = read("src", "features", "playback", "PlayerScreen.tsx");
@@ -30,8 +30,6 @@ test("P10.5 finalized MP4 assets use normal progressive playback while legacy fr
   assert.match(artifacts, /sourceKind = "file"/);
   assert.match(artifacts, /OrionFinalizedArtifactOwner\.authorize\(context, bundleDir, expectedSize\)/);
   assert.match(artifacts, /target\.length\(\) != expectedSize/);
-  assert.match(screen, /offlineSource\?\.sourceKind === 'file'/);
-  assert.match(screen, /<NativePlayerSurface/);
-  assert.match(screen, /streamContentType="progressive"/);
   assert.match(screen, /offlineAssetId && offlineSource \? \([\s\S]*<OrionOfflinePlayerSurface/);
+  assert.doesNotMatch(screen, /<NativePlayerSurface/);
 });

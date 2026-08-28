@@ -6,9 +6,46 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONObject
 
 class OrionFinalizedArtifactPolicyTest {
   private val digest = "a".repeat(64)
+
+  @Test
+  fun jsonNullSeriesTitleCannotOverrideTheRealMovieTitle() {
+    assertNull(OrionFinalizedArtifactPolicy.metadataText(JSONObject.NULL))
+    assertNull(OrionFinalizedArtifactPolicy.metadataText("null"))
+    assertNull(OrionFinalizedArtifactPolicy.metadataText("undefined"))
+    assertEquals("Grand Theft Auto VI An Extended Look", OrionFinalizedArtifactPolicy.metadataText(" Grand Theft Auto VI An Extended Look "))
+    assertEquals(
+      "Grand Theft Auto VI An Extended Look (2026).mp4",
+      OrionFinalizedArtifactPolicy.finalDisplayName(
+        title = "Grand Theft Auto VI An Extended Look",
+        year = 2026,
+        seriesTitle = OrionFinalizedArtifactPolicy.metadataText(JSONObject.NULL),
+        season = null,
+        episode = null,
+        episodeTitle = null,
+      ),
+    )
+  }
+
+  @Test
+  fun subtitleNamesUseTheFinalMediaStemAndLanguageBeforeProviderCollisionIdentity() {
+    assertEquals(
+      "Grand Theft Auto VI An Extended Look (2026).en.srt",
+      OrionFinalizedArtifactPolicy.subtitleDisplayName(
+        "Grand Theft Auto VI An Extended Look (2026).mp4", "en", "subdl", "srt", false,
+      ),
+    )
+    assertEquals(
+      "Grand Theft Auto VI An Extended Look (2026).en.wyzie.vtt",
+      OrionFinalizedArtifactPolicy.subtitleDisplayName(
+        "Grand Theft Auto VI An Extended Look (2026).mp4", "en", "wyzie", "vtt", true,
+      ),
+    )
+    assertNull(OrionFinalizedArtifactPolicy.subtitleDisplayName("Movie.mp4", "en", "subdl", "txt", false))
+  }
 
   @Test
   fun acceptsOnlyTheExactDeterministicYtDlpOutput() {

@@ -14,13 +14,17 @@ internal object OrionSafDocumentNamePolicy {
   private const val MP4_EXTENSION = ".mp4"
 
   fun sanitize(value: String, fallback: String = "Orion download"): String {
+    val extension = if (value.endsWith(MP4_EXTENSION, true) || fallback.endsWith(MP4_EXTENSION, true)) MP4_EXTENSION else ""
+    return sanitizePreservingExtension(value, fallback, extension)
+  }
+
+  fun sanitizePreservingExtension(value: String, fallback: String, extension: String): String {
     val fallbackName = normalize(fallback).ifBlank { "Orion download" }
     val candidate = normalize(value).ifBlank { fallbackName }
-    val preserveMp4 = candidate.endsWith(MP4_EXTENSION, ignoreCase = true)
-    val suffix = if (preserveMp4) MP4_EXTENSION else ""
-    val rawStem = if (preserveMp4) candidate.dropLast(MP4_EXTENSION.length) else candidate
-    val fallbackStem = if (fallbackName.endsWith(MP4_EXTENSION, ignoreCase = true)) {
-      fallbackName.dropLast(MP4_EXTENSION.length)
+    val suffix = extension.lowercase().takeIf { it.matches(Regex("^\\.[a-z0-9]{1,8}$")) } ?: ""
+    val rawStem = if (suffix.isNotEmpty() && candidate.endsWith(suffix, ignoreCase = true)) candidate.dropLast(suffix.length) else candidate
+    val fallbackStem = if (suffix.isNotEmpty() && fallbackName.endsWith(suffix, ignoreCase = true)) {
+      fallbackName.dropLast(suffix.length)
     } else fallbackName
     val stem = rawStem.trimEnd('.', ' ').ifBlank {
       fallbackStem.trimEnd('.', ' ').ifBlank { "Orion download" }

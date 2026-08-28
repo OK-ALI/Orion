@@ -26,7 +26,7 @@ test('P10.5-C2 routes opaque asset identity instead of durable physical offline 
   assert.doesNotMatch(downloads, /offlineUri:/);
 });
 
-test('P10.5 finalized files use normal progressive playback and legacy bundles keep the dedicated surface', () => {
+test('P10.5 finalized files and legacy bundles keep the asset-id native surface', () => {
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
   const surface = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
 
@@ -34,10 +34,8 @@ test('P10.5 finalized files use normal progressive playback and legacy bundles k
   assert.match(screen, /if \(offlineRequested\) \{\s*setImdbId\(null\);\s*return undefined;/);
   assert.match(screen, /if \(offlineRequested\) return '';/);
   assert.match(screen, /resolveNativeOfflinePlaybackV1\(offlineAssetId\)/);
-  assert.match(screen, /offlineSource\?\.sourceKind === 'file'/);
-  assert.match(screen, /<NativePlayerSurface/);
-  assert.match(screen, /streamContentType="progressive"/);
   assert.match(screen, /<OrionOfflinePlayerSurface/);
+  assert.doesNotMatch(screen, /<NativePlayerSurface/);
   assert.match(screen, /\) : \(\s*<EmbedPlayerSurface/);
   assert.match(screen, /PlayerStateOverlay/);
   assert.match(screen, /controller|setLoading/);

@@ -298,6 +298,7 @@ internal object OrionDownloadTransferEngine {
     try { OrionDownloadYtDlpRuntime.stop(jobId) } catch (_: Throwable) {}
     OrionDownloadTransferRuntime.release(jobId)
     try { OrionFinalizedArtifactOwner.cleanupPendingPublication(context, jobId) } catch (_: Throwable) {}
+    try { OrionFinalizedArtifactOwner.cleanupPendingSubtitlePublications(context, jobId) } catch (_: Throwable) {}
     try { OrionDownloadYtDlpRuntime.stagingDir(context, jobId).deleteRecursively() } catch (_: Throwable) {}
     try { java.io.File(context.filesDir, "orion-downloads/partial/$jobId-fragments").deleteRecursively() } catch (_: Throwable) {}
     try { java.io.File(context.filesDir, "orion-downloads/partial/$jobId.part").delete() } catch (_: Throwable) {}
@@ -1721,6 +1722,7 @@ internal object OrionDownloadTransferEngine {
     var sidecarRoot: java.io.File? = null
     var settledProof: OrionFinalizedArtifactProof? = null
     var settledDocumentProof: OrionFinalizedDocumentProof? = null
+    var settledSubtitleProofs: List<OrionFinalizedSubtitleDocumentProof> = emptyList()
     var durableMediaBytes = verifiedBytes
     val userOwnedLibrary = destination == "orion-library" &&
       job.optJSONObject("storageTarget")?.optString("mode") == "user-folder"
@@ -1825,6 +1827,44 @@ internal object OrionDownloadTransferEngine {
 
         sidecarRoot =
           candidateSidecars
+
+        if (userOwnedLibrary) {
+          when (val subtitleSettlement = OrionFinalizedArtifactOwner.publishSubtitlesToUserFolder(
+            context = context,
+            jobId = jobId,
+            generation = generation,
+            targetId = job.optJSONObject("storageTarget")?.optString("targetId").orEmpty(),
+            mediaDisplayName = settledDocumentProof?.displayName ?: return,
+            subtitleDirectory = candidateSidecars,
+            entries = subtitleResult.bundleEntries,
+          )) {
+            OrionFinalizedSubtitleDocumentSettlement.Cancelled -> {
+              settledDocumentProof?.let { OrionDownloadStorageRegistry.deleteDocument(context, it.contentUri) }
+              candidateSidecars.deleteRecursively()
+              return
+            }
+            is OrionFinalizedSubtitleDocumentSettlement.Failed -> {
+              settledDocumentProof?.let { OrionDownloadStorageRegistry.deleteDocument(context, it.contentUri) }
+              candidateSidecars.deleteRecursively()
+              if (subtitleSettlement.actionRequired) {
+                OrionDownloadJobStore.markActionRequired(jobId, subtitleSettlement.code, subtitleSettlement.message)
+              } else {
+                OrionDownloadJobStore.markFailed(jobId, subtitleSettlement.code, subtitleSettlement.message, subtitleSettlement.retryable)
+              }
+              return
+            }
+            is OrionFinalizedSubtitleDocumentSettlement.Verified -> {
+              settledSubtitleProofs = subtitleSettlement.proofs
+              if (settledSubtitleProofs.size != selectedSubtitleCount) {
+                OrionFinalizedArtifactOwner.cleanupPendingSubtitlePublications(context, jobId)
+                settledDocumentProof?.let { OrionDownloadStorageRegistry.deleteDocument(context, it.contentUri) }
+                candidateSidecars.deleteRecursively()
+                OrionDownloadJobStore.markFailed(jobId, "subtitle-publication-incomplete", "One or more selected subtitles could not be published beside the media file.", true)
+                return
+              }
+            }
+          }
+        }
       }
 
       locatorKind = if (userOwnedLibrary) "content-uri" else "managed"
@@ -1834,11 +1874,14 @@ internal object OrionDownloadTransferEngine {
 
     val assetId = "asset-$jobId"
     val now = System.currentTimeMillis()
+    val durableSubtitleBytes = if (userOwnedLibrary) settledSubtitleProofs.fold(0L) { total, proof ->
+      try { Math.addExact(total, proof.sizeBytes) } catch (_: ArithmeticException) { Long.MAX_VALUE }
+    } else subtitleResult.bytes
     val totalVerifiedBytes =
-      if (durableMediaBytes > Long.MAX_VALUE - subtitleResult.bytes) {
+      if (durableMediaBytes > Long.MAX_VALUE - durableSubtitleBytes) {
         Long.MAX_VALUE
       } else {
-        durableMediaBytes + subtitleResult.bytes
+        durableMediaBytes + durableSubtitleBytes
       }
 
     val asset = org.json.JSONObject()
@@ -1864,8 +1907,7 @@ internal object OrionDownloadTransferEngine {
         "_artifacts",
         if (userOwnedLibrary) directUserFolderArtifacts(
           assetId = assetId,
-          jobId = jobId,
-          subtitleEntries = subtitleResult.bundleEntries,
+          subtitleProofs = settledSubtitleProofs,
           proof = settledDocumentProof ?: return,
           now = now,
         ) else directManagedArtifacts(
@@ -1891,12 +1933,14 @@ internal object OrionDownloadTransferEngine {
       if (destination == "orion-library") {
         settledProof?.file?.delete()
         settledDocumentProof?.let { OrionDownloadStorageRegistry.deleteDocument(context, it.contentUri) }
+        OrionFinalizedArtifactOwner.cleanupPendingSubtitlePublications(context, jobId)
         sidecarRoot?.deleteRecursively()
       }
       return
     }
 
     if (userOwnedLibrary) partial.delete()
+    if (userOwnedLibrary) sidecarRoot?.deleteRecursively()
 
     OrionDownloadSubtitleRuntime.cleanup(
       context,
@@ -1927,8 +1971,7 @@ internal object OrionDownloadTransferEngine {
 
   private fun directUserFolderArtifacts(
     assetId: String,
-    jobId: String,
-    subtitleEntries: org.json.JSONArray,
+    subtitleProofs: List<OrionFinalizedSubtitleDocumentProof>,
     proof: OrionFinalizedDocumentProof,
     now: Long,
   ): org.json.JSONArray {
@@ -1947,23 +1990,17 @@ internal object OrionDownloadTransferEngine {
         .put("_verifiedByteCount", proof.sizeBytes)
         .put("_contentSha256", proof.sha256),
     )
-    for (index in 0 until subtitleEntries.length()) {
-      val entry = subtitleEntries.optJSONObject(index) ?: continue
-      val relative = entry.optString("name")
-      val trackId = entry.optString("id")
-      if (!relative.matches(Regex("^subtitles/[A-Za-z0-9._-]{1,120}$")) ||
-        !trackId.matches(Regex("^[A-Za-z0-9._:-]{1,100}$"))
-      ) continue
+    subtitleProofs.forEachIndexed { index, subtitle ->
       artifacts.put(ownedArtifact(
         artifactId = "$assetId:subtitle:$index",
         role = "subtitle",
-        displayName = relative.substringAfterLast('/'),
-        mimeType = subtitleMime(relative.substringAfterLast('.', "srt")),
-        sizeBytes = entry.optLong("size", 0L).coerceAtLeast(0L),
-        locatorKind = "managed-relative",
-        locatorValue = "$jobId.sidecars/$relative",
+        displayName = subtitle.displayName,
+        mimeType = subtitle.mimeType,
+        sizeBytes = subtitle.sizeBytes,
+        locatorKind = "content-uri",
+        locatorValue = subtitle.contentUri.toString(),
         now = now,
-      ).put("_trackId", trackId))
+      ).put("_trackId", subtitle.trackId).put("_contentSha256", subtitle.sha256))
     }
     return artifacts
   }

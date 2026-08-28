@@ -19,7 +19,13 @@ internal data class OrionOfflinePlayerSubtitle(
   val label: String,
   val format: String,
   val isDefault: Boolean,
-  val file: File,
+  val file: File? = null,
+  val document: OrionOfflinePlayerDocument? = null,
+)
+
+internal data class OrionOfflinePlayerDocument(
+  val uri: Uri,
+  val sizeBytes: Long,
 )
 
 internal data class OrionOfflinePlayerAsset(
@@ -32,6 +38,7 @@ internal data class OrionOfflinePlayerAsset(
   val audioMediaCount: Int,
   val subtitles: List<OrionOfflinePlayerSubtitle>,
   val mediaFile: File? = null,
+  val mediaDocument: OrionOfflinePlayerDocument? = null,
 )
 
 internal data class OrionOfflinePlayerResolution(
@@ -144,8 +151,6 @@ internal object OrionDownloadArtifactManager {
         ?: return playbackResult(false, clean, "offline-primary-locator-invalid", "Offline media ownership could not be resolved.")
       val playbackUri = OrionFinalizedArtifactOwner.authorizeDocument(context, document, expectedSize)
         ?: return playbackResult(false, clean, "offline-file-uri-unavailable", "Orion could not open the selected media document for playback.")
-      val subtitles = finalizedSubtitlePayload(context, asset)
-        ?: return playbackResult(false, clean, "offline-subtitle-invalid", "Downloaded subtitles could not be opened safely.")
       return JSONObject()
         .put("schemaVersion", 1)
         .put("ok", true)
@@ -154,8 +159,10 @@ internal object OrionDownloadArtifactManager {
         .put("contentType", "progressive")
         .put("sourceKind", "file")
         .put("fragmentCount", 1)
-        .put("subtitleCount", subtitles.length())
-        .put("subtitles", subtitles)
+        // User-folder subtitles stay behind the native asset-id boundary. The
+        // dedicated Orion player resolves their exact owned document URIs.
+        .put("subtitleCount", 0)
+        .put("subtitles", JSONArray())
     }
     if (locatorKind !in setOf("managed", "managed-relative")) {
       return playbackResult(false, clean, "offline-primary-not-managed", "Offline media is not stored in Orion Library.")
@@ -243,7 +250,8 @@ internal object OrionDownloadArtifactManager {
     reconcile(context, setOf(clean))
     val asset = OrionDownloadJobStore.ownershipAssets(setOf(clean)).optJSONObject(0)
       ?: return failure("asset-record", "offline-asset-not-found", "Offline download was not found.")
-    if (asset.optString("destination") != "orion-library" || asset.optJSONObject("storageTarget")?.optString("mode") != "orion-library") {
+    val storageMode = asset.optJSONObject("storageTarget")?.optString("mode").orEmpty()
+    if (asset.optString("destination") != "orion-library" || storageMode !in setOf("orion-library", "user-folder")) {
       return failure("destination", "offline-asset-not-managed", "This download is not an Orion Library offline asset.")
     }
     val primary = ownedPrimary(asset)
@@ -254,7 +262,86 @@ internal object OrionDownloadArtifactManager {
       "verified" -> Unit
       else -> return failure("availability", "offline-primary-not-verified", "Offline media is not currently verified.")
     }
-    if (primary.optJSONObject("_locator")?.optString("kind").orEmpty() !in setOf("managed", "managed-relative")) {
+    val primaryLocatorKind = primary.optJSONObject("_locator")?.optString("kind").orEmpty()
+    if (storageMode == "user-folder" && primaryLocatorKind == "content-uri") {
+      val expectedSize = primary.optLong("expectedSizeBytes", -1L)
+      if (asset.optString("container") != "mp4" || asset.optString("mimeType") != "video/mp4" ||
+        !OrionFinalizedArtifactPolicy.verificationStampMatches(
+          primary.optInt("_verificationVersion", 0),
+          primary.optLong("_verifiedByteCount", -1L),
+          expectedSize,
+          primary.optString("_contentSha256"),
+        )
+      ) return failure("document-integrity", "offline-file-verification-required", "Offline media has not passed durable playback verification.")
+      val documentUri = parseContentUri(primary.optJSONObject("_locator")?.optString("value").orEmpty())
+        ?: return failure("document-locator", "offline-primary-locator-invalid", "Offline media ownership could not be resolved.")
+      if (OrionFinalizedArtifactOwner.authorizeDocument(context, documentUri, expectedSize) == null) {
+        return failure("document-authority", "offline-file-uri-unavailable", "Orion could not open the selected media document for playback.")
+      }
+
+      val artifacts = asset.optJSONArray("_artifacts") ?: JSONArray()
+      val trackMetadata = asset.optJSONArray("tracks") ?: JSONArray()
+      val subtitles = mutableListOf<OrionOfflinePlayerSubtitle>()
+      for (artifactIndex in 0 until artifacts.length()) {
+        val artifact = artifacts.optJSONObject(artifactIndex) ?: continue
+        if (artifact.optString("role") != "subtitle" || subtitles.size >= MAX_FINALIZED_SUBTITLES) continue
+        // Optional subtitle loss remains visible to reconciliation/management,
+        // but never invalidates a healthy verified video.
+        if (artifact.optString("availability") != "verified") continue
+        val trackId = artifact.optString("_trackId").takeIf { it.matches(Regex("^[A-Za-z0-9._:-]{1,100}$")) } ?: continue
+        val metadata = (0 until trackMetadata.length()).mapNotNull { trackMetadata.optJSONObject(it) }
+          .firstOrNull { it.optString("kind") == "subtitle" && it.optString("id") == trackId } ?: continue
+        val format = metadata.optString("format").lowercase().takeIf { it in setOf("vtt", "srt", "ass") } ?: continue
+        val expectedSubtitleSize = artifact.optLong("expectedSizeBytes", -1L)
+        if (expectedSubtitleSize <= 0L || expectedSubtitleSize > MAX_FINALIZED_SUBTITLE_BYTES) continue
+        val locator = artifact.optJSONObject("_locator") ?: continue
+        val subtitleFile: File?
+        val subtitleDocument: OrionOfflinePlayerDocument?
+        when (locator.optString("kind")) {
+          "content-uri" -> {
+            val uri = parseContentUri(locator.optString("value")) ?: continue
+            val probe = OrionDownloadStorageRegistry.probeDocument(context, uri)
+            if (probe !is OrionDownloadStorageRegistry.DocumentProbe.Verified || probe.sizeBytes != expectedSubtitleSize) continue
+            subtitleFile = null
+            subtitleDocument = OrionOfflinePlayerDocument(uri, expectedSubtitleSize)
+          }
+          "managed-relative" -> {
+            val file = managedTarget(context, asset, artifact) ?: continue
+            if (!file.isFile || file.length() != expectedSubtitleSize) continue
+            subtitleFile = file
+            subtitleDocument = null
+          }
+          else -> continue
+        }
+        val language = metadata.optString("language").replace(Regex("[^A-Za-z0-9-]"), "").take(12).ifBlank { "und" }
+        val label = metadata.optString("label").replace(Regex("[\\u0000-\\u001f\\u007f]"), "").trim().take(120)
+          .ifBlank { "${language.uppercase()} subtitle" }
+        subtitles += OrionOfflinePlayerSubtitle(
+          id = trackId,
+          language = language,
+          label = label,
+          format = format,
+          isDefault = metadata.optBoolean("default", subtitles.isEmpty()),
+          file = subtitleFile,
+          document = subtitleDocument,
+        )
+      }
+      return OrionOfflinePlayerResolution(
+        asset = OrionOfflinePlayerAsset(
+          assetId = clean,
+          sourceKind = "file",
+          fragmentCount = 1,
+          videoParts = emptyList(),
+          audioParts = emptyList(),
+          videoMediaCount = 1,
+          audioMediaCount = 0,
+          subtitles = subtitles,
+          mediaDocument = OrionOfflinePlayerDocument(documentUri, expectedSize),
+        ),
+        stage = "ready",
+      )
+    }
+    if (primaryLocatorKind !in setOf("managed", "managed-relative")) {
       return failure("locator", "offline-primary-not-managed", "Offline media is not stored in Orion Library.")
     }
     val bundleDir = managedTarget(context, asset, primary)

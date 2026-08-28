@@ -6,15 +6,13 @@ const path = require('node:path');
 const mobileRoot = path.resolve(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(mobileRoot, ...parts), 'utf8');
 
-test('P10.5 selects finalized files into normal playback and reserves the dedicated surface for legacy fragments', () => {
+test('P10.5 routes finalized SAF files and legacy fragments through the asset-id native surface', () => {
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
   const offline = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
 
   assert.match(screen, /offlineAssetId\?: string/);
-  assert.match(screen, /offlineSource\?\.sourceKind === 'file'/);
-  assert.match(screen, /<NativePlayerSurface/);
-  assert.match(screen, /streamContentType="progressive"/);
   assert.match(screen, /offlineAssetId && offlineSource \? \([\s\S]*<OrionOfflinePlayerSurface/);
+  assert.doesNotMatch(screen, /<NativePlayerSurface/);
   assert.match(screen, /assetId=\{offlineAssetId\}/);
   assert.match(screen, /\) : \(\s*<EmbedPlayerSurface/);
   assert.match(screen, /resolveNativeOfflinePlaybackV1\(offlineAssetId\)/);
@@ -54,7 +52,9 @@ test('P10.5-C5.1 maps local role streams and modern subtitle configurations into
   assert.match(factory, /ProgressiveMediaSource\.Factory\(fragmentFactory\)/);
   assert.match(factory, /DefaultMediaSourceFactory\(routedFactory\)/);
   assert.match(factory, /DefaultDataSource\.Factory\(context, fragmentFactory\)/);
-  assert.match(factory, /MediaItem\.SubtitleConfiguration\.Builder\(Uri\.fromFile\(subtitle\.file\)\)/);
+  assert.match(factory, /subtitle\.document\?\.uri \?: subtitle\.file\?\.let\(Uri::fromFile\)/);
+  assert.match(factory, /OrionOfflineDocumentDataSource/);
+  assert.match(factory, /openFileDescriptor\(dataSpec\.uri, "r"\)/);
   assert.match(factory, /\.setSubtitleConfigurations\(subtitleConfigurations\)/);
   assert.doesNotMatch(factory, /experimentalParseSubtitlesDuringExtraction\(false\)/);
   assert.doesNotMatch(factory, /SingleSampleMediaSource/);
