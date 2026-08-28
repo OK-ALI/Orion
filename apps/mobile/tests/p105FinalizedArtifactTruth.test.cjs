@@ -17,19 +17,20 @@ test('yt-dlp exposes only the deterministic media.mp4 staging artifact', () => {
   assert.doesNotMatch(runtime, /private fun finalizedOutputs/);
 });
 
-test('Orion Library completion settles and verifies the durable file before persistence', () => {
+test('new Orion Library completion settles and verifies the SAF document before persistence', () => {
   const transfer = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
   const owner = read('plugins', 'orion-cinema-webview-native', 'OrionFinalizedArtifactOwner.kt');
   const store = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadJobStore.kt');
 
-  const settle = transfer.indexOf('OrionFinalizedArtifactOwner.settle(');
-  const artifacts = transfer.indexOf('directManagedArtifacts(', settle);
+  const settle = transfer.indexOf('OrionFinalizedArtifactOwner.settleToUserFolder(');
+  const artifacts = transfer.indexOf('directUserFolderArtifacts(', settle);
   const complete = transfer.indexOf('OrionDownloadJobStore.markCompleted(', artifacts);
   assert.ok(settle >= 0 && artifacts > settle && complete > artifacts,
     'durable settlement must precede artifact construction and the completion transaction');
-  assert.match(owner, /File\(context\.filesDir, "orion-downloads\/library"\)/);
-  assert.match(owner, /OrionFinalizedMediaVerifier\.verify\(targetCanonical, requireAudio\)/);
+  assert.match(owner, /OrionDownloadStorageRegistry\.createDocument/);
+  assert.match(owner, /OrionFinalizedMediaVerifier\.verify\(context, uri, displayName/);
   assert.match(owner, /MessageDigest\.getInstance\("SHA-256"\)/);
+  assert.match(owner, /openFileDescriptor\(document, "rwt"\)/);
   assert.match(owner, /openAssetFileDescriptor\(uri, "r"\)/);
   assert.match(transfer, /_verificationVersion/);
   assert.match(transfer, /_verifiedByteCount/);
@@ -51,6 +52,7 @@ test('reconciliation validates old unstamped MP4s and playback requires durable 
   assert.match(manager, /artifact-missing/);
   assert.match(manager, /artifact-unavailable/);
   assert.match(owner, /FileProvider\.getUriForFile/);
+  assert.match(owner, /authorizeDocument/);
   assert.match(bridge, /uri\.startsWith\('content:\/\/'\)/);
   assert.doesNotMatch(bridge, /filePath|absolutePath/);
 });

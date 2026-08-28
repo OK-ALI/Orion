@@ -16,14 +16,9 @@ function createJobId(): string {
   return `mobdl-${Date.now().toString(36)}-${random}`;
 }
 
-function orionLibraryTarget(): MobileDownloadStorageTargetV1 {
-  return { mode: 'orion-library', targetId: 'orion-library', displayName: 'Orion Library', writable: true, persistedPermission: true };
-}
-
 /**
- * Starts the Android-owned HLS/DASH transfer engine for Orion Library or the
- * persisted Device Storage target. Media request URLs, headers and cookies
- * remain native-only. Subtitle provider URLs are transient native input.
+ * Starts the Android-owned HLS/DASH transfer engine for the logical Orion
+ * Library. Its physical MP4 owner is the persisted user-selected SAF folder.
  */
 export async function startMobileDownloadFromSelectionV1(input: StartMobileDownloadSelectionInputV1): Promise<string> {
   const { target, selection, preferences } = input;
@@ -34,24 +29,14 @@ export async function startMobileDownloadFromSelectionV1(input: StartMobileDownl
   if (selection.resolvedMethod !== 'fragments' || !['hls', 'dash'].includes(candidate.preflight.resolvedManifestKind)) {
     throw new Error('Mobile downloads require a ready HLS or DASH stream. Try another source.');
   }
-  const destination: MobileDownloadJobV1['destination'] = preferences.defaultDestination;
-  const storageTarget = destination === 'device-storage'
-    ? preferences.deviceStorageTarget
-    : orionLibraryTarget();
+  const destination: MobileDownloadJobV1['destination'] = 'orion-library';
+  const storageTarget: MobileDownloadStorageTargetV1 | null = preferences.libraryStorageTarget;
 
-  if (destination === 'device-storage') {
-    if (!candidate.capabilities.deviceStorage) {
-      throw new Error('This source is not ready for Device Storage.');
-    }
-    if (!storageTarget || storageTarget.mode !== 'device-storage' || !storageTarget.writable || !storageTarget.persistedPermission) {
-      throw new Error('Choose a writable Device Storage folder in Downloads Settings before starting this download.');
-    }
-  } else if (!candidate.capabilities.orionLibrary) {
+  if (!candidate.capabilities.orionLibrary) {
     throw new Error('This source is not ready for Orion Library storage.');
   }
-
-  if (!storageTarget) {
-    throw new Error('The selected download destination is unavailable.');
+  if (!storageTarget || storageTarget.mode !== 'user-folder' || !storageTarget.targetId || !storageTarget.writable || !storageTarget.persistedPermission) {
+    throw new Error('Choose a writable Orion Library storage folder before starting this download.');
   }
 
   const selectedSubtitleAssetIds = [...new Set(input.selectedSubtitleAssetIds || [])].slice(0, 2);

@@ -6,7 +6,6 @@ import {
   selectMobileDownloadCandidateForItemV1,
   subscribeMobileDownloadCandidatesV1,
 } from './downloadCandidateCapture';
-import { getMobileDownloadPreferencesV1 } from './downloadPreferences';
 
 /**
  * Returns from Player only when a pending download intent has a genuinely
@@ -21,8 +20,7 @@ export function useDownloadSourceAutoReturnV1(itemKey: string): void {
     if (returning.current) return;
     const intent = getMobileDownloadSourceResolutionIntentV1(itemKey);
     if (!intent || intent.autoReturnIssued) return;
-    const destination = getMobileDownloadPreferencesV1().defaultDestination;
-    const ready = selectMobileDownloadCandidateForItemV1(itemKey, intent.method, snapshots, destination);
+    const ready = selectMobileDownloadCandidateForItemV1(itemKey, intent.method, snapshots, 'orion-library');
     if (!ready || !markMobileDownloadSourceAutoReturnIssuedV1(itemKey)) return;
     returning.current = true;
     router.back();

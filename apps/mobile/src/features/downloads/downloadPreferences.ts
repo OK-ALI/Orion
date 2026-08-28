@@ -16,13 +16,14 @@ const listeners = new Set<PreferenceListener>();
 export const DEFAULT_MOBILE_DOWNLOAD_PREFERENCES_V1: MobileDownloadPreferencesV1 = Object.freeze({
   schemaVersion: 1,
   defaultDestination: 'orion-library',
+  libraryStorageTarget: null,
   deviceStorageTarget: null,
   preferredQuality: 'best',
   subtitlePreference: 'preferred',
 });
 
 function defaults(): MobileDownloadPreferencesV1 {
-  return { ...DEFAULT_MOBILE_DOWNLOAD_PREFERENCES_V1, deviceStorageTarget: null };
+  return { ...DEFAULT_MOBILE_DOWNLOAD_PREFERENCES_V1, libraryStorageTarget: null, deviceStorageTarget: null };
 }
 
 const qualities = new Set<MobileDownloadQualityV1>(['best', '1080p', '720p', '480p']);
@@ -37,6 +38,17 @@ export function normalizeMobileDownloadPreferencesV1(value: unknown): MobileDown
     normalizedDeviceStorageTarget.writable && normalizedDeviceStorageTarget.persistedPermission && normalizedDeviceStorageTarget.targetId
     ? normalizedDeviceStorageTarget
     : null;
+  const normalizedLibraryStorageTarget = normalizeMobileDownloadStorageTargetV1(input.libraryStorageTarget);
+  const explicitLibraryStorageTarget = normalizedLibraryStorageTarget?.mode === 'user-folder' &&
+    normalizedLibraryStorageTarget.writable && normalizedLibraryStorageTarget.persistedPermission && normalizedLibraryStorageTarget.targetId
+    ? normalizedLibraryStorageTarget
+    : null;
+  // P10.4 stored the same opaque SAF registry handle under Device Storage.
+  // Rewrap it for the logical-library model; native validates the handle before use.
+  const libraryStorageTarget = explicitLibraryStorageTarget || (deviceStorageTarget ? {
+    ...deviceStorageTarget,
+    mode: 'user-folder' as const,
+  } : null);
   const defaultDestination: MobileDownloadDestinationModeV1 =
     input.defaultDestination === 'device-storage' && deviceStorageTarget
       ? 'device-storage'
@@ -44,6 +56,7 @@ export function normalizeMobileDownloadPreferencesV1(value: unknown): MobileDown
   return {
     schemaVersion: 1,
     defaultDestination,
+    libraryStorageTarget,
     deviceStorageTarget,
     preferredQuality: qualities.has(input.preferredQuality as MobileDownloadQualityV1)
       ? input.preferredQuality as MobileDownloadQualityV1
@@ -95,6 +108,17 @@ export function setMobileDownloadDeviceStorageTargetV1(
     ...current,
     defaultDestination: deviceStorageTarget ? current.defaultDestination : 'orion-library',
     deviceStorageTarget,
+  });
+}
+
+export function setMobileDownloadLibraryStorageTargetV1(
+  libraryStorageTarget: MobileDownloadStorageTargetV1 | null,
+): MobileDownloadPreferencesV1 {
+  const current = getMobileDownloadPreferencesV1();
+  return persist({
+    ...current,
+    defaultDestination: 'orion-library',
+    libraryStorageTarget,
   });
 }
 

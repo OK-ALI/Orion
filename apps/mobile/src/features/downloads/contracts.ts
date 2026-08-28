@@ -140,7 +140,7 @@ function finalizationStage(value: unknown): MobileDownloadFinalizationStageV1 | 
 export function normalizeMobileDownloadStorageTargetV1(value: unknown): MobileDownloadStorageTargetV1 | null {
   if (!value || typeof value !== 'object') return null;
   const input = value as Partial<MobileDownloadStorageTargetV1>;
-  if (input.mode !== 'orion-library' && input.mode !== 'device-storage') return null;
+  if (input.mode !== 'orion-library' && input.mode !== 'device-storage' && input.mode !== 'user-folder') return null;
   if (typeof input.displayName !== 'string' || !input.displayName.trim()) return null;
   const targetId = input.targetId === null || typeof input.targetId === 'string' ? input.targetId : null;
   return {

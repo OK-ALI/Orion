@@ -133,6 +133,14 @@ function verifiedOrionLibraryAssetId(
   return null;
 }
 
+function assetLocationLabel(asset: MobileDownloadAssetV1 | undefined): string {
+  if (!asset) return 'Orion Library';
+  if (asset.destination === 'device-storage') return 'Device Storage';
+  return asset.storageTarget.mode === 'user-folder'
+    ? `Orion Library · ${asset.storageTarget.displayName}`
+    : 'Orion Library';
+}
+
 function jobSortValue(job: MobileDownloadJobV1, sort: DownloadSort): number | string {
   if (sort === 'oldest') return job.createdAt;
   if (sort === 'name') return mediaPrimaryTitle(job.media).toLocaleLowerCase();
@@ -381,7 +389,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
               <View style={styles.copy}>
                 <Text numberOfLines={2} style={[styles.title, { color: theme.text }]}>{mediaPrimaryTitle(asset.media)}</Text>
                 {mediaSecondaryTitle(asset.media) ? <Text numberOfLines={2} style={[styles.secondaryTitle, { color: theme.textSecondary }]}>{mediaSecondaryTitle(asset.media)}</Text> : null}
-                <Text style={[styles.meta, { color: theme.warning }]}>{missing ? 'Missing' : 'Unavailable'} · {asset.destination === 'device-storage' ? 'Device Storage' : 'Orion Library'}</Text>
+                <Text style={[styles.meta, { color: theme.warning }]}>{missing ? 'Missing' : 'Unavailable'} · {assetLocationLabel(asset)}</Text>
                 <Text style={[styles.metrics, { color: theme.textSecondary }]}>{missing ? 'The media artifact no longer exists. Remove the stale record or download it again.' : 'Reconnect the storage provider or reselect the folder, then refresh.'}</Text>
               </View>
             </View>
@@ -418,7 +426,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
                 <Text numberOfLines={1} style={[styles.secondaryTitle, { color: theme.textSecondary }]}>
                   {episodic ? `${group.entries.length} downloaded episode${group.entries.length === 1 ? '' : 's'}` : (entry.media.year ? String(entry.media.year) : 'Movie')}
                 </Text>
-                <Text style={[styles.meta, { color: theme.success }]}>Verified · {assetById.get(entry.primaryAssetId)?.destination === 'device-storage' ? 'Device Storage' : 'Orion Library'}</Text>
+                <Text style={[styles.meta, { color: theme.success }]}>Verified · {assetLocationLabel(assetById.get(entry.primaryAssetId))}</Text>
                 {size ? <Text style={[styles.metrics, { color: theme.textSecondary }]}>{size} stored</Text> : null}
               </View>
               {episodic ? <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={theme.textMuted} /> : <Ionicons name="checkmark-circle" size={20} color={theme.success} />}
@@ -441,7 +449,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
                       </View>
                       <View style={styles.copy}>
                         <Text numberOfLines={1} style={[styles.episodeTitle, { color: theme.text }]}>{episode.episodeTitle || `Episode ${episode.media.episode ?? ''}`}</Text>
-                        <Text style={[styles.episodeMeta, { color: theme.textSecondary }]}>{[episodeSize, 'Verified', assetById.get(episode.primaryAssetId)?.destination === 'device-storage' ? 'Device Storage' : 'Orion Library'].filter(Boolean).join(' · ')}</Text>
+                        <Text style={[styles.episodeMeta, { color: theme.textSecondary }]}>{[episodeSize, 'Verified', assetLocationLabel(assetById.get(episode.primaryAssetId))].filter(Boolean).join(' · ')}</Text>
                       </View>
                       {episodePlayableAssetId && onPlayInOrion ? <Pressable accessibilityRole="button" accessibilityLabel={`Play ${episode.episodeTitle || `episode ${episode.media.episode ?? ''}`} in Orion`} onPress={() => onPlayInOrion(episode, episodePlayableAssetId)} style={({ pressed }) => [styles.moreButton, { borderColor: theme.accent, backgroundColor: pressed ? theme.accentSoft : theme.elevated }]}><Ionicons name="play" size={18} color={theme.accent} /></Pressable> : null}
                       {episodePlayableAssetId && onPlayLocally && assetById.get(episodePlayableAssetId)?.actions.open ? <Pressable accessibilityRole="button" accessibilityLabel={`Play ${episode.episodeTitle || `episode ${episode.media.episode ?? ''}`} locally`} onPress={() => onPlayLocally(episodePlayableAssetId)} style={({ pressed }) => [styles.moreButton, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.elevated }]}><Ionicons name="open-outline" size={18} color={theme.textSecondary} /></Pressable> : null}

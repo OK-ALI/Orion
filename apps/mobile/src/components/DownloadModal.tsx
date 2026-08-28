@@ -18,8 +18,10 @@ import {
 import type { MobileDownloadCandidateSnapshotV1, MobileDownloadTransferMethodV1 } from '../features/downloads/downloadCandidateCapture';
 import {
   getMobileDownloadPreferencesV1,
+  setMobileDownloadLibraryStorageTargetV1,
   subscribeMobileDownloadPreferencesV1,
 } from '../features/downloads/downloadPreferences';
+import { chooseNativeLibraryStorageTargetV1, validateNativeLibraryStorageTargetV1 } from '../features/downloads/nativeDownloadEngine';
 import { startMobileDownloadFromSelectionV1 } from '../features/downloads/downloadStart';
 import { readMobileDownloadRepositoryV1, subscribeMobileDownloadRepositoryV1 } from '../features/downloads/downloadRepository';
 import {
@@ -68,6 +70,8 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
   const [subtitles, setSubtitles] = useState<MobileDownloadSubtitleDiscoveryV1>(EMPTY_SUBTITLES);
   const [selectedSubtitleIds, setSelectedSubtitleIds] = useState<string[]>([]);
   const [starting, setStarting] = useState(false);
+  const [choosingStorage, setChoosingStorage] = useState(false);
+  const [validatedStorageTargetId, setValidatedStorageTargetId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
 
   useEffect(() => subscribeMobileDownloadPreferencesV1(setPreferences), []);
@@ -90,13 +94,43 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     : target?.media.title || 'Download';
   const supportingTitle = isEpisode ? target?.media.episodeTitle : null;
   const needsEpisode = target?.media.mediaType === 'tv' && !isEpisode;
-  const destination: MobileDownloadJobV1['destination'] = preferences.defaultDestination;
-  const destinationTitle = destination === 'device-storage'
-    ? 'Device Storage'
-    : 'Orion Library';
-  const destinationDetail = destination === 'device-storage'
-    ? `Portable media saved to your persisted Android storage folder.${preferences.deviceStorageTarget?.displayName ? ` Folder: ${preferences.deviceStorageTarget.displayName}.` : ''}`
-    : 'Managed offline media for reliable playback inside Orion.';
+  const destination: MobileDownloadJobV1['destination'] = 'orion-library';
+  const destinationTitle = 'Orion Library';
+  const storageTarget = preferences.libraryStorageTarget;
+  const storageReady = storageTarget?.mode === 'user-folder' && Boolean(storageTarget.targetId) &&
+    storageTarget.targetId === validatedStorageTargetId && storageTarget.writable && storageTarget.persistedPermission;
+  const storageChecking = Boolean(storageTarget?.targetId) && !storageReady;
+  const destinationDetail = storageReady
+    ? `Storage folder: ${storageTarget.displayName}. The completed MP4 remains visible there.`
+    : storageChecking
+      ? 'Checking access to your Orion Library storage folder…'
+      : 'Choose a writable Android folder before starting your first Orion Library download.';
+  useEffect(() => {
+    const targetId = storageTarget?.targetId;
+    if (!targetId) {
+      setValidatedStorageTargetId(null);
+      return;
+    }
+    let active = true;
+    setValidatedStorageTargetId(null);
+    void validateNativeLibraryStorageTargetV1(targetId).then((validated) => {
+      if (!active) return;
+      if (!validated) {
+        setPreferences(setMobileDownloadLibraryStorageTargetV1(null));
+        if (visible) setStartError('Orion Library folder access needs to be selected again.');
+        return;
+      }
+      setValidatedStorageTargetId(validated.targetId);
+      if (
+        validated.displayName !== storageTarget?.displayName ||
+        validated.writable !== storageTarget?.writable ||
+        validated.persistedPermission !== storageTarget?.persistedPermission
+      ) {
+        setPreferences(setMobileDownloadLibraryStorageTargetV1(validated));
+      }
+    });
+    return () => { active = false; };
+  }, [storageTarget?.displayName, storageTarget?.persistedPermission, storageTarget?.targetId, storageTarget?.writable, visible]);
   const duplicateJob = target ? repositoryJobs.find((job) => (
     job.destination === destination
     && DUPLICATE_BLOCKING_STATES.has(job.state)
@@ -196,7 +230,7 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
   };
 
   const handleStart = async () => {
-    if (!target || !selectedCandidate || needsEpisode || starting || duplicateJob) return;
+    if (!target || !selectedCandidate || needsEpisode || starting || duplicateJob || !storageReady) return;
     setStarting(true);
     setStartError(null);
     try {
@@ -213,6 +247,25 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
       }
     } finally {
       setStarting(false);
+    }
+  };
+
+  const handleChooseStorage = async () => {
+    if (choosingStorage) return;
+    setChoosingStorage(true);
+    setStartError(null);
+    try {
+      const selected = await chooseNativeLibraryStorageTargetV1();
+      if (!selected || !selected.writable || !selected.persistedPermission) {
+        setStartError('Orion could not keep writable access to that folder. Choose another folder.');
+        return;
+      }
+      setValidatedStorageTargetId(selected.targetId);
+      setPreferences(setMobileDownloadLibraryStorageTargetV1(selected));
+    } catch (error) {
+      setStartError(error instanceof Error ? error.message : 'Orion could not choose its storage folder.');
+    } finally {
+      setChoosingStorage(false);
     }
   };
 
@@ -237,13 +290,17 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
 
             <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Save to</Text>
             <View style={[styles.optionCard, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
-              <Ionicons name={destination === 'device-storage' ? 'folder-outline' : 'albums-outline'} size={21} color={theme.accent} />
+              <Ionicons name="albums-outline" size={21} color={theme.accent} />
               <View style={styles.optionCopy}>
                 <Text style={[styles.optionTitle, { color: theme.text }]}>{destinationTitle}</Text>
                 <Text style={[styles.description, { color: theme.textSecondary }]}>{destinationDetail}</Text>
               </View>
               <Ionicons name="checkmark-circle" size={20} color={theme.accent} />
             </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Choose Orion Library storage folder" disabled={choosingStorage} onPress={() => void handleChooseStorage()} style={({ pressed }) => [styles.storageButton, { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: storageReady ? theme.border : theme.warning }]}>
+              <Ionicons name="folder-open-outline" size={18} color={theme.accent} />
+              <Text style={[styles.storageButtonText, { color: theme.text }]}>{choosingStorage ? 'Choosing folder…' : storageReady ? 'Change storage folder' : storageChecking ? 'Choose another folder' : 'Choose storage folder'}</Text>
+            </Pressable>
 
             <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Download method</Text>
             <View style={styles.optionGrid}>
@@ -338,8 +395,8 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
             <Pressable accessibilityRole="button" accessibilityLabel="Cancel download options" onPress={onClose} style={({ pressed }) => [styles.secondaryButton, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.surface }]}>
               <Text style={[styles.secondaryButtonText, { color: theme.textSecondary }]}>Cancel</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={needsEpisode ? 'Choose an episode before downloading' : selectedCandidate ? 'Start download' : 'Open player to resolve download source'} accessibilityState={{ disabled: needsEpisode || starting || subtitleCheckPending || Boolean(duplicateJob) || !capability.available }} disabled={needsEpisode || starting || subtitleCheckPending || Boolean(duplicateJob) || !capability.available} onPress={selectedCandidate ? handleStart : handleResolveSource} style={({ pressed }) => [styles.primaryButton, { backgroundColor: needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.accentSoft : pressed ? theme.accentSoft : theme.accent, borderColor: needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.border : theme.accent }]}>
-              <Text style={[styles.primaryButtonText, { color: needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.textMuted : theme.onAccent }]}>{needsEpisode ? 'Choose episode' : duplicateJob ? (duplicateJob.state === 'completed' ? 'Already downloaded' : 'Already active') : starting ? 'Starting…' : selectedCandidate ? 'Start download' : 'Open player'}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={!storageReady ? 'Choose a storage folder before downloading' : needsEpisode ? 'Choose an episode before downloading' : selectedCandidate ? 'Start download' : 'Open player to resolve download source'} accessibilityState={{ disabled: !storageReady || needsEpisode || starting || subtitleCheckPending || Boolean(duplicateJob) || !capability.available }} disabled={!storageReady || needsEpisode || starting || subtitleCheckPending || Boolean(duplicateJob) || !capability.available} onPress={selectedCandidate ? handleStart : handleResolveSource} style={({ pressed }) => [styles.primaryButton, { backgroundColor: !storageReady || needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.accentSoft : pressed ? theme.accentSoft : theme.accent, borderColor: !storageReady || needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.border : theme.accent }]}>
+              <Text style={[styles.primaryButtonText, { color: !storageReady || needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.textMuted : theme.onAccent }]}>{storageChecking ? 'Checking storage folder…' : !storageReady ? 'Choose storage folder' : needsEpisode ? 'Choose episode' : duplicateJob ? (duplicateJob.state === 'completed' ? 'Already downloaded' : 'Already active') : starting ? 'Starting…' : selectedCandidate ? 'Start download' : 'Open player'}</Text>
             </Pressable>
           </View>
         </View>
@@ -375,6 +432,8 @@ const styles = StyleSheet.create({
   groupTitle: { fontSize: fontSizes.sm, fontWeight: '900', marginTop: spacing[1] },
   optionGrid: { gap: spacing[2] },
   optionCard: { minHeight: 76, borderWidth: 1, borderRadius: radii.xl, padding: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  storageButton: { minHeight: 46, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
+  storageButtonText: { fontSize: fontSizes.xs, fontWeight: '900' },
   optionCopy: { flex: 1, minWidth: 0 },
   optionTitle: { fontSize: fontSizes.sm, fontWeight: '900' },
   description: { fontSize: fontSizes.xs, lineHeight: 17, marginTop: 3 },

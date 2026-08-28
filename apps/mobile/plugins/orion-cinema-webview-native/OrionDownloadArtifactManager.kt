@@ -114,7 +114,8 @@ internal object OrionDownloadArtifactManager {
     reconcile(context, setOf(clean))
     val asset = OrionDownloadJobStore.ownershipAssets(setOf(clean)).optJSONObject(0)
       ?: return playbackResult(false, clean, "offline-asset-not-found", "Offline download was not found.")
-    if (asset.optString("destination") != "orion-library" || asset.optJSONObject("storageTarget")?.optString("mode") != "orion-library") {
+    val storageMode = asset.optJSONObject("storageTarget")?.optString("mode").orEmpty()
+    if (asset.optString("destination") != "orion-library" || storageMode !in setOf("orion-library", "user-folder")) {
       return playbackResult(false, clean, "offline-asset-not-managed", "This download is not an Orion Library offline asset.")
     }
 
@@ -127,6 +128,35 @@ internal object OrionDownloadArtifactManager {
       else -> return playbackResult(false, clean, "offline-primary-not-verified", "Offline media is not currently verified.")
     }
     val locatorKind = primary.optJSONObject("_locator")?.optString("kind").orEmpty()
+    if (locatorKind == "content-uri" && storageMode == "user-folder") {
+      val expectedSize = primary.optLong("expectedSizeBytes", -1L)
+      if (asset.optString("container") != "mp4" || asset.optString("mimeType") != "video/mp4" ||
+        !OrionFinalizedArtifactPolicy.verificationStampMatches(
+          primary.optInt("_verificationVersion", 0),
+          primary.optLong("_verifiedByteCount", -1L),
+          expectedSize,
+          primary.optString("_contentSha256"),
+        )
+      ) {
+        return playbackResult(false, clean, "offline-file-verification-required", "Offline media has not passed durable playback verification.")
+      }
+      val document = parseContentUri(primary.optJSONObject("_locator")?.optString("value").orEmpty())
+        ?: return playbackResult(false, clean, "offline-primary-locator-invalid", "Offline media ownership could not be resolved.")
+      val playbackUri = OrionFinalizedArtifactOwner.authorizeDocument(context, document, expectedSize)
+        ?: return playbackResult(false, clean, "offline-file-uri-unavailable", "Orion could not open the selected media document for playback.")
+      val subtitles = finalizedSubtitlePayload(context, asset)
+        ?: return playbackResult(false, clean, "offline-subtitle-invalid", "Downloaded subtitles could not be opened safely.")
+      return JSONObject()
+        .put("schemaVersion", 1)
+        .put("ok", true)
+        .put("assetId", clean)
+        .put("uri", playbackUri.toString())
+        .put("contentType", "progressive")
+        .put("sourceKind", "file")
+        .put("fragmentCount", 1)
+        .put("subtitleCount", subtitles.length())
+        .put("subtitles", subtitles)
+    }
     if (locatorKind !in setOf("managed", "managed-relative")) {
       return playbackResult(false, clean, "offline-primary-not-managed", "Offline media is not stored in Orion Library.")
     }
@@ -656,6 +686,18 @@ internal object OrionDownloadArtifactManager {
     val locatorKind = locator.optString("kind")
     if (locatorKind == "content-uri") {
       val document = parseContentUri(locator.optString("value")) ?: return actionResult(false, "artifact-locator-invalid", "This download cannot be opened.")
+      val userOwnedPrimary = asset.optString("destination") == "orion-library" &&
+        asset.optJSONObject("storageTarget")?.optString("mode") == "user-folder"
+      if (userOwnedPrimary) {
+        val expectedSize = primary.optLong("expectedSizeBytes", -1L)
+        if (!OrionFinalizedArtifactPolicy.verificationStampMatches(
+            primary.optInt("_verificationVersion", 0),
+            primary.optLong("_verifiedByteCount", -1L),
+            expectedSize,
+            primary.optString("_contentSha256"),
+          ) || OrionFinalizedArtifactOwner.authorizeDocument(context, document, expectedSize) == null
+        ) return actionResult(false, "artifact-integrity-invalid", "This Orion Library document is no longer a verified MP4.")
+      }
       if (locate) {
         val targetId = asset.optJSONObject("storageTarget")?.optString("targetId").orEmpty()
         val tree = OrionDownloadStorageRegistry.resolveTreeUri(context, targetId)
@@ -692,8 +734,20 @@ internal object OrionDownloadArtifactManager {
     val locator = artifact.optJSONObject("_locator") ?: return ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
     return when (locator.optString("kind")) {
       "content-uri" -> when (val probe = OrionDownloadStorageRegistry.probeDocument(context, parseContentUri(locator.optString("value")) ?: return ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null))) {
-        is OrionDownloadStorageRegistry.DocumentProbe.Verified -> ArtifactProbe(OrionArtifactAvailability.VERIFIED, probe.sizeBytes)
-        OrionDownloadStorageRegistry.DocumentProbe.Missing -> ArtifactProbe(OrionArtifactAvailability.MISSING, null)
+        is OrionDownloadStorageRegistry.DocumentProbe.Verified -> {
+          val userOwnedPrimary = asset.optString("destination") == "orion-library" &&
+            asset.optJSONObject("storageTarget")?.optString("mode") == "user-folder" &&
+            artifact.optString("role") == "primary"
+          val expectedSize = artifact.optLong("expectedSizeBytes", -1L)
+          if (userOwnedPrimary && (probe.sizeBytes != expectedSize || !OrionFinalizedArtifactPolicy.verificationStampMatches(
+              artifact.optInt("_verificationVersion", 0),
+              artifact.optLong("_verifiedByteCount", -1L),
+              expectedSize,
+              artifact.optString("_contentSha256"),
+            ))) ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, probe.sizeBytes, clearVerification = true)
+          else ArtifactProbe(OrionArtifactAvailability.VERIFIED, probe.sizeBytes)
+        }
+        OrionDownloadStorageRegistry.DocumentProbe.Missing -> ArtifactProbe(OrionArtifactAvailability.MISSING, null, clearVerification = true)
         OrionDownloadStorageRegistry.DocumentProbe.Unavailable -> ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
       }
       "managed", "managed-relative" -> {

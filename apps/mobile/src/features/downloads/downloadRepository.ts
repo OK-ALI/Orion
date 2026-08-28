@@ -197,7 +197,7 @@ export function normalizeMobileDownloadJobV1(value: unknown): MobileDownloadJobV
   const storageTarget = normalizeMobileDownloadStorageTargetV1(input.storageTarget);
   if (!jobId || !candidateId || !media || !storageTarget) return null;
   if (input.destination !== 'orion-library' && input.destination !== 'device-storage') return null;
-  if (storageTarget.mode !== input.destination) return null;
+  if (storageTarget.mode !== input.destination && !(input.destination === 'orion-library' && storageTarget.mode === 'user-folder')) return null;
   if (!['best', '1080p', '720p', '480p'].includes(String(input.requestedQuality))) return null;
   if (!isMobileDownloadJobStateV1(input.state)) return null;
 
@@ -240,7 +240,7 @@ export function normalizeMobileDownloadAssetV1(value: unknown): MobileDownloadAs
   const sourceId = stringValue(input.sourceId);
   if (!assetId || !jobId || !media || !storageTarget || !locator || !locatorValue || !container || !sourceId) return null;
   if (input.destination !== 'orion-library' && input.destination !== 'device-storage') return null;
-  if (storageTarget.mode !== input.destination) return null;
+  if (storageTarget.mode !== input.destination && !(input.destination === 'orion-library' && storageTarget.mode === 'user-folder')) return null;
   if (locator.kind !== 'managed' && locator.kind !== 'content-uri' && locator.kind !== 'file-uri' && locator.kind !== 'native-owned') return null;
 
   const legacySize = Math.max(0, finite(input.verifiedSizeBytes) ?? 0);

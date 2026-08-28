@@ -6,6 +6,7 @@ import type { MobileDownloadAssetV1, MobileDownloadManagementResultV1 } from '@o
 import { useOrionTheme } from '../../context/ThemeContext';
 import { useResponsiveLayout } from '../../services/responsive';
 import {
+  chooseNativeLibraryStorageTargetV1,
   chooseNativeDeviceStorageTargetV1,
   deleteAllNativeDownloadsV1,
   deleteNativeDownloadAssetsV1,
@@ -15,6 +16,7 @@ import {
   reconcileNativeDownloadsV1,
   removeUnavailableNativeDownloadRecordsV1,
 } from './nativeDownloadEngine';
+import { setMobileDownloadLibraryStorageTargetV1 } from './downloadPreferences';
 
 type ManagementMode = 'manage' | 'free-space';
 type ManagementSort = 'size' | 'title' | 'destination';
@@ -54,7 +56,10 @@ function titleOf(asset: MobileDownloadAssetV1): string {
 }
 
 function destinationOf(asset: MobileDownloadAssetV1): string {
-  return asset.destination === 'device-storage' ? 'Device Storage' : 'Orion Library';
+  if (asset.destination === 'device-storage') return 'Device Storage';
+  return asset.storageTarget.mode === 'user-folder'
+    ? `Orion Library · ${asset.storageTarget.displayName}`
+    : 'Orion Library';
 }
 
 function knownVerifiedBytes(asset: MobileDownloadAssetV1): number {
@@ -142,19 +147,23 @@ export function DownloadManagementSheet({ visible, mode, assets, initialAssetIds
     }
   };
 
-  const reselectDeviceFolder = async () => {
+  const reselectFolder = async (asset: MobileDownloadAssetV1) => {
     if (busy) return;
     setBusy(true);
     setMessage(null);
     try {
-      const target = await chooseNativeDeviceStorageTargetV1();
-      if (!target) setMessage('No Device Storage folder was selected.');
+      const libraryFolder = asset.destination === 'orion-library' && asset.storageTarget.mode === 'user-folder';
+      const target = libraryFolder
+        ? await chooseNativeLibraryStorageTargetV1()
+        : await chooseNativeDeviceStorageTargetV1();
+      if (!target) setMessage('No storage folder was selected.');
       else {
+        if (libraryFolder) setMobileDownloadLibraryStorageTargetV1(target);
         await reconcileNativeDownloadsV1();
         setMessage(`Reconnected ${target.displayName}. Artifact availability was refreshed.`);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Orion could not reconnect Device Storage.');
+      setMessage(error instanceof Error ? error.message : 'Orion could not reconnect this storage folder.');
     } finally {
       setBusy(false);
     }
@@ -240,7 +249,7 @@ export function DownloadManagementSheet({ visible, mode, assets, initialAssetIds
                   <View style={styles.rowActions}>
                     {asset.actions.open ? <IconAction label="Play Locally" icon="open-outline" onPress={() => void runAssetAction(asset.assetId, 'play-local')} /> : null}
                     {asset.actions.locate ? <IconAction label="Locate" icon="folder-open-outline" onPress={() => void runAssetAction(asset.assetId, 'locate')} /> : null}
-                    {asset.availability === 'unavailable' && asset.destination === 'device-storage' ? <IconAction label="Reselect folder" icon="folder-outline" onPress={() => void reselectDeviceFolder()} /> : null}
+                    {asset.availability === 'unavailable' && (asset.destination === 'device-storage' || asset.storageTarget.mode === 'user-folder') ? <IconAction label="Reselect folder" icon="folder-outline" onPress={() => void reselectFolder(asset)} /> : null}
                   </View>
                 </View>
               );

@@ -6,13 +6,12 @@ import type { MobileDownloadPreferencesV1, MobileDownloadQualityV1, MobileDownlo
 import { useOrionTheme } from '../../context/ThemeContext';
 import {
   getMobileDownloadPreferencesV1,
-  setMobileDownloadDefaultDestinationV1,
-  setMobileDownloadDeviceStorageTargetV1,
+  setMobileDownloadLibraryStorageTargetV1,
   setMobileDownloadPreferredQualityV1,
   setMobileDownloadSubtitlePreferenceV1,
   subscribeMobileDownloadPreferencesV1,
 } from './downloadPreferences';
-import { chooseNativeDeviceStorageTargetV1 } from './nativeDownloadEngine';
+import { chooseNativeLibraryStorageTargetV1, validateNativeLibraryStorageTargetV1 } from './nativeDownloadEngine';
 import { getSubtitleProviderKey, setSubtitleProviderKey } from '../../services/subtitles';
 
 const QUALITY_OPTIONS: ReadonlyArray<{ id: MobileDownloadQualityV1; label: string }> = [
@@ -38,6 +37,21 @@ export function DownloadSettingsContent() {
 
   useEffect(() => subscribeMobileDownloadPreferencesV1(setPreferences), []);
   useEffect(() => {
+    const targetId = preferences.libraryStorageTarget?.targetId;
+    if (!targetId) return;
+    let active = true;
+    void validateNativeLibraryStorageTargetV1(targetId).then((target) => {
+      if (!active) return;
+      if (!target) {
+        setPreferences(setMobileDownloadLibraryStorageTargetV1(null));
+        setStorageStatus('Orion Library folder access needs to be selected again.');
+      } else if (target.displayName !== preferences.libraryStorageTarget?.displayName) {
+        setPreferences(setMobileDownloadLibraryStorageTargetV1(target));
+      }
+    });
+    return () => { active = false; };
+  }, [preferences.libraryStorageTarget?.displayName, preferences.libraryStorageTarget?.targetId]);
+  useEffect(() => {
     let active = true;
     Promise.all([getSubtitleProviderKey('subdl'), getSubtitleProviderKey('wyzie')]).then(([subdl, wyzie]) => {
       if (!active) return;
@@ -47,38 +61,27 @@ export function DownloadSettingsContent() {
     return () => { active = false; };
   }, []);
 
-  const chooseDeviceStorage = async () => {
+  const chooseLibraryStorage = async () => {
     if (choosingStorage) return;
     setChoosingStorage(true);
     setStorageStatus('Opening Android folder picker…');
     try {
-      const target = await chooseNativeDeviceStorageTargetV1();
+      const target = await chooseNativeLibraryStorageTargetV1();
       if (!target) {
-        setStorageStatus('No Device Storage folder selected.');
+        setStorageStatus('No Orion Library storage folder selected.');
         return;
       }
       if (!target.writable || !target.persistedPermission) {
         setStorageStatus('Orion could not keep writable access to that folder. Choose another folder.');
         return;
       }
-      setPreferences(setMobileDownloadDeviceStorageTargetV1(target));
-      setPreferences(setMobileDownloadDefaultDestinationV1('device-storage'));
-      setStorageStatus(`Device Storage ready: ${target.displayName}`);
+      setPreferences(setMobileDownloadLibraryStorageTargetV1(target));
+      setStorageStatus(`Orion Library storage ready: ${target.displayName}`);
     } catch (error) {
-      setStorageStatus(error instanceof Error ? error.message : 'Orion could not choose a Device Storage folder.');
+      setStorageStatus(error instanceof Error ? error.message : 'Orion could not choose its storage folder.');
     } finally {
       setChoosingStorage(false);
     }
-  };
-
-  const selectDeviceStorage = () => {
-    const target = preferences.deviceStorageTarget;
-    if (!target || !target.writable || !target.persistedPermission) {
-      void chooseDeviceStorage();
-      return;
-    }
-    setPreferences(setMobileDownloadDefaultDestinationV1('device-storage'));
-    setStorageStatus(`Device Storage ready: ${target.displayName}`);
   };
 
   const saveSubtitleKeys = async () => {
@@ -97,27 +100,20 @@ export function DownloadSettingsContent() {
     }
   };
 
-  const deviceStorageSelected = preferences.defaultDestination === 'device-storage';
-  const deviceStorageTarget = preferences.deviceStorageTarget;
+  const libraryStorageTarget = preferences.libraryStorageTarget;
 
   return (
     <View style={styles.root}>
       <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Offline storage</Text>
-      <Pressable accessibilityRole="radio" accessibilityLabel="Orion Library download destination" accessibilityState={{ checked: !deviceStorageSelected }} onPress={() => setPreferences(setMobileDownloadDefaultDestinationV1('orion-library'))} style={({ pressed }) => [styles.destinationCard, { backgroundColor: !deviceStorageSelected ? theme.accentSoft : pressed ? theme.surfaceHover : theme.elevated, borderColor: !deviceStorageSelected ? theme.accent : theme.border }]}>
+      <View accessibilityRole="summary" accessibilityLabel="Destination Orion Library" style={[styles.destinationCard, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
         <View style={[styles.iconBox, { backgroundColor: theme.surface, borderColor: theme.border }]}><Ionicons name="albums-outline" size={20} color={theme.accent} /></View>
-        <View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>Orion Library</Text><Text style={[styles.description, { color: theme.textSecondary }]}>Managed offline media for reliable playback inside Orion.</Text></View>
-        <Ionicons name={!deviceStorageSelected ? 'radio-button-on' : 'radio-button-off'} size={20} color={!deviceStorageSelected ? theme.accent : theme.textMuted} />
-      </Pressable>
+        <View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>Orion Library</Text><Text style={[styles.description, { color: theme.textSecondary }]}>Orion manages the catalogue while completed MP4 files remain visible in your selected folder.</Text></View>
+        <Ionicons name="checkmark-circle" size={20} color={theme.accent} />
+      </View>
 
-      <Pressable accessibilityRole="radio" accessibilityLabel="Device Storage download destination" accessibilityState={{ checked: deviceStorageSelected }} onPress={selectDeviceStorage} style={({ pressed }) => [styles.destinationCard, { backgroundColor: deviceStorageSelected ? theme.accentSoft : pressed ? theme.surfaceHover : theme.elevated, borderColor: deviceStorageSelected ? theme.accent : theme.border }]}>
-        <View style={[styles.iconBox, { backgroundColor: theme.surface, borderColor: theme.border }]}><Ionicons name="folder-open-outline" size={20} color={theme.accent} /></View>
-        <View style={styles.optionCopy}><Text style={[styles.optionTitle, { color: theme.text }]}>Device Storage</Text><Text style={[styles.description, { color: theme.textSecondary }]}>Device Storage creates a verified portable MP4 when the stream can be finalized safely.</Text></View>
-        <Ionicons name={deviceStorageSelected ? 'radio-button-on' : 'radio-button-off'} size={20} color={deviceStorageSelected ? theme.accent : theme.textMuted} />
-      </Pressable>
-
-      <Text style={[styles.explainer, { color: theme.textMuted }]}>{deviceStorageTarget ? `Folder: ${deviceStorageTarget.displayName}` : 'Choose a writable Android folder before using Device Storage.'}</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel="Choose Device Storage folder" disabled={choosingStorage} onPress={() => void chooseDeviceStorage()} style={({ pressed }) => [styles.secondaryButton, { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: theme.border }]}>
-        <Ionicons name="folder-outline" size={17} color={theme.accent} /><Text style={[styles.secondaryButtonText, { color: theme.text }]}>{choosingStorage ? 'Choosing folder…' : deviceStorageTarget ? 'Change Device Storage folder' : 'Choose Device Storage folder'}</Text>
+      <Text style={[styles.explainer, { color: theme.textMuted }]}>{libraryStorageTarget ? `Storage folder: ${libraryStorageTarget.displayName}` : 'Choose a writable Android folder before your first download.'}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="Choose Orion Library storage folder" disabled={choosingStorage} onPress={() => void chooseLibraryStorage()} style={({ pressed }) => [styles.secondaryButton, { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: theme.border }]}>
+        <Ionicons name="folder-outline" size={17} color={theme.accent} /><Text style={[styles.secondaryButtonText, { color: theme.text }]}>{choosingStorage ? 'Choosing folder…' : libraryStorageTarget ? 'Change storage folder' : 'Choose storage folder'}</Text>
       </Pressable>
       {storageStatus ? <Text style={[styles.keyStatus, { color: theme.textMuted }]}>{storageStatus}</Text> : null}
 

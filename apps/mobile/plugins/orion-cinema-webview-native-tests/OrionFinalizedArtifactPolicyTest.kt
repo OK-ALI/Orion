@@ -3,6 +3,7 @@ package com.okali.orion.playback
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -52,5 +53,97 @@ class OrionFinalizedArtifactPolicyTest {
     assertFalse(OrionFinalizedArtifactPolicy.verificationStampMatches(1, 42L, 42L, digest))
     assertFalse(OrionFinalizedArtifactPolicy.verificationStampMatches(2, 41L, 42L, digest))
     assertFalse(OrionFinalizedArtifactPolicy.verificationStampMatches(2, 42L, 42L, "bad"))
+  }
+
+  @Test
+  fun userFolderProofBindsSourceDestinationMetadataDescriptorAndVerifier() {
+    assertTrue(OrionFinalizedArtifactPolicy.documentProofMatches(42L, 42L, 42L, digest, digest, true, true))
+    assertTrue(OrionFinalizedArtifactPolicy.documentProofMatches(42L, 42L, null, digest, digest, true, true))
+    assertFalse(OrionFinalizedArtifactPolicy.documentProofMatches(42L, 41L, 42L, digest, digest, true, true))
+    assertFalse(OrionFinalizedArtifactPolicy.documentProofMatches(42L, 42L, 41L, digest, digest, true, true))
+    assertFalse(OrionFinalizedArtifactPolicy.documentProofMatches(42L, 42L, 42L, digest, "b".repeat(64), true, true))
+    assertFalse(OrionFinalizedArtifactPolicy.documentProofMatches(42L, 42L, 42L, digest, digest, false, true))
+    assertFalse(OrionFinalizedArtifactPolicy.documentProofMatches(42L, 42L, 42L, digest, digest, true, false))
+  }
+
+  @Test
+  fun humanVisibleNamesPreserveIdentityAndRemainBounded() {
+    assertEquals(
+      "Arrival (2016).mp4",
+      OrionFinalizedArtifactPolicy.finalDisplayName("Arrival", 2016, null, null, null, null),
+    )
+    assertEquals(
+      "Reacher - S02E03 - Picture Says a Thousand Words.mp4",
+      OrionFinalizedArtifactPolicy.finalDisplayName(
+        "Reacher",
+        null,
+        "Reacher",
+        2,
+        3,
+        "Picture Says a Thousand Words",
+      ),
+    )
+    val sanitized = OrionFinalizedArtifactPolicy.finalDisplayName("Bad:/Name", null, null, null, null, null)
+    assertEquals("Bad__Name.mp4", sanitized)
+    assertTrue(OrionFinalizedArtifactPolicy.finalDisplayName("x".repeat(400), null, null, null, null, null).length <= 120)
+    assertEquals(
+      "🎬".repeat(116) + ".mp4",
+      OrionFinalizedArtifactPolicy.finalDisplayName("🎬".repeat(200), null, null, null, null, null),
+    )
+  }
+
+  @Test
+  fun actualSafSanitizerPreservesSupplementaryUnicodeAndMp4Suffix() {
+    val sanitized = OrionSafDocumentNamePolicy.sanitize("🎬".repeat(200) + ".mp4", "Orion Download.mp4")
+    assertEquals("🎬".repeat(116) + ".mp4", sanitized)
+    assertEquals(120, sanitized.codePointCount(0, sanitized.length))
+    assertFalse(hasBrokenSurrogatePair(sanitized))
+    assertEquals("Bad__Name.mp4", OrionSafDocumentNamePolicy.sanitize(" Bad:/Name.mp4 "))
+    assertEquals("Orion Download.mp4", OrionSafDocumentNamePolicy.sanitize("   ", "Orion Download.mp4"))
+  }
+
+  @Test
+  fun documentProbeRequiresDescriptorAccessAndConsistentKnownSizes() {
+    assertEquals(
+      OrionDocumentProbePolicy.Result.Verified(42L),
+      OrionDocumentProbePolicy.classify(true, 42L, OrionDocumentProbePolicy.DescriptorOutcome.OPENED, 42L),
+    )
+    assertEquals(
+      OrionDocumentProbePolicy.Result.Verified(42L),
+      OrionDocumentProbePolicy.classify(true, 42L, OrionDocumentProbePolicy.DescriptorOutcome.OPENED, null),
+    )
+    assertEquals(
+      OrionDocumentProbePolicy.Result.Verified(42L),
+      OrionDocumentProbePolicy.classify(true, null, OrionDocumentProbePolicy.DescriptorOutcome.OPENED, 42L),
+    )
+    assertSame(
+      OrionDocumentProbePolicy.Result.Unavailable,
+      OrionDocumentProbePolicy.classify(true, 42L, OrionDocumentProbePolicy.DescriptorOutcome.UNAVAILABLE, null),
+    )
+    assertSame(
+      OrionDocumentProbePolicy.Result.Unavailable,
+      OrionDocumentProbePolicy.classify(true, 42L, OrionDocumentProbePolicy.DescriptorOutcome.OPENED, 41L),
+    )
+    assertSame(
+      OrionDocumentProbePolicy.Result.Unavailable,
+      OrionDocumentProbePolicy.classify(true, null, OrionDocumentProbePolicy.DescriptorOutcome.OPENED, null),
+    )
+    assertSame(
+      OrionDocumentProbePolicy.Result.Missing,
+      OrionDocumentProbePolicy.classify(true, 42L, OrionDocumentProbePolicy.DescriptorOutcome.MISSING, null),
+    )
+    assertSame(
+      OrionDocumentProbePolicy.Result.Missing,
+      OrionDocumentProbePolicy.classify(false, null, OrionDocumentProbePolicy.DescriptorOutcome.OPENED, 42L),
+    )
+  }
+
+  private fun hasBrokenSurrogatePair(value: String): Boolean {
+    for (index in value.indices) {
+      val char = value[index]
+      if (char.isHighSurrogate() && (index + 1 >= value.length || !value[index + 1].isLowSurrogate())) return true
+      if (char.isLowSurrogate() && (index == 0 || !value[index - 1].isHighSurrogate())) return true
+    }
+    return false
   }
 }

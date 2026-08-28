@@ -1,8 +1,10 @@
 package com.okali.orion.playback
 
+import android.content.Context
 import android.media.MediaExtractor
 import android.media.MediaCodecList
 import android.media.MediaFormat
+import android.net.Uri
 import java.io.File
 import java.nio.ByteBuffer
 
@@ -103,12 +105,55 @@ internal object OrionFinalizedMediaVerifier {
         if (offset == bytes.size) bytes else bytes.copyOf(offset)
       }
     } catch (_: Throwable) { ByteArray(0) }
-    if (!OrionFinalizedMediaPolicy.hasIsoBmffFileType(prefix, file.length())) {
+    return verifyExtractor(file.name, file.length(), prefix, requireAudio) { extractor ->
+      extractor.setDataSource(file.absolutePath)
+    }
+  }
+
+  fun verify(
+    context: Context,
+    uri: Uri,
+    displayName: String,
+    sizeBytes: Long,
+    requireAudio: Boolean,
+  ): OrionFinalizedMediaVerification {
+    if (uri.scheme != "content" || sizeBytes <= 0L || !displayName.endsWith(".mp4", true)) {
+      return OrionFinalizedMediaPolicy.evaluate(displayName, sizeBytes, emptyList(), requireAudio)
+    }
+    val prefix = try {
+      val bytes = ByteArray(minOf(sizeBytes, CONTAINER_PREFIX_BYTES.toLong()).toInt())
+      context.contentResolver.openInputStream(uri)?.use { input ->
+        var offset = 0
+        while (offset < bytes.size) {
+          val count = input.read(bytes, offset, bytes.size - offset)
+          if (count < 0) break
+          if (count > 0) offset += count
+        }
+        if (offset == bytes.size) bytes else bytes.copyOf(offset)
+      } ?: ByteArray(0)
+    } catch (_: Throwable) { ByteArray(0) }
+    return verifyExtractor(displayName, sizeBytes, prefix, requireAudio) { extractor ->
+      val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
+        ?: throw java.io.IOException("provider-descriptor-null")
+      descriptor.use {
+        extractor.setDataSource(it.fileDescriptor, 0L, sizeBytes)
+      }
+    }
+  }
+
+  private fun verifyExtractor(
+    displayName: String,
+    sizeBytes: Long,
+    prefix: ByteArray,
+    requireAudio: Boolean,
+    configure: (MediaExtractor) -> Unit,
+  ): OrionFinalizedMediaVerification {
+    if (!OrionFinalizedMediaPolicy.hasIsoBmffFileType(prefix, sizeBytes)) {
       return OrionFinalizedMediaVerification(false, "yt-dlp-media-container-invalid", "The completed download is not a finalized MP4 container.")
     }
     val extractor = MediaExtractor()
     return try {
-      extractor.setDataSource(file.absolutePath)
+      configure(extractor)
       if (extractor.trackCount !in 1..MAX_TRACKS) {
         return OrionFinalizedMediaVerification(false, "yt-dlp-media-container-invalid", "The finalized MP4 has an invalid track inventory.")
       }
@@ -203,7 +248,7 @@ internal object OrionFinalizedMediaVerifier {
           representativeSamplesReadable = probe.representativeSamplesReadable,
         )
       }
-      OrionFinalizedMediaPolicy.evaluate(file.name, file.length(), probes, requireAudio)
+      OrionFinalizedMediaPolicy.evaluate(displayName, sizeBytes, probes, requireAudio)
     } catch (_: Throwable) {
       OrionFinalizedMediaVerification(false, "yt-dlp-media-probe-failed", "Orion could not validate the finalized MP4 container.")
     } finally {

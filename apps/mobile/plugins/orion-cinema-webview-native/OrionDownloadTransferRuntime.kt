@@ -121,13 +121,17 @@ internal object OrionDownloadTransferEngine {
         jobId,
       )
 
+    val pendingPublication = job.optJSONObject("_pendingPublication")
+
     val media =
       OrionFinalizedArtifactOwner
         .finalFile(context, jobId)
         ?.takeIf { it.isFile && it.length() > 0L }
         ?: OrionFinalizedArtifactOwner
           .stagingOutput(staging)
-        ?: return false
+        ?: if (pendingPublication?.optString("kind") == "saf-finalized-mp4" &&
+          pendingPublication.optLong("expectedSizeBytes", -1L) > 0L
+        ) java.io.File(staging, "missing-recovery-source.mp4") else return false
 
     if (
       !OrionDownloadSubtitleRuntime
@@ -154,7 +158,9 @@ internal object OrionDownloadTransferEngine {
 
     // The staging file is not the playback artifact. finalizeDirect settles and
     // verifies the durable Orion Library file before any Verified record exists.
-    val verifiedBytes = media.length()
+    val verifiedBytes = media.length().takeIf { it > 0L }
+      ?: pendingPublication?.optLong("expectedSizeBytes", -1L)?.takeIf { it > 0L }
+      ?: return false
 
     OrionDownloadJobStore.setProgress(
       jobId,
@@ -228,6 +234,21 @@ internal object OrionDownloadTransferEngine {
     return OrionDownloadSubtitleRuntime.hasLocalSelection(context, jobId, selectedCount)
   }
 
+  fun hasCompleteLocalYtDlpFinalization(context: android.content.Context, jobId: String): Boolean {
+    val job = OrionDownloadJobStore.getJob(jobId) ?: return false
+    if (job.optString("_transferKind") !in setOf("hls", "dash") || job.optString("state") == "cancelled") return false
+    val staging = OrionDownloadYtDlpRuntime.stagingDir(context, jobId)
+    val media = OrionFinalizedArtifactOwner.finalFile(context, jobId)?.takeIf { it.isFile && it.length() > 0L }
+      ?: OrionFinalizedArtifactOwner.stagingOutput(staging)
+    val pendingReady = job.optJSONObject("_pendingPublication")?.let { pending ->
+      pending.optString("kind") == "saf-finalized-mp4" && pending.optLong("expectedSizeBytes", -1L) > 0L &&
+        pending.optString("expectedSha256").matches(Regex("^[a-f0-9]{64}$"))
+    } == true
+    if ((media == null || !media.isFile || media.length() <= 0L) && !pendingReady) return false
+    val selectedCount = job.optJSONArray("selectedSubtitleAssetIds")?.length() ?: 0
+    return OrionDownloadSubtitleRuntime.hasLocalSelection(context, jobId, selectedCount)
+  }
+
   private fun runVerifiedLocalFinalization(context: android.content.Context, jobId: String): Boolean {
     if (!hasCompleteLocalFinalization(context, jobId)) return false
     val job = OrionDownloadJobStore.getJob(jobId) ?: return false
@@ -276,6 +297,7 @@ internal object OrionDownloadTransferEngine {
     OrionDownloadRecoveryScheduler.cancel(context, jobId)
     try { OrionDownloadYtDlpRuntime.stop(jobId) } catch (_: Throwable) {}
     OrionDownloadTransferRuntime.release(jobId)
+    try { OrionFinalizedArtifactOwner.cleanupPendingPublication(context, jobId) } catch (_: Throwable) {}
     try { OrionDownloadYtDlpRuntime.stagingDir(context, jobId).deleteRecursively() } catch (_: Throwable) {}
     try { java.io.File(context.filesDir, "orion-downloads/partial/$jobId-fragments").deleteRecursively() } catch (_: Throwable) {}
     try { java.io.File(context.filesDir, "orion-downloads/partial/$jobId.part").delete() } catch (_: Throwable) {}
@@ -1698,7 +1720,10 @@ internal object OrionDownloadTransferEngine {
       )
     var sidecarRoot: java.io.File? = null
     var settledProof: OrionFinalizedArtifactProof? = null
+    var settledDocumentProof: OrionFinalizedDocumentProof? = null
     var durableMediaBytes = verifiedBytes
+    val userOwnedLibrary = destination == "orion-library" &&
+      job.optJSONObject("storageTarget")?.optString("mode") == "user-folder"
 
     if (destination == "device-storage") {
       val targetId = job.optJSONObject("storageTarget")?.optString("targetId").orEmpty()
@@ -1723,26 +1748,43 @@ internal object OrionDownloadTransferEngine {
       val completedDir = java.io.File(context.filesDir, "orion-downloads/library")
       completedDir.mkdirs()
 
-      when (
-        val settlement = OrionFinalizedArtifactOwner.settle(
+      if (userOwnedLibrary) {
+        val targetId = job.optJSONObject("storageTarget")?.optString("targetId").orEmpty()
+        when (val settlement = OrionFinalizedArtifactOwner.settleToUserFolder(
+          context = context,
+          jobId = jobId,
+          generation = generation,
+          source = partial,
+          targetId = targetId,
+          media = media,
+          requireAudio = true,
+        )) {
+          OrionFinalizedDocumentSettlement.Cancelled -> return
+          is OrionFinalizedDocumentSettlement.Failed -> {
+            if (settlement.actionRequired) OrionDownloadJobStore.markActionRequired(jobId, settlement.code, settlement.message)
+            else OrionDownloadJobStore.markFailed(jobId, settlement.code, settlement.message, settlement.retryable)
+            return
+          }
+          is OrionFinalizedDocumentSettlement.Verified -> {
+            settledDocumentProof = settlement.proof
+            durableMediaBytes = settlement.proof.sizeBytes
+          }
+        }
+      } else {
+        when (val settlement = OrionFinalizedArtifactOwner.settle(
           context = context,
           jobId = jobId,
           source = partial,
           requireAudio = true,
-        )
-      ) {
-        is OrionFinalizedArtifactSettlement.Failed -> {
-          OrionDownloadJobStore.markFailed(
-            jobId,
-            settlement.code,
-            settlement.message,
-            retryable = settlement.retryable,
-          )
-          return
-        }
-        is OrionFinalizedArtifactSettlement.Verified -> {
-          settledProof = settlement.proof
-          durableMediaBytes = settlement.proof.sizeBytes
+        )) {
+          is OrionFinalizedArtifactSettlement.Failed -> {
+            OrionDownloadJobStore.markFailed(jobId, settlement.code, settlement.message, retryable = settlement.retryable)
+            return
+          }
+          is OrionFinalizedArtifactSettlement.Verified -> {
+            settledProof = settlement.proof
+            durableMediaBytes = settlement.proof.sizeBytes
+          }
         }
       }
 
@@ -1769,6 +1811,7 @@ internal object OrionDownloadTransferEngine {
           subtitleResult.bundleEntries.length() != selectedSubtitleCount
         ) {
           candidateSidecars.deleteRecursively()
+          settledDocumentProof?.let { OrionDownloadStorageRegistry.deleteDocument(context, it.contentUri) }
 
           OrionDownloadJobStore.markFailed(
             jobId,
@@ -1784,8 +1827,9 @@ internal object OrionDownloadTransferEngine {
           candidateSidecars
       }
 
-      locatorKind = "managed"
-      locatorValue = "orion-library:$jobId"
+      locatorKind = if (userOwnedLibrary) "content-uri" else "managed"
+      locatorValue = settledDocumentProof?.contentUri?.toString() ?: "orion-library:$jobId"
+      externallyVisible = userOwnedLibrary
     }
 
     val assetId = "asset-$jobId"
@@ -1818,14 +1862,20 @@ internal object OrionDownloadTransferEngine {
     if (destination == "orion-library") {
       asset.put(
         "_artifacts",
-        directManagedArtifacts(
+        if (userOwnedLibrary) directUserFolderArtifacts(
+          assetId = assetId,
+          jobId = jobId,
+          subtitleEntries = subtitleResult.bundleEntries,
+          proof = settledDocumentProof ?: return,
+          now = now,
+        ) else directManagedArtifacts(
           assetId = assetId,
           jobId = jobId,
           media = media,
           subtitleEntries = subtitleResult.bundleEntries,
           proof = settledProof ?: return,
           now = now,
-        ),
+        )
       )
     }
 
@@ -1840,10 +1890,13 @@ internal object OrionDownloadTransferEngine {
     ) {
       if (destination == "orion-library") {
         settledProof?.file?.delete()
+        settledDocumentProof?.let { OrionDownloadStorageRegistry.deleteDocument(context, it.contentUri) }
         sidecarRoot?.deleteRecursively()
       }
       return
     }
+
+    if (userOwnedLibrary) partial.delete()
 
     OrionDownloadSubtitleRuntime.cleanup(
       context,
@@ -1871,6 +1924,49 @@ internal object OrionDownloadTransferEngine {
 
   private fun fragmentName(index: Int): String = "f${index.toString().padStart(6, '0')}.bin"
   private fun fragmentFile(directory: java.io.File, index: Int): java.io.File = java.io.File(directory, fragmentName(index))
+
+  private fun directUserFolderArtifacts(
+    assetId: String,
+    jobId: String,
+    subtitleEntries: org.json.JSONArray,
+    proof: OrionFinalizedDocumentProof,
+    now: Long,
+  ): org.json.JSONArray {
+    val artifacts = org.json.JSONArray().put(
+      ownedArtifact(
+        artifactId = "$assetId:primary",
+        role = "primary",
+        displayName = proof.displayName,
+        mimeType = "video/mp4",
+        sizeBytes = proof.sizeBytes,
+        locatorKind = "content-uri",
+        locatorValue = proof.contentUri.toString(),
+        now = now,
+      )
+        .put("_verificationVersion", OrionFinalizedArtifactPolicy.VERIFICATION_VERSION)
+        .put("_verifiedByteCount", proof.sizeBytes)
+        .put("_contentSha256", proof.sha256),
+    )
+    for (index in 0 until subtitleEntries.length()) {
+      val entry = subtitleEntries.optJSONObject(index) ?: continue
+      val relative = entry.optString("name")
+      val trackId = entry.optString("id")
+      if (!relative.matches(Regex("^subtitles/[A-Za-z0-9._-]{1,120}$")) ||
+        !trackId.matches(Regex("^[A-Za-z0-9._:-]{1,100}$"))
+      ) continue
+      artifacts.put(ownedArtifact(
+        artifactId = "$assetId:subtitle:$index",
+        role = "subtitle",
+        displayName = relative.substringAfterLast('/'),
+        mimeType = subtitleMime(relative.substringAfterLast('.', "srt")),
+        sizeBytes = entry.optLong("size", 0L).coerceAtLeast(0L),
+        locatorKind = "managed-relative",
+        locatorValue = "$jobId.sidecars/$relative",
+        now = now,
+      ).put("_trackId", trackId))
+    }
+    return artifacts
+  }
 
   private fun directManagedArtifacts(
     assetId: String,

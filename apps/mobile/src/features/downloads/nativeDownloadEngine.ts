@@ -60,6 +60,20 @@ interface NativeDownloadEngineModule {
     writable?: boolean;
     persistedPermission?: boolean;
   }>;
+  chooseLibraryStorageTarget(): Promise<{
+    ok: boolean;
+    targetId?: string;
+    displayName?: string;
+    writable?: boolean;
+    persistedPermission?: boolean;
+  }>;
+  validateLibraryStorageTarget(targetId: string): Promise<{
+    ok: boolean;
+    targetId?: string;
+    displayName?: string;
+    writable?: boolean;
+    persistedPermission?: boolean;
+  }>;
 }
 
 function nativeModule(): NativeDownloadEngineModule | null {
@@ -352,6 +366,32 @@ export async function chooseNativeDeviceStorageTargetV1(): Promise<MobileDownloa
     writable: result.writable === true,
     persistedPermission: result.persistedPermission === true,
   };
+}
+
+function normalizeLibraryStorageTargetResult(
+  result: { ok?: boolean; targetId?: string; displayName?: string; writable?: boolean; persistedPermission?: boolean } | null,
+): MobileDownloadStorageTargetV1 | null {
+  if (!result?.ok || !result.targetId || !result.displayName) return null;
+  return {
+    mode: 'user-folder',
+    targetId: result.targetId,
+    displayName: result.displayName,
+    writable: result.writable === true,
+    persistedPermission: result.persistedPermission === true,
+  };
+}
+
+export async function chooseNativeLibraryStorageTargetV1(): Promise<MobileDownloadStorageTargetV1 | null> {
+  const module = nativeModule();
+  if (!module) return null;
+  return normalizeLibraryStorageTargetResult(await module.chooseLibraryStorageTarget());
+}
+
+export async function validateNativeLibraryStorageTargetV1(targetId: string): Promise<MobileDownloadStorageTargetV1 | null> {
+  const module = nativeModule();
+  const clean = targetId.trim();
+  if (!module || !/^saf-[a-f0-9]{20}$/.test(clean)) return null;
+  return normalizeLibraryStorageTargetResult(await module.validateLibraryStorageTarget(clean));
 }
 
 // Compile-time imports deliberately exercise the same normalizers used for the

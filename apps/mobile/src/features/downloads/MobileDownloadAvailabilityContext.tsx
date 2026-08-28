@@ -33,7 +33,7 @@ const EMPTY_INDEX: MobileDownloadAvailabilityIndexV1 = {
 const MobileDownloadAvailabilityContext = createContext<MobileDownloadAvailabilityIndexV1>(EMPTY_INDEX);
 
 function hasVerifiedPrimaryArtifact(asset: MobileDownloadAssetV1): boolean {
-  if (asset.destination !== 'orion-library' || asset.storageTarget.mode !== 'orion-library') return false;
+  if (asset.destination !== 'orion-library' || !['orion-library', 'user-folder'].includes(asset.storageTarget.mode)) return false;
   if (asset.availability !== 'verified') return false;
   return asset.artifacts.some((artifact) => artifact.role === 'primary' && artifact.availability === 'verified');
 }

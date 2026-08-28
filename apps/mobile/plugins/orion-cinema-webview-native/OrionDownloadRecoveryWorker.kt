@@ -23,7 +23,9 @@ class OrionDownloadRecoveryWorker(
     val job = OrionDownloadJobStore.getJob(jobId) ?: return Result.success()
     val state = job.optString("state")
     if (state in setOf("completed", "cancelled", "unsupported", "protected")) return Result.success()
-    if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(applicationContext, jobId)) {
+    if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(applicationContext, jobId) ||
+      OrionDownloadTransferEngine.hasCompleteLocalYtDlpFinalization(applicationContext, jobId)
+    ) {
       return try {
         OrionDownloadForegroundService.start(applicationContext, jobId, recovery = true)
         Result.success()

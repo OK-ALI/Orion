@@ -1,6 +1,7 @@
 import type { MediaIdentity } from './media';
 
 export type MobileDownloadDestinationModeV1 = 'orion-library' | 'device-storage';
+export type MobileDownloadStorageTargetModeV1 = MobileDownloadDestinationModeV1 | 'user-folder';
 export type MobileDownloadLibraryKindV1 = 'movie' | 'series' | 'anime';
 export type MobileDownloadManifestKindV1 = 'direct' | 'hls' | 'dash' | 'extensionless' | 'unknown';
 export type MobileDownloadProtectionV1 = 'clear' | 'unknown' | 'protected';
@@ -98,7 +99,7 @@ export interface MobileDownloadCandidateV1 {
 }
 
 export interface MobileDownloadStorageTargetV1 {
-  mode: MobileDownloadDestinationModeV1;
+  mode: MobileDownloadStorageTargetModeV1;
   /** Opaque Orion/native storage handle, never a raw machine path. */
   targetId: string | null;
   displayName: string;
@@ -261,7 +262,11 @@ export interface OfflineMediaEntryV1 {
 
 export interface MobileDownloadPreferencesV1 {
   schemaVersion: 1;
+  /** Deprecated for new jobs; retained so older preference payloads remain readable. */
   defaultDestination: MobileDownloadDestinationModeV1;
+  /** Physical owner for every newly-created logical Orion Library asset. */
+  libraryStorageTarget: MobileDownloadStorageTargetV1 | null;
+  /** Legacy P10.4 portable destination preference. */
   deviceStorageTarget: MobileDownloadStorageTargetV1 | null;
   preferredQuality: MobileDownloadQualityV1;
   subtitlePreference: MobileDownloadSubtitlePreferenceV1;

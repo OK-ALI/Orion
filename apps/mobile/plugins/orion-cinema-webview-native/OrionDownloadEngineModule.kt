@@ -30,7 +30,7 @@ class OrionDownloadEngineModule(
         promise.resolve(Arguments.createMap().apply { putBoolean("ok", false) })
         return
       }
-      val target = OrionDownloadStorageRegistry.registerTree(reactContext, data.data!!)
+      val target = OrionDownloadStorageRegistry.registerTree(reactContext, data.data!!, data.flags)
       if (target == null) {
         promise.resolve(Arguments.createMap().apply { putBoolean("ok", false) })
         return
@@ -101,18 +101,25 @@ class OrionDownloadEngineModule(
         promise.reject("DOWNLOAD_STORAGE_INSUFFICIENT", "Orion needs more free device space before this download can start.")
         return
       }
-      if (destination == "device-storage") {
+      val storageMode = job.optJSONObject("storageTarget")?.optString("mode").orEmpty()
+      val userOwnedLibrary = destination == "orion-library" && storageMode == "user-folder"
+      if (destination == "orion-library" && !userOwnedLibrary) {
+        OrionDownloadTransferRuntime.release(jobId)
+        promise.reject("DOWNLOAD_STORAGE_TARGET_REQUIRED", "Choose the Orion Library storage folder before starting this download.")
+        return
+      }
+      if (destination == "device-storage" || userOwnedLibrary) {
         val targetId = job.optJSONObject("storageTarget")?.optString("targetId").orEmpty()
         val target = OrionDownloadStorageRegistry.describe(reactContext, targetId)
         if (target == null || !target.writable || !target.persistedPermission) {
           OrionDownloadTransferRuntime.release(jobId)
-          promise.reject("DOWNLOAD_STORAGE_TARGET_REQUIRED", "Choose the Device Storage folder again before starting this download.")
+          promise.reject("DOWNLOAD_STORAGE_TARGET_REQUIRED", if (userOwnedLibrary) "Choose the Orion Library storage folder again before starting this download." else "Choose the Device Storage folder again before starting this download.")
           return
         }
         val freeBytes = OrionDownloadStorageRegistry.freeBytes(reactContext, targetId)
         if (freeBytes != null && freeBytes < MIN_FREE_RESERVE_BYTES) {
           OrionDownloadTransferRuntime.release(jobId)
-          promise.reject("DOWNLOAD_STORAGE_INSUFFICIENT", "Device Storage does not have enough free space to start this download.")
+          promise.reject("DOWNLOAD_STORAGE_INSUFFICIENT", "The selected storage folder does not have enough free space to start this download.")
           return
         }
       }
@@ -310,6 +317,31 @@ class OrionDownloadEngineModule(
 
   @ReactMethod
   fun chooseDeviceStorageTarget(promise: Promise) {
+    chooseStorageTarget(promise)
+  }
+
+  @ReactMethod
+  fun chooseLibraryStorageTarget(promise: Promise) {
+    chooseStorageTarget(promise)
+  }
+
+  @ReactMethod
+  fun validateLibraryStorageTarget(targetId: String, promise: Promise) {
+    ioExecutor.execute {
+      val target = OrionDownloadStorageRegistry.describe(reactContext, targetId.trim())
+      promise.resolve(Arguments.createMap().apply {
+        putBoolean("ok", target != null)
+        if (target != null) {
+          putString("targetId", target.targetId)
+          putString("displayName", target.displayName)
+          putBoolean("writable", target.writable)
+          putBoolean("persistedPermission", target.persistedPermission)
+        }
+      })
+    }
+  }
+
+  private fun chooseStorageTarget(promise: Promise) {
     if (storagePromise != null) {
       promise.reject("DOWNLOAD_STORAGE_PICKER_BUSY", "A storage picker is already open.")
       return

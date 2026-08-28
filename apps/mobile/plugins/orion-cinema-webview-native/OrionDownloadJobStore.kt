@@ -312,6 +312,28 @@ internal object OrionDownloadJobStore {
   }
 
   @Synchronized
+  fun setPendingPublication(jobId: String, expectedGeneration: Long, publication: JSONObject): Boolean {
+    var accepted = false
+    mutateJobLocked(jobId) { job ->
+      if (job.optLong("_executionGeneration", -1L) != expectedGeneration ||
+        job.optString("state") == "cancelled" || job.optString("_control", "run") == "cancel"
+      ) return@mutateJobLocked
+      job.put("_pendingPublication", JSONObject(publication.toString()))
+      accepted = true
+    }
+    return accepted
+  }
+
+  @Synchronized
+  fun clearPendingPublication(jobId: String, expectedGeneration: Long? = null) {
+    mutateJobLocked(jobId) { job ->
+      if (expectedGeneration == null || job.optLong("_executionGeneration", -1L) == expectedGeneration) {
+        job.remove("_pendingPublication")
+      }
+    }
+  }
+
+  @Synchronized
   fun cancelAndFence(jobId: String): Long? {
     val state = readStateLocked()
     val jobs = state.optJSONArray("jobs") ?: return null
@@ -612,6 +634,7 @@ internal object OrionDownloadJobStore {
       job.put("progress", progress)
       job.put("_control", "run")
       job.remove("_finalizationPlan")
+      job.remove("_pendingPublication")
       committed = true
       break
     }
@@ -717,8 +740,20 @@ internal object OrionDownloadJobStore {
           artifact.optLong("expectedSizeBytes", -2L),
           artifact.optString("_contentSha256"),
         )
+      val finalizedUserFolderMp4 = locatorKind == "content-uri" &&
+        asset.optString("destination") == "orion-library" &&
+        asset.optJSONObject("storageTarget")?.optString("mode") == "user-folder" &&
+        asset.optString("container") == "mp4" && asset.optString("mimeType") == "video/mp4" &&
+        OrionFinalizedArtifactPolicy.verificationStampMatches(
+          artifact.optInt("_verificationVersion", 0),
+          artifact.optLong("_verifiedByteCount", -1L),
+          artifact.optLong("expectedSizeBytes", -2L),
+          artifact.optString("_contentSha256"),
+        )
+      val legacyContentDocument = locatorKind == "content-uri" &&
+        !(asset.optString("destination") == "orion-library" && asset.optJSONObject("storageTarget")?.optString("mode") == "user-folder")
       val open = role == "primary" && availability == "verified" &&
-        (locatorKind == "content-uri" || finalizedManagedMp4)
+        (legacyContentDocument || finalizedUserFolderMp4 || finalizedManagedMp4)
       val locate = role == "primary" && availability == "verified" && locatorKind == "content-uri" &&
         !asset.optJSONObject("storageTarget")?.optString("targetId").isNullOrBlank()
       if (role == "primary") {
@@ -779,12 +814,13 @@ internal object OrionDownloadJobStore {
 
   private fun sanitizeStorageTarget(input: JSONObject?, destination: String): JSONObject? {
     input ?: return null
-    if (input.optString("mode") != destination) return null
+    val mode = input.optString("mode")
+    if (mode != destination && !(destination == "orion-library" && mode == "user-folder")) return null
     val displayName = cleanText(input.optString("displayName"), 100) ?: return null
     val target = input.opt("targetId")
     val targetId = if (target == null || target == JSONObject.NULL) JSONObject.NULL else cleanText(target.toString(), 140) ?: return null
     return JSONObject()
-      .put("mode", destination)
+      .put("mode", mode)
       .put("targetId", targetId)
       .put("displayName", displayName)
       .put("writable", input.optBoolean("writable", false))
