@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.core.content.FileProvider
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -54,6 +53,15 @@ internal object OrionDownloadArtifactManager {
   private const val MAX_FINALIZED_SUBTITLE_CHARS = 10 * 1024 * 1024
   private val FRAGMENT_ROLES = setOf("video", "video-init", "audio", "audio-init")
 
+  private data class ArtifactProbe(
+    val availability: OrionArtifactAvailability,
+    val observedSizeBytes: Long?,
+    val verificationVersion: Int? = null,
+    val verifiedByteCount: Long? = null,
+    val contentSha256: String? = null,
+    val clearVerification: Boolean = false,
+  )
+
   fun reconcile(context: Context, assetIds: Set<String>? = null): JSONObject {
     synchronized(reconciliationLock) {
       if (reconciling) return OrionDownloadJobStore.snapshot()
@@ -69,12 +77,24 @@ internal object OrionDownloadArtifactManager {
         for (artifactIndex in 0 until artifacts.length()) {
           val artifact = artifacts.optJSONObject(artifactIndex) ?: continue
           val probe = probeArtifact(context, asset, artifact)
-          updates.put(JSONObject()
+          val update = JSONObject()
             .put("artifactId", artifact.optString("artifactId"))
             .put("_locatorFingerprint", artifact.optJSONObject("_locator")?.toString() ?: "")
-            .put("availability", probe.first.wire)
-            .put("observedSizeBytes", probe.second ?: JSONObject.NULL)
-            .put("lastCheckedAt", checkedAt))
+            .put("availability", probe.availability.wire)
+            .put("observedSizeBytes", probe.observedSizeBytes ?: JSONObject.NULL)
+            .put("lastCheckedAt", checkedAt)
+          if (
+            probe.verificationVersion != null &&
+            probe.verifiedByteCount != null &&
+            probe.contentSha256 != null
+          ) {
+            update
+              .put("_verificationVersion", probe.verificationVersion)
+              .put("_verifiedByteCount", probe.verifiedByteCount)
+              .put("_contentSha256", probe.contentSha256)
+          }
+          if (probe.clearVerification) update.put("_clearVerification", true)
+          updates.put(update)
         }
       }
       OrionDownloadJobStore.updateArtifactStates(updates)
@@ -100,8 +120,11 @@ internal object OrionDownloadArtifactManager {
 
     val primary = ownedPrimary(asset)
       ?: return playbackResult(false, clean, "offline-primary-missing", "Offline media is not tracked.")
-    if (primary.optString("availability") != "verified") {
-      return playbackResult(false, clean, "offline-primary-not-verified", "Offline media is not currently verified.")
+    when (primary.optString("availability")) {
+      "missing" -> return playbackResult(false, clean, "offline-primary-missing", "The downloaded media file is missing from Orion Library.")
+      "unavailable" -> return playbackResult(false, clean, "offline-primary-unavailable", "The downloaded media file could not be verified or opened.")
+      "verified" -> Unit
+      else -> return playbackResult(false, clean, "offline-primary-not-verified", "Offline media is not currently verified.")
     }
     val locatorKind = primary.optJSONObject("_locator")?.optString("kind").orEmpty()
     if (locatorKind !in setOf("managed", "managed-relative")) {
@@ -125,9 +148,17 @@ internal object OrionDownloadArtifactManager {
       ) {
         return playbackResult(false, clean, "offline-file-invalid", "Offline media file is missing or inconsistent.")
       }
+      if (!OrionFinalizedArtifactPolicy.verificationStampMatches(
+          primary.optInt("_verificationVersion", 0),
+          primary.optLong("_verifiedByteCount", -1L),
+          expectedSize,
+          primary.optString("_contentSha256"),
+        )) {
+        return playbackResult(false, clean, "offline-file-verification-required", "Offline media has not passed durable playback verification.")
+      }
       val subtitles = finalizedSubtitlePayload(context, asset)
         ?: return playbackResult(false, clean, "offline-subtitle-invalid", "Downloaded subtitles could not be opened safely.")
-      val playbackUri = managedContentUri(context, bundleDir)
+      val playbackUri = OrionFinalizedArtifactOwner.authorize(context, bundleDir, expectedSize)
         ?: return playbackResult(false, clean, "offline-file-uri-unavailable", "Orion could not authorize the local media file for playback.")
       return JSONObject()
         .put("schemaVersion", 1)
@@ -187,8 +218,11 @@ internal object OrionDownloadArtifactManager {
     }
     val primary = ownedPrimary(asset)
       ?: return failure("ownership", "offline-primary-missing", "Offline media is not tracked.")
-    if (primary.optString("availability") != "verified") {
-      return failure("availability", "offline-primary-not-verified", "Offline media is not currently verified.")
+    when (primary.optString("availability")) {
+      "missing" -> return failure("availability", "offline-primary-missing", "The downloaded media file is missing from Orion Library.")
+      "unavailable" -> return failure("availability", "offline-primary-unavailable", "The downloaded media file could not be verified or opened.")
+      "verified" -> Unit
+      else -> return failure("availability", "offline-primary-not-verified", "Offline media is not currently verified.")
     }
     if (primary.optJSONObject("_locator")?.optString("kind").orEmpty() !in setOf("managed", "managed-relative")) {
       return failure("locator", "offline-primary-not-managed", "Offline media is not stored in Orion Library.")
@@ -210,6 +244,16 @@ internal object OrionDownloadArtifactManager {
         bundleDir.length() != expectedSize
       ) {
         return failure("file-integrity", "offline-file-invalid", "Offline media file is missing or inconsistent.")
+      }
+      if (
+        !OrionFinalizedArtifactPolicy.verificationStampMatches(
+          primary.optInt("_verificationVersion", 0),
+          primary.optLong("_verifiedByteCount", -1L),
+          expectedSize,
+          primary.optString("_contentSha256"),
+        ) || OrionFinalizedArtifactOwner.authorize(context, bundleDir, expectedSize) == null
+      ) {
+        return failure("file-authority", "offline-file-authority-invalid", "Offline media could not be authorized for playback.")
       }
 
       val artifacts =
@@ -602,7 +646,12 @@ internal object OrionDownloadArtifactManager {
     val asset = OrionDownloadJobStore.ownershipAssets(setOf(assetId)).optJSONObject(0)
       ?: return actionResult(false, "asset-not-found", "Download not found.")
     val primary = ownedPrimary(asset) ?: return actionResult(false, "artifact-not-found", "Downloaded media is not tracked.")
-    if (primary.optString("availability") != "verified") return actionResult(false, "artifact-not-verified", "This download is not currently available.")
+    when (primary.optString("availability")) {
+      "missing" -> return actionResult(false, "artifact-missing", "The downloaded media file is missing from Orion Library.")
+      "unavailable" -> return actionResult(false, "artifact-unavailable", "Android could not verify or open the downloaded media file.")
+      "verified" -> Unit
+      else -> return actionResult(false, "artifact-not-verified", "This download is not currently verified.")
+    }
     val locator = primary.optJSONObject("_locator") ?: return actionResult(false, "artifact-locator-missing", "This download cannot be opened.")
     val locatorKind = locator.optString("kind")
     if (locatorKind == "content-uri") {
@@ -625,40 +674,87 @@ internal object OrionDownloadArtifactManager {
     if (!target.isFile || expectedSize <= 0L || target.length() != expectedSize || !target.extension.equals("mp4", true)) {
       return actionResult(false, "artifact-integrity-invalid", "This download is no longer a verified MP4.")
     }
-    val contentUri = managedContentUri(context, target)
-      ?: return actionResult(false, "artifact-action-unsupported", "Orion could not authorize this download for local playback.")
+    if (!OrionFinalizedArtifactPolicy.verificationStampMatches(
+        primary.optInt("_verificationVersion", 0),
+        primary.optLong("_verifiedByteCount", -1L),
+        expectedSize,
+        primary.optString("_contentSha256"),
+      )) {
+      return actionResult(false, "artifact-verification-required", "This download has not passed durable playback verification.")
+    }
+    val contentUri = OrionFinalizedArtifactOwner.authorize(context, target, expectedSize)
+      ?: return actionResult(false, "artifact-authority-unavailable", "Orion could not open this download through its local playback authority.")
     return if (launch(context, contentUri, "video/mp4", chooser = true)) actionResult(true, null, null)
     else actionResult(false, "artifact-action-unsupported", "No Android app can play this saved download.")
   }
 
-  private fun probeArtifact(context: Context, asset: JSONObject, artifact: JSONObject): Pair<OrionArtifactAvailability, Long?> {
-    val locator = artifact.optJSONObject("_locator") ?: return OrionArtifactAvailability.UNAVAILABLE to null
+  private fun probeArtifact(context: Context, asset: JSONObject, artifact: JSONObject): ArtifactProbe {
+    val locator = artifact.optJSONObject("_locator") ?: return ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
     return when (locator.optString("kind")) {
-      "content-uri" -> when (val probe = OrionDownloadStorageRegistry.probeDocument(context, parseContentUri(locator.optString("value")) ?: return OrionArtifactAvailability.UNAVAILABLE to null)) {
-        is OrionDownloadStorageRegistry.DocumentProbe.Verified -> OrionArtifactAvailability.VERIFIED to probe.sizeBytes
-        OrionDownloadStorageRegistry.DocumentProbe.Missing -> OrionArtifactAvailability.MISSING to null
-        OrionDownloadStorageRegistry.DocumentProbe.Unavailable -> OrionArtifactAvailability.UNAVAILABLE to null
+      "content-uri" -> when (val probe = OrionDownloadStorageRegistry.probeDocument(context, parseContentUri(locator.optString("value")) ?: return ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null))) {
+        is OrionDownloadStorageRegistry.DocumentProbe.Verified -> ArtifactProbe(OrionArtifactAvailability.VERIFIED, probe.sizeBytes)
+        OrionDownloadStorageRegistry.DocumentProbe.Missing -> ArtifactProbe(OrionArtifactAvailability.MISSING, null)
+        OrionDownloadStorageRegistry.DocumentProbe.Unavailable -> ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
       }
       "managed", "managed-relative" -> {
-        val target = managedTarget(context, asset, artifact) ?: return OrionArtifactAvailability.UNAVAILABLE to null
-        if (!target.exists()) OrionArtifactAvailability.MISSING to null
+        val target = managedTarget(context, asset, artifact) ?: return ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
+        if (!target.exists()) ArtifactProbe(OrionArtifactAvailability.MISSING, null, clearVerification = true)
         else if (artifact.optString("role") == "primary" && target.isDirectory) {
           val validated = validateManagedFragmentBundle(target)
           val expectedSize = artifact.optLong("expectedSizeBytes", -1L)
-          if (validated == null || expectedSize <= 0L || validated.primaryBytes != expectedSize) OrionArtifactAvailability.UNAVAILABLE to null
-          else OrionArtifactAvailability.VERIFIED to validated.primaryBytes
+          if (validated == null || expectedSize <= 0L || validated.primaryBytes != expectedSize) ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
+          else ArtifactProbe(OrionArtifactAvailability.VERIFIED, validated.primaryBytes)
         } else if (artifact.optString("role") == "primary" && target.isFile) {
           val expectedSize = artifact.optLong("expectedSizeBytes", -1L)
-          if (expectedSize <= 0L || target.length() != expectedSize) OrionArtifactAvailability.UNAVAILABLE to null
-          else OrionArtifactAvailability.VERIFIED to expectedSize
+          if (expectedSize <= 0L || target.length() != expectedSize) {
+            ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null, clearVerification = true)
+          } else if (
+            asset.optString("container") == "mp4" &&
+            asset.optString("mimeType") == "video/mp4"
+          ) {
+            val version = artifact.optInt("_verificationVersion", 0)
+            val verifiedByteCount = artifact.optLong("_verifiedByteCount", -1L)
+            val sha256 = artifact.optString("_contentSha256")
+            if (OrionFinalizedArtifactPolicy.verificationStampMatches(
+                version,
+                verifiedByteCount,
+                expectedSize,
+                sha256,
+              )) {
+              ArtifactProbe(OrionArtifactAvailability.VERIFIED, expectedSize)
+            } else {
+              when (
+                val validation = OrionFinalizedArtifactOwner.validate(
+                  context = context,
+                  file = target,
+                  expectedSizeBytes = expectedSize,
+                  expectedSha256 = null,
+                  requireAudio = true,
+                )
+              ) {
+                is OrionFinalizedArtifactSettlement.Verified -> ArtifactProbe(
+                  availability = OrionArtifactAvailability.VERIFIED,
+                  observedSizeBytes = validation.proof.sizeBytes,
+                  verificationVersion = OrionFinalizedArtifactPolicy.VERIFICATION_VERSION,
+                  verifiedByteCount = validation.proof.sizeBytes,
+                  contentSha256 = validation.proof.sha256,
+                )
+                is OrionFinalizedArtifactSettlement.Failed -> ArtifactProbe(
+                  availability = if (validation.code == "finalized-artifact-missing") OrionArtifactAvailability.MISSING else OrionArtifactAvailability.UNAVAILABLE,
+                  observedSizeBytes = null,
+                  clearVerification = true,
+                )
+              }
+            }
+          } else ArtifactProbe(OrionArtifactAvailability.VERIFIED, expectedSize)
         } else {
           val expectedSize = artifact.optLong("expectedSizeBytes", -1L)
           val observed = managedSize(target, false)
-          if (expectedSize <= 0L || observed != expectedSize) OrionArtifactAvailability.UNAVAILABLE to null
-          else OrionArtifactAvailability.VERIFIED to observed
+          if (expectedSize <= 0L || observed != expectedSize) ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
+          else ArtifactProbe(OrionArtifactAvailability.VERIFIED, observed)
         }
       }
-      else -> OrionArtifactAvailability.UNAVAILABLE to null
+      else -> ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
     }
   }
 
@@ -776,10 +872,6 @@ internal object OrionDownloadArtifactManager {
     val artifacts = asset.optJSONArray("_artifacts") ?: return null
     return (0 until artifacts.length()).mapNotNull { artifacts.optJSONObject(it) }.firstOrNull { it.optString("role") == "primary" }
   }
-
-  private fun managedContentUri(context: Context, file: File): Uri? = try {
-    FileProvider.getUriForFile(context, "${context.packageName}.orion-downloads", file)
-  } catch (_: Throwable) { null }
 
   private fun finalizedSubtitlePayload(context: Context, asset: JSONObject): JSONArray? {
     val artifacts = asset.optJSONArray("_artifacts") ?: return JSONArray()

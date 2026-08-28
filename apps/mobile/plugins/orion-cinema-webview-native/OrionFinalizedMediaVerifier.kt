@@ -1,8 +1,10 @@
 package com.okali.orion.playback
 
 import android.media.MediaExtractor
+import android.media.MediaCodecList
 import android.media.MediaFormat
 import java.io.File
+import java.nio.ByteBuffer
 
 internal data class OrionFinalizedTrackProbe(
   val kind: String,
@@ -11,6 +13,8 @@ internal data class OrionFinalizedTrackProbe(
   val width: Int = 0,
   val height: Int = 0,
   val largestSampleBytes: Long = 0L,
+  val decoderSupported: Boolean = true,
+  val representativeSamplesReadable: Boolean = true,
 )
 
 internal data class OrionFinalizedMediaVerification(
@@ -24,7 +28,7 @@ internal data class OrionFinalizedMediaVerification(
 /** Pure acceptance policy shared by production probing and executable JVM tests. */
 internal object OrionFinalizedMediaPolicy {
   private const val MAX_MEDIA_DURATION_US = 30L * 24L * 60L * 60L * 1_000_000L
-  private const val MAX_SAMPLE_BYTES = 128L * 1024L * 1024L
+  private const val MAX_SAMPLE_BYTES = 32L * 1024L * 1024L
 
   fun hasIsoBmffFileType(prefix: ByteArray, fileSize: Long): Boolean {
     if (fileSize < 16L || prefix.size < 12) return false
@@ -58,6 +62,12 @@ internal object OrionFinalizedMediaPolicy {
     if (tracks.any { it.largestSampleBytes <= 0L || it.largestSampleBytes > MAX_SAMPLE_BYTES }) {
       return failure("yt-dlp-media-samples-invalid", "The finalized MP4 has invalid encoded samples.")
     }
+    if (tracks.any { !it.decoderSupported }) {
+      return failure("yt-dlp-media-decoder-unsupported", "This device cannot decode one or more finalized media tracks.")
+    }
+    if (tracks.any { !it.representativeSamplesReadable }) {
+      return failure("yt-dlp-media-payload-invalid", "The finalized MP4 contains unreadable encoded media samples.")
+    }
     return OrionFinalizedMediaVerification(
       ok = true,
       code = "verified",
@@ -74,6 +84,7 @@ internal object OrionFinalizedMediaPolicy {
 internal object OrionFinalizedMediaVerifier {
   private const val MAX_TRACKS = 32
   private const val MAX_SAMPLES = 2_000_000L
+  private const val MAX_REPRESENTATIVE_SAMPLE_BYTES = 32 * 1024 * 1024
   private const val CONTAINER_PREFIX_BYTES = 64 * 1024
 
   fun verify(file: File, requireAudio: Boolean): OrionFinalizedMediaVerification {
@@ -113,7 +124,10 @@ internal object OrionFinalizedMediaVerifier {
         val declaredDuration = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L
         val width = if (kind == "video" && format.containsKey(MediaFormat.KEY_WIDTH)) format.getInteger(MediaFormat.KEY_WIDTH) else 0
         val height = if (kind == "video" && format.containsKey(MediaFormat.KEY_HEIGHT)) format.getInteger(MediaFormat.KEY_HEIGHT) else 0
-        selected[index] = MutableProbe(kind, declaredDuration, width, height)
+        val decoderSupported = try {
+          MediaCodecList(MediaCodecList.REGULAR_CODECS).findDecoderForFormat(format) != null
+        } catch (_: Throwable) { false }
+        selected[index] = MutableProbe(kind, declaredDuration, width, height, decoderSupported)
         extractor.selectTrack(index)
       }
       if (selected.isEmpty()) {
@@ -142,6 +156,39 @@ internal object OrionFinalizedMediaVerifier {
         }
         if (!extractor.advance()) break
       }
+      selected.keys.forEach { index ->
+        try { extractor.unselectTrack(index) } catch (_: Throwable) {}
+      }
+      var sampleBuffer = ByteBuffer.allocateDirect(64 * 1024)
+      for ((index, probe) in selected) {
+        extractor.selectTrack(index)
+        val sampleTimes = linkedSetOf(
+          probe.minimumTimeUs.coerceAtLeast(0L),
+          probe.maximumTimeUs.coerceAtLeast(0L),
+        )
+        for (sampleTime in sampleTimes) {
+          extractor.seekTo(sampleTime, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+          val sampleSize = extractor.sampleSize
+          if (extractor.sampleTrackIndex != index || sampleSize <= 0L || sampleSize > MAX_REPRESENTATIVE_SAMPLE_BYTES.toLong()) {
+            probe.representativeSamplesReadable = false
+            break
+          }
+          if (sampleBuffer.capacity() < sampleSize.toInt()) {
+            var capacity = sampleBuffer.capacity()
+            while (capacity < sampleSize.toInt() && capacity < MAX_REPRESENTATIVE_SAMPLE_BYTES) {
+              capacity = minOf(MAX_REPRESENTATIVE_SAMPLE_BYTES, capacity * 2)
+            }
+            sampleBuffer = ByteBuffer.allocateDirect(capacity)
+          }
+          sampleBuffer.clear()
+          val bytesRead = extractor.readSampleData(sampleBuffer, 0)
+          if (bytesRead <= 0 || bytesRead.toLong() != sampleSize) {
+            probe.representativeSamplesReadable = false
+            break
+          }
+        }
+        extractor.unselectTrack(index)
+      }
       val probes = selected.values.map { probe ->
         val span = if (probe.minimumTimeUs == Long.MAX_VALUE || probe.maximumTimeUs <= probe.minimumTimeUs) 0L
           else probe.maximumTimeUs - probe.minimumTimeUs
@@ -152,6 +199,8 @@ internal object OrionFinalizedMediaVerifier {
           width = probe.width,
           height = probe.height,
           largestSampleBytes = probe.largestSampleBytes,
+          decoderSupported = probe.decoderSupported,
+          representativeSamplesReadable = probe.representativeSamplesReadable,
         )
       }
       OrionFinalizedMediaPolicy.evaluate(file.name, file.length(), probes, requireAudio)
@@ -167,9 +216,11 @@ internal object OrionFinalizedMediaVerifier {
     val declaredDurationUs: Long,
     val width: Int,
     val height: Int,
+    val decoderSupported: Boolean,
     var count: Long = 0L,
     var minimumTimeUs: Long = Long.MAX_VALUE,
     var maximumTimeUs: Long = Long.MIN_VALUE,
     var largestSampleBytes: Long = 0L,
+    var representativeSamplesReadable: Boolean = true,
   )
 }

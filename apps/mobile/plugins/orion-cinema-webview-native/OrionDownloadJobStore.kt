@@ -376,6 +376,25 @@ internal object OrionDownloadJobStore {
         artifact.put("availability", availability)
         artifact.put("observedSizeBytes", if (update.isNull("observedSizeBytes")) JSONObject.NULL else update.optLong("observedSizeBytes").coerceAtLeast(0L))
         artifact.put("lastCheckedAt", update.optLong("lastCheckedAt", System.currentTimeMillis()))
+        if (update.optBoolean("_clearVerification", false)) {
+          artifact.remove("_verificationVersion")
+          artifact.remove("_verifiedByteCount")
+          artifact.remove("_contentSha256")
+        } else {
+          val verificationVersion = update.optInt("_verificationVersion", 0)
+          val verifiedByteCount = update.optLong("_verifiedByteCount", -1L)
+          val contentSha256 = update.optString("_contentSha256")
+          if (OrionFinalizedArtifactPolicy.verificationStampMatches(
+              verificationVersion,
+              verifiedByteCount,
+              artifact.optLong("expectedSizeBytes", -1L),
+              contentSha256,
+            )) {
+            artifact.put("_verificationVersion", verificationVersion)
+            artifact.put("_verifiedByteCount", verifiedByteCount)
+            artifact.put("_contentSha256", contentSha256)
+          }
+        }
         changed = true
       }
     }
@@ -691,7 +710,13 @@ internal object OrionDownloadJobStore {
       val observed = if (artifact.isNull("observedSizeBytes")) null else artifact.optLong("observedSizeBytes").coerceAtLeast(0L)
       if (availability == "verified" && observed != null) verifiedBytes = safeAddBytes(verifiedBytes, observed)
       val finalizedManagedMp4 = locatorKind == "managed-relative" &&
-        asset.optString("container") == "mp4" && asset.optString("mimeType") == "video/mp4"
+        asset.optString("container") == "mp4" && asset.optString("mimeType") == "video/mp4" &&
+        OrionFinalizedArtifactPolicy.verificationStampMatches(
+          artifact.optInt("_verificationVersion", 0),
+          artifact.optLong("_verifiedByteCount", -1L),
+          artifact.optLong("expectedSizeBytes", -2L),
+          artifact.optString("_contentSha256"),
+        )
       val open = role == "primary" && availability == "verified" &&
         (locatorKind == "content-uri" || finalizedManagedMp4)
       val locate = role == "primary" && availability == "verified" && locatorKind == "content-uri" &&

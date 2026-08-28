@@ -121,33 +121,13 @@ internal object OrionDownloadTransferEngine {
         jobId,
       )
 
-    val files =
-      staging.listFiles()
-        .orEmpty()
-        .filter {
-          it.isFile &&
-          it.length() > 0L &&
-          !it.name.endsWith(".part", true) &&
-          !it.name.endsWith(".ytdl", true)
-        }
-
     val media =
-      files.singleOrNull {
-        it.extension.equals(
-          "mp4",
-          ignoreCase = true,
-        )
-      } ?: return false
-
-    if (
-      files.size != 1 ||
-      !OrionDownloadOwnershipPolicy.canonicalContained(
-        staging,
-        media,
-      )
-    ) {
-      return false
-    }
+      OrionFinalizedArtifactOwner
+        .finalFile(context, jobId)
+        ?.takeIf { it.isFile && it.length() > 0L }
+        ?: OrionFinalizedArtifactOwner
+          .stagingOutput(staging)
+        ?: return false
 
     if (
       !OrionDownloadSubtitleRuntime
@@ -172,24 +152,9 @@ internal object OrionDownloadTransferEngine {
       "verifying",
     )
 
-    val mediaVerification =
-      OrionFinalizedMediaVerifier.verify(
-        media,
-        requireAudio = true,
-      )
-
-    if (!mediaVerification.ok) {
-      OrionDownloadJobStore.markFailed(
-        jobId,
-        mediaVerification.code,
-        mediaVerification.message,
-        retryable = false,
-      )
-
-      return true
-    }
-
-    val verifiedBytes = mediaVerification.sizeBytes
+    // The staging file is not the playback artifact. finalizeDirect settles and
+    // verifies the durable Orion Library file before any Verified record exists.
+    val verifiedBytes = media.length()
 
     OrionDownloadJobStore.setProgress(
       jobId,
@@ -316,6 +281,8 @@ internal object OrionDownloadTransferEngine {
     try { java.io.File(context.filesDir, "orion-downloads/partial/$jobId.part").delete() } catch (_: Throwable) {}
     try { java.io.File(context.cacheDir, "orion-downloads/device-finalize/$jobId").deleteRecursively() } catch (_: Throwable) {}
     try { java.io.File(context.cacheDir, "orion-downloads/portable/$jobId").deleteRecursively() } catch (_: Throwable) {}
+    try { OrionFinalizedArtifactOwner.finalFile(context, jobId)?.delete() } catch (_: Throwable) {}
+    try { java.io.File(context.filesDir, "orion-downloads/library/$jobId.sidecars").deleteRecursively() } catch (_: Throwable) {}
     OrionDownloadSubtitleRuntime.cleanup(context, jobId)
     OrionDownloadNotifications.reconcile(context)
   }
@@ -521,24 +488,32 @@ internal object OrionDownloadTransferEngine {
           "verifying",
         )
 
-        val mediaVerification =
-          OrionFinalizedMediaVerifier.verify(
-            media,
-            requireAudio = true,
-          )
-
-        if (!mediaVerification.ok) {
-          OrionDownloadJobStore.markFailed(
-            jobId,
-            mediaVerification.code,
-            mediaVerification.message,
-            retryable = false,
-          )
-          return
-        }
+        val destination =
+          job.optString("destination")
 
         val verifiedBytes =
-          mediaVerification.sizeBytes
+          if (destination == "device-storage") {
+            val mediaVerification =
+              OrionFinalizedMediaVerifier.verify(
+                media,
+                requireAudio = true,
+              )
+
+            if (!mediaVerification.ok) {
+              OrionDownloadJobStore.markFailed(
+                jobId,
+                mediaVerification.code,
+                mediaVerification.message,
+                retryable = false,
+              )
+              return
+            }
+
+            mediaVerification.sizeBytes
+          } else {
+            // Orion Library verification belongs to the durable settled file.
+            media.length()
+          }
 
         OrionDownloadJobStore.setProgress(
           jobId,
@@ -567,8 +542,7 @@ internal object OrionDownloadTransferEngine {
           job = job,
           partial = media,
           verifiedBytes = verifiedBytes,
-          destination =
-            job.optString("destination"),
+          destination = destination,
         )
 
         val completed =
@@ -958,24 +932,31 @@ internal object OrionDownloadTransferEngine {
           "verifying",
         )
 
-        val mediaVerification =
-          OrionFinalizedMediaVerifier.verify(
-            media,
-            requireAudio = true,
-          )
-
-        if (!mediaVerification.ok) {
-          OrionDownloadJobStore.markFailed(
-            jobId,
-            mediaVerification.code,
-            mediaVerification.message,
-            retryable = false,
-          )
-          return
-        }
+        val destination =
+          job.optString("destination")
 
         val verifiedBytes =
-          mediaVerification.sizeBytes
+          if (destination == "device-storage") {
+            val mediaVerification =
+              OrionFinalizedMediaVerifier.verify(
+                media,
+                requireAudio = true,
+              )
+
+            if (!mediaVerification.ok) {
+              OrionDownloadJobStore.markFailed(
+                jobId,
+                mediaVerification.code,
+                mediaVerification.message,
+                retryable = false,
+              )
+              return
+            }
+
+            mediaVerification.sizeBytes
+          } else {
+            media.length()
+          }
 
         OrionDownloadJobStore.setProgress(
           jobId,
@@ -1004,8 +985,7 @@ internal object OrionDownloadTransferEngine {
           job = job,
           partial = media,
           verifiedBytes = verifiedBytes,
-          destination =
-            job.optString("destination"),
+          destination = destination,
         )
 
         val completed =
@@ -1699,6 +1679,7 @@ internal object OrionDownloadTransferEngine {
     destination: String,
   ) {
     val jobId = job.optString("jobId")
+    val generation = OrionDownloadJobStore.executionGeneration(jobId) ?: return
     val media = job.optJSONObject("media") ?: org.json.JSONObject()
     val sourceId = job.optString("_sourceId", "unknown")
     val fileName = safeFileName(media) + ".mp4"
@@ -1716,6 +1697,8 @@ internal object OrionDownloadTransferEngine {
         0L,
       )
     var sidecarRoot: java.io.File? = null
+    var settledProof: OrionFinalizedArtifactProof? = null
+    var durableMediaBytes = verifiedBytes
 
     if (destination == "device-storage") {
       val targetId = job.optJSONObject("storageTarget")?.optString("targetId").orEmpty()
@@ -1739,6 +1722,29 @@ internal object OrionDownloadTransferEngine {
     } else {
       val completedDir = java.io.File(context.filesDir, "orion-downloads/library")
       completedDir.mkdirs()
+
+      when (
+        val settlement = OrionFinalizedArtifactOwner.settle(
+          context = context,
+          jobId = jobId,
+          source = partial,
+          requireAudio = true,
+        )
+      ) {
+        is OrionFinalizedArtifactSettlement.Failed -> {
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            settlement.code,
+            settlement.message,
+            retryable = settlement.retryable,
+          )
+          return
+        }
+        is OrionFinalizedArtifactSettlement.Verified -> {
+          settledProof = settlement.proof
+          durableMediaBytes = settlement.proof.sizeBytes
+        }
+      }
 
       if (selectedSubtitleCount > 0) {
         val candidateSidecars =
@@ -1778,18 +1784,6 @@ internal object OrionDownloadTransferEngine {
           candidateSidecars
       }
 
-      val finalFile = java.io.File(completedDir, "$jobId.mp4")
-      if (finalFile.exists()) finalFile.delete()
-      if (!partial.renameTo(finalFile)) {
-        try {
-          partial.inputStream().use { input -> finalFile.outputStream().use { output -> input.copyTo(output, BUFFER_SIZE) } }
-          partial.delete()
-        } catch (_: Throwable) {
-          sidecarRoot?.deleteRecursively()
-          OrionDownloadJobStore.markFailed(jobId, "finalization-write-failed", "Orion could not finalize this download.", retryable = true)
-          return
-        }
-      }
       locatorKind = "managed"
       locatorValue = "orion-library:$jobId"
     }
@@ -1797,10 +1791,10 @@ internal object OrionDownloadTransferEngine {
     val assetId = "asset-$jobId"
     val now = System.currentTimeMillis()
     val totalVerifiedBytes =
-      if (verifiedBytes > Long.MAX_VALUE - subtitleResult.bytes) {
+      if (durableMediaBytes > Long.MAX_VALUE - subtitleResult.bytes) {
         Long.MAX_VALUE
       } else {
-        verifiedBytes + subtitleResult.bytes
+        durableMediaBytes + subtitleResult.bytes
       }
 
     val asset = org.json.JSONObject()
@@ -1829,23 +1823,13 @@ internal object OrionDownloadTransferEngine {
           jobId = jobId,
           media = media,
           subtitleEntries = subtitleResult.bundleEntries,
-          mediaBytes = verifiedBytes,
+          proof = settledProof ?: return,
           now = now,
         ),
       )
     }
 
     val offline = offlineEntry(job, media, assetId, now)
-    val generation =
-      OrionDownloadJobStore.executionGeneration(jobId)
-        ?: run {
-          if (destination == "orion-library") {
-            java.io.File(context.filesDir, "orion-downloads/library/$jobId.mp4").delete()
-            sidecarRoot?.deleteRecursively()
-          }
-          return
-        }
-
     if (
       !OrionDownloadJobStore.markCompleted(
         jobId,
@@ -1855,7 +1839,7 @@ internal object OrionDownloadTransferEngine {
       )
     ) {
       if (destination == "orion-library") {
-        java.io.File(context.filesDir, "orion-downloads/library/$jobId.mp4").delete()
+        settledProof?.file?.delete()
         sidecarRoot?.deleteRecursively()
       }
       return
@@ -1893,7 +1877,7 @@ internal object OrionDownloadTransferEngine {
     jobId: String,
     media: org.json.JSONObject,
     subtitleEntries: org.json.JSONArray,
-    mediaBytes: Long,
+    proof: OrionFinalizedArtifactProof,
     now: Long,
   ): org.json.JSONArray {
     val artifacts =
@@ -1905,11 +1889,14 @@ internal object OrionDownloadTransferEngine {
         role = "primary",
         displayName = safeFileName(media),
         mimeType = "video/mp4",
-        sizeBytes = mediaBytes,
+        sizeBytes = proof.sizeBytes,
         locatorKind = "managed-relative",
-        locatorValue = "$jobId.mp4",
+        locatorValue = proof.relativeLocator,
         now = now,
-      ),
+      )
+        .put("_verificationVersion", OrionFinalizedArtifactPolicy.VERIFICATION_VERSION)
+        .put("_verifiedByteCount", proof.sizeBytes)
+        .put("_contentSha256", proof.sha256),
     )
 
     for (index in 0 until subtitleEntries.length()) {

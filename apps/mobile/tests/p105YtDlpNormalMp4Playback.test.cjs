@@ -17,7 +17,7 @@ test("P10.5 finalized MP4 assets use normal progressive playback while legacy fr
   assert.match(transfer, /OrionDownloadSubtitleRuntime\.prepare\(/);
   assert.match(transfer, /subtitle-finalization-incomplete/);
   assert.match(transfer, /directManagedArtifacts\(/);
-  assert.match(transfer, /locatorValue = "\$jobId\.mp4"/);
+  assert.match(transfer, /locatorValue = proof\.relativeLocator/);
   assert.match(transfer, /locatorValue =\s*"\$jobId\.sidecars\/\$relative"/);
   assert.match(transfer, /\.put\(\s*"_trackId",\s*trackId/);
   assert.match(transfer, /\.put\("tracks", subtitleResult\.tracks\)/);
@@ -28,7 +28,7 @@ test("P10.5 finalized MP4 assets use normal progressive playback while legacy fr
   assert.match(artifacts, /asset\.optString\("container"\) != "mp4"/);
   assert.match(artifacts, /artifact\.optString\("_trackId"\)/);
   assert.match(artifacts, /sourceKind = "file"/);
-  assert.match(artifacts, /managedContentUri\(context, bundleDir\)/);
+  assert.match(artifacts, /OrionFinalizedArtifactOwner\.authorize\(context, bundleDir, expectedSize\)/);
   assert.match(artifacts, /target\.length\(\) != expectedSize/);
   assert.match(screen, /offlineSource\?\.sourceKind === 'file'/);
   assert.match(screen, /<NativePlayerSurface/);

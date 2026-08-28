@@ -43,4 +43,24 @@ class OrionFinalizedMediaPolicyTest {
   fun audioIsOptionalOnlyWhenTheCallingContractSaysSo() {
     assertTrue(OrionFinalizedMediaPolicy.evaluate("silent.mp4", 10L, listOf(video), requireAudio = false).ok)
   }
+
+  @Test
+  fun rejectsUnsupportedDecodersAndUnreadableRepresentativePayloads() {
+    assertEquals(
+      "yt-dlp-media-decoder-unsupported",
+      OrionFinalizedMediaPolicy.evaluate("media.mp4", 10L, listOf(video.copy(decoderSupported = false), audio), true).code,
+    )
+    assertEquals(
+      "yt-dlp-media-payload-invalid",
+      OrionFinalizedMediaPolicy.evaluate("media.mp4", 10L, listOf(video.copy(representativeSamplesReadable = false), audio), true).code,
+    )
+  }
+
+  @Test
+  fun rejectsSamplesLargerThanTheBoundedVerificationBuffer() {
+    assertEquals(
+      "yt-dlp-media-samples-invalid",
+      OrionFinalizedMediaPolicy.evaluate("media.mp4", 10L, listOf(video.copy(largestSampleBytes = 33L * 1024L * 1024L), audio), true).code,
+    )
+  }
 }

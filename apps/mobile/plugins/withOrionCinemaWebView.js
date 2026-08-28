@@ -55,6 +55,7 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionDownloadYtDlpAuthority.kt',
   'OrionYtDlpProgressParser.kt',
   'OrionFinalizedMediaVerifier.kt',
+  'OrionFinalizedArtifactOwner.kt',
   'OrionDownloadYtDlpRuntime.kt',
   'OrionDownloadYtDlpGateway.kt',
   'OrionDownloadYtDlpHlsGateway.kt',
@@ -73,6 +74,7 @@ const CINEMA_NATIVE_TEST_FILES = Object.freeze([
   'OrionDownloadYtDlpDashGatewayTest.kt',
   'OrionYtDlpProgressParserTest.kt',
   'OrionFinalizedMediaPolicyTest.kt',
+  'OrionFinalizedArtifactPolicyTest.kt',
   'OrionDownloadNotificationContractTest.kt',
 ]);
 

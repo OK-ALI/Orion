@@ -61,6 +61,7 @@ export function NativePlayerSurface({
   const { recordPlayback } = useLibraryPlaybackActions();
   const controller = useMobilePlayerController();
   const [watchdogDismissed, setWatchdogDismissed] = useState(false);
+  const [localPlaybackError, setLocalPlaybackError] = useState<string | null>(null);
   const [embeddedSubtitleTracks, setEmbeddedSubtitleTracks] = useState<SubtitleTrack[]>([]);
   const [selectedSubtitleKey, setSelectedSubtitleKey] = useState<string | null>(null);
   const [selectedSidecarId, setSelectedSidecarId] = useState<string | null>(null);
@@ -234,11 +235,15 @@ export function NativePlayerSurface({
       telemetry.emitTelemetry({ evidence: 'native-video-event', state: 'buffering' });
     } else if (statusEvent.status === 'error') {
       controller.setLoading('failed');
+      if (!allowSourceSwitch) {
+        setLocalPlaybackError('Orion could not read the verified local MP4 through Android playback. Retry, or return to Downloads and refresh its status.');
+      }
       telemetry.emitTelemetry({ evidence: 'native-video-event', state: 'error' });
     } else {
       controller.setLoading(null);
+      setLocalPlaybackError(null);
     }
-  }, [statusEvent.status]);
+  }, [allowSourceSwitch, statusEvent.status]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -305,7 +310,22 @@ export function NativePlayerSurface({
       ) : null}
       <PlayerStateOverlay
         state={controller.state.loadingState}
-        onRetry={() => player.play()}
+        detail={localPlaybackError || undefined}
+        onBack={localPlaybackError ? () => router.back() : undefined}
+        onRetry={() => {
+          if (!localPlaybackError) {
+            player.play();
+            return;
+          }
+          setLocalPlaybackError(null);
+          controller.setLoading('preparing');
+          void player.replaceAsync(videoSource)
+            .then(() => player.play())
+            .catch(() => {
+              setLocalPlaybackError('Orion still could not open this verified local MP4. Return to Downloads and refresh its status.');
+              controller.setLoading('failed');
+            });
+        }}
         onSwitchSource={allowSourceSwitch ? () => controller.openOverlay('sources') : undefined}
       />
       <PlayerHUD

@@ -6,6 +6,7 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '..');
 const plugin = fs.readFileSync(path.join(ROOT, 'plugins', 'withOrionCinemaWebView.js'), 'utf8');
 const runtime = fs.readFileSync(path.join(ROOT, 'plugins', 'orion-cinema-webview-native', 'OrionDownloadYtDlpRuntime.kt'), 'utf8');
+const owner = fs.readFileSync(path.join(ROOT, 'plugins', 'orion-cinema-webview-native', 'OrionFinalizedArtifactOwner.kt'), 'utf8');
 
 test('P10.5 Candidate 2 keeps the native-only fixed yt-dlp process boundary without routing production transfers', () => {
   assert.match(plugin, /'OrionDownloadYtDlpRuntime\.kt'/);
@@ -22,7 +23,8 @@ test('P10.5 Candidate 2 keeps the native-only fixed yt-dlp process boundary with
   assert.match(runtime, /--add-header/);
   assert.match(runtime, /authority\.rootUrl/);
   assert.match(runtime, /authority\.safeGlobalHeaders/);
-  assert.match(runtime, /OrionDownloadOwnershipPolicy\.canonicalContained/);
+  assert.match(runtime, /OrionFinalizedArtifactOwner\.stagingOutput/);
+  assert.match(owner, /OrionDownloadOwnershipPolicy\.canonicalContained/);
   assert.doesNotMatch(runtime, /addCommands\(/);
   assert.doesNotMatch(runtime, /updateYoutubeDL/);
   assert.doesNotMatch(runtime, /com\.facebook\.react/);

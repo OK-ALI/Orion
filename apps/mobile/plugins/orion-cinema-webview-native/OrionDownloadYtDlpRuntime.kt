@@ -292,9 +292,9 @@ internal object OrionDownloadYtDlpRuntime {
       if (response.exitCode != 0) {
         OrionYtDlpOutcome.Failed("yt-dlp-process-failed", true)
       } else {
-        val outputs = finalizedOutputs(workDir)
-        if (outputs.isEmpty()) OrionYtDlpOutcome.Failed("yt-dlp-output-missing", false)
-        else OrionYtDlpOutcome.Completed(outputs, response.elapsedTime.coerceAtLeast(0L))
+        val output = OrionFinalizedArtifactOwner.stagingOutput(workDir)
+        if (output == null) OrionYtDlpOutcome.Failed("yt-dlp-output-contract-invalid", false)
+        else OrionYtDlpOutcome.Completed(listOf(output), response.elapsedTime.coerceAtLeast(0L))
       }
     } catch (_: YoutubeDL.CanceledException) {
       when (OrionDownloadJobStore.control(cleanJobId)) {
@@ -342,17 +342,6 @@ internal object OrionDownloadYtDlpRuntime {
     }
     return request
   }
-
-  private fun finalizedOutputs(workDir: File): List<File> =
-    workDir.listFiles().orEmpty()
-      .filter { file ->
-        file.isFile &&
-          file.length() > 0L &&
-          !file.name.endsWith(".part", true) &&
-          !file.name.endsWith(".ytdl", true) &&
-          OrionDownloadOwnershipPolicy.canonicalContained(workDir, file)
-      }
-      .sortedBy { it.name }
 
   private fun safeHttpUrl(raw: String): String? = try {
     val url = URL(raw)

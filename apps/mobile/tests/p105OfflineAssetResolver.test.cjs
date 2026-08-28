@@ -16,7 +16,8 @@ test('P10.5 offline resolver stays ID-only, Orion-owned and fail-closed', () => 
   assert.match(manager, /reconcile\(context, setOf\(clean\)\)/);
   assert.match(manager, /asset\.optString\("destination"\) != "orion-library"/);
   assert.match(manager, /optString\("mode"\) != "orion-library"/);
-  assert.match(manager, /primary\.optString\("availability"\) != "verified"/);
+  assert.match(manager, /when \(primary\.optString\("availability"\)\)/);
+  assert.match(manager, /"verified" -> Unit/);
   assert.match(manager, /locatorKind !in setOf\("managed", "managed-relative"\)/);
   assert.match(manager, /validateManagedFragmentBundle\(bundleDir\)/);
   assert.match(manager, /entry\.optString\("name"\) != expectedName/);

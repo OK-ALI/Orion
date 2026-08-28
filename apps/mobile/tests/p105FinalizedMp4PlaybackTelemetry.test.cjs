@@ -38,6 +38,7 @@ test('yt-dlp stdout telemetry populates the complete production progress contrac
 
 test('yt-dlp completion requires a probed MP4 with video, expected audio, duration and sane samples', () => {
   const verifier = read('plugins', 'orion-cinema-webview-native', 'OrionFinalizedMediaVerifier.kt');
+  const owner = read('plugins', 'orion-cinema-webview-native', 'OrionFinalizedArtifactOwner.kt');
   const transfer = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
 
   assert.match(verifier, /MediaExtractor/);
@@ -47,10 +48,12 @@ test('yt-dlp completion requires a probed MP4 with video, expected audio, durati
   assert.match(verifier, /durationUs <= 0L/);
   assert.match(verifier, /fileName\.endsWith\("\.mp4"/);
   assert.match(verifier, /hasIsoBmffFileType/);
+  assert.match(verifier, /findDecoderForFormat/);
+  assert.match(verifier, /readSampleData/);
   assert.doesNotMatch(verifier, /sampleTime < 0L/);
-  assert.ok((transfer.match(/OrionFinalizedMediaVerifier\.verify\(/g) || []).length >= 3,
-    'initial HLS, initial DASH and retained local yt-dlp recovery must all probe finalized media');
-  assert.match(transfer, /OrionFinalizedMediaVerifier\.verify\([\s\S]{0,100}requireAudio = true/);
+  assert.match(owner, /OrionFinalizedMediaVerifier\.verify\(targetCanonical, requireAudio\)/);
+  assert.match(owner, /openAssetFileDescriptor\(uri, "r"\)/);
+  assert.match(transfer, /OrionFinalizedArtifactOwner\.settle\(/);
   assert.match(transfer, /mediaVerification\.code/);
 });
 
@@ -60,7 +63,7 @@ test('finalized files use progressive content URIs and legacy bundles alone keep
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
   const native = read('src', 'features', 'playback', 'NativePlayerSurface.tsx');
 
-  assert.match(manager, /managedContentUri\(context, bundleDir\)/);
+  assert.match(manager, /OrionFinalizedArtifactOwner\.authorize\(context, bundleDir, expectedSize\)/);
   assert.match(manager, /sourceKind", "file"/);
   assert.match(manager, /contentType", "progressive"/);
   assert.match(bridge, /sourceKind === 'file'/);
@@ -119,12 +122,13 @@ test('completed downloads expose distinct Play in Orion and secure Play Locally 
   const list = read('src', 'features', 'downloads', 'DownloadActivityList.tsx');
   const downloads = read('app', '(tabs)', 'downloads.tsx');
   const manager = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadArtifactManager.kt');
+  const owner = read('plugins', 'orion-cinema-webview-native', 'OrionFinalizedArtifactOwner.kt');
   const plugin = read('plugins', 'withOrionCinemaWebView.js');
 
   assert.match(list, /label="Play in Orion"/);
   assert.match(list, /label="Play Locally"/);
   assert.match(downloads, /playNativeDownloadAssetLocallyV1/);
-  assert.match(manager, /FileProvider\.getUriForFile/);
+  assert.match(owner, /FileProvider\.getUriForFile/);
   assert.match(manager, /Intent\.createChooser/);
   assert.match(manager, /ClipData\.newRawUri/);
   assert.match(manager, /FLAG_GRANT_READ_URI_PERMISSION/);
