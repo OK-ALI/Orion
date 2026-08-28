@@ -239,7 +239,33 @@ internal object OrionDownloadArtifactManager {
       .put("subtitleCount", validated.index.optJSONArray("subtitles")?.length() ?: 0)
   }
 
+  fun resolveFinalizedPlayerAsset(context: Context, assetId: String): OrionOfflinePlayerResolution {
+    val resolution = resolveAnyOfflinePlayerAsset(context, assetId)
+    val asset = resolution.asset ?: return resolution
+    if (asset.mediaDocument == null && asset.mediaFile == null) {
+      return OrionOfflinePlayerResolution(
+        stage = "source-kind",
+        code = "finalized-player-source-invalid",
+        message = "This offline download is not finalized media.",
+      )
+    }
+    return resolution
+  }
+
   fun resolveOfflinePlayerAsset(context: Context, assetId: String): OrionOfflinePlayerResolution {
+    val resolution = resolveAnyOfflinePlayerAsset(context, assetId)
+    val asset = resolution.asset ?: return resolution
+    if (asset.mediaDocument != null || asset.mediaFile != null) {
+      return OrionOfflinePlayerResolution(
+        stage = "source-kind",
+        code = "offline-fragment-source-required",
+        message = "This player accepts legacy fragment downloads only.",
+      )
+    }
+    return resolution
+  }
+
+  private fun resolveAnyOfflinePlayerAsset(context: Context, assetId: String): OrionOfflinePlayerResolution {
     val clean = assetId.trim()
     fun failure(stage: String, code: String, message: String, index: Int? = null) =
       OrionOfflinePlayerResolution(stage = stage, code = code, message = message, failedFragmentIndex = index)
@@ -395,9 +421,7 @@ internal object OrionDownloadArtifactManager {
       val subtitles =
         mutableListOf<OrionOfflinePlayerSubtitle>()
 
-      subtitleArtifacts.forEachIndexed {
-          subtitleIndex,
-          artifact ->
+      subtitleArtifacts.forEach { artifact ->
         val id =
           artifact.optString("_trackId")
             .takeIf {
@@ -405,12 +429,12 @@ internal object OrionDownloadArtifactManager {
                 Regex("^[A-Za-z0-9._:-]{1,100}$"),
               )
             }
-            ?: return failure("subtitle-id", "offline-subtitle-id-invalid", "Downloaded subtitles could not be opened safely.")
+            ?: return@forEach
 
         if (
           artifact.optString("availability") != "verified"
         ) {
-          return failure("subtitle-availability", "offline-subtitle-not-verified", "Downloaded subtitles are not currently verified.")
+          return@forEach
         }
 
         val file =
@@ -419,7 +443,7 @@ internal object OrionDownloadArtifactManager {
             asset,
             artifact,
           )
-            ?: return failure("subtitle-file", "offline-subtitle-file-invalid", "Downloaded subtitles could not be opened safely.")
+            ?: return@forEach
 
         val expectedSubtitleSize =
           artifact.optLong(
@@ -432,7 +456,7 @@ internal object OrionDownloadArtifactManager {
           expectedSubtitleSize <= 0L ||
           file.length() != expectedSubtitleSize
         ) {
-          return failure("subtitle-file", "offline-subtitle-file-invalid", "Downloaded subtitles could not be opened safely.")
+          return@forEach
         }
 
         val metadata =
@@ -444,7 +468,7 @@ internal object OrionDownloadArtifactManager {
               it.optString("kind") == "subtitle" &&
               it.optString("id") == id
             }
-            ?: return failure("subtitle-track", "offline-subtitle-track-invalid", "Downloaded subtitle metadata is incomplete.")
+            ?: return@forEach
 
         val format =
           metadata.optString("format")
@@ -456,7 +480,7 @@ internal object OrionDownloadArtifactManager {
                 "ass",
               )
             }
-            ?: return failure("subtitle-format", "offline-subtitle-format-invalid", "Downloaded subtitles could not be opened safely.")
+            ?: return@forEach
 
         val language =
           metadata.optString("language")
@@ -490,7 +514,7 @@ internal object OrionDownloadArtifactManager {
             isDefault =
               metadata.optBoolean(
                 "default",
-                subtitleIndex == 0,
+                subtitles.isEmpty(),
               ),
             file = file,
           )

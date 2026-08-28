@@ -18,6 +18,7 @@ import {
 } from '../../services/sourceHealth';
 import { reportMobileDiagnosticError, updateMobileDiagnostics } from '../../services/mobileDiagnostics';
 import { EmbedPlayerSurface } from './EmbedPlayerSurface';
+import { OrionFinalizedPlayerSurface } from './OrionFinalizedPlayerSurface';
 import { OrionOfflinePlayerSurface } from './OrionOfflinePlayerSurface';
 import {
   resolveNativeOfflinePlaybackV1,
@@ -525,12 +526,21 @@ export default function PlayerScreen() {
 
   const surface = initialChoicePending ? null : offlineRequested ? (
     offlineAssetId && offlineSource ? (
-      <OrionOfflinePlayerSurface
-        key={`orion-offline-${offlineAssetId}-${offlineResolutionAttempt}`}
-        assetId={offlineAssetId}
-        {...commonProps}
-        sourceId="local"
-      />
+      offlineSource.sourceKind === 'file' ? (
+        <OrionFinalizedPlayerSurface
+          key={`orion-finalized-${offlineAssetId}-${offlineResolutionAttempt}`}
+          assetId={offlineAssetId}
+          {...commonProps}
+          sourceId="local"
+        />
+      ) : (
+        <OrionOfflinePlayerSurface
+          key={`orion-fragments-${offlineAssetId}-${offlineResolutionAttempt}`}
+          assetId={offlineAssetId}
+          {...commonProps}
+          sourceId="local"
+        />
+      )
     ) : (
       <OfflinePlaybackPreparationSurface
         error={offlineError}

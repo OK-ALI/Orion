@@ -41,13 +41,13 @@ test('GTA-like movie title survives the JS and native nullable metadata boundari
 test('verified SAF playback stays asset-id-only and uses Orion descriptor I/O instead of expo generic content I/O', () => {
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
   const manager = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadArtifactManager.kt');
-  const factory = read('plugins', 'orion-cinema-webview-native', 'OrionOfflineMediaSourceFactory.kt');
+  const factory = read('plugins', 'orion-cinema-webview-native', 'OrionFinalizedMediaSourceFactory.kt');
   const surface = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
 
-  assert.match(screen, /offlineAssetId && offlineSource \? \([\s\S]*<OrionOfflinePlayerSurface/);
+  assert.match(screen, /offlineSource\.sourceKind === 'file' \? \([\s\S]*<OrionFinalizedPlayerSurface/);
   assert.doesNotMatch(screen, /<NativePlayerSurface/);
   assert.match(manager, /mediaDocument = OrionOfflinePlayerDocument\(documentUri, expectedSize\)/);
-  assert.match(factory, /OrionOfflineDocumentRoutingDataSourceFactory/);
+  assert.match(factory, /OrionFinalizedDocumentRoutingDataSourceFactory/);
   assert.match(factory, /documents\[dataSpec\.uri\.toString\(\)\]/);
   assert.match(factory, /contentResolver\.openFileDescriptor\(dataSpec\.uri, "r"\)/);
   assert.doesNotMatch(factory, /openTypedAssetFileDescriptor|openAssetFileDescriptor/);

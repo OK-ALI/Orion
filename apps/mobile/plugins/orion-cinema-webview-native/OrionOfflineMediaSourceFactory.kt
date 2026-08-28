@@ -11,17 +11,14 @@ import androidx.media3.datasource.BaseDataSource
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import java.io.EOFException
 import java.io.File
-import java.io.FileInputStream
 import java.io.IOException
 import java.io.RandomAccessFile
-import android.os.ParcelFileDescriptor
 
 internal data class OrionOfflineMediaSourceBuild(
   val mediaSource: MediaSource,
@@ -32,6 +29,7 @@ internal data class OrionOfflineMediaSourceBuild(
 @OptIn(UnstableApi::class)
 internal object OrionOfflineMediaSourceFactory {
   fun build(context: Context, asset: OrionOfflinePlayerAsset): OrionOfflineMediaSourceBuild? {
+    if (asset.mediaDocument != null || asset.mediaFile != null) return null
     val subtitleConfigurations = asset.subtitles.map { subtitle ->
       val mime = when (subtitle.format) {
         "vtt" -> MimeTypes.TEXT_VTT
@@ -47,39 +45,6 @@ internal object OrionOfflineMediaSourceFactory {
         .setMimeType(mime)
         .setSelectionFlags(if (subtitle.isDefault) C.SELECTION_FLAG_DEFAULT else 0)
         .build()
-    }
-
-    val mediaDocument = asset.mediaDocument
-    if (mediaDocument != null) {
-      val documents = linkedMapOf(mediaDocument.uri.toString() to mediaDocument.sizeBytes)
-      asset.subtitles.mapNotNull { it.document }.forEach { documents[it.uri.toString()] = it.sizeBytes }
-      val item = MediaItem.Builder()
-        .setMediaId("orion-offline-saf-document")
-        .setUri(mediaDocument.uri)
-        .setMimeType(MimeTypes.VIDEO_MP4)
-        .setSubtitleConfigurations(subtitleConfigurations)
-        .build()
-      return OrionOfflineMediaSourceBuild(
-        DefaultMediaSourceFactory(OrionOfflineDocumentRoutingDataSourceFactory(context, documents))
-          .createMediaSource(item),
-        asset.subtitles,
-      )
-    }
-
-    val mediaFile = asset.mediaFile
-    if (mediaFile != null) {
-      if (!mediaFile.isFile || mediaFile.length() <= 0L) return null
-      val item = MediaItem.Builder()
-        .setMediaId("orion-offline-file")
-        .setUri(Uri.fromFile(mediaFile))
-        .setSubtitleConfigurations(subtitleConfigurations)
-        .build()
-      return OrionOfflineMediaSourceBuild(
-        DefaultMediaSourceFactory(
-          DefaultDataSource.Factory(context),
-        ).createMediaSource(item),
-        asset.subtitles,
-      )
     }
 
     val streams = linkedMapOf<String, List<OrionOfflinePlayerPart>>()
@@ -126,124 +91,6 @@ internal object OrionOfflineMediaSourceFactory {
       )
     }
     return OrionOfflineMediaSourceBuild(source, asset.subtitles)
-  }
-}
-
-@OptIn(UnstableApi::class)
-private class OrionOfflineDocumentRoutingDataSourceFactory(
-  private val context: Context,
-  private val documents: Map<String, Long>,
-) : DataSource.Factory {
-  override fun createDataSource(): DataSource = OrionOfflineDocumentRoutingDataSource(context, documents)
-}
-
-@OptIn(UnstableApi::class)
-private class OrionOfflineDocumentRoutingDataSource(
-  context: Context,
-  private val documents: Map<String, Long>,
-) : DataSource {
-  private val context = context.applicationContext
-  private val listeners = mutableListOf<TransferListener>()
-  private var active: DataSource? = null
-
-  override fun addTransferListener(transferListener: TransferListener) {
-    listeners += transferListener
-  }
-
-  override fun open(dataSpec: DataSpec): Long {
-    check(active == null) { "offline-document-source-already-open" }
-    val selected = if (documents.containsKey(dataSpec.uri.toString())) {
-      OrionOfflineDocumentDataSource(context, documents)
-    } else {
-      DefaultDataSource.Factory(context).createDataSource()
-    }
-    listeners.forEach(selected::addTransferListener)
-    active = selected
-    return try { selected.open(dataSpec) } catch (error: Throwable) {
-      try { selected.close() } catch (_: Throwable) {}
-      active = null
-      throw error
-    }
-  }
-
-  override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
-    active?.read(buffer, offset, length) ?: throw IOException("offline-document-source-not-open")
-
-  override fun getUri(): Uri? = active?.uri
-
-  override fun getResponseHeaders(): Map<String, List<String>> = active?.responseHeaders ?: emptyMap()
-
-  override fun close() {
-    val selected = active
-    active = null
-    selected?.close()
-  }
-}
-
-/** Descriptor-authoritative reader for exact, already-validated SAF documents. */
-@OptIn(UnstableApi::class)
-private class OrionOfflineDocumentDataSource(
-  private val context: Context,
-  private val documents: Map<String, Long>,
-) : BaseDataSource(false) {
-  private var openedUri: Uri? = null
-  private var descriptor: ParcelFileDescriptor? = null
-  private var input: FileInputStream? = null
-  private var remaining = 0L
-  private var opened = false
-
-  override fun open(dataSpec: DataSpec): Long {
-    close()
-    transferInitializing(dataSpec)
-    val expected = documents[dataSpec.uri.toString()]?.takeIf { it > 0L }
-      ?: throw IOException("offline-document-uri-not-owned")
-    if (dataSpec.position < 0L || dataSpec.position > expected) throw EOFException("offline-document-position-invalid")
-    val pfd = try { context.contentResolver.openFileDescriptor(dataSpec.uri, "r") } catch (error: Throwable) {
-      throw IOException("offline-document-descriptor-unavailable", error)
-    } ?: throw IOException("offline-document-descriptor-unavailable")
-    val stream = FileInputStream(pfd.fileDescriptor)
-    try {
-      val statSize = pfd.statSize
-      if (statSize >= 0L && statSize != expected) throw IOException("offline-document-size-mismatch")
-      stream.channel.position(dataSpec.position)
-      val available = expected - dataSpec.position
-      remaining = if (dataSpec.length == C.LENGTH_UNSET.toLong()) available else minOf(available, dataSpec.length)
-    } catch (error: Throwable) {
-      try { stream.close() } catch (_: Throwable) {}
-      try { pfd.close() } catch (_: Throwable) {}
-      throw error
-    }
-    descriptor = pfd
-    input = stream
-    openedUri = dataSpec.uri
-    opened = true
-    transferStarted(dataSpec)
-    return remaining
-  }
-
-  override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
-    if (length == 0) return 0
-    if (!opened || remaining <= 0L) return C.RESULT_END_OF_INPUT
-    val count = input?.read(buffer, offset, minOf(length.toLong(), remaining).toInt())
-      ?: throw IOException("offline-document-source-not-open")
-    if (count < 0) throw EOFException("offline-document-short-read")
-    remaining -= count.toLong()
-    bytesTransferred(count)
-    return count
-  }
-
-  override fun getUri(): Uri? = openedUri
-
-  override fun close() {
-    openedUri = null
-    try { input?.close() } finally {
-      input = null
-      try { descriptor?.close() } finally { descriptor = null }
-    }
-    if (opened) {
-      opened = false
-      transferEnded()
-    }
   }
 }
 

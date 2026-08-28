@@ -93,6 +93,15 @@ const cinemaNativeTestFiles = cinemaConfigPlugin.CINEMA_NATIVE_TEST_FILES;
 if (!Array.isArray(cinemaNativeTestFiles) || cinemaNativeTestFiles.length === 0) {
   throw new Error("Orion Cinema native test source manifest is missing or empty.");
 }
+const cinemaNativeResourceFiles = cinemaConfigPlugin.CINEMA_NATIVE_RESOURCE_FILES;
+if (!Array.isArray(cinemaNativeResourceFiles) || cinemaNativeResourceFiles.length === 0) {
+  throw new Error("Orion Cinema native resource manifest is missing or empty.");
+}
+const cinemaNativeResourceSourceDirectory = path.join(
+  projectDirectory,
+  "plugins",
+  "orion-cinema-webview-native-res",
+);
 const cinemaAndroidDependencyMarker = cinemaConfigPlugin.CINEMA_ANDROID_DEPENDENCY_MARKER;
 const cinemaAndroidDependencies = cinemaConfigPlugin.CINEMA_ANDROID_DEPENDENCIES;
 if (
@@ -282,7 +291,18 @@ function syncCinemaNativeSources() {
       throw new Error(`Cinema native test source did not synchronize: ${fileName}`);
     }
   }
-  console.log(`[Android] Synchronized and SHA-256 verified ${cinemaNativeFiles.length} Cinema native sources and ${cinemaNativeTestFiles.length} JVM tests.`);
+  for (const resource of cinemaNativeResourceFiles) {
+    const source = path.join(cinemaNativeResourceSourceDirectory, resource.directory, resource.name);
+    const targetDirectory = path.join(androidResources, resource.directory);
+    const target = path.join(targetDirectory, resource.name);
+    if (!fs.existsSync(source)) throw new Error(`Missing authoritative Cinema native resource: ${source}`);
+    fs.mkdirSync(targetDirectory, { recursive: true });
+    fs.copyFileSync(source, target);
+    if (sha256(source) !== sha256(target)) {
+      throw new Error(`Cinema native resource did not synchronize: ${resource.name}`);
+    }
+  }
+  console.log(`[Android] Synchronized and SHA-256 verified ${cinemaNativeFiles.length} Cinema native sources, ${cinemaNativeTestFiles.length} JVM tests, and ${cinemaNativeResourceFiles.length} resources.`);
 }
 
 function ensureCinemaGradleDependencies() {

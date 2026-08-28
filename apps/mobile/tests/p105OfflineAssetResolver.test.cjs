@@ -15,7 +15,7 @@ test('P10.5 offline resolver stays ID-only, Orion-owned and fail-closed', () => 
   assert.match(module, /OrionDownloadArtifactManager\.resolveOfflinePlayback\(reactContext, assetId\)/);
   assert.match(manager, /reconcile\(context, setOf\(clean\)\)/);
   assert.match(manager, /asset\.optString\("destination"\) != "orion-library"/);
-  assert.match(manager, /optString\("mode"\) != "orion-library"/);
+  assert.match(manager, /storageMode !in setOf\("orion-library", "user-folder"\)/);
   assert.match(manager, /when \(primary\.optString\("availability"\)\)/);
   assert.match(manager, /"verified" -> Unit/);
   assert.match(manager, /locatorKind !in setOf\("managed", "managed-relative"\)/);

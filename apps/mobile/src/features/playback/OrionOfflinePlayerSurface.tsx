@@ -37,6 +37,16 @@ interface OfflinePlaybackEvent {
   stage?: string | null;
   failedFragmentIndex?: number | null;
   errorCategory?: string | null;
+  viewWidth?: number;
+  viewHeight?: number;
+  surfaceAvailable?: boolean;
+  surfaceWidth?: number;
+  surfaceHeight?: number;
+  videoTrackCount?: number;
+  audioTrackCount?: number;
+  videoDecoderInitialized?: boolean;
+  audioDecoderInitialized?: boolean;
+  firstFrameRendered?: boolean;
 }
 
 interface OfflineSubtitleEvent {
@@ -57,6 +67,7 @@ interface NativeOfflinePlayerProps extends ViewProps {
 }
 
 const NativeOfflinePlayer = requireNativeComponent<NativeOfflinePlayerProps>('OrionOfflinePlayerView');
+const NativeFinalizedPlayer = requireNativeComponent<NativeOfflinePlayerProps>('OrionFinalizedPlayerView');
 
 type FacadeEvents = {
   statusChange(event: { status: 'loading' | 'readyToPlay' | 'error' }): void;
@@ -118,11 +129,12 @@ class OrionOfflinePlayerFacade extends EventEmitter<FacadeEvents> {
   }
 }
 
-interface OrionOfflinePlayerSurfaceProps extends PlaybackSurfaceProps {
+export interface OrionOfflinePlayerSurfaceProps extends PlaybackSurfaceProps {
   assetId: string;
 }
 
-export function OrionOfflinePlayerSurface({
+export function OrionNativeAssetPlayerSurface({
+  finalized = false,
   assetId,
   title,
   seriesTitle,
@@ -138,7 +150,7 @@ export function OrionOfflinePlayerSurface({
   initialResumeTime = 0,
   onPlaybackSnapshot,
   onVerifiedPlaybackCompletion,
-}: OrionOfflinePlayerSurfaceProps) {
+}: OrionOfflinePlayerSurfaceProps & { finalized?: boolean }) {
   const router = useRouter();
   const { recordPlayback } = useLibraryPlaybackActions();
   const controller = useMobilePlayerController();
@@ -184,10 +196,11 @@ export function OrionOfflinePlayerSurface({
 
   const dispatch = useMemo(() => (name: string, args: unknown[] = []) => {
     const handle = findNodeHandle(nativeRef.current);
-    const command = UIManager.getViewManagerConfig('OrionOfflinePlayerView')?.Commands?.[name];
+    const viewManagerName = finalized ? 'OrionFinalizedPlayerView' : 'OrionOfflinePlayerView';
+    const command = UIManager.getViewManagerConfig(viewManagerName)?.Commands?.[name];
     if (handle == null || command == null) return;
     UIManager.dispatchViewManagerCommand(handle, command, args);
-  }, []);
+  }, [finalized]);
   const facade = useMemo(() => new OrionOfflinePlayerFacade(dispatch), [dispatch]);
   const presentation = controller.state.presentation;
   const controlsVisible = controller.state.hudState !== 'hidden';
@@ -298,18 +311,21 @@ export function OrionOfflinePlayerSurface({
   const failureDetail = nativeState.state === 'failed'
     ? `${nativeState.message || 'This offline download could not be played.'} (${nativeState.errorCategory || nativeState.code || 'playback'})`
     : undefined;
+  const NativePlayer = finalized ? NativeFinalizedPlayer : NativeOfflinePlayer;
 
   return (
     <View style={styles.container}>
-      <NativeOfflinePlayer
-        ref={nativeRef}
-        style={styles.video}
-        assetId={assetId}
-        initialPositionSeconds={initialResumeTime}
-        presentation={presentation}
-        onPlaybackStateChange={handlePlaybackState}
-        onSubtitleTracksChange={handleSubtitleTracks}
-      />
+      <View style={styles.nativeVideoHost}>
+        <NativePlayer
+          ref={nativeRef}
+          style={styles.nativeVideo}
+          assetId={assetId}
+          initialPositionSeconds={initialResumeTime}
+          presentation={presentation}
+          onPlaybackStateChange={handlePlaybackState}
+          onSubtitleTracksChange={handleSubtitleTracks}
+        />
+      </View>
       <PlayerStateOverlay
         state={controller.state.loadingState}
         detail={failureDetail}
@@ -346,4 +362,8 @@ export function OrionOfflinePlayerSurface({
       />
     </View>
   );
+}
+
+export function OrionOfflinePlayerSurface(props: OrionOfflinePlayerSurfaceProps) {
+  return <OrionNativeAssetPlayerSurface {...props} finalized={false} />;
 }

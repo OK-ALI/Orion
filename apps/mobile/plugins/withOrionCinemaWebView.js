@@ -10,6 +10,7 @@ const {
 const PACKAGE_PATH = ['com', 'okali', 'orion', 'playback'];
 const NATIVE_SOURCE = path.join(__dirname, 'orion-cinema-webview-native');
 const NATIVE_TEST_SOURCE = path.join(__dirname, 'orion-cinema-webview-native-tests');
+const NATIVE_RESOURCE_SOURCE = path.join(__dirname, 'orion-cinema-webview-native-res');
 const PACKAGE_IMPORT = 'com.okali.orion.playback.OrionCinemaWebViewPackage';
 const CINEMA_ANDROID_DEPENDENCY_MARKER = '// ORION_P105_OFFLINE_PLAYER_DEPENDENCIES';
 const CINEMA_ANDROID_DEPENDENCIES = Object.freeze([
@@ -46,6 +47,10 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionDownloadSubtitleRuntime.kt',
   'OrionOfflineMediaSourcePolicy.kt',
   'OrionOfflineMediaSourceFactory.kt',
+  'OrionFinalizedMediaSourceFactory.kt',
+  'OrionFinalizedPlayerPolicy.kt',
+  'OrionFinalizedPlayerView.kt',
+  'OrionFinalizedPlayerViewManager.kt',
   'OrionOfflinePlayerView.kt',
   'OrionOfflinePlayerViewManager.kt',
   'OrionOfflinePlaybackTimeline.kt',
@@ -63,6 +68,7 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionDownloadTransferRuntime.kt',
 ]);
 const CINEMA_NATIVE_TEST_FILES = Object.freeze([
+  'OrionFinalizedPlayerPolicyTest.kt',
   'OrionOfflineMediaSourcePolicyTest.kt',
   'OrionOfflinePlaybackTimelineTest.kt',
   'OrionPortableCadenceTest.kt',
@@ -76,6 +82,9 @@ const CINEMA_NATIVE_TEST_FILES = Object.freeze([
   'OrionFinalizedMediaPolicyTest.kt',
   'OrionFinalizedArtifactPolicyTest.kt',
   'OrionDownloadNotificationContractTest.kt',
+]);
+const CINEMA_NATIVE_RESOURCE_FILES = Object.freeze([
+  Object.freeze({ directory: 'layout', name: 'orion_finalized_player_view.xml' }),
 ]);
 
 function withCinemaMainApplication(config) {
@@ -115,6 +124,14 @@ function withCinemaSources(config) {
     fs.mkdirSync(testPackageRoot, { recursive: true });
     for (const name of CINEMA_NATIVE_TEST_FILES) {
       fs.copyFileSync(path.join(NATIVE_TEST_SOURCE, name), path.join(testPackageRoot, name));
+    }
+    for (const resource of CINEMA_NATIVE_RESOURCE_FILES) {
+      const resourceRoot = path.join(nextConfig.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res', resource.directory);
+      fs.mkdirSync(resourceRoot, { recursive: true });
+      fs.copyFileSync(
+        path.join(NATIVE_RESOURCE_SOURCE, resource.directory, resource.name),
+        path.join(resourceRoot, resource.name),
+      );
     }
     const xmlRoot = path.join(nextConfig.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res', 'xml');
     fs.mkdirSync(xmlRoot, { recursive: true });
@@ -225,6 +242,7 @@ module.exports = function withOrionCinemaWebView(config) {
 
 module.exports.CINEMA_NATIVE_FILES = CINEMA_NATIVE_FILES;
 module.exports.CINEMA_NATIVE_TEST_FILES = CINEMA_NATIVE_TEST_FILES;
+module.exports.CINEMA_NATIVE_RESOURCE_FILES = CINEMA_NATIVE_RESOURCE_FILES;
 module.exports.CINEMA_ANDROID_DEPENDENCY_MARKER = CINEMA_ANDROID_DEPENDENCY_MARKER;
 module.exports.CINEMA_ANDROID_DEPENDENCIES = CINEMA_ANDROID_DEPENDENCIES;
 module.exports.YTDLP_ANDROID_DEPENDENCY_MARKER = YTDLP_ANDROID_DEPENDENCY_MARKER;

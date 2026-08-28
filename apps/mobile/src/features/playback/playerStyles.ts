@@ -17,6 +17,20 @@ export const playerStyles = StyleSheet.create({
     backgroundColor: '#000',
   },
   video: { flex: 1 },
+  nativeVideoHost: {
+    flex: 1,
+    width: '100%',
+    alignSelf: 'stretch',
+    position: 'relative',
+    backgroundColor: '#000',
+  },
+  nativeVideo: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
   webVideo: { flex: 1, backgroundColor: '#000' },
   fullWidthHeaderGradient: {
     position: 'absolute',

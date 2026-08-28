@@ -13,6 +13,7 @@ class OrionCinemaWebViewPackage : ReactPackage {
   )
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> = listOf(
     OrionCinemaWebViewManager(),
+    OrionFinalizedPlayerViewManager(),
     OrionOfflinePlayerViewManager(),
   )
 }
