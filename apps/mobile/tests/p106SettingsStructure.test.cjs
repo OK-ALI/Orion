@@ -18,8 +18,10 @@ test('P10.6-C1 removes structural Settings cards while preserving the establishe
   assert.doesNotMatch(settings, /section:\s*\{[^}]*borderRadius:/);
   assert.doesNotMatch(settings, /section:\s*\{[^}]*borderWidth:\s*1/);
 
-  assert.match(settings, /styles\.sectionIcon, \{ backgroundColor: theme\.accentSoft \}/);
-  assert.match(settings, /sectionIcon:\s*\{\s*width: 40, height: 40, borderRadius: radii\.full/);
+  assert.doesNotMatch(settings, /sectionIcon|sectionHeadingCopy/);
+  assert.doesNotMatch(settings, /<SettingsSection[\s\S]{0,100}icon=/);
+  assert.match(settings, /sectionHeader:\s*\{\s*alignItems: "flex-start", marginBottom: spacing\[6\]/);
+  assert.match(settings, /sectionTitle:\s*\{\s*fontSize: fontSizes\.xl,[^}]*fontWeight: "900"/);
 });
 
 test('P10.6-C1 turns the reserved-settings footer into a divider-led note instead of another card', () => {
@@ -46,6 +48,17 @@ test('P10.6-C1 preserves meaningful interactive controls instead of flattening S
   assert.match(navigator, /Jump to section/);
   assert.match(navigator, /accessibilityRole="radio"/);
   assert.match(navigator, /onSelect\(section\.id\)/);
+});
+
+test('P10.6 Settings hierarchy polish preserves measured Jump to section anchors', () => {
+  const settings = read('app', '(tabs)', 'settings.tsx');
+  const navigator = read('src', 'features', 'settings', 'SettingsSectionNavigator.tsx');
+
+  assert.match(settings, /nativeID=\{`settings-section-\$\{sectionId\}`\}/);
+  assert.match(settings, /onLayout=\{onLayout\}/);
+  assert.match(settings, /sectionOffsets\.current\[sectionId\] = event\.nativeEvent\.layout\.y/);
+  assert.match(settings, /scrollRef\.current\?\.scrollTo\(\{ y: Math\.max\(0, y - spacing\[2\]\), animated: !preferences\.reducedMotion \}\)/);
+  assert.match(navigator, /onPress=\{\(\) => \{[\s\S]{0,120}setOpen\(false\);[\s\S]{0,120}onSelect\(section\.id\)/);
 });
 
 test('P10.6-C1 keeps all active Settings owners mounted and defers hierarchy/copy cleanup to later slices', () => {

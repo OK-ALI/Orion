@@ -97,9 +97,9 @@ test('offline route preflight is classification-only and cannot expose finalized
     module.indexOf('fun classifyOfflinePlayback('),
     module.indexOf('fun chooseDeviceStorageTarget('),
   );
-  assert.match(nativeMethod, /resolveFinalizedPlayerAsset\(reactContext, clean\)/);
-  assert.match(nativeMethod, /resolveOfflinePlayerAsset\(reactContext, clean\)/);
+  assert.match(nativeMethod, /classifyOfflinePlaybackRoute\(clean\)/);
   assert.match(nativeMethod, /putString\("sourceKind"/);
+  assert.doesNotMatch(nativeMethod, /resolveFinalizedPlayerAsset|resolveOfflinePlayerAsset|reconcile\(/);
   assert.doesNotMatch(nativeMethod, /putString\("uri"|subtitle|content:\/\/|filePath/);
 
   const jsMethod = bridge.slice(

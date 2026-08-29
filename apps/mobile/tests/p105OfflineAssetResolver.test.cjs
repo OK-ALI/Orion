@@ -16,6 +16,7 @@ test('P10.5 legacy full resolver stays fail-closed while PlayerScreen uses the c
   assert.match(module, /OrionDownloadArtifactManager\.resolveOfflinePlayback\(reactContext, assetId\)/);
   assert.match(module, /fun classifyOfflinePlayback\(assetId: String, promise: Promise\)/);
   assert.match(manager, /reconcile\(context, setOf\(clean\)\)/);
+  assert.match(manager, /fun classifyOfflinePlaybackRoute\(assetId: String\)/);
   assert.match(manager, /asset\.optString\("destination"\) != "orion-library"/);
   assert.match(manager, /storageMode !in setOf\("orion-library", "user-folder"\)/);
   assert.match(manager, /when \(primary\.optString\("availability"\)\)/);

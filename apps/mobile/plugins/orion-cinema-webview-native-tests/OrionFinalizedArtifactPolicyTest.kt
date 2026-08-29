@@ -176,33 +176,40 @@ class OrionFinalizedArtifactPolicyTest {
   }
 
   @Test
-  fun integrityCadenceDeepChecksTargetedStaleAndUnstampedArtifacts() {
+  fun integrityCadenceKeepsVerifiedAccessBoundedAndDeepChecksMaintenance() {
     val hour = 60L * 60L * 1000L
     val now = 10L * 24L * hour
 
-    assertTrue(OrionArtifactIntegrityPolicy.requiresDigestVerification(
-      targeted = true,
+    assertFalse(OrionArtifactIntegrityPolicy.requiresDigestVerification(
+      purpose = OrionArtifactReconciliationPurpose.ACCESS,
       stampValid = true,
-      integrityCheckedAt = now - hour,
-      legacyLastCheckedAt = now - hour,
+      integrityCheckedAt = now - (48L * hour),
+      legacyLastCheckedAt = now - (48L * hour),
       now = now,
     ))
     assertTrue(OrionArtifactIntegrityPolicy.requiresDigestVerification(
-      targeted = false,
+      purpose = OrionArtifactReconciliationPurpose.ACCESS,
       stampValid = false,
       integrityCheckedAt = now - hour,
       legacyLastCheckedAt = now - hour,
       now = now,
     ))
     assertTrue(OrionArtifactIntegrityPolicy.requiresDigestVerification(
-      targeted = false,
+      purpose = OrionArtifactReconciliationPurpose.PERIODIC,
       stampValid = true,
       integrityCheckedAt = now - OrionArtifactIntegrityPolicy.FULL_DIGEST_RECHECK_INTERVAL_MS,
       legacyLastCheckedAt = now - hour,
       now = now,
     ))
+    assertTrue(OrionArtifactIntegrityPolicy.requiresDigestVerification(
+      purpose = OrionArtifactReconciliationPurpose.EXPLICIT_DEEP,
+      stampValid = true,
+      integrityCheckedAt = now - hour,
+      legacyLastCheckedAt = now - hour,
+      now = now,
+    ))
     assertFalse(OrionArtifactIntegrityPolicy.requiresDigestVerification(
-      targeted = false,
+      purpose = OrionArtifactReconciliationPurpose.PERIODIC,
       stampValid = true,
       integrityCheckedAt = now - hour,
       legacyLastCheckedAt = now - (48L * hour),

@@ -20,6 +20,9 @@ class OrionDownloadEngineModule(
   private var storagePromise: Promise? = null
   private var playerPromise: Promise? = null
   private val ioExecutor = Executors.newSingleThreadExecutor()
+  // User playback/open actions must not wait behind periodic whole-library
+  // integrity maintenance queued on the download executor.
+  private val playbackExecutor = Executors.newSingleThreadExecutor()
   private val snapshotListener: (JSONObject) -> Unit = { snapshot -> emitSnapshot(snapshot) }
   private val activityListener: ActivityEventListener = object : BaseActivityEventListener() {
     override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
@@ -306,7 +309,7 @@ class OrionDownloadEngineModule(
 
   @ReactMethod
   fun openAsset(assetId: String, promise: Promise) {
-    ioExecutor.execute {
+    playbackExecutor.execute {
       try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.open(reactContext, assetId.trim(), locate = false))) }
       catch (_: Throwable) { promise.reject("DOWNLOAD_OPEN_FAILED", "Orion could not open this download.") }
     }
@@ -314,7 +317,7 @@ class OrionDownloadEngineModule(
 
   @ReactMethod
   fun playAssetLocally(assetId: String, promise: Promise) {
-    ioExecutor.execute {
+    playbackExecutor.execute {
       try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.open(reactContext, assetId.trim(), locate = false))) }
       catch (_: Throwable) { promise.reject("DOWNLOAD_LOCAL_PLAYBACK_FAILED", "Orion could not open this download in another player.") }
     }
@@ -433,7 +436,7 @@ class OrionDownloadEngineModule(
 
   @ReactMethod
   fun locateAsset(assetId: String, promise: Promise) {
-    ioExecutor.execute {
+    playbackExecutor.execute {
       try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.open(reactContext, assetId.trim(), locate = true))) }
       catch (_: Throwable) { promise.reject("DOWNLOAD_LOCATE_FAILED", "Orion could not locate this download.") }
     }
@@ -442,7 +445,7 @@ class OrionDownloadEngineModule(
 
   @ReactMethod
   fun resolveOfflinePlayback(assetId: String, promise: Promise) {
-    ioExecutor.execute {
+    playbackExecutor.execute {
       try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.resolveOfflinePlayback(reactContext, assetId))) }
       catch (_: Throwable) { promise.reject("OFFLINE_PLAYBACK_RESOLVE_FAILED", "Orion could not resolve this offline download.") }
     }
@@ -450,48 +453,25 @@ class OrionDownloadEngineModule(
 
   @ReactMethod
   fun classifyOfflinePlayback(assetId: String, promise: Promise) {
-    ioExecutor.execute {
+    playbackExecutor.execute {
       try {
         val clean = assetId.trim()
-        val finalized = OrionDownloadArtifactManager.resolveFinalizedPlayerAsset(reactContext, clean)
-        val finalizedAsset = finalized.asset
-        if (finalizedAsset != null) {
-          promise.resolve(Arguments.createMap().apply {
-            putInt("schemaVersion", 1)
-            putBoolean("ok", true)
-            putString("assetId", finalizedAsset.assetId)
-            putString("sourceKind", "file")
-            putInt("fragmentCount", 1)
-          })
-          return@execute
-        }
-        if (finalized.code != "finalized-player-source-invalid") {
+        val route = OrionDownloadArtifactManager.classifyOfflinePlaybackRoute(clean)
+        if (route.assetId == null || route.sourceKind == null) {
           promise.resolve(Arguments.createMap().apply {
             putBoolean("ok", false)
             putString("assetId", clean)
-            putString("code", finalized.code ?: "offline-playback-route-invalid")
-            putString("message", finalized.message ?: "Orion could not classify this offline download.")
-          })
-          return@execute
-        }
-
-        val legacy = OrionDownloadArtifactManager.resolveOfflinePlayerAsset(reactContext, clean)
-        val legacyAsset = legacy.asset
-        if (legacyAsset == null) {
-          promise.resolve(Arguments.createMap().apply {
-            putBoolean("ok", false)
-            putString("assetId", clean)
-            putString("code", legacy.code ?: "offline-playback-route-invalid")
-            putString("message", legacy.message ?: "Orion could not classify this offline download.")
+            putString("code", route.code ?: "offline-playback-route-invalid")
+            putString("message", route.message ?: "Orion could not classify this offline download.")
           })
           return@execute
         }
         promise.resolve(Arguments.createMap().apply {
           putInt("schemaVersion", 1)
           putBoolean("ok", true)
-          putString("assetId", legacyAsset.assetId)
-          putString("sourceKind", legacyAsset.sourceKind)
-          putInt("fragmentCount", legacyAsset.fragmentCount.coerceAtLeast(0))
+          putString("assetId", route.assetId)
+          putString("sourceKind", route.sourceKind)
+          putInt("fragmentCount", route.fragmentCount.coerceAtLeast(0))
         })
       } catch (_: Throwable) {
         promise.reject("OFFLINE_PLAYBACK_CLASSIFY_FAILED", "Orion could not classify this offline download.")
@@ -557,6 +537,7 @@ class OrionDownloadEngineModule(
     playerPromise = null
     OrionPlayerActivity.setProgressListener(null)
     ioExecutor.shutdownNow()
+    playbackExecutor.shutdownNow()
     super.invalidate()
   }
 

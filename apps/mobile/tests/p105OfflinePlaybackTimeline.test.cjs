@@ -51,8 +51,8 @@ test('P10.5-C4 keeps offline presentation local, ID-authoritative and locator-fr
   assert.match(module, /fun classifyOfflinePlayback\(assetId: String, promise: Promise\)/);
   assert.match(manager, /validateManagedFragmentBundle\(bundleDir\)/);
   assert.match(bridge, /classifyNativeOfflinePlaybackV1\(assetId: string\)/);
-  assert.match(classifier, /resolveFinalizedPlayerAsset\(reactContext, clean\)/);
-  assert.match(classifier, /resolveOfflinePlayerAsset\(reactContext, clean\)/);
+  assert.match(classifier, /classifyOfflinePlaybackRoute\(clean\)/);
+  assert.doesNotMatch(classifier, /resolveFinalizedPlayerAsset|resolveOfflinePlayerAsset|reconcile\(/);
   assert.doesNotMatch(classifier, /putString\("uri"|subtitle|content:\/\/|filePath/);
   assert.doesNotMatch(bridgeClassifier, /uri|subtitles|content:\/\/|file:\/\//);
   assert.doesNotMatch(resolver, /MediaMuxer|portable\.mp4|https?:\/\/|localhost/);

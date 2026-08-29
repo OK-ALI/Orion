@@ -6,12 +6,22 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
 
-test('P10.6-D3 deep-verifies targeted finalized primary media even when length is unchanged', () => {
+test('P10.6-D3 keeps verified playback access bounded while retaining background deep verification', () => {
   const manager = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadArtifactManager.kt');
+  const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
 
   assert.match(manager, /FULL_DIGEST_RECHECK_INTERVAL_MS = 24L \* 60L \* 60L \* 1000L/);
-  assert.match(manager, /targeted = assetIds != null/);
-  assert.match(manager, /if \(!stampValid \|\| targeted\) return true/);
+  assert.match(manager, /purpose == OrionArtifactReconciliationPurpose\.ACCESS\) return false/);
+  assert.match(manager, /purpose == OrionArtifactReconciliationPurpose\.EXPLICIT_DEEP/);
+  assert.match(manager, /purpose: OrionArtifactReconciliationPurpose = if \(assetIds == null\)[\s\S]{0,180}PERIODIC[\s\S]{0,180}ACCESS/);
+  assert.match(module, /private val playbackExecutor = Executors\.newSingleThreadExecutor\(\)/);
+  assert.match(module, /val route = OrionDownloadArtifactManager\.classifyOfflinePlaybackRoute\(clean\)/);
+
+  const classifier = manager.slice(
+    manager.indexOf('fun classifyOfflinePlaybackRoute('),
+    manager.indexOf('fun resolveOfflinePlayback(', manager.indexOf('fun classifyOfflinePlaybackRoute(')),
+  );
+  assert.doesNotMatch(classifier, /reconcile\(|validateDocumentIntegrity|sha256|resolveFinalizedPlayerAsset/);
 
   const managedValidation = manager.indexOf('OrionFinalizedArtifactOwner.validate(');
   const managedDigest = manager.indexOf('expectedSha256 = contentSha256.takeIf { stampValid }', managedValidation);

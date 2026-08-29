@@ -55,7 +55,6 @@ const THEME_DESCRIPTIONS: Record<OrionThemeId, string> = {
 
 interface SettingsSectionProps {
   sectionId: MobileSettingsSectionId;
-  icon: React.ComponentProps<typeof Ionicons>["name"];
   title: string;
   description: string;
   children: React.ReactNode;
@@ -63,7 +62,7 @@ interface SettingsSectionProps {
   onLayout: (event: LayoutChangeEvent) => void;
 }
 
-function SettingsSection({ sectionId, icon, title, description, children, theme, onLayout }: SettingsSectionProps) {
+function SettingsSection({ sectionId, title, description, children, theme, onLayout }: SettingsSectionProps) {
   return (
     <View
       nativeID={`settings-section-${sectionId}`}
@@ -71,13 +70,8 @@ function SettingsSection({ sectionId, icon, title, description, children, theme,
       style={[styles.section, { borderBottomColor: theme.border }]}
     >
       <View style={styles.sectionHeader}>
-        <View style={[styles.sectionIcon, { backgroundColor: theme.accentSoft }]}>
-          <Ionicons name={icon} size={20} color={theme.accent} />
-        </View>
-        <View style={styles.sectionHeadingCopy}>
-          <Text accessibilityRole="header" style={[styles.sectionTitle, { color: theme.text }]}>{title}</Text>
-          <Text style={[styles.sectionDescription, { color: theme.textSecondary }]}>{description}</Text>
-        </View>
+        <Text accessibilityRole="header" style={[styles.sectionTitle, { color: theme.text }]}>{title}</Text>
+        <Text style={[styles.sectionDescription, { color: theme.textSecondary }]}>{description}</Text>
       </View>
       {children}
     </View>
@@ -160,7 +154,6 @@ export default function MobileSettingsScreen() {
       >
         <SettingsSection
           sectionId="account"
-          icon="person-circle-outline"
           title={account.label}
           description="Your Orion profile and sign-in."
           theme={theme}
@@ -171,7 +164,6 @@ export default function MobileSettingsScreen() {
 
         <SettingsSection
           sectionId="appearance"
-          icon="color-palette-outline"
           title={appearance.label}
           description="Themes and system appearance."
           theme={theme}
@@ -252,7 +244,6 @@ export default function MobileSettingsScreen() {
 
         <SettingsSection
           sectionId="performance"
-          icon="speedometer-outline"
           title={performance.label}
           description="Choose how Orion balances browsing speed and device resources."
           theme={theme}
@@ -300,7 +291,6 @@ export default function MobileSettingsScreen() {
 
         <SettingsSection
           sectionId="accessibility"
-          icon="accessibility-outline"
           title={accessibility.label}
           description="Motion and interaction comfort."
           theme={theme}
@@ -326,7 +316,6 @@ export default function MobileSettingsScreen() {
 
         <SettingsSection
           sectionId="notifications"
-          icon="notifications-outline"
           title={notifications.label}
           description="Choose your alerts and quiet hours."
           theme={theme}
@@ -337,7 +326,6 @@ export default function MobileSettingsScreen() {
 
         <SettingsSection
           sectionId="updates"
-          icon="cloud-download-outline"
           title={updates.label}
           description="Choose when you receive updates and see what is available."
           theme={theme}
@@ -348,7 +336,6 @@ export default function MobileSettingsScreen() {
 
         <SettingsSection
           sectionId="downloads"
-          icon="download-outline"
           title={downloads.label}
           description="Offline location, quality and subtitle defaults."
           theme={theme}
@@ -370,11 +357,9 @@ const styles = StyleSheet.create({
   content: { paddingTop: spacing[2], paddingHorizontal: spacing[5], paddingBottom: 80 },
   contentTablet: { maxWidth: 900, width: "100%", alignSelf: "center" },
   section: { paddingBottom: spacing[6], marginBottom: spacing[5], borderBottomWidth: StyleSheet.hairlineWidth },
-  sectionHeader: { flexDirection: "row", alignItems: "center", gap: spacing[3], marginBottom: spacing[4] },
-  sectionIcon: { width: 40, height: 40, borderRadius: radii.full, alignItems: "center", justifyContent: "center" },
-  sectionHeadingCopy: { flex: 1 },
-  sectionTitle: { fontSize: fontSizes.lg, fontWeight: "900" },
-  sectionDescription: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: 2 },
+  sectionHeader: { alignItems: "flex-start", marginBottom: spacing[6] },
+  sectionTitle: { fontSize: fontSizes.xl, lineHeight: 30, fontWeight: "900", letterSpacing: -0.35 },
+  sectionDescription: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: spacing[2], maxWidth: 620 },
   groupTitle: { fontSize: fontSizes.md, fontWeight: "900", marginBottom: spacing[4] },
   subgroupTitle: { fontSize: fontSizes.md, fontWeight: "900", marginTop: spacing[5], marginBottom: spacing[2] },
   themeGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing[3] },

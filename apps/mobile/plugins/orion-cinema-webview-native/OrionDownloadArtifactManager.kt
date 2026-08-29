@@ -49,6 +49,20 @@ internal data class OrionOfflinePlayerResolution(
   val failedFragmentIndex: Int? = null,
 )
 
+internal data class OrionOfflinePlaybackRoute(
+  val assetId: String? = null,
+  val sourceKind: String? = null,
+  val fragmentCount: Int = 0,
+  val code: String? = null,
+  val message: String? = null,
+)
+
+internal enum class OrionArtifactReconciliationPurpose {
+  ACCESS,
+  PERIODIC,
+  EXPLICIT_DEEP,
+}
+
 internal object OrionArtifactIntegrityPolicy {
   const val FULL_DIGEST_RECHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
 
@@ -56,13 +70,17 @@ internal object OrionArtifactIntegrityPolicy {
     integrityCheckedAt.takeIf { it > 0L } ?: legacyLastCheckedAt.takeIf { it > 0L }
 
   fun requiresDigestVerification(
-    targeted: Boolean,
+    purpose: OrionArtifactReconciliationPurpose,
     stampValid: Boolean,
     integrityCheckedAt: Long,
     legacyLastCheckedAt: Long,
     now: Long,
   ): Boolean {
-    if (!stampValid || targeted) return true
+    if (!stampValid || purpose == OrionArtifactReconciliationPurpose.EXPLICIT_DEEP) return true
+    // Playback and exact management actions must stay bounded. A valid durable
+    // stamp is paired with fresh URI/size/descriptor checks on these hot paths;
+    // full-file hashing belongs to settlement or background integrity work.
+    if (purpose == OrionArtifactReconciliationPurpose.ACCESS) return false
     val baseline = previousIntegrityCheckedAt(integrityCheckedAt, legacyLastCheckedAt) ?: return true
     if (now <= 0L || now < baseline) return true
     return now - baseline >= FULL_DIGEST_RECHECK_INTERVAL_MS
@@ -90,7 +108,15 @@ internal object OrionDownloadArtifactManager {
     val clearVerification: Boolean = false,
   )
 
-  fun reconcile(context: Context, assetIds: Set<String>? = null): JSONObject {
+  fun reconcile(
+    context: Context,
+    assetIds: Set<String>? = null,
+    purpose: OrionArtifactReconciliationPurpose = if (assetIds == null) {
+      OrionArtifactReconciliationPurpose.PERIODIC
+    } else {
+      OrionArtifactReconciliationPurpose.ACCESS
+    },
+  ): JSONObject {
     synchronized(reconciliationLock) {
       if (reconciling) return OrionDownloadJobStore.snapshot()
       reconciling = true
@@ -108,7 +134,7 @@ internal object OrionDownloadArtifactManager {
             context = context,
             asset = asset,
             artifact = artifact,
-            targeted = assetIds != null,
+            purpose = purpose,
             checkedAt = checkedAt,
           )
           val update = JSONObject()
@@ -139,6 +165,46 @@ internal object OrionDownloadArtifactManager {
     } finally {
       synchronized(reconciliationLock) { reconciling = false }
     }
+  }
+
+  /**
+   * Classifies only the native playback owner. It intentionally performs no
+   * storage I/O: the selected native surface revalidates the exact artifact
+   * before opening it, so route selection must not duplicate that work.
+   */
+  fun classifyOfflinePlaybackRoute(assetId: String): OrionOfflinePlaybackRoute {
+    val clean = assetId.trim()
+    fun failure(code: String, message: String) =
+      OrionOfflinePlaybackRoute(code = code, message = message)
+    if (!clean.matches(Regex("^[A-Za-z0-9._:-]{1,140}$"))) {
+      return failure("offline-asset-id-invalid", "Offline download identity is invalid.")
+    }
+    val asset = OrionDownloadJobStore.ownershipAssets(setOf(clean)).optJSONObject(0)
+      ?: return failure("offline-asset-not-found", "Offline download was not found.")
+    val storageMode = asset.optJSONObject("storageTarget")?.optString("mode").orEmpty()
+    if (asset.optString("destination") != "orion-library" || storageMode !in setOf("orion-library", "user-folder")) {
+      return failure("offline-asset-not-managed", "This download is not an Orion Library offline asset.")
+    }
+    val primary = ownedPrimary(asset)
+      ?: return failure("offline-primary-missing", "Offline media is not tracked.")
+    when (primary.optString("availability")) {
+      "missing" -> return failure("offline-primary-missing", "The downloaded media file is missing from Orion Library.")
+      "unavailable" -> return failure("offline-primary-unavailable", "The downloaded media file could not be verified or opened.")
+      "verified" -> Unit
+      else -> return failure("offline-primary-not-verified", "Offline media is not currently verified.")
+    }
+
+    val locatorKind = primary.optJSONObject("_locator")?.optString("kind").orEmpty()
+    val container = asset.optString("container")
+    val mimeType = asset.optString("mimeType")
+    if (container == "mp4" && mimeType == "video/mp4" && locatorKind in setOf("content-uri", "managed", "managed-relative")) {
+      return OrionOfflinePlaybackRoute(clean, "file", 1)
+    }
+    val fragmentKind = container.removeSuffix("-fragments").takeIf { it in setOf("hls", "dash") }
+    if (fragmentKind != null && locatorKind in setOf("managed", "managed-relative")) {
+      return OrionOfflinePlaybackRoute(clean, fragmentKind, 0)
+    }
+    return failure("offline-playback-route-invalid", "Orion could not classify this offline download.")
   }
 
 
@@ -875,7 +941,7 @@ internal object OrionDownloadArtifactManager {
     context: Context,
     asset: JSONObject,
     artifact: JSONObject,
-    targeted: Boolean,
+    purpose: OrionArtifactReconciliationPurpose,
     checkedAt: Long,
   ): ArtifactProbe {
     val locator = artifact.optJSONObject("_locator") ?: return ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
@@ -906,7 +972,7 @@ internal object OrionDownloadArtifactManager {
                   artifact.optLong("lastCheckedAt", -1L),
                 )
                 val deepVerify = OrionArtifactIntegrityPolicy.requiresDigestVerification(
-                  targeted = targeted,
+                  purpose = purpose,
                   stampValid = stampValid,
                   integrityCheckedAt = artifact.optLong("_integrityCheckedAt", -1L),
                   legacyLastCheckedAt = artifact.optLong("lastCheckedAt", -1L),
@@ -996,7 +1062,7 @@ internal object OrionDownloadArtifactManager {
               artifact.optLong("lastCheckedAt", -1L),
             )
             val deepVerify = OrionArtifactIntegrityPolicy.requiresDigestVerification(
-              targeted = targeted,
+              purpose = purpose,
               stampValid = stampValid,
               integrityCheckedAt = artifact.optLong("_integrityCheckedAt", -1L),
               legacyLastCheckedAt = artifact.optLong("lastCheckedAt", -1L),
