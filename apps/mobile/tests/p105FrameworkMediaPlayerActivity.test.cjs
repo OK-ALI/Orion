@@ -151,3 +151,60 @@ test('PlayerScreen finalized-file product route cuts over to OrionPlayerActivity
   assert.match(activitySurface, /router\.back\(\)/);
   assert.match(legacySurface, /requireNativeComponent<NativeOfflinePlayerProps>\('OrionOfflinePlayerView'\)/);
 });
+test('framework Activity defers MediaPlayer timeline polling until onPrepared', () => {
+  const activity = read('plugins', 'orion-cinema-webview-native', 'OrionPlayerActivity.kt');
+
+  const openPlayer = activity.slice(
+    activity.indexOf('private fun openPlayer('),
+    activity.indexOf('private fun configureVerifiedDataSource('),
+  );
+
+  const preparedListener = openPlayer.slice(
+    openPlayer.indexOf('player.setOnPreparedListener'),
+    openPlayer.indexOf('player.setOnCompletionListener'),
+  );
+
+  const afterPrepareAsync = openPlayer.slice(
+    openPlayer.indexOf('player.prepareAsync()'),
+  );
+
+  const errorListener = openPlayer.slice(
+    openPlayer.indexOf('player.setOnErrorListener'),
+    openPlayer.indexOf('    try {', openPlayer.indexOf('player.setOnErrorListener')),
+  );
+
+  assert.match(
+    preparedListener,
+    /prepared = true[\s\S]*mainHandler\.post\(progressTicker\)/,
+  );
+
+  assert.doesNotMatch(
+    afterPrepareAsync,
+    /mainHandler\.post\(progressTicker\)/,
+  );
+
+  assert.match(
+    errorListener,
+    /prepared = false[\s\S]*mainHandler\.removeCallbacks\(progressTicker\)[\s\S]*fail\(/,
+  );
+
+  assert.match(
+    activity,
+    /private fun updateProgress\(\) \{\s*if \(!prepared\) return/,
+  );
+
+  assert.match(
+    activity,
+    /private fun safePosition\(player: MediaPlayer\?\): Long \{\s*if \(!prepared \|\| player == null\) return 0L/,
+  );
+
+  assert.match(
+    activity,
+    /private fun safeDuration\(player: MediaPlayer\?\): Long \{\s*if \(!prepared \|\| player == null\) return 0L/,
+  );
+
+  assert.match(
+    activity,
+    /private fun releasePlayer\(\) \{\s*mainHandler\.removeCallbacks\(progressTicker\)\s*prepared = false/,
+  );
+});

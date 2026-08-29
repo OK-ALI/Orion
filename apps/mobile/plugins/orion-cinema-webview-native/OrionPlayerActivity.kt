@@ -71,9 +71,9 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
 
   private val progressTicker = object : Runnable {
     override fun run() {
-      if (released) return
+      if (released || !prepared) return
       updateProgress()
-      mainHandler.postDelayed(this, 250L)
+      if (!released && prepared) mainHandler.postDelayed(this, 250L)
     }
   }
 
@@ -202,6 +202,8 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       playPauseView.text = "Pause"
       updateProgress()
       publishProgress("playing", force = true)
+      mainHandler.removeCallbacks(progressTicker)
+      mainHandler.post(progressTicker)
     }
     player.setOnCompletionListener {
       completed = true
@@ -229,6 +231,9 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       false
     }
     player.setOnErrorListener { _, what, extra ->
+      prepared = false
+      buffering = false
+      mainHandler.removeCallbacks(progressTicker)
       fail("orion-player-media-error-$what-$extra", "Android could not play this verified MP4.")
       true
     }
@@ -237,8 +242,6 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       configureVerifiedDataSource(player, asset)
       renderSurface?.let(player::setSurface)
       player.prepareAsync()
-      mainHandler.removeCallbacks(progressTicker)
-      mainHandler.post(progressTicker)
     } catch (_: Throwable) {
       fail("orion-player-data-source-failed", "Orion could not open the verified media descriptor.")
     }
@@ -427,6 +430,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   }
 
   private fun updateProgress() {
+    if (!prepared) return
     val player = mediaPlayer ?: return
     val position = safePosition(player)
     val duration = safeDuration(player)
@@ -576,19 +580,26 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   }
 
   private fun releasePlayer() {
+    mainHandler.removeCallbacks(progressTicker)
     prepared = false
     try { mediaPlayer?.setSurface(null) } catch (_: Throwable) { Unit }
     try { mediaPlayer?.release() } catch (_: Throwable) { Unit }
     mediaPlayer = null
   }
 
-  private fun safePosition(player: MediaPlayer?): Long = try {
-    player?.currentPosition?.toLong()?.coerceAtLeast(0L) ?: 0L
-  } catch (_: Throwable) { 0L }
+  private fun safePosition(player: MediaPlayer?): Long {
+    if (!prepared || player == null) return 0L
+    return try {
+      player.currentPosition.toLong().coerceAtLeast(0L)
+    } catch (_: Throwable) { 0L }
+  }
 
-  private fun safeDuration(player: MediaPlayer?): Long = try {
-    player?.duration?.toLong()?.coerceAtLeast(0L) ?: 0L
-  } catch (_: Throwable) { 0L }
+  private fun safeDuration(player: MediaPlayer?): Long {
+    if (!prepared || player == null) return 0L
+    return try {
+      player.duration.toLong().coerceAtLeast(0L)
+    } catch (_: Throwable) { 0L }
+  }
 
   private fun enterImmersiveMode() {
     @Suppress("DEPRECATION")
