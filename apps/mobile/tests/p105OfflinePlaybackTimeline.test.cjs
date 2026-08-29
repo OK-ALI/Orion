@@ -31,7 +31,7 @@ test('P10.5-C4 gives offline playback a bounded timing owner independent of port
   assert.match(finalizer, /MediaMuxer/);
 });
 
-test('P10.5-C4 keeps offline presentation local, ID-authoritative and remux-free', () => {
+test('P10.5-C4 keeps offline presentation local, ID-authoritative and locator-free at the RN route boundary', () => {
   const manager = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadArtifactManager.kt');
   const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
   const bridge = read('src', 'features', 'downloads', 'nativeDownloadEngine.ts');
@@ -39,12 +39,22 @@ test('P10.5-C4 keeps offline presentation local, ID-authoritative and remux-free
   const resolverStart = finalizer.indexOf('fun prepareOfflinePlaybackPresentation(');
   const resolverEnd = finalizer.indexOf('fun finalizeToDeviceStorage(', resolverStart);
   const resolver = finalizer.slice(resolverStart, resolverEnd);
+  const classifier = module.slice(
+    module.indexOf('fun classifyOfflinePlayback('),
+    module.indexOf('fun chooseDeviceStorageTarget('),
+  );
+  const bridgeClassifier = bridge.slice(
+    bridge.indexOf('export async function classifyNativeOfflinePlaybackV1'),
+    bridge.indexOf('export interface NativeOfflineSubtitleV1'),
+  );
 
-  assert.match(module, /fun resolveOfflinePlayback\(assetId: String, promise: Promise\)/);
+  assert.match(module, /fun classifyOfflinePlayback\(assetId: String, promise: Promise\)/);
   assert.match(manager, /validateManagedFragmentBundle\(bundleDir\)/);
-  assert.match(bridge, /resolveNativeOfflinePlaybackV1\(assetId: string\)/);
-  assert.match(bridge, /uri\.startsWith\('content:\/\/'\)/);
-  assert.match(bridge, /uri\.startsWith\('file:\/\/'\)/);
+  assert.match(bridge, /classifyNativeOfflinePlaybackV1\(assetId: string\)/);
+  assert.match(classifier, /resolveFinalizedPlayerAsset\(reactContext, clean\)/);
+  assert.match(classifier, /resolveOfflinePlayerAsset\(reactContext, clean\)/);
+  assert.doesNotMatch(classifier, /putString\("uri"|subtitle|content:\/\/|filePath/);
+  assert.doesNotMatch(bridgeClassifier, /uri|subtitles|content:\/\/|file:\/\//);
   assert.doesNotMatch(resolver, /MediaMuxer|portable\.mp4|https?:\/\/|localhost/);
 });
 

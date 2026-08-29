@@ -10,6 +10,7 @@ import {
 } from './downloadRepository';
 
 const EVENT_NAME = 'OrionDownloadEngineSnapshot';
+const PLAYER_PROGRESS_EVENT_NAME = 'OrionFinalizedPlayerProgress';
 
 export type MobileDownloadReconciliationStateV1 = 'checking' | 'ready' | 'unavailable';
 type MobileDownloadReconciliationListenerV1 = (state: MobileDownloadReconciliationStateV1) => void;
@@ -53,6 +54,13 @@ interface NativeDownloadEngineModule {
   playAssetLocally(assetId: string): Promise<unknown>;
   locateAsset(assetId: string): Promise<unknown>;
   resolveOfflinePlayback(assetId: string): Promise<unknown>;
+  classifyOfflinePlayback(assetId: string): Promise<unknown>;
+  launchFinalizedPlayer(
+    assetId: string,
+    initialPositionSeconds: number,
+    title: string | null,
+    presentation: NativeFinalizedPlayerPresentationV1,
+  ): Promise<unknown>;
   chooseDeviceStorageTarget(): Promise<{
     ok: boolean;
     targetId?: string;
@@ -269,6 +277,41 @@ export async function removeUnavailableNativeDownloadRecordsV1(assetIds: readonl
 }
 
 
+export interface NativeOfflinePlaybackRouteV1 {
+  schemaVersion: 1;
+  assetId: string;
+  sourceKind: 'file' | 'hls' | 'dash';
+  fragmentCount: number;
+}
+
+export async function classifyNativeOfflinePlaybackV1(assetId: string): Promise<NativeOfflinePlaybackRouteV1> {
+  const module = nativeModule();
+  if (!module) throw new Error('Android download engine is unavailable.');
+  const clean = assetId.trim();
+  if (!/^[A-Za-z0-9._:-]{1,140}$/.test(clean)) throw new Error('Offline download identity is invalid.');
+  const raw = await module.classifyOfflinePlayback(clean);
+  const result = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  if (result.ok !== true) {
+    throw new Error(typeof result.message === 'string' && result.message.trim()
+      ? result.message
+      : 'Orion could not classify this offline download.');
+  }
+  const resultAssetId = typeof result.assetId === 'string' ? result.assetId.trim() : '';
+  const sourceKind = result.sourceKind === 'file' || result.sourceKind === 'hls' || result.sourceKind === 'dash'
+    ? result.sourceKind
+    : null;
+  if (resultAssetId !== clean || !sourceKind) {
+    throw new Error('Offline playback route is invalid.');
+  }
+  return {
+    schemaVersion: 1,
+    assetId: clean,
+    sourceKind,
+    fragmentCount: Math.max(0, Math.trunc(Number(result.fragmentCount) || 0)),
+  };
+}
+
+
 export interface NativeOfflineSubtitleV1 {
   id: string;
   language: string;
@@ -287,6 +330,108 @@ export interface NativeOfflinePlaybackSourceV1 {
   fragmentCount: number;
   subtitleCount: number;
   subtitles: NativeOfflineSubtitleV1[];
+}
+
+export type NativeFinalizedPlayerPresentationV1 = 'fit' | 'fill' | 'stretch';
+export type NativeFinalizedPlayerStateV1 =
+  | 'preparing'
+  | 'buffering'
+  | 'playing'
+  | 'paused'
+  | 'seeking'
+  | 'ended'
+  | 'failed';
+
+export interface NativeFinalizedPlayerProgressV1 {
+  assetId: string;
+  state: NativeFinalizedPlayerStateV1;
+  playing: boolean;
+  currentTime: number;
+  duration: number | null;
+  presentation: NativeFinalizedPlayerPresentationV1;
+  code?: string;
+  message?: string;
+}
+
+export interface NativeFinalizedPlayerResultV1 {
+  ok: boolean;
+  currentTime: number;
+  duration: number | null;
+  completed: boolean;
+  presentation: NativeFinalizedPlayerPresentationV1;
+  code?: string;
+  message?: string;
+}
+
+function normalizeFinalizedPlayerPresentationV1(value: unknown): NativeFinalizedPlayerPresentationV1 {
+  return value === 'fill' || value === 'stretch' ? value : 'fit';
+}
+
+function normalizeFinalizedPlayerProgressV1(value: unknown): NativeFinalizedPlayerProgressV1 | null {
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const assetId = typeof raw.assetId === 'string' ? raw.assetId.trim() : '';
+  const state = typeof raw.state === 'string' ? raw.state : '';
+  if (!/^[A-Za-z0-9._:-]{1,140}$/.test(assetId)
+    || !['preparing', 'buffering', 'playing', 'paused', 'seeking', 'ended', 'failed'].includes(state)) {
+    return null;
+  }
+  const currentTime = Math.max(0, Number(raw.currentTime) || 0);
+  const durationValue = Number(raw.duration);
+  const duration = Number.isFinite(durationValue) && durationValue > 0 ? durationValue : null;
+  return {
+    assetId,
+    state: state as NativeFinalizedPlayerStateV1,
+    playing: raw.playing === true,
+    currentTime,
+    duration,
+    presentation: normalizeFinalizedPlayerPresentationV1(raw.presentation),
+    ...(typeof raw.code === 'string' && raw.code.trim() ? { code: raw.code.trim().slice(0, 120) } : {}),
+    ...(typeof raw.message === 'string' && raw.message.trim() ? { message: raw.message.trim().slice(0, 240) } : {}),
+  };
+}
+
+export function subscribeNativeFinalizedPlayerProgressV1(
+  listener: (event: NativeFinalizedPlayerProgressV1) => void,
+): () => void {
+  if (Platform.OS !== 'android') return () => {};
+  const subscription = DeviceEventEmitter.addListener(PLAYER_PROGRESS_EVENT_NAME, (value: unknown) => {
+    const event = normalizeFinalizedPlayerProgressV1(value);
+    if (event) listener(event);
+  });
+  return () => subscription.remove();
+}
+
+export async function launchNativeFinalizedPlayerV1({
+  assetId,
+  initialPositionSeconds = 0,
+  title,
+  presentation = 'fit',
+}: {
+  assetId: string;
+  initialPositionSeconds?: number;
+  title?: string | null;
+  presentation?: NativeFinalizedPlayerPresentationV1;
+}): Promise<NativeFinalizedPlayerResultV1> {
+  const module = nativeModule();
+  if (!module) throw new Error('Android download engine is unavailable.');
+  const clean = assetId.trim();
+  if (!/^[A-Za-z0-9._:-]{1,140}$/.test(clean)) throw new Error('Offline download identity is invalid.');
+  const initialPosition = Math.max(0, Number(initialPositionSeconds) || 0);
+  const safePresentation = normalizeFinalizedPlayerPresentationV1(presentation);
+  const raw = await module.launchFinalizedPlayer(clean, initialPosition, title?.trim() || null, safePresentation);
+  const result = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const currentTime = Math.max(0, Number(result.currentTime) || 0);
+  const durationValue = Number(result.duration);
+  const duration = Number.isFinite(durationValue) && durationValue > 0 ? durationValue : null;
+  return {
+    ok: result.ok === true,
+    currentTime,
+    duration,
+    completed: result.completed === true,
+    presentation: normalizeFinalizedPlayerPresentationV1(result.presentation),
+    ...(typeof result.code === 'string' && result.code.trim() ? { code: result.code.trim().slice(0, 120) } : {}),
+    ...(typeof result.message === 'string' && result.message.trim() ? { message: result.message.trim().slice(0, 240) } : {}),
+  };
 }
 
 export async function resolveNativeOfflinePlaybackV1(assetId: string): Promise<NativeOfflinePlaybackSourceV1> {

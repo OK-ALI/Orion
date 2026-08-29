@@ -28,28 +28,36 @@ test('P10.5-C3 prepares downloaded subtitle sidecars as local HLS WebVTT renditi
   assert.doesNotMatch(resolver, /SubDL|Wyzie|subdl|wyzie/);
 });
 
-test('P10.5-C3 activates the existing Orion subtitle HUD for embedded or verified local sidecar tracks', () => {
-  const surface = read('src', 'features', 'playback', 'NativePlayerSurface.tsx');
+test('P10.5-C3 keeps subtitle controls local across legacy fragment and framework finalized playback owners', () => {
+  const legacy = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
+  const activity = read('plugins', 'orion-cinema-webview-native', 'OrionPlayerActivity.kt');
   const hud = read('src', 'components', 'player', 'PlayerHUD.tsx');
 
   assert.match(hud, /onOpenSubtitles\?: \(\) => void/);
   assert.match(hud, />Subtitles</);
-  assert.match(surface, /player\.availableSubtitleTracks/);
-  assert.match(surface, /canSubtitles: subtitleTracks\.length > 0/);
-  assert.match(surface, /onOpenSubtitles=\{subtitleTracks\.length > 0/);
-  assert.match(surface, /controller\.openOverlay\('subtitles'\)/);
-  assert.match(surface, /<OfflineSubtitleSheet/);
-  assert.match(surface, /player\.subtitleTrack = sidecarId \? null : track/);
-  assert.match(surface, /parseOfflineSubtitleCues/);
+
+  assert.match(legacy, /canSubtitles: subtitleTracks\.length > 0/);
+  assert.match(legacy, /onOpenSubtitles=\{subtitleTracks\.length > 0/);
+  assert.match(legacy, /controller\.openOverlay\('subtitles'\)/);
+  assert.match(legacy, /<OfflineSubtitleSheet/);
+  assert.match(legacy, /facade\.selectSubtitle\(track\?\.id \|\| null\)/);
+
+  assert.match(activity, /subtitleButton = button\("Subtitles Off"\)/);
+  assert.match(activity, /OrionPlayerSubtitleParser\.parse/);
+  assert.match(activity, /OrionPlayerSubtitleParser\.activeCue/);
+  assert.match(activity, /prepareSubtitle\(subtitle: OrionOfflinePlayerSubtitle\)/);
+  assert.match(activity, /contentResolver\.openInputStream\(subtitle\.document\.uri\)/);
 });
 
 test('P10.5-C3 subtitle selection remains local and does not add playback-time provider discovery', () => {
-  const surface = read('src', 'features', 'playback', 'NativePlayerSurface.tsx');
+  const legacy = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
+  const activity = read('plugins', 'orion-cinema-webview-native', 'OrionPlayerActivity.kt');
   const sheet = read('src', 'features', 'playback', 'OfflineSubtitleSheet.tsx');
 
   assert.match(sheet, /Downloaded and available offline/);
   assert.match(sheet, /onSelect: \(track: SubtitleTrack \| null\) => void/);
   assert.match(sheet, /accessibilityRole="radio"/);
-  assert.doesNotMatch(surface, /downloadSubtitles|discoverSubtitles|subtitleSources|fetch\(/);
+  assert.doesNotMatch(legacy, /downloadSubtitles|discoverSubtitles|subtitleSources|fetch\(/);
   assert.doesNotMatch(sheet, /fetch\(|https?:\/\//);
+  assert.doesNotMatch(activity, /https?:\/\/|SubDL|Wyzie|downloadSubtitles|discoverSubtitles/i);
 });

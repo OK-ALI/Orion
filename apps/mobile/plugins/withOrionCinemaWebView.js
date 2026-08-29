@@ -29,6 +29,8 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionCinemaWebViewManagerDelegate.java',
   'OrionCinemaWebViewPackage.kt',
   'OrionPlayerSystemUiModule.kt',
+  'OrionPlayerActivity.kt',
+  'OrionPlayerSubtitleParser.kt',
   'OrionDownloadCaptureModule.kt',
   'OrionDownloadRequestContextBroker.kt',
   'OrionDownloadAuthorizedHttp.kt',
@@ -69,6 +71,7 @@ const CINEMA_NATIVE_FILES = Object.freeze([
 ]);
 const CINEMA_NATIVE_TEST_FILES = Object.freeze([
   'OrionFinalizedPlayerPolicyTest.kt',
+  'OrionPlayerSubtitleParserTest.kt',
   'OrionOfflineMediaSourcePolicyTest.kt',
   'OrionOfflinePlaybackTimelineTest.kt',
   'OrionPortableCadenceTest.kt',
@@ -210,6 +213,20 @@ function withDownloadEngineManifest(config) {
       });
     }
     application.service = services;
+    const activities = application.activity || [];
+    const playerActivityName = 'com.okali.orion.playback.OrionPlayerActivity';
+    if (!activities.some((item) => item?.$?.['android:name'] === playerActivityName)) {
+      activities.push({
+        $: {
+          'android:name': playerActivityName,
+          'android:exported': 'false',
+          'android:hardwareAccelerated': 'true',
+          'android:screenOrientation': 'sensorLandscape',
+          'android:configChanges': 'keyboard|keyboardHidden|orientation|screenSize|uiMode',
+        },
+      });
+    }
+    application.activity = activities;
     const providers = application.provider || [];
     const authority = '${applicationId}.orion-downloads';
     if (!providers.some((item) => item?.$?.['android:authorities'] === authority)) {

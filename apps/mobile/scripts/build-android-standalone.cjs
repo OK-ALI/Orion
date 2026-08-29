@@ -328,6 +328,29 @@ function ensureCinemaGradleDependencies() {
   console.log("[Android] Orion Cinema Gradle dependencies verified.");
 }
 
+function ensureCinemaPlayerActivity() {
+  let contents = fs.readFileSync(androidManifest, "utf8");
+  const playerActivityName = "com.okali.orion.playback.OrionPlayerActivity";
+  if (!contents.includes(`android:name="${playerActivityName}"`)) {
+    const activity = [
+      `    <activity android:name="${playerActivityName}" android:exported="false" android:hardwareAccelerated="true" android:screenOrientation="sensorLandscape" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|uiMode"/>`,
+    ].join("\n");
+    if (!contents.includes("  </application>")) throw new Error("Unable to locate Android application for Orion Player.");
+    contents = contents.replace("  </application>", `${activity}\n  </application>`);
+    fs.writeFileSync(androidManifest, contents, "utf8");
+  }
+  const verified = fs.readFileSync(androidManifest, "utf8");
+  for (const required of [
+    `android:name="${playerActivityName}"`,
+    'android:exported="false"',
+    'android:hardwareAccelerated="true"',
+    'android:screenOrientation="sensorLandscape"',
+  ]) {
+    if (!verified.includes(required)) throw new Error(`Orion Player manifest prerequisite is missing: ${required}`);
+  }
+  console.log("[Android] Orion Player Activity manifest verified.");
+}
+
 function ensureCinemaDownloadFileProvider() {
   let contents = fs.readFileSync(androidManifest, "utf8");
   if (!contents.includes('${applicationId}.orion-downloads')) {
@@ -738,6 +761,7 @@ if (process.argv.includes("--sync-native-only")) {
   try {
     syncCinemaNativeSources();
     ensureCinemaGradleDependencies();
+    ensureCinemaPlayerActivity();
     ensureCinemaDownloadFileProvider();
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
@@ -751,6 +775,7 @@ try {
   ensureAndroidAppVersion();
   syncCinemaNativeSources();
   ensureCinemaGradleDependencies();
+  ensureCinemaPlayerActivity();
   ensureCinemaDownloadFileProvider();
   syncGoogleIdentityNativeSources();
   syncGoogleDriveAuthorizationNativeSources();

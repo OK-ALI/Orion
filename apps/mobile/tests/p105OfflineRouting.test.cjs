@@ -26,22 +26,24 @@ test('P10.5-C2 routes opaque asset identity instead of durable physical offline 
   assert.doesNotMatch(downloads, /offlineUri:/);
 });
 
-test('P10.5 finalized files and legacy bundles keep the asset-id native surface', () => {
+test('P10.5 finalized files launch the framework Activity while legacy bundles keep the asset-id embedded surface', () => {
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
-  const surface = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
+  const finalized = read('src', 'features', 'playback', 'OrionFinalizedPlayerActivitySurface.tsx');
+  const legacy = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
 
   assert.match(screen, /offlineAssetId\?: string/);
   assert.match(screen, /if \(offlineRequested\) \{\s*setImdbId\(null\);\s*return undefined;/);
   assert.match(screen, /if \(offlineRequested\) return '';/);
-  assert.match(screen, /resolveNativeOfflinePlaybackV1\(offlineAssetId\)/);
-  assert.match(screen, /<OrionOfflinePlayerSurface/);
-  assert.doesNotMatch(screen, /<NativePlayerSurface/);
-  assert.match(screen, /\) : \(\s*<EmbedPlayerSurface/);
+  assert.match(screen, /classifyNativeOfflinePlaybackV1\(offlineAssetId\)/);
+  assert.match(screen, /offlineSource\.sourceKind === 'file' \? \([\s\S]*<OrionFinalizedPlayerActivitySurface/);
+  assert.match(screen, /\) : \(\s*<OrionOfflinePlayerSurface/);
+  assert.doesNotMatch(screen, /resolveNativeOfflinePlaybackV1\(offlineAssetId\)|<NativePlayerSurface|OrionFinalizedPlayerSurface|offlineUri/);
   assert.match(screen, /PlayerStateOverlay/);
   assert.match(screen, /controller|setLoading/);
-  assert.doesNotMatch(screen, /offlineUri/);
 
-  assert.match(surface, /requireNativeComponent<NativeOfflinePlayerProps>\('OrionOfflinePlayerView'\)/);
-  assert.match(surface, /assetId=\{assetId\}/);
-  assert.doesNotMatch(surface, /streamUrl|offlineUri|useVideoPlayer/);
+  assert.match(finalized, /launchNativeFinalizedPlayerV1/);
+  assert.match(finalized, /assetId/);
+  assert.match(legacy, /requireNativeComponent<NativeOfflinePlayerProps>\('OrionOfflinePlayerView'\)/);
+  assert.match(legacy, /assetId=\{assetId\}/);
+  assert.doesNotMatch(legacy, /streamUrl|offlineUri|https?:\/\/|localhost/);
 });

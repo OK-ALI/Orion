@@ -30,6 +30,7 @@ test("P10.5 finalized MP4 assets use descriptor-backed native playback while leg
   assert.match(artifacts, /sourceKind = "file"/);
   assert.match(artifacts, /OrionFinalizedArtifactOwner\.authorize\(context, bundleDir, expectedSize\)/);
   assert.match(artifacts, /target\.length\(\) != expectedSize/);
-  assert.match(screen, /offlineAssetId && offlineSource \? \([\s\S]*<OrionOfflinePlayerSurface/);
-  assert.doesNotMatch(screen, /<NativePlayerSurface/);
+  assert.match(screen, /offlineSource\.sourceKind === 'file' \? \([\s\S]*<OrionFinalizedPlayerActivitySurface/);
+  assert.match(screen, /\) : \(\s*<OrionOfflinePlayerSurface/);
+  assert.doesNotMatch(screen, /OrionFinalizedPlayerSurface/);
 });

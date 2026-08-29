@@ -18,10 +18,28 @@ class OrionDownloadEngineModule(
   private val reactContext: ReactApplicationContext,
 ) : ReactContextBaseJavaModule(reactContext) {
   private var storagePromise: Promise? = null
+  private var playerPromise: Promise? = null
   private val ioExecutor = Executors.newSingleThreadExecutor()
   private val snapshotListener: (JSONObject) -> Unit = { snapshot -> emitSnapshot(snapshot) }
   private val activityListener: ActivityEventListener = object : BaseActivityEventListener() {
     override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
+      if (requestCode == REQUEST_ORION_PLAYER) {
+        val promise = playerPromise
+        playerPromise = null
+        OrionPlayerActivity.setProgressListener(null)
+        if (promise == null) return
+        val result = Arguments.createMap().apply {
+          putBoolean("ok", resultCode == Activity.RESULT_OK)
+          putDouble("currentTime", (data?.getLongExtra(OrionPlayerActivity.RESULT_POSITION_MS, 0L) ?: 0L) / 1_000.0)
+          putDouble("duration", (data?.getLongExtra(OrionPlayerActivity.RESULT_DURATION_MS, 0L) ?: 0L) / 1_000.0)
+          putBoolean("completed", data?.getBooleanExtra(OrionPlayerActivity.RESULT_COMPLETED, false) == true)
+          putString("presentation", data?.getStringExtra(OrionPlayerActivity.RESULT_PRESENTATION)?.takeIf { it in setOf("fit", "fill", "stretch") } ?: "fit")
+          data?.getStringExtra(OrionPlayerActivity.RESULT_CODE)?.takeIf { it.isNotBlank() }?.let { putString("code", it) }
+          data?.getStringExtra(OrionPlayerActivity.RESULT_MESSAGE)?.takeIf { it.isNotBlank() }?.let { putString("message", it) }
+        }
+        promise.resolve(result)
+        return
+      }
       if (requestCode != REQUEST_STORAGE_TREE) return
       val promise = storagePromise
       storagePromise = null
@@ -299,6 +317,59 @@ class OrionDownloadEngineModule(
   }
 
   @ReactMethod
+  fun launchFinalizedPlayer(
+    assetId: String,
+    initialPositionSeconds: Double,
+    title: String?,
+    presentation: String?,
+    promise: Promise,
+  ) {
+    val clean = assetId.trim()
+    if (!clean.matches(Regex("^[A-Za-z0-9._:-]{1,140}$"))) {
+      promise.reject("ORION_PLAYER_ASSET_INVALID", "Offline download identity is invalid.")
+      return
+    }
+    if (!initialPositionSeconds.isFinite() || initialPositionSeconds < 0.0) {
+      promise.reject("ORION_PLAYER_POSITION_INVALID", "Offline playback position is invalid.")
+      return
+    }
+    if (playerPromise != null) {
+      promise.reject("ORION_PLAYER_BUSY", "Orion Player is already open.")
+      return
+    }
+    val activity = reactContext.currentActivity
+    if (activity == null) {
+      promise.reject("ORION_PLAYER_UNAVAILABLE", "Orion Player is unavailable right now.")
+      return
+    }
+    val safePresentation = presentation?.trim()?.lowercase().takeIf { it in setOf("fit", "fill", "stretch") } ?: "fit"
+    val safeTitle = title.orEmpty()
+      .replace(Regex("[\\u0000-\\u001f\\u007f]"), "")
+      .trim()
+      .take(160)
+    playerPromise = promise
+    OrionPlayerActivity.setProgressListener { progress ->
+      if (playerPromise != null && progress.assetId == clean) emitPlayerProgress(progress)
+    }
+    try {
+      activity.startActivityForResult(
+        OrionPlayerActivity.createIntent(
+          activity,
+          clean,
+          (initialPositionSeconds * 1_000.0).toLong(),
+          safeTitle,
+          safePresentation,
+        ),
+        REQUEST_ORION_PLAYER,
+      )
+    } catch (_: Throwable) {
+      playerPromise = null
+      OrionPlayerActivity.setProgressListener(null)
+      promise.reject("ORION_PLAYER_LAUNCH_FAILED", "Orion could not open its native player.")
+    }
+  }
+
+  @ReactMethod
   fun locateAsset(assetId: String, promise: Promise) {
     ioExecutor.execute {
       try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.open(reactContext, assetId.trim(), locate = true))) }
@@ -312,6 +383,57 @@ class OrionDownloadEngineModule(
     ioExecutor.execute {
       try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.resolveOfflinePlayback(reactContext, assetId))) }
       catch (_: Throwable) { promise.reject("OFFLINE_PLAYBACK_RESOLVE_FAILED", "Orion could not resolve this offline download.") }
+    }
+  }
+
+  @ReactMethod
+  fun classifyOfflinePlayback(assetId: String, promise: Promise) {
+    ioExecutor.execute {
+      try {
+        val clean = assetId.trim()
+        val finalized = OrionDownloadArtifactManager.resolveFinalizedPlayerAsset(reactContext, clean)
+        val finalizedAsset = finalized.asset
+        if (finalizedAsset != null) {
+          promise.resolve(Arguments.createMap().apply {
+            putInt("schemaVersion", 1)
+            putBoolean("ok", true)
+            putString("assetId", finalizedAsset.assetId)
+            putString("sourceKind", "file")
+            putInt("fragmentCount", 1)
+          })
+          return@execute
+        }
+        if (finalized.code != "finalized-player-source-invalid") {
+          promise.resolve(Arguments.createMap().apply {
+            putBoolean("ok", false)
+            putString("assetId", clean)
+            putString("code", finalized.code ?: "offline-playback-route-invalid")
+            putString("message", finalized.message ?: "Orion could not classify this offline download.")
+          })
+          return@execute
+        }
+
+        val legacy = OrionDownloadArtifactManager.resolveOfflinePlayerAsset(reactContext, clean)
+        val legacyAsset = legacy.asset
+        if (legacyAsset == null) {
+          promise.resolve(Arguments.createMap().apply {
+            putBoolean("ok", false)
+            putString("assetId", clean)
+            putString("code", legacy.code ?: "offline-playback-route-invalid")
+            putString("message", legacy.message ?: "Orion could not classify this offline download.")
+          })
+          return@execute
+        }
+        promise.resolve(Arguments.createMap().apply {
+          putInt("schemaVersion", 1)
+          putBoolean("ok", true)
+          putString("assetId", legacyAsset.assetId)
+          putString("sourceKind", legacyAsset.sourceKind)
+          putInt("fragmentCount", legacyAsset.fragmentCount.coerceAtLeast(0))
+        })
+      } catch (_: Throwable) {
+        promise.reject("OFFLINE_PLAYBACK_CLASSIFY_FAILED", "Orion could not classify this offline download.")
+      }
     }
   }
 
@@ -370,6 +492,8 @@ class OrionDownloadEngineModule(
     OrionDownloadJobStore.removeListener(snapshotListener)
     reactContext.removeActivityEventListener(activityListener)
     storagePromise = null
+    playerPromise = null
+    OrionPlayerActivity.setProgressListener(null)
     ioExecutor.shutdownNow()
     super.invalidate()
   }
@@ -380,6 +504,25 @@ class OrionDownloadEngineModule(
       reactContext
         .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
         .emit(EVENT_NAME, toWritableMap(snapshot))
+    }
+  }
+
+  private fun emitPlayerProgress(progress: OrionFinalizedPlayerProgress) {
+    if (!reactContext.hasActiveReactInstance()) return
+    val event = Arguments.createMap().apply {
+      putString("assetId", progress.assetId)
+      putString("state", progress.state)
+      putBoolean("playing", progress.playing)
+      putDouble("currentTime", progress.positionMs.coerceAtLeast(0L) / 1_000.0)
+      putDouble("duration", progress.durationMs.coerceAtLeast(0L) / 1_000.0)
+      putString("presentation", progress.presentation)
+      progress.code?.takeIf { it.isNotBlank() }?.let { putString("code", it.take(120)) }
+      progress.message?.takeIf { it.isNotBlank() }?.let { putString("message", it.take(240)) }
+    }
+    reactContext.runOnUiQueueThread {
+      reactContext
+        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+        .emit(PLAYER_PROGRESS_EVENT_NAME, event)
     }
   }
 
@@ -432,7 +575,9 @@ class OrionDownloadEngineModule(
 
   companion object {
     private const val EVENT_NAME = "OrionDownloadEngineSnapshot"
+    private const val PLAYER_PROGRESS_EVENT_NAME = "OrionFinalizedPlayerProgress"
     private const val REQUEST_STORAGE_TREE = 45103
+    private const val REQUEST_ORION_PLAYER = 45104
     private const val MIN_FREE_RESERVE_BYTES = 32L * 1024L * 1024L
   }
 }

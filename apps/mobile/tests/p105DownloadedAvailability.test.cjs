@@ -28,7 +28,7 @@ test('P10.5-B owns one recoverable reconciled Verified Orion Library availabilit
   assert.match(engine, /generation !== mobileDownloadReconciliationGenerationV1/);
 
   assert.match(source, /asset\.destination !== 'orion-library'/);
-  assert.match(source, /asset\.storageTarget\.mode !== 'orion-library'/);
+  assert.match(source, /!\['orion-library', 'user-folder'\]\.includes\(asset\.storageTarget\.mode\)/);
   assert.match(source, /asset\.availability !== 'verified'/);
   assert.match(source, /artifact\.role === 'primary' && artifact\.availability === 'verified'/);
   assert.match(source, /mobileDownloadItemKeyFromMediaV1\(asset\.media\) === itemKey/);

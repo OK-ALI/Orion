@@ -73,13 +73,23 @@ test('SAF final settlement verifies the exact document before completion', () =>
   assert.match(transfer, /locatorKind = if \(userOwnedLibrary\) "content-uri" else "managed"/);
 });
 
-test('one persisted content URI drives Orion and external playback while legacy FileProvider remains isolated', () => {
+test('one persisted content URI remains native storage authority for Orion framework and external playback', () => {
+  const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
   const manager = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadArtifactManager.kt');
+  const activity = read('plugins', 'orion-cinema-webview-native', 'OrionPlayerActivity.kt');
   const owner = read('plugins', 'orion-cinema-webview-native', 'OrionFinalizedArtifactOwner.kt');
 
   assert.match(manager, /locatorKind == "content-uri" && storageMode == "user-folder"/);
   assert.match(manager, /OrionFinalizedArtifactOwner\.authorizeDocument/);
-  assert.match(manager, /\.put\("uri", playbackUri\.toString\(\)\)/);
+  assert.match(manager, /fun resolveFinalizedPlayerAsset\(/);
+  assert.match(manager, /mediaDocument = OrionOfflinePlayerDocument\(documentUri, expectedSize\)/);
+
+  assert.match(screen, /classifyNativeOfflinePlaybackV1\(offlineAssetId\)/);
+  assert.doesNotMatch(screen, /resolveNativeOfflinePlaybackV1\(offlineAssetId\)|offlineUri|content:\/\//);
+  assert.match(activity, /resolveFinalizedPlayerAsset\(applicationContext, assetId\)/);
+  assert.match(activity, /contentResolver\.openAssetFileDescriptor\(document\.uri, "r"\)/);
+  assert.match(activity, /player\.setDataSource\(it\.fileDescriptor/);
+
   assert.match(manager, /Intent\.ACTION_VIEW/);
   assert.match(manager, /ClipData\.newRawUri/);
   assert.match(owner, /FileProvider\.getUriForFile/);

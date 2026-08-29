@@ -6,13 +6,15 @@ const path = require('node:path');
 const mobileRoot = path.resolve(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(mobileRoot, ...parts), 'utf8');
 
-test('P10.5 offline resolver stays ID-only, Orion-owned and fail-closed', () => {
+test('P10.5 legacy full resolver stays fail-closed while PlayerScreen uses the classification-only route boundary', () => {
   const manager = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadArtifactManager.kt');
   const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
   const bridge = read('src', 'features', 'downloads', 'nativeDownloadEngine.ts');
+  const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
 
   assert.match(module, /fun resolveOfflinePlayback\(assetId: String, promise: Promise\)/);
   assert.match(module, /OrionDownloadArtifactManager\.resolveOfflinePlayback\(reactContext, assetId\)/);
+  assert.match(module, /fun classifyOfflinePlayback\(assetId: String, promise: Promise\)/);
   assert.match(manager, /reconcile\(context, setOf\(clean\)\)/);
   assert.match(manager, /asset\.optString\("destination"\) != "orion-library"/);
   assert.match(manager, /storageMode !in setOf\("orion-library", "user-folder"\)/);
@@ -22,6 +24,7 @@ test('P10.5 offline resolver stays ID-only, Orion-owned and fail-closed', () => 
   assert.match(manager, /validateManagedFragmentBundle\(bundleDir\)/);
   assert.match(manager, /entry\.optString\("name"\) != expectedName/);
   assert.match(manager, /file\.length\(\) != expectedSize/);
+
   assert.match(bridge, /resolveNativeOfflinePlaybackV1/);
   assert.match(bridge, /uri\.startsWith\('content:\/\/'\)/);
   assert.match(bridge, /uri\.startsWith\('file:\/\/'\)/);
@@ -29,6 +32,10 @@ test('P10.5 offline resolver stays ID-only, Orion-owned and fail-closed', () => 
   const bridgeEnd = bridge.indexOf('async function runNativeAssetAction', bridgeStart);
   assert.ok(bridgeStart >= 0 && bridgeEnd > bridgeStart);
   assert.doesNotMatch(bridge.slice(bridgeStart, bridgeEnd), /writeMobileDownloadRepositoryV1/);
+
+  assert.match(bridge, /export async function classifyNativeOfflinePlaybackV1/);
+  assert.match(screen, /classifyNativeOfflinePlaybackV1\(offlineAssetId\)/);
+  assert.doesNotMatch(screen, /resolveNativeOfflinePlaybackV1\(offlineAssetId\)|offlineUri/);
 });
 
 test('P10.5 offline presentation uses its playback timeline and never invokes MP4 remux', () => {

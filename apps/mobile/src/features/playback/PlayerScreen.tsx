@@ -18,11 +18,11 @@ import {
 } from '../../services/sourceHealth';
 import { reportMobileDiagnosticError, updateMobileDiagnostics } from '../../services/mobileDiagnostics';
 import { EmbedPlayerSurface } from './EmbedPlayerSurface';
-import { OrionFinalizedPlayerSurface } from './OrionFinalizedPlayerSurface';
+import { OrionFinalizedPlayerActivitySurface } from './OrionFinalizedPlayerActivitySurface';
 import { OrionOfflinePlayerSurface } from './OrionOfflinePlayerSurface';
 import {
-  resolveNativeOfflinePlaybackV1,
-  type NativeOfflinePlaybackSourceV1,
+  classifyNativeOfflinePlaybackV1,
+  type NativeOfflinePlaybackRouteV1,
 } from '../downloads/nativeDownloadEngine';
 import { ResumePlaybackPrompt } from './ResumePlaybackPrompt';
 import {
@@ -111,7 +111,7 @@ export default function PlayerScreen() {
   const { getPlaybackProgress } = useLibraryPlaybackActions();
   const offlineRequested = isOffline === 'true';
   const [offlineResolutionAttempt, setOfflineResolutionAttempt] = useState(0);
-  const [offlineSource, setOfflineSource] = useState<NativeOfflinePlaybackSourceV1 | null>(null);
+  const [offlineSource, setOfflineSource] = useState<NativeOfflinePlaybackRouteV1 | null>(null);
   const [offlineError, setOfflineError] = useState<string | null>(null);
   const routePlaybackIdentity = resolvePlaybackRouteIdentity(type, season, episode);
   const resolvedSeason = routePlaybackIdentity.season;
@@ -182,7 +182,7 @@ export default function PlayerScreen() {
     let disposed = false;
     setOfflineSource(null);
     setOfflineError(null);
-    resolveNativeOfflinePlaybackV1(offlineAssetId)
+    classifyNativeOfflinePlaybackV1(offlineAssetId)
       .then((source) => {
         if (disposed) return;
         setOfflineSource(source);
@@ -527,8 +527,8 @@ export default function PlayerScreen() {
   const surface = initialChoicePending ? null : offlineRequested ? (
     offlineAssetId && offlineSource ? (
       offlineSource.sourceKind === 'file' ? (
-        <OrionFinalizedPlayerSurface
-          key={`orion-finalized-${offlineAssetId}-${offlineResolutionAttempt}`}
+        <OrionFinalizedPlayerActivitySurface
+          key={`orion-finalized-activity-${offlineAssetId}-${offlineResolutionAttempt}`}
           assetId={offlineAssetId}
           {...commonProps}
           sourceId="local"

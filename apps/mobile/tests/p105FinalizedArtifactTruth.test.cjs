@@ -57,16 +57,17 @@ test('reconciliation validates old unstamped MP4s and playback requires durable 
   assert.doesNotMatch(bridge, /filePath|absolutePath/);
 });
 
-test('descriptor-backed native player reports local preparation failure with retry and back', () => {
+test('framework finalized player reports native launch/playback failure with retry and back', () => {
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
-  const player = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
+  const player = read('src', 'features', 'playback', 'OrionFinalizedPlayerActivitySurface.tsx');
 
+  assert.match(screen, /<OrionFinalizedPlayerActivitySurface/);
   assert.match(screen, /<OrionOfflinePlayerSurface/);
-  assert.doesNotMatch(screen, /<NativePlayerSurface/);
-  assert.match(player, /onRetry=\{nativeState\.state === 'failed' \? \(\) => facade\.retry\(\) : undefined\}/);
-  assert.match(player, /onBack=\{nativeState\.state === 'failed' \? \(\) => router\.back\(\) : undefined\}/);
-  assert.match(player, /nativeState\.message/);
-  assert.match(player, /nativeState\.errorCategory/);
+  assert.match(player, /setError\(message\)/);
+  assert.match(player, /onRetry=\{error \? \(\) => setLaunchAttempt/);
+  assert.match(player, /onBack=\{error \? \(\) => router\.back\(\) : undefined\}/);
+  assert.match(player, /result\.message/);
+  assert.match(player, /result\.code/);
 });
 
 test('yt-dlp telemetry contract remains intact', () => {

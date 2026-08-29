@@ -6,105 +6,77 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
 
-test('finalized MP4 and legacy fragments have isolated native route owners', () => {
+test('finalized MP4 and legacy fragments have isolated product route owners after the framework-player cutover', () => {
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
-  const finalized = read('src', 'features', 'playback', 'OrionFinalizedPlayerSurface.tsx');
-  const shared = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
+  const finalized = read('src', 'features', 'playback', 'OrionFinalizedPlayerActivitySurface.tsx');
+  const legacy = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
+  const activity = read('plugins', 'orion-cinema-webview-native', 'OrionPlayerActivity.kt');
   const manager = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadArtifactManager.kt');
   const legacyFactory = read('plugins', 'orion-cinema-webview-native', 'OrionOfflineMediaSourceFactory.kt');
-  const finalizedFactory = read('plugins', 'orion-cinema-webview-native', 'OrionFinalizedMediaSourceFactory.kt');
 
-  assert.match(screen, /offlineSource\.sourceKind === 'file' \? \([\s\S]*<OrionFinalizedPlayerSurface/);
+  assert.match(screen, /offlineSource\.sourceKind === 'file' \? \([\s\S]*<OrionFinalizedPlayerActivitySurface/);
   assert.match(screen, /\) : \(\s*<OrionOfflinePlayerSurface/);
-  assert.match(finalized, /OrionNativeAssetPlayerSurface[\s\S]*finalized/);
-  assert.match(shared, /'OrionFinalizedPlayerView'/);
-  assert.match(shared, /'OrionOfflinePlayerView'/);
+  assert.doesNotMatch(screen, /OrionFinalizedPlayerSurface/);
+  assert.match(finalized, /launchNativeFinalizedPlayerV1/);
+  assert.match(finalized, /subscribeNativeFinalizedPlayerProgressV1/);
+  assert.match(activity, /MediaPlayer\(\)/);
+  assert.match(activity, /TextureView\(this\)/);
+  assert.match(activity, /resolveFinalizedPlayerAsset\(applicationContext, assetId\)/);
+  assert.doesNotMatch(activity, /ExoPlayer|androidx\.media3|OrionFinalizedMediaSourceFactory/);
+  assert.match(legacy, /'OrionOfflinePlayerView'/);
   assert.match(manager, /fun resolveFinalizedPlayerAsset/);
-  assert.match(manager, /asset\.mediaDocument == null && asset\.mediaFile == null/);
   assert.match(manager, /fun resolveOfflinePlayerAsset/);
-  assert.match(manager, /asset\.mediaDocument != null \|\| asset\.mediaFile != null/);
   assert.match(legacyFactory, /if \(asset\.mediaDocument != null \|\| asset\.mediaFile != null\) return null/);
-  assert.match(finalizedFactory, /if \(asset\.videoParts\.isNotEmpty\(\) \|\| asset\.audioParts\.isNotEmpty\(\)\) return null/);
-  assert.doesNotMatch(finalizedFactory, /OrionOfflineFragmentDataSource|MediaMuxer|https?:\/\/|localhost/);
-  assert.doesNotMatch(finalized, /expo-video|useVideoPlayer|uri|filePath/);
 });
 
-test('React Native supplies a non-zero-capable full-size native host', () => {
-  const styles = read('src', 'features', 'playback', 'playerStyles.ts');
-  const surface = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
+test('finalized Activity receives only identity, initial position, title and presentation', () => {
+  const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
+  const activity = read('plugins', 'orion-cinema-webview-native', 'OrionPlayerActivity.kt');
+  const bridge = read('src', 'features', 'downloads', 'nativeDownloadEngine.ts');
 
-  assert.match(styles, /nativeVideoHost:\s*\{[\s\S]*flex: 1,[\s\S]*width: '100%'[\s\S]*alignSelf: 'stretch'/);
-  assert.match(styles, /nativeVideo:\s*\{[\s\S]*position: 'absolute'[\s\S]*top: 0,[\s\S]*right: 0,[\s\S]*bottom: 0,[\s\S]*left: 0/);
-  assert.match(surface, /<View style=\{styles\.nativeVideoHost\}>[\s\S]*style=\{styles\.nativeVideo\}/);
-  assert.match(surface, /assetId=\{assetId\}/);
-  assert.doesNotMatch(surface, /offlineUri|streamUrl/);
+  const method = module.slice(module.indexOf('fun launchFinalizedPlayer('), module.indexOf('fun locateAsset('));
+  assert.match(method, /assetId: String/);
+  assert.match(method, /initialPositionSeconds: Double/);
+  assert.match(method, /title: String\?/);
+  assert.match(method, /presentation: String\?/);
+  assert.doesNotMatch(method, /Uri|content:\/\/|filePath|mediaDocument|mediaFile/);
+  assert.match(activity, /EXTRA_ASSET_ID/);
+  assert.match(activity, /EXTRA_INITIAL_POSITION_MS/);
+  assert.match(activity, /EXTRA_PRESENTATION/);
+  assert.match(bridge, /module\.launchFinalizedPlayer\(clean, initialPosition, title\?\.trim\(\) \|\| null, safePresentation\)/);
 });
 
-test('dedicated native finalized player proves surface, decoder, track and first-frame stages', () => {
-  const view = read('plugins', 'orion-cinema-webview-native', 'OrionFinalizedPlayerView.kt');
-  const policy = read('plugins', 'orion-cinema-webview-native', 'OrionFinalizedPlayerPolicy.kt');
-  const manager = read('plugins', 'orion-cinema-webview-native', 'OrionFinalizedPlayerViewManager.kt');
-  const resource = read('plugins', 'orion-cinema-webview-native-res', 'layout', 'orion_finalized_player_view.xml');
+test('framework player progress and final result return through one bounded bridge', () => {
+  const activity = read('plugins', 'orion-cinema-webview-native', 'OrionPlayerActivity.kt');
+  const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
+  const surface = read('src', 'features', 'playback', 'OrionFinalizedPlayerActivitySurface.tsx');
 
-  assert.match(view, /resolveFinalizedPlayerAsset\(reactContext, requestedAssetId\)/);
-  assert.match(view, /OrionFinalizedMediaSourceFactory\.build/);
-  assert.match(view, /playerView\.player !== player/);
-  assert.match(view, /videoSurface == null/);
-  assert.match(view, /setZOrderOnTop\(false\)/);
-  assert.match(view, /setZOrderMediaOverlay\(false\)/);
-  assert.match(view, /SurfaceHolder\.Callback/);
-  assert.match(view, /AnalyticsListener/);
-  assert.match(view, /onVideoDecoderInitialized/);
-  assert.match(view, /onAudioDecoderInitialized/);
-  assert.match(view, /onRenderedFirstFrame/);
-  for (const field of ['viewWidth', 'viewHeight', 'surfaceAvailable', 'surfaceWidth', 'surfaceHeight', 'videoTrackCount', 'audioTrackCount', 'videoDecoderInitialized', 'audioDecoderInitialized', 'firstFrameRendered']) {
-    assert.match(view, new RegExp(`put(?:Int|Boolean)\\("${field}"`));
-  }
-  assert.match(policy, /LAYOUT_TIMEOUT_MS = 3_000L/);
-  assert.match(policy, /PREPARATION_TIMEOUT_MS = 30_000L/);
-  assert.match(policy, /FIRST_FRAME_TIMEOUT_MS = 10_000L/);
-  assert.match(policy, /finalized-video-surface-unavailable/);
-  assert.match(policy, /finalized-player-prepare-timeout/);
-  assert.match(policy, /finalized-video-decoder-not-initialized/);
-  assert.match(policy, /finalized-first-frame-timeout/);
-  assert.match(policy, /fun resetForRetry/);
-  assert.match(view, /OrionFinalizedPlayerPolicy\.resetForRetry/);
-  assert.match(manager, /override fun getName\(\): String = "OrionFinalizedPlayerView"/);
-  assert.match(resource, /app:surface_type="surface_view"/);
-  assert.match(resource, /android:layout_width="match_parent"/);
-  assert.match(resource, /android:layout_height="match_parent"/);
+  assert.match(activity, /publishProgress\(currentPlaybackState\(\)\)/);
+  assert.match(activity, /PROGRESS_EVENT_INTERVAL_MS = 1_000L/);
+  assert.match(activity, /RESULT_POSITION_MS/);
+  assert.match(activity, /RESULT_DURATION_MS/);
+  assert.match(activity, /RESULT_COMPLETED/);
+  assert.match(activity, /RESULT_PRESENTATION/);
+  assert.match(module, /PLAYER_PROGRESS_EVENT_NAME/);
+  assert.match(module, /putDouble\("currentTime"/);
+  assert.match(module, /putDouble\("duration"/);
+  assert.match(surface, /usePlaybackTelemetryController/);
+  assert.match(surface, /evidence: 'native-video-event'/);
+  assert.match(surface, /onPlaybackSnapshot/);
+  assert.match(surface, /onVerifiedPlaybackCompletion/);
 });
 
-test('finalized source uses exact bounded descriptors and modern local subtitles', () => {
-  const factory = read('plugins', 'orion-cinema-webview-native', 'OrionFinalizedMediaSourceFactory.kt');
-  const resolver = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadArtifactManager.kt');
+test('Activity owns native presentation and subtitles without reusing the retired finalized Media3 surface', () => {
+  const activity = read('plugins', 'orion-cinema-webview-native', 'OrionPlayerActivity.kt');
+  const parser = read('plugins', 'orion-cinema-webview-native', 'OrionPlayerSubtitleParser.kt');
+  const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
 
-  assert.match(factory, /MediaItem\.SubtitleConfiguration\.Builder\(uri\)/);
-  assert.match(factory, /\.setSubtitleConfigurations\(subtitleConfigurations\)/);
-  assert.doesNotMatch(factory, /SingleSampleMediaSource|experimentalParseSubtitlesDuringExtraction\(false\)/);
-  assert.match(factory, /DefaultMediaSourceFactory\(factory\)\.createMediaSource\(item\)/);
-  assert.match(factory, /contentResolver\.openFileDescriptor\(dataSpec\.uri, "r"\)/);
-  assert.match(factory, /dataSpec\.position > source\.sizeBytes/);
-  assert.match(factory, /dataSpec\.length > available/);
-  assert.match(factory, /stream\.channel\.position\(dataSpec\.position\)/);
-  assert.match(factory, /remaining -= count\.toLong\(\)/);
-  assert.match(factory, /DefaultDataSource\.Factory\(context\)/);
-  assert.match(resolver, /artifact\.optString\("availability"\) != "verified"[\s\S]*return@forEach/);
-  assert.doesNotMatch(resolver, /offline-subtitle-not-verified/);
-});
-
-test('new native code, JVM policy and PlayerView XML are synchronized and registered', () => {
-  const plugin = read('plugins', 'withOrionCinemaWebView.js');
-  const sync = read('scripts', 'build-android-standalone.cjs');
-  const packageSource = read('plugins', 'orion-cinema-webview-native', 'OrionCinemaWebViewPackage.kt');
-
-  for (const file of ['OrionFinalizedMediaSourceFactory.kt', 'OrionFinalizedPlayerPolicy.kt', 'OrionFinalizedPlayerView.kt', 'OrionFinalizedPlayerViewManager.kt', 'OrionFinalizedPlayerPolicyTest.kt', 'orion_finalized_player_view.xml']) {
-    assert.match(plugin, new RegExp(file.replace('.', '\\.')));
-  }
-  assert.match(sync, /CINEMA_NATIVE_RESOURCE_FILES/);
-  assert.match(sync, /Cinema native resource did not synchronize/);
-  assert.match(packageSource, /OrionFinalizedPlayerViewManager\(\)/);
-  assert.match(packageSource, /OrionOfflinePlayerViewManager\(\)/);
+  assert.match(activity, /presentation != "stretch"/);
+  assert.match(activity, /presentation == "fill"/);
+  assert.match(activity, /OrionPlayerSubtitleParser\.parse/);
+  assert.match(activity, /OrionPlayerSubtitleParser\.activeCue/);
+  assert.match(parser, /parseVtt|parseSrt|parseAss/);
+  assert.doesNotMatch(screen, /OrionFinalizedPlayerSurface/);
 });
 
 test('Play Locally remains the exact independently granted artifact path', () => {

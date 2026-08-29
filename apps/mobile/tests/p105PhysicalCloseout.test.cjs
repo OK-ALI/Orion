@@ -38,21 +38,26 @@ test('GTA-like movie title survives the JS and native nullable metadata boundari
   assert.match(owner, /!it\.equals\("null", true\)/);
 });
 
-test('verified SAF playback stays asset-id-only and uses Orion descriptor I/O instead of expo generic content I/O', () => {
+test('verified SAF playback stays asset-id-only and resolves descriptor I/O inside OrionPlayerActivity', () => {
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
   const manager = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadArtifactManager.kt');
-  const factory = read('plugins', 'orion-cinema-webview-native', 'OrionFinalizedMediaSourceFactory.kt');
-  const surface = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
+  const activity = read('plugins', 'orion-cinema-webview-native', 'OrionPlayerActivity.kt');
+  const finalized = read('src', 'features', 'playback', 'OrionFinalizedPlayerActivitySurface.tsx');
 
-  assert.match(screen, /offlineSource\.sourceKind === 'file' \? \([\s\S]*<OrionFinalizedPlayerSurface/);
-  assert.doesNotMatch(screen, /<NativePlayerSurface/);
+  assert.match(screen, /classifyNativeOfflinePlaybackV1\(offlineAssetId\)/);
+  assert.match(screen, /offlineSource\.sourceKind === 'file' \? \([\s\S]*<OrionFinalizedPlayerActivitySurface/);
+  assert.doesNotMatch(screen, /resolveNativeOfflinePlaybackV1\(offlineAssetId\)|OrionFinalizedPlayerSurface|<NativePlayerSurface|offlineUri/);
+
+  assert.match(manager, /fun resolveFinalizedPlayerAsset\(/);
   assert.match(manager, /mediaDocument = OrionOfflinePlayerDocument\(documentUri, expectedSize\)/);
-  assert.match(factory, /OrionFinalizedDocumentRoutingDataSourceFactory/);
-  assert.match(factory, /documents\[dataSpec\.uri\.toString\(\)\]/);
-  assert.match(factory, /contentResolver\.openFileDescriptor\(dataSpec\.uri, "r"\)/);
-  assert.doesNotMatch(factory, /openTypedAssetFileDescriptor|openAssetFileDescriptor/);
-  assert.match(surface, /nativeState\.errorCategory/);
-  assert.match(surface, /facade\.retry\(\)/);
+  assert.match(activity, /resolveFinalizedPlayerAsset\(applicationContext, assetId\)/);
+  assert.match(activity, /contentResolver\.openAssetFileDescriptor\(document\.uri, "r"\)/);
+  assert.match(activity, /player\.setDataSource\(it\.fileDescriptor, it\.startOffset\.coerceAtLeast\(0L\), length\)/);
+  assert.doesNotMatch(activity, /ExoPlayer|androidx\.media3|OrionFinalizedMediaSourceFactory/);
+
+  assert.match(finalized, /launchNativeFinalizedPlayerV1\(\{/);
+  assert.match(finalized, /assetId,/);
+  assert.doesNotMatch(finalized, /content:\/\/|file:\/\/|offlineUri/);
 });
 
 test('new selected subtitles publish as exact same-tree SAF documents and remain independently owned', () => {

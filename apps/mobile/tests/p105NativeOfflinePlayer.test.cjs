@@ -9,20 +9,18 @@ const read = (...parts) => fs.readFileSync(path.join(mobileRoot, ...parts), 'utf
 test('P10.5 routes finalized SAF files and legacy fragments through isolated asset-id native surfaces', () => {
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
   const offline = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
-  const finalized = read('src', 'features', 'playback', 'OrionFinalizedPlayerSurface.tsx');
+  const finalized = read('src', 'features', 'playback', 'OrionFinalizedPlayerActivitySurface.tsx');
 
   assert.match(screen, /offlineAssetId\?: string/);
-  assert.match(screen, /offlineSource\.sourceKind === 'file' \? \([\s\S]*<OrionFinalizedPlayerSurface/);
+  assert.match(screen, /offlineSource\.sourceKind === 'file' \? \([\s\S]*<OrionFinalizedPlayerActivitySurface/);
   assert.match(screen, /\) : \(\s*<OrionOfflinePlayerSurface/);
-  assert.doesNotMatch(screen, /<NativePlayerSurface/);
   assert.match(screen, /assetId=\{offlineAssetId\}/);
   assert.match(screen, /\) : \(\s*<EmbedPlayerSurface/);
-  assert.match(screen, /resolveNativeOfflinePlaybackV1\(offlineAssetId\)/);
-  assert.doesNotMatch(screen, /offlineUri/);
+  assert.match(screen, /classifyNativeOfflinePlaybackV1\(offlineAssetId\)/);
+  assert.doesNotMatch(screen, /resolveNativeOfflinePlaybackV1\(offlineAssetId\)|offlineUri|OrionFinalizedPlayerSurface/);
+  assert.match(finalized, /launchNativeFinalizedPlayerV1/);
+  assert.match(finalized, /subscribeNativeFinalizedPlayerProgressV1/);
   assert.match(offline, /requireNativeComponent<NativeOfflinePlayerProps>\('OrionOfflinePlayerView'\)/);
-  assert.match(offline, /requireNativeComponent<NativeOfflinePlayerProps>\('OrionFinalizedPlayerView'\)/);
-  assert.match(finalized, /OrionNativeAssetPlayerSurface/);
-  assert.match(finalized, /finalized/);
   assert.match(offline, /assetId=\{assetId\}/);
   assert.doesNotMatch(offline, /streamUrl|offlineUri|https?:\/\/|localhost/);
 });
@@ -49,20 +47,17 @@ test('P10.5-C5 native authority deep-validates exact P10.4 ownership before Medi
   assert.match(policy, /MAX_FRAGMENTS = 20_000/);
 });
 
-test('P10.5-C5.1 maps local role streams and modern subtitle configurations into controller-free Media3', () => {
+test('P10.5-C5.1 keeps legacy fragment role streams and subtitles on controller-free Media3 only', () => {
   const factory = read('plugins', 'orion-cinema-webview-native', 'OrionOfflineMediaSourceFactory.kt');
-  const finalizedFactory = read('plugins', 'orion-cinema-webview-native', 'OrionFinalizedMediaSourceFactory.kt');
   const view = read('plugins', 'orion-cinema-webview-native', 'OrionOfflinePlayerView.kt');
-  const combined = `${factory}\n${finalizedFactory}\n${view}`;
+  const activity = read('plugins', 'orion-cinema-webview-native', 'OrionPlayerActivity.kt');
+  const combinedLegacy = `${factory}\n${view}`;
 
   assert.match(factory, /ProgressiveMediaSource\.Factory\(fragmentFactory\)/);
   assert.match(factory, /DefaultMediaSourceFactory\(routedFactory\)/);
   assert.match(factory, /DefaultDataSource\.Factory\(context, fragmentFactory\)/);
   assert.match(factory, /subtitle\.document\?\.uri \?: subtitle\.file\?\.let\(Uri::fromFile\)/);
   assert.match(factory, /if \(asset\.mediaDocument != null \|\| asset\.mediaFile != null\) return null/);
-  assert.doesNotMatch(factory, /OrionFinalizedDocumentDataSource/);
-  assert.match(finalizedFactory, /OrionFinalizedDocumentDataSource/);
-  assert.match(finalizedFactory, /openFileDescriptor\(dataSpec\.uri, "r"\)/);
   assert.match(factory, /\.setSubtitleConfigurations\(subtitleConfigurations\)/);
   assert.doesNotMatch(factory, /experimentalParseSubtitlesDuringExtraction\(false\)/);
   assert.doesNotMatch(factory, /SingleSampleMediaSource/);
@@ -74,10 +69,12 @@ test('P10.5-C5.1 maps local role streams and modern subtitle configurations into
   assert.match(factory, /OrionOfflineFragmentDataSource/);
   assert.match(factory, /streams\[videoUri\.toString\(\)\] = asset\.videoParts/);
   assert.match(factory, /streams\[uri\.toString\(\)\] = asset\.audioParts/);
-  assert.doesNotMatch(finalizedFactory, /OrionOfflineFragmentDataSource|MergingMediaSource/);
   assert.match(view, /useController = false/);
-  assert.doesNotMatch(combined, /OrionPortableCadence|OrionOfflinePlaybackTimeline|prepareOfflinePlaybackPresentation|MediaMuxer|portable\.mp4/);
-  assert.doesNotMatch(combined, /https?:\/\/|localhost|provider|fallback/i);
+  assert.doesNotMatch(combinedLegacy, /OrionPortableCadence|OrionOfflinePlaybackTimeline|prepareOfflinePlaybackPresentation|MediaMuxer|portable\.mp4/);
+  assert.doesNotMatch(combinedLegacy, /https?:\/\/|localhost|provider|fallback/i);
+
+  assert.match(activity, /android\.media\.MediaPlayer/);
+  assert.doesNotMatch(activity, /ExoPlayer|androidx\.media3|OrionFinalizedMediaSourceFactory/);
 });
 
 test('P10.5-C5 shares Orion controls, Retry and Back and owns route orientation before preparation', () => {
