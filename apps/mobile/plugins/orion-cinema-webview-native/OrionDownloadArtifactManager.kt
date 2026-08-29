@@ -49,6 +49,26 @@ internal data class OrionOfflinePlayerResolution(
   val failedFragmentIndex: Int? = null,
 )
 
+internal object OrionArtifactIntegrityPolicy {
+  const val FULL_DIGEST_RECHECK_INTERVAL_MS = 24L * 60L * 60L * 1000L
+
+  fun previousIntegrityCheckedAt(integrityCheckedAt: Long, legacyLastCheckedAt: Long): Long? =
+    integrityCheckedAt.takeIf { it > 0L } ?: legacyLastCheckedAt.takeIf { it > 0L }
+
+  fun requiresDigestVerification(
+    targeted: Boolean,
+    stampValid: Boolean,
+    integrityCheckedAt: Long,
+    legacyLastCheckedAt: Long,
+    now: Long,
+  ): Boolean {
+    if (!stampValid || targeted) return true
+    val baseline = previousIntegrityCheckedAt(integrityCheckedAt, legacyLastCheckedAt) ?: return true
+    if (now <= 0L || now < baseline) return true
+    return now - baseline >= FULL_DIGEST_RECHECK_INTERVAL_MS
+  }
+}
+
 /** Bounded native owner for reconciliation and ID-only download management. */
 internal object OrionDownloadArtifactManager {
   private val reconciliationLock = Any()
@@ -66,6 +86,7 @@ internal object OrionDownloadArtifactManager {
     val verificationVersion: Int? = null,
     val verifiedByteCount: Long? = null,
     val contentSha256: String? = null,
+    val integrityCheckedAt: Long? = null,
     val clearVerification: Boolean = false,
   )
 
@@ -83,7 +104,13 @@ internal object OrionDownloadArtifactManager {
         val artifacts = asset.optJSONArray("_artifacts") ?: continue
         for (artifactIndex in 0 until artifacts.length()) {
           val artifact = artifacts.optJSONObject(artifactIndex) ?: continue
-          val probe = probeArtifact(context, asset, artifact)
+          val probe = probeArtifact(
+            context = context,
+            asset = asset,
+            artifact = artifact,
+            targeted = assetIds != null,
+            checkedAt = checkedAt,
+          )
           val update = JSONObject()
             .put("artifactId", artifact.optString("artifactId"))
             .put("_locatorFingerprint", artifact.optJSONObject("_locator")?.toString() ?: "")
@@ -99,6 +126,9 @@ internal object OrionDownloadArtifactManager {
               .put("_verificationVersion", probe.verificationVersion)
               .put("_verifiedByteCount", probe.verifiedByteCount)
               .put("_contentSha256", probe.contentSha256)
+          }
+          probe.integrityCheckedAt?.takeIf { it > 0L }?.let {
+            update.put("_integrityCheckedAt", it)
           }
           if (probe.clearVerification) update.put("_clearVerification", true)
           updates.put(update)
@@ -841,59 +871,150 @@ internal object OrionDownloadArtifactManager {
     else actionResult(false, "artifact-action-unsupported", "No Android app can play this saved download.")
   }
 
-  private fun probeArtifact(context: Context, asset: JSONObject, artifact: JSONObject): ArtifactProbe {
+  private fun probeArtifact(
+    context: Context,
+    asset: JSONObject,
+    artifact: JSONObject,
+    targeted: Boolean,
+    checkedAt: Long,
+  ): ArtifactProbe {
     val locator = artifact.optJSONObject("_locator") ?: return ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
     return when (locator.optString("kind")) {
-      "content-uri" -> when (val probe = OrionDownloadStorageRegistry.probeDocument(context, parseContentUri(locator.optString("value")) ?: return ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null))) {
-        is OrionDownloadStorageRegistry.DocumentProbe.Verified -> {
-          val userOwnedPrimary = asset.optString("destination") == "orion-library" &&
-            asset.optJSONObject("storageTarget")?.optString("mode") == "user-folder" &&
-            artifact.optString("role") == "primary"
-          val expectedSize = artifact.optLong("expectedSizeBytes", -1L)
-          if (userOwnedPrimary && (probe.sizeBytes != expectedSize || !OrionFinalizedArtifactPolicy.verificationStampMatches(
-              artifact.optInt("_verificationVersion", 0),
-              artifact.optLong("_verifiedByteCount", -1L),
-              expectedSize,
-              artifact.optString("_contentSha256"),
-            ))) ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, probe.sizeBytes, clearVerification = true)
-          else ArtifactProbe(OrionArtifactAvailability.VERIFIED, probe.sizeBytes)
+      "content-uri" -> {
+        val document = parseContentUri(locator.optString("value"))
+          ?: return ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
+        when (val probe = OrionDownloadStorageRegistry.probeDocument(context, document)) {
+          is OrionDownloadStorageRegistry.DocumentProbe.Verified -> {
+            val userOwnedPrimary = asset.optString("destination") == "orion-library" &&
+              asset.optJSONObject("storageTarget")?.optString("mode") == "user-folder" &&
+              artifact.optString("role") == "primary"
+            if (!userOwnedPrimary) {
+              ArtifactProbe(OrionArtifactAvailability.VERIFIED, probe.sizeBytes)
+            } else {
+              val expectedSize = artifact.optLong("expectedSizeBytes", -1L)
+              val stampValid = OrionFinalizedArtifactPolicy.verificationStampMatches(
+                artifact.optInt("_verificationVersion", 0),
+                artifact.optLong("_verifiedByteCount", -1L),
+                expectedSize,
+                artifact.optString("_contentSha256"),
+              )
+              if (probe.sizeBytes != expectedSize) {
+                ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, probe.sizeBytes, clearVerification = true)
+              } else {
+                val previousIntegrityCheckedAt = OrionArtifactIntegrityPolicy.previousIntegrityCheckedAt(
+                  artifact.optLong("_integrityCheckedAt", -1L),
+                  artifact.optLong("lastCheckedAt", -1L),
+                )
+                val deepVerify = OrionArtifactIntegrityPolicy.requiresDigestVerification(
+                  targeted = targeted,
+                  stampValid = stampValid,
+                  integrityCheckedAt = artifact.optLong("_integrityCheckedAt", -1L),
+                  legacyLastCheckedAt = artifact.optLong("lastCheckedAt", -1L),
+                  now = checkedAt,
+                )
+                if (!deepVerify) {
+                  ArtifactProbe(
+                    availability = OrionArtifactAvailability.VERIFIED,
+                    observedSizeBytes = probe.sizeBytes,
+                    integrityCheckedAt = previousIntegrityCheckedAt,
+                  )
+                } else {
+                  val targetId = asset.optJSONObject("storageTarget")?.optString("targetId").orEmpty()
+                  when (
+                    val validation = OrionFinalizedArtifactOwner.validateDocumentIntegrity(
+                      context = context,
+                      uri = document,
+                      targetId = targetId,
+                      displayName = artifact.optString("displayName", "Orion Download.mp4"),
+                      expectedSizeBytes = expectedSize,
+                      expectedSha256 = artifact.optString("_contentSha256").takeIf { stampValid },
+                      requireAudio = true,
+                    )
+                  ) {
+                    is OrionFinalizedDocumentSettlement.Verified -> ArtifactProbe(
+                      availability = OrionArtifactAvailability.VERIFIED,
+                      observedSizeBytes = validation.proof.sizeBytes,
+                      verificationVersion = OrionFinalizedArtifactPolicy.VERIFICATION_VERSION,
+                      verifiedByteCount = validation.proof.sizeBytes,
+                      contentSha256 = validation.proof.sha256,
+                      integrityCheckedAt = checkedAt,
+                    )
+                    is OrionFinalizedDocumentSettlement.Failed -> ArtifactProbe(
+                      availability = OrionArtifactAvailability.UNAVAILABLE,
+                      observedSizeBytes = probe.sizeBytes,
+                      clearVerification = true,
+                    )
+                    OrionFinalizedDocumentSettlement.Cancelled -> ArtifactProbe(
+                      availability = OrionArtifactAvailability.UNAVAILABLE,
+                      observedSizeBytes = probe.sizeBytes,
+                    )
+                  }
+                }
+              }
+            }
+          }
+          OrionDownloadStorageRegistry.DocumentProbe.Missing ->
+            ArtifactProbe(OrionArtifactAvailability.MISSING, null, clearVerification = true)
+          OrionDownloadStorageRegistry.DocumentProbe.Unavailable ->
+            ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
         }
-        OrionDownloadStorageRegistry.DocumentProbe.Missing -> ArtifactProbe(OrionArtifactAvailability.MISSING, null, clearVerification = true)
-        OrionDownloadStorageRegistry.DocumentProbe.Unavailable -> ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
       }
       "managed", "managed-relative" -> {
-        val target = managedTarget(context, asset, artifact) ?: return ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
-        if (!target.exists()) ArtifactProbe(OrionArtifactAvailability.MISSING, null, clearVerification = true)
-        else if (artifact.optString("role") == "primary" && target.isDirectory) {
+        val target = managedTarget(context, asset, artifact)
+          ?: return ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
+        if (!target.exists()) {
+          ArtifactProbe(OrionArtifactAvailability.MISSING, null, clearVerification = true)
+        } else if (artifact.optString("role") == "primary" && target.isDirectory) {
           val validated = validateManagedFragmentBundle(target)
           val expectedSize = artifact.optLong("expectedSizeBytes", -1L)
-          if (validated == null || expectedSize <= 0L || validated.primaryBytes != expectedSize) ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
-          else ArtifactProbe(OrionArtifactAvailability.VERIFIED, validated.primaryBytes)
+          if (validated == null || expectedSize <= 0L || validated.primaryBytes != expectedSize) {
+            ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null)
+          } else {
+            ArtifactProbe(OrionArtifactAvailability.VERIFIED, validated.primaryBytes)
+          }
         } else if (artifact.optString("role") == "primary" && target.isFile) {
           val expectedSize = artifact.optLong("expectedSizeBytes", -1L)
           if (expectedSize <= 0L || target.length() != expectedSize) {
-            ArtifactProbe(OrionArtifactAvailability.UNAVAILABLE, null, clearVerification = true)
+            ArtifactProbe(
+              availability = OrionArtifactAvailability.UNAVAILABLE,
+              observedSizeBytes = target.length().takeIf { it >= 0L },
+              clearVerification = true,
+            )
           } else if (
             asset.optString("container") == "mp4" &&
             asset.optString("mimeType") == "video/mp4"
           ) {
-            val version = artifact.optInt("_verificationVersion", 0)
-            val verifiedByteCount = artifact.optLong("_verifiedByteCount", -1L)
-            val sha256 = artifact.optString("_contentSha256")
-            if (OrionFinalizedArtifactPolicy.verificationStampMatches(
-                version,
-                verifiedByteCount,
-                expectedSize,
-                sha256,
-              )) {
-              ArtifactProbe(OrionArtifactAvailability.VERIFIED, expectedSize)
+            val contentSha256 = artifact.optString("_contentSha256")
+            val stampValid = OrionFinalizedArtifactPolicy.verificationStampMatches(
+              artifact.optInt("_verificationVersion", 0),
+              artifact.optLong("_verifiedByteCount", -1L),
+              expectedSize,
+              contentSha256,
+            )
+            val previousIntegrityCheckedAt = OrionArtifactIntegrityPolicy.previousIntegrityCheckedAt(
+              artifact.optLong("_integrityCheckedAt", -1L),
+              artifact.optLong("lastCheckedAt", -1L),
+            )
+            val deepVerify = OrionArtifactIntegrityPolicy.requiresDigestVerification(
+              targeted = targeted,
+              stampValid = stampValid,
+              integrityCheckedAt = artifact.optLong("_integrityCheckedAt", -1L),
+              legacyLastCheckedAt = artifact.optLong("lastCheckedAt", -1L),
+              now = checkedAt,
+            )
+            if (stampValid && !deepVerify) {
+              ArtifactProbe(
+                availability = OrionArtifactAvailability.VERIFIED,
+                observedSizeBytes = expectedSize,
+                integrityCheckedAt = previousIntegrityCheckedAt,
+              )
             } else {
               when (
                 val validation = OrionFinalizedArtifactOwner.validate(
                   context = context,
                   file = target,
                   expectedSizeBytes = expectedSize,
-                  expectedSha256 = null,
+                  expectedSha256 = contentSha256.takeIf { stampValid },
                   requireAudio = true,
                 )
               ) {
@@ -903,15 +1024,20 @@ internal object OrionDownloadArtifactManager {
                   verificationVersion = OrionFinalizedArtifactPolicy.VERIFICATION_VERSION,
                   verifiedByteCount = validation.proof.sizeBytes,
                   contentSha256 = validation.proof.sha256,
+                  integrityCheckedAt = checkedAt,
                 )
                 is OrionFinalizedArtifactSettlement.Failed -> ArtifactProbe(
-                  availability = if (validation.code == "finalized-artifact-missing") OrionArtifactAvailability.MISSING else OrionArtifactAvailability.UNAVAILABLE,
+                  availability =
+                    if (validation.code == "finalized-artifact-missing") OrionArtifactAvailability.MISSING
+                    else OrionArtifactAvailability.UNAVAILABLE,
                   observedSizeBytes = null,
                   clearVerification = true,
                 )
               }
             }
-          } else ArtifactProbe(OrionArtifactAvailability.VERIFIED, expectedSize)
+          } else {
+            ArtifactProbe(OrionArtifactAvailability.VERIFIED, expectedSize)
+          }
         } else {
           val expectedSize = artifact.optLong("expectedSizeBytes", -1L)
           val observed = managedSize(target, false)

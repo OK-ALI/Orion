@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { PlayerStateOverlay } from '../../components/player/PlayerStateOverlay';
 import { useLibraryPlaybackActions } from '../../context/LibraryContext';
+import { useOrionTheme } from '../../context/ThemeContext';
 import {
   launchNativeFinalizedPlayerV1,
   subscribeNativeFinalizedPlayerProgressV1,
@@ -35,6 +36,29 @@ export function OrionFinalizedPlayerActivitySurface({
   onVerifiedPlaybackCompletion,
 }: OrionFinalizedPlayerActivitySurfaceProps) {
   const router = useRouter();
+  const { theme, preferences } = useOrionTheme();
+  const nativePlayerThemeRef = useRef({
+    accent: theme.accent,
+    onAccent: theme.onAccent,
+    text: theme.text,
+    textSecondary: theme.textSecondary,
+    mediaScrim: theme.mediaScrim,
+    surface: theme.surface,
+    elevated: theme.elevated,
+    border: theme.border,
+    reducedMotion: preferences.reducedMotion,
+  });
+  nativePlayerThemeRef.current = {
+    accent: theme.accent,
+    onAccent: theme.onAccent,
+    text: theme.text,
+    textSecondary: theme.textSecondary,
+    mediaScrim: theme.mediaScrim,
+    surface: theme.surface,
+    elevated: theme.elevated,
+    border: theme.border,
+    reducedMotion: preferences.reducedMotion,
+  };
   const { recordPlayback } = useLibraryPlaybackActions();
   const [launchAttempt, setLaunchAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +128,7 @@ export function OrionFinalizedPlayerActivitySurface({
       initialPositionSeconds: Math.max(0, Number(initialResumeTime) || 0),
       title: episodeTitle || title || seriesTitle || 'Orion Player',
       presentation,
+      theme: nativePlayerThemeRef.current,
     })
       .then((result: NativeFinalizedPlayerResultV1) => {
         if (disposed) return;
@@ -150,7 +175,10 @@ export function OrionFinalizedPlayerActivitySurface({
   ]);
 
   return (
-    <View accessibilityLabel={error ? 'Orion Player needs attention' : 'Opening Orion Player'} style={{ flex: 1, backgroundColor: '#000' }}>
+    <View
+      accessibilityLabel={error ? 'Orion Player needs attention' : 'Opening Orion Player'}
+      style={{ flex: 1, backgroundColor: theme.background }}
+    >
       <PlayerStateOverlay
         state={error ? 'failed' : 'preparing'}
         detail={error || 'Opening the verified download in Orion Player.'}

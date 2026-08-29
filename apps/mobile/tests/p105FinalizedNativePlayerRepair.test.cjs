@@ -29,7 +29,7 @@ test('finalized MP4 and legacy fragments have isolated product route owners afte
   assert.match(legacyFactory, /if \(asset\.mediaDocument != null \|\| asset\.mediaFile != null\) return null/);
 });
 
-test('finalized Activity receives only identity, initial position, title and presentation', () => {
+test('finalized Activity receives identity, position, title, presentation and bounded theme tokens only', () => {
   const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
   const activity = read('plugins', 'orion-cinema-webview-native', 'OrionPlayerActivity.kt');
   const bridge = read('src', 'features', 'downloads', 'nativeDownloadEngine.ts');
@@ -39,11 +39,21 @@ test('finalized Activity receives only identity, initial position, title and pre
   assert.match(method, /initialPositionSeconds: Double/);
   assert.match(method, /title: String\?/);
   assert.match(method, /presentation: String\?/);
+  assert.match(method, /themeAccent: String\?/);
+  assert.match(method, /themeText: String\?/);
+  assert.match(method, /themeBorder: String\?/);
+  assert.match(method, /reducedMotion: Boolean/);
   assert.doesNotMatch(method, /Uri|content:\/\/|filePath|mediaDocument|mediaFile/);
   assert.match(activity, /EXTRA_ASSET_ID/);
   assert.match(activity, /EXTRA_INITIAL_POSITION_MS/);
   assert.match(activity, /EXTRA_PRESENTATION/);
-  assert.match(bridge, /module\.launchFinalizedPlayer\(clean, initialPosition, title\?\.trim\(\) \|\| null, safePresentation\)/);
+  assert.match(activity, /EXTRA_THEME_ACCENT/);
+  assert.match(activity, /EXTRA_THEME_TEXT/);
+  assert.match(activity, /EXTRA_THEME_BORDER/);
+  assert.match(activity, /EXTRA_REDUCED_MOTION/);
+  assert.match(bridge, /const safeTheme = normalizeFinalizedPlayerThemeV1\(theme\)/);
+  assert.match(bridge, /module\.launchFinalizedPlayer\(\s*clean,\s*initialPosition,\s*title\?\.trim\(\) \|\| null,\s*safePresentation,\s*safeTheme\.accent,/);
+  assert.match(bridge, /safeTheme\.border,\s*safeTheme\.reducedMotion,/);
 });
 
 test('framework player progress and final result return through one bounded bridge', () => {

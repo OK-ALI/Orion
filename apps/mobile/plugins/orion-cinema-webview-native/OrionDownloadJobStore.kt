@@ -424,6 +424,7 @@ internal object OrionDownloadJobStore {
           artifact.remove("_verificationVersion")
           artifact.remove("_verifiedByteCount")
           artifact.remove("_contentSha256")
+          artifact.remove("_integrityCheckedAt")
         } else {
           val verificationVersion = update.optInt("_verificationVersion", 0)
           val verifiedByteCount = update.optLong("_verifiedByteCount", -1L)
@@ -437,6 +438,19 @@ internal object OrionDownloadJobStore {
             artifact.put("_verificationVersion", verificationVersion)
             artifact.put("_verifiedByteCount", verifiedByteCount)
             artifact.put("_contentSha256", contentSha256)
+          }
+          val integrityCheckedAt = update.optLong("_integrityCheckedAt", -1L)
+          if (
+            integrityCheckedAt > 0L &&
+            availability == "verified" &&
+            OrionFinalizedArtifactPolicy.verificationStampMatches(
+              artifact.optInt("_verificationVersion", 0),
+              artifact.optLong("_verifiedByteCount", -1L),
+              artifact.optLong("expectedSizeBytes", -1L),
+              artifact.optString("_contentSha256"),
+            )
+          ) {
+            artifact.put("_integrityCheckedAt", integrityCheckedAt)
           }
         }
         changed = true

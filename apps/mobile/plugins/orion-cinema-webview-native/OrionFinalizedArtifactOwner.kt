@@ -227,6 +227,16 @@ internal object OrionFinalizedArtifactOwner {
     if (!source.isFile || source.length() <= 0L) {
       return documentFailed("finalized-artifact-source-missing", "The finalized download source is missing.", false)
     }
+    val expectedBytes = source.length()
+    val destinationFreeBytes = OrionDownloadStorageRegistry.freeBytes(context, targetId)
+    if (OrionSafPhysicalStoragePolicy.isConclusiveInsufficient(expectedBytes, destinationFreeBytes)) {
+      return documentFailed(
+        "storage-destination-insufficient",
+        "The selected storage folder does not have enough free space for this completed download. Free up space and retry finalization.",
+        true,
+        true,
+      )
+    }
 
     if (!canContinue(jobId, generation)) return OrionFinalizedDocumentSettlement.Cancelled
     val temporaryName = "Orion-${jobId.takeLast(8)}.partial.mp4"
@@ -286,7 +296,6 @@ internal object OrionFinalizedArtifactOwner {
       }
     }
 
-    val expectedBytes = source.length()
     val sourceDigest = try {
       val digest = MessageDigest.getInstance("SHA-256")
       val descriptor = context.contentResolver.openFileDescriptor(document, "rwt")
@@ -849,6 +858,59 @@ internal object OrionFinalizedArtifactOwner {
         contentUri = uri,
         mediaVerification = verification,
       ),
+    )
+  }
+
+  fun validateDocumentIntegrity(
+    context: Context,
+    uri: Uri,
+    targetId: String,
+    displayName: String,
+    expectedSizeBytes: Long,
+    expectedSha256: String?,
+    requireAudio: Boolean,
+  ): OrionFinalizedDocumentSettlement {
+    if (uri.scheme != "content" || expectedSizeBytes <= 0L) {
+      return documentFailed("finalized-artifact-document-unavailable", "Orion could not reopen the completed media document.", true, true)
+    }
+    val info = OrionDownloadStorageRegistry.documentInfo(context, uri)
+      ?: return documentFailed("finalized-artifact-document-unavailable", "Orion could not reopen the completed media document.", true, true)
+    if (info.mimeType != null && info.mimeType != "video/mp4" && info.mimeType != "application/octet-stream") {
+      return documentFailed("finalized-artifact-mime-invalid", "The selected storage provider did not preserve the MP4 media type.", false)
+    }
+    val hashed = sha256(context, uri)
+      ?: return documentFailed("finalized-artifact-read-failed", "Orion could not read the complete media document from the selected folder.", true, true)
+    if (hashed.second != expectedSizeBytes || (info.sizeBytes != null && info.sizeBytes != expectedSizeBytes)) {
+      return documentFailed("finalized-artifact-size-mismatch", "The final media document size no longer matches the completed download.", false)
+    }
+    if (!expectedSha256.isNullOrBlank() && !hashed.first.equals(expectedSha256, true)) {
+      return documentFailed("finalized-artifact-digest-mismatch", "The final media document no longer matches its verified content.", false)
+    }
+    val descriptorAccessible = try {
+      context.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+        val stat = descriptor.statSize
+        stat < 0L || stat == expectedSizeBytes
+      } ?: false
+    } catch (_: Throwable) { false }
+    if (!descriptorAccessible) {
+      return documentFailed("finalized-artifact-descriptor-unavailable", "Orion could not open the final media document for playback.", true, true)
+    }
+    val verification = OrionFinalizedMediaVerifier.verify(context, uri, displayName, expectedSizeBytes, requireAudio)
+    if (!verification.ok) return documentFailed(verification.code, verification.message, false)
+    if (!OrionFinalizedArtifactPolicy.documentProofMatches(
+        expectedSizeBytes,
+        hashed.second,
+        info.sizeBytes,
+        (expectedSha256 ?: hashed.first).lowercase(),
+        hashed.first,
+        descriptorAccessible,
+        verification.ok,
+      )
+    ) {
+      return documentFailed("finalized-artifact-proof-mismatch", "The final media document does not match the completed download.", false)
+    }
+    return OrionFinalizedDocumentSettlement.Verified(
+      OrionFinalizedDocumentProof(uri, targetId, displayName, expectedSizeBytes, hashed.first, verification),
     )
   }
 

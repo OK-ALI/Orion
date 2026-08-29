@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { spacing, radii, fontSizes } from '@orion/shared/tokens';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import type { MobileDownloadPreferencesV1 } from '@orion/shared/types';
 import { useOrionTheme } from '../../src/context/ThemeContext';
 import { useResponsiveLayout } from '../../src/services/responsive';
 import { MobilePageHeader } from '../../src/components/MobilePageHeader';
+import { OrionDialog } from '../../src/components/OrionDialog';
 import { getMobileDownloadCapability } from '../../src/services/downloadManager';
 import { DownloadActivityList } from '../../src/features/downloads/DownloadActivityList';
 import { DownloadManagementSheet } from '../../src/features/downloads/DownloadManagementSheet';
@@ -55,7 +56,8 @@ export default function DownloadsScreen() {
   const [assets, setAssets] = useState(listMobileDownloadAssetsV1);
   const [offlineEntries, setOfflineEntries] = useState(listOfflineMediaEntriesV1);
   const [preferences, setPreferences] = useState<MobileDownloadPreferencesV1>(getMobileDownloadPreferencesV1);
-  const [management, setManagement] = useState<{ mode: 'manage' | 'free-space'; assetIds: string[] } | null>(null);
+  const [management, setManagement] = useState<{ assetIds: string[] } | null>(null);
+  const [localPlaybackError, setLocalPlaybackError] = useState<string | null>(null);
 
   useEffect(() => subscribeMobileDownloadRepositoryV1((snapshot) => {
     setJobs(snapshot.jobs);
@@ -95,44 +97,44 @@ export default function DownloadsScreen() {
         contentContainerStyle={[styles.content, isTablet && styles.contentTablet]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.summaryRow}>
-          <View style={[styles.summaryCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <View style={[styles.summaryIcon, { backgroundColor: theme.accentSoft }]}>
-              <Ionicons name="download-outline" size={19} color={theme.accent} />
+        <View accessibilityRole="summary" style={styles.summaryStrip}>
+          <View style={styles.summaryMetric}>
+            <Ionicons name="download-outline" size={18} color={theme.accent} />
+            <View style={styles.summaryCopy}>
+              <Text style={[styles.summaryValue, { color: theme.text }]}>{activeCount}</Text>
+              <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Active</Text>
             </View>
-            <Text style={[styles.summaryValue, { color: theme.text }]}>{activeCount}</Text>
-            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Active</Text>
           </View>
 
-          <View style={[styles.summaryCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <View style={[styles.summaryIcon, { backgroundColor: theme.accentSoft }]}>
-              <Ionicons name="checkmark-circle-outline" size={19} color={theme.accent} />
+          <View style={[styles.summaryDivider, { backgroundColor: theme.border }]} />
+
+          <View style={styles.summaryMetric}>
+            <Ionicons name="checkmark-circle-outline" size={18} color={theme.accent} />
+            <View style={styles.summaryCopy}>
+              <Text style={[styles.summaryValue, { color: theme.text }]}>{librarySummary.completedTitleCount}</Text>
+              <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Completed</Text>
             </View>
-            <Text style={[styles.summaryValue, { color: theme.text }]}>{librarySummary.completedTitleCount}</Text>
-            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Completed</Text>
           </View>
 
-          <View style={[styles.summaryCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <View style={[styles.summaryIcon, { backgroundColor: theme.accentSoft }]}>
-              <Ionicons name="server-outline" size={19} color={theme.accent} />
+          <View style={[styles.summaryDivider, { backgroundColor: theme.border }]} />
+
+          <View style={styles.summaryMetric}>
+            <Ionicons name="server-outline" size={18} color={theme.accent} />
+            <View style={styles.summaryCopy}>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.summaryStoredValue, { color: theme.text }]}>{formatStoredSize(librarySummary.storedBytes)}</Text>
+              <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Stored</Text>
             </View>
-            <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.summaryStoredValue, { color: theme.text }]}>{formatStoredSize(librarySummary.storedBytes)}</Text>
-            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>Stored</Text>
           </View>
         </View>
 
         {assets.length ? (
           <View style={styles.managementRow}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Manage completed downloads" onPress={() => setManagement({ mode: 'manage', assetIds: [] })} style={({ pressed }) => [styles.managementButton, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.surface }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Manage completed downloads" onPress={() => setManagement({ assetIds: [] })} style={({ pressed }) => [styles.managementButton, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.surface }]}>
               <Ionicons name="checkbox-outline" size={18} color={theme.textSecondary} />
               <Text style={[styles.managementText, { color: theme.textSecondary }]}>Manage</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Free up download storage" onPress={() => setManagement({ mode: 'free-space', assetIds: [] })} style={({ pressed }) => [styles.managementButton, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.surface }]}>
-              <Ionicons name="server-outline" size={18} color={theme.textSecondary} />
-              <Text style={[styles.managementText, { color: theme.textSecondary }]}>Free Up Space</Text>
-            </Pressable>
             {librarySummary.needsAttentionCount ? (
-              <Pressable accessibilityRole="button" accessibilityLabel={`Needs attention, ${librarySummary.needsAttentionCount}`} onPress={() => setManagement({ mode: 'manage', assetIds: assets.filter((asset) => asset.availability === 'missing' || asset.availability === 'unavailable').map((asset) => asset.assetId) })} style={({ pressed }) => [styles.managementButton, { borderColor: theme.warning, backgroundColor: pressed ? theme.surfaceHover : theme.surface }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Needs attention, ${librarySummary.needsAttentionCount}`} onPress={() => setManagement({ assetIds: assets.filter((asset) => asset.availability === 'missing' || asset.availability === 'unavailable').map((asset) => asset.assetId) })} style={({ pressed }) => [styles.managementButton, { borderColor: theme.warning, backgroundColor: pressed ? theme.surfaceHover : theme.surface }]}>
                 <Ionicons name="warning-outline" size={18} color={theme.warning} />
                 <Text style={[styles.managementText, { color: theme.warning }]}>Needs attention · {librarySummary.needsAttentionCount}</Text>
               </Pressable>
@@ -140,8 +142,8 @@ export default function DownloadsScreen() {
           </View>
         ) : null}
 
-        <View style={[styles.destinationCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <View style={[styles.destinationIcon, { backgroundColor: theme.surfaceHover, borderColor: theme.border }]}>
+        <View style={[styles.destinationRow, { borderColor: theme.border }]}>
+          <View style={[styles.destinationIcon, { backgroundColor: theme.accentSoft }]}>
             <Ionicons
               name="albums-outline"
               size={21}
@@ -167,7 +169,7 @@ export default function DownloadsScreen() {
         </View>
 
         {jobs.length === 0 && offlineEntries.length === 0 ? (
-          <View style={[styles.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={styles.emptyState}>
             <View style={[styles.emptyIcon, { backgroundColor: theme.accentSoft }]}>
               <Ionicons name="arrow-down-circle-outline" size={38} color={theme.accent} />
             </View>
@@ -201,7 +203,7 @@ export default function DownloadsScreen() {
             assets={assets}
             offlineEntries={offlineEntries}
             active={isFocused}
-            onManageAssets={(assetIds) => setManagement({ mode: 'manage', assetIds: [...assetIds] })}
+            onManageAssets={(assetIds) => setManagement({ assetIds: [...assetIds] })}
             onPlayInOrion={(entry, assetId) => router.push({
               pathname: '/player/[id]',
               params: {
@@ -221,8 +223,7 @@ export default function DownloadsScreen() {
             })}
             onPlayLocally={(assetId) => {
               void playNativeDownloadAssetLocallyV1(assetId).catch((error: unknown) => {
-                Alert.alert(
-                  'Play Locally unavailable',
+                setLocalPlaybackError(
                   error instanceof Error ? error.message : 'No compatible local video player is available.',
                 );
               });
@@ -231,9 +232,20 @@ export default function DownloadsScreen() {
         )}
       </ScrollView>
 
+      <OrionDialog
+        visible={Boolean(localPlaybackError)}
+        title="Play Locally unavailable"
+        message={localPlaybackError || 'No compatible local video player is available.'}
+        icon="alert-circle-outline"
+        onDismiss={() => setLocalPlaybackError(null)}
+        actions={[
+          { label: 'OK', role: 'primary', onPress: () => setLocalPlaybackError(null) },
+        ]}
+      />
+
       <DownloadManagementSheet
         visible={management !== null}
-        mode={management?.mode || 'manage'}
+        mode="manage"
         assets={assets}
         initialAssetIds={management?.assetIds || []}
         onClose={() => setManagement(null)}
@@ -247,23 +259,24 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { paddingHorizontal: spacing[5], paddingBottom: 72, gap: spacing[4] },
   contentTablet: { maxWidth: 980, width: '100%', alignSelf: 'center' },
-  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
-  summaryCard: { flexGrow: 1, flexBasis: 92, minWidth: 88, minHeight: 72, borderWidth: 1, borderRadius: radii.xl, paddingHorizontal: spacing[3], paddingVertical: spacing[2], justifyContent: 'center' },
-  summaryIcon: { width: 27, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
+  summaryStrip: { minHeight: 56, flexDirection: 'row', alignItems: 'center' },
+  summaryMetric: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  summaryCopy: { flex: 1, minWidth: 0 },
+  summaryDivider: { width: StyleSheet.hairlineWidth, height: 34, marginHorizontal: spacing[2] },
   summaryValue: { fontSize: 19, fontWeight: '900' },
   summaryStoredValue: { fontSize: 16, fontWeight: '900' },
-  summaryLabel: { fontSize: fontSizes.xs, fontWeight: '700', marginTop: 2 },
-  destinationCard: { minHeight: 68, borderWidth: 1, borderRadius: radii.xl, paddingHorizontal: spacing[3], paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  destinationIcon: { width: 36, height: 36, borderRadius: radii.lg, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  summaryLabel: { fontSize: fontSizes.xs, fontWeight: '700', marginTop: 1 },
+  destinationRow: { minHeight: 68, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  destinationIcon: { width: 36, height: 36, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center' },
   destinationCopy: { flex: 1, minWidth: 0 },
   sectionEyebrow: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   destinationTitle: { fontSize: fontSizes.md, fontWeight: '900', marginTop: 3 },
   body: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: 3 },
   iconButton: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   managementRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
-  managementButton: { minHeight: 48, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
+  managementButton: { minHeight: 42, borderWidth: 1, borderRadius: radii.full, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
   managementText: { fontSize: fontSizes.xs, fontWeight: '900' },
-  emptyCard: { borderWidth: 1, borderRadius: radii['2xl'], padding: spacing[6], alignItems: 'center' },
+  emptyState: { paddingVertical: spacing[6], alignItems: 'center' },
   emptyIcon: { width: 70, height: 70, borderRadius: 35, alignItems: 'center', justifyContent: 'center', marginBottom: spacing[4] },
   emptyTitle: { fontSize: 20, fontWeight: '900', textAlign: 'center' },
   emptyBody: { maxWidth: 520, fontSize: fontSizes.sm, lineHeight: 21, textAlign: 'center', marginTop: spacing[2] },

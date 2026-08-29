@@ -61,7 +61,7 @@ test('P9-F5 exposes one App Updates surface after Expo runtime retirement', () =
   const state = readMobile('src/services/mobileApplicationUpdateState.ts');
 
   assert.match(settings, /appPresentation/);
-  assert.match(execution, /presentation\.label/);
+  assert.match(execution, /presentation\.description/);
   assert.match(state, /label: 'Update ready'/);
   assert.match(state, /label: 'Permission needed'/);
   assert.match(state, /label: 'Unavailable'/);

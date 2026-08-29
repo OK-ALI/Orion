@@ -53,6 +53,8 @@ test("application confirmations use Orion dialogs instead of raw alerts", () => 
   roots.forEach((root) => visit(path.join(mobileRoot, root)));
   assert.match(read("src/features/library/LibraryScreen.tsx"), /OrionDialog/);
   assert.match(read("src/features/connect/ConnectScreen.tsx"), /QR code not recognized/);
+  assert.match(read("app/(tabs)/downloads.tsx"), /OrionDialog/);
+  assert.match(read("app/(tabs)/downloads.tsx"), /Play Locally unavailable/);
 });
 
 test("Library keeps explicit tabs and adds direction-locked finger paging", () => {
@@ -151,7 +153,7 @@ test("Phase 7 Settings uses a scalable active-only section architecture", () => 
   assert.match(settings, /<DownloadSettingsContent \/>/);
   assert.match(settings, /Follow system appearance/);
   assert.match(settings, /Reduced motion/);
-  assert.match(settings, /Additional settings stay hidden until their Mobile features are ready\./);
+  assert.match(settings, /More settings will appear here as Orion adds them\./);
   assert.doesNotMatch(settings, /Google sign-in and cross-device sync are intentionally scheduled/);
   assert.doesNotMatch(settings, /Account settings|Sync settings|Playback settings|Update settings|Connect settings|Download settings/);
 });
@@ -237,8 +239,8 @@ test("Phase 7 My List derives All, Unwatched and Watched views without new persi
   assert.match(library, /savedItemWatchState\(watched, item\)/);
   assert.match(library, /data=\{filteredSavedItems\}/);
   assert.match(library, /accessibilityHint=\{`Shows \$\{filter\.label\.toLowerCase\(\)\} titles in My List`\}/);
-  assert.match(library, /No watched titles in My List yet/);
-  assert.match(library, /Nothing left in Unwatched/);
+  assert.match(library, /No watched titles/);
+  assert.match(library, /All caught up/);
 
   assert.match(watchedState, /export function isSavedItemFullyWatched/);
   assert.match(watchedState, /next_episode_to_air/);
@@ -515,8 +517,9 @@ test("Phase 7.9.1 adds real automatic/manual performance profiles and a registry
   assert.match(settings, /sections=\{MOBILE_ACTIVE_SETTINGS_SECTIONS\}/);
   assert.match(settings, /sectionId="performance"/);
   assert.match(settings, /Automatic \(Recommended\)/);
-  assert.match(settings, /Active profile/);
-  assert.match(settings, /Profiles currently tune browsing render budgets/);
+  assert.doesNotMatch(settings, /Active profile/);
+  assert.match(settings, /Currently: \{PERFORMANCE_PROFILE_LABELS\[resolvedProfile\]\}/);
+  assert.match(settings, /Profiles adjust how much browsing work Orion keeps ready/);
   assert.match(navigator, /Jump to section/);
   assert.match(navigator, /accessibilityRole="radio"/);
   assert.match(navigator, /onSelect\(section\.id\)/);
@@ -585,23 +588,28 @@ test("Phase 7.10.1 gives Media Detail a cleaner hierarchy and episode progress w
 
 test("Phase 7.10.3 keeps episode cards composed while preserving the complete overview behind Show more", () => {
   const detail = read("src/features/media-detail/MediaDetailScreen.tsx");
+  const overview = read("src/features/media-detail/EpisodeOverview.tsx");
   const watched = read("src/features/media-detail/WatchedControls.tsx");
   const styles = read("src/features/media-detail/mediaDetailStyles.ts");
 
+  // Media Detail keeps the extracted overview owner mounted on episode cards.
+  assert.match(detail, /import \{ EpisodeOverview \} from '\.\/EpisodeOverview';/);
+  assert.match(detail, /<EpisodeOverview overview=\{ep\.overview\} theme=\{theme\} \/>/);
+
   // Collapsed cards stay concise, but the source overview is always rendered
   // intact. Expansion only changes line clamping and never substitutes text.
-  assert.match(detail, /function EpisodeOverview\(/);
-  assert.match(detail, /numberOfLines=\{expanded \? undefined : 2\}/);
-  assert.match(detail, /\{overview\}/);
-  assert.match(detail, /\{expanded \? 'Show less' : 'Show more'\}/);
-  assert.match(detail, /setExpanded\(\(value\) => !value\)/);
-  assert.doesNotMatch(detail, /overview\.slice\(|overview\.substring\(|overview\.substr\(/);
+  assert.match(overview, /function EpisodeOverview\(/);
+  assert.match(overview, /numberOfLines=\{expanded \? undefined : 2\}/);
+  assert.match(overview, /\{overview\}/);
+  assert.match(overview, /\{expanded \? 'Show less' : 'Show more'\}/);
+  assert.match(overview, /setExpanded\(\(value\) => !value\)/);
+  assert.doesNotMatch(overview, /overview\.slice\(|overview\.substring\(|overview\.substr\(/);
 
   // Overflow is measured from real rendered lines instead of guessed from a
   // character count, and the measuring copy is hidden from accessibility.
-  assert.match(detail, /onTextLayout=\{handleMeasure\}/);
-  assert.match(detail, /event\.nativeEvent\.lines\.length > 2/);
-  assert.match(detail, /importantForAccessibility="no-hide-descendants"/);
+  assert.match(overview, /onTextLayout=\{handleMeasure\}/);
+  assert.match(overview, /event\.nativeEvent\.lines\.length > 2/);
+  assert.match(overview, /importantForAccessibility="no-hide-descendants"/);
   assert.match(styles, /episodeOverviewMeasure: \{[\s\S]*?position: 'absolute'[\s\S]*?opacity: 0/);
 
   // At normal phone text sizes the two actions use one deliberate row; their

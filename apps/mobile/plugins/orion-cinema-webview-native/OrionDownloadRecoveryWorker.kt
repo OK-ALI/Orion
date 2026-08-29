@@ -12,6 +12,12 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import java.util.concurrent.TimeUnit
 
+internal object OrionDownloadRecoveryPolicy {
+  fun shouldRemainIdle(state: String, control: String): Boolean =
+    state in setOf("completed", "cancelled", "unsupported", "protected", "paused") ||
+      control == "pause"
+}
+
 class OrionDownloadRecoveryWorker(
   appContext: Context,
   workerParams: WorkerParameters,
@@ -22,7 +28,8 @@ class OrionDownloadRecoveryWorker(
     if (jobId.isBlank()) return Result.failure()
     val job = OrionDownloadJobStore.getJob(jobId) ?: return Result.success()
     val state = job.optString("state")
-    if (state in setOf("completed", "cancelled", "unsupported", "protected")) return Result.success()
+    val control = job.optString("_control", "run")
+    if (OrionDownloadRecoveryPolicy.shouldRemainIdle(state, control)) return Result.success()
     if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(applicationContext, jobId) ||
       OrionDownloadTransferEngine.hasCompleteLocalYtDlpFinalization(applicationContext, jobId)
     ) {

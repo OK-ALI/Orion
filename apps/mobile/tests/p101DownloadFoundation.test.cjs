@@ -154,7 +154,7 @@ test('P10.1 preserves exact TV episode identity instead of a boolean-only modal 
   assert.match(modal, /target: MobileDownloadTargetV1 \| null/);
 });
 
-test('P10.4C activates dual destination selection only through the Android-owned SAF finalizer', () => {
+test('P10.4C keeps Orion Library storage selection behind the Android-owned SAF finalizer', () => {
   const architecture = readMobile('src', 'features', 'settings', 'settingsArchitecture.ts');
   const settings = readMobile('app', '(tabs)', 'settings.tsx');
   const downloadSettings = readMobile('src', 'features', 'downloads', 'DownloadSettingsContent.tsx');
@@ -164,21 +164,24 @@ test('P10.4C activates dual destination selection only through the Android-owned
   assert.match(architecture, /id: 'downloads', label: 'Downloads', status: 'active'/);
   assert.match(settings, /<DownloadSettingsContent \/>/);
   assert.match(downloadSettings, />Orion Library</);
-  assert.match(downloadSettings, />Device Storage</);
-  assert.match(downloadSettings, /chooseNativeDeviceStorageTargetV1/);
-  assert.match(downloadSettings, /setMobileDownloadDefaultDestinationV1\('device-storage'\)/);
+  assert.match(downloadSettings, /chooseNativeLibraryStorageTargetV1/);
+  assert.match(downloadSettings, /validateNativeLibraryStorageTargetV1/);
+  assert.match(downloadSettings, /setMobileDownloadLibraryStorageTargetV1/);
+  assert.doesNotMatch(downloadSettings, />Device Storage</);
+  assert.doesNotMatch(downloadSettings, /chooseNativeDeviceStorageTargetV1/);
   assert.match(downloadSettings, />Preferred quality</);
   assert.match(downloadSettings, />Subtitles</);
   assert.doesNotMatch(downloadSettings, /notification/i);
 
-  // Device Storage stays behind the real Android native engine and SAF picker.
+  // Finalized storage stays behind the real Android native engine and SAF picker.
   assert.match(manager, /isNativeDownloadEngineAvailableV1/);
   assert.match(manager, /MOBILE_DOWNLOADER_AVAILABLE = isNativeDownloadEngineAvailableV1\(\)/);
   assert.match(manager, /state: 'waiting-for-engine'/);
   assert.match(manager, /state: 'ready'/);
   assert.match(modal, /!capability\.available/);
   assert.match(modal, /const subtitleCheckPending =/);
-  assert.match(modal, /disabled=\{needsEpisode \|\| starting \|\| subtitleCheckPending \|\| Boolean\(duplicateJob\) \|\| !capability\.available\}/);
+  assert.match(modal, /disabled=\{!storageReady \|\| needsEpisode \|\| starting \|\| subtitleCheckPending \|\| Boolean\(duplicateJob\) \|\| !capability\.available\}/);
+  assert.match(modal, /accessibilityState=\{\{ disabled: !storageReady \|\| needsEpisode \|\| starting \|\| subtitleCheckPending \|\| Boolean\(duplicateJob\) \|\| !capability\.available \}\}/);
   assert.doesNotMatch(manager, /setInterval|Math\.random/);
 });
 
@@ -357,6 +360,7 @@ test('P10.1 download preferences survive module restart and future schemas fail 
   assert.deepEqual(futureSchemaProcess.getMobileDownloadPreferencesV1(), {
     schemaVersion: 1,
     defaultDestination: 'orion-library',
+    libraryStorageTarget: null,
     deviceStorageTarget: null,
     preferredQuality: 'best',
     subtitlePreference: 'preferred',
@@ -372,7 +376,11 @@ test('P10.4 Downloads surface projects media-first identity, native transfer tru
   assert.match(screen, /listMobileDownloadAssetsV1/);
   assert.match(screen, />Stored</);
   assert.doesNotMatch(screen, /Device Storage creates a verified portable MP4/);
-  assert.match(downloadSettings, /Device Storage creates a verified portable MP4 when the stream can be finalized safely/);
+  assert.match(downloadSettings, />Orion Library</);
+  assert.match(downloadSettings, /chooseNativeLibraryStorageTargetV1/);
+  assert.match(downloadSettings, /validateNativeLibraryStorageTargetV1/);
+  assert.match(downloadSettings, /setMobileDownloadLibraryStorageTargetV1/);
+  assert.doesNotMatch(downloadSettings, /Device Storage creates a verified portable MP4 when the stream can be finalized safely/);
   assert.match(activity, /createMobileDownloadProgressSnapshotV1/);
   assert.match(activity, /imgUrl/);
   assert.match(activity, /posterPath/);

@@ -42,7 +42,8 @@ test('P10.5-C3 keeps subtitle controls local across legacy fragment and framewor
   assert.match(legacy, /<OfflineSubtitleSheet/);
   assert.match(legacy, /facade\.selectSubtitle\(track\?\.id \|\| null\)/);
 
-  assert.match(activity, /subtitleButton = button\("Subtitles Off"\)/);
+  assert.match(activity, /subtitleButton = button\("CC Off"\)/);
+  assert.match(activity, /compactSubtitleLabel/);
   assert.match(activity, /OrionPlayerSubtitleParser\.parse/);
   assert.match(activity, /OrionPlayerSubtitleParser\.activeCue/);
   assert.match(activity, /prepareSubtitle\(subtitle: OrionOfflinePlayerSubtitle\)/);

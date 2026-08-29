@@ -30,6 +30,8 @@ class OrionDownloadForegroundService : Service() {
     when (intent?.action) {
       ACTION_PAUSE -> {
         OrionDownloadJobStore.requestControl(jobId, "pause")
+        OrionDownloadJobStore.setState(jobId, "paused")
+        OrionDownloadRecoveryScheduler.cancel(applicationContext, jobId)
         OrionDownloadNotifications.reconcile(applicationContext)
         return START_NOT_STICKY
       }
@@ -37,7 +39,22 @@ class OrionDownloadForegroundService : Service() {
         OrionDownloadTransferEngine.cancelJob(applicationContext, jobId)
         return START_NOT_STICKY
       }
-      ACTION_RESUME -> OrionDownloadJobStore.clearControl(jobId)
+      ACTION_RESUME -> {
+        OrionDownloadJobStore.clearControl(jobId)
+        OrionDownloadJobStore.setState(jobId, "recovering")
+        OrionDownloadRecoveryScheduler.schedule(applicationContext, jobId)
+      }
+      ACTION_RECOVER -> {
+        val recoveryJob = OrionDownloadJobStore.getJob(jobId) ?: return START_NOT_STICKY
+        if (OrionDownloadRecoveryPolicy.shouldRemainIdle(
+            recoveryJob.optString("state"),
+            recoveryJob.optString("_control", "run"),
+          )
+        ) {
+          OrionDownloadNotifications.reconcile(applicationContext)
+          return START_NOT_STICKY
+        }
+      }
     }
 
     startForeground(OrionDownloadNotifications.notificationId(), OrionDownloadNotifications.foreground(applicationContext))
@@ -67,12 +84,13 @@ class OrionDownloadForegroundService : Service() {
     const val EXTRA_JOB_ID = "jobId"
     const val ACTION_START = "com.okali.orion.download.START"
     const val ACTION_RESUME = "com.okali.orion.download.RESUME"
+    const val ACTION_RECOVER = "com.okali.orion.download.RECOVER"
     const val ACTION_PAUSE = "com.okali.orion.download.PAUSE"
     const val ACTION_CANCEL = "com.okali.orion.download.CANCEL"
 
     fun start(context: Context, jobId: String, recovery: Boolean = false) {
       val intent = Intent(context, OrionDownloadForegroundService::class.java).apply {
-        action = if (recovery) ACTION_RESUME else ACTION_START
+        action = if (recovery) ACTION_RECOVER else ACTION_START
         putExtra(EXTRA_JOB_ID, jobId)
       }
       ContextCompat.startForegroundService(context, intent)

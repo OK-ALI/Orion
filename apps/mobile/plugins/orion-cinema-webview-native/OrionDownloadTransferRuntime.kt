@@ -60,7 +60,11 @@ internal object OrionDownloadTransferEngine {
   fun runJob(context: android.content.Context, jobId: String) {
     OrionDownloadJobStore.initialize(context)
     val job = OrionDownloadJobStore.getJob(jobId) ?: return
-    if (job.optString("state") in setOf("completed", "cancelled", "unsupported", "protected")) return
+    if (OrionDownloadRecoveryPolicy.shouldRemainIdle(
+        job.optString("state"),
+        job.optString("_control", "run"),
+      )
+    ) return
     if (runVerifiedLocalFinalization(context, jobId)) return
     if (runVerifiedYtDlpFinalization(context, jobId)) return
     if (OrionDownloadJobStore.getJob(jobId)?.optString("state") == "cancelled") return

@@ -56,7 +56,7 @@ function titleOf(asset: MobileDownloadAssetV1): string {
 }
 
 function destinationOf(asset: MobileDownloadAssetV1): string {
-  if (asset.destination === 'device-storage') return 'Device Storage';
+  if (asset.destination === 'device-storage') return 'On device';
   return asset.storageTarget.mode === 'user-folder'
     ? `Orion Library · ${asset.storageTarget.displayName}`
     : 'Orion Library';
@@ -206,7 +206,7 @@ export function DownloadManagementSheet({ visible, mode, assets, initialAssetIds
             <View style={styles.headerCopy}>
               <Text style={[styles.eyebrow, { color: theme.textMuted }]}>{mode === 'free-space' ? 'STORAGE' : 'DOWNLOADS'}</Text>
               <Text accessibilityRole="header" style={[styles.heading, { color: theme.text }]}>{mode === 'free-space' ? 'Free Up Space' : 'Manage Downloads'}</Text>
-              <Text style={[styles.subheading, { color: theme.textSecondary }]}>Select exact download copies. Orion never clears a Device Storage folder.</Text>
+              <Text style={[styles.subheading, { color: theme.textSecondary }]}>Select downloads. Other files stay untouched.</Text>
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={({ pressed }) => [styles.close, { backgroundColor: pressed ? theme.surfaceHover : theme.surface }]}>
               <Ionicons name="close" size={22} color={theme.textSecondary} />
@@ -243,7 +243,7 @@ export function DownloadManagementSheet({ visible, mode, assets, initialAssetIds
                     <View style={styles.rowCopy}>
                       <Text numberOfLines={2} style={[styles.rowTitle, { color: theme.text }]}>{titleOf(asset)}</Text>
                       <Text style={[styles.rowMeta, { color: theme.textSecondary }]}>{destinationOf(asset)} · {formatBytes(bytes)}</Text>
-                      <Text style={[styles.rowState, { color: availabilityColor }]}>{asset.availability === 'unavailable' ? 'Unavailable · reconnect or reselect folder' : asset.availability === 'missing' ? 'Missing · needs attention' : asset.availability === 'checking' ? 'Checking' : 'Verified'}</Text>
+                      <Text style={[styles.rowState, { color: availabilityColor }]}>{asset.availability === 'unavailable' ? 'Unavailable · Fix folder' : asset.availability === 'missing' ? 'Missing · Review' : asset.availability === 'checking' ? 'Checking' : 'Ready offline'}</Text>
                     </View>
                   </Pressable>
                   <View style={styles.rowActions}>
@@ -254,7 +254,7 @@ export function DownloadManagementSheet({ visible, mode, assets, initialAssetIds
                 </View>
               );
             })}
-            {sortedAssets.length === 0 ? <Text style={[styles.empty, { color: theme.textSecondary }]}>No completed download copies.</Text> : null}
+            {sortedAssets.length === 0 ? <Text style={[styles.empty, { color: theme.textSecondary }]}>No downloads.</Text> : null}
           </ScrollView>
 
           {message ? <Text accessibilityRole="alert" style={[styles.message, { color: theme.textSecondary, backgroundColor: theme.surface }]}>{message}</Text> : null}

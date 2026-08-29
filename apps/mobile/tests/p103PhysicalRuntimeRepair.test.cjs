@@ -24,8 +24,8 @@ test('P10.3 source intent retains the selected method and auto-returns only on r
   assert.match(capture, /method: MobileDownloadTransferMethodV1/);
   assert.match(capture, /autoReturnIssued: boolean/);
   assert.match(capture, /markMobileDownloadSourceAutoReturnIssuedV1/);
-  assert.match(hook, /getMobileDownloadPreferencesV1\(\)\.defaultDestination/);
-  assert.match(hook, /selectMobileDownloadCandidateForItemV1\(itemKey, intent\.method, snapshots, destination\)/);
+  assert.doesNotMatch(hook, /getMobileDownloadPreferencesV1|defaultDestination/);
+  assert.match(hook, /selectMobileDownloadCandidateForItemV1\(itemKey, intent\.method, snapshots, 'orion-library'\)/);
   assert.match(hook, /router\.back\(\)/);
   assert.doesNotMatch(hook, /setTimeout|setInterval|sleep/);
   assert.match(detail, /requestMobileDownloadSourceResolutionV1\(target\.itemKey, method\)/);
@@ -98,7 +98,7 @@ test('P10.3 retires experimental Direct residue and renders real operational dow
   assert.match(activity, /Resume/);
   assert.match(activity, /Retry/);
   assert.match(activity, /Cancel/);
-  assert.match(activity, /Verified/);
+  assert.match(activity, /Ready offline/);
   assert.match(activity, /Orion Library/);
   assert.match(activity, /theme\.success/);
   assert.match(activity, /flexWrap: 'wrap'/);
@@ -141,7 +141,7 @@ test('P10.3 foreground notification uses real media title and native progress tr
 });
 
 
-test('P10.4C Device Storage activation remains persisted-target, SAF-scoped and portable-finalizer backed', () => {
+test('P10.4C Orion Library activation remains persisted-target, SAF-scoped and portable-finalizer backed', () => {
   const capture = read('src', 'features', 'downloads', 'downloadCandidateCapture.ts');
   const start = read('src', 'features', 'downloads', 'downloadStart.ts');
   const modal = read('src', 'components', 'DownloadModal.tsx');
@@ -150,12 +150,12 @@ test('P10.4C Device Storage activation remains persisted-target, SAF-scoped and 
   const runtime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
   assert.match(capture, /candidate\.capabilities\.deviceStorage === true/);
   assert.doesNotMatch(capture, /destination !== 'orion-library'\) return null/);
-  assert.match(start, /preferences\.deviceStorageTarget/);
-  assert.match(start, /candidate\.capabilities\.deviceStorage/);
+  assert.match(start, /preferences\.libraryStorageTarget/);
+  assert.match(start, /candidate\.capabilities\.orionLibrary/);
   assert.match(start, /storageTarget\.persistedPermission/);
-  assert.match(modal, /preferences\.deviceStorageTarget/);
-  assert.match(modal, /destinationTitle/);
-  assert.match(modal, /Portable media saved to your persisted Android storage folder/);
+  assert.match(modal, /preferences\.libraryStorageTarget/);
+  assert.match(modal, /destinationTitle = 'Orion Library'/);
+  assert.match(modal, /The completed MP4 remains visible there/);
   assert.doesNotMatch(modal, /chooseNativeDeviceStorageTargetV1/);
   assert.match(module, /destination !in setOf\("orion-library", "device-storage"\)/);
   assert.match(module, /OrionDownloadStorageRegistry\.describe/);

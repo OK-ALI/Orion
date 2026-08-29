@@ -36,13 +36,27 @@ internal object OrionDownloadNotificationContract {
   }
 
   fun finalizationStageLabel(stage: String?): String = when (stage) {
-    "preparing" -> "Preparing media"
-    "remuxing" -> "Creating portable MP4"
-    "verifying-output" -> "Checking MP4"
-    "publishing-media" -> "Saving to Device Storage"
-    "confirming-publication" -> "Confirming saved file"
-    "publishing-subtitles" -> "Preserving subtitles"
-    else -> "Finalizing download"
+    "preparing" -> "Preparing offline video"
+    "remuxing" -> "Preparing offline video"
+    "verifying-output" -> "Checking saved video"
+    "publishing-media" -> "Saving to Orion Library"
+    "confirming-publication" -> "Confirming saved video"
+    "publishing-subtitles" -> "Saving subtitles"
+    else -> "Finishing download"
+  }
+
+  fun stateLabel(state: String): String = when (state) {
+    "queued" -> "Queued"
+    "preflighting" -> "Checking download"
+    "downloading" -> "Downloading"
+    "paused" -> "Paused"
+    "recovering" -> "Waiting to retry"
+    "verifying" -> "Checking download"
+    "completed" -> "Completed"
+    "storage-blocked" -> "Storage space needed"
+    "action-required" -> "Needs your attention"
+    "failed" -> "Download couldn't finish"
+    else -> "Preparing download"
   }
 
   fun presentation(state: String, stage: String?): OrionDownloadNotificationPresentation {
@@ -50,19 +64,15 @@ internal object OrionDownloadNotificationContract {
       val label = finalizationStageLabel(stage)
       return OrionDownloadNotificationPresentation(label, label, indeterminate = true, showTransferMetrics = false)
     }
-    val label = when (state) {
-      "queued" -> "Queued"
-      "preflighting" -> "Checking download"
-      "downloading" -> "Downloading"
-      "paused" -> "Paused"
-      "recovering" -> "Recovering"
-      "verifying" -> "Verifying"
-      "completed" -> "Completed"
-      "storage-blocked" -> "Storage needed"
-      "action-required" -> "Action needed"
-      "failed" -> "Download failed"
-      else -> "Preparing download"
+    if (state == "recovering") {
+      return OrionDownloadNotificationPresentation(
+        "Waiting to retry",
+        "The connection was interrupted. Orion will retry automatically.",
+        indeterminate = true,
+        showTransferMetrics = false,
+      )
     }
+    val label = stateLabel(state)
     return OrionDownloadNotificationPresentation(label, label, indeterminate = false, showTransferMetrics = true)
   }
 }

@@ -81,7 +81,7 @@ test("P8.1 Account copy is user-facing and does not expose internal phase langua
   assert.doesNotMatch(accountUi, /P8\.1|portable-profile|portable profiles/i);
   assert.doesNotMatch(settings, /portable-profile|portable profiles/i);
   assert.match(accountUi, /use the same Orion identity across devices/);
-  assert.match(settings, /Your Orion identity and account connection/);
+  assert.match(settings, /Your Orion profile and sign-in\./);
   assert.match(accountUi, /Google connected/);
   assert.match(accountUi, />Orion Cloud</);
   assert.doesNotMatch(accountUi, /Google connects your Orion identity\. Orion Cloud is a separate connection/);

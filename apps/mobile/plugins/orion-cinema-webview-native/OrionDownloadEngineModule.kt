@@ -166,7 +166,11 @@ class OrionDownloadEngineModule(
 
   @ReactMethod
   fun pauseJob(jobId: String) {
-    OrionDownloadJobStore.requestControl(jobId.trim(), "pause")
+    val clean = jobId.trim()
+    if (clean.isBlank()) return
+    OrionDownloadJobStore.requestControl(clean, "pause")
+    OrionDownloadJobStore.setState(clean, "paused")
+    OrionDownloadRecoveryScheduler.cancel(reactContext, clean)
   }
 
   @ReactMethod
@@ -322,6 +326,15 @@ class OrionDownloadEngineModule(
     initialPositionSeconds: Double,
     title: String?,
     presentation: String?,
+    themeAccent: String?,
+    themeOnAccent: String?,
+    themeText: String?,
+    themeTextSecondary: String?,
+    themeMediaScrim: String?,
+    themeSurface: String?,
+    themeElevated: String?,
+    themeBorder: String?,
+    reducedMotion: Boolean,
     promise: Promise,
   ) {
     val clean = assetId.trim()
@@ -343,6 +356,46 @@ class OrionDownloadEngineModule(
       return
     }
     val safePresentation = presentation?.trim()?.lowercase().takeIf { it in setOf("fit", "fill", "stretch") } ?: "fit"
+    val safeThemeAccent = themeAccent.orEmpty()
+      .trim()
+      .uppercase()
+      .takeIf { it.matches(Regex("^#[0-9A-F]{6}$")) }
+      ?: "#E50914"
+    val safeThemeOnAccent = themeOnAccent.orEmpty()
+      .trim()
+      .uppercase()
+      .takeIf { it.matches(Regex("^#[0-9A-F]{6}$")) }
+      ?: "#FFFFFF"
+    val safeThemeText = themeText.orEmpty()
+      .trim()
+      .uppercase()
+      .takeIf { it.matches(Regex("^#[0-9A-F]{6}$")) }
+      ?: "#F4F1F6"
+    val safeThemeTextSecondary = themeTextSecondary.orEmpty()
+      .trim()
+      .uppercase()
+      .takeIf { it.matches(Regex("^#[0-9A-F]{6}$")) }
+      ?: "#B5AEBA"
+    val safeThemeMediaScrim = themeMediaScrim.orEmpty()
+      .trim()
+      .uppercase()
+      .takeIf { it.matches(Regex("^#[0-9A-F]{8}$")) }
+      ?: "#C7030308"
+    val safeThemeSurface = themeSurface.orEmpty()
+      .trim()
+      .uppercase()
+      .takeIf { it.matches(Regex("^#[0-9A-F]{6}$")) }
+      ?: "#191622"
+    val safeThemeElevated = themeElevated.orEmpty()
+      .trim()
+      .uppercase()
+      .takeIf { it.matches(Regex("^#[0-9A-F]{6}$")) }
+      ?: "#100E17"
+    val safeThemeBorder = themeBorder.orEmpty()
+      .trim()
+      .uppercase()
+      .takeIf { it.matches(Regex("^#[0-9A-F]{8}$")) }
+      ?: "#1AFFFFFF"
     val safeTitle = title.orEmpty()
       .replace(Regex("[\\u0000-\\u001f\\u007f]"), "")
       .trim()
@@ -359,6 +412,15 @@ class OrionDownloadEngineModule(
           (initialPositionSeconds * 1_000.0).toLong(),
           safeTitle,
           safePresentation,
+          safeThemeAccent,
+          safeThemeOnAccent,
+          safeThemeText,
+          safeThemeTextSecondary,
+          safeThemeMediaScrim,
+          safeThemeSurface,
+          safeThemeElevated,
+          safeThemeBorder,
+          reducedMotion,
         ),
         REQUEST_ORION_PLAYER,
       )

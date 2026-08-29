@@ -28,26 +28,29 @@ test("mobile startup uses the saved live theme and unmounts after completion", (
   assert.match(layout, /onComplete=\{\(\) => setShowStartup\(false\)\}/);
 });
 
-test("Phase 7.9.1c native Android launch surface uses Orion branding instead of the legacy grid bitmap", () => {
+test("native Android launch surface follows the current Expo splash contract and Orion brand config", () => {
   const styles = read("android/app/src/main/res/values/styles.xml");
   const colors = read("android/app/src/main/res/values/colors.xml");
-  const launchBackground = read("android/app/src/main/res/drawable/orion_launch_background.xml");
+  const manifest = read("android/app/src/main/AndroidManifest.xml");
+  const mainActivity = read("android/app/src/main/java/com/okali/orion/MainActivity.kt");
   const appConfig = JSON.parse(read("app.json"));
   const splashPlugin = appConfig.expo.plugins.find(
     (plugin) => Array.isArray(plugin) && plugin[0] === "expo-splash-screen",
   );
 
-  assert.match(styles, /android:windowBackground\">@drawable\/orion_launch_background/);
-  assert.doesNotMatch(styles, /android:windowBackground\">@drawable\/splashscreen_logo/);
+  assert.match(styles, /<style name="Theme\.App\.SplashScreen" parent="Theme\.SplashScreen">/);
+  assert.match(styles, /<item name="windowSplashScreenBackground">@color\/splashscreen_background<\/item>/);
+  assert.match(styles, /<item name="windowSplashScreenAnimatedIcon">@drawable\/splashscreen_logo<\/item>/);
+  assert.match(styles, /<item name="postSplashScreenTheme">@style\/AppTheme<\/item>/);
   assert.match(colors, /<color name="splashscreen_background">#07070C<\/color>/);
-  assert.match(launchBackground, /@color\/splashscreen_background/);
-  assert.match(launchBackground, /@drawable\/orion_splash_mark/);
+  assert.match(manifest, /android:name="\.MainActivity"[\s\S]*android:theme="@style\/Theme\.App\.SplashScreen"/);
+  assert.match(mainActivity, /SplashScreenManager\.registerOnActivity\(this\)/);
 
   for (const density of ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"]) {
     assert.equal(
-      fs.existsSync(path.join(mobileRoot, `android/app/src/main/res/drawable-${density}/orion_splash_mark.png`)),
+      fs.existsSync(path.join(mobileRoot, `android/app/src/main/res/drawable-${density}/splashscreen_logo.png`)),
       true,
-      `missing ${density} Orion splash mark`,
+      `missing ${density} Expo splash logo`,
     );
   }
 

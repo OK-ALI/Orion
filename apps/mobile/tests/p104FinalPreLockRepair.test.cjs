@@ -97,7 +97,7 @@ test('P10.4 final pre-lock duplicate exclusion stays native-atomic and destinati
   assert.match(store, /current\.optString\("_itemKey"\) != itemKey \|\| current\.optString\("destination"\) != destination/);
   assert.match(store, /DUPLICATE_BLOCKING_STATES/);
   assert.match(module, /DOWNLOAD_DUPLICATE/);
-  assert.match(modal, /preferences\.deviceStorageTarget/);
+  assert.match(modal, /preferences\.libraryStorageTarget/);
   assert.match(modal, /mobileDownloadItemKeyFromMediaV1\(job\.media\) === target\.itemKey/);
   assert.match(modal, /job\.destination === destination/);
   assert.match(modal, /Already downloaded here/);
@@ -105,7 +105,7 @@ test('P10.4 final pre-lock duplicate exclusion stays native-atomic and destinati
   assert.doesNotMatch(modal, /other storage location for a second intentional copy/);
 });
 
-test('P10.4 normal download entry defaults to Orion Library while a persisted Device Storage target remains usable', () => {
+test('P10.4 compatibility preferences feed the current Orion Library download path', () => {
   const modal = read('src', 'components', 'DownloadModal.tsx');
   const preferences = read('src', 'features', 'downloads', 'downloadPreferences.ts');
   const start = read('src', 'features', 'downloads', 'downloadStart.ts');
@@ -113,12 +113,15 @@ test('P10.4 normal download entry defaults to Orion Library while a persisted De
   assert.match(preferences, /input\.defaultDestination === 'device-storage' && deviceStorageTarget/);
   assert.match(preferences, /deviceStorageTarget,/);
   assert.match(preferences, /setMobileDownloadDefaultDestinationV1/);
-  assert.match(start, /preferences\.deviceStorageTarget/);
-  assert.match(start, /destination === 'device-storage'/);
-  assert.match(start, /candidate\.capabilities\.deviceStorage/);
+  assert.match(preferences, /libraryStorageTarget/);
+  assert.match(start, /const destination: MobileDownloadJobV1\['destination'\] = 'orion-library'/);
+  assert.match(start, /preferences\.libraryStorageTarget/);
+  assert.match(start, /candidate\.capabilities\.orionLibrary/);
+  assert.match(start, /storageTarget\.mode !== 'user-folder'/);
   assert.match(start, /storageTarget\.persistedPermission/);
-  assert.match(modal, /preferences\.deviceStorageTarget/);
-  assert.match(modal, /destinationTitle/);
+  assert.match(modal, /const destination: MobileDownloadJobV1\['destination'\] = 'orion-library'/);
+  assert.match(modal, /preferences\.libraryStorageTarget/);
+  assert.match(modal, /destinationTitle = 'Orion Library'/);
   assert.match(modal, /selectMobileDownloadCandidateForItemV1\(target\.itemKey, transferMethod, candidateSnapshots, destination\)/);
   assert.doesNotMatch(modal, /chooseNativeDeviceStorageTargetV1/);
 });
@@ -191,8 +194,8 @@ test('P10.4 A3 finalization uses fast SAF publication verification and truthful 
   assert.match(contracts, /finalizationStage: finalizationStage\(input\.finalizationStage\)/);
   assert.match(activity, /const finalizing = job\.state === 'finalizing'/);
   assert.match(activity, /const percent = finalizing \|\| progress\.percent === null \? null/);
-  assert.match(activity, /Creating portable MP4/);
-  assert.match(activity, /Transfer complete · building portable file/);
+  assert.match(activity, /Preparing offline video/);
+  assert.match(activity, /Transfer complete · preparing offline video/);
   assert.match(activity, /setInterval\(\(\) => setNowMs\(Date\.now\(\)\), 1_000\)/);
   assert.match(activity, /downloadElapsedSecondsV1\(job, nowMs\)/);
   assert.match(telemetry, /job\.progress\.finalizationStageStartedAt/);
@@ -213,7 +216,7 @@ test('P10.4 final pre-lock subtitles use protected user keys and bounded path-sa
   assert.doesNotMatch(provider, /EXPO_PUBLIC_SUBDL_API_KEY|EXPO_PUBLIC_WYZIE_API_KEY/);
   assert.match(playbackDiscovery, /outcome\.state === 'invalid-key' \|\| outcome\.state === 'quota-or-rate-limited'/);
   assert.match(settings, /secureTextEntry/);
-  assert.match(settings, /Save provider keys/);
+  assert.match(settings, /Save keys/);
   assert.match(subtitleRuntime, /MAX_ZIP_ENTRIES = 64/);
   assert.match(subtitleRuntime, /MAX_EXTRACTED_BYTES = 10L \* 1024L \* 1024L/);
   assert.match(subtitleRuntime, /safeZipEntryName/);
@@ -222,17 +225,18 @@ test('P10.4 final pre-lock subtitles use protected user keys and bounded path-sa
   assert.match(plugin, /'OrionDownloadSubtitleRuntime\.kt'/);
 });
 
-test('P10.4 final pre-lock Downloads surface is denser and presents truthful dual-destination storage', () => {
+test('P10.4 final pre-lock Downloads surface remains dense under the current card-light Orion Library presentation', () => {
   const screen = read('app', '(tabs)', 'downloads.tsx');
   const settings = read('src', 'features', 'downloads', 'DownloadSettingsContent.tsx');
   const activity = read('src', 'features', 'downloads', 'DownloadActivityList.tsx');
   assert.match(screen, /Keep verified movies and episodes ready\./);
-  assert.match(screen, /summaryCard: \{[^}\n]*minHeight: 72/);
-  assert.match(screen, /destinationCard: \{[^}\n]*minHeight: 68/);
+  assert.match(screen, /summaryStrip: \{[^}\n]*minHeight: 56/);
+  assert.match(screen, /destinationRow: \{[^}\n]*minHeight: 68/);
   assert.match(screen, /const destinationLabel = 'Orion Library'/);
-  assert.match(settings, />Device Storage<\/Text>/);
-  assert.match(settings, /Device Storage creates a verified portable MP4 when the stream can be finalized safely/);
-  assert.match(settings, /chooseNativeDeviceStorageTargetV1/);
+  assert.match(settings, />Orion Library<\/Text>/);
+  assert.match(settings, /Choose where Orion should keep your offline downloads\./);
+  assert.match(settings, /chooseNativeLibraryStorageTargetV1/);
+  assert.doesNotMatch(settings, /chooseNativeDeviceStorageTargetV1/);
   assert.match(activity, /horizontal/);
   assert.match(activity, /flexWrap: 'wrap'/);
 });

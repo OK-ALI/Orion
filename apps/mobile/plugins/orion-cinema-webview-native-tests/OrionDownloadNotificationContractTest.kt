@@ -12,18 +12,18 @@ class OrionDownloadNotificationContractTest {
   @Test
   fun finalizationIsIndeterminateAndStageOriented() {
     val presentation = OrionDownloadNotificationContract.presentation("finalizing", "remuxing")
-    assertEquals("Creating portable MP4", presentation.headline)
-    assertEquals("Creating portable MP4", presentation.detail)
+    assertEquals("Preparing offline video", presentation.headline)
+    assertEquals("Preparing offline video", presentation.detail)
     assertTrue(presentation.indeterminate)
     assertFalse(presentation.showTransferMetrics)
   }
 
   @Test
   fun everyFinalizationStageHasTruthfulText() {
-    assertEquals("Preparing media", OrionDownloadNotificationContract.finalizationStageLabel("preparing"))
-    assertEquals("Checking MP4", OrionDownloadNotificationContract.finalizationStageLabel("verifying-output"))
-    assertEquals("Saving to Device Storage", OrionDownloadNotificationContract.finalizationStageLabel("publishing-media"))
-    assertEquals("Preserving subtitles", OrionDownloadNotificationContract.finalizationStageLabel("publishing-subtitles"))
+    assertEquals("Preparing offline video", OrionDownloadNotificationContract.finalizationStageLabel("preparing"))
+    assertEquals("Checking saved video", OrionDownloadNotificationContract.finalizationStageLabel("verifying-output"))
+    assertEquals("Saving to Orion Library", OrionDownloadNotificationContract.finalizationStageLabel("publishing-media"))
+    assertEquals("Saving subtitles", OrionDownloadNotificationContract.finalizationStageLabel("publishing-subtitles"))
   }
 
   @Test
@@ -32,6 +32,23 @@ class OrionDownloadNotificationContractTest {
     assertEquals("Downloading", presentation.headline)
     assertFalse(presentation.indeterminate)
     assertTrue(presentation.showTransferMetrics)
+  }
+
+  @Test
+  fun recoveryPresentationExplainsAutomaticRetryWithoutStaleTransferMetrics() {
+    val presentation = OrionDownloadNotificationContract.presentation("recovering", null)
+    assertEquals("Waiting to retry", presentation.headline)
+    assertEquals("The connection was interrupted. Orion will retry automatically.", presentation.detail)
+    assertTrue(presentation.indeterminate)
+    assertFalse(presentation.showTransferMetrics)
+  }
+
+  @Test
+  fun customerStateLabelsMatchFailureAndAttentionLanguage() {
+    assertEquals("Storage space needed", OrionDownloadNotificationContract.stateLabel("storage-blocked"))
+    assertEquals("Needs your attention", OrionDownloadNotificationContract.stateLabel("action-required"))
+    assertEquals("Download couldn't finish", OrionDownloadNotificationContract.stateLabel("failed"))
+    assertEquals("Checking download", OrionDownloadNotificationContract.stateLabel("verifying"))
   }
 
   @Test

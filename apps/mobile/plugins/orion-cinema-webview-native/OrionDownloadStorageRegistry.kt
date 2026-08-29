@@ -3,10 +3,13 @@ package com.okali.orion.playback
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.StatFs
+import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import java.io.File
 import java.security.MessageDigest
 
 internal object OrionSafDocumentNamePolicy {
@@ -64,6 +67,27 @@ internal object OrionDocumentProbePolicy {
     if (metadataSize != null && descriptorSize != null && metadataSize != descriptorSize) return Result.Unavailable
     return Result.Verified(metadataSize ?: descriptorSize ?: return Result.Unavailable)
   }
+}
+
+internal object OrionSafPhysicalStoragePolicy {
+  private const val EXTERNAL_STORAGE_DOCUMENTS_AUTHORITY = "com.android.externalstorage.documents"
+
+  fun volumeId(authority: String?, documentId: String): String? {
+    if (!authority.equals(EXTERNAL_STORAGE_DOCUMENTS_AUTHORITY, ignoreCase = true)) return null
+    val separator = documentId.indexOf(':')
+    if (separator <= 0) return null
+    val value = documentId.substring(0, separator).trim()
+    if (value.isBlank() || !value.matches(Regex("^[A-Za-z0-9_-]{1,64}$"))) return null
+    return value
+  }
+
+  fun matchesVolume(volumeId: String, isPrimary: Boolean, uuid: String?): Boolean {
+    if (volumeId.equals("primary", ignoreCase = true)) return isPrimary
+    return !isPrimary && !uuid.isNullOrBlank() && uuid.equals(volumeId, ignoreCase = true)
+  }
+
+  fun isConclusiveInsufficient(expectedBytes: Long, freeBytes: Long?): Boolean =
+    expectedBytes > 0L && freeBytes != null && freeBytes >= 0L && freeBytes < expectedBytes
 }
 
 internal object OrionDownloadStorageRegistry {
@@ -321,12 +345,29 @@ internal object OrionDownloadStorageRegistry {
   fun freeBytes(context: Context, handle: String): Long? {
     val tree = resolveTreeUri(context, handle) ?: return null
     val docId = try { DocumentsContract.getTreeDocumentId(tree) } catch (_: Throwable) { return null }
-    if (!docId.startsWith("primary:")) return null
+    val volumeId = OrionSafPhysicalStoragePolicy.volumeId(tree.authority, docId) ?: return null
+    val probe = if (volumeId.equals("primary", ignoreCase = true)) {
+      Environment.getExternalStorageDirectory()
+    } else {
+      physicalVolumeProbePath(context, volumeId) ?: return null
+    }
     return try {
-      StatFs(Environment.getExternalStorageDirectory().absolutePath).availableBytes
+      StatFs(probe.absolutePath).availableBytes.takeIf { it >= 0L }
     } catch (_: Throwable) {
       null
     }
+  }
+
+  private fun physicalVolumeProbePath(context: Context, volumeId: String): File? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return null
+    val storageManager = context.getSystemService(Context.STORAGE_SERVICE) as? StorageManager ?: return null
+    for (directory in context.getExternalFilesDirs(null).filterNotNull()) {
+      val volume = try { storageManager.getStorageVolume(directory) } catch (_: Throwable) { null } ?: continue
+      if (OrionSafPhysicalStoragePolicy.matchesVolume(volumeId, volume.isPrimary, volume.uuid)) {
+        return directory
+      }
+    }
+    return null
   }
 
   private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")

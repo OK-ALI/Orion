@@ -216,4 +216,38 @@ class OrionDownloadManagementPolicyTest {
     assertTrue(authorization.approvedAssetIds.isEmpty())
     assertEquals(setOf("B", "C"), authorization.rejectedAssetIds)
   }
+  @Test
+  fun safPhysicalStoragePolicyRecognizesOnlyRealExternalStorageVolumes() {
+    assertEquals("primary", OrionSafPhysicalStoragePolicy.volumeId(
+      "com.android.externalstorage.documents",
+      "primary:Movies/Orion",
+    ))
+    assertEquals("ABCD-1234", OrionSafPhysicalStoragePolicy.volumeId(
+      "com.android.externalstorage.documents",
+      "ABCD-1234:Movies/Orion",
+    ))
+    assertEquals(null, OrionSafPhysicalStoragePolicy.volumeId(
+      "com.google.android.apps.docs.storage",
+      "primary:Movies/Orion",
+    ))
+    assertEquals(null, OrionSafPhysicalStoragePolicy.volumeId(
+      "com.android.externalstorage.documents",
+      "malformed-without-separator",
+    ))
+
+    assertTrue(OrionSafPhysicalStoragePolicy.matchesVolume("primary", true, null))
+    assertFalse(OrionSafPhysicalStoragePolicy.matchesVolume("primary", false, "ABCD-1234"))
+    assertTrue(OrionSafPhysicalStoragePolicy.matchesVolume("ABCD-1234", false, "abcd-1234"))
+    assertFalse(OrionSafPhysicalStoragePolicy.matchesVolume("ABCD-1234", true, "ABCD-1234"))
+  }
+
+  @Test
+  fun publicationCapacityBlocksOnlyConclusiveInsufficiency() {
+    assertTrue(OrionSafPhysicalStoragePolicy.isConclusiveInsufficient(1_000L, 999L))
+    assertFalse(OrionSafPhysicalStoragePolicy.isConclusiveInsufficient(1_000L, 1_000L))
+    assertFalse(OrionSafPhysicalStoragePolicy.isConclusiveInsufficient(1_000L, 2_000L))
+    assertFalse(OrionSafPhysicalStoragePolicy.isConclusiveInsufficient(1_000L, null))
+    assertFalse(OrionSafPhysicalStoragePolicy.isConclusiveInsufficient(0L, 0L))
+  }
+
 }

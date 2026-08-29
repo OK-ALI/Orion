@@ -42,7 +42,7 @@ internal object OrionDownloadNotifications {
     val percent = progress?.optDouble("percent", Double.NaN) ?: Double.NaN
     val stage = optionalText(progress, "finalizationStage")
     val presentation = OrionDownloadNotificationContract.presentation(state, stage)
-    val indeterminate = state == "finalizing" || percent.isNaN()
+    val indeterminate = presentation.indeterminate || percent.isNaN()
     val value = if (indeterminate) 0 else percent.coerceIn(0.0, 99.0).roundToInt()
     val headline = if (state == "finalizing") presentation.headline else progressHeadline(state, progress, value, indeterminate)
     val detail = if (presentation.showTransferMetrics) progressDetail(state, progress, value, indeterminate) else presentation.detail
@@ -207,7 +207,7 @@ internal object OrionDownloadNotifications {
   }
 
   private fun progressHeadline(state: String, progress: JSONObject?, value: Int, indeterminate: Boolean): String {
-    val parts = mutableListOf(statusText(state))
+    val parts = mutableListOf(OrionDownloadNotificationContract.stateLabel(state))
     if (!indeterminate) parts.add("$value%")
     fragmentText(progress)?.let(parts::add)
     return parts.joinToString(" · ").take(120)
@@ -259,21 +259,6 @@ internal object OrionDownloadNotifications {
     seconds < 60L -> "${seconds}s"
     seconds < 3600L -> "${seconds / 60L}m ${seconds % 60L}s"
     else -> "${seconds / 3600L}h ${(seconds % 3600L) / 60L}m"
-  }
-
-  private fun statusText(state: String): String = when (state) {
-    "queued" -> "Queued"
-    "preflighting" -> "Checking download"
-    "downloading" -> "Downloading"
-    "paused" -> "Paused"
-    "recovering" -> "Recovering"
-    "verifying" -> "Verifying"
-    "finalizing" -> OrionDownloadNotificationContract.finalizationStageLabel(null)
-    "completed" -> "Completed"
-    "storage-blocked" -> "Storage needed"
-    "action-required" -> "Action needed"
-    "failed" -> "Download failed"
-    else -> "Preparing download"
   }
 
 }

@@ -58,9 +58,11 @@ test('P10.3 media and episode surfaces graduate from Offline info to Download', 
 });
 
 test('P10.4C fragment destination boundary stays truthful at user start', () => {
-  assert.match(modal, /preferences\.deviceStorageTarget/);
-  assert.match(start, /preferences\.deviceStorageTarget/);
-  assert.match(start, /destination === 'device-storage'/);
-  assert.match(start, /candidate\.capabilities\.deviceStorage/);
+  assert.match(modal, /const destination: MobileDownloadJobV1\['destination'\] = 'orion-library'/);
+  assert.match(modal, /preferences\.libraryStorageTarget/);
+  assert.match(start, /const destination: MobileDownloadJobV1\['destination'\] = 'orion-library'/);
+  assert.match(start, /preferences\.libraryStorageTarget/);
+  assert.match(start, /candidate\.capabilities\.orionLibrary/);
+  assert.match(start, /storageTarget\.mode !== 'user-folder'/);
   assert.doesNotMatch(start, /chooseNativeDeviceStorageTargetV1/);
 });

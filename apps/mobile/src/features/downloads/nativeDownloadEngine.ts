@@ -60,6 +60,15 @@ interface NativeDownloadEngineModule {
     initialPositionSeconds: number,
     title: string | null,
     presentation: NativeFinalizedPlayerPresentationV1,
+    themeAccent: string,
+    themeOnAccent: string,
+    themeText: string,
+    themeTextSecondary: string,
+    themeMediaScrim: string,
+    themeSurface: string,
+    themeElevated: string,
+    themeBorder: string,
+    reducedMotion: boolean,
   ): Promise<unknown>;
   chooseDeviceStorageTarget(): Promise<{
     ok: boolean;
@@ -367,6 +376,53 @@ function normalizeFinalizedPlayerPresentationV1(value: unknown): NativeFinalized
   return value === 'fill' || value === 'stretch' ? value : 'fit';
 }
 
+export interface NativeFinalizedPlayerThemeV1 {
+  accent: string;
+  onAccent: string;
+  text: string;
+  textSecondary: string;
+  mediaScrim: string;
+  surface: string;
+  elevated: string;
+  border: string;
+  reducedMotion: boolean;
+}
+
+function normalizeRgbHex(value: unknown, fallback: string): string {
+  const candidate = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  return /^#[0-9A-F]{6}$/.test(candidate) ? candidate : fallback;
+}
+
+function normalizeRgbaArgb(value: unknown, fallback: string): string {
+  const candidate = typeof value === 'string' ? value.trim() : '';
+  const rgba = candidate.match(/^rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(0(?:\.\d+)?|1(?:\.0+)?)\s*\)$/i);
+  if (!rgba) return fallback;
+  const red = Math.min(255, Number(rgba[1]));
+  const green = Math.min(255, Number(rgba[2]));
+  const blue = Math.min(255, Number(rgba[3]));
+  const alpha = Math.round(Math.min(1, Math.max(0, Number(rgba[4]))) * 255);
+  const byte = (component: number) => Math.round(component).toString(16).padStart(2, '0').toUpperCase();
+  return `#${byte(alpha)}${byte(red)}${byte(green)}${byte(blue)}`;
+}
+
+function normalizeMediaScrimArgb(value: unknown): string {
+  return normalizeRgbaArgb(value, '#C7030308');
+}
+
+function normalizeFinalizedPlayerThemeV1(value: NativeFinalizedPlayerThemeV1 | undefined): NativeFinalizedPlayerThemeV1 {
+  return {
+    accent: normalizeRgbHex(value?.accent, '#E50914'),
+    onAccent: normalizeRgbHex(value?.onAccent, '#FFFFFF'),
+    text: normalizeRgbHex(value?.text, '#F4F1F6'),
+    textSecondary: normalizeRgbHex(value?.textSecondary, '#B5AEBA'),
+    mediaScrim: normalizeMediaScrimArgb(value?.mediaScrim),
+    surface: normalizeRgbHex(value?.surface, '#191622'),
+    elevated: normalizeRgbHex(value?.elevated, '#100E17'),
+    border: normalizeRgbaArgb(value?.border, '#1AFFFFFF'),
+    reducedMotion: value?.reducedMotion === true,
+  };
+}
+
 function normalizeFinalizedPlayerProgressV1(value: unknown): NativeFinalizedPlayerProgressV1 | null {
   const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const assetId = typeof raw.assetId === 'string' ? raw.assetId.trim() : '';
@@ -406,11 +462,13 @@ export async function launchNativeFinalizedPlayerV1({
   initialPositionSeconds = 0,
   title,
   presentation = 'fit',
+  theme,
 }: {
   assetId: string;
   initialPositionSeconds?: number;
   title?: string | null;
   presentation?: NativeFinalizedPlayerPresentationV1;
+  theme?: NativeFinalizedPlayerThemeV1;
 }): Promise<NativeFinalizedPlayerResultV1> {
   const module = nativeModule();
   if (!module) throw new Error('Android download engine is unavailable.');
@@ -418,7 +476,22 @@ export async function launchNativeFinalizedPlayerV1({
   if (!/^[A-Za-z0-9._:-]{1,140}$/.test(clean)) throw new Error('Offline download identity is invalid.');
   const initialPosition = Math.max(0, Number(initialPositionSeconds) || 0);
   const safePresentation = normalizeFinalizedPlayerPresentationV1(presentation);
-  const raw = await module.launchFinalizedPlayer(clean, initialPosition, title?.trim() || null, safePresentation);
+  const safeTheme = normalizeFinalizedPlayerThemeV1(theme);
+  const raw = await module.launchFinalizedPlayer(
+    clean,
+    initialPosition,
+    title?.trim() || null,
+    safePresentation,
+    safeTheme.accent,
+    safeTheme.onAccent,
+    safeTheme.text,
+    safeTheme.textSecondary,
+    safeTheme.mediaScrim,
+    safeTheme.surface,
+    safeTheme.elevated,
+    safeTheme.border,
+    safeTheme.reducedMotion,
+  );
   const result = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   const currentTime = Math.max(0, Number(result.currentTime) || 0);
   const durationValue = Number(result.duration);

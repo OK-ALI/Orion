@@ -68,10 +68,10 @@ function SettingsSection({ sectionId, icon, title, description, children, theme,
     <View
       nativeID={`settings-section-${sectionId}`}
       onLayout={onLayout}
-      style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}
+      style={[styles.section, { borderBottomColor: theme.border }]}
     >
       <View style={styles.sectionHeader}>
-        <View style={[styles.sectionIcon, { backgroundColor: theme.surfaceHover, borderColor: theme.border }]}>
+        <View style={[styles.sectionIcon, { backgroundColor: theme.accentSoft }]}>
           <Ionicons name={icon} size={20} color={theme.accent} />
         </View>
         <View style={styles.sectionHeadingCopy}>
@@ -162,7 +162,7 @@ export default function MobileSettingsScreen() {
           sectionId="account"
           icon="person-circle-outline"
           title={account.label}
-          description="Your Orion identity and account connection."
+          description="Your Orion profile and sign-in."
           theme={theme}
           onLayout={recordSectionLayout('account')}
         >
@@ -215,7 +215,7 @@ export default function MobileSettingsScreen() {
             <View style={[styles.customAccentRow, { borderTopColor: theme.border }]}>
               <View style={styles.settingCopy}>
                 <Text style={[styles.settingTitle, { color: theme.text }]}>Custom accent</Text>
-                <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>Use a six-digit hexadecimal accent color.</Text>
+                <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>Enter the color code you want Orion to use.</Text>
               </View>
               <TextInput
                 accessibilityLabel="Custom accent hexadecimal color"
@@ -231,7 +231,8 @@ export default function MobileSettingsScreen() {
             </View>
           )}
 
-          <View style={[styles.settingRow, styles.settingTopDivider, { borderTopColor: theme.border }]}>
+          <Text accessibilityRole="header" style={[styles.subgroupTitle, { color: theme.text }]}>System appearance</Text>
+          <View style={styles.settingRow}>
             <View style={styles.settingCopy}>
               <Text style={[styles.settingTitle, { color: theme.text }]}>Follow system appearance</Text>
               <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>Use Projector Silver in light mode and Midnight Premiere in dark mode.</Text>
@@ -253,24 +254,11 @@ export default function MobileSettingsScreen() {
           sectionId="performance"
           icon="speedometer-outline"
           title={performance.label}
-          description="Choose how much browsing work Orion keeps ready."
+          description="Choose how Orion balances browsing speed and device resources."
           theme={theme}
           onLayout={recordSectionLayout('performance')}
         >
-          <View style={[styles.performanceSummary, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
-            <View style={styles.performanceSummaryCopy}>
-              <Text style={[styles.settingTitle, { color: theme.text }]}>Active profile</Text>
-              <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
-                {selection === 'automatic'
-                  ? `Automatic selected ${PERFORMANCE_PROFILE_LABELS[resolvedProfile]} for this device.`
-                  : `${PERFORMANCE_PROFILE_LABELS[resolvedProfile]} is selected manually.`}
-              </Text>
-            </View>
-            <View style={[styles.profileBadge, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
-              <Text style={[styles.profileBadgeText, { color: theme.accent }]}>{PERFORMANCE_PROFILE_LABELS[resolvedProfile]}</Text>
-            </View>
-          </View>
-
+          <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Profiles</Text>
           <View style={styles.profileGrid}>
             {PERFORMANCE_PROFILE_OPTIONS.map((option) => {
               const selected = selection === option.id;
@@ -306,7 +294,7 @@ export default function MobileSettingsScreen() {
           </View>
 
           <Text style={[styles.performanceNote, { color: theme.textMuted }]}>
-            Profiles currently tune browsing render budgets. Catalog content, artwork sources and playback behavior stay unchanged.
+            Profiles adjust how much browsing work Orion keeps ready. Your catalog, artwork and playback stay the same.
           </Text>
         </SettingsSection>
 
@@ -340,7 +328,7 @@ export default function MobileSettingsScreen() {
           sectionId="notifications"
           icon="notifications-outline"
           title={notifications.label}
-          description="Local alerts, categories, quiet hours and notification privacy."
+          description="Choose your alerts and quiet hours."
           theme={theme}
           onLayout={recordSectionLayout('notifications')}
         >
@@ -351,7 +339,7 @@ export default function MobileSettingsScreen() {
           sectionId="updates"
           icon="cloud-download-outline"
           title={updates.label}
-          description="Release channel, version availability and Android compatibility."
+          description="Choose when you receive updates and see what is available."
           theme={theme}
           onLayout={recordSectionLayout('updates')}
         >
@@ -369,9 +357,9 @@ export default function MobileSettingsScreen() {
           <DownloadSettingsContent />
         </SettingsSection>
 
-        <View style={[styles.notice, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
+        <View style={[styles.notice, { borderTopColor: theme.border }]}>
           <Ionicons name="layers-outline" size={20} color={theme.textMuted} />
-          <Text style={[styles.noticeText, { color: theme.textSecondary }]}>Additional settings stay hidden until their Mobile features are ready.</Text>
+          <Text style={[styles.noticeText, { color: theme.textSecondary }]}>More settings will appear here as Orion adds them.</Text>
         </View>
       </ScrollView>
     </View>
@@ -381,13 +369,14 @@ export default function MobileSettingsScreen() {
 const styles = StyleSheet.create({
   content: { paddingTop: spacing[2], paddingHorizontal: spacing[5], paddingBottom: 80 },
   contentTablet: { maxWidth: 900, width: "100%", alignSelf: "center" },
-  section: { borderRadius: radii["2xl"], borderWidth: 1, padding: spacing[5], marginBottom: spacing[4] },
-  sectionHeader: { flexDirection: "row", alignItems: "center", gap: spacing[3], marginBottom: spacing[5] },
-  sectionIcon: { width: 44, height: 44, borderRadius: radii.lg, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  section: { paddingBottom: spacing[6], marginBottom: spacing[5], borderBottomWidth: StyleSheet.hairlineWidth },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: spacing[3], marginBottom: spacing[4] },
+  sectionIcon: { width: 40, height: 40, borderRadius: radii.full, alignItems: "center", justifyContent: "center" },
   sectionHeadingCopy: { flex: 1 },
   sectionTitle: { fontSize: fontSizes.lg, fontWeight: "900" },
   sectionDescription: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: 2 },
   groupTitle: { fontSize: fontSizes.md, fontWeight: "900", marginBottom: spacing[4] },
+  subgroupTitle: { fontSize: fontSizes.md, fontWeight: "900", marginTop: spacing[5], marginBottom: spacing[2] },
   themeGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing[3] },
   themeButton: { minHeight: 76, minWidth: 150, flexGrow: 1, flexBasis: 180, borderWidth: 2, borderRadius: radii.xl, paddingHorizontal: 14, paddingVertical: 10, flexDirection: "row", gap: 10, alignItems: "center" },
   themeSwatch: { width: 18, height: 18, borderRadius: 9 },
@@ -401,10 +390,6 @@ const styles = StyleSheet.create({
   settingDescription: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: 4 },
   customAccentRow: { marginTop: spacing[4], paddingTop: spacing[4], borderTopWidth: 1, flexDirection: "row", alignItems: "center", gap: spacing[4] },
   colorInput: { width: 116, minHeight: 48, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: 14, fontWeight: "800" },
-  performanceSummary: { borderWidth: 1, borderRadius: radii.xl, padding: spacing[4], marginBottom: spacing[4], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  performanceSummaryCopy: { flex: 1 },
-  profileBadge: { minHeight: 34, borderRadius: 17, borderWidth: 1, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
-  profileBadgeText: { fontSize: fontSizes.xs, fontWeight: '900' },
   profileGrid: { gap: spacing[3] },
   profileOption: { minHeight: 78, borderWidth: 1, borderRadius: radii.xl, paddingHorizontal: 14, paddingVertical: 12 },
   profileOptionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3] },
@@ -412,6 +397,6 @@ const styles = StyleSheet.create({
   profileOptionDescription: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: 4 },
   profileResolvedText: { fontSize: fontSizes.xs, fontWeight: '800', marginTop: 7 },
   performanceNote: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: spacing[4] },
-  notice: { borderWidth: 1, borderRadius: radii.xl, padding: spacing[4], flexDirection: "row", alignItems: "flex-start", gap: spacing[3] },
+  notice: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: spacing[4], flexDirection: "row", alignItems: "flex-start", gap: spacing[3] },
   noticeText: { flex: 1, fontSize: fontSizes.xs, lineHeight: 19 },
 });

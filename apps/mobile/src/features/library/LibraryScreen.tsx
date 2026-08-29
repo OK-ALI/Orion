@@ -231,7 +231,7 @@ export default function LibraryScreen() {
 
   return (
     <View style={[styles.safeArea, { backgroundColor: theme.background }]}>
-      <MobilePageHeader eyebrow="YOUR STORIES" title="Library" subtitle="Your saved stories, verified progress and watch history." trailing={historyAction} />
+      <MobilePageHeader eyebrow="YOUR STORIES" title="Library" subtitle="Saved stories, progress and watch history." trailing={historyAction} />
       <View style={[styles.tabsFrame, styles.tabs, { paddingHorizontal: horizontalPadding }]}>
           {TABS.map((tab, index) => {
             const active = activeTab === tab.id;
@@ -315,8 +315,8 @@ export default function LibraryScreen() {
                   savedFilter === 'all'
                     ? emptyState('bookmark-outline', 'Your list is ready for its first story', 'Save a movie or series and it will appear here.')
                     : savedFilter === 'watched'
-                      ? emptyState('checkmark-circle-outline', 'No watched titles in My List yet', 'Titles move here when Orion can verify they are fully watched.')
-                      : emptyState('sparkles-outline', 'Nothing left in Unwatched', 'Every title Orion can evaluate in My List is currently complete.')
+                      ? emptyState('checkmark-circle-outline', 'No watched titles', 'Finished titles appear here.')
+                      : emptyState('sparkles-outline', 'All caught up', 'Everything in My List is watched.')
                 }
                 renderItem={({ item }) => (
                   <MediaCard
@@ -339,7 +339,7 @@ export default function LibraryScreen() {
                 windowSize={stackListRenderBudget.windowSize}
                 contentContainerStyle={[styles.listContent, styles.continueList, { paddingHorizontal: horizontalPadding }]}
                 ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
-                ListEmptyComponent={emptyState('play-circle-outline', 'Nothing waiting to resume', 'Verified playback appears here after 30 seconds.')}
+                ListEmptyComponent={emptyState('play-circle-outline', 'Nothing waiting to resume', 'Watch 30 seconds to see it here.')}
                 renderItem={({ item }) => (
                   <ContinueWatchingCard
                     entry={item}
@@ -361,7 +361,7 @@ export default function LibraryScreen() {
                 windowSize={stackListRenderBudget.windowSize}
                 contentContainerStyle={[styles.listContent, styles.historyList, { paddingHorizontal: horizontalPadding }]}
                 ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-                ListEmptyComponent={emptyState('time-outline', 'No verified watch history', 'Movies and episodes enter History after Orion confirms advancing playback.')}
+                ListEmptyComponent={emptyState('time-outline', 'No watch history', 'What you watch appears here.')}
                 renderItem={({ item }) => (
                   <HistoryRow
                     item={item}

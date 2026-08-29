@@ -175,6 +175,48 @@ class OrionFinalizedArtifactPolicyTest {
     )
   }
 
+  @Test
+  fun integrityCadenceDeepChecksTargetedStaleAndUnstampedArtifacts() {
+    val hour = 60L * 60L * 1000L
+    val now = 10L * 24L * hour
+
+    assertTrue(OrionArtifactIntegrityPolicy.requiresDigestVerification(
+      targeted = true,
+      stampValid = true,
+      integrityCheckedAt = now - hour,
+      legacyLastCheckedAt = now - hour,
+      now = now,
+    ))
+    assertTrue(OrionArtifactIntegrityPolicy.requiresDigestVerification(
+      targeted = false,
+      stampValid = false,
+      integrityCheckedAt = now - hour,
+      legacyLastCheckedAt = now - hour,
+      now = now,
+    ))
+    assertTrue(OrionArtifactIntegrityPolicy.requiresDigestVerification(
+      targeted = false,
+      stampValid = true,
+      integrityCheckedAt = now - OrionArtifactIntegrityPolicy.FULL_DIGEST_RECHECK_INTERVAL_MS,
+      legacyLastCheckedAt = now - hour,
+      now = now,
+    ))
+    assertFalse(OrionArtifactIntegrityPolicy.requiresDigestVerification(
+      targeted = false,
+      stampValid = true,
+      integrityCheckedAt = now - hour,
+      legacyLastCheckedAt = now - (48L * hour),
+      now = now,
+    ))
+  }
+
+  @Test
+  fun legacyLastCheckedTimeBootstrapsPrivateIntegrityCadenceOnce() {
+    assertEquals(42L, OrionArtifactIntegrityPolicy.previousIntegrityCheckedAt(-1L, 42L))
+    assertEquals(84L, OrionArtifactIntegrityPolicy.previousIntegrityCheckedAt(84L, 42L))
+    assertNull(OrionArtifactIntegrityPolicy.previousIntegrityCheckedAt(-1L, -1L))
+  }
+
   private fun hasBrokenSurrogatePair(value: String): Boolean {
     for (index in value.indices) {
       val char = value[index]

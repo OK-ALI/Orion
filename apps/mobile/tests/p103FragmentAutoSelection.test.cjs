@@ -75,12 +75,13 @@ test('P10.3 fragmented finalization persists no raw network locations', () => {
   assert.match(store, /if \(key\.startsWith\("_"\)\) remove\.add\(key\)/);
 });
 
-test('P10.4C keeps Device Storage capability truthful for a persisted destination', () => {
+test('P10.4C keeps the current Orion Library user-folder destination truthful', () => {
   const start = read('src', 'features', 'downloads', 'downloadStart.ts');
   const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
-  assert.match(start, /preferences\.deviceStorageTarget/);
-  assert.match(start, /destination === 'device-storage'/);
-  assert.match(start, /candidate\.capabilities\.deviceStorage/);
+  assert.match(start, /const destination: MobileDownloadJobV1\['destination'\] = 'orion-library'/);
+  assert.match(start, /preferences\.libraryStorageTarget/);
+  assert.match(start, /candidate\.capabilities\.orionLibrary/);
+  assert.match(start, /storageTarget\.mode !== 'user-folder'/);
   assert.match(start, /storageTarget\.persistedPermission/);
   assert.match(module, /DOWNLOAD_DESTINATION_INVALID/);
 });

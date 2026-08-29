@@ -66,7 +66,7 @@ export function UpdatesSettingsContent() {
   const appPresentation = getMobileApplicationUpdatePresentationV1(appUpdateState);
   const selectedChannelDescription = channel === 'stable'
     ? 'Recommended for everyday use.'
-    : 'Get newer test builds before they reach Stable.';
+    : 'Try newer Orion versions before they reach Stable.';
 
   const summaryState = checking
     ? { label: 'Checking', description: 'Looking for Orion updates…' }

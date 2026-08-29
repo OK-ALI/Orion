@@ -25,7 +25,7 @@ function appUpdateFeedback(
     return 'Android needs permission before Orion can install this update.';
   }
   if (rawMessage === 'direct-build-required') {
-    return 'App updates are not available in this build.';
+    return "This version of Orion can't install updates directly.";
   }
   if (state.result?.rollout.deferred) {
     const result = state.result;
@@ -114,9 +114,6 @@ export function MobileUpdateExecutionSection({ state }: { state: MobileApplicati
           <Text style={[styles.title, { color: theme.text }]}>App updates</Text>
           <Text style={[styles.description, { color: theme.textSecondary }]}>Orion verifies every app update before installation.</Text>
         </View>
-        <View style={[styles.statusChip, { backgroundColor: theme.surfaceHover, borderColor: theme.border }]}>
-          <Text style={[styles.statusChipText, { color: state.status === 'failed' ? theme.warning : theme.accent }]}>{presentation.label}</Text>
-        </View>
       </View>
 
       {busy ? (
@@ -184,8 +181,6 @@ const styles = StyleSheet.create({
   headingCopy: { flex: 1, minWidth: 0 },
   title: { fontSize: fontSizes.sm, fontWeight: '900' },
   description: { fontSize: fontSizes.xs, marginTop: 3, lineHeight: 18 },
-  statusChip: { minHeight: 28, borderRadius: 14, borderWidth: 1, paddingHorizontal: 9, alignItems: 'center', justifyContent: 'center' },
-  statusChipText: { fontSize: 10, fontWeight: '900' },
   message: { fontSize: fontSizes.xs, lineHeight: 18 },
   progressRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[3] },
   progress: { fontSize: fontSizes.xs, fontWeight: '900' },

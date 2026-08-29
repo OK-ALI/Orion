@@ -62,7 +62,7 @@ test('finalization notification contract is stage-only and transfer metrics are 
   const service = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadForegroundService.kt');
   const runtime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
   assert.match(contract, /indeterminate = true, showTransferMetrics = false/);
-  assert.match(contract, /Creating portable MP4/);
+  assert.match(contract, /Preparing offline video/);
   assert.match(notifications, /OrionDownloadNotificationContract\.presentation/);
   assert.match(notifications, /presentation\.showTransferMetrics/);
   assert.match(notifications, /transitionFinalizationStage/);
