@@ -121,32 +121,56 @@ test("P10.7 recovering downloads expose deterministic manual Retry now instead o
   assert.ok(cancel >= 0 && local > cancel && service > local);
 });
 
-test("P10.7 finalized MediaPlayer seeking keeps target progress authoritative until Android really settles", () => {
+test("P10.7 finalized MediaPlayer seeking preserves Samsung fast path and adds one general fallback", () => {
   const activity = read("plugins", "orion-cinema-webview-native", "OrionPlayerActivity.kt");
   const policy = read("plugins", "orion-cinema-webview-native", "OrionMediaPlayerSeekPolicy.kt");
+  assert.match(activity, /class OrionPlayerActivity : Activity\(\), TextureView\.SurfaceTextureListener/);
+  assert.match(activity, /val player = MediaPlayer\(\)/);
   assert.match(activity, /setOnSeekCompleteListener/);
   assert.match(activity, /MediaPlayer\.SEEK_CLOSEST_SYNC/);
+  assert.match(activity, /MediaPlayer\.SEEK_CLOSEST/);
+  assert.match(policy, /attempt == Attempt\.PRIMARY -> Mode\.CLOSEST_SYNC/);
+  assert.match(policy, /else -> Mode\.CLOSEST/);
+  assert.match(policy, /request\.attempt == Attempt\.PRIMARY\) Completion\.FALLBACK/);
+  assert.match(policy, /fun withFallback\(request: Request\): Request = request\.copy\(attempt = Attempt\.FALLBACK\)/);
+  assert.doesNotMatch(activity, /Build\.MANUFACTURER|Build\.MODEL|Xiaomi|Redmi/i);
+  assert.doesNotMatch(activity, /androidx\.media3|ExoPlayer/);
+
+  const requestSeek = activity.slice(
+    activity.indexOf("private fun requestSeek("),
+    activity.indexOf("private fun issuePendingSeek("),
+  );
+  const issueSeek = activity.slice(
+    activity.indexOf("private fun issuePendingSeek("),
+    activity.indexOf("private fun handleSeekComplete("),
+  );
+  assert.match(requestSeek, /deadlineUptimeMs = OrionMediaPlayerSeekPolicy\.deadline\(now\)/);
+  assert.match(requestSeek, /if \(player\.isPlaying\) player\.pause\(\)/);
+  assert.match(requestSeek, /postDelayed\(seekTimeoutRunnable, OrionMediaPlayerSeekPolicy\.SEEK_TIMEOUT_MS\)/);
+  assert.doesNotMatch(issueSeek, /postDelayed\(seekTimeoutRunnable|removeCallbacks\(seekTimeoutRunnable/);
   assert.match(activity, /postDelayed\(seekTimeoutRunnable, OrionMediaPlayerSeekPolicy\.SEEK_TIMEOUT_MS\)/);
   assert.match(activity, /postDelayed\(confirmation, OrionMediaPlayerSeekPolicy\.SEEK_CONFIRMATION_DELAY_MS\)/);
   assert.match(activity, /displayPosition\(actualPosition, pendingSeek\?\.targetMs\)/);
   assert.match(activity, /if \(!trackingSeekBar && duration > 0L\)/);
   assert.match(activity, /pendingSeek = OrionMediaPlayerSeekPolicy\.Request/);
-  assert.match(activity, /OrionMediaPlayerSeekPolicy\.Completion\.REISSUE/);
+  assert.match(activity, /OrionMediaPlayerSeekPolicy\.Completion\.FALLBACK/);
   assert.match(activity, /OrionMediaPlayerSeekPolicy\.Completion\.AWAIT_TIMEOUT/);
   assert.match(activity, /AWAIT_TIMEOUT ->[\s\S]{0,120}scheduleSeekConfirmation\(player, active\)/);
+  assert.match(activity, /OrionMediaPlayerSeekPolicy\.Completion\.TIMED_OUT -> finishPendingSeek\(timedOut = true\)/);
   assert.match(activity, /private fun finishPendingSeekFromTimeout\(\)/);
+  assert.match(activity, /val settled = issuedSeek == null/);
   assert.match(activity, /finishPendingSeek\(timedOut = !settled\)/);
   assert.match(activity, /Couldn’t seek to that time/);
-  assert.doesNotMatch(activity, /player\.seekTo\(target\.toInt\(\)\)[\s\S]{0,120}seekingByUser = false/);
   assert.match(policy, /SEEK_CONFIRMATION_DELAY_MS = 150L/);
-  assert.match(policy, /request\.reissues < MAX_REISSUES/);
+  assert.match(policy, /deadlineUptimeMs: Long/);
+  assert.match(policy, /remainingMs\(request, nowUptimeMs\)/);
   assert.match(policy, /Completion\.AWAIT_TIMEOUT/);
   assert.match(policy, /fun displayPosition\(actualPositionMs: Long, pendingTargetMs: Long\?\): Long/);
   assert.match(policy, /\(durationMs \/ progressMax\) \* boundedProgress/);
+  assert.match(activity, /updateSubtitle\(actualPosition\)/);
 });
 
-
-test("P10.7 pending seek keeps the latest explicit play or pause intent", () => {
+test("P10.7 pending seek coalesces latest target and fences stale native callbacks", () => {
   const activity = read("plugins", "orion-cinema-webview-native", "OrionPlayerActivity.kt");
   const policy = read("plugins", "orion-cinema-webview-native", "OrionMediaPlayerSeekPolicy.kt");
   const playControl = activity.slice(
@@ -162,6 +186,41 @@ test("P10.7 pending seek keeps the latest explicit play or pause intent", () => 
   assert.match(toggle, /if \(!playWhenSettled\)[\s\S]*player\.pause\(\)/);
   assert.match(toggle, /resumeAfterPause = false/);
   assert.match(policy, /fun withPlayIntent\(request: Request, playWhenSettled: Boolean\): Request/);
+  assert.match(activity, /private var issuedSeek: OrionMediaPlayerSeekPolicy\.IssuedAttempt\? = null/);
+  assert.match(activity, /val playWhenSettled = pendingSeek\?\.playWhenSettled[\s\S]{0,100}player\.isPlaying/);
+  assert.match(activity, /if \(issuedSeek != null\) return/);
+  assert.match(activity, /val issued = issuedSeek \?: return/);
+  assert.match(activity, /issuedSeek = null[\s\S]{0,180}!OrionMediaPlayerSeekPolicy\.matchesAttempt\(request, issued\)[\s\S]{0,100}issuePendingSeek\(player\)/);
+  assert.match(policy, /request\.generation == issued\.generation/);
+  assert.match(policy, /request\.playerGeneration == issued\.playerGeneration/);
+  assert.match(policy, /request\.attempt == issued\.attempt/);
+});
+
+test("P10.7 pending seek playback intent owns the Play or Pause presentation", () => {
+  const activity = read("plugins", "orion-cinema-webview-native", "OrionPlayerActivity.kt");
+  const updateProgress = activity.slice(
+    activity.indexOf("private fun updateProgress("),
+    activity.indexOf("private fun updatePlayPausePresentation("),
+  );
+  const presentation = activity.slice(
+    activity.indexOf("private fun updatePlayPausePresentation("),
+    activity.indexOf("private fun togglePlaybackDuringPendingSeek("),
+  );
+  const toggle = activity.slice(
+    activity.indexOf("private fun togglePlaybackDuringPendingSeek("),
+    activity.indexOf("private fun requestSeek("),
+  );
+
+  assert.match(updateProgress, /updatePlayPausePresentation\(player\)/);
+  assert.doesNotMatch(updateProgress, /playPauseView\.text\s*=|player\.isPlaying/);
+  assert.match(presentation, /val pendingPlayIntent = pendingSeek\?\.playWhenSettled/);
+  assert.match(presentation, /pendingPlayIntent != null -> if \(pendingPlayIntent\) "Pause" else "Play"/);
+  assert.match(presentation, /player\.isPlaying[\s\S]{0,80}-> "Pause"/);
+  assert.match(presentation, /completed -> "Replay"/);
+  assert.match(presentation, /else -> "Play"/);
+  assert.match(toggle, /pendingSeek = OrionMediaPlayerSeekPolicy\.withPlayIntent\(request, playWhenSettled\)/);
+  assert.match(toggle, /updatePlayPausePresentation\(player\)/);
+  assert.doesNotMatch(toggle, /playPauseView\.text\s*=\s*if \(playWhenSettled\)/);
 });
 
 test("P10.7 Locate browses the persisted tree without reopening directory-selection configuration", () => {

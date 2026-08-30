@@ -87,7 +87,9 @@ test('P10.6-A2 keeps watching-first chrome while P10.7 waits for confirmed seek 
   assert.match(seekListener, /seekingByUser = true[\s\S]*showChrome\(autoHide = false\)/);
   assert.match(seekListener, /val player = mediaPlayer \?: return/);
   assert.match(seekListener, /OrionMediaPlayerSeekPolicy\.targetMs/);
-  assert.match(seekListener, /requestSeek\(player, target, playWhenSettled = wasPlaying\)/);
+  assert.match(seekListener, /val playWhenSettled = pendingSeek\?\.playWhenSettled/);
+  assert.match(seekListener, /player\.isPlaying/);
+  assert.match(seekListener, /requestSeek\(player, target, playWhenSettled = playWhenSettled\)/);
   assert.doesNotMatch(seekListener, /seekingByUser = false/);
   assert.match(activity, /setOnSeekCompleteListener[\s\S]{0,150}handleSeekComplete/);
 

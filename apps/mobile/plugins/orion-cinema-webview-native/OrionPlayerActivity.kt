@@ -74,6 +74,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   private var playerGeneration = 0L
   private var seekGeneration = 0L
   private var pendingSeek: OrionMediaPlayerSeekPolicy.Request? = null
+  private var issuedSeek: OrionMediaPlayerSeekPolicy.IssuedAttempt? = null
   private var seekConfirmationRunnable: Runnable? = null
   private var videoWidth = 0
   private var videoHeight = 0
@@ -414,8 +415,9 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
           val player = mediaPlayer ?: return
           val duration = safeDuration(player)
           val target = OrionMediaPlayerSeekPolicy.targetMs(duration, seekBar?.progress ?: 0)
-          val wasPlaying = try { player.isPlaying } catch (_: Throwable) { false }
-          requestSeek(player, target, playWhenSettled = wasPlaying)
+          val playWhenSettled = pendingSeek?.playWhenSettled
+            ?: try { player.isPlaying } catch (_: Throwable) { false }
+          requestSeek(player, target, playWhenSettled = playWhenSettled)
         }
       })
     }
@@ -574,12 +576,22 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       seekBar.progress = ((position.toDouble() / duration.toDouble()) * 1000.0).toInt().coerceIn(0, 1000)
       positionView.text = "${formatTime(position)} / ${formatTime(duration)}"
     }
-    if (prepared) playPauseView.text = if (try { player.isPlaying } catch (_: Throwable) { false }) "Pause" else if (completed) "Replay" else "Play"
+    updatePlayPausePresentation(player)
     // Subtitle timing remains tied to the decoder's confirmed position. Only
     // the seek/progress presentation is pinned to the requested target while
     // an OEM MediaPlayer is still settling an asynchronous seek.
     updateSubtitle(actualPosition)
     publishProgress(currentPlaybackState())
+  }
+
+  private fun updatePlayPausePresentation(player: MediaPlayer) {
+    val pendingPlayIntent = pendingSeek?.playWhenSettled
+    playPauseView.text = when {
+      pendingPlayIntent != null -> if (pendingPlayIntent) "Pause" else "Play"
+      try { player.isPlaying } catch (_: Throwable) { false } -> "Pause"
+      completed -> "Replay"
+      else -> "Play"
+    }
   }
 
   private fun togglePlaybackDuringPendingSeek(player: MediaPlayer): Boolean {
@@ -590,7 +602,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     if (!playWhenSettled) {
       try { if (player.isPlaying) player.pause() } catch (_: Throwable) { Unit }
     }
-    playPauseView.text = if (playWhenSettled) "Pause" else "Play"
+    updatePlayPausePresentation(player)
     publishProgress("seeking", force = true)
     showChrome(autoHide = false)
     return true
@@ -600,39 +612,61 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     if (!prepared || player !== mediaPlayer) return
     val duration = safeDuration(player)
     val boundedTarget = targetMs.coerceIn(0L, max(0L, duration - 1L))
+    val now = SystemClock.elapsedRealtime()
     seekGeneration += 1L
     pendingSeek = OrionMediaPlayerSeekPolicy.Request(
       generation = seekGeneration,
       playerGeneration = playerGeneration,
       targetMs = boundedTarget,
       playWhenSettled = playWhenSettled,
+      deadlineUptimeMs = OrionMediaPlayerSeekPolicy.deadline(now),
     )
     seekingByUser = true
     completed = false
+    resumeAfterPause = false
+    cancelSeekConfirmation()
+    mainHandler.removeCallbacks(seekTimeoutRunnable)
+    mainHandler.postDelayed(seekTimeoutRunnable, OrionMediaPlayerSeekPolicy.SEEK_TIMEOUT_MS)
+    try { if (player.isPlaying) player.pause() } catch (_: Throwable) { Unit }
     updateProgress()
     issuePendingSeek(player)
   }
 
   private fun issuePendingSeek(player: MediaPlayer) {
     val request = pendingSeek ?: return
+    if (issuedSeek != null) return
+    if (OrionMediaPlayerSeekPolicy.remainingMs(request, SystemClock.elapsedRealtime()) == 0L) {
+      finishPendingSeek(timedOut = true)
+      return
+    }
     cancelSeekConfirmation()
-    mainHandler.removeCallbacks(seekTimeoutRunnable)
+    val issued = OrionMediaPlayerSeekPolicy.issued(request)
+    issuedSeek = issued
     try {
-      if (OrionMediaPlayerSeekPolicy.mode(Build.VERSION.SDK_INT) == OrionMediaPlayerSeekPolicy.Mode.CLOSEST_SYNC) {
-        player.seekTo(request.targetMs, MediaPlayer.SEEK_CLOSEST_SYNC)
-      } else {
-        player.seekTo(request.targetMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+      when (OrionMediaPlayerSeekPolicy.mode(Build.VERSION.SDK_INT, request.attempt)) {
+        OrionMediaPlayerSeekPolicy.Mode.CLOSEST_SYNC ->
+          player.seekTo(request.targetMs, MediaPlayer.SEEK_CLOSEST_SYNC)
+        OrionMediaPlayerSeekPolicy.Mode.CLOSEST ->
+          player.seekTo(request.targetMs, MediaPlayer.SEEK_CLOSEST)
+        OrionMediaPlayerSeekPolicy.Mode.LEGACY_PREVIOUS_SYNC ->
+          player.seekTo(request.targetMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
       }
       publishProgress("seeking", force = true)
-      mainHandler.postDelayed(seekTimeoutRunnable, OrionMediaPlayerSeekPolicy.SEEK_TIMEOUT_MS)
     } catch (_: Throwable) {
+      if (issuedSeek == issued) issuedSeek = null
       finishPendingSeek(timedOut = true)
     }
   }
 
   private fun handleSeekComplete(player: MediaPlayer) {
+    val issued = issuedSeek ?: return
+    if (player !== mediaPlayer || !OrionMediaPlayerSeekPolicy.acceptsCallback(issued, playerGeneration)) return
+    issuedSeek = null
     val request = pendingSeek ?: return
-    if (player !== mediaPlayer || !OrionMediaPlayerSeekPolicy.acceptsCallback(request, playerGeneration)) return
+    if (!OrionMediaPlayerSeekPolicy.matchesAttempt(request, issued)) {
+      issuePendingSeek(player)
+      return
+    }
     scheduleSeekConfirmation(player, request)
   }
 
@@ -649,8 +683,12 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       if (
         active.generation != expectedSeekGeneration ||
         active.playerGeneration != expectedPlayerGeneration ||
+        active.attempt != request.attempt ||
         player !== mediaPlayer ||
-        !OrionMediaPlayerSeekPolicy.acceptsCallback(active, playerGeneration)
+        !OrionMediaPlayerSeekPolicy.acceptsCallback(
+          OrionMediaPlayerSeekPolicy.issued(active),
+          playerGeneration,
+        )
       ) {
         return@Runnable
       }
@@ -659,15 +697,17 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
           active,
           safePosition(player),
           safeDuration(player),
+          SystemClock.elapsedRealtime(),
         )
       ) {
         OrionMediaPlayerSeekPolicy.Completion.SETTLED -> finishPendingSeek(timedOut = false)
-        OrionMediaPlayerSeekPolicy.Completion.REISSUE -> {
-          pendingSeek = OrionMediaPlayerSeekPolicy.reissued(active)
+        OrionMediaPlayerSeekPolicy.Completion.FALLBACK -> {
+          pendingSeek = OrionMediaPlayerSeekPolicy.withFallback(active)
           issuePendingSeek(player)
         }
         OrionMediaPlayerSeekPolicy.Completion.AWAIT_TIMEOUT ->
           scheduleSeekConfirmation(player, active)
+        OrionMediaPlayerSeekPolicy.Completion.TIMED_OUT -> finishPendingSeek(timedOut = true)
       }
     }
     seekConfirmationRunnable = confirmation
@@ -682,12 +722,14 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   private fun finishPendingSeekFromTimeout() {
     val request = pendingSeek ?: return
     val player = mediaPlayer
-    val settled = player != null &&
+    val settled = issuedSeek == null &&
+      player != null &&
       prepared &&
       OrionMediaPlayerSeekPolicy.completion(
         request,
         safePosition(player),
         safeDuration(player),
+        SystemClock.elapsedRealtime(),
       ) == OrionMediaPlayerSeekPolicy.Completion.SETTLED
     finishPendingSeek(timedOut = !settled)
   }
@@ -1222,6 +1264,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     mainHandler.removeCallbacks(seekTimeoutRunnable)
     cancelSeekConfirmation()
     pendingSeek = null
+    issuedSeek = null
     trackingSeekBar = false
     seekingByUser = false
     playerGeneration += 1L
