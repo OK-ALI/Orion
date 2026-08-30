@@ -67,7 +67,7 @@ test('P10.6-A2 carries active Orion theme presentation tokens across the asset-I
   assert.match(activity, /setBackgroundColor\(chromeFillColor\)/);
 });
 
-test('P10.6-A2 gives the native player watching-first chrome behavior without changing seek semantics', () => {
+test('P10.6-A2 keeps watching-first chrome while P10.7 waits for confirmed seek completion', () => {
   const activity = read('plugins', 'orion-cinema-webview-native', 'OrionPlayerActivity.kt');
 
   assert.match(activity, /CHROME_AUTO_HIDE_MS = 2_800L/);
@@ -86,8 +86,10 @@ test('P10.6-A2 gives the native player watching-first chrome behavior without ch
   );
   assert.match(seekListener, /seekingByUser = true[\s\S]*showChrome\(autoHide = false\)/);
   assert.match(seekListener, /val player = mediaPlayer \?: return/);
-  assert.match(seekListener, /player\.seekTo\(target\.toInt\(\)\)/);
-  assert.match(seekListener, /seekingByUser = false[\s\S]*showChrome\(\)/);
+  assert.match(seekListener, /OrionMediaPlayerSeekPolicy\.targetMs/);
+  assert.match(seekListener, /requestSeek\(player, target, playWhenSettled = wasPlaying\)/);
+  assert.doesNotMatch(seekListener, /seekingByUser = false/);
+  assert.match(activity, /setOnSeekCompleteListener[\s\S]{0,150}handleSeekComplete/);
 
   const playControl = activity.slice(
     activity.indexOf('playPauseView = button("Play", primary = true)'),

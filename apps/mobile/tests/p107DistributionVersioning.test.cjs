@@ -24,11 +24,11 @@ const release = fs.readFileSync(
 );
 
 test('P10.7-A production candidate owns one aligned Mobile version identity', () => {
-  assert.equal(app.expo.version, '2.2.6');
-  assert.equal(app.expo.android.versionCode, 40);
+  assert.equal(app.expo.version, '2.2.7');
+  assert.equal(app.expo.android.versionCode, 41);
   assert.equal(app.expo.android.package, 'com.okali.orion');
-  assert.equal(mobilePackage.version, '2.2.6');
-  assert.equal(rootLock.packages['apps/mobile'].version, '2.2.6');
+  assert.equal(mobilePackage.version, '2.2.7');
+  assert.equal(rootLock.packages['apps/mobile'].version, '2.2.7');
 });
 
 test('P10.7-A Android builder materializes app.json versionName and versionCode into generated Gradle', () => {

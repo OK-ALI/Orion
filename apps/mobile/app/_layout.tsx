@@ -37,10 +37,8 @@ void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // Initialize shared API clients with React Native MMKV for persistence
 initAnilistClient(mmkvStorageAdapter);
-const DEFAULT_TMDB_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI4ODllZDlmYjQxMzdlZmQ1ZTM3ODQzMTQ1MDY0OGRlNiIsIm5iZiI6MTc4MjE0MjUyNi4zNzQsInN1YiI6IjZhMzk1NjNlOTIzNmQzOTU1NWI5Mjk0MSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.XFF0uoMWj6aGsTRLfOhJHJzJPa9LCZOoCCC1DCwapEU';
-
 initTmdbClient({ 
-  apiToken: process.env.EXPO_PUBLIC_TMDB_READ_TOKEN || DEFAULT_TMDB_TOKEN, 
+  apiToken: (process.env.EXPO_PUBLIC_TMDB_READ_TOKEN || '').trim(),
   storage: mmkvStorageAdapter 
 });
 

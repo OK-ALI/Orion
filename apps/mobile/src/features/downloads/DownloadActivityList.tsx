@@ -463,9 +463,9 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
         const percent = finalizing || progress.percent === null ? null : Math.max(0, Math.min(99, Math.round(progress.percent)));
         const warning = FAILED_STATES.has(job.state) || job.state === 'recovering';
         const tone = warning ? theme.warning : job.state === 'paused' ? theme.textMuted : theme.accent;
-        const canPause = job.state === 'downloading' || job.state === 'recovering';
+        const canPause = job.state === 'downloading';
         const canResume = job.state === 'paused';
-        const canRetry = FAILED_STATES.has(job.state) && job.failure?.retryable;
+        const canRetry = job.state === 'recovering' || (FAILED_STATES.has(job.state) && job.failure?.retryable);
         const failurePresentation = downloadFailurePresentation(job);
         const poster = imgUrl(job.media.posterPath ?? null, 'w342');
         const downloaded = progress.bytesDownloaded > 0 ? formatBytes(progress.bytesDownloaded) : null;

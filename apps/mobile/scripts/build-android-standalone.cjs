@@ -2,6 +2,10 @@ const path = require("node:path");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
+const {
+  requireMobileProductionConfig,
+  verifyMobileProductionConfigEmbedded,
+} = require("./orion-google-production-config.cjs");
 
 const androidDirectory = path.resolve(__dirname, "..", "android");
 const gradleWrapper = process.platform === "win32" ? "gradlew.bat" : "./gradlew";
@@ -771,6 +775,14 @@ if (process.argv.includes("--sync-native-only")) {
   process.exit(0);
 }
 
+let mobileProductionConfig;
+try {
+  mobileProductionConfig = requireMobileProductionConfig(projectDirectory);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+
 try {
   ensureAndroidAppVersion();
   syncCinemaNativeSources();
@@ -837,6 +849,14 @@ if (bundleResult.error || bundleResult.status !== 0 || !fs.existsSync(embeddedBu
   console.error(`Unable to create the embedded Android bundle: ${bundleResult.error?.message || "bundle failed"}`);
   process.exit(bundleResult.status ?? 1);
 }
+
+try {
+  verifyMobileProductionConfigEmbedded(embeddedBundle, mobileProductionConfig);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+console.log("[Android] Required mobile production configuration verified in the embedded bundle.");
 
 try {
   prepareExpoEmbeddedUpdateManifest(entryResult.stdout.trim());

@@ -205,6 +205,6 @@ test('framework Activity defers MediaPlayer timeline polling until onPrepared', 
 
   assert.match(
     activity,
-    /private fun releasePlayer\(\) \{\s*mainHandler\.removeCallbacks\(progressTicker\)\s*prepared = false/,
+    /private fun releasePlayer\(\) \{[\s\S]{0,400}mainHandler\.removeCallbacks\(progressTicker\)[\s\S]{0,400}prepared = false/,
   );
 });

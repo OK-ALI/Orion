@@ -29,7 +29,7 @@ const GOOGLE_WEB_CLIENT_ID = (process.env.EXPO_PUBLIC_ORION_GOOGLE_WEB_CLIENT_ID
 function friendlyFailure(code?: string): string {
   if (code === 'GOOGLE_SIGN_IN_CANCELLED') return 'Google sign-in was cancelled. Nothing changed.';
   if (code === 'GOOGLE_NO_CREDENTIAL') return 'No Google account was available for sign-in. Check the accounts on this device and try again.';
-  if (code === 'GOOGLE_CLIENT_ID_MISSING') return 'Google sign-in is not configured for this Orion build yet.';
+  if (code === 'GOOGLE_CLIENT_ID_MISSING') return 'This Orion build is missing its Google sign-in configuration.';
   if (code === 'GOOGLE_IDENTITY_UNAVAILABLE') return 'Google sign-in is unavailable on this device build.';
   return 'Google sign-in could not finish. Your local Orion data was not changed.';
 }

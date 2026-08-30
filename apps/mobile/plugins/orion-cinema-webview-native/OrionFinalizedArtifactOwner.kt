@@ -8,6 +8,7 @@ import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.OutputStream
 import java.security.MessageDigest
 import org.json.JSONArray
 import org.json.JSONObject
@@ -176,6 +177,19 @@ internal object OrionFinalizedArtifactOwner {
   private const val HASH_BUFFER_BYTES = 1024 * 1024
   private const val TAG = "OrionFinalizedMedia"
 
+  private sealed class DocumentWriteResult {
+    data class Success(
+      val sha256: String,
+      val bytesWritten: Long,
+      val mode: OrionSafPublicationWritePolicy.Mode,
+      val syncOutcome: OrionSafPublicationWritePolicy.SyncOutcome,
+    ) : DocumentWriteResult()
+    data class Failed(val stage: String) : DocumentWriteResult()
+    data object Cancelled : DocumentWriteResult()
+  }
+
+  private class DocumentWriteStageException(val stage: String, cause: Throwable? = null) : Exception(stage, cause)
+
   fun stagingOutput(directory: File): File? {
     val files = directory.listFiles().orEmpty().filter { it.isFile }
     val name = OrionFinalizedArtifactPolicy.finalizedOutput(files.map {
@@ -296,39 +310,29 @@ internal object OrionFinalizedArtifactOwner {
       }
     }
 
-    val sourceDigest = try {
-      val digest = MessageDigest.getInstance("SHA-256")
-      val descriptor = context.contentResolver.openFileDescriptor(document, "rwt")
-        ?: throw java.io.IOException("provider-descriptor-null")
-      descriptor.use { pfd ->
-        FileInputStream(source).use { input ->
-          FileOutputStream(pfd.fileDescriptor).use { output ->
-            val buffer = ByteArray(HASH_BUFFER_BYTES)
-            var copied = 0L
-            while (true) {
-              if (!canContinue(jobId, generation)) throw InterruptedException("cancelled")
-              val count = input.read(buffer)
-              if (count < 0) break
-              if (count == 0) continue
-              output.write(buffer, 0, count)
-              digest.update(buffer, 0, count)
-              copied = Math.addExact(copied, count.toLong())
-            }
-            output.flush()
-            output.fd.sync()
-            if (copied != expectedBytes) throw java.io.IOException("copy-size-mismatch")
-          }
-        }
+    val write = writeDocument(context, document, source, expectedBytes) { canContinue(jobId, generation) }
+    val written = when (write) {
+      DocumentWriteResult.Cancelled -> {
+        cleanupDocument(context, document)
+        return OrionFinalizedDocumentSettlement.Cancelled
       }
-      digest.digest().joinToString("") { byte -> "%02x".format(byte) }
-    } catch (_: InterruptedException) {
-      cleanupDocument(context, document)
-      return OrionFinalizedDocumentSettlement.Cancelled
-    } catch (_: Throwable) {
-      cleanupDocument(context, document)
-      return documentFailed("finalized-artifact-settlement-failed", "Orion could not copy the completed media into the selected folder.", true)
+      is DocumentWriteResult.Failed -> return cleanupFailedPublication(
+        context,
+        jobId,
+        generation,
+        document,
+        "finalized-artifact-${OrionSafPublicationWritePolicy.failureCode(write.stage)}",
+        publicationFailureMessage(write.stage),
+      )
+      is DocumentWriteResult.Success -> write
     }
-    if (!journal(context, jobId, generation, targetId, document, finalName, info.displayName, "copied", expectedBytes, sourceDigest)) {
+    val sourceDigest = written.sha256
+    val copiedStage = when {
+      written.syncOutcome == OrionSafPublicationWritePolicy.SyncOutcome.FAILED -> "copied-sync-deferred"
+      written.mode == OrionSafPublicationWritePolicy.Mode.EXCLUSIVE_W -> "copied-exclusive"
+      else -> "copied"
+    }
+    if (!journal(context, jobId, generation, targetId, document, finalName, info.displayName, copiedStage, expectedBytes, sourceDigest)) {
       cleanupDocument(context, document)
       return OrionFinalizedDocumentSettlement.Cancelled
     }
@@ -389,6 +393,16 @@ internal object OrionFinalizedArtifactOwner {
           settlement
         }
       }
+    }
+    if (!OrionSafPublicationWritePolicy.acceptsAfterDeepVerification(written.syncOutcome, true)) {
+      return cleanupFailedPublication(
+        context,
+        jobId,
+        generation,
+        document,
+        "finalized-artifact-proof-mismatch",
+        "The final media document did not satisfy Orion's publication proof.",
+      )
     }
     return settlement
   }
@@ -469,36 +483,22 @@ internal object OrionFinalizedArtifactOwner {
         cleanupPendingSubtitlePublications(context, jobId)
         return OrionFinalizedSubtitleDocumentSettlement.Cancelled
       }
-      val sourceDigest = sha256(source)
-        ?: return subtitlePublicationFailure(context, jobId, "subtitle-publication-read-failed", "Orion could not read a selected subtitle.", true)
-      try {
-        val descriptor = context.contentResolver.openFileDescriptor(document, "rwt")
-          ?: throw java.io.IOException("provider-descriptor-null")
-        descriptor.use { pfd ->
-          FileInputStream(source).use { input ->
-            FileOutputStream(pfd.fileDescriptor).use { output ->
-              val buffer = ByteArray(HASH_BUFFER_BYTES)
-              var copied = 0L
-              while (true) {
-                if (!canContinue(jobId, generation)) throw InterruptedException("cancelled")
-                val count = input.read(buffer)
-                if (count < 0) break
-                if (count == 0) continue
-                output.write(buffer, 0, count)
-                copied = Math.addExact(copied, count.toLong())
-              }
-              output.flush()
-              output.fd.sync()
-              if (copied != expectedBytes) throw java.io.IOException("copy-size-mismatch")
-            }
-          }
+      val written = when (val write = writeDocument(context, document, source, expectedBytes) { canContinue(jobId, generation) }) {
+        DocumentWriteResult.Cancelled -> {
+          cleanupPendingSubtitlePublications(context, jobId)
+          return OrionFinalizedSubtitleDocumentSettlement.Cancelled
         }
-      } catch (_: InterruptedException) {
-        cleanupPendingSubtitlePublications(context, jobId)
-        return OrionFinalizedSubtitleDocumentSettlement.Cancelled
-      } catch (_: Throwable) {
-        return subtitlePublicationFailure(context, jobId, "subtitle-publication-write-failed", "Orion could not publish a selected subtitle.", true, true)
+        is DocumentWriteResult.Failed -> return subtitlePublicationFailure(
+          context,
+          jobId,
+          "subtitle-publication-${OrionSafPublicationWritePolicy.failureCode(write.stage)}",
+          "Orion could not publish a selected subtitle.",
+          true,
+          true,
+        )
+        is DocumentWriteResult.Success -> write
       }
+      val sourceDigest = written.sha256
       val info = OrionDownloadStorageRegistry.documentInfo(context, document)
         ?: return subtitlePublicationFailure(context, jobId, "subtitle-publication-document-unavailable", "Orion could not inspect a published subtitle.", true, true)
       val destinationDigest = sha256(context, document)
@@ -638,6 +638,125 @@ internal object OrionFinalizedArtifactOwner {
     return OrionFinalizedDocumentSettlement.Verified(
       OrionFinalizedDocumentProof(uri, targetId, displayName, expectedBytes, hashed.first, verification),
     )
+  }
+
+  private fun writeDocument(
+    context: Context,
+    document: Uri,
+    source: File,
+    expectedBytes: Long,
+    canContinue: () -> Boolean,
+  ): DocumentWriteResult {
+    val seekableDescriptor = try {
+      context.contentResolver.openFileDescriptor(document, "rwt")
+    } catch (_: Throwable) {
+      null
+    }
+    if (seekableDescriptor != null) {
+      return try {
+        seekableDescriptor.use { descriptor ->
+          FileOutputStream(descriptor.fileDescriptor).use { output ->
+            writeDocumentBytes(
+              source,
+              expectedBytes,
+              output,
+              OrionSafPublicationWritePolicy.Mode.SEEKABLE_RWT,
+              canContinue,
+            ) {
+              try {
+                output.fd.sync()
+                OrionSafPublicationWritePolicy.SyncOutcome.SYNCED
+              } catch (_: Throwable) {
+                OrionSafPublicationWritePolicy.SyncOutcome.FAILED
+              }
+            }
+          }
+        }
+      } catch (_: InterruptedException) {
+        DocumentWriteResult.Cancelled
+      } catch (error: DocumentWriteStageException) {
+        DocumentWriteResult.Failed(error.stage)
+      } catch (_: Throwable) {
+        DocumentWriteResult.Failed("close")
+      }
+    }
+
+    if (!OrionSafPublicationWritePolicy.shouldFallbackToExclusive(false, 0L)) {
+      return DocumentWriteResult.Failed("descriptor-open")
+    }
+    val output = try {
+      context.contentResolver.openOutputStream(document, "w")
+    } catch (_: Throwable) {
+      null
+    } ?: return DocumentWriteResult.Failed("descriptor-open")
+    return try {
+      output.use {
+        writeDocumentBytes(
+          source,
+          expectedBytes,
+          it,
+          OrionSafPublicationWritePolicy.Mode.EXCLUSIVE_W,
+          canContinue,
+        ) { OrionSafPublicationWritePolicy.SyncOutcome.UNSUPPORTED }
+      }
+    } catch (_: InterruptedException) {
+      DocumentWriteResult.Cancelled
+    } catch (error: DocumentWriteStageException) {
+      DocumentWriteResult.Failed(error.stage)
+    } catch (_: Throwable) {
+      DocumentWriteResult.Failed("close")
+    }
+  }
+
+  private fun writeDocumentBytes(
+    source: File,
+    expectedBytes: Long,
+    output: OutputStream,
+    mode: OrionSafPublicationWritePolicy.Mode,
+    canContinue: () -> Boolean,
+    sync: () -> OrionSafPublicationWritePolicy.SyncOutcome,
+  ): DocumentWriteResult.Success {
+    val digest = MessageDigest.getInstance("SHA-256")
+    var copied = 0L
+    val input = try { FileInputStream(source) } catch (error: Throwable) {
+      throw DocumentWriteStageException("source-read", error)
+    }
+    input.use {
+      val buffer = ByteArray(HASH_BUFFER_BYTES)
+      while (true) {
+        if (!canContinue()) throw InterruptedException("cancelled")
+        val count = try { it.read(buffer) } catch (error: Throwable) {
+          throw DocumentWriteStageException("source-read", error)
+        }
+        if (count < 0) break
+        if (count == 0) continue
+        try { output.write(buffer, 0, count) } catch (error: Throwable) {
+          throw DocumentWriteStageException("document-write", error)
+        }
+        digest.update(buffer, 0, count)
+        copied = try { Math.addExact(copied, count.toLong()) } catch (error: Throwable) {
+          throw DocumentWriteStageException("copy-size", error)
+        }
+      }
+    }
+    try { output.flush() } catch (error: Throwable) {
+      throw DocumentWriteStageException("flush", error)
+    }
+    if (copied != expectedBytes) throw DocumentWriteStageException("copy-size")
+    return DocumentWriteResult.Success(
+      sha256 = digest.digest().joinToString("") { byte -> "%02x".format(byte) },
+      bytesWritten = copied,
+      mode = mode,
+      syncOutcome = sync(),
+    )
+  }
+
+  private fun publicationFailureMessage(stage: String): String = when (stage) {
+    "descriptor-open" -> "The selected storage provider would not open the completed media document for writing."
+    "source-read" -> "Orion could not read the completed local media while publishing it."
+    "flush" -> "The selected storage provider could not finish writing the completed media."
+    "copy-size" -> "The selected storage provider wrote an incomplete media document."
+    else -> "Orion could not copy the completed media into the selected folder."
   }
 
   private fun journal(

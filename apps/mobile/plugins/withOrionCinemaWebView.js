@@ -30,6 +30,7 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionCinemaWebViewPackage.kt',
   'OrionPlayerSystemUiModule.kt',
   'OrionPlayerActivity.kt',
+  'OrionMediaPlayerSeekPolicy.kt',
   'OrionPlayerSubtitleParser.kt',
   'OrionDownloadCaptureModule.kt',
   'OrionDownloadRequestContextBroker.kt',
@@ -46,6 +47,7 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionDownloadOwnershipPolicy.kt',
   'OrionDownloadRecoveryWorker.kt',
   'OrionDownloadStorageRegistry.kt',
+  'OrionSafPublicationWritePolicy.kt',
   'OrionDownloadSubtitleRuntime.kt',
   'OrionOfflineMediaSourcePolicy.kt',
   'OrionOfflineMediaSourceFactory.kt',
@@ -72,6 +74,7 @@ const CINEMA_NATIVE_FILES = Object.freeze([
 const CINEMA_NATIVE_TEST_FILES = Object.freeze([
   'OrionFinalizedPlayerPolicyTest.kt',
   'OrionPlayerSubtitleParserTest.kt',
+  'OrionMediaPlayerSeekPolicyTest.kt',
   'OrionOfflineMediaSourcePolicyTest.kt',
   'OrionOfflinePlaybackTimelineTest.kt',
   'OrionPortableCadenceTest.kt',
@@ -84,6 +87,7 @@ const CINEMA_NATIVE_TEST_FILES = Object.freeze([
   'OrionYtDlpProgressParserTest.kt',
   'OrionFinalizedMediaPolicyTest.kt',
   'OrionFinalizedArtifactPolicyTest.kt',
+  'OrionSafPublicationWritePolicyTest.kt',
   'OrionDownloadNotificationContractTest.kt',
 ]);
 const CINEMA_NATIVE_RESOURCE_FILES = Object.freeze([

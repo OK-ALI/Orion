@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.DocumentsContract
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -908,7 +909,8 @@ internal object OrionDownloadArtifactManager {
       if (locate) {
         val targetId = asset.optJSONObject("storageTarget")?.optString("targetId").orEmpty()
         val tree = OrionDownloadStorageRegistry.resolveTreeUri(context, targetId)
-        if (tree != null && launch(context, tree, null, chooser = false)) return actionResult(true, null, null)
+        return if (tree != null && launchLocate(context, tree)) actionResult(true, null, null)
+        else actionResult(false, "artifact-locate-unavailable", "Android could not open the selected Orion Library folder.")
       }
       val mime = primary.optString("mimeType").takeIf { it.isNotBlank() && it != "null" } ?: asset.optString("mimeType", "video/mp4")
       return if (launch(context, document, mime, chooser = true)) actionResult(true, null, null)
@@ -1262,6 +1264,15 @@ internal object OrionDownloadArtifactManager {
     }
     return result
   }
+
+  private fun launchLocate(context: Context, treeUri: Uri): Boolean = try {
+    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+      putExtra(DocumentsContract.EXTRA_INITIAL_URI, treeUri)
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    context.startActivity(intent)
+    true
+  } catch (_: Throwable) { false }
 
   private fun launch(context: Context, uri: Uri, mimeType: String?, chooser: Boolean): Boolean = try {
     val intent = Intent(Intent.ACTION_VIEW).apply {

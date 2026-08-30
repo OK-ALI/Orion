@@ -373,7 +373,7 @@ export function AccountSettingsContent() {
             <Text style={[styles.setupText, { color: theme.textMuted }]}>Google sign-in is unavailable on this device.</Text>
           )}
           {nativeGoogleAvailable && !googleConfigured && (
-            <Text style={[styles.setupText, { color: theme.textMuted }]}>Google sign-in is not available right now.</Text>
+            <Text style={[styles.setupText, { color: theme.textMuted }]}>This Orion build is missing its Google sign-in configuration.</Text>
           )}
         </>
       )}

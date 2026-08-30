@@ -184,6 +184,9 @@ class OrionDownloadEngineModule(
       promise.reject("DOWNLOAD_JOB_NOT_FOUND", "Download job was not found.")
       return
     }
+    // An explicit user retry owns the next attempt. Remove the scheduled
+    // recovery first so WorkManager cannot race the immediate foreground run.
+    OrionDownloadRecoveryScheduler.cancel(reactContext, clean)
     if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, clean)) {
       OrionDownloadJobStore.clearControl(clean)
       OrionDownloadJobStore.setState(clean, "recovering")
@@ -232,6 +235,7 @@ class OrionDownloadEngineModule(
       val stored = OrionDownloadJobStore.getJob(jobId) ?: continue
       val candidateId = stored.optString("candidateId")
       OrionDownloadJobStore.incrementRetry(jobId)
+      OrionDownloadRecoveryScheduler.cancel(reactContext, jobId)
       if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, jobId)) {
         OrionDownloadJobStore.clearControl(jobId)
         OrionDownloadJobStore.setState(jobId, "recovering")

@@ -171,8 +171,9 @@ test('P10.6-A3 preserves seek, subtitle parsing, result bridge and asset-id-only
     activity.indexOf('bottom.addView(seekBar'),
   );
   assert.match(seekListener, /val player = mediaPlayer \?: return/);
-  assert.match(seekListener, /val target = duration \* \(seekBar\?\.progress \?: 0\) \/ 1000L/);
-  assert.match(seekListener, /player\.seekTo\(target\.toInt\(\)\)/);
+  assert.match(seekListener, /OrionMediaPlayerSeekPolicy\.targetMs\(duration, seekBar\?\.progress \?: 0\)/);
+  assert.match(seekListener, /requestSeek\(player, target, playWhenSettled = wasPlaying\)/);
+  assert.match(activity, /MediaPlayer\.SEEK_CLOSEST_SYNC/);
 
   const subtitlePreparation = activity.slice(
     activity.indexOf('private fun prepareSubtitle('),

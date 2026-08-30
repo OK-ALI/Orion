@@ -31,6 +31,7 @@ import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import java.io.FileInputStream
 import java.io.InputStream
 import java.util.concurrent.Executors
@@ -68,6 +69,11 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   private var released = false
   private var resumeAfterPause = false
   private var seekingByUser = false
+  private var trackingSeekBar = false
+  private var hostResumed = false
+  private var playerGeneration = 0L
+  private var seekGeneration = 0L
+  private var pendingSeek: OrionMediaPlayerSeekPolicy.Request? = null
   private var videoWidth = 0
   private var videoHeight = 0
   private var presentation = "fit"
@@ -101,6 +107,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   }
 
   private val hideChromeRunnable = Runnable { hideChrome() }
+  private val seekTimeoutRunnable = Runnable { finishPendingSeek(timedOut = true) }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -157,12 +164,13 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
 
   override fun onResume() {
     super.onResume()
+    hostResumed = true
     enterImmersiveMode()
     val player = mediaPlayer
-    if (prepared && resumeAfterPause && player != null && !player.isPlaying) {
+    if (prepared && pendingSeek == null && resumeAfterPause && player != null && !player.isPlaying) {
       try { player.start() } catch (_: Throwable) { Unit }
+      resumeAfterPause = false
     }
-    resumeAfterPause = false
     if (prepared) {
       publishProgress(currentPlaybackState(), force = true)
       showChrome()
@@ -170,9 +178,11 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   }
 
   override fun onPause() {
+    hostResumed = false
     val player = mediaPlayer
-    resumeAfterPause = prepared && try { player?.isPlaying == true } catch (_: Throwable) { false }
-    if (resumeAfterPause) {
+    val playing = prepared && try { player?.isPlaying == true } catch (_: Throwable) { false }
+    resumeAfterPause = playing || pendingSeek?.playWhenSettled == true
+    if (playing) {
       try { player?.pause() } catch (_: Throwable) { Unit }
     }
     if (prepared && !completed && !isFinishing) publishProgress("paused", force = true)
@@ -219,6 +229,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
 
   private fun openPlayer(asset: OrionOfflinePlayerAsset, initialPositionMs: Long) {
     releasePlayer()
+    playerGeneration += 1L
     val player = MediaPlayer()
     mediaPlayer = player
     player.setAudioAttributes(
@@ -231,15 +242,19 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       prepared = true
       val duration = safeDuration(it)
       val target = initialPositionMs.coerceIn(0L, max(0L, duration - 1L))
-      if (target > 0L) it.seekTo(target.toInt())
-      it.start()
-      playPauseView.text = "Pause"
-      updateProgress()
-      publishProgress("playing", force = true)
       mainHandler.removeCallbacks(progressTicker)
       mainHandler.post(progressTicker)
-      showChrome()
+      if (target > 0L) {
+        requestSeek(it, target, playWhenSettled = true)
+      } else {
+        it.start()
+        playPauseView.text = "Pause"
+        updateProgress()
+        publishProgress("playing", force = true)
+        showChrome()
+      }
     }
+    player.setOnSeekCompleteListener { completedPlayer -> handleSeekComplete(completedPlayer) }
     player.setOnCompletionListener {
       completed = true
       playPauseView.text = "Replay"
@@ -388,18 +403,18 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
           positionView.text = "${formatTime(duration * progress / 1000L)} / ${formatTime(duration)}"
         }
         override fun onStartTrackingTouch(seekBar: SeekBar?) {
+          trackingSeekBar = true
           seekingByUser = true
           showChrome(autoHide = false)
           publishProgress("seeking", force = true)
         }
         override fun onStopTrackingTouch(seekBar: SeekBar?) {
+          trackingSeekBar = false
           val player = mediaPlayer ?: return
           val duration = safeDuration(player)
-          val target = duration * (seekBar?.progress ?: 0) / 1000L
-          try { player.seekTo(target.toInt()) } catch (_: Throwable) { Unit }
-          seekingByUser = false
-          publishProgress(currentPlaybackState(), force = true)
-          showChrome()
+          val target = OrionMediaPlayerSeekPolicy.targetMs(duration, seekBar?.progress ?: 0)
+          val wasPlaying = try { player.isPlaying } catch (_: Throwable) { false }
+          requestSeek(player, target, playWhenSettled = wasPlaying)
         }
       })
     }
@@ -414,6 +429,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       setOnClickListener {
         val player = mediaPlayer ?: return@setOnClickListener
         if (!prepared) return@setOnClickListener
+        if (togglePlaybackDuringPendingSeek(player)) return@setOnClickListener
         try {
           if (player.isPlaying) {
             player.pause()
@@ -423,7 +439,8 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
           } else {
             if (completed) {
               completed = false
-              player.seekTo(0)
+              requestSeek(player, 0L, playWhenSettled = true)
+              return@setOnClickListener
             }
             player.start()
             text = "Pause"
@@ -558,6 +575,84 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     if (prepared) playPauseView.text = if (try { player.isPlaying } catch (_: Throwable) { false }) "Pause" else if (completed) "Replay" else "Play"
     updateSubtitle(position)
     publishProgress(currentPlaybackState())
+  }
+
+  private fun togglePlaybackDuringPendingSeek(player: MediaPlayer): Boolean {
+    val request = pendingSeek ?: return false
+    val playWhenSettled = !request.playWhenSettled
+    pendingSeek = OrionMediaPlayerSeekPolicy.withPlayIntent(request, playWhenSettled)
+    resumeAfterPause = false
+    if (!playWhenSettled) {
+      try { if (player.isPlaying) player.pause() } catch (_: Throwable) { Unit }
+    }
+    playPauseView.text = if (playWhenSettled) "Pause" else "Play"
+    publishProgress("seeking", force = true)
+    showChrome(autoHide = false)
+    return true
+  }
+
+  private fun requestSeek(player: MediaPlayer, targetMs: Long, playWhenSettled: Boolean) {
+    if (!prepared || player !== mediaPlayer) return
+    val duration = safeDuration(player)
+    val boundedTarget = targetMs.coerceIn(0L, max(0L, duration - 1L))
+    seekGeneration += 1L
+    pendingSeek = OrionMediaPlayerSeekPolicy.Request(
+      generation = seekGeneration,
+      playerGeneration = playerGeneration,
+      targetMs = boundedTarget,
+      playWhenSettled = playWhenSettled,
+    )
+    seekingByUser = true
+    completed = false
+    issuePendingSeek(player)
+  }
+
+  private fun issuePendingSeek(player: MediaPlayer) {
+    val request = pendingSeek ?: return
+    mainHandler.removeCallbacks(seekTimeoutRunnable)
+    try {
+      if (OrionMediaPlayerSeekPolicy.mode(Build.VERSION.SDK_INT) == OrionMediaPlayerSeekPolicy.Mode.CLOSEST_SYNC) {
+        player.seekTo(request.targetMs, MediaPlayer.SEEK_CLOSEST_SYNC)
+      } else {
+        player.seekTo(request.targetMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+      }
+      publishProgress("seeking", force = true)
+      mainHandler.postDelayed(seekTimeoutRunnable, OrionMediaPlayerSeekPolicy.SEEK_TIMEOUT_MS)
+    } catch (_: Throwable) {
+      finishPendingSeek(timedOut = true)
+    }
+  }
+
+  private fun handleSeekComplete(player: MediaPlayer) {
+    val request = pendingSeek ?: return
+    if (player !== mediaPlayer || !OrionMediaPlayerSeekPolicy.acceptsCallback(request, playerGeneration)) return
+    val actual = safePosition(player)
+    if (OrionMediaPlayerSeekPolicy.completion(request, actual, safeDuration(player)) == OrionMediaPlayerSeekPolicy.Completion.REISSUE) {
+      pendingSeek = OrionMediaPlayerSeekPolicy.reissued(request)
+      issuePendingSeek(player)
+      return
+    }
+    finishPendingSeek(timedOut = false)
+  }
+
+  private fun finishPendingSeek(timedOut: Boolean) {
+    val request = pendingSeek ?: return
+    val player = mediaPlayer
+    mainHandler.removeCallbacks(seekTimeoutRunnable)
+    pendingSeek = null
+    seekingByUser = trackingSeekBar
+    if (player != null && prepared && request.playWhenSettled) {
+      if (hostResumed) {
+        try { if (!player.isPlaying) player.start() } catch (_: Throwable) { Unit }
+        resumeAfterPause = false
+      } else {
+        resumeAfterPause = true
+      }
+    }
+    updateProgress()
+    publishProgress(currentPlaybackState(), force = true)
+    if (timedOut) Toast.makeText(this, "Couldn’t seek to that time", Toast.LENGTH_SHORT).show()
+    showChrome()
   }
 
   private fun currentPlaybackState(): String = when {
@@ -1063,6 +1158,11 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
 
   private fun releasePlayer() {
     mainHandler.removeCallbacks(progressTicker)
+    mainHandler.removeCallbacks(seekTimeoutRunnable)
+    pendingSeek = null
+    trackingSeekBar = false
+    seekingByUser = false
+    playerGeneration += 1L
     prepared = false
     try { mediaPlayer?.setSurface(null) } catch (_: Throwable) { Unit }
     try { mediaPlayer?.release() } catch (_: Throwable) { Unit }
