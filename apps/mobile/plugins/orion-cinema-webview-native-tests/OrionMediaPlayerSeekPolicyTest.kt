@@ -31,7 +31,7 @@ class OrionMediaPlayerSeekPolicyTest {
   }
 
   @Test
-  fun distantEarlyCallbackReissuesOnlyOnceThenSettles() {
+  fun distantEarlyCallbackReissuesOnceThenWaitsInsteadOfAcceptingAFalseZeroPosition() {
     val request = request(targetMs = 60_000L)
     assertEquals(
       OrionMediaPlayerSeekPolicy.Completion.REISSUE,
@@ -40,9 +40,30 @@ class OrionMediaPlayerSeekPolicyTest {
     val reissued = OrionMediaPlayerSeekPolicy.reissued(request)
     assertEquals(1, reissued.reissues)
     assertEquals(
-      OrionMediaPlayerSeekPolicy.Completion.SETTLED,
+      OrionMediaPlayerSeekPolicy.Completion.AWAIT_TIMEOUT,
       OrionMediaPlayerSeekPolicy.completion(reissued, 0L, 120_000L),
     )
+    assertEquals(
+      OrionMediaPlayerSeekPolicy.Completion.SETTLED,
+      OrionMediaPlayerSeekPolicy.completion(reissued, 60_000L, 120_000L),
+    )
+  }
+
+  @Test
+  fun pendingSeekTargetOwnsProgressPresentationUntilAndroidSettles() {
+    assertEquals(
+      60_000L,
+      OrionMediaPlayerSeekPolicy.displayPosition(actualPositionMs = 0L, pendingTargetMs = 60_000L),
+    )
+    assertEquals(
+      12_000L,
+      OrionMediaPlayerSeekPolicy.displayPosition(actualPositionMs = 12_000L, pendingTargetMs = null),
+    )
+    assertEquals(
+      0L,
+      OrionMediaPlayerSeekPolicy.displayPosition(actualPositionMs = -1L, pendingTargetMs = null),
+    )
+    assertEquals(150L, OrionMediaPlayerSeekPolicy.SEEK_CONFIRMATION_DELAY_MS)
   }
 
   @Test

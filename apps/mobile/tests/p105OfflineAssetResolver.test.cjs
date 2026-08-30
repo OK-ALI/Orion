@@ -68,7 +68,7 @@ test('P10.5 reconciliation deep-validates managed fragment bundles before keepin
   assert.match(manager, /subtitles\.length\(\) > 2/);
 });
 
-test('P10.7 Locate opens the Android document navigator at the persisted Orion Library tree and never falls through to Play locally', () => {
+test('P10.7 Locate browses the persisted Orion Library tree without reopening folder configuration', () => {
   const manager = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadArtifactManager.kt');
   const openStart = manager.indexOf('fun open(context: Context, assetId: String, locate: Boolean)');
   const openEnd = manager.indexOf('private fun probeArtifact(', openStart);
@@ -76,6 +76,9 @@ test('P10.7 Locate opens the Android document navigator at the persisted Orion L
   assert.match(open, /if \(locate\) \{[\s\S]*resolveTreeUri\(context, targetId\)[\s\S]*launchLocate\(context, tree\)/);
   assert.match(open, /artifact-locate-unavailable/);
   assert.doesNotMatch(open, /launch\(context, tree, null, chooser = false\)/);
-  assert.match(manager, /Intent\(Intent\.ACTION_OPEN_DOCUMENT_TREE\)/);
+  assert.match(manager, /Intent\(Intent\.ACTION_OPEN_DOCUMENT\)/);
+  assert.match(manager, /addCategory\(Intent\.CATEGORY_OPENABLE\)/);
+  assert.match(manager, /type = "video\/mp4"/);
   assert.match(manager, /DocumentsContract\.EXTRA_INITIAL_URI/);
+  assert.doesNotMatch(manager, /ACTION_OPEN_DOCUMENT_TREE/);
 });

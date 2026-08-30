@@ -1266,9 +1266,15 @@ internal object OrionDownloadArtifactManager {
   }
 
   private fun launchLocate(context: Context, treeUri: Uri): Boolean = try {
-    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+    // Locate is navigation only. Android's directory-selection action is a
+    // configuration/grant flow ("Use this folder"), so use the system document
+    // browser instead and seed it at Orion's already persisted library tree.
+    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+      addCategory(Intent.CATEGORY_OPENABLE)
+      type = "video/mp4"
       putExtra(DocumentsContract.EXTRA_INITIAL_URI, treeUri)
-      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      putExtra(Intent.EXTRA_TITLE, "Orion Library")
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     context.startActivity(intent)
     true

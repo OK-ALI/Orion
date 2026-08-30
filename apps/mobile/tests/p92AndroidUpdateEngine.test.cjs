@@ -39,6 +39,9 @@ test('P9.2 native updater verifies GitHub origin, hash, package, version and per
   assert.match(native, /candidate\.packageName != reactContext\.packageName/);
   assert.match(native, /versionCode\(candidate\) <= versionCode\(installedPackageInfo\(\)\)/);
   assert.match(native, /candidateSigner != expectedSigner \|\| candidateSigner != currentSigner/);
+  assert.match(native, /modern\.signingInfo\?\.apkContentsSigners\.isNullOrEmpty\(\)/);
+  assert.match(native, /getPackageArchiveInfo\(file\.absolutePath, PackageManager\.GET_SIGNATURES\)/);
+  assert.match(native, /modernSignature \?: info\.signatures\?\.firstOrNull\(\)/);
   assert.match(native, /FileProvider\.getUriForFile/);
   assert.doesNotMatch(native, /AppUpdateManager|AppUpdateType|InstallStatus|com\.google\.android\.play/);
 });

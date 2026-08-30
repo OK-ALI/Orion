@@ -57,17 +57,32 @@ class OrionUpdateModule(
     )
 
   @Suppress("DEPRECATION")
-  private fun archivePackageInfo(file: File): PackageInfo? =
-    reactContext.packageManager.getPackageArchiveInfo(file.absolutePath, signingFlags())
+  private fun archivePackageInfo(file: File): PackageInfo? {
+    val packageManager = reactContext.packageManager
+    val modern = packageManager.getPackageArchiveInfo(file.absolutePath, signingFlags())
+      ?: return null
+    if (
+      Build.VERSION.SDK_INT < Build.VERSION_CODES.P ||
+      !modern.signingInfo?.apkContentsSigners.isNullOrEmpty()
+    ) {
+      return modern
+    }
+    // Android 9/10 vendor PackageManager builds can parse an APK archive while
+    // leaving signingInfo empty for GET_SIGNING_CERTIFICATES. Reparse the same
+    // already hash-verified APK with the legacy signature flag, then subject
+    // that certificate to the exact same permanent/current signer checks.
+    return packageManager.getPackageArchiveInfo(file.absolutePath, PackageManager.GET_SIGNATURES)
+      ?: modern
+  }
 
   @Suppress("DEPRECATION")
   private fun signerSha256(info: PackageInfo): String? {
-    val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-      info.signingInfo?.apkContentsSigners
+    val modernSignature = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      info.signingInfo?.apkContentsSigners?.firstOrNull()
     } else {
-      info.signatures
+      null
     }
-    val signature = signatures?.firstOrNull() ?: return null
+    val signature = modernSignature ?: info.signatures?.firstOrNull() ?: return null
     return sha256(signature.toByteArray())
   }
 

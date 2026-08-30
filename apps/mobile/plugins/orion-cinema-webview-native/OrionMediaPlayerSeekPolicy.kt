@@ -7,10 +7,11 @@ import kotlin.math.min
 /** Pure seek arithmetic/state decisions used by the finalized MediaPlayer activity. */
 internal object OrionMediaPlayerSeekPolicy {
   const val SEEK_TIMEOUT_MS = 10_000L
+  const val SEEK_CONFIRMATION_DELAY_MS = 150L
   const val MAX_REISSUES = 1
 
   enum class Mode { LEGACY_PREVIOUS_SYNC, CLOSEST_SYNC }
-  enum class Completion { SETTLED, REISSUE }
+  enum class Completion { SETTLED, REISSUE, AWAIT_TIMEOUT }
 
   data class Request(
     val generation: Long,
@@ -38,12 +39,12 @@ internal object OrionMediaPlayerSeekPolicy {
 
   fun completion(request: Request, actualPositionMs: Long, durationMs: Long): Completion {
     val tolerance = min(10_000L, max(3_000L, durationMs / 200L))
-    return if (abs(actualPositionMs - request.targetMs) <= tolerance || request.reissues >= MAX_REISSUES) {
-      Completion.SETTLED
-    } else {
-      Completion.REISSUE
-    }
+    if (abs(actualPositionMs - request.targetMs) <= tolerance) return Completion.SETTLED
+    return if (request.reissues < MAX_REISSUES) Completion.REISSUE else Completion.AWAIT_TIMEOUT
   }
+
+  fun displayPosition(actualPositionMs: Long, pendingTargetMs: Long?): Long =
+    (pendingTargetMs ?: actualPositionMs).coerceAtLeast(0L)
 
   fun reissued(request: Request): Request = request.copy(reissues = request.reissues + 1)
 }

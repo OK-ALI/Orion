@@ -121,17 +121,27 @@ test("P10.7 recovering downloads expose deterministic manual Retry now instead o
   assert.ok(cancel >= 0 && local > cancel && service > local);
 });
 
-test("P10.7 finalized MediaPlayer seeking remains pending until Android confirms completion", () => {
+test("P10.7 finalized MediaPlayer seeking keeps target progress authoritative until Android really settles", () => {
   const activity = read("plugins", "orion-cinema-webview-native", "OrionPlayerActivity.kt");
   const policy = read("plugins", "orion-cinema-webview-native", "OrionMediaPlayerSeekPolicy.kt");
   assert.match(activity, /setOnSeekCompleteListener/);
   assert.match(activity, /MediaPlayer\.SEEK_CLOSEST_SYNC/);
   assert.match(activity, /postDelayed\(seekTimeoutRunnable, OrionMediaPlayerSeekPolicy\.SEEK_TIMEOUT_MS\)/);
-  assert.match(activity, /if \(!seekingByUser && duration > 0L\)/);
+  assert.match(activity, /postDelayed\(confirmation, OrionMediaPlayerSeekPolicy\.SEEK_CONFIRMATION_DELAY_MS\)/);
+  assert.match(activity, /displayPosition\(actualPosition, pendingSeek\?\.targetMs\)/);
+  assert.match(activity, /if \(!trackingSeekBar && duration > 0L\)/);
   assert.match(activity, /pendingSeek = OrionMediaPlayerSeekPolicy\.Request/);
   assert.match(activity, /OrionMediaPlayerSeekPolicy\.Completion\.REISSUE/);
+  assert.match(activity, /OrionMediaPlayerSeekPolicy\.Completion\.AWAIT_TIMEOUT/);
+  assert.match(activity, /AWAIT_TIMEOUT ->[\s\S]{0,120}scheduleSeekConfirmation\(player, active\)/);
+  assert.match(activity, /private fun finishPendingSeekFromTimeout\(\)/);
+  assert.match(activity, /finishPendingSeek\(timedOut = !settled\)/);
   assert.match(activity, /Couldn’t seek to that time/);
   assert.doesNotMatch(activity, /player\.seekTo\(target\.toInt\(\)\)[\s\S]{0,120}seekingByUser = false/);
+  assert.match(policy, /SEEK_CONFIRMATION_DELAY_MS = 150L/);
+  assert.match(policy, /request\.reissues < MAX_REISSUES/);
+  assert.match(policy, /Completion\.AWAIT_TIMEOUT/);
+  assert.match(policy, /fun displayPosition\(actualPositionMs: Long, pendingTargetMs: Long\?\): Long/);
   assert.match(policy, /\(durationMs \/ progressMax\) \* boundedProgress/);
 });
 
@@ -154,7 +164,7 @@ test("P10.7 pending seek keeps the latest explicit play or pause intent", () => 
   assert.match(policy, /fun withPlayIntent\(request: Request, playWhenSettled: Boolean\): Request/);
 });
 
-test("P10.7 Locate uses DocumentsUI navigation instead of ACTION_VIEW on a tree URI", () => {
+test("P10.7 Locate browses the persisted tree without reopening directory-selection configuration", () => {
   const manager = read("plugins", "orion-cinema-webview-native", "OrionDownloadArtifactManager.kt");
   const locate = manager.slice(
     manager.indexOf("if (locate) {"),
@@ -163,8 +173,11 @@ test("P10.7 Locate uses DocumentsUI navigation instead of ACTION_VIEW on a tree 
   assert.match(locate, /launchLocate\(context, tree\)/);
   assert.match(locate, /artifact-locate-unavailable/);
   assert.doesNotMatch(locate, /launch\(context, tree/);
-  assert.match(manager, /Intent\(Intent\.ACTION_OPEN_DOCUMENT_TREE\)/);
+  assert.match(manager, /Intent\(Intent\.ACTION_OPEN_DOCUMENT\)/);
+  assert.match(manager, /addCategory\(Intent\.CATEGORY_OPENABLE\)/);
+  assert.match(manager, /type = "video\/mp4"/);
   assert.match(manager, /putExtra\(DocumentsContract\.EXTRA_INITIAL_URI, treeUri\)/);
+  assert.doesNotMatch(manager, /ACTION_OPEN_DOCUMENT_TREE/);
 });
 
 test("P10.7 new production and JVM policy owners are included in hash-verified synchronization", () => {
