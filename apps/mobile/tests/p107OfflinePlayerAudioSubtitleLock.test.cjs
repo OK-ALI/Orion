@@ -38,8 +38,11 @@ test('Slice C adds subtitle size, background, and vertical position without repl
   assert.match(activity, /"large" -> 20f/);
   assert.match(activity, /"low" -> 126/);
   assert.match(activity, /"high" -> 238/);
-  assert.match(activity, /"low" -> 112/);
-  assert.match(activity, /"high" -> 196/);
+  assert.match(activity, /if \(chromeControlsVisible\)/);
+  assert.match(activity, /"low" -> 100/);
+  assert.match(activity, /"high" -> 148/);
+  assert.match(activity, /"low" -> 32/);
+  assert.match(activity, /"high" -> 84/);
   assert.match(activity, /updateSubtitle\(actualPosition\)/);
   assert.match(activity, /OrionPlayerSubtitleParser\.parse\(subtitle\.format, content\)/);
 });

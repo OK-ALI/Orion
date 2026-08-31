@@ -128,6 +128,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   private var safeInsetTop = 0
   private var safeInsetRight = 0
   private var safeInsetBottom = 0
+  private var chromeControlsVisible = true
   private var buffering = false
   private var lastProgressPublishedAt = 0L
 
@@ -504,7 +505,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
 
     val bottom = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
-      setPadding(dp(18), dp(16), dp(18), dp(12))
+      setPadding(dp(18), dp(4), dp(18), dp(12))
       background = cinematicChromeScrim(top = false)
     }
     seekPreviewView = TextView(this).apply {
@@ -657,11 +658,6 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       rightMargin = dp(10)
     })
     controls.addView(forwardView, LinearLayout.LayoutParams(dp(82), dp(40)))
-    bottom.addView(controls, LinearLayout.LayoutParams(
-      ViewGroup.LayoutParams.MATCH_PARENT,
-      ViewGroup.LayoutParams.WRAP_CONTENT,
-    ))
-
     val secondaryControls = LinearLayout(this).apply {
       orientation = LinearLayout.HORIZONTAL
       gravity = Gravity.CENTER_VERTICAL
@@ -711,6 +707,11 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
         ViewGroup.LayoutParams.MATCH_PARENT,
         ViewGroup.LayoutParams.WRAP_CONTENT,
         Gravity.BOTTOM,
+      ))
+      addView(controls, FrameLayout.LayoutParams(
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+        Gravity.CENTER,
       ))
     }
     root.addView(chrome, FrameLayout.LayoutParams(
@@ -820,16 +821,11 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       )
       bottom.setPadding(
         dp(18) + safeInsetLeft,
-        dp(16),
+        dp(4),
         dp(18) + safeInsetRight,
         dp(12) + safeInsetBottom,
       )
-      (subtitleView.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
-        params.bottomMargin = dp(subtitleBottomMarginDp()) + safeInsetBottom
-        params.leftMargin = dp(24) + safeInsetLeft
-        params.rightMargin = dp(24) + safeInsetRight
-        subtitleView.layoutParams = params
-      }
+      updateSubtitleGeometry()
       (seekPreviewView.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
         params.bottomMargin = dp(SEEK_PREVIEW_BOTTOM_MARGIN_DP) + safeInsetBottom
         seekPreviewView.layoutParams = params
@@ -1644,10 +1640,34 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     }
   }
 
-  private fun subtitleBottomMarginDp(): Int = when (subtitlePosition) {
-    "low" -> 112
-    "high" -> 196
-    else -> 148
+  private fun subtitleBottomMarginDp(): Int = if (chromeControlsVisible) {
+    when (subtitlePosition) {
+      "low" -> 100
+      "high" -> 148
+      else -> 116
+    }
+  } else {
+    when (subtitlePosition) {
+      "low" -> 32
+      "high" -> 84
+      else -> 52
+    }
+  }
+
+  private fun updateSubtitleGeometry() {
+    if (!::subtitleView.isInitialized) return
+    (subtitleView.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+      params.bottomMargin = dp(subtitleBottomMarginDp()) + safeInsetBottom
+      params.leftMargin = dp(24) + safeInsetLeft
+      params.rightMargin = dp(24) + safeInsetRight
+      subtitleView.layoutParams = params
+    }
+  }
+
+  private fun setChromeControlsVisible(visible: Boolean) {
+    if (chromeControlsVisible == visible) return
+    chromeControlsVisible = visible
+    updateSubtitleGeometry()
   }
 
   private fun applySubtitleAppearance() {
@@ -1667,12 +1687,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       borderColor,
       10,
     )
-    (subtitleView.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
-      params.bottomMargin = dp(subtitleBottomMarginDp()) + safeInsetBottom
-      params.leftMargin = dp(24) + safeInsetLeft
-      params.rightMargin = dp(24) + safeInsetRight
-      subtitleView.layoutParams = params
-    }
+    updateSubtitleGeometry()
   }
 
   @Suppress("DEPRECATION")
@@ -1838,6 +1853,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
         chrome.animate().cancel()
         chrome.alpha = 0f
         chrome.visibility = View.INVISIBLE
+        setChromeControlsVisible(false)
       }
       showUnlockAffordance()
       unlockView.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED)
@@ -1939,6 +1955,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     }
     if (!::chrome.isInitialized) return
     chrome.animate().cancel()
+    setChromeControlsVisible(true)
     chrome.visibility = View.VISIBLE
     if (reducedMotion) {
       chrome.alpha = 1f
@@ -1960,6 +1977,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     if (reducedMotion) {
       chrome.alpha = 0f
       chrome.visibility = View.INVISIBLE
+      setChromeControlsVisible(false)
       return
     }
     chrome.animate()
@@ -1968,6 +1986,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       .withEndAction {
         if (::chrome.isInitialized && shouldAutoHideChrome() && chrome.alpha <= 0.01f) {
           chrome.visibility = View.INVISIBLE
+          setChromeControlsVisible(false)
         }
       }
       .start()
