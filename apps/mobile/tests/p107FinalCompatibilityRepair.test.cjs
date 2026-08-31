@@ -93,17 +93,31 @@ test("P10.7 verifies Google and TMDB configuration in the embedded bundle withou
   assert.match(settings, /This Orion build is missing its Google sign-in configuration/);
 });
 
-test("P10.7 SAF publication falls back only before writes and still requires the full destination proof", () => {
+test("P10.7 SAF publication is exclusive-first, single-owner, bounded, and still deeply verified", () => {
   const owner = read("plugins", "orion-cinema-webview-native", "OrionFinalizedArtifactOwner.kt");
   const policy = read("plugins", "orion-cinema-webview-native", "OrionSafPublicationWritePolicy.kt");
-  assert.match(owner, /openFileDescriptor\(document, "rwt"\)/);
-  assert.match(owner, /openOutputStream\(document, "w"\)/);
-  assert.match(owner, /shouldFallbackToExclusive\(false, 0L\)/);
+  const exclusive = owner.indexOf('openOutputStream(document, "w")');
+  const seekable = owner.indexOf('openFileDescriptor(document, "rwt")');
+  assert.ok(exclusive >= 0 && seekable > exclusive);
+  assert.match(owner, /shouldFallbackToSeekable\(false, 0L\)/);
+  assert.match(owner, /ParcelFileDescriptor\.AutoCloseOutputStream\(descriptor\)/);
+  assert.doesNotMatch(owner, /descriptor\.use[\s\S]{0,160}FileOutputStream\(descriptor\.fileDescriptor\)/);
   assert.match(owner, /SyncOutcome\.FAILED/);
+  assert.match(owner, /CloseOutcome\.FAILED/);
+  assert.match(owner, /awaitDocumentInfo/);
+  assert.match(owner, /awaitReadableDescriptor/);
+  assert.match(owner, /DocumentInfoReadiness\.Cancelled[\s\S]{0,180}OrionFinalizedDocumentSettlement\.Cancelled/);
+  assert.match(owner, /awaitDocumentInfo\(context, document, expectedBytes\)/);
+  assert.match(policy, /enum class ReadinessDecision \{ READY, RETRY, FAILED, CANCELLED \}/);
+  assert.match(policy, /observedBytes == expectedBytes -> ReadinessProbe\.READY/);
+  assert.match(policy, /!canContinue -> ReadinessDecision\.CANCELLED/);
+  assert.match(owner, /rename-fallback-created/);
+  assert.match(owner, /rename-fallback-copied/);
   assert.match(owner, /verifyDocument\([\s\S]{0,350}sourceDigest/);
-  assert.match(owner, /acceptsAfterDeepVerification\(written\.syncOutcome, true\)/);
+  assert.match(owner, /acceptsAfterDeepVerification\([\s\S]{0,160}written\.closeOutcome[\s\S]{0,80}true/);
   assert.match(owner, /finalized-artifact-\$\{OrionSafPublicationWritePolicy\.failureCode\(write\.stage\)\}/);
-  assert.match(policy, /!seekableDescriptorOpened && bytesWritten == 0L/);
+  assert.match(policy, /!exclusiveStreamOpened && bytesWritten == 0L/);
+  assert.match(policy, /100L, 200L, 400L, 800L, 1_500L/);
   assert.doesNotMatch(policy, /Uri|content:\/\/|File\(/);
 });
 
@@ -121,7 +135,7 @@ test("P10.7 recovering downloads expose deterministic manual Retry now instead o
   assert.ok(cancel >= 0 && local > cancel && service > local);
 });
 
-test("P10.7 finalized MediaPlayer seeking preserves Samsung fast path and adds one general fallback", () => {
+test("P10.7 finalized MediaPlayer seeking requires frame-backed convergence and one bounded fallback", () => {
   const activity = read("plugins", "orion-cinema-webview-native", "OrionPlayerActivity.kt");
   const policy = read("plugins", "orion-cinema-webview-native", "OrionMediaPlayerSeekPolicy.kt");
   assert.match(activity, /class OrionPlayerActivity : Activity\(\), TextureView\.SurfaceTextureListener/);
@@ -131,7 +145,7 @@ test("P10.7 finalized MediaPlayer seeking preserves Samsung fast path and adds o
   assert.match(activity, /MediaPlayer\.SEEK_CLOSEST/);
   assert.match(policy, /attempt == Attempt\.PRIMARY -> Mode\.CLOSEST_SYNC/);
   assert.match(policy, /else -> Mode\.CLOSEST/);
-  assert.match(policy, /request\.attempt == Attempt\.PRIMARY\) Completion\.FALLBACK/);
+  assert.match(policy, /enum class Decision \{ WAIT, SETTLE, FALLBACK, TIMED_OUT \}/);
   assert.match(policy, /fun withFallback\(request: Request\): Request = request\.copy\(attempt = Attempt\.FALLBACK\)/);
   assert.doesNotMatch(activity, /Build\.MANUFACTURER|Build\.MODEL|Xiaomi|Redmi/i);
   assert.doesNotMatch(activity, /androidx\.media3|ExoPlayer/);
@@ -148,23 +162,25 @@ test("P10.7 finalized MediaPlayer seeking preserves Samsung fast path and adds o
   assert.match(requestSeek, /if \(player\.isPlaying\) player\.pause\(\)/);
   assert.match(requestSeek, /postDelayed\(seekTimeoutRunnable, OrionMediaPlayerSeekPolicy\.SEEK_TIMEOUT_MS\)/);
   assert.doesNotMatch(issueSeek, /postDelayed\(seekTimeoutRunnable|removeCallbacks\(seekTimeoutRunnable/);
-  assert.match(activity, /postDelayed\(seekTimeoutRunnable, OrionMediaPlayerSeekPolicy\.SEEK_TIMEOUT_MS\)/);
-  assert.match(activity, /postDelayed\(confirmation, OrionMediaPlayerSeekPolicy\.SEEK_CONFIRMATION_DELAY_MS\)/);
+  assert.match(activity, /onSurfaceTextureUpdated[\s\S]{0,160}surfaceFrameGeneration \+= 1L/);
+  assert.match(activity, /beginObservation\([\s\S]{0,120}issued,[\s\S]{0,120}surfaceFrameGeneration/);
+  assert.match(activity, /postDelayed\(observationPoll, OrionMediaPlayerSeekPolicy\.OBSERVATION_INTERVAL_MS\)/);
   assert.match(activity, /displayPosition\(actualPosition, pendingSeek\?\.targetMs\)/);
   assert.match(activity, /if \(!trackingSeekBar && duration > 0L\)/);
   assert.match(activity, /pendingSeek = OrionMediaPlayerSeekPolicy\.Request/);
-  assert.match(activity, /OrionMediaPlayerSeekPolicy\.Completion\.FALLBACK/);
-  assert.match(activity, /OrionMediaPlayerSeekPolicy\.Completion\.AWAIT_TIMEOUT/);
-  assert.match(activity, /AWAIT_TIMEOUT ->[\s\S]{0,120}scheduleSeekConfirmation\(player, active\)/);
-  assert.match(activity, /OrionMediaPlayerSeekPolicy\.Completion\.TIMED_OUT -> finishPendingSeek\(timedOut = true\)/);
+  assert.match(activity, /OrionMediaPlayerSeekPolicy\.Decision\.FALLBACK/);
+  assert.match(activity, /Decision\.WAIT -> scheduleSeekObservation\(player, active\)/);
+  assert.match(activity, /Decision\.TIMED_OUT -> finishPendingSeek\(timedOut = true\)/);
   assert.match(activity, /private fun finishPendingSeekFromTimeout\(\)/);
-  assert.match(activity, /val settled = issuedSeek == null/);
-  assert.match(activity, /finishPendingSeek\(timedOut = !settled\)/);
   assert.match(activity, /Couldn’t seek to that time/);
-  assert.match(policy, /SEEK_CONFIRMATION_DELAY_MS = 150L/);
+  assert.match(policy, /OBSERVATION_INTERVAL_MS = 100L/);
+  assert.match(policy, /PRIMARY_FALLBACK_WAIT_MS = 1_500L/);
+  assert.match(policy, /callbackSurfaceFrameGeneration = callbackSurfaceFrameGeneration\.coerceAtLeast/);
+  assert.match(policy, /surfaceFrameGeneration > observation\.callbackSurfaceFrameGeneration/);
+  assert.match(policy, /nearSamples >= 2/);
+  assert.match(policy, /stableFarSamples >= 2/);
   assert.match(policy, /deadlineUptimeMs: Long/);
   assert.match(policy, /remainingMs\(request, nowUptimeMs\)/);
-  assert.match(policy, /Completion\.AWAIT_TIMEOUT/);
   assert.match(policy, /fun displayPosition\(actualPositionMs: Long, pendingTargetMs: Long\?\): Long/);
   assert.match(policy, /\(durationMs \/ progressMax\) \* boundedProgress/);
   assert.match(activity, /updateSubtitle\(actualPosition\)/);
@@ -190,7 +206,7 @@ test("P10.7 pending seek coalesces latest target and fences stale native callbac
   assert.match(activity, /val playWhenSettled = pendingSeek\?\.playWhenSettled[\s\S]{0,100}player\.isPlaying/);
   assert.match(activity, /if \(issuedSeek != null\) return/);
   assert.match(activity, /val issued = issuedSeek \?: return/);
-  assert.match(activity, /issuedSeek = null[\s\S]{0,180}!OrionMediaPlayerSeekPolicy\.matchesAttempt\(request, issued\)[\s\S]{0,100}issuePendingSeek\(player\)/);
+  assert.match(activity, /issuedSeek = null[\s\S]{0,320}!OrionMediaPlayerSeekPolicy\.matchesAttempt\(request, issued\)[\s\S]{0,240}issuePendingSeek\(player\)/);
   assert.match(policy, /request\.generation == issued\.generation/);
   assert.match(policy, /request\.playerGeneration == issued\.playerGeneration/);
   assert.match(policy, /request\.attempt == issued\.attempt/);

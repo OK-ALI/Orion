@@ -60,9 +60,23 @@ test('P10.6-A3 completes theme-aware native player presentation across the six O
   assert.match(activity, /setTextColor\(chromeTextColor\)/);
   assert.match(activity, /setTextColor\(contentTextColor\)/);
   assert.match(activity, /setTextColor\(secondaryTextColor\)/);
-  assert.match(activity, /setTextColor\(if \(primary\) onAccentColor else contentTextColor\)/);
+  assert.match(activity, /alphaColor\(accentColor, 48\)/);
+  assert.match(activity, /alphaColor\(accentColor, 154\)/);
+  assert.match(activity, /alphaColor\(panelFillColor, 108\)/);
+  assert.match(activity, /alphaColor\(contentTextColor, 36\)/);
+  assert.match(activity, /cinematicChromeScrim\(top = true\)/);
+  assert.match(activity, /cinematicChromeScrim\(top = false\)/);
+  assert.match(activity, /setTextColor\(if \(selected\) onAccentColor else contentTextColor\)/);
+  assert.doesNotMatch(activity, /setTextColor\(if \(primary\) onAccentColor else contentTextColor\)/);
+  assert.doesNotMatch(activity, /setBackgroundColor\(chromeFillColor\)/);
   assert.match(activity, /progressBackgroundTintList = ColorStateList\.valueOf\(alphaColor\(chromeTextColor, 85\)\)/);
-  assert.match(activity, /background = roundedBackground\(\s*alphaColor\(panelFillColor, 238\),\s*borderColor,/);
+  assert.match(activity, /private var subtitleBackground = "medium"/);
+  assert.match(activity, /private fun applySubtitleAppearance\(\)/);
+  assert.match(activity, /val backgroundAlpha = when \(subtitleBackground\)/);
+  assert.match(activity, /"low" -> 126/);
+  assert.match(activity, /"high" -> 238/);
+  assert.match(activity, /else -> 188/);
+  assert.match(activity, /subtitleView\.background = roundedBackground\(\s*alphaColor\(panelFillColor, backgroundAlpha\),\s*borderColor,/);
 
   assert.match(overlay, /backgroundColor: theme\.elevated/);
   assert.match(overlay, /borderColor: theme\.border/);

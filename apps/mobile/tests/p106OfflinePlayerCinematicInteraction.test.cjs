@@ -63,8 +63,14 @@ test('P10.6-A2 carries active Orion theme presentation tokens across the asset-I
   assert.match(activity, /EXTRA_THEME_MEDIA_SCRIM/);
   assert.match(activity, /EXTRA_THEME_SURFACE/);
   assert.match(activity, /EXTRA_REDUCED_MOTION/);
-  assert.match(activity, /setTextColor\(if \(primary\) onAccentColor else contentTextColor\)/);
-  assert.match(activity, /setBackgroundColor\(chromeFillColor\)/);
+  assert.match(activity, /setTextColor\(contentTextColor\)/);
+  assert.match(activity, /setTextColor\(if \(selected\) onAccentColor else contentTextColor\)/);
+  assert.match(activity, /alphaColor\(accentColor, 48\)/);
+  assert.match(activity, /alphaColor\(accentColor, 154\)/);
+  assert.match(activity, /cinematicChromeScrim\(top = true\)/);
+  assert.match(activity, /cinematicChromeScrim\(top = false\)/);
+  assert.match(activity, /alphaColor\(chromeFillColor, 188\)/);
+  assert.doesNotMatch(activity, /setBackgroundColor\(chromeFillColor\)/);
 });
 
 test('P10.6-A2 keeps watching-first chrome while P10.7 waits for confirmed seek completion', () => {

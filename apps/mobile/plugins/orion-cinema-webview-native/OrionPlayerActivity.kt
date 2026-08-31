@@ -11,14 +11,19 @@ import android.graphics.SurfaceTexture
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.Settings
 import android.text.TextUtils
+import android.util.Log
+import android.view.GestureDetector
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
@@ -28,6 +33,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.SeekBar
 import android.widget.ScrollView
 import android.widget.TextView
@@ -35,6 +41,7 @@ import android.widget.Toast
 import java.io.FileInputStream
 import java.io.InputStream
 import java.util.concurrent.Executors
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -54,12 +61,24 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   private val resolver = Executors.newSingleThreadExecutor()
   private lateinit var textureView: TextureView
   private lateinit var titleView: TextView
+  private lateinit var rewindView: TextView
   private lateinit var playPauseView: TextView
+  private lateinit var forwardView: TextView
   private lateinit var positionView: TextView
   private lateinit var seekBar: SeekBar
+  private lateinit var speedView: TextView
+  private lateinit var audioView: TextView
   private lateinit var presentationView: TextView
   private lateinit var subtitleButton: TextView
+  private lateinit var lockView: TextView
+  private lateinit var unlockView: TextView
   private lateinit var subtitleView: TextView
+  private lateinit var seekPreviewView: TextView
+  private lateinit var gestureFeedbackView: TextView
+  private lateinit var playbackStatusOverlay: LinearLayout
+  private lateinit var playbackStatusSpinner: ProgressBar
+  private lateinit var playbackStatusText: TextView
+  private lateinit var audioManager: AudioManager
   private lateinit var chrome: View
   private lateinit var selectorOverlay: FrameLayout
   private var mediaPlayer: MediaPlayer? = null
@@ -75,12 +94,24 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   private var seekGeneration = 0L
   private var pendingSeek: OrionMediaPlayerSeekPolicy.Request? = null
   private var issuedSeek: OrionMediaPlayerSeekPolicy.IssuedAttempt? = null
-  private var seekConfirmationRunnable: Runnable? = null
+  private var seekObservation: OrionMediaPlayerSeekPolicy.Observation? = null
+  private var seekObservationRunnable: Runnable? = null
+  private var surfaceFrameGeneration = 0L
   private var videoWidth = 0
   private var videoHeight = 0
   private var presentation = "fit"
+  private var playbackSpeed = 1.0f
+  private var audioTracks: List<EmbeddedAudioTrack> = emptyList()
+  private var selectedAudioTrackIndex = -1
+  private var controlsLocked = false
+  private var verticalGestureMode: String? = null
+  private var gestureStartBrightness = 0.5f
+  private var gestureStartVolume = 0
   private var subtitleTracks: List<PreparedSubtitle> = emptyList()
   private var selectedSubtitleIndex = -1
+  private var subtitleTextSize = "medium"
+  private var subtitleBackground = "medium"
+  private var subtitlePosition = "standard"
   private var lastSubtitleText: String? = null
   private var requestedAssetId = ""
   private var accentColor = Color.rgb(229, 9, 20)
@@ -109,6 +140,8 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   }
 
   private val hideChromeRunnable = Runnable { hideChrome() }
+  private val hideUnlockRunnable = Runnable { hideUnlockAffordance() }
+  private val hideGestureFeedbackRunnable = Runnable { hideGestureFeedback() }
   private val seekTimeoutRunnable = Runnable { finishPendingSeekFromTimeout() }
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -202,6 +235,10 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
 
   @Deprecated("Deprecated in Android")
   override fun onBackPressed() {
+    if (controlsLocked) {
+      setControlsLocked(false)
+      return
+    }
     if (::selectorOverlay.isInitialized && selectorOverlay.visibility == View.VISIBLE) {
       dismissChoicePanel()
       return
@@ -227,7 +264,9 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     return true
   }
 
-  override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) = Unit
+  override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) {
+    if (surfaceFrameGeneration < Long.MAX_VALUE) surfaceFrameGeneration += 1L
+  }
 
   private fun openPlayer(asset: OrionOfflinePlayerAsset, initialPositionMs: Long) {
     releasePlayer()
@@ -242,10 +281,12 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     )
     player.setOnPreparedListener {
       prepared = true
+      refreshAudioTracks(it)
       val duration = safeDuration(it)
       val target = initialPositionMs.coerceIn(0L, max(0L, duration - 1L))
       mainHandler.removeCallbacks(progressTicker)
       mainHandler.post(progressTicker)
+      if (playbackSpeed != 1.0f) applyPlaybackSpeed(it, playbackSpeed)
       if (target > 0L) {
         requestSeek(it, target, playWhenSettled = true)
       } else {
@@ -273,10 +314,12 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       when (what) {
         MediaPlayer.MEDIA_INFO_BUFFERING_START -> {
           buffering = true
+          updatePlaybackStatus()
           publishProgress("buffering", force = true)
         }
         MediaPlayer.MEDIA_INFO_BUFFERING_END -> {
           buffering = false
+          updatePlaybackStatus()
           publishProgress(currentPlaybackState(), force = true)
         }
       }
@@ -285,6 +328,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     player.setOnErrorListener { _, what, extra ->
       prepared = false
       buffering = false
+      hidePlaybackStatus()
       mainHandler.removeCallbacks(progressTicker)
       fail("orion-player-media-error-$what-$extra", "Android could not play this verified MP4.")
       true
@@ -325,10 +369,15 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   }
 
   private fun buildUi() {
+    audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
     val root = FrameLayout(this).apply {
       setBackgroundColor(Color.BLACK)
       isClickable = true
       setOnClickListener {
+        if (controlsLocked) {
+          showUnlockAffordance()
+          return@setOnClickListener
+        }
         if (::chrome.isInitialized && chrome.visibility == View.VISIBLE && chrome.alpha > 0.5f) {
           hideChrome()
         } else {
@@ -336,6 +385,61 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
         }
       }
     }
+    val tapGestureDetector = GestureDetector(
+      this,
+      object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDown(event: MotionEvent): Boolean {
+          verticalGestureMode = null
+          gestureStartBrightness = currentWindowBrightness()
+          gestureStartVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+          return true
+        }
+
+        override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
+          root.performClick()
+          return true
+        }
+
+        override fun onScroll(
+          downEvent: MotionEvent?,
+          event: MotionEvent,
+          distanceX: Float,
+          distanceY: Float,
+        ): Boolean {
+          if (controlsLocked) {
+            showUnlockAffordance()
+            return true
+          }
+          val start = downEvent ?: return false
+          val totalX = event.x - start.x
+          val totalY = event.y - start.y
+          if (verticalGestureMode == null) {
+            if (abs(totalY) < dp(VERTICAL_GESTURE_START_DP).toFloat()) return false
+            if (abs(totalY) <= abs(totalX) * 1.15f) return false
+            verticalGestureMode = if (start.x < root.width / 2f) "brightness" else "volume"
+          }
+          val verticalFraction = ((start.y - event.y) / max(1, root.height).toFloat()) * 1.15f
+          when (verticalGestureMode) {
+            "brightness" -> applyBrightnessGesture(verticalFraction)
+            "volume" -> applyVolumeGesture(verticalFraction)
+          }
+          return true
+        }
+
+        override fun onDoubleTap(event: MotionEvent): Boolean {
+          if (controlsLocked) {
+            showUnlockAffordance()
+            return true
+          }
+          val player = mediaPlayer ?: return true
+          if (!prepared) return true
+          val offsetMs = if (event.x < root.width / 2f) -DOUBLE_TAP_SEEK_MS else DOUBLE_TAP_SEEK_MS
+          seekByOffset(player, offsetMs)
+          return true
+        }
+      },
+    )
+    root.setOnTouchListener { _, event -> tapGestureDetector.onTouchEvent(event) }
 
     textureView = TextureView(this).apply {
       surfaceTextureListener = this@OrionPlayerActivity
@@ -347,50 +451,76 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       Gravity.CENTER,
     ))
 
+    // Keep the decoded TextureView pristine. The cinematic chrome uses only
+    // translucent gradient scrims so Android 9 and newer devices share one
+    // safe presentation path without frame capture or video-surface effects.
     val top = LinearLayout(this).apply {
       orientation = LinearLayout.HORIZONTAL
       gravity = Gravity.CENTER_VERTICAL
-      setPadding(dp(18), dp(12), dp(18), dp(12))
-      setBackgroundColor(chromeFillColor)
+      setPadding(dp(16), dp(10), dp(16), dp(18))
+      background = cinematicChromeScrim(top = true)
     }
     val back = button("‹").apply {
-      textSize = 34f
+      textSize = 30f
+      setPadding(0, 0, 0, dp(2))
+      background = roundedBackground(
+        alphaColor(panelFillColor, 104),
+        alphaColor(contentTextColor, 38),
+        14,
+      )
       contentDescription = "Back"
       setOnClickListener { finishWithPlaybackResult() }
     }
     titleView = TextView(this).apply {
       setTextColor(chromeTextColor)
-      textSize = 16f
+      textSize = 15.5f
       setTypeface(typeface, Typeface.BOLD)
-      setPadding(dp(12), 0, dp(12), 0)
+      setPadding(dp(10), 0, dp(10), 0)
+      setShadowLayer(4f, 0f, 1f, alphaColor(Color.BLACK, 220))
       maxLines = 1
       ellipsize = TextUtils.TruncateAt.END
     }
     val offlineBadge = TextView(this).apply {
       text = "ORION OFFLINE"
-      setTextColor(onAccentColor)
-      textSize = 10f
+      setTextColor(alphaColor(accentColor, 232))
+      textSize = 9f
       setTypeface(typeface, Typeface.BOLD)
       gravity = Gravity.CENTER
-      setPadding(dp(10), 0, dp(10), 0)
+      setPadding(dp(9), 0, dp(9), 0)
       background = roundedBackground(
-        accentColor,
-        accentColor,
-        12,
+        alphaColor(panelFillColor, 112),
+        alphaColor(accentColor, 92),
+        14,
       )
+      elevation = dp(1).toFloat()
       contentDescription = "Orion offline playback"
     }
-    top.addView(back, LinearLayout.LayoutParams(dp(48), dp(48)))
+    top.addView(back, LinearLayout.LayoutParams(dp(44), dp(44)))
     top.addView(titleView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
     top.addView(offlineBadge, LinearLayout.LayoutParams(
       ViewGroup.LayoutParams.WRAP_CONTENT,
-      dp(30),
+      dp(28),
     ))
 
     val bottom = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
-      setPadding(dp(20), dp(8), dp(20), dp(14))
-      setBackgroundColor(chromeFillColor)
+      setPadding(dp(18), dp(16), dp(18), dp(12))
+      background = cinematicChromeScrim(top = false)
+    }
+    seekPreviewView = TextView(this).apply {
+      setTextColor(contentTextColor)
+      textSize = 12f
+      setTypeface(typeface, Typeface.BOLD)
+      gravity = Gravity.CENTER
+      setPadding(dp(10), dp(5), dp(10), dp(5))
+      background = roundedBackground(
+        alphaColor(panelFillColor, 196),
+        alphaColor(contentTextColor, 42),
+        12,
+      )
+      visibility = View.GONE
+      elevation = dp(3).toFloat()
+      contentDescription = "Seek preview"
     }
     seekBar = SeekBar(this).apply {
       max = 1000
@@ -402,16 +532,22 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
         override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
           if (!fromUser) return
           val duration = safeDuration(mediaPlayer)
-          positionView.text = "${formatTime(duration * progress / 1000L)} / ${formatTime(duration)}"
+          val target = duration * progress / 1000L
+          positionView.text = "${formatTime(target)} / ${formatTime(duration)}"
+          showSeekPreview(progress, target)
         }
         override fun onStartTrackingTouch(seekBar: SeekBar?) {
           trackingSeekBar = true
           seekingByUser = true
+          val duration = safeDuration(mediaPlayer)
+          val progress = seekBar?.progress ?: 0
+          showSeekPreview(progress, duration * progress / 1000L)
           showChrome(autoHide = false)
           publishProgress("seeking", force = true)
         }
         override fun onStopTrackingTouch(seekBar: SeekBar?) {
           trackingSeekBar = false
+          hideSeekPreview()
           val player = mediaPlayer ?: return
           val duration = safeDuration(player)
           val target = OrionMediaPlayerSeekPolicy.targetMs(duration, seekBar?.progress ?: 0)
@@ -425,9 +561,20 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
 
     val controls = LinearLayout(this).apply {
       orientation = LinearLayout.HORIZONTAL
-      gravity = Gravity.CENTER_VERTICAL
+      gravity = Gravity.CENTER
+      setPadding(0, dp(2), 0, dp(4))
+    }
+    rewindView = button("↶ 10").apply {
+      textSize = 14f
+      contentDescription = "Rewind 10 seconds"
+      setOnClickListener {
+        val player = mediaPlayer ?: return@setOnClickListener
+        if (!prepared) return@setOnClickListener
+        seekByOffset(player, -TRANSPORT_SEEK_MS)
+      }
     }
     playPauseView = button("Play", primary = true).apply {
+      textSize = 14f
       contentDescription = "Play or pause"
       setOnClickListener {
         val player = mediaPlayer ?: return@setOnClickListener
@@ -455,11 +602,39 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     }
     positionView = TextView(this).apply {
       setTextColor(chromeTextColor)
-      textSize = 13f
+      textSize = 12.5f
       setTypeface(typeface, Typeface.BOLD)
       text = "0:00 / 0:00"
       gravity = Gravity.CENTER_VERTICAL
-      setPadding(dp(10), 0, dp(10), 0)
+      setPadding(dp(2), 0, dp(10), 0)
+      setShadowLayer(4f, 0f, 1f, alphaColor(Color.BLACK, 220))
+    }
+    forwardView = button("10 ↷").apply {
+      textSize = 14f
+      contentDescription = "Forward 10 seconds"
+      setOnClickListener {
+        val player = mediaPlayer ?: return@setOnClickListener
+        if (!prepared) return@setOnClickListener
+        seekByOffset(player, TRANSPORT_SEEK_MS)
+      }
+    }
+    speedView = button("1×").apply {
+      contentDescription = "Playback speed: 1 times"
+      isEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+      alpha = if (isEnabled) 1f else 0.45f
+      setOnClickListener {
+        if (!prepared || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return@setOnClickListener
+        showPlaybackSpeedSelector()
+      }
+    }
+    audioView = button("Audio").apply {
+      contentDescription = "Audio track unavailable"
+      isEnabled = false
+      alpha = 0.45f
+      setOnClickListener {
+        if (!prepared || audioTracks.size <= 1) return@setOnClickListener
+        showAudioTrackSelector()
+      }
     }
     presentationView = button("Fit").apply {
       setOnClickListener { showPresentationSelector() }
@@ -471,27 +646,47 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
         showSubtitleSelector()
       }
     }
-    controls.addView(playPauseView, LinearLayout.LayoutParams(dp(96), dp(42)).apply {
-      rightMargin = dp(8)
+    lockView = button("Lock").apply {
+      contentDescription = "Lock player controls"
+      setOnClickListener { setControlsLocked(true) }
+    }
+    controls.addView(rewindView, LinearLayout.LayoutParams(dp(82), dp(40)).apply {
+      rightMargin = dp(10)
     })
-    controls.addView(positionView, LinearLayout.LayoutParams(0, dp(42), 1f))
-    controls.addView(presentationView, LinearLayout.LayoutParams(dp(82), dp(42)).apply {
+    controls.addView(playPauseView, LinearLayout.LayoutParams(dp(88), dp(40)).apply {
+      rightMargin = dp(10)
+    })
+    controls.addView(forwardView, LinearLayout.LayoutParams(dp(82), dp(40)))
+    bottom.addView(controls, LinearLayout.LayoutParams(
+      ViewGroup.LayoutParams.MATCH_PARENT,
+      ViewGroup.LayoutParams.WRAP_CONTENT,
+    ))
+
+    val secondaryControls = LinearLayout(this).apply {
+      orientation = LinearLayout.HORIZONTAL
+      gravity = Gravity.CENTER_VERTICAL
+    }
+    secondaryControls.addView(positionView, LinearLayout.LayoutParams(0, dp(40), 1f))
+    secondaryControls.addView(speedView, LinearLayout.LayoutParams(dp(66), dp(40)).apply {
       leftMargin = dp(8)
       rightMargin = dp(8)
     })
-    controls.addView(subtitleButton, LinearLayout.LayoutParams(dp(76), dp(42)))
-    bottom.addView(controls)
+    secondaryControls.addView(audioView, LinearLayout.LayoutParams(dp(82), dp(40)).apply {
+      rightMargin = dp(8)
+    })
+    secondaryControls.addView(presentationView, LinearLayout.LayoutParams(dp(76), dp(40)).apply {
+      rightMargin = dp(8)
+    })
+    secondaryControls.addView(subtitleButton, LinearLayout.LayoutParams(dp(70), dp(40)).apply {
+      rightMargin = dp(8)
+    })
+    secondaryControls.addView(lockView, LinearLayout.LayoutParams(dp(68), dp(40)))
+    bottom.addView(secondaryControls)
 
     subtitleView = TextView(this).apply {
       setTextColor(contentTextColor)
-      textSize = 17f
       gravity = Gravity.CENTER
       setPadding(dp(12), dp(6), dp(12), dp(6))
-      background = roundedBackground(
-        alphaColor(panelFillColor, 238),
-        borderColor,
-        10,
-      )
       visibility = View.GONE
       maxLines = 4
     }
@@ -499,7 +694,12 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       ViewGroup.LayoutParams.WRAP_CONTENT,
       ViewGroup.LayoutParams.WRAP_CONTENT,
       Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
-    ).apply { bottomMargin = dp(106); leftMargin = dp(24); rightMargin = dp(24) })
+    ).apply {
+      bottomMargin = dp(subtitleBottomMarginDp())
+      leftMargin = dp(24)
+      rightMargin = dp(24)
+    })
+    applySubtitleAppearance()
 
     chrome = FrameLayout(this).apply {
       addView(top, FrameLayout.LayoutParams(
@@ -518,6 +718,69 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       ViewGroup.LayoutParams.MATCH_PARENT,
     ))
 
+    root.addView(seekPreviewView, FrameLayout.LayoutParams(
+      ViewGroup.LayoutParams.WRAP_CONTENT,
+      dp(36),
+      Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
+    ).apply {
+      bottomMargin = dp(SEEK_PREVIEW_BOTTOM_MARGIN_DP)
+    })
+
+    playbackStatusSpinner = ProgressBar(this).apply {
+      isIndeterminate = true
+      indeterminateTintList = ColorStateList.valueOf(accentColor)
+    }
+    playbackStatusText = TextView(this).apply {
+      setTextColor(contentTextColor)
+      textSize = 12.5f
+      setTypeface(typeface, Typeface.BOLD)
+      gravity = Gravity.CENTER_VERTICAL
+      setPadding(dp(8), 0, 0, 0)
+    }
+    playbackStatusOverlay = LinearLayout(this).apply {
+      orientation = LinearLayout.HORIZONTAL
+      gravity = Gravity.CENTER
+      setPadding(dp(12), dp(8), dp(14), dp(8))
+      background = roundedBackground(
+        alphaColor(panelFillColor, 164),
+        alphaColor(contentTextColor, 34),
+        16,
+      )
+      visibility = View.GONE
+      elevation = dp(4).toFloat()
+      addView(playbackStatusSpinner, LinearLayout.LayoutParams(dp(22), dp(22)))
+      addView(playbackStatusText, LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+      ))
+    }
+    root.addView(playbackStatusOverlay, FrameLayout.LayoutParams(
+      ViewGroup.LayoutParams.WRAP_CONTENT,
+      dp(46),
+      Gravity.CENTER,
+    ))
+
+    gestureFeedbackView = TextView(this).apply {
+      setTextColor(contentTextColor)
+      textSize = 13f
+      setTypeface(typeface, Typeface.BOLD)
+      gravity = Gravity.CENTER
+      setPadding(dp(12), 0, dp(12), 0)
+      background = roundedBackground(
+        alphaColor(panelFillColor, 178),
+        alphaColor(contentTextColor, 38),
+        16,
+      )
+      visibility = View.GONE
+      alpha = 0f
+      elevation = dp(4).toFloat()
+    }
+    root.addView(gestureFeedbackView, FrameLayout.LayoutParams(
+      dp(164),
+      dp(46),
+      Gravity.CENTER,
+    ))
+
     selectorOverlay = FrameLayout(this).apply {
       visibility = View.GONE
       isClickable = true
@@ -530,6 +793,18 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       ViewGroup.LayoutParams.MATCH_PARENT,
     ))
 
+    unlockView = button("Unlock").apply {
+      visibility = View.GONE
+      alpha = 0f
+      contentDescription = "Unlock player controls"
+      setOnClickListener { setControlsLocked(false) }
+    }
+    root.addView(unlockView, FrameLayout.LayoutParams(
+      dp(112),
+      dp(44),
+      Gravity.CENTER,
+    ))
+
     root.setOnApplyWindowInsetsListener { _, insets ->
       val resolvedInsets = resolveSafeInsets(insets)
       safeInsetLeft = resolvedInsets.left
@@ -538,22 +813,26 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       safeInsetBottom = resolvedInsets.bottom
 
       top.setPadding(
-        dp(18) + safeInsetLeft,
-        dp(12) + safeInsetTop,
-        dp(18) + safeInsetRight,
-        dp(12),
+        dp(16) + safeInsetLeft,
+        dp(10) + safeInsetTop,
+        dp(16) + safeInsetRight,
+        dp(18),
       )
       bottom.setPadding(
-        dp(20) + safeInsetLeft,
-        dp(8),
-        dp(20) + safeInsetRight,
-        dp(14) + safeInsetBottom,
+        dp(18) + safeInsetLeft,
+        dp(16),
+        dp(18) + safeInsetRight,
+        dp(12) + safeInsetBottom,
       )
       (subtitleView.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
-        params.bottomMargin = dp(106) + safeInsetBottom
+        params.bottomMargin = dp(subtitleBottomMarginDp()) + safeInsetBottom
         params.leftMargin = dp(24) + safeInsetLeft
         params.rightMargin = dp(24) + safeInsetRight
         subtitleView.layoutParams = params
+      }
+      (seekPreviewView.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+        params.bottomMargin = dp(SEEK_PREVIEW_BOTTOM_MARGIN_DP) + safeInsetBottom
+        seekPreviewView.layoutParams = params
       }
       subtitleView.maxWidth = max(
         dp(220),
@@ -581,7 +860,114 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     // the seek/progress presentation is pinned to the requested target while
     // an OEM MediaPlayer is still settling an asynchronous seek.
     updateSubtitle(actualPosition)
+    updatePlaybackStatus()
     publishProgress(currentPlaybackState())
+  }
+
+  private fun showSeekPreview(progress: Int, targetMs: Long) {
+    if (!::seekPreviewView.isInitialized || !::seekBar.isInitialized) return
+    seekPreviewView.text = formatTime(targetMs)
+    seekPreviewView.visibility = View.VISIBLE
+    seekPreviewView.post {
+      val parent = seekPreviewView.parent as? View ?: return@post
+      val usableTrackWidth = max(1, seekBar.width - seekBar.paddingLeft - seekBar.paddingRight)
+      val thumbCenter = seekBar.x + seekBar.paddingLeft + usableTrackWidth * (progress.coerceIn(0, 1000) / 1000f)
+      val minX = (safeInsetLeft + dp(8)).toFloat()
+      val maxX = max(minX, parent.width - safeInsetRight - dp(8) - seekPreviewView.width.toFloat())
+      seekPreviewView.x = (thumbCenter - seekPreviewView.width / 2f).coerceIn(minX, maxX)
+    }
+  }
+
+  private fun hideSeekPreview() {
+    if (::seekPreviewView.isInitialized) seekPreviewView.visibility = View.GONE
+  }
+
+  private fun updatePlaybackStatus() {
+    if (!::playbackStatusOverlay.isInitialized) return
+    val request = pendingSeek
+    val seekingLongEnough = request != null &&
+      OrionMediaPlayerSeekPolicy.remainingMs(request, SystemClock.elapsedRealtime()) <=
+        OrionMediaPlayerSeekPolicy.SEEK_TIMEOUT_MS - SEEKING_STATUS_DELAY_MS
+    val label = when {
+      buffering -> "Buffering…"
+      seekingLongEnough -> "Seeking…"
+      else -> null
+    }
+    if (label == null) {
+      hidePlaybackStatus()
+      return
+    }
+    playbackStatusText.text = label
+    playbackStatusOverlay.visibility = View.VISIBLE
+  }
+
+  private fun hidePlaybackStatus() {
+    if (::playbackStatusOverlay.isInitialized) playbackStatusOverlay.visibility = View.GONE
+  }
+
+  private fun currentWindowBrightness(): Float {
+    val windowValue = window.attributes.screenBrightness
+    if (windowValue >= 0f) return windowValue.coerceIn(MIN_WINDOW_BRIGHTNESS, 1f)
+    val systemValue = try {
+      Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128)
+    } catch (_: Throwable) {
+      128
+    }
+    return (systemValue / 255f).coerceIn(MIN_WINDOW_BRIGHTNESS, 1f)
+  }
+
+  private fun applyBrightnessGesture(verticalFraction: Float) {
+    val brightness = (gestureStartBrightness + verticalFraction)
+      .coerceIn(MIN_WINDOW_BRIGHTNESS, 1f)
+    val attributes = window.attributes
+    attributes.screenBrightness = brightness
+    window.attributes = attributes
+    showGestureFeedback("Brightness", (brightness * 100f).toInt())
+  }
+
+  private fun applyVolumeGesture(verticalFraction: Float) {
+    val maxVolume = max(1, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC))
+    val delta = (verticalFraction * maxVolume).toInt()
+    val target = (gestureStartVolume + delta).coerceIn(0, maxVolume)
+    if (target != audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)) {
+      audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+    }
+    val percent = ((target.toFloat() / maxVolume.toFloat()) * 100f).toInt()
+    showGestureFeedback(if (target == 0) "Muted" else "Volume", percent)
+  }
+
+  private fun showGestureFeedback(label: String, percent: Int) {
+    if (!::gestureFeedbackView.isInitialized) return
+    mainHandler.removeCallbacks(hideGestureFeedbackRunnable)
+    gestureFeedbackView.animate().cancel()
+    gestureFeedbackView.text = "$label ${percent.coerceIn(0, 100)}%"
+    gestureFeedbackView.visibility = View.VISIBLE
+    if (reducedMotion) {
+      gestureFeedbackView.alpha = 1f
+    } else {
+      gestureFeedbackView.animate().alpha(1f).setDuration(CHROME_FADE_MS).start()
+    }
+    mainHandler.postDelayed(hideGestureFeedbackRunnable, GESTURE_FEEDBACK_HIDE_MS)
+  }
+
+  private fun hideGestureFeedback() {
+    mainHandler.removeCallbacks(hideGestureFeedbackRunnable)
+    if (!::gestureFeedbackView.isInitialized) return
+    gestureFeedbackView.animate().cancel()
+    if (reducedMotion) {
+      gestureFeedbackView.alpha = 0f
+      gestureFeedbackView.visibility = View.GONE
+      return
+    }
+    gestureFeedbackView.animate()
+      .alpha(0f)
+      .setDuration(CHROME_FADE_MS)
+      .withEndAction {
+        if (::gestureFeedbackView.isInitialized && gestureFeedbackView.alpha <= 0.01f) {
+          gestureFeedbackView.visibility = View.GONE
+        }
+      }
+      .start()
   }
 
   private fun updatePlayPausePresentation(player: MediaPlayer) {
@@ -608,6 +994,18 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     return true
   }
 
+  private fun seekByOffset(player: MediaPlayer, offsetMs: Long) {
+    if (!prepared || player !== mediaPlayer) return
+    val duration = safeDuration(player)
+    if (duration <= 0L) return
+    val basePosition = pendingSeek?.targetMs ?: safePosition(player)
+    val target = (basePosition + offsetMs).coerceIn(0L, max(0L, duration - 1L))
+    val playWhenSettled = pendingSeek?.playWhenSettled
+      ?: try { player.isPlaying } catch (_: Throwable) { false }
+    showChrome(autoHide = false)
+    requestSeek(player, target, playWhenSettled = playWhenSettled)
+  }
+
   private fun requestSeek(player: MediaPlayer, targetMs: Long, playWhenSettled: Boolean) {
     if (!prepared || player !== mediaPlayer) return
     val duration = safeDuration(player)
@@ -624,10 +1022,11 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     seekingByUser = true
     completed = false
     resumeAfterPause = false
-    cancelSeekConfirmation()
+    cancelSeekObservation()
     mainHandler.removeCallbacks(seekTimeoutRunnable)
     mainHandler.postDelayed(seekTimeoutRunnable, OrionMediaPlayerSeekPolicy.SEEK_TIMEOUT_MS)
     try { if (player.isPlaying) player.pause() } catch (_: Throwable) { Unit }
+    logSeekTransition("request", now, boundedTarget - safePosition(player))
     updateProgress()
     issuePendingSeek(player)
   }
@@ -639,8 +1038,9 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       finishPendingSeek(timedOut = true)
       return
     }
-    cancelSeekConfirmation()
-    val issued = OrionMediaPlayerSeekPolicy.issued(request)
+    cancelSeekObservation()
+    val now = SystemClock.elapsedRealtime()
+    val issued = OrionMediaPlayerSeekPolicy.issued(request, now, surfaceFrameGeneration)
     issuedSeek = issued
     try {
       when (OrionMediaPlayerSeekPolicy.mode(Build.VERSION.SDK_INT, request.attempt)) {
@@ -651,93 +1051,104 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
         OrionMediaPlayerSeekPolicy.Mode.LEGACY_PREVIOUS_SYNC ->
           player.seekTo(request.targetMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
       }
+      logSeekTransition("issued-${request.attempt.name.lowercase()}", now, request.targetMs - safePosition(player))
       publishProgress("seeking", force = true)
     } catch (_: Throwable) {
       if (issuedSeek == issued) issuedSeek = null
+      logSeekTransition("issue-failed", now, request.targetMs - safePosition(player))
       finishPendingSeek(timedOut = true)
     }
   }
 
   private fun handleSeekComplete(player: MediaPlayer) {
     val issued = issuedSeek ?: return
-    if (player !== mediaPlayer || !OrionMediaPlayerSeekPolicy.acceptsCallback(issued, playerGeneration)) return
+    if (player !== mediaPlayer || !OrionMediaPlayerSeekPolicy.acceptsCallback(issued, playerGeneration)) {
+      logSeekTransition("stale-callback", SystemClock.elapsedRealtime(), 0L)
+      return
+    }
     issuedSeek = null
     val request = pendingSeek ?: return
     if (!OrionMediaPlayerSeekPolicy.matchesAttempt(request, issued)) {
+      logSeekTransition("superseded-callback", SystemClock.elapsedRealtime(), request.targetMs - safePosition(player))
       issuePendingSeek(player)
       return
     }
-    scheduleSeekConfirmation(player, request)
+    seekObservation = OrionMediaPlayerSeekPolicy.beginObservation(
+      issued,
+      SystemClock.elapsedRealtime(),
+      surfaceFrameGeneration,
+    )
+    logSeekTransition("callback-${request.attempt.name.lowercase()}", SystemClock.elapsedRealtime(), request.targetMs - safePosition(player))
+    scheduleSeekObservation(player, request)
   }
 
-  private fun scheduleSeekConfirmation(
+  private fun scheduleSeekObservation(
     player: MediaPlayer,
     request: OrionMediaPlayerSeekPolicy.Request,
   ) {
-    cancelSeekConfirmation()
+    seekObservationRunnable?.let(mainHandler::removeCallbacks)
     val expectedSeekGeneration = request.generation
     val expectedPlayerGeneration = request.playerGeneration
-    val confirmation = Runnable {
-      seekConfirmationRunnable = null
+    val expectedAttempt = request.attempt
+    val observationPoll = Runnable {
+      seekObservationRunnable = null
       val active = pendingSeek ?: return@Runnable
       if (
         active.generation != expectedSeekGeneration ||
         active.playerGeneration != expectedPlayerGeneration ||
-        active.attempt != request.attempt ||
+        active.attempt != expectedAttempt ||
         player !== mediaPlayer ||
-        !OrionMediaPlayerSeekPolicy.acceptsCallback(
-          OrionMediaPlayerSeekPolicy.issued(active),
-          playerGeneration,
-        )
+        playerGeneration != expectedPlayerGeneration
       ) {
         return@Runnable
       }
-      when (
-        OrionMediaPlayerSeekPolicy.completion(
-          active,
-          safePosition(player),
-          safeDuration(player),
-          SystemClock.elapsedRealtime(),
-        )
-      ) {
-        OrionMediaPlayerSeekPolicy.Completion.SETTLED -> finishPendingSeek(timedOut = false)
-        OrionMediaPlayerSeekPolicy.Completion.FALLBACK -> {
+      val observation = seekObservation ?: return@Runnable
+      val now = SystemClock.elapsedRealtime()
+      val actual = safePosition(player)
+      val result = OrionMediaPlayerSeekPolicy.observe(
+        active,
+        observation,
+        actual,
+        safeDuration(player),
+        now,
+        surfaceFrameGeneration,
+      )
+      seekObservation = result.observation
+      when (result.decision) {
+        OrionMediaPlayerSeekPolicy.Decision.SETTLE -> {
+          logSeekTransition("settled-${active.attempt.name.lowercase()}", now, active.targetMs - actual)
+          finishPendingSeek(timedOut = false)
+        }
+        OrionMediaPlayerSeekPolicy.Decision.FALLBACK -> {
+          logSeekTransition("fallback", now, active.targetMs - actual)
+          cancelSeekObservation()
           pendingSeek = OrionMediaPlayerSeekPolicy.withFallback(active)
           issuePendingSeek(player)
         }
-        OrionMediaPlayerSeekPolicy.Completion.AWAIT_TIMEOUT ->
-          scheduleSeekConfirmation(player, active)
-        OrionMediaPlayerSeekPolicy.Completion.TIMED_OUT -> finishPendingSeek(timedOut = true)
+        OrionMediaPlayerSeekPolicy.Decision.WAIT -> scheduleSeekObservation(player, active)
+        OrionMediaPlayerSeekPolicy.Decision.TIMED_OUT -> finishPendingSeek(timedOut = true)
       }
     }
-    seekConfirmationRunnable = confirmation
-    mainHandler.postDelayed(confirmation, OrionMediaPlayerSeekPolicy.SEEK_CONFIRMATION_DELAY_MS)
+    seekObservationRunnable = observationPoll
+    mainHandler.postDelayed(observationPoll, OrionMediaPlayerSeekPolicy.OBSERVATION_INTERVAL_MS)
   }
 
-  private fun cancelSeekConfirmation() {
-    seekConfirmationRunnable?.let(mainHandler::removeCallbacks)
-    seekConfirmationRunnable = null
+  private fun cancelSeekObservation() {
+    seekObservationRunnable?.let(mainHandler::removeCallbacks)
+    seekObservationRunnable = null
+    seekObservation = null
   }
 
   private fun finishPendingSeekFromTimeout() {
-    val request = pendingSeek ?: return
-    val player = mediaPlayer
-    val settled = issuedSeek == null &&
-      player != null &&
-      prepared &&
-      OrionMediaPlayerSeekPolicy.completion(
-        request,
-        safePosition(player),
-        safeDuration(player),
-        SystemClock.elapsedRealtime(),
-      ) == OrionMediaPlayerSeekPolicy.Completion.SETTLED
-    finishPendingSeek(timedOut = !settled)
+    if (pendingSeek == null) return
+    finishPendingSeek(timedOut = true)
   }
 
   private fun finishPendingSeek(timedOut: Boolean) {
     val request = pendingSeek ?: return
     val player = mediaPlayer
-    cancelSeekConfirmation()
+    if (timedOut) logSeekTransition("timeout", SystemClock.elapsedRealtime(), request.targetMs - safePosition(player))
+    cancelSeekObservation()
     mainHandler.removeCallbacks(seekTimeoutRunnable)
     pendingSeek = null
     seekingByUser = trackingSeekBar
@@ -753,6 +1164,23 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     publishProgress(currentPlaybackState(), force = true)
     if (timedOut) Toast.makeText(this, "Couldn’t seek to that time", Toast.LENGTH_SHORT).show()
     showChrome()
+  }
+
+  private fun logSeekTransition(event: String, nowUptimeMs: Long, deltaMs: Long) {
+    val active = pendingSeek
+    val elapsed = active?.let {
+      OrionMediaPlayerSeekPolicy.SEEK_TIMEOUT_MS -
+        OrionMediaPlayerSeekPolicy.remainingMs(it, nowUptimeMs)
+    } ?: 0L
+    val elapsedBucket = ((elapsed.coerceAtLeast(0L) / 250L).coerceAtMost(40L) * 250L)
+    val magnitude = kotlin.math.abs(deltaMs)
+    val deltaBucket = when {
+      magnitude < 1_000L -> "<1s"
+      magnitude < 3_000L -> "<3s"
+      magnitude < 10_000L -> "<10s"
+      else -> ">=10s"
+    }
+    Log.d("OrionPlayerSeek", "event=${event.take(40)} elapsedBucketMs=$elapsedBucket deltaBucket=$deltaBucket")
   }
 
   private fun currentPlaybackState(): String = when {
@@ -928,6 +1356,174 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     presentationView.contentDescription = "Video sizing: $label. Activate to choose a sizing mode."
   }
 
+  private fun refreshAudioTracks(player: MediaPlayer) {
+    val discovered = mutableListOf<EmbeddedAudioTrack>()
+    try {
+      var audioOrdinal = 0
+      player.trackInfo.forEachIndexed { mediaTrackIndex, trackInfo ->
+        if (trackInfo.trackType != MediaPlayer.TrackInfo.MEDIA_TRACK_TYPE_AUDIO) return@forEachIndexed
+        val label = friendlyAudioTrackLabel(
+          language = try { trackInfo.language.orEmpty() } catch (_: Throwable) { "" },
+          ordinal = audioOrdinal,
+        )
+        discovered += EmbeddedAudioTrack(
+          mediaTrackIndex = mediaTrackIndex,
+          label = label,
+        )
+        audioOrdinal += 1
+      }
+    } catch (_: Throwable) {
+      discovered.clear()
+    }
+    audioTracks = discovered
+    selectedAudioTrackIndex = try {
+      player.getSelectedTrack(MediaPlayer.TrackInfo.MEDIA_TRACK_TYPE_AUDIO)
+    } catch (_: Throwable) {
+      -1
+    }
+    if (selectedAudioTrackIndex < 0 && audioTracks.isNotEmpty()) {
+      selectedAudioTrackIndex = audioTracks.first().mediaTrackIndex
+    }
+    updateAudioButton()
+  }
+
+  private fun friendlyAudioTrackLabel(language: String, ordinal: Int): String {
+    val normalized = language.trim().lowercase()
+    val languageName = when (normalized) {
+      "en", "eng", "english" -> "English"
+      "ur", "urd", "urdu" -> "Urdu"
+      "ko", "kor", "korean" -> "Korean"
+      "ja", "jpn", "japanese" -> "Japanese"
+      "zh", "zho", "chi", "chinese" -> "Chinese"
+      "ar", "ara", "arabic" -> "Arabic"
+      "hi", "hin", "hindi" -> "Hindi"
+      "es", "spa", "spanish" -> "Spanish"
+      "fr", "fra", "fre", "french" -> "French"
+      "de", "deu", "ger", "german" -> "German"
+      "it", "ita", "italian" -> "Italian"
+      "pt", "por", "portuguese" -> "Portuguese"
+      "tr", "tur", "turkish" -> "Turkish"
+      "ru", "rus", "russian" -> "Russian"
+      "fa", "fas", "per", "persian", "farsi" -> "Persian"
+      "", "und" -> null
+      else -> language.trim().takeIf { it.length <= 24 }
+    }
+    val suffix = "Audio ${ordinal + 1}"
+    return languageName?.let { "$it · $suffix" } ?: suffix
+  }
+
+  private fun updateAudioButton() {
+    if (!::audioView.isInitialized) return
+    val available = prepared && audioTracks.size > 1
+    audioView.isEnabled = available
+    audioView.alpha = if (available) 1f else 0.45f
+    val selected = audioTracks.firstOrNull {
+      it.mediaTrackIndex == selectedAudioTrackIndex
+    }
+    audioView.text = "Audio"
+    audioView.contentDescription = when {
+      audioTracks.isEmpty() -> "Audio track unavailable"
+      audioTracks.size == 1 -> "Audio track: ${audioTracks.first().label}"
+      selected != null -> "Audio track: ${selected.label}. Activate to choose another track."
+      else -> "Audio tracks available. Activate to choose a track."
+    }
+  }
+
+  private fun showAudioTrackSelector() {
+    val player = mediaPlayer ?: return
+    if (!prepared || audioTracks.size <= 1) return
+    showChoicePanel(
+      title = "Audio",
+      detail = "Choose an embedded audio track.",
+      choices = audioTracks.map { track ->
+        track.mediaTrackIndex.toString() to track.label
+      },
+      selectedValue = selectedAudioTrackIndex.toString(),
+    ) { value ->
+      val requestedTrackIndex = value.toIntOrNull() ?: return@showChoicePanel
+      if (audioTracks.none { it.mediaTrackIndex == requestedTrackIndex }) return@showChoicePanel
+      try {
+        player.selectTrack(requestedTrackIndex)
+        selectedAudioTrackIndex = try {
+          player.getSelectedTrack(MediaPlayer.TrackInfo.MEDIA_TRACK_TYPE_AUDIO)
+        } catch (_: Throwable) {
+          requestedTrackIndex
+        }
+        if (selectedAudioTrackIndex < 0) selectedAudioTrackIndex = requestedTrackIndex
+        updateAudioButton()
+        audioView.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED)
+      } catch (_: Throwable) {
+        Toast.makeText(this, "Audio track could not be changed", Toast.LENGTH_SHORT).show()
+      }
+    }
+  }
+
+  private fun applyPlaybackSpeed(player: MediaPlayer, speed: Float): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return speed == 1.0f
+    val wasPlaying = try { player.isPlaying } catch (_: Throwable) { false }
+    return try {
+      val params = player.playbackParams
+        .setSpeed(speed.coerceIn(0.5f, 2.0f))
+        .setPitch(1.0f)
+      player.playbackParams = params
+      if (!wasPlaying) {
+        try { if (player.isPlaying) player.pause() } catch (_: Throwable) { Unit }
+      }
+      true
+    } catch (_: Throwable) {
+      if (!wasPlaying) {
+        try { if (player.isPlaying) player.pause() } catch (_: Throwable) { Unit }
+      }
+      false
+    }
+  }
+
+  private fun updatePlaybackSpeedLabel() {
+    val label = playbackSpeedLabel(playbackSpeed)
+    speedView.text = label
+    speedView.contentDescription = "Playback speed: $label"
+  }
+
+  private fun playbackSpeedLabel(speed: Float): String {
+    val plain = if (speed % 1.0f == 0.0f) {
+      speed.toInt().toString()
+    } else {
+      speed.toString().trimEnd('0').trimEnd('.')
+    }
+    return "$plain×"
+  }
+
+  private fun showPlaybackSpeedSelector() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+    val choices = listOf(
+      "0.5" to "0.5×",
+      "0.75" to "0.75×",
+      "1.0" to "1×",
+      "1.25" to "1.25×",
+      "1.5" to "1.5×",
+      "1.75" to "1.75×",
+      "2.0" to "2×",
+    )
+    showChoicePanel(
+      title = "Playback speed",
+      detail = "Choose how fast the video plays.",
+      choices = choices,
+      selectedValue = playbackSpeed.toString(),
+    ) { value ->
+      val nextSpeed = value.toFloatOrNull()?.coerceIn(0.5f, 2.0f) ?: return@showChoicePanel
+      val player = mediaPlayer ?: return@showChoicePanel
+      if (!prepared) return@showChoicePanel
+      if (!applyPlaybackSpeed(player, nextSpeed)) {
+        Toast.makeText(this, "Playback speed is unavailable", Toast.LENGTH_SHORT).show()
+        return@showChoicePanel
+      }
+      playbackSpeed = nextSpeed
+      updatePlaybackSpeedLabel()
+      speedView.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED)
+      publishProgress(currentPlaybackState(), force = true)
+    }
+  }
+
   private fun showPresentationSelector() {
     showChoicePanel(
       title = "Video sizing",
@@ -954,12 +1550,17 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     subtitleTracks.forEachIndexed { index, track ->
       choices += index.toString() to friendlySubtitleLabel(track.label, index)
     }
+    choices += SUBTITLE_APPEARANCE_VALUE to "Subtitle appearance"
     showChoicePanel(
       title = "Subtitles",
-      detail = "Choose an available subtitle track.",
+      detail = "Choose a subtitle track or adjust its appearance.",
       choices = choices,
       selectedValue = selectedSubtitleIndex.toString(),
     ) { value ->
+      if (value == SUBTITLE_APPEARANCE_VALUE) {
+        mainHandler.post { showSubtitleAppearanceSelector() }
+        return@showChoicePanel
+      }
       val nextIndex = value.toIntOrNull()
         ?.takeIf { it in -1..subtitleTracks.lastIndex }
         ?: -1
@@ -968,6 +1569,109 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       subtitleView.visibility = View.GONE
       updateSubtitleButton()
       subtitleButton.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED)
+    }
+  }
+
+  private fun showSubtitleAppearanceSelector() {
+    showChoicePanel(
+      title = "Subtitle appearance",
+      detail = "Adjust text size, background strength, or vertical position.",
+      choices = listOf(
+        "size" to "Text size · ${subtitleTextSize.replaceFirstChar { it.uppercase() }}",
+        "background" to "Background · ${subtitleBackground.replaceFirstChar { it.uppercase() }}",
+        "position" to "Position · ${subtitlePosition.replaceFirstChar { it.uppercase() }}",
+      ),
+      selectedValue = "",
+    ) { value ->
+      mainHandler.post {
+        when (value) {
+          "size" -> showSubtitleSizeSelector()
+          "background" -> showSubtitleBackgroundSelector()
+          "position" -> showSubtitlePositionSelector()
+        }
+      }
+    }
+  }
+
+  private fun showSubtitleSizeSelector() {
+    showChoicePanel(
+      title = "Subtitle text size",
+      detail = "Choose how large subtitles appear.",
+      choices = listOf(
+        "small" to "Small",
+        "medium" to "Medium",
+        "large" to "Large",
+      ),
+      selectedValue = subtitleTextSize,
+    ) { value ->
+      if (value !in setOf("small", "medium", "large")) return@showChoicePanel
+      subtitleTextSize = value
+      applySubtitleAppearance()
+    }
+  }
+
+  private fun showSubtitleBackgroundSelector() {
+    showChoicePanel(
+      title = "Subtitle background",
+      detail = "Choose how strongly the subtitle panel separates text from the video.",
+      choices = listOf(
+        "low" to "Low",
+        "medium" to "Medium",
+        "high" to "High",
+      ),
+      selectedValue = subtitleBackground,
+    ) { value ->
+      if (value !in setOf("low", "medium", "high")) return@showChoicePanel
+      subtitleBackground = value
+      applySubtitleAppearance()
+    }
+  }
+
+  private fun showSubtitlePositionSelector() {
+    showChoicePanel(
+      title = "Subtitle position",
+      detail = "Choose the subtitle height above the bottom edge.",
+      choices = listOf(
+        "low" to "Low",
+        "standard" to "Standard",
+        "high" to "High",
+      ),
+      selectedValue = subtitlePosition,
+    ) { value ->
+      if (value !in setOf("low", "standard", "high")) return@showChoicePanel
+      subtitlePosition = value
+      applySubtitleAppearance()
+    }
+  }
+
+  private fun subtitleBottomMarginDp(): Int = when (subtitlePosition) {
+    "low" -> 112
+    "high" -> 196
+    else -> 148
+  }
+
+  private fun applySubtitleAppearance() {
+    if (!::subtitleView.isInitialized) return
+    subtitleView.textSize = when (subtitleTextSize) {
+      "small" -> 14f
+      "large" -> 20f
+      else -> 17f
+    }
+    val backgroundAlpha = when (subtitleBackground) {
+      "low" -> 126
+      "high" -> 238
+      else -> 188
+    }
+    subtitleView.background = roundedBackground(
+      alphaColor(panelFillColor, backgroundAlpha),
+      borderColor,
+      10,
+    )
+    (subtitleView.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+      params.bottomMargin = dp(subtitleBottomMarginDp()) + safeInsetBottom
+      params.leftMargin = dp(24) + safeInsetLeft
+      params.rightMargin = dp(24) + safeInsetRight
+      subtitleView.layoutParams = params
     }
   }
 
@@ -1001,7 +1705,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     selectedValue: String,
     onSelect: (String) -> Unit,
   ) {
-    if (!::selectorOverlay.isInitialized) return
+    if (controlsLocked || !::selectorOverlay.isInitialized) return
     mainHandler.removeCallbacks(hideChromeRunnable)
     showChrome(autoHide = false)
     selectorOverlay.removeAllViews()
@@ -1107,7 +1811,77 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     if (!::selectorOverlay.isInitialized || selectorOverlay.visibility != View.VISIBLE) return
     selectorOverlay.visibility = View.GONE
     selectorOverlay.removeAllViews()
-    showChrome()
+    if (controlsLocked) {
+      showUnlockAffordance()
+    } else {
+      showChrome()
+    }
+  }
+
+  private fun setControlsLocked(locked: Boolean) {
+    if (controlsLocked == locked) {
+      if (locked) showUnlockAffordance() else showChrome()
+      return
+    }
+    controlsLocked = locked
+    mainHandler.removeCallbacks(hideChromeRunnable)
+    mainHandler.removeCallbacks(hideUnlockRunnable)
+    if (::selectorOverlay.isInitialized && selectorOverlay.visibility == View.VISIBLE) {
+      selectorOverlay.visibility = View.GONE
+      selectorOverlay.removeAllViews()
+    }
+    if (locked) {
+      hideSeekPreview()
+      hideGestureFeedback()
+      verticalGestureMode = null
+      if (::chrome.isInitialized) {
+        chrome.animate().cancel()
+        chrome.alpha = 0f
+        chrome.visibility = View.INVISIBLE
+      }
+      showUnlockAffordance()
+      unlockView.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED)
+    } else {
+      hideUnlockAffordance()
+      showChrome()
+      lockView.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED)
+    }
+  }
+
+  private fun showUnlockAffordance() {
+    if (!controlsLocked || !::unlockView.isInitialized) return
+    mainHandler.removeCallbacks(hideUnlockRunnable)
+    unlockView.animate().cancel()
+    unlockView.visibility = View.VISIBLE
+    if (reducedMotion) {
+      unlockView.alpha = 1f
+    } else {
+      unlockView.animate()
+        .alpha(1f)
+        .setDuration(CHROME_FADE_MS)
+        .start()
+    }
+    mainHandler.postDelayed(hideUnlockRunnable, UNLOCK_AUTO_HIDE_MS)
+  }
+
+  private fun hideUnlockAffordance() {
+    mainHandler.removeCallbacks(hideUnlockRunnable)
+    if (!::unlockView.isInitialized) return
+    unlockView.animate().cancel()
+    if (reducedMotion) {
+      unlockView.alpha = 0f
+      unlockView.visibility = View.GONE
+      return
+    }
+    unlockView.animate()
+      .alpha(0f)
+      .setDuration(CHROME_FADE_MS)
+      .withEndAction {
+        if (::unlockView.isInitialized && unlockView.alpha <= 0.01f) {
+          unlockView.visibility = View.GONE
+        }
+      }
+      .start()
   }
 
   private fun applyPresentationThemeFromIntent() {
@@ -1153,12 +1927,16 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   }
 
   private fun shouldAutoHideChrome(): Boolean {
-    if (!prepared || seekingByUser) return false
+    if (controlsLocked || !prepared || seekingByUser) return false
     return try { mediaPlayer?.isPlaying == true } catch (_: Throwable) { false }
   }
 
   private fun showChrome(autoHide: Boolean = true) {
     mainHandler.removeCallbacks(hideChromeRunnable)
+    if (controlsLocked) {
+      showUnlockAffordance()
+      return
+    }
     if (!::chrome.isInitialized) return
     chrome.animate().cancel()
     chrome.visibility = View.VISIBLE
@@ -1177,7 +1955,7 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
 
   private fun hideChrome() {
     mainHandler.removeCallbacks(hideChromeRunnable)
-    if (!::chrome.isInitialized || !shouldAutoHideChrome()) return
+    if (controlsLocked || !::chrome.isInitialized || !shouldAutoHideChrome()) return
     chrome.animate().cancel()
     if (reducedMotion) {
       chrome.alpha = 0f
@@ -1203,6 +1981,23 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
       Color.blue(color),
     )
 
+  private fun cinematicChromeScrim(top: Boolean): GradientDrawable {
+    val colors = if (top) {
+      intArrayOf(
+        alphaColor(chromeFillColor, 184),
+        alphaColor(chromeFillColor, 118),
+        Color.TRANSPARENT,
+      )
+    } else {
+      intArrayOf(
+        Color.TRANSPARENT,
+        alphaColor(chromeFillColor, 112),
+        alphaColor(chromeFillColor, 188),
+      )
+    }
+    return GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, colors)
+  }
+
   private fun roundedBackground(
     fillColor: Int,
     strokeColor: Int,
@@ -1215,20 +2010,25 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
 
   private fun button(label: String, primary: Boolean = false) = TextView(this).apply {
     text = label
-    setTextColor(if (primary) onAccentColor else contentTextColor)
+    setTextColor(contentTextColor)
     textSize = 13f
     setTypeface(typeface, Typeface.BOLD)
     gravity = Gravity.CENTER
     isClickable = true
     isFocusable = true
     setPadding(dp(10), 0, dp(10), 0)
+    elevation = dp(1).toFloat()
     background = if (primary) {
-      roundedBackground(accentColor, accentColor, 12)
+      roundedBackground(
+        alphaColor(accentColor, 48),
+        alphaColor(accentColor, 154),
+        14,
+      )
     } else {
       roundedBackground(
-        controlFillColor,
-        alphaColor(accentColor, 120),
-        12,
+        alphaColor(panelFillColor, 108),
+        alphaColor(contentTextColor, 36),
+        14,
       )
     }
   }
@@ -1262,13 +2062,21 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   private fun releasePlayer() {
     mainHandler.removeCallbacks(progressTicker)
     mainHandler.removeCallbacks(seekTimeoutRunnable)
-    cancelSeekConfirmation()
+    mainHandler.removeCallbacks(hideGestureFeedbackRunnable)
+    hideSeekPreview()
+    hidePlaybackStatus()
+    hideGestureFeedback()
+    mainHandler.removeCallbacks(hideUnlockRunnable)
+    cancelSeekObservation()
     pendingSeek = null
     issuedSeek = null
     trackingSeekBar = false
     seekingByUser = false
     playerGeneration += 1L
     prepared = false
+    audioTracks = emptyList()
+    selectedAudioTrackIndex = -1
+    updateAudioButton()
     try { mediaPlayer?.setSurface(null) } catch (_: Throwable) { Unit }
     try { mediaPlayer?.release() } catch (_: Throwable) { Unit }
     mediaPlayer = null
@@ -1316,6 +2124,11 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     val bottom: Int,
   )
 
+  private data class EmbeddedAudioTrack(
+    val mediaTrackIndex: Int,
+    val label: String,
+  )
+
   private data class PreparedSubtitle(
     val id: String,
     val label: String,
@@ -1349,6 +2162,15 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
     private const val PROGRESS_EVENT_INTERVAL_MS = 1_000L
     private const val CHROME_AUTO_HIDE_MS = 2_800L
     private const val CHROME_FADE_MS = 180L
+    private const val UNLOCK_AUTO_HIDE_MS = 1_800L
+    private const val GESTURE_FEEDBACK_HIDE_MS = 900L
+    private const val SEEKING_STATUS_DELAY_MS = 350L
+    private const val SEEK_PREVIEW_BOTTOM_MARGIN_DP = 116
+    private const val VERTICAL_GESTURE_START_DP = 18
+    private const val MIN_WINDOW_BRIGHTNESS = 0.05f
+    private const val TRANSPORT_SEEK_MS = 10_000L
+    private const val DOUBLE_TAP_SEEK_MS = 10_000L
+    private const val SUBTITLE_APPEARANCE_VALUE = "__appearance__"
     @Volatile private var progressListener: ((OrionFinalizedPlayerProgress) -> Unit)? = null
 
     fun setProgressListener(listener: ((OrionFinalizedPlayerProgress) -> Unit)?) {

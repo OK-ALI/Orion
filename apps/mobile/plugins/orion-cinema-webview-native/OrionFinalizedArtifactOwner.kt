@@ -2,6 +2,8 @@ package com.okali.orion.playback
 
 import android.content.Context
 import android.net.Uri
+import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.provider.DocumentsContract
 import android.util.Log
 import androidx.core.content.FileProvider
@@ -183,12 +185,32 @@ internal object OrionFinalizedArtifactOwner {
       val bytesWritten: Long,
       val mode: OrionSafPublicationWritePolicy.Mode,
       val syncOutcome: OrionSafPublicationWritePolicy.SyncOutcome,
+      val closeOutcome: OrionSafPublicationWritePolicy.CloseOutcome,
     ) : DocumentWriteResult()
-    data class Failed(val stage: String) : DocumentWriteResult()
+    data class Failed(
+      val stage: String,
+      val mode: OrionSafPublicationWritePolicy.Mode?,
+      val bytesWritten: Long,
+      val exceptionClass: String,
+    ) : DocumentWriteResult()
     data object Cancelled : DocumentWriteResult()
   }
 
-  private class DocumentWriteStageException(val stage: String, cause: Throwable? = null) : Exception(stage, cause)
+  private sealed class DocumentInfoReadiness {
+    data class Ready(val info: OrionDownloadStorageRegistry.DocumentInfo) : DocumentInfoReadiness()
+    data object Failed : DocumentInfoReadiness()
+    data object Cancelled : DocumentInfoReadiness()
+  }
+
+  private enum class DescriptorReadiness { READY, FAILED, CANCELLED }
+
+  private data class DocumentCopyProof(val sha256: String, val bytesWritten: Long)
+
+  private class DocumentWriteStageException(
+    val stage: String,
+    val bytesWritten: Long,
+    cause: Throwable? = null,
+  ) : Exception(stage, cause)
 
   fun stagingOutput(directory: File): File? {
     val files = directory.listFiles().orEmpty().filter { it.isFile }
@@ -260,9 +282,13 @@ internal object OrionFinalizedArtifactOwner {
       cleanupDocument(context, document)
       return OrionFinalizedDocumentSettlement.Cancelled
     }
-    var info = OrionDownloadStorageRegistry.documentInfo(context, document)
-    if (info == null) {
-      return cleanupFailedPublication(
+    var info = when (val readiness = awaitDocumentInfo(context, document, null) { canContinue(jobId, generation) }) {
+      is DocumentInfoReadiness.Ready -> readiness.info
+      DocumentInfoReadiness.Cancelled -> {
+        cleanupDocument(context, document)
+        return OrionFinalizedDocumentSettlement.Cancelled
+      }
+      DocumentInfoReadiness.Failed -> return cleanupFailedPublication(
         context,
         jobId,
         generation,
@@ -293,9 +319,13 @@ internal object OrionFinalizedArtifactOwner {
         cleanupDocument(context, document)
         return OrionFinalizedDocumentSettlement.Cancelled
       }
-      info = OrionDownloadStorageRegistry.documentInfo(context, document)
-      if (info == null) {
-        return cleanupFailedPublication(
+      info = when (val readiness = awaitDocumentInfo(context, document, null) { canContinue(jobId, generation) }) {
+        is DocumentInfoReadiness.Ready -> readiness.info
+        DocumentInfoReadiness.Cancelled -> {
+          cleanupDocument(context, document)
+          return OrionFinalizedDocumentSettlement.Cancelled
+        }
+        DocumentInfoReadiness.Failed -> return cleanupFailedPublication(
           context,
           jobId,
           generation,
@@ -311,7 +341,7 @@ internal object OrionFinalizedArtifactOwner {
     }
 
     val write = writeDocument(context, document, source, expectedBytes) { canContinue(jobId, generation) }
-    val written = when (write) {
+    var written = when (write) {
       DocumentWriteResult.Cancelled -> {
         cleanupDocument(context, document)
         return OrionFinalizedDocumentSettlement.Cancelled
@@ -326,9 +356,25 @@ internal object OrionFinalizedArtifactOwner {
       )
       is DocumentWriteResult.Success -> write
     }
-    val sourceDigest = written.sha256
+    var sourceDigest = written.sha256
+    info = when (val readiness = awaitDocumentInfo(context, document, expectedBytes) { canContinue(jobId, generation) }) {
+      is DocumentInfoReadiness.Ready -> readiness.info
+      DocumentInfoReadiness.Cancelled -> {
+        cleanupDocument(context, document)
+        return OrionFinalizedDocumentSettlement.Cancelled
+      }
+      DocumentInfoReadiness.Failed -> return cleanupFailedPublication(
+        context,
+        jobId,
+        generation,
+        document,
+        "finalized-artifact-document-unavailable",
+        "Orion could not reopen the completed media document.",
+      )
+    }
     val copiedStage = when {
-      written.syncOutcome == OrionSafPublicationWritePolicy.SyncOutcome.FAILED -> "copied-sync-deferred"
+      written.syncOutcome == OrionSafPublicationWritePolicy.SyncOutcome.FAILED ||
+        written.closeOutcome == OrionSafPublicationWritePolicy.CloseOutcome.FAILED -> "copied-durability-deferred"
       written.mode == OrionSafPublicationWritePolicy.Mode.EXCLUSIVE_W -> "copied-exclusive"
       else -> "copied"
     }
@@ -340,32 +386,141 @@ internal object OrionFinalizedArtifactOwner {
     if (canRename) {
       val renamed = OrionDownloadStorageRegistry.renameDocument(context, document, finalName)
       if (renamed == null) {
-        cleanupDocument(context, document)
-        return documentFailed("finalized-artifact-rename-failed", "Orion could not give the completed media its final filename.", true, true)
-      }
-      document = renamed
-      if (!journal(context, jobId, generation, targetId, document, finalName, finalName, "renamed")) {
-        cleanupDocument(context, document)
-        return OrionFinalizedDocumentSettlement.Cancelled
-      }
-      info = OrionDownloadStorageRegistry.documentInfo(context, document)
-        ?: return cleanupFailedPublication(
+        logSafTransition(null, "rename-failed", SystemClock.elapsedRealtime(), expectedBytes, null)
+        when (cleanupDocument(context, document)) {
+          OrionDownloadStorageRegistry.DocumentDeleteResult.Unavailable -> return documentFailed(
+            "finalized-artifact-cleanup-unavailable",
+            "Orion could not safely remove the temporary media document after a rename failure.",
+            true,
+            true,
+          )
+          else -> Unit
+        }
+        OrionDownloadJobStore.clearPendingPublication(jobId, generation)
+        document = OrionDownloadStorageRegistry.createDocument(context, targetId, "video/mp4", finalName)
+          ?: return documentFailed(
+            "finalized-artifact-document-create-failed",
+            "Orion could not create the final media document after the storage provider rejected rename.",
+            true,
+            true,
+          )
+        if (!journal(context, jobId, generation, targetId, document, finalName, finalName, "rename-fallback-created")) {
+          cleanupDocument(context, document)
+          return OrionFinalizedDocumentSettlement.Cancelled
+        }
+        info = when (val readiness = awaitDocumentInfo(context, document, null) { canContinue(jobId, generation) }) {
+          is DocumentInfoReadiness.Ready -> readiness.info
+          DocumentInfoReadiness.Cancelled -> {
+            cleanupDocument(context, document)
+            return OrionFinalizedDocumentSettlement.Cancelled
+          }
+          DocumentInfoReadiness.Failed -> return cleanupFailedPublication(
+            context,
+            jobId,
+            generation,
+            document,
+            "finalized-artifact-document-unavailable",
+            "Orion could not inspect the replacement media document.",
+          )
+        }
+        written = when (val fallbackWrite = writeDocument(
           context,
-          jobId,
-          generation,
           document,
-          "finalized-artifact-document-unavailable",
-          "Orion could not inspect the renamed media document.",
-        )
-      if (!journal(context, jobId, generation, targetId, document, finalName, info.displayName, "renamed-inspected", expectedBytes, sourceDigest)) {
-        cleanupDocument(context, document)
-        return OrionFinalizedDocumentSettlement.Cancelled
+          source,
+          expectedBytes,
+        ) { canContinue(jobId, generation) }) {
+          DocumentWriteResult.Cancelled -> {
+            cleanupDocument(context, document)
+            return OrionFinalizedDocumentSettlement.Cancelled
+          }
+          is DocumentWriteResult.Failed -> return cleanupFailedPublication(
+            context,
+            jobId,
+            generation,
+            document,
+            "finalized-artifact-${OrionSafPublicationWritePolicy.failureCode(fallbackWrite.stage)}",
+            publicationFailureMessage(fallbackWrite.stage),
+          )
+          is DocumentWriteResult.Success -> fallbackWrite
+        }
+        sourceDigest = written.sha256
+        info = when (val readiness = awaitDocumentInfo(context, document, expectedBytes) { canContinue(jobId, generation) }) {
+          is DocumentInfoReadiness.Ready -> readiness.info
+          DocumentInfoReadiness.Cancelled -> {
+            cleanupDocument(context, document)
+            return OrionFinalizedDocumentSettlement.Cancelled
+          }
+          DocumentInfoReadiness.Failed -> return cleanupFailedPublication(
+            context,
+            jobId,
+            generation,
+            document,
+            "finalized-artifact-document-unavailable",
+            "Orion could not reopen the replacement media document.",
+          )
+        }
+        if (!journal(
+            context,
+            jobId,
+            generation,
+            targetId,
+            document,
+            finalName,
+            info.displayName,
+            "rename-fallback-copied",
+            expectedBytes,
+            sourceDigest,
+          )
+        ) {
+          cleanupDocument(context, document)
+          return OrionFinalizedDocumentSettlement.Cancelled
+        }
+      } else {
+        document = renamed
+        if (!journal(context, jobId, generation, targetId, document, finalName, finalName, "renamed")) {
+          cleanupDocument(context, document)
+          return OrionFinalizedDocumentSettlement.Cancelled
+        }
+        info = when (val readiness = awaitDocumentInfo(context, document, expectedBytes) { canContinue(jobId, generation) }) {
+          is DocumentInfoReadiness.Ready -> readiness.info
+          DocumentInfoReadiness.Cancelled -> {
+            cleanupDocument(context, document)
+            return OrionFinalizedDocumentSettlement.Cancelled
+          }
+          DocumentInfoReadiness.Failed -> return cleanupFailedPublication(
+            context,
+            jobId,
+            generation,
+            document,
+            "finalized-artifact-document-unavailable",
+            "Orion could not inspect the renamed media document.",
+          )
+        }
+        if (!journal(context, jobId, generation, targetId, document, finalName, info.displayName, "renamed-inspected", expectedBytes, sourceDigest)) {
+          cleanupDocument(context, document)
+          return OrionFinalizedDocumentSettlement.Cancelled
+        }
       }
     }
 
     if (!canContinue(jobId, generation)) {
       cleanupDocument(context, document)
       return OrionFinalizedDocumentSettlement.Cancelled
+    }
+    when (awaitReadableDescriptor(context, document, expectedBytes) { canContinue(jobId, generation) }) {
+      DescriptorReadiness.READY -> Unit
+      DescriptorReadiness.CANCELLED -> {
+        cleanupDocument(context, document)
+        return OrionFinalizedDocumentSettlement.Cancelled
+      }
+      DescriptorReadiness.FAILED -> return cleanupFailedPublication(
+        context,
+        jobId,
+        generation,
+        document,
+        "finalized-artifact-descriptor-unavailable",
+        "Orion could not reopen the completed media document for verification.",
+      )
     }
     val settlement = verifyDocument(
       context,
@@ -394,7 +549,12 @@ internal object OrionFinalizedArtifactOwner {
         }
       }
     }
-    if (!OrionSafPublicationWritePolicy.acceptsAfterDeepVerification(written.syncOutcome, true)) {
+    if (!OrionSafPublicationWritePolicy.acceptsAfterDeepVerification(
+        written.syncOutcome,
+        written.closeOutcome,
+        true,
+      )
+    ) {
       return cleanupFailedPublication(
         context,
         jobId,
@@ -647,107 +807,194 @@ internal object OrionFinalizedArtifactOwner {
     expectedBytes: Long,
     canContinue: () -> Boolean,
   ): DocumentWriteResult {
-    val seekableDescriptor = try {
-      context.contentResolver.openFileDescriptor(document, "rwt")
-    } catch (_: Throwable) {
+    val startedAt = SystemClock.elapsedRealtime()
+    var exclusiveOpenError: Throwable? = null
+    val exclusive = try {
+      context.contentResolver.openOutputStream(document, "w")
+    } catch (error: Throwable) {
+      exclusiveOpenError = error
       null
     }
-    if (seekableDescriptor != null) {
-      return try {
-        seekableDescriptor.use { descriptor ->
-          FileOutputStream(descriptor.fileDescriptor).use { output ->
-            writeDocumentBytes(
-              source,
-              expectedBytes,
-              output,
-              OrionSafPublicationWritePolicy.Mode.SEEKABLE_RWT,
-              canContinue,
-            ) {
-              try {
-                output.fd.sync()
-                OrionSafPublicationWritePolicy.SyncOutcome.SYNCED
-              } catch (_: Throwable) {
-                OrionSafPublicationWritePolicy.SyncOutcome.FAILED
-              }
-            }
-          }
-        }
-      } catch (_: InterruptedException) {
-        DocumentWriteResult.Cancelled
-      } catch (error: DocumentWriteStageException) {
-        DocumentWriteResult.Failed(error.stage)
-      } catch (_: Throwable) {
-        DocumentWriteResult.Failed("close")
-      }
+    if (exclusive != null) {
+      logSafTransition(OrionSafPublicationWritePolicy.Mode.EXCLUSIVE_W, "open", startedAt, 0L, null)
+      return writeOwnedDocumentStream(
+        exclusive,
+        source,
+        expectedBytes,
+        OrionSafPublicationWritePolicy.Mode.EXCLUSIVE_W,
+        startedAt,
+        canContinue,
+      ) { OrionSafPublicationWritePolicy.SyncOutcome.UNSUPPORTED }
+    }
+    logSafTransition(
+      OrionSafPublicationWritePolicy.Mode.EXCLUSIVE_W,
+      "open-failed",
+      startedAt,
+      0L,
+      exclusiveOpenError,
+    )
+    if (!OrionSafPublicationWritePolicy.shouldFallbackToSeekable(false, 0L)) {
+      return documentWriteFailure("descriptor-open", OrionSafPublicationWritePolicy.Mode.EXCLUSIVE_W, 0L, exclusiveOpenError)
     }
 
-    if (!OrionSafPublicationWritePolicy.shouldFallbackToExclusive(false, 0L)) {
-      return DocumentWriteResult.Failed("descriptor-open")
-    }
-    val output = try {
-      context.contentResolver.openOutputStream(document, "w")
-    } catch (_: Throwable) {
+    var seekableOpenError: Throwable? = null
+    val descriptor = try {
+      context.contentResolver.openFileDescriptor(document, "rwt")
+    } catch (error: Throwable) {
+      seekableOpenError = error
       null
-    } ?: return DocumentWriteResult.Failed("descriptor-open")
-    return try {
-      output.use {
-        writeDocumentBytes(
-          source,
-          expectedBytes,
-          it,
-          OrionSafPublicationWritePolicy.Mode.EXCLUSIVE_W,
-          canContinue,
-        ) { OrionSafPublicationWritePolicy.SyncOutcome.UNSUPPORTED }
+    } ?: return documentWriteFailure(
+      "descriptor-open",
+      OrionSafPublicationWritePolicy.Mode.SEEKABLE_RWT,
+      0L,
+      seekableOpenError,
+    )
+    val output = try {
+      ParcelFileDescriptor.AutoCloseOutputStream(descriptor)
+    } catch (error: Throwable) {
+      try { descriptor.close() } catch (_: Throwable) { Unit }
+      return documentWriteFailure(
+        "descriptor-open",
+        OrionSafPublicationWritePolicy.Mode.SEEKABLE_RWT,
+        0L,
+        error,
+      )
+    }
+    logSafTransition(OrionSafPublicationWritePolicy.Mode.SEEKABLE_RWT, "open", startedAt, 0L, null)
+    return writeOwnedDocumentStream(
+      output,
+      source,
+      expectedBytes,
+      OrionSafPublicationWritePolicy.Mode.SEEKABLE_RWT,
+      startedAt,
+      canContinue,
+    ) {
+      try {
+        output.fd.sync()
+        OrionSafPublicationWritePolicy.SyncOutcome.SYNCED
+      } catch (_: Throwable) {
+        OrionSafPublicationWritePolicy.SyncOutcome.FAILED
       }
+    }
+  }
+
+  private fun writeOwnedDocumentStream(
+    output: OutputStream,
+    source: File,
+    expectedBytes: Long,
+    mode: OrionSafPublicationWritePolicy.Mode,
+    startedAt: Long,
+    canContinue: () -> Boolean,
+    sync: () -> OrionSafPublicationWritePolicy.SyncOutcome,
+  ): DocumentWriteResult {
+    val result: DocumentWriteResult = try {
+      val proof = writeDocumentBytes(source, expectedBytes, output, canContinue)
+      logSafTransition(mode, "flush", startedAt, proof.bytesWritten, null)
+      val syncOutcome = sync()
+      logSafTransition(mode, "sync-${syncOutcome.name.lowercase()}", startedAt, proof.bytesWritten, null)
+      DocumentWriteResult.Success(
+        sha256 = proof.sha256,
+        bytesWritten = proof.bytesWritten,
+        mode = mode,
+        syncOutcome = syncOutcome,
+        closeOutcome = OrionSafPublicationWritePolicy.CloseOutcome.CLOSED,
+      )
     } catch (_: InterruptedException) {
       DocumentWriteResult.Cancelled
     } catch (error: DocumentWriteStageException) {
-      DocumentWriteResult.Failed(error.stage)
-    } catch (_: Throwable) {
-      DocumentWriteResult.Failed("close")
+      documentWriteFailure(error.stage, mode, error.bytesWritten, error.cause)
+    } catch (error: Throwable) {
+      documentWriteFailure("document-write", mode, 0L, error)
     }
+    val closeOutcome = try {
+      output.close()
+      logSafTransition(mode, "close", startedAt, (result as? DocumentWriteResult.Success)?.bytesWritten ?: 0L, null)
+      OrionSafPublicationWritePolicy.CloseOutcome.CLOSED
+    } catch (error: Throwable) {
+      logSafTransition(mode, "close-deferred", startedAt, (result as? DocumentWriteResult.Success)?.bytesWritten ?: 0L, error)
+      OrionSafPublicationWritePolicy.CloseOutcome.FAILED
+    }
+    return if (result is DocumentWriteResult.Success) result.copy(closeOutcome = closeOutcome) else result
   }
 
   private fun writeDocumentBytes(
     source: File,
     expectedBytes: Long,
     output: OutputStream,
-    mode: OrionSafPublicationWritePolicy.Mode,
     canContinue: () -> Boolean,
-    sync: () -> OrionSafPublicationWritePolicy.SyncOutcome,
-  ): DocumentWriteResult.Success {
+  ): DocumentCopyProof {
     val digest = MessageDigest.getInstance("SHA-256")
     var copied = 0L
     val input = try { FileInputStream(source) } catch (error: Throwable) {
-      throw DocumentWriteStageException("source-read", error)
+      throw DocumentWriteStageException("source-read", 0L, error)
     }
     input.use {
       val buffer = ByteArray(HASH_BUFFER_BYTES)
       while (true) {
         if (!canContinue()) throw InterruptedException("cancelled")
         val count = try { it.read(buffer) } catch (error: Throwable) {
-          throw DocumentWriteStageException("source-read", error)
+          throw DocumentWriteStageException("source-read", copied, error)
         }
         if (count < 0) break
         if (count == 0) continue
         try { output.write(buffer, 0, count) } catch (error: Throwable) {
-          throw DocumentWriteStageException("document-write", error)
+          throw DocumentWriteStageException("document-write", copied, error)
         }
         digest.update(buffer, 0, count)
         copied = try { Math.addExact(copied, count.toLong()) } catch (error: Throwable) {
-          throw DocumentWriteStageException("copy-size", error)
+          throw DocumentWriteStageException("copy-size", copied, error)
         }
       }
     }
     try { output.flush() } catch (error: Throwable) {
-      throw DocumentWriteStageException("flush", error)
+      throw DocumentWriteStageException("flush", copied, error)
     }
-    if (copied != expectedBytes) throw DocumentWriteStageException("copy-size")
-    return DocumentWriteResult.Success(
+    if (copied != expectedBytes) throw DocumentWriteStageException("copy-size", copied)
+    return DocumentCopyProof(
       sha256 = digest.digest().joinToString("") { byte -> "%02x".format(byte) },
       bytesWritten = copied,
+    )
+  }
+
+  private fun documentWriteFailure(
+    stage: String,
+    mode: OrionSafPublicationWritePolicy.Mode?,
+    bytesWritten: Long,
+    error: Throwable?,
+  ): DocumentWriteResult.Failed {
+    logSafTransition(mode, stage, SystemClock.elapsedRealtime(), bytesWritten, error)
+    return DocumentWriteResult.Failed(
+      stage = stage,
       mode = mode,
-      syncOutcome = sync(),
+      bytesWritten = bytesWritten.coerceAtLeast(0L),
+      exceptionClass = error?.javaClass?.simpleName.orEmpty().take(60),
+    )
+  }
+
+  private fun logSafTransition(
+    mode: OrionSafPublicationWritePolicy.Mode?,
+    stage: String,
+    startedAt: Long,
+    bytes: Long,
+    error: Throwable?,
+  ) {
+    val elapsed = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
+    val elapsedBucket = when {
+      elapsed < 100L -> "<100ms"
+      elapsed < 500L -> "<500ms"
+      elapsed < 3_000L -> "<3s"
+      else -> ">=3s"
+    }
+    val byteBucket = when {
+      bytes <= 0L -> "0"
+      bytes < 1024L * 1024L -> "<1MiB"
+      bytes < 100L * 1024L * 1024L -> "<100MiB"
+      else -> ">=100MiB"
+    }
+    val exceptionClass = error?.javaClass?.simpleName.orEmpty().take(60).ifBlank { "none" }
+    Log.d(
+      TAG,
+      "saf-publication mode=${mode?.name ?: "none"} stage=${stage.take(40)} elapsed=$elapsedBucket bytes=$byteBucket exception=$exceptionClass",
     )
   }
 
@@ -785,6 +1032,94 @@ internal object OrionFinalizedArtifactOwner {
     val job = OrionDownloadJobStore.getJob(jobId) ?: return false
     return job.optLong("_executionGeneration", -1L) == generation &&
       job.optString("state") != "cancelled" && job.optString("_control", "run") != "cancel"
+  }
+
+  private fun awaitDocumentInfo(
+    context: Context,
+    uri: Uri,
+    expectedBytes: Long?,
+    canContinue: () -> Boolean,
+  ): DocumentInfoReadiness {
+    val startedAt = SystemClock.elapsedRealtime()
+    for (attempt in 0..OrionSafPublicationWritePolicy.READINESS_DELAYS_MS.size) {
+      val info = OrionDownloadStorageRegistry.documentInfo(context, uri)
+      val probe = info?.let {
+        OrionSafPublicationWritePolicy.metadataProbe(it.sizeBytes, expectedBytes)
+      } ?: OrionSafPublicationWritePolicy.ReadinessProbe.TRANSIENT_NOT_READY
+      val delay = OrionSafPublicationWritePolicy.readinessDelayMs(attempt)
+      when (OrionSafPublicationWritePolicy.readinessDecision(probe, canContinue(), delay != null)) {
+        OrionSafPublicationWritePolicy.ReadinessDecision.READY -> {
+          logSafTransition(null, "metadata-ready", startedAt, expectedBytes ?: 0L, null)
+          return DocumentInfoReadiness.Ready(checkNotNull(info))
+        }
+        OrionSafPublicationWritePolicy.ReadinessDecision.CANCELLED -> {
+          logSafTransition(null, "metadata-cancelled", startedAt, expectedBytes ?: 0L, null)
+          return DocumentInfoReadiness.Cancelled
+        }
+        OrionSafPublicationWritePolicy.ReadinessDecision.FAILED -> {
+          logSafTransition(null, "metadata-unavailable", startedAt, expectedBytes ?: 0L, null)
+          return DocumentInfoReadiness.Failed
+        }
+        OrionSafPublicationWritePolicy.ReadinessDecision.RETRY -> Unit
+      }
+      try {
+        Thread.sleep(checkNotNull(delay))
+      } catch (_: InterruptedException) {
+        Thread.currentThread().interrupt()
+        return if (!canContinue()) DocumentInfoReadiness.Cancelled else DocumentInfoReadiness.Failed
+      }
+    }
+    return DocumentInfoReadiness.Failed
+  }
+
+  private fun awaitReadableDescriptor(
+    context: Context,
+    uri: Uri,
+    expectedBytes: Long,
+    canContinue: () -> Boolean,
+  ): DescriptorReadiness {
+    fun probe(): OrionSafPublicationWritePolicy.ReadinessProbe {
+      return try {
+        val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
+          ?: return OrionSafPublicationWritePolicy.ReadinessProbe.TRANSIENT_NOT_READY
+        descriptor.use {
+          OrionSafPublicationWritePolicy.descriptorProbe(true, it.statSize, expectedBytes)
+        }
+      } catch (_: SecurityException) {
+        OrionSafPublicationWritePolicy.descriptorProbe(false, null, expectedBytes, permissionDenied = true)
+      } catch (_: java.io.FileNotFoundException) {
+        OrionSafPublicationWritePolicy.ReadinessProbe.TRANSIENT_NOT_READY
+      } catch (_: Throwable) {
+        OrionSafPublicationWritePolicy.ReadinessProbe.TRANSIENT_NOT_READY
+      }
+    }
+    val startedAt = SystemClock.elapsedRealtime()
+    for (attempt in 0..OrionSafPublicationWritePolicy.READINESS_DELAYS_MS.size) {
+      val probe = probe()
+      val delay = OrionSafPublicationWritePolicy.readinessDelayMs(attempt)
+      when (OrionSafPublicationWritePolicy.readinessDecision(probe, canContinue(), delay != null)) {
+        OrionSafPublicationWritePolicy.ReadinessDecision.READY -> {
+          logSafTransition(null, "descriptor-ready", startedAt, expectedBytes, null)
+          return DescriptorReadiness.READY
+        }
+        OrionSafPublicationWritePolicy.ReadinessDecision.CANCELLED -> {
+          logSafTransition(null, "descriptor-cancelled", startedAt, expectedBytes, null)
+          return DescriptorReadiness.CANCELLED
+        }
+        OrionSafPublicationWritePolicy.ReadinessDecision.FAILED -> {
+          logSafTransition(null, "descriptor-unavailable", startedAt, expectedBytes, null)
+          return DescriptorReadiness.FAILED
+        }
+        OrionSafPublicationWritePolicy.ReadinessDecision.RETRY -> Unit
+      }
+      try {
+        Thread.sleep(checkNotNull(delay))
+      } catch (_: InterruptedException) {
+        Thread.currentThread().interrupt()
+        return if (!canContinue()) DescriptorReadiness.CANCELLED else DescriptorReadiness.FAILED
+      }
+    }
+    return DescriptorReadiness.FAILED
   }
 
   private fun cleanupDocument(context: Context, uri: Uri) = OrionDownloadStorageRegistry.deleteDocument(context, uri)
