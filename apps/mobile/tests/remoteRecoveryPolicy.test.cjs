@@ -297,7 +297,7 @@ test("the recovery hook consumes current NetworkContext truth without navigation
   );
 });
 
-test("P10A.1-B does not wire Home or Discover before the Mobile offline product slice", () => {
+test("P10A.1-B recovery foundation stays shared while P10A.2 wires Home before Discover", () => {
   const home =
     fs.readFileSync(
       path.join(
@@ -316,7 +316,7 @@ test("P10A.1-B does not wire Home or Discover before the Mobile offline product 
       "utf8",
     );
 
-  assert.doesNotMatch(
+  assert.match(
     home,
     /useRemoteRecoveryEffect/,
   );
