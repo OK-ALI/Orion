@@ -1033,6 +1033,10 @@ Acceptance:
 
 ## P10A.2 - Mobile Offline Experience
 
+**Final status:** COMPLETE / PHYSICALLY ACCEPTED / FROZEN
+**Closure recorded:** September 2, 2026
+**Accepted scope:** Mobile Offline Experience + Connection-Aware Product Hardening
+
 Primary contracts:
 
 `P10A-C03`, `P10A-C04`, `P10A-C05`, `P10A-C06`, `P10A-C14`.
@@ -1054,6 +1058,59 @@ Acceptance:
 - focused Mobile tests,
 - Mobile broad gates affected by changed code,
 - F10A-M1 through F10A-M5 physical validation.
+
+### P10A.2 automated acceptance
+
+Recorded pre-closure results; these checks were not rerun for this documentation-only closure:
+
+- Final presentation polish: 54 focused Home/Media Detail tests and 208 relevant Home, adaptive, Downloads/offline-playback and playback/resume regression tests passed.
+- Mobile typecheck passed; the source-size check passed for 190 files.
+- v2.2.14 version preparation: 3 distribution/version tests and 14 release-signing, runtime and standalone-build contract tests passed; Mobile typecheck passed.
+
+Automated acceptance is separate from the user-confirmed physical acceptance below.
+
+### P10A.2 physical acceptance
+
+The user confirmed that **v2.2.13 passed the full functional physical matrix**:
+
+| Physical case | Scenario | Result |
+|---|---|---|
+| F10A-M1 | Cold start offline with downloads | PASS |
+| F10A-M2 | Cold start offline without downloads | PASS |
+| F10A-M3 | Live connection loss | PASS |
+| F10A-M4 | Reconnect without restart | PASS |
+| F10A-M5 | All six themes + Reduced Motion | PASS |
+
+For F10A-M4, the native Android restored-connection notification appeared and Orion restored online/remote capability without restarting.
+
+Two subsequent, non-functional presentation changes were physically revalidated on **v2.2.14** and both **PASSED**:
+
+1. Offline Home: the additional 12 dp breathing gap before Continue Watching.
+2. Online + downloaded Media Detail: the compact Available offline capability treatment, with subtle metadata, secondary Play Offline and the normal primary Watch Now CTA.
+
+The v2.2.14 validation covers those two changed surfaces; the full M1-M5 functional acceptance remains the v2.2.13 result above.
+
+### P10A.2 final accepted candidate
+
+The candidate/publication details and physical results are user-confirmed. Local HEAD, app identity, APK size and APK SHA256 were checked during closure.
+
+| Identity | Accepted value |
+|---|---|
+| Version / Android versionCode | `2.2.14 / 48` |
+| Package | `com.okali.orion` |
+| Checkpoint | `39832ccb7f859089bd9e9c782c107e9bae74e296` |
+| Branch | `codex/orion-v3-p10-mobile-downloads-offline-library` |
+| GitHub prerelease | [v2.2.14](https://github.com/OK-ALI/Orion/releases/tag/v2.2.14) |
+| APK | `orion-mobile-v2.2.14.apk` |
+| APK size | `106077507 bytes` |
+| APK SHA256 | `C2C2061B2C2F232C40A4CD8D354E76398DEC94CCFB9FA15A27F5B10914AE013A` |
+| Permanent signer SHA256 | `4422EC4BC16B1C83C914A0AD1B688BE8F7C158FF7F99BCD223A909966AC7A1BD` |
+
+P10A.2 is **COMPLETE / PHYSICALLY ACCEPTED / FROZEN**. Preserve its accepted implementation unless a genuinely new defect is discovered. There is **no requirement to repeat F10A-M1 through F10A-M5 unless a new relevant defect appears**.
+
+Published `v2.2.11`, `v2.2.12`, `v2.2.13` and `v2.2.14` remain immutable: no rebuilding, replacement, release alteration or retagging. Phase 10 history remains unchanged. The Master Audit remains **DEFERRED RECONCILIATION** and is not changed by this closure.
+
+The next stage is **P10A.3 - Desktop Offline Experience + Music local-first behavior**, under the contracts, scope and future acceptance requirements below. This closure does not start P10A.3 or close Phase 10A as a whole.
 
 ## P10A.3 - Desktop Offline Experience + Music local-first behavior
 
@@ -1266,6 +1323,14 @@ Phase 10A is COMPLETE only when all of the following are true:
 ---
 
 # 21. Immediate execution boundary
+
+## Current boundary - September 2, 2026
+
+P10A.2 is **COMPLETE / PHYSICALLY ACCEPTED / FROZEN**; its automated, physical and final-candidate evidence is recorded in section 15.
+
+The next stage is **P10A.3 - Desktop Offline Experience + Music local-first behavior** (`P10A-C07`, `P10A-C08`, `P10A-C09`, `P10A-C14`). Its later acceptance requires focused Desktop/Electron tests and physical cases F10A-D1 through F10A-D4. This is reference context only; no P10A.3 implementation is started by this documentation closure.
+
+## Original setup boundary - September 1, 2026 (historical)
 
 After this plan is preserved and reviewed, the next allowed implementation step is:
 
