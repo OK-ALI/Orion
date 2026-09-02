@@ -108,7 +108,7 @@ export default function HomeScreen() {
         kDramaData,
         topMovies,
         topTV,
-      ] = await Promise.all([
+      ] = await Promise.allSettled([
         tmdbFetch<TmdbPaginatedResponse>('/trending/movie/week'),
         tmdbFetch<TmdbPaginatedResponse>('/trending/tv/week'),
         tmdbFetch<TmdbPaginatedResponse>(
@@ -125,88 +125,88 @@ export default function HomeScreen() {
         return;
       }
 
-      setTrendingMovies(
-        (moviesData?.results || [])
-          .slice(0, 20)
-          .map((item) => ({
-            ...item,
-            media_type: 'movie' as const,
-          })),
-      );
-
-      setTrendingTV(
-        (tvData?.results || [])
-          .slice(0, 20)
-          .map((item) => ({
-            ...item,
-            media_type: 'tv' as const,
-          })),
-      );
-
-      setKDramas(
-        (kDramaData?.results || [])
-          .filter(
-            (item) =>
-              item.poster_path ||
-              item.backdrop_path,
-          )
-          .slice(0, 20)
-          .map((item) => ({
-            ...item,
-            media_type: 'tv' as const,
-          })),
-      );
-
-      const topMovieItems =
-        (topMovies?.results || [])
-          .slice(0, 8)
-          .map((item) => ({
-            ...item,
-            media_type: 'movie' as const,
-          }));
-
-      const topTVItems =
-        (topTV?.results || [])
-          .slice(0, 8)
-          .map((item) => ({
-            ...item,
-            media_type: 'tv' as const,
-          }));
-
-      const merged: TmdbMediaItem[] = [];
-      const maxLen =
-        Math.max(
-          topMovieItems.length,
-          topTVItems.length,
+      // Failed sections retain their previous data; only fulfilled inputs commit.
+      if (moviesData.status === 'fulfilled') {
+        setTrendingMovies(
+          (moviesData.value?.results || [])
+            .slice(0, 20)
+            .map((item) => ({
+              ...item,
+              media_type: 'movie' as const,
+            })),
         );
-
-      for (let index = 0; index < maxLen; index += 1) {
-        if (topMovieItems[index]) {
-          merged.push(topMovieItems[index]);
-        }
-
-        if (topTVItems[index]) {
-          merged.push(topTVItems[index]);
-        }
       }
 
-      setTopRated(merged);
-    } catch (error) {
+      if (tvData.status === 'fulfilled') {
+        setTrendingTV(
+          (tvData.value?.results || [])
+            .slice(0, 20)
+            .map((item) => ({
+              ...item,
+              media_type: 'tv' as const,
+            })),
+        );
+      }
+
+      if (kDramaData.status === 'fulfilled') {
+        setKDramas(
+          (kDramaData.value?.results || [])
+            .filter(
+              (item) =>
+                item.poster_path ||
+                item.backdrop_path,
+            )
+            .slice(0, 20)
+            .map((item) => ({
+              ...item,
+              media_type: 'tv' as const,
+            })),
+        );
+      }
+
+      if (topMovies.status === 'fulfilled' || topTV.status === 'fulfilled') {
+        const topMovieItems =
+          (topMovies.status === 'fulfilled' ? topMovies.value?.results || [] : [])
+            .slice(0, 8)
+            .map((item) => ({
+              ...item,
+              media_type: 'movie' as const,
+            }));
+
+        const topTVItems =
+          (topTV.status === 'fulfilled' ? topTV.value?.results || [] : [])
+            .slice(0, 8)
+            .map((item) => ({
+              ...item,
+              media_type: 'tv' as const,
+            }));
+
+        const merged: TmdbMediaItem[] = [];
+        const maxLen =
+          Math.max(
+            topMovieItems.length,
+            topTVItems.length,
+          );
+
+        for (let index = 0; index < maxLen; index += 1) {
+          if (topMovieItems[index]) {
+            merged.push(topMovieItems[index]);
+          }
+
+          if (topTVItems[index]) {
+            merged.push(topTVItems[index]);
+          }
+        }
+
+        setTopRated(merged);
+      }
+
       if (
-        generation !== remoteLoadGenerationRef.current ||
-        !remoteReadyRef.current
+        [moviesData, tvData, kDramaData, topMovies, topTV]
+          .every((result) => result.status === 'rejected')
       ) {
-        return;
+        setRemoteError('Cinema content could not refresh.');
       }
-
-      console.error(
-        'Failed to fetch home data:',
-        error,
-      );
-
-      setRemoteError(
-        'Cinema content could not refresh.',
-      );
     } finally {
       if (
         generation === remoteLoadGenerationRef.current &&
