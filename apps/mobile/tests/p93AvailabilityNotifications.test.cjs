@@ -11,7 +11,7 @@ test('P9.3 installs Expo local notifications without introducing remote push reg
   const config = JSON.parse(read('app.json')).expo;
   const service = read('src', 'services', 'mobileNotifications.ts');
 
-  assert.equal(pkg.dependencies['expo-notifications'], '~57.0.15');
+  assert.equal(pkg.dependencies['expo-notifications'], '~57.0.16');
   assert.ok(config.plugins.includes('expo-notifications'));
   assert.match(service, /scheduleNotificationAsync/);
   assert.match(service, /requestPermissionsAsync/);

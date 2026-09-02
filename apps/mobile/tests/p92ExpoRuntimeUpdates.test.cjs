@@ -54,7 +54,7 @@ test('P9 retirement removes the Expo patch lifecycle while retaining the depende
   assert.equal(rootPackage.scripts?.postinstall, undefined);
   assert.equal(fs.existsSync(path.join(repoRoot, 'scripts', 'patch-expo-updates-embedded-registration.cjs')), false);
   assert.equal(fs.existsSync(path.join(root, 'tests', 'p9fExpoEmbeddedRegistration.test.cjs')), false);
-  assert.equal(mobilePackage.dependencies['expo-updates'], '~57.0.19');
+  assert.equal(mobilePackage.dependencies['expo-updates'], '~57.0.21');
 });
 
 test('P9 retirement removes EAS Update channel bindings from build profiles', () => {
