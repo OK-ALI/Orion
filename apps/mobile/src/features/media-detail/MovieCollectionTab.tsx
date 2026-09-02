@@ -2,6 +2,7 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from '
 import { useEffect, useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { tmdbFetch } from '@orion/shared/api';
+import { mediaDetailConnectionCopy, type MediaDetailRemoteState } from './useMediaDetailRemoteState';
 import type { TmdbMediaItem } from '@orion/shared/types';
 import { radii, spacing } from '@orion/shared/tokens';
 import { MediaCard } from '../../components/MediaCard';
@@ -17,6 +18,7 @@ type MovieCollection = {
 };
 
 type Props = {
+  remote: MediaDetailRemoteState;
   collectionId: number;
   collectionName: string;
   currentMovieId: string | number;
@@ -32,7 +34,7 @@ function collectionReleaseOrder(a: TmdbMediaItem, b: TmdbMediaItem) {
   return Number(a.id) - Number(b.id);
 }
 
-export function MovieCollectionTab({ collectionId, collectionName, currentMovieId, onOpenMovie }: Props) {
+export function MovieCollectionTab({ collectionId, collectionName, currentMovieId, onOpenMovie, remote }: Props) {
   const { theme } = useOrionTheme();
   const { resolvedProfile } = usePerformanceProfile();
   const { width } = useResponsiveLayout();
@@ -46,12 +48,15 @@ export function MovieCollectionTab({ collectionId, collectionName, currentMovieI
   );
 
   useEffect(() => {
+    if (!remote.remoteReadyRef.current) return;
     let cancelled = false;
+    const generation = remote.generationRef.current;
+    const isCurrent = () => !cancelled && remote.remoteReadyRef.current && generation === remote.generationRef.current;
     setLoading(true);
     setError(false);
     tmdbFetch<any>(`/collection/${collectionId}`)
       .then((result) => {
-        if (cancelled) return;
+        if (!isCurrent()) return;
         const parts = (Array.isArray(result?.parts) ? result.parts : [])
           .filter((part: any) => part?.id != null)
           .map((part: any) => ({ ...part, media_type: 'movie' } as TmdbMediaItem))
@@ -63,20 +68,24 @@ export function MovieCollectionTab({ collectionId, collectionName, currentMovieI
         });
       })
       .catch(() => {
-        if (!cancelled) setError(true);
+        if (isCurrent()) setError(true);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (isCurrent()) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [collectionId, collectionName, reloadKey]);
+  }, [collectionId, collectionName, reloadKey, remote.refreshKey, remote.generationRef, remote.remoteReadyRef]);
+  const currentCollection = collection?.id === collectionId ? collection : null;
 
   const currentIndex = useMemo(
-    () => collection?.parts.findIndex((part) => String(part.id) === String(currentMovieId)) ?? -1,
-    [collection?.parts, currentMovieId],
+    () => currentCollection?.parts.findIndex((part) => String(part.id) === String(currentMovieId)) ?? -1,
+    [currentCollection?.parts, currentMovieId],
   );
 
-  if (loading) {
+  if (!currentCollection && !remote.network.remoteReady) {
+    return <Text accessibilityLiveRegion="polite" style={[styles.stateText, { color: theme.textMuted }]}>{mediaDetailConnectionCopy(remote.network.productState)}</Text>;
+  }
+  if (!currentCollection && (loading || !error)) {
     return (
       <View style={styles.centerState} accessibilityLiveRegion="polite">
         <ActivityIndicator color={theme.accent} />
@@ -85,7 +94,7 @@ export function MovieCollectionTab({ collectionId, collectionName, currentMovieI
     );
   }
 
-  if (error) {
+  if (error && !currentCollection) {
     return (
       <View style={[styles.errorCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <Ionicons name="albums-outline" size={22} color={theme.textMuted} />
@@ -95,7 +104,7 @@ export function MovieCollectionTab({ collectionId, collectionName, currentMovieI
           accessibilityRole="button"
           accessibilityLabel="Retry collection"
           style={({ pressed }) => [styles.retryButton, { borderColor: theme.accent }, pressed && { opacity: 0.7 }]}
-          onPress={() => setReloadKey((value) => value + 1)}
+          onPress={() => { if (remote.remoteReadyRef.current) setReloadKey((value) => value + 1); }}
         >
           <Ionicons name="refresh" size={15} color={theme.accent} />
           <Text style={[styles.retryText, { color: theme.accent }]}>Retry</Text>
@@ -104,7 +113,7 @@ export function MovieCollectionTab({ collectionId, collectionName, currentMovieI
     );
   }
 
-  const parts = collection?.parts || [];
+  const parts = currentCollection?.parts || [];
   if (parts.length === 0) {
     return <Text style={[styles.stateText, { color: theme.textMuted }]}>No collection titles are available.</Text>;
   }
@@ -114,7 +123,7 @@ export function MovieCollectionTab({ collectionId, collectionName, currentMovieI
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <View style={styles.headerCopy}>
-          <Text accessibilityRole="header" style={[styles.title, { color: theme.text }]}>{collection?.name || collectionName}</Text>
+          <Text accessibilityRole="header" style={[styles.title, { color: theme.text }]}>{currentCollection?.name || collectionName}</Text>
           <Text style={[styles.subtitle, { color: theme.textMuted }]}>{parts.length} films{positionText}</Text>
         </View>
         <View style={[styles.iconBadge, { backgroundColor: theme.accentSoft, borderColor: theme.border }]}>

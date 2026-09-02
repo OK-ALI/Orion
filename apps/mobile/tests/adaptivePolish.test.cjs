@@ -368,12 +368,14 @@ test("Phase 7.8.1 bounds Hero work to the visible active Home route", () => {
 test("Phase 7.8.2 defers TV episode catalog work until Episodes is actually opened", () => {
   const detail = read("src/features/media-detail/MediaDetailScreen.tsx");
 
-  assert.match(detail, /activeTab !== 'episodes'/);
-  assert.match(detail, /if \(isMovie \|\| activeTab !== 'episodes' \|\| !selectedSeason\) return/);
-  assert.match(detail, /tmdbFetch<any>\(`\/tv\/\$\{id\}\/season\/\$\{selectedSeason\}`\)/);
-  assert.match(detail, /if \(!cancelled\) setEpisodes\(res\.episodes \|\| \[\]\)/);
-  assert.match(detail, /return \(\) => \{ cancelled = true; \}/);
-  assert.match(detail, /\[activeTab, id, isMovie, selectedSeason\]/);
+  assert.match(detail, /useMediaDetailRemoteState/);
+  const remote = read("src/features/media-detail/useMediaDetailRemoteState.ts");
+  assert.match(remote, /activeTab !== 'episodes'/);
+  assert.match(remote, /if \(isMovie \|\| activeTab !== 'episodes' \|\| !selectedSeason\) return/);
+  assert.match(remote, /tmdbFetch<any>\(`\/tv\/\$\{id\}\/season\/\$\{selectedSeason\}`\)/);
+  assert.match(remote, /if \(!isCurrent\(\)\) return;[\s\S]*setEpisodeResponse\(\{ key: episodeKey, episodes: res\.episodes \|\| \[\] \}\)/);
+  assert.match(remote, /return \(\) => \{ cancelled = true; \}/);
+  assert.match(remote, /\[activeTab, id, isMovie, selectedSeason, routeKey, episodeKey, episodeRequestKey\]/);
   const watchedHook = read("src/features/media-detail/useMediaDetailWatched.ts");
   assert.match(watchedHook, /reconcileSeriesWatched\(data\)/);
 });

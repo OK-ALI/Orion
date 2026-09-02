@@ -6,7 +6,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { tmdbFetch, imgUrl } from '@orion/shared/api';
+import { imgUrl } from '@orion/shared/api';
+import { useMediaDetailRemoteState, mediaDetailConnectionCopy } from './useMediaDetailRemoteState';
+import { useMediaDetailLocalAvailability, type MediaDetailLocalCopy } from './useMediaDetailLocalAvailability';
+import { MediaDetailFallback, MediaDetailLocalCopies } from './MediaDetailFallback';
 import { TmdbMediaItem } from '@orion/shared/types';
 import { DownloadModal } from '../../components/DownloadModal';
 import { TrailerModal } from '../../components/TrailerModal';
@@ -33,19 +36,40 @@ export default function MediaDetailScreen() {
   const { resolvedProfile } = usePerformanceProfile();
   const { toggleSave, isSaved } = useLibraryVisual();
   const { getPlaybackProgress } = useLibraryPlaybackActions();
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'info' | 'episodes' | 'cast' | 'recommended' | 'collection'>('info');
   const [downloadTarget, setDownloadTarget] = useState<MobileDownloadTargetV1 | null>(null);
   const pendingDownloadTargetRef = useRef<MobileDownloadTargetV1 | null>(null);
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [showTrailerModal, setShowTrailerModal] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState(1);
-  const [episodes, setEpisodes] = useState<any[]>([]);
-  const [episodesLoading, setEpisodesLoading] = useState(false);
-  const [seasonVideos, setSeasonVideos] = useState<any[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const remote = useMediaDetailRemoteState({ id, type, selectedSeason, activeTab, showTrailerModal });
+  const { data, loading, loadError, episodes, episodesLoading, seasonVideos, network, remoteReadyRef } = remote;
+  const local = useMediaDetailLocalAvailability(id, type);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const detailScrollRef = useRef<ScrollView>(null);
+  const detailContentYRef = useRef(0);
+  const localCopiesYRef = useRef(0);
+  const multipleOfflineEpisodes = type === 'tv' && local.copies.length > 1;
+  const playOffline = (requested?: MediaDetailLocalCopy, season?: number, episode?: number) => {
+    if (!requested && season === undefined && episode === undefined && type === 'tv' && local.getPlayableCopies().length > 1) {
+      setActionMessage('Choose a downloaded episode from Offline Episodes.');
+      detailScrollRef.current?.scrollTo({ y: Math.max(0, detailContentYRef.current + localCopiesYRef.current - 16), animated: false });
+      return;
+    }
+    const copy = local.findPlayableCopy(requested?.asset.assetId, season, episode);
+    if (!copy) { setActionMessage('No verified local copy is available. This action needs a connection.'); return; }
+    const { entry, asset } = copy;
+    router.push({ pathname: '/player/[id]', params: {
+      id: String(entry.media.id), type: entry.media.mediaType,
+      title: entry.media.episodeTitle || entry.media.title, year: entry.media.year ?? undefined,
+      seriesTitle: entry.media.seriesTitle || undefined, season: entry.media.season ?? undefined,
+      episode: entry.media.episode ?? undefined, episodeTitle: entry.media.episodeTitle || undefined,
+      posterPath: entry.posterPath || entry.media.posterPath || undefined,
+      backdropPath: entry.backdropPath || entry.media.backdropPath || undefined,
+      isOffline: 'true', offlineAssetId: asset.assetId,
+    } });
+  };
+  const connectionMessage = mediaDetailConnectionCopy(network.productState, local.copies.length > 0);
   const [, setProgressRefreshVersion] = useState(0);
   const { width, isTablet } = useResponsiveLayout();
   const { fontScale } = useWindowDimensions();
@@ -59,10 +83,10 @@ export default function MediaDetailScreen() {
   };
   const isMovie = type === 'movie';
   const watchedActions = useMediaDetailWatched({
-    data,
+    data: data || (isMovie ? local.record : null),
     type,
     seriesId: id,
-    title: isMovie ? (data?.title || 'This movie') : (data?.name || 'This show'),
+    title: isMovie ? (data?.title || local.record?.title || 'This movie') : (data?.name || local.record?.name || 'This show'),
     selectedSeason,
     episodes,
   });
@@ -91,7 +115,7 @@ export default function MediaDetailScreen() {
     useCallback(() => {
       setProgressRefreshVersion((version) => version + 1);
       const pendingDownloadTarget = pendingDownloadTargetRef.current;
-      if (pendingDownloadTarget) {
+      if (pendingDownloadTarget && remoteReadyRef.current) {
         pendingDownloadTargetRef.current = null;
         setDownloadTarget(pendingDownloadTarget);
       }
@@ -102,6 +126,7 @@ export default function MediaDetailScreen() {
     setDownloadTarget(null);
   }, [downloadTarget]);
   const resolveDownloadSource = useCallback((target: MobileDownloadTargetV1, method: MobileDownloadTransferMethodV1) => {
+    if (!remoteReadyRef.current || String(target.media.id) !== String(id) || target.media.mediaType !== type) return;
     requestMobileDownloadSourceResolutionV1(target.itemKey, method);
     pendingDownloadTargetRef.current = target;
     setDownloadTarget(null);
@@ -120,74 +145,25 @@ export default function MediaDetailScreen() {
         backdropPath: target.media.backdropPath || undefined,
       },
     });
-  }, [router]);
+  }, [router, id, type, remoteReadyRef]);
   useEffect(() => {
-    async function loadDetails() {
-      setLoading(true);
-      setLoadError(null);
-      try {
-        const res = await tmdbFetch<any>(`/${type}/${id}?append_to_response=credits,videos,recommendations`);
-        setData(res);
-      } catch (err) {
-        console.error('Failed to fetch details:', err);
-        setLoadError('Orion could not load this title. Check your connection and try again.');
-        setData(null);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadDetails();
-  }, [id, type, reloadKey]);
-  useEffect(() => {
-    if (type !== 'tv' || !showTrailerModal || !selectedSeason) return;
-    let cancelled = false;
-    tmdbFetch<any>(`/tv/${id}/season/${selectedSeason}/videos`)
-      .then((result) => {
-        if (!cancelled) {
-          setSeasonVideos((current) => [
-            ...current.filter((video) => video.seasonNum !== selectedSeason),
-            ...(result.results || []).map((video: any) => ({ ...video, seasonNum: selectedSeason })),
-          ]);
-        }
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [id, type, showTrailerModal, selectedSeason]);
-  useEffect(() => {
-    if (isMovie || activeTab !== 'episodes' || !selectedSeason) return;
-    let cancelled = false;
-    async function loadEpisodes() {
-      setEpisodesLoading(true);
-      try {
-        const res = await tmdbFetch<any>(`/tv/${id}/season/${selectedSeason}`);
-        if (!cancelled) setEpisodes(res.episodes || []);
-      } catch (err) {
-        if (!cancelled) console.error('Failed to fetch episodes:', err);
-      } finally {
-        if (!cancelled) setEpisodesLoading(false);
-      }
-    }
-    loadEpisodes();
-    return () => { cancelled = true; };
-  }, [activeTab, id, isMovie, selectedSeason]);
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.accent} />
-      </View>
-    );
+    setActionMessage(null);
+    if (downloadTarget) cancelMobileDownloadSourceResolutionV1(downloadTarget.itemKey);
+    if (pendingDownloadTargetRef.current) cancelMobileDownloadSourceResolutionV1(pendingDownloadTargetRef.current.itemKey);
+    pendingDownloadTargetRef.current = null;
+    setDownloadTarget(null);
+  }, [id, type, network.remoteReady]);
+  if (loading && !data && !local.record) {
+    return <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}><ActivityIndicator size="large" color={theme.accent} /></View>;
   }
   if (!data) {
-    return (
-      <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
-        <Ionicons name="cloud-offline-outline" size={38} color={theme.textMuted} />
-        <Text style={[styles.errorTitle, { color: theme.text }]}>{loadError || 'Media not found.'}</Text>
-        <Pressable accessibilityRole="button" style={[styles.retryButton, { backgroundColor: theme.accent }]} onPress={() => setReloadKey((value) => value + 1)}>
-          <Ionicons name="refresh" size={17} color={theme.onAccent} />
-          <Text style={[styles.retryButtonText, { color: theme.onAccent }]}>Retry</Text>
-        </Pressable>
-      </View>
-    );
+    return <MediaDetailFallback title={local.record?.title} year={local.record?.year} copies={local.copies}
+      message={actionMessage || (!network.remoteReady ? connectionMessage : loadError || connectionMessage)}
+      checkingLocal={local.reconciliation === 'checking'} remoteReady={network.remoteReady} loading={loading}
+      saved={!!local.record && isSaved(local.record)} watched={watchedActions.movieWatched}
+      onPlay={playOffline} onOpenLibrary={() => router.push('/(tabs)/downloads')} onBack={() => router.back()}
+      onRetry={remote.retry} onSave={() => { if (local.record) toggleSave(local.record); }}
+      onWatched={isMovie ? watchedActions.toggleMovieWatched : undefined} />;
   }
   const title = isMovie ? data.title : data.name;
   const year = isMovie ? data.release_date?.slice(0, 4) : data.first_air_date?.slice(0, 4);
@@ -227,9 +203,12 @@ export default function MediaDetailScreen() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={isMovie ? `Download ${title}` : `Download episodes of ${title}`}
-        accessibilityHint={isMovie ? 'Opens download options' : 'Opens the episode list where you can choose episodes to download'}
+        accessibilityHint={!network.remoteReady ? 'Downloading new media needs a connection' : isMovie ? 'Opens download options' : 'Opens the episode list where you can choose episodes to download'}
+        accessibilityState={{ disabled: !network.remoteReady }}
+        disabled={!network.remoteReady}
         hitSlop={6}
         onPress={() => {
+          if (!remoteReadyRef.current) return;
           if (isMovie) {
             setDownloadTarget(createMobileDownloadTargetV1({
               id,
@@ -259,7 +238,7 @@ export default function MediaDetailScreen() {
         </BlurView>
       </Pressable>
 
-      <Animated.ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+      <Animated.ScrollView ref={detailScrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
         <View style={styles.backdropContainer}>
           {backdrop ? (
             <Image source={{ uri: backdrop }} style={styles.backdropImage} />
@@ -272,7 +251,7 @@ export default function MediaDetailScreen() {
             style={styles.backdropGradient}
           />
         </View>
-        <View style={styles.detailsContent}>
+        <View style={styles.detailsContent} onLayout={(event) => { detailContentYRef.current = event.nativeEvent.layout.y; }}>
           {isUnreleased && (
             <View style={styles.unreleasedBannerTop}>
               <Ionicons name="lock-closed" size={16} color="#f87171" />
@@ -331,6 +310,12 @@ export default function MediaDetailScreen() {
               {isMovie && <MovieWatchedBadge watched={watchedActions.movieWatched} theme={theme} />}
             </View>
           </View>
+          {(!network.remoteReady || loadError || actionMessage) && <Text accessibilityLiveRegion="polite" style={[styles.overviewText, { color: theme.textSecondary }]}>
+            {actionMessage || (!network.remoteReady ? connectionMessage + ' Streaming, trailers and new downloads need a connection.' : loadError)}
+          </Text>}
+          <View onLayout={(event) => { localCopiesYRef.current = event.nativeEvent.layout.y; }}>
+            <MediaDetailLocalCopies copies={local.copies} onPlay={playOffline} onOpenLibrary={() => router.push('/(tabs)/downloads')} />
+          </View>
           <View style={[styles.actionStack, isTablet && styles.actionRowTablet]}>
             {isUnreleased ? (
               <View style={styles.unreleasedBtn}>
@@ -340,9 +325,14 @@ export default function MediaDetailScreen() {
             ) : (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Watch ${title}`}
+                accessibilityLabel={!network.remoteReady && local.copies.length ? (multipleOfflineEpisodes ? 'Offline Episodes' : `Play ${title} offline`) : `Watch ${title}`}
+                accessibilityHint={!network.remoteReady ? (multipleOfflineEpisodes ? 'Choose an episode from your downloaded episodes' : local.copies.length ? 'Plays the verified downloaded copy listed above' : 'This action needs a connection') : 'Streams this title'}
+                accessibilityState={{ disabled: !network.remoteReady && !local.copies.length }}
+                disabled={!network.remoteReady && !local.copies.length}
                 style={({ pressed }) => [styles.playWrapper, styles.primaryWatchAction, pressed && styles.pressed]}
-                onPress={() => router.push({
+                onPress={() => {
+                  if (!remoteReadyRef.current) { playOffline(); return; }
+                  router.push({
                   pathname: '/player/[id]',
                   params: {
                     id, type, title, year,
@@ -350,12 +340,12 @@ export default function MediaDetailScreen() {
                     posterPath: data.poster_path || undefined,
                     backdropPath: data.backdrop_path || undefined,
                   }
-                })}
+                }); }}
               >
                 <View style={[styles.playButtonGlow, { backgroundColor: theme.accent }]} />
                 <View style={[styles.playButton, { backgroundColor: theme.accent }]}>
                   <Ionicons name="play" size={18} color={theme.onAccent} />
-                  <Text style={[styles.playButtonText, { color: theme.onAccent }]}>Watch Now</Text>
+                  <Text style={[styles.playButtonText, { color: theme.onAccent }]}>{!network.remoteReady && local.copies.length ? (multipleOfflineEpisodes ? 'Offline Episodes' : 'Play Offline') : 'Watch Now'}</Text>
                 </View>
               </Pressable>
             )}
@@ -379,13 +369,16 @@ export default function MediaDetailScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Play ${title} trailer`}
+                  accessibilityHint={!network.remoteReady ? 'Trailers need a connection' : 'Plays the trailer'}
+                  accessibilityState={{ disabled: !network.remoteReady }}
+                  disabled={!network.remoteReady}
                   style={({ pressed }) => [
                     styles.trailerBtn,
                     styles.secondaryActionButton,
                     { backgroundColor: theme.surface, borderColor: theme.border },
                     pressed && styles.pressed,
                   ]}
-                  onPress={() => setShowTrailerModal(true)}
+                  onPress={() => { if (remoteReadyRef.current) setShowTrailerModal(true); }}
                 >
                   <Ionicons name="film-outline" size={18} color={theme.text} />
                   <Text style={[styles.trailerBtnText, { color: theme.text }]}>Trailer</Text>
@@ -549,6 +542,7 @@ export default function MediaDetailScreen() {
                 collectionName={collectionRef.name}
                 currentMovieId={id}
                 onOpenMovie={openCollectionMovie}
+                remote={remote}
               />
             )}
             {activeTab === 'episodes' && (
@@ -579,6 +573,9 @@ export default function MediaDetailScreen() {
                     theme={theme}
                   />
                 )}
+                {!episodesLoading && !remote.episodesLoaded && <Text style={[styles.placeholderText, { color: theme.textMuted }]}>
+                  {!network.remoteReady ? connectionMessage : remote.episodesError ? 'Episode information is unavailable. Please try again later.' : 'Episode information has not loaded yet.'}
+                </Text>}
                 {episodesLoading ? (
                   <ActivityIndicator size="small" color={theme.accent} style={{ marginTop: 20 }} />
                 ) : (
@@ -600,13 +597,15 @@ export default function MediaDetailScreen() {
                         key={ep.id}
                         accessibilityRole="button"
                         accessibilityLabel={`Episode ${ep.episode_number}, ${ep.name}${episodeWatched ? ', watched' : progressLabel}`}
-                        accessibilityHint="Starts this episode"
+                        accessibilityHint={network.remoteReady ? "Starts this episode" : "Plays a downloaded copy if available; streaming needs a connection"}
                         style={({ pressed }) => [
                           styles.episodeCard,
                           { backgroundColor: theme.elevated, borderColor: theme.border },
                           pressed && { opacity: 0.85 },
                         ]}
-                        onPress={() => router.push({
+                        onPress={() => {
+                          if (!remoteReadyRef.current) { playOffline(undefined, selectedSeason, ep.episode_number); return; }
+                          router.push({
                           pathname: '/player/[id]',
                           params: {
                             id, type, title: ep.name, year,
@@ -617,7 +616,7 @@ export default function MediaDetailScreen() {
                             posterPath: data.poster_path || undefined,
                             backdropPath: ep.still_path || data.backdrop_path || undefined,
                           }
-                        })}
+                        }); }}
                       >
                         <View style={styles.epThumbWrapper}>
                           {ep.still_path ? (
@@ -671,11 +670,14 @@ export default function MediaDetailScreen() {
                             <Pressable
                               accessibilityRole="button"
                               accessibilityLabel={`Download Episode ${ep.episode_number}`}
-                              accessibilityHint="Opens download options for this episode"
+                              accessibilityHint={network.remoteReady ? "Opens download options for this episode" : "Downloading new media needs a connection"}
+                              accessibilityState={{ disabled: !network.remoteReady }}
+                              disabled={!network.remoteReady}
                               hitSlop={4}
                               style={({ pressed }) => [styles.epDownloadBtn, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && { opacity: 0.7 }]}
                               onPress={(e) => {
                                 e.stopPropagation();
+                                if (!remoteReadyRef.current) return;
                                 setDownloadTarget(createMobileDownloadTargetV1({
                                   id,
                                   mediaType: type,
@@ -705,12 +707,12 @@ export default function MediaDetailScreen() {
           <View style={{ height: 120 }} />
         </View>
       </Animated.ScrollView>
-      <DownloadModal
+      {network.remoteReady && <DownloadModal
         visible={Boolean(downloadTarget)}
         onClose={closeDownloadOptions}
         onResolveSource={resolveDownloadSource}
         target={downloadTarget}
-      />
+      />}
       <Modal visible={showMoreSheet} transparent animationType="fade" onRequestClose={() => setShowMoreSheet(false)}>
         <View style={styles.moreOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowMoreSheet(false)} />
