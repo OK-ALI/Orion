@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { spacing } from '@orion/shared/tokens';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchSearch, isAnimeContent, tmdbFetch } from '@orion/shared/api';
+import { tmdbFetch } from '@orion/shared/api';
 import { TmdbMediaItem, TmdbPaginatedResponse } from '@orion/shared/types';
 import { MediaCard } from '../../components/MediaCard';
 import { PersonCard } from '../../components/PersonCard';
@@ -26,6 +26,9 @@ import { createDiscoverStyles } from './discoverStyles';
 import { useResponsiveLayout } from '../../services/responsive';
 import { getGridRenderBudget, getRailRenderBudget } from '../../services/listPerformance';
 import { usePerformanceProfile } from '../../context/PerformanceContext';
+import { getDiscoverUnavailableCopy, useDiscoverRemoteGate } from './useDiscoverRemoteGate';
+import { useDiscoverSearchResults } from './useDiscoverSearchResults';
+import { useDiscoverRegionResults } from './useDiscoverRegionResults';
 
 export default function DiscoverScreen() {
   const { theme, preferences } = useOrionTheme();
@@ -36,15 +39,11 @@ export default function DiscoverScreen() {
   const searchInputRef = useRef<TextInput>(null);
   const searchArrival = useRef(new Animated.Value(1)).current;
   const params = useLocalSearchParams<{ focusSearch?: string }>();
-  const [results, setResults] = useState<TmdbMediaItem[]>([]);
-  const [loading, setLoading] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const router = useRouter();
   const [region, setRegion] = useState<string>('all');
   const [subfilter, setSubfilter] = useState<string>('all');
-  const [regionResults, setRegionResults] = useState<TmdbMediaItem[]>([]);
-  const [regionLoading, setRegionLoading] = useState(false);
   const [genreType, setGenreType] = useState<'all' | 'movie' | 'tv'>('movie');
   const [selectedGenre, setSelectedGenre] = useState<{ id: number | 'all'; name: string } | null>(null);
   const [genreResults, setGenreResults] = useState<TmdbMediaItem[]>([]);
@@ -56,6 +55,19 @@ export default function DiscoverScreen() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
+  const { network, refreshKey, generationRef, remoteReadyRef } = useDiscoverRemoteGate();
+
+  const { filteredSearchResults, loading, searchSucceeded } = useDiscoverSearchResults({
+    query, activeFilter, refreshKey, generationRef, remoteReadyRef,
+  });
+  const { regionResults, regionLoading, regionSucceeded } = useDiscoverRegionResults({
+    region, subfilter, genreType, refreshKey, generationRef, remoteReadyRef,
+    enabled: region !== 'all' && !selectedGenre && !query.trim(),
+  });
+  const genreRequestRef = useRef(0);
+  const genreRequestPendingRef = useRef(false);
+  const genreViewKey = JSON.stringify([selectedGenre?.id, genreType, region, subfilter, year, minRating, sortBy, refreshKey]);
+  const [genreOutcome, setGenreOutcome] = useState<{ key: string; status: 'success' | 'error' } | null>(null);
   const { isPhone, isTablet, isLandscape } = useResponsiveLayout();
   const COLUMN_COUNT = isPhone
     ? (isLandscape ? 4 : containerWidth >= 390 ? 3 : 2)
@@ -73,13 +85,7 @@ export default function DiscoverScreen() {
     () => getRailRenderBudget(containerWidth, 140 + spacing[4] + spacing[3], resolvedProfile),
     [containerWidth, resolvedProfile],
   );
-  const filteredSearchResults = useMemo(() => results.filter((result) => {
-    const mediaType = (result as any).media_type;
-    if (mediaType !== 'movie' && mediaType !== 'tv' && mediaType !== 'person' && !!mediaType) return false;
-    if (activeFilter === 'all') return true;
-    if (activeFilter === 'anime') return mediaType !== 'person' && isAnimeContent(result);
-    return mediaType === activeFilter;
-  }), [activeFilter, results]);
+
   const searchArrivalStyle = {
     opacity: searchArrival.interpolate({ inputRange: [0, 1], outputRange: [0.84, 1] }),
     transform: [{ scale: searchArrival.interpolate({ inputRange: [0, 1], outputRange: [0.985, 1] }) }],
@@ -99,27 +105,28 @@ export default function DiscoverScreen() {
       router.setParams({ focusSearch: '0' });
     });
   }, [params.focusSearch, preferences.reducedMotion, router, searchArrival]);
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
+
+  const fetchDiscoverResults = useCallback(async (pageNum: number = 1) => {
+    if (!selectedGenre || (pageNum > 1 && genreRequestPendingRef.current)) return;
+
+    if (!remoteReadyRef.current) {
+      if (pageNum === 1) setGenreResults([]);
+      setGenreLoading(false);
+      setLoadingMore(false);
       return;
     }
-    const timeoutId = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const data = await fetchSearch(query.trim());
-        setResults(data.results || []);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }, 600);
-    return () => clearTimeout(timeoutId);
-  }, [query]);
-  const fetchDiscoverResults = useCallback(async (pageNum: number = 1) => {
-    if (!selectedGenre) return;
+
+    const generation = generationRef.current;
+    const request = ++genreRequestRef.current;
+    const isCurrent = () => request === genreRequestRef.current &&
+      generation === generationRef.current && remoteReadyRef.current;
+    genreRequestPendingRef.current = true;
     if (pageNum === 1) {
+      setGenreOutcome(null);
+      setGenreResults([]);
+      setPage(1);
+      setTotalPages(1);
+      setLoadingMore(false);
       setGenreLoading(true);
     } else {
       setLoadingMore(true);
@@ -138,6 +145,8 @@ export default function DiscoverScreen() {
           );
         })
       );
+      if (!isCurrent()) return;
+
       const seen = new Set();
       const merged = responses
         .flatMap((data, index) => (data.results || []).map((item) => ({ ...item, media_type: requestTypes[index] })))
@@ -150,6 +159,7 @@ export default function DiscoverScreen() {
           return true;
         });
       const maxTotalPages = Math.max(...responses.map((data) => data.total_pages || 1));
+      setGenreOutcome({ key: genreViewKey, status: 'success' });
       setTotalPages(maxTotalPages);
       setPage(pageNum);
       if (pageNum === 1) {
@@ -169,43 +179,26 @@ export default function DiscoverScreen() {
         });
       }
     } catch (err) {
-      console.error('Discover fetch failed:', err);
+      if (isCurrent()) {
+        console.error('Discover fetch failed:', err);
+        if (pageNum === 1) setGenreOutcome({ key: genreViewKey, status: 'error' });
+      }
     } finally {
-      setGenreLoading(false);
-      setLoadingMore(false);
+      if (isCurrent()) {
+        genreRequestPendingRef.current = false;
+        setGenreLoading(false);
+        setLoadingMore(false);
+      }
     }
-  }, [selectedGenre, genreType, region, subfilter, year, minRating, sortBy]);
+  }, [selectedGenre, genreType, region, subfilter, year, minRating, sortBy, genreViewKey, generationRef, remoteReadyRef]);
   useEffect(() => {
-    if (selectedGenre) {
-      fetchDiscoverResults(1);
-    }
-  }, [selectedGenre, genreType, region, subfilter, year, minRating, sortBy]);
-  useEffect(() => {
-    if (region === 'all' || selectedGenre || query.trim().length > 0) {
-      setRegionResults([]);
-      return;
-    }
-    let mounted = true;
-    setRegionLoading(true);
-    const { countryParam, languageParam } = getRegionQueryParams(region, subfilter);
-    const requestTypes = genreType === 'all' ? ['movie', 'tv'] : [genreType];
-    Promise.all(
-      requestTypes.map((mediaType) =>
-        tmdbFetch<TmdbPaginatedResponse>(`/discover/${mediaType}?sort_by=popularity.desc${countryParam}${languageParam}&page=1`)
-      )
-    )
-      .then((responses) => {
-        if (mounted) {
-          const merged = responses
-            .flatMap((data, index) => (data.results || []).map((item) => ({ ...item, media_type: requestTypes[index] as 'movie' | 'tv' })))
-            .filter((i) => i.poster_path);
-          setRegionResults(merged.sort((a, b) => (b.popularity || 0) - (a.popularity || 0)));
-        }
-      })
-      .catch((err) => console.error('Region content fetch failed', err))
-      .finally(() => { if (mounted) setRegionLoading(false); });
-    return () => { mounted = false; };
-  }, [region, subfilter, genreType, selectedGenre, query]);
+    if (selectedGenre) void fetchDiscoverResults(1);
+    return () => {
+      genreRequestRef.current += 1;
+      genreRequestPendingRef.current = false;
+    };
+  }, [selectedGenre, fetchDiscoverResults]);
+
   const handlePress = useCallback((item: any) => {
     if (item?.media_type === 'person') {
       router.push(`/person/${item.id}`);
@@ -215,7 +208,14 @@ export default function DiscoverScreen() {
     }
   }, [router]);
   const handleLoadMore = () => {
-    if (page < totalPages && !genreLoading && !loadingMore) {
+    if (
+      page < totalPages &&
+      !genreLoading &&
+      !loadingMore &&
+      remoteReadyRef.current &&
+      genreOutcome?.key === genreViewKey &&
+      genreOutcome.status === 'success'
+    ) {
       fetchDiscoverResults(page + 1);
     }
   };
@@ -337,7 +337,11 @@ export default function DiscoverScreen() {
                 ListEmptyComponent={
                   query.trim() ? (
                     <View style={styles.centered}>
-                      <Text style={styles.emptyText}>No results found for "{query}"</Text>
+                      <Text style={styles.emptyText}>
+                        {network.remoteReady
+                          ? (searchSucceeded ? `No results found for "${query}"` : 'Cinema results could not be loaded. Please try again.')
+                          : getDiscoverUnavailableCopy(network.productState)}
+                      </Text>
                     </View>
                   ) : null
                 }
@@ -435,7 +439,7 @@ export default function DiscoverScreen() {
               </Pressable>
             </ScrollView>
           </View>
-          {genreLoading ? (
+          {network.remoteReady && (genreLoading || genreOutcome?.key !== genreViewKey) ? (
             <View style={styles.centered}>
               <ActivityIndicator size="large" color={theme.accent} />
             </View>
@@ -443,7 +447,7 @@ export default function DiscoverScreen() {
             containerWidth > 0 && (
               <FlatList
                 key={`genre-${COLUMN_COUNT}`}
-                data={genreResults}
+                data={network.remoteReady ? genreResults : []}
                 initialNumToRender={gridRenderBudget.initialNumToRender}
                 maxToRenderPerBatch={gridRenderBudget.maxToRenderPerBatch}
                 windowSize={gridRenderBudget.windowSize}
@@ -463,7 +467,11 @@ export default function DiscoverScreen() {
                 )}
                 ListEmptyComponent={
                   <View style={styles.centered}>
-                    <Text style={styles.emptyText}>No titles match the selected filters.</Text>
+                    <Text style={styles.emptyText}>
+                      {network.remoteReady
+                        ? (genreOutcome?.status === 'success' ? 'No titles match the selected filters.' : 'Cinema results could not be loaded. Please try again.')
+                        : getDiscoverUnavailableCopy(network.productState)}
+                    </Text>
                   </View>
                 }
                 ListFooterComponent={
@@ -474,7 +482,7 @@ export default function DiscoverScreen() {
                         accessibilityLabel="Load more titles"
                         style={({ pressed }) => [styles.loadMoreButton, pressed && { opacity: 0.8 }]}
                         onPress={handleLoadMore}
-                        disabled={loadingMore}
+                        disabled={loadingMore || !network.remoteReady}
                       >
                         {loadingMore ? (
                           <ActivityIndicator size="small" color={theme.onAccent} />
@@ -579,7 +587,11 @@ export default function DiscoverScreen() {
                     <MediaCard item={item} onPress={() => handlePress(item)} />
                   )}
                   ListEmptyComponent={
-                    <Text style={styles.emptyRegionText}>No trending titles for this region.</Text>
+                    <Text style={styles.emptyRegionText}>
+                      {network.remoteReady
+                        ? (regionSucceeded ? 'No trending titles for this region.' : 'Cinema results could not be loaded. Please try again.')
+                        : getDiscoverUnavailableCopy(network.productState)}
+                    </Text>
                   }
                 />
               )}
