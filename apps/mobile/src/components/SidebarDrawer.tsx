@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { accent, fontFamilies, fontSizes, radii, spacing, text } from '@orion/shared/tokens';
 import { useOrionTheme } from '../context/ThemeContext';
 import { useNetworkStatus } from '../context/NetworkContext';
+import { getMobileConnectionPresentation } from './mobileConnectionPresentationPolicy';
 import { useOrionAccount } from '../context/AccountContext';
 
 interface SidebarDrawerProps {
@@ -70,8 +71,11 @@ export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarD
           : 'Google not connected';
 
   const network = useNetworkStatus();
-  const isOnline = network.online && network.internetReachable !== false;
+  const presentation = getMobileConnectionPresentation(network.productState);
   const pingMs = network.latencyMs;
+  const connectionLabel = network.productState === 'online'
+    ? `Online${pingMs !== null ? ` · ${pingMs} ms` : ''}`
+    : presentation.footer;
 
   const handleNavigate = (route: string) => {
     onClose();
@@ -101,10 +105,11 @@ export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarD
                 <Text accessibilityRole="header" style={[styles.sectionTitle, { color: theme.textMuted }]}>{section.label}</Text>
                 {section.items.map((item) => {
                   const isActive = pathname === item.route || (item.route !== '/' && pathname.startsWith(item.route));
+                  const localAvailable = item.id === 'downloads' && presentation.localDownloads;
                   return (
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel={item.name}
+                      accessibilityLabel={localAvailable ? 'Downloads. Local media remains available.' : item.name}
                       accessibilityState={{ selected: isActive }}
                       key={item.id}
                       style={({ pressed }) => [
@@ -124,7 +129,12 @@ export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarD
                       >
                         <Ionicons name={(isActive ? item.activeIcon : item.icon) as any} size={18} color={isActive ? theme.onAccent : theme.textSecondary} />
                       </View>
-                      <Text style={[styles.menuText, { color: theme.textSecondary }, isActive && styles.menuTextActive, isActive && { color: theme.text }]}>{item.name}</Text>
+                      <View style={styles.menuCopy}>
+                        <Text style={[styles.menuText, { color: theme.textSecondary }, isActive && styles.menuTextActive, isActive && { color: theme.text }]}>{item.name}</Text>
+                        {localAvailable && (
+                          <Text style={[styles.localBadge, { color: theme.text, backgroundColor: theme.elevated, borderColor: theme.border }]}>LOCAL</Text>
+                        )}
+                      </View>
                       {isActive ? <View style={[styles.activeDot, { backgroundColor: theme.accent, shadowColor: theme.accent }]} /> : <Ionicons name="chevron-forward" size={14} color={theme.textMuted} />}
                     </Pressable>
                   );
@@ -156,13 +166,13 @@ export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarD
             </View>
             <Ionicons name="chevron-forward" size={14} color={theme.textMuted} />
           </Pressable>
-          <View style={[styles.footerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View accessible accessibilityLabel={`Orion Mobile. ${connectionLabel}`} style={[styles.footerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.statusRow}>
-              <View style={[styles.statusDot, { backgroundColor: isOnline ? '#10b981' : '#ef4444' }]} />
+              <View style={[styles.statusDot, { backgroundColor: theme[presentation.tone], shadowColor: theme[presentation.tone] }]} />
               <Text style={[styles.statusText, { color: theme.text }]}>Orion Mobile</Text>
             </View>
             <Text style={[styles.versionText, { color: theme.textMuted }]}>
-              {isOnline ? `Online${pingMs !== null ? ` · ${pingMs} ms` : ''}` : 'Offline Mode'}
+              {connectionLabel}
             </Text>
           </View>
         </View>
@@ -316,12 +326,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.8,
     shadowRadius: 10,
   },
+  menuCopy: { flex: 1, minWidth: 0 },
+  localBadge: {
+    alignSelf: 'flex-start',
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
   menuText: {
     color: 'rgba(255, 255, 255, 0.75)',
     fontSize: fontSizes.sm,
     fontFamily: fontFamilies.heading,
     fontWeight: '600',
-    flex: 1,
   },
   menuTextActive: {
     color: '#ffffff',
@@ -397,19 +417,17 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    shadowColor: '#10b981',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 6,
   },
   statusText: {
-    color: '#ffffff',
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: -0.2,
   },
   versionText: {
-    color: 'rgba(255, 255, 255, 0.45)',
     fontSize: 11,
     paddingLeft: 16,
     fontWeight: '500',

@@ -71,7 +71,8 @@ test("offline status floats inside the safe area and compacts after four seconds
   const layout = read("app/_layout.tsx");
   assert.match(banner, /insets\.top \+ 8/);
   assert.match(banner, /setTimeout\(\(\) => setState\("compact"\), 4000\)/);
-  assert.match(banner, /Offline — cached library data remains available/);
+  assert.match(read("src/components/mobileConnectionPresentationPolicy.ts"), /expanded: "You're offline"/);
+  assert.match(banner, /Local and downloaded content remain available/);
   assert.match(layout, /<OfflineBanner \/>/);
 });
 
