@@ -41,6 +41,7 @@ import { useSystemIntegration } from "./hooks/useSystemIntegration";
 import { useSmartConnectRemoteCommands } from "./hooks/useSmartConnectRemoteCommands";
 import { useSmartConnectTelemetry } from "./hooks/useSmartConnectTelemetry";
 import useNetworkStatus from "../shared/hooks/useNetworkStatus";
+import useDesktopNetworkRecovery from "./hooks/useDesktopNetworkRecovery";
 import { DesktopSyncProviders } from "../features/account/DesktopSyncProviders";
 
 const WHATS_NEW_EDITION = "orion-x-music-planet";
@@ -241,9 +242,12 @@ export default function App() {
   const [trending, setTrending] = useState([]);
   const [trendingTV, setTrendingTV] = useState([]);
   const [loadingHome, setLoadingHome] = useState(false);
-  const network = useNetworkStatus();
-  const offline = network.status === "offline";
-  const previousNetworkStatusRef = useRef(network.status);
+  const probeMetadataService = useCallback(async () => {
+    if (!apiKey) return;
+    await tmdbFetch("/configuration", apiKey);
+  }, [apiKey]);
+  const network = useNetworkStatus({ serviceProbe: apiKey ? probeMetadataService : null });
+  const offline = network.productState === "offline";
 
   // ── Player accent + subtitle lang ─────────────────────────────────────────
   // Computed once here and passed as a prop to MoviePage / TVPage so neither
@@ -380,9 +384,12 @@ export default function App() {
   }, [fetchTrending]);
 
   const retryHome = useCallback(() => {
-    if (offline) return;
+    if (offline) {
+      network.recheck();
+      return;
+    }
     fetchTrending();
-  }, [offline, fetchTrending]);
+  }, [offline, fetchTrending, network.recheck]);
 
   // ── Sync librarySort when changed from Settings ───────────────────────────
   useEffect(() => {
@@ -412,14 +419,7 @@ export default function App() {
     // The first application happens synchronously in main.jsx before React paints.
     applyStoredAppearance();
   }, []);
-  useEffect(() => {
-    const previous = previousNetworkStatusRef.current;
-    previousNetworkStatusRef.current = network.status;
-    if ((previous === "offline" || previous === "degraded") && network.status === "online") {
-      fetchTrending();
-      window.dispatchEvent(new CustomEvent("orion:network-restored"));
-    }
-  }, [fetchTrending, network.status]);
+  useDesktopNetworkRecovery(network, fetchTrending);
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const { navigate: baseNavigate, navigateBack: baseNavigateBack, pageRef } = useNavigation({
