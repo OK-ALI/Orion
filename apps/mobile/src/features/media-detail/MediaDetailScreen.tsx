@@ -314,7 +314,7 @@ export default function MediaDetailScreen() {
             {actionMessage || (!network.remoteReady ? connectionMessage + ' Streaming, trailers and new downloads need a connection.' : loadError)}
           </Text>}
           <View onLayout={(event) => { localCopiesYRef.current = event.nativeEvent.layout.y; }}>
-            <MediaDetailLocalCopies copies={local.copies} onPlay={playOffline} onOpenLibrary={() => router.push('/(tabs)/downloads')} />
+            <MediaDetailLocalCopies presentation={network.productState === 'online' ? 'compact' : 'card'} copies={local.copies} onPlay={playOffline} onOpenLibrary={() => router.push('/(tabs)/downloads')} />
           </View>
           <View style={[styles.actionStack, isTablet && styles.actionRowTablet]}>
             {isUnreleased ? (

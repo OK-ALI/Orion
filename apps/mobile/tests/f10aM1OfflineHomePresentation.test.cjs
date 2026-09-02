@@ -240,3 +240,18 @@ test('resume options retain their short-progress and restricted-source behavior'
     assert.deepEqual(h.choices, expected); assert.equal(h.cancelled, 1);
   }
 });
+
+
+test('final offline Home polish adds 12 dp after the introduction while preserving the accepted control clearance', () => {
+  const h = harness();
+  assert.deepEqual(style(h.panelUI().props.style), { paddingBottom: 24, paddingTop: 120, paddingHorizontal: 20 });
+  assert.equal(style(h.panelUI().props.style).paddingBottom - 12, 12);
+  assert.deepEqual(contentOrder(h).slice(0, 2), ['HomeConnectionPanel', 'HomeContinueWatching']);
+  // Other-state order, online geometry and all rail/card data, dimensions and actions
+  // are exercised above; this gap belongs only to the offline introduction.
+  for (const state of ['online', 'checking', 'degraded', 'reconnecting']) {
+    const other = harness({ state });
+    assert.ok(!texts(other.panelUI()).includes('Your local Orion is ready.'));
+    assert.equal(other.component('HomeContinueWatching').props.presentation, undefined);
+  }
+});

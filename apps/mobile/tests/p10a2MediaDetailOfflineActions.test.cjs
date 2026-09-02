@@ -25,7 +25,8 @@ const titleResponse = (id = 1, type = 'movie') => ({ id, title: 'Remote title ' 
 
 // Deterministic hook/effect runner, real screen/hydration/repository selectors, mocked
 // platform services. Deferred promises let tests resolve pre-loss requests last.
-function harness({ state = 'online', epoch = 0, repository = emptyRepository(), reconciliation = 'ready', mode = 'screen', type = 'movie' } = {}) {
+function harness({ state = 'online', epoch = 0, repository = emptyRepository(), reconciliation = 'ready', mode = 'screen', type = 'movie',
+  themeId = 'midnight-premiere', width = 400, height = 800, fontScale = 1 } = {}) {
   const slots = [], requests = [], routes = [], saves = [], sourceRequests = [];
   const repositoryListeners = new Set(), reconciliationListeners = new Set(), modules = new Map();
   let network = { productState: state, remoteReady: state === 'online', recoveryEpoch: epoch };
@@ -33,6 +34,7 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
   let cursor = 0, dirty = false, effects = [], result, watched = 0;
   const same = (a, b) => a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
   const react = {
+    createContext: () => ({}),
     useState(initial) { const i = cursor++; if (!slots[i]) slots[i] = { value: typeof initial === 'function' ? initial() : initial };
       return [slots[i].value, (next) => { const value = typeof next === 'function' ? next(slots[i].value) : next;
         if (!Object.is(value, slots[i].value)) { slots[i].value = value; dirty = true; } }]; },
@@ -42,27 +44,26 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
     useEffect(fn, deps) { const i = cursor++; if (!slots[i] || !same(slots[i].deps, deps)) effects.push({ i, fn, deps, cleanup: slots[i]?.cleanup }); },
   };
   const element = (type, props) => ({ type, props: props || {} });
-  const theme = {};
   const router = { push: (route) => routes.push(route), back() {} };
   const watchedActions = { movieWatched: false, isEpisodeWatched: () => false, toggleMovieWatched: () => watched++, toggleEpisodeWatched: () => watched++ };
   const mocks = {
     react, 'react/jsx-runtime': { jsx: element, jsxs: element, Fragment: 'Fragment' },
     'react-native': { ...Object.fromEntries(['View', 'Text', 'Image', 'ScrollView', 'ActivityIndicator', 'Pressable', 'FlatList', 'Modal'].map((s) => [s, s])),
-      StyleSheet: { create: (s) => s, absoluteFill: {}, hairlineWidth: 1 }, useWindowDimensions: () => ({ fontScale: 1 }),
+      StyleSheet: { create: (s) => s, absoluteFill: {}, hairlineWidth: 1 }, Platform: { OS: 'android' }, useWindowDimensions: () => ({ width, height, fontScale }),
       Animated: { Value: class {}, ScrollView: 'ScrollView', sequence: () => ({ start() {} }), timing: () => ({}) }, Share: { share: async () => {} } },
     'expo-router': { useRouter: () => router, useLocalSearchParams: () => params, useFocusEffect: (fn) => react.useEffect(fn, [fn]) },
     'expo-linear-gradient': { LinearGradient: 'LinearGradient' }, 'expo-blur': { BlurView: 'BlurView' }, '@expo/vector-icons': { Ionicons: 'Ionicons' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 10, bottom: 10 }) },
-    '@orion/shared/tokens': { spacing: Array.from({ length: 20 }, (_, i) => i * 4), radii: {} },
     '@orion/shared/api': { tmdbFetch: (url) => new Promise((resolve, reject) => requests.push({ url, resolve, reject })), imgUrl: (value) => value },
     '../../context/NetworkContext': { useNetworkStatus: () => network }, './NetworkContext': { useNetworkStatus: () => network },
     '../../context/ThemeContext': { useOrionTheme: () => ({ theme }) },
     '../../context/LibraryContext': { useLibraryVisual: () => ({ toggleSave: (record) => saves.push(record), isSaved: () => false }), useLibraryPlaybackActions: () => ({ getPlaybackProgress: () => null }) },
     '../../context/PerformanceContext': { usePerformanceProfile: () => ({ resolvedProfile: 'balanced' }) },
-    '../../services/responsive': { useResponsiveLayout: () => ({ width: 400, isTablet: false }) },
+    '../../services/responsive': { useResponsiveLayout: () => ({ width, isTablet: Math.min(width, height) >= 600 }) },
     '../../services/listPerformance': { getRailRenderBudget: () => ({}) },
     './useMediaDetailWatched': { useMediaDetailWatched: () => watchedActions },
-    './mediaDetailStyles': { styles: {} }, './EpisodeOverview': { EpisodeOverview: 'EpisodeOverview' },
+    '../services/storageAdapter': { mmkvStorageAdapter: {} },
+    './EpisodeOverview': { EpisodeOverview: 'EpisodeOverview' },
     './WatchedControls': Object.fromEntries(['EpisodeWatchedButton', 'MovieWatchedBadge', 'SeasonWatchedControl', 'WatchedFeedback'].map((s) => [s, s])),
     '../trailers/trailerCandidateService': { normalizeTrailerCandidates: (videos, seasons) => [...videos, ...seasons] },
     '../library/playbackLibrary': { isVerifiedPlaybackEvidence: () => true },
@@ -89,6 +90,8 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
     new Function('require', 'module', 'exports', compiledCache.get(file))(requireLocal, module, module.exports);
     return module.exports;
   }
+  mocks['@orion/shared/tokens'] = load(path.resolve(root, '../../packages/shared/src/tokens/index.ts'));
+  const theme = load(path.join(root, 'src/context/ThemeContext.tsx')).ORION_MOBILE_THEMES[themeId];
   const remoteHook = load(path.join(dir, 'useMediaDetailRemoteState.ts')).useMediaDetailRemoteState;
   const Screen = load(path.join(dir, 'MediaDetailScreen.tsx')).default;
   const Collection = load(path.join(dir, 'MovieCollectionTab.tsx')).MovieCollectionTab;
@@ -105,7 +108,7 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
   function nodes(node) { if (Array.isArray(node)) return node.flatMap(nodes); if (!node?.props) return []; return [node, ...nodes(node.props.children)]; }
   function find(label) { const node = nodes(result).find((n) => n.props.accessibilityLabel === label); assert.ok(node, 'Missing ' + label); return node; }
   render();
-  return { requests, routes, saves, sourceRequests, selector, render,
+  return { requests, routes, saves, sourceRequests, selector, render, theme,
     get result() { return result; }, get watched() { return watched; },
     find, nodes: () => nodes(result), press(label) { find(label).props.onPress({ stopPropagation() {} }); render(); },
     localChoiceNodes() {
@@ -345,4 +348,110 @@ test('cold offline TV fallback exposes choices and refuses an unspecified episod
   assert.equal(h.routes.length, 0); assert.equal(h.requests.length, 0);
   assert.match(h.component('MediaDetailFallback').props.message, /Choose a downloaded episode/);
   assert.ok(h.localChoiceNodes().some((node) => node.props.children === 'Offline Episodes')); h.unmount();
+});
+
+
+const style = (value) => Object.assign({}, ...(Array.isArray(value) ? value.flat(Infinity).filter(Boolean) : [typeof value === 'function' ? value({ pressed: false }) : value]).flat(Infinity));
+
+// Compare complete rendered geometry/content outside the intentionally variable
+// local capability, including Download, Watch Now, secondary actions and tabs.
+function presentationTree(node) {
+  if (Array.isArray(node)) return node.map(presentationTree);
+  if (!node?.props) return node;
+  const type = typeof node.type === 'function' ? node.type.name : node.type;
+  if (type === 'MediaDetailLocalCopies') return { type };
+  const props = Object.fromEntries(Object.entries(node.props).filter(([key, value]) => key !== 'children' && key !== 'ref' && (key === 'style' || typeof value !== 'function'))
+    .map(([key, value]) => [key, key === 'style' ? style(value) : value]));
+  return { type, props, children: presentationTree(node.props.children) };
+}
+
+for (const themeId of ['midnight-premiere', 'amoled', 'mocha', 'slate', 'projector-silver', 'custom']) {
+  test(themeId + ': online verified copy is compact, semantic and secondary to unchanged Watch Now', async () => {
+    const h = harness({ repository: downloaded(), themeId }); h.requests[0].resolve(titleResponse()); await h.settle();
+    assert.equal(h.component('MediaDetailLocalCopies').props.presentation, 'compact');
+    const all = h.localChoiceNodes(), row = style(all[0].props.style);
+    for (const key of ['borderWidth', 'borderRadius', 'backgroundColor', 'padding', 'paddingVertical', 'height']) assert.equal(row[key], undefined, key);
+    assert.equal(row.flexDirection, 'row'); assert.equal(row.flexWrap, 'wrap'); assert.equal(row.rowGap, 4);
+    assert.equal(all.some(n => n.props.accessibilityRole === 'header'), false);
+    const label = all.find(n => n.props.children === 'Available offline');
+    assert.equal(style(label.props.style).color, h.theme.textSecondary); assert.equal(style(label.props.style).fontSize, 13);
+    const icon = all.find(n => n.type === 'Ionicons'); assert.equal(icon.props.color, h.theme.textSecondary); assert.equal(icon.props.accessible, false);
+    const button = all.find(n => n.props.accessibilityLabel === 'Play Offline'), buttonStyle = style(button.props.style);
+    assert.equal(buttonStyle.minHeight, 44); assert.equal(buttonStyle.minWidth, 44);
+    assert.equal(buttonStyle.backgroundColor, h.theme.surface); assert.equal(buttonStyle.borderColor, h.theme.border);
+    assert.equal(style(button.props.style({ pressed: true })).backgroundColor, h.theme.surfaceHover);
+    assert.equal(style(button.props.children.props.style).color, h.theme.text);
+    const watch = h.find('Watch Remote title 1'); assert.equal(style(watch.props.style).width, '100%');
+    assert.equal(watch.props.accessibilityHint, 'Streams this title'); assert.equal(watch.props.disabled, false);
+    assert.ok(h.nodes().some(n => n.props.children === 'Watch Now'));
+    h.press('Watch Remote title 1'); button.props.onPress();
+    assert.equal(h.routes[0].params.isOffline, undefined); assert.equal(h.routes[0].params.offlineAssetId, undefined);
+    assert.equal(h.routes[1].params.isOffline, 'true'); assert.equal(h.routes[1].params.offlineAssetId, 'asset-1');
+    h.repository(emptyRepository()); button.props.onPress(); assert.equal(h.routes.length, 2, 'stale compact action must recheck existing repository owner');
+    assert.deepEqual(h.localChoiceNodes(), []); h.unmount();
+  });
+}
+
+test('online without downloads retains identical surrounding Media Detail geometry, actions and content', async () => {
+  const empty = harness(), local = harness({ repository: downloaded() });
+  for (const h of [empty, local]) { h.requests[0].resolve(titleResponse()); await h.settle(); }
+  assert.deepEqual(empty.localChoiceNodes(), []);
+  assert.deepEqual(presentationTree(empty.result), presentationTree(local.result));
+  assert.equal(style(local.find('Download Remote title 1').props.style).width, 36);
+  assert.equal(style(local.find('Download Remote title 1').props.style).right, 20);
+  assert.equal(style(local.find('Add Remote title 1 to My List').props.style).height, 48);
+  assert.equal(style(local.find('Play Remote title 1 trailer').props.style).height, 48);
+  assert.equal(style(local.find('More actions').props.style).width, 48);
+  const all = local.nodes();
+  assert.ok(all.indexOf(local.component('MediaDetailLocalCopies')) < all.indexOf(local.find('Watch Remote title 1')));
+  assert.ok(all.indexOf(local.find('Watch Remote title 1')) < all.indexOf(local.find('More actions')));
+  empty.press('Watch Remote title 1'); local.press('Watch Remote title 1'); assert.deepEqual(empty.routes, local.routes);
+  empty.unmount(); local.unmount();
+});
+
+for (const hasCopy of [false, true]) {
+  test('offline ' + (hasCopy ? 'downloaded' : 'not downloaded') + ' preserves cold and loaded presentation', async () => {
+    const repository = hasCopy ? downloaded() : emptyRepository();
+    const cold = harness({ state: 'offline', repository }), loaded = harness({ repository });
+    loaded.requests[0].resolve(titleResponse()); await loaded.settle();
+    for (const state of ['offline', 'checking', 'degraded', 'reconnecting']) {
+      loaded.connect(state); assert.equal(loaded.component('MediaDetailLocalCopies').props.presentation, 'card');
+      const choices = loaded.localChoiceNodes();
+      assert.deepEqual(presentationTree(choices), presentationTree(cold.localChoiceNodes()));
+      if (hasCopy) {
+        assert.equal(style(choices[0].props.style).padding, 16); assert.equal(style(choices[0].props.style).borderRadius, 16);
+        const button = choices.find(n => n.props.accessibilityLabel === 'Play Offline');
+        assert.equal(style(button.props.style).backgroundColor, loaded.theme.accent); button.props.onPress();
+        assert.equal(loaded.routes.at(-1).params.offlineAssetId, 'asset-1');
+      } else { assert.deepEqual(choices, []); assert.equal(loaded.find('Watch Remote title 1').props.disabled, true); }
+    }
+    assert.equal(cold.requests.length, 0); cold.unmount(); loaded.unmount();
+  });
+}
+
+test('compact capability wraps without fixed heights, clipped labels or full-width secondary actions', async () => {
+  for (const [width, height, fontScale] of [[320, 700, 1], [320, 700, 2], [800, 1200, 1.5]]) {
+    const h = harness({ width, height, fontScale, repository: downloaded() }); h.requests[0].resolve(titleResponse()); await h.settle();
+    const all = h.localChoiceNodes(), row = style(all[0].props.style);
+    assert.equal(row.flexWrap, 'wrap'); assert.equal(row.columnGap, 12); assert.equal(row.marginTop, 8);
+    for (const n of all) {
+      const s = style(n.props.style); assert.equal(s.height, undefined); assert.equal(s.overflow, undefined);
+      if (n.type === 'Text') { assert.equal(n.props.numberOfLines, undefined); assert.notEqual(n.props.allowFontScaling, false); assert.equal(s.flexShrink, 1); }
+      if (n.type === 'Pressable') { assert.equal(s.width, undefined); assert.equal(s.maxWidth, '100%'); assert.equal(s.paddingVertical, 8); assert.equal(s.minHeight, 44); }
+    }
+    h.unmount();
+  }
+  const source = read('MediaDetailFallback.tsx'); assert.doesNotMatch(source, /#[0-9a-f]{3,8}|rgba\(|Animated|LayoutAnimation|useWindowDimensions|useNetworkStatus/i);
+});
+
+test('compact TV choices preserve explicit episode identity and access to all downloads', async () => {
+  const snapshots = Array.from({ length: 9 }, (_, i) => downloaded('tv', 1, 1, i + 1, 'episode-' + (i + 1)));
+  const repository = { ...emptyRepository(), assets: snapshots.flatMap(s => s.assets), offlineEntries: snapshots.flatMap(s => s.offlineEntries) };
+  const h = harness({ type: 'tv', repository }); h.requests[0].resolve(titleResponse(1, 'tv')); await h.settle();
+  const choices = h.localChoiceNodes(); assert.equal(choices.filter(n => n.type === 'Pressable').length, 9);
+  choices.find(n => n.props.accessibilityLabel === 'Play Offline · S1 E3 · Local episode 3').props.onPress();
+  assert.equal(h.routes[0].params.offlineAssetId, 'episode-3'); assert.equal(h.routes[0].params.episode, 3);
+  const seeAll = choices.find(n => n.props.accessibilityLabel === 'See all downloads');
+  assert.equal(style(seeAll.props.style).minHeight, 44); assert.equal(style(seeAll.props.style).borderColor, h.theme.border);
+  seeAll.props.onPress(); assert.equal(h.routes[1], '/(tabs)/downloads'); h.unmount();
 });

@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { spacing } from '@orion/shared/tokens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOrionTheme } from '../context/ThemeContext';
 import { useResponsiveLayout } from '../services/responsive';
@@ -51,7 +52,7 @@ export function HomeOfflineIntroduction({ onOpenDownloads, onOpenLibrary }: {
 }
 
 const styles = StyleSheet.create({
-  introduction: { paddingBottom: 12 },
+  introduction: { paddingBottom: spacing[6] },
   eyebrow: { fontSize: 10, lineHeight: 14, fontWeight: '900', letterSpacing: 1.7, marginBottom: 6 },
   title: { fontSize: 26, lineHeight: 32, fontWeight: '900', letterSpacing: -0.6 },
   body: { fontSize: 14, lineHeight: 20, marginTop: 6, maxWidth: 560 },

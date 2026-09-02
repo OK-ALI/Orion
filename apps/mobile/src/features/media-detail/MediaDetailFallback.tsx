@@ -1,18 +1,29 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { spacing } from '@orion/shared/tokens';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { MediaDetailLocalCopy } from './useMediaDetailLocalAvailability';
 
-export function MediaDetailLocalCopies({ copies, onPlay, onOpenLibrary }: {
+export function MediaDetailLocalCopies({ copies, onPlay, onOpenLibrary, presentation = 'card' }: {
+  presentation?: 'card' | 'compact';
   copies: MediaDetailLocalCopy[]; onPlay: (copy: MediaDetailLocalCopy) => void; onOpenLibrary: () => void;
 }) {
   const { theme } = useOrionTheme();
   if (!copies.length) return null;
+  const compact = presentation === 'compact';
   return (
-    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <Text accessibilityRole="header" style={[styles.heading, { color: theme.text }]}>
-        {copies.length > 1 && copies[0].entry.media.mediaType === 'tv' ? 'Offline Episodes' : 'Available offline'}
-      </Text>
+    <View style={compact ? styles.capability : [styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      {compact ? (
+        <View style={styles.capabilityLabel}>
+          <Ionicons name="download-outline" size={16} color={theme.textSecondary} accessible={false} />
+          <Text style={[styles.capabilityText, { color: theme.textSecondary }]}>Available offline</Text>
+        </View>
+      ) : (
+        <Text accessibilityRole="header" style={[styles.heading, { color: theme.text }]}>
+          {copies.length > 1 && copies[0].entry.media.mediaType === 'tv' ? 'Offline Episodes' : 'Available offline'}
+        </Text>
+      )}
       {copies.slice(0, 8).map((copy) => {
         const media = copy.entry.media;
         const label = media.mediaType === 'tv'
@@ -20,13 +31,15 @@ export function MediaDetailLocalCopies({ copies, onPlay, onOpenLibrary }: {
           : 'Play Offline';
         return (
           <Pressable key={copy.asset.assetId} accessibilityRole="button" accessibilityLabel={label}
-            onPress={() => onPlay(copy)} style={[styles.button, { backgroundColor: theme.accent }]}>
-            <Text style={[styles.buttonText, { color: theme.onAccent }]}>{label}</Text>
+            onPress={() => onPlay(copy)} style={compact
+              ? ({ pressed }) => [styles.compactButton, { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: theme.border }]
+              : [styles.button, { backgroundColor: theme.accent }]}>
+            <Text style={compact ? [styles.compactButtonText, { color: theme.text }] : [styles.buttonText, { color: theme.onAccent }]}>{label}</Text>
           </Pressable>
         );
       })}
       {copies.length > 8 && (
-        <Pressable accessibilityRole="button" accessibilityLabel="See all downloads" onPress={onOpenLibrary} style={styles.button}>
+        <Pressable accessibilityRole="button" accessibilityLabel="See all downloads" onPress={onOpenLibrary} style={compact ? [styles.compactButton, { borderColor: theme.border }] : styles.button}>
           <Text style={[styles.buttonText, { color: theme.accent }]}>See all downloads</Text>
         </Pressable>
       )}
@@ -79,6 +92,11 @@ export function MediaDetailFallback({ title, year, copies, message, checkingLoca
 
 const styles = StyleSheet.create({
   fallback: { paddingHorizontal: 24, gap: 16 },
+  capability: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing[3], rowGap: spacing[1], marginTop: spacing[2] },
+  capabilityLabel: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, maxWidth: '100%' },
+  capabilityText: { fontSize: 13, flexShrink: 1 },
+  compactButton: { minHeight: 44, minWidth: 44, maxWidth: '100%', flexShrink: 1, paddingHorizontal: spacing[3], paddingVertical: spacing[2], justifyContent: 'center', borderRadius: 22, borderWidth: StyleSheet.hairlineWidth },
+  compactButtonText: { fontSize: 13, fontWeight: '600', flexShrink: 1 },
   card: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 16, gap: 12 },
   title: { fontSize: 26, fontWeight: '800' },
   heading: { fontSize: 16, fontWeight: '700' },
