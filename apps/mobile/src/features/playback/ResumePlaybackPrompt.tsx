@@ -57,6 +57,66 @@ export function ResumePlaybackPrompt({
         : switching
           ? `${sourceName} can continue from your saved place. Choose how you'd like to start.`
           : `You watched ${title} before. Choose how you'd like to continue.`;
+  const actionButtons = [
+    !resumeRestricted ? (
+      <Pressable
+        key="resume"
+        accessibilityRole="button"
+        onPress={() => onChoose('resume')}
+        style={[styles.actionButton, styles.primary, { backgroundColor: theme.accent }]}
+      >
+        <Ionicons name="play" size={18} color={theme.onAccent} />
+        <Text style={[styles.primaryText, { color: theme.onAccent }]}>Resume from {formatPlaybackTime(savedTime)}</Text>
+      </Pressable>
+    ) : null,
+    !resumeRestricted && savedTime > 45 ? (
+      <Pressable
+        key="replay-30"
+        accessibilityRole="button"
+        onPress={() => onChoose('replay-30')}
+        style={[styles.actionButton, styles.secondary, { backgroundColor: theme.surface, borderColor: theme.border }]}
+      >
+        <Ionicons name="play-back" size={18} color={theme.text} />
+        <Text style={[styles.secondaryText, { color: theme.text }]}>Replay last 30 seconds</Text>
+      </Pressable>
+    ) : null,
+    (
+      <Pressable
+        key="start-over"
+        accessibilityRole="button"
+        onPress={() => onChoose('start-over')}
+        style={[
+          styles.actionButton,
+          resumeRestricted ? styles.primary : styles.secondary,
+          resumeRestricted
+            ? { backgroundColor: theme.accent }
+            : { backgroundColor: theme.surface, borderColor: theme.border },
+        ]}
+      >
+        <Ionicons name="refresh" size={18} color={resumeRestricted ? theme.onAccent : theme.text} />
+        <Text style={[
+          resumeRestricted ? styles.primaryText : styles.secondaryText,
+          { color: resumeRestricted ? theme.onAccent : theme.text },
+        ]}>
+          {unpredictable ? 'Open anyway' : limitedResume ? 'Try from beginning' : 'Start from beginning'}
+        </Text>
+      </Pressable>
+    ),
+    (
+      <Pressable
+        key="cancel"
+        accessibilityRole="button"
+        onPress={onCancel}
+        style={[
+          styles.actionButton,
+          styles.secondary,
+          { backgroundColor: theme.surface, borderColor: theme.border },
+        ]}
+      >
+        <Text style={[styles.secondaryText, { color: theme.textSecondary }]}>Cancel</Text>
+      </Pressable>
+    ),
+  ].filter((button) => button !== null);
 
   return (
     <Modal transparent statusBarTranslucent animationType="fade" onRequestClose={onCancel}>
@@ -113,70 +173,16 @@ export function ResumePlaybackPrompt({
               {formatPlaybackTime(savedTime)}
             </Text>
           </View>
-          <View style={[styles.actions, compactLandscape && styles.actionsCompact]}>
-            {!resumeRestricted && (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => onChoose('resume')}
-                style={[
-                  styles.actionButton,
-                  compactLandscape && styles.actionButtonCompact,
-                  styles.primary,
-                  { backgroundColor: theme.accent },
-                ]}
-              >
-                <Ionicons name="play" size={18} color={theme.onAccent} />
-                <Text style={[styles.primaryText, { color: theme.onAccent }]}>Resume from {formatPlaybackTime(savedTime)}</Text>
-              </Pressable>
-            )}
-            {!resumeRestricted && savedTime > 45 && (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => onChoose('replay-30')}
-                style={[
-                  styles.actionButton,
-                  compactLandscape && styles.actionButtonCompact,
-                  styles.secondary,
-                  { backgroundColor: theme.surface, borderColor: theme.border },
-                ]}
-              >
-                <Ionicons name="play-back" size={18} color={theme.text} />
-                <Text style={[styles.secondaryText, { color: theme.text }]}>Replay last 30 seconds</Text>
-              </Pressable>
-            )}
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => onChoose('start-over')}
-              style={[
-                styles.actionButton,
-                compactLandscape && styles.actionButtonCompact,
-                resumeRestricted ? styles.primary : styles.secondary,
-                resumeRestricted
-                  ? { backgroundColor: theme.accent }
-                  : { backgroundColor: theme.surface, borderColor: theme.border },
-              ]}
-            >
-              <Ionicons name="refresh" size={18} color={resumeRestricted ? theme.onAccent : theme.text} />
-              <Text style={[
-                resumeRestricted ? styles.primaryText : styles.secondaryText,
-                { color: resumeRestricted ? theme.onAccent : theme.text },
-              ]}>
-                {unpredictable ? 'Open anyway' : limitedResume ? 'Try from beginning' : 'Start from beginning'}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={onCancel}
-              style={[
-                styles.actionButton,
-                compactLandscape && styles.actionButtonCompact,
-                styles.secondary,
-                { backgroundColor: theme.surface, borderColor: theme.border },
-              ]}
-            >
-              <Text style={[styles.secondaryText, { color: theme.textSecondary }]}>Cancel</Text>
-            </Pressable>
-          </View>
+          {compactLandscape ? (
+            <View style={styles.actions}>
+              <View style={styles.actionsCompactRow}>{actionButtons.slice(0, 2)}</View>
+              {actionButtons.length > 2 && (
+                <View style={styles.actionsCompactRow}>{actionButtons.slice(2)}</View>
+              )}
+            </View>
+          ) : (
+            <View style={styles.actions}>{actionButtons}</View>
+          )}
         </View>
       </ScrollView>
     </Modal>
@@ -239,7 +245,7 @@ const styles = StyleSheet.create({
   time: { fontSize: 24, fontWeight: '900', fontVariant: ['tabular-nums'] },
   timeCompact: { fontSize: 18 },
   actions: { width: '100%', gap: spacing[2] },
-  actionsCompact: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
+  actionsCompactRow: { width: '100%', flexDirection: 'row', gap: spacing[2] },
   actionButton: {
     minHeight: 46,
     borderRadius: radii.full,
@@ -251,11 +257,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     minWidth: 0,
     flexBasis: 220,
-  },
-  actionButtonCompact: {
-    flexBasis: '48%',
-    flexGrow: 1,
-    flexShrink: 0,
   },
   primary: { minHeight: 50 },
   primaryText: { fontSize: 14, fontWeight: '900', textAlign: 'center' },

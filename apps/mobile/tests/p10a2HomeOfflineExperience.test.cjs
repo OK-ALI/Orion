@@ -72,14 +72,14 @@ test("cold offline Home stays useful instead of waiting behind a full-screen rem
   );
 
   assert.ok(
-    panel.includes(
+    read("src/components/HomeOfflineIntroduction.tsx").includes(
       "Your local Orion is ready.",
     ),
   );
 
   assert.ok(
-    panel.includes(
-      "Verified Downloads can play without internet.",
+    read("src/components/HomeOfflineIntroduction.tsx").includes(
+      "Your Library and verified Downloads stay available without internet.",
     ),
   );
 
@@ -227,7 +227,7 @@ test("Home connection panel exposes truthful offline, degraded, reconnecting, an
     );
 
   assert.ok(
-    panel.includes(
+    read("src/components/HomeOfflineIntroduction.tsx").includes(
       "Your local Orion is ready.",
     ),
   );

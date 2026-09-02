@@ -15,7 +15,7 @@ interface ContinueWatchingCardProps {
   presentation?: ContinueWatchingPresentation;
 }
 
-export type ContinueWatchingPresentation = 'home-rail' | 'library-full';
+export type ContinueWatchingPresentation = 'home-rail' | 'library-full' | 'offline-compact';
 
 export function ContinueWatchingCard({
   entry,
@@ -31,6 +31,7 @@ export function ContinueWatchingCard({
   const { mediaIdentity, presentation } = progress;
   const compact = shortestEdge < 360;
   const isLibrary = presentationMode === 'library-full';
+  const offlineCompact = presentationMode === 'offline-compact';
   const cardWidth = isLibrary
     ? '100%'
     : Math.min(330, Math.max(252, width * (compact ? 0.82 : 0.79)));
@@ -48,7 +49,7 @@ export function ContinueWatchingCard({
         accessibilityRole="button"
         accessibilityLabel={`Open ${mediaIdentity.title}`}
         onPress={onOpenDetails || onResume}
-        style={({ pressed }) => [styles.artworkFrame, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.artworkFrame, offlineCompact && styles.offlineArtworkFrame, pressed && styles.pressed]}
       >
         {artwork ? (
           <Image source={{ uri: artwork }} style={styles.artwork} resizeMode="cover" />
@@ -63,13 +64,13 @@ export function ContinueWatchingCard({
         </View>
       </Pressable>
 
-      <View style={[styles.content, !isLibrary && styles.homeContent]}>
+      <View style={[styles.content, !isLibrary && styles.homeContent, offlineCompact && styles.offlineContent]}>
         <Text style={[styles.title, !isLibrary && styles.homeTitle, { color: theme.text }]} numberOfLines={2}>{mediaIdentity.title}</Text>
         <Text style={[styles.context, { color: theme.textSecondary }]} numberOfLines={2}>{episodeContext}</Text>
         <Text style={[styles.progressText, { color: theme.textMuted }]} numberOfLines={1}>
           {progressDescription(progress.currentTime, progress.duration, progress.percent)}
         </Text>
-        <View style={[styles.actions, compact && styles.actionsCompact]}>
+        <View style={[styles.actions, compact && styles.actionsCompact, offlineCompact && styles.offlineActions]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Resume ${mediaIdentity.title}`}
@@ -104,6 +105,9 @@ export function ContinueWatchingCard({
 const styles = StyleSheet.create({
   card: { borderRadius: 18, borderWidth: 1, overflow: 'hidden', flexShrink: 0 },
   artworkFrame: { width: '100%', aspectRatio: 16 / 9, overflow: 'hidden' },
+  offlineArtworkFrame: { aspectRatio: 2.25 },
+  offlineContent: { padding: 10, gap: 2 },
+  offlineActions: { marginTop: 6 },
   artwork: { width: '100%', height: '100%' },
   fallback: { alignItems: 'center', justifyContent: 'center' },
   scrim: { ...StyleSheet.absoluteFill, opacity: 0.22 },

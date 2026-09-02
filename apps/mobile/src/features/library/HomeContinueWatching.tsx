@@ -10,7 +10,10 @@ import { useResponsiveLayout } from '../../services/responsive';
 import { getRailRenderBudget } from '../../services/listPerformance';
 import { usePerformanceProfile } from '../../context/PerformanceContext';
 
-export function HomeContinueWatching() {
+export function HomeContinueWatching({ presentation = 'default' }: {
+  presentation?: 'default' | 'offline-compact';
+}) {
+  const offlineCompact = presentation === 'offline-compact';
   const router = useRouter();
   const { width, shortestEdge } = useResponsiveLayout();
   const { theme } = useOrionTheme();
@@ -105,10 +108,11 @@ export function HomeContinueWatching() {
   };
 
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, offlineCompact && styles.offlineSection]}>
       <View
         style={[
           styles.header,
+          offlineCompact && styles.offlineHeader,
           { paddingHorizontal: padding },
         ]}
       >
@@ -181,7 +185,7 @@ export function HomeContinueWatching() {
         renderItem={({ item }) => (
           <ContinueWatchingCard
             entry={item}
-            presentation="home-rail"
+            presentation={offlineCompact ? 'offline-compact' : 'home-rail'}
             onResume={() => resume(item)}
             onOpenDetails={() =>
               router.push({
@@ -212,6 +216,8 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 24,
   },
+  offlineSection: { marginBottom: 16 },
+  offlineHeader: { minHeight: 60, paddingTop: 6, paddingBottom: 6 },
   header: {
     minHeight: 72,
     paddingTop: 12,

@@ -328,6 +328,23 @@ export default function HomeScreen() {
 
   const showRemoteCatalog =
     network.remoteReady;
+  const offlineHome = network.productState === 'offline';
+  const connectionPanel = (
+    <HomeConnectionPanel
+      state={network.productState}
+      loading={loadingRemote}
+      error={remoteError}
+      onRetry={() => {
+        void loadRemoteHome();
+      }}
+      onOpenDownloads={() => {
+        router.push('/(tabs)/downloads');
+      }}
+      onOpenLibrary={() => {
+        router.push('/(tabs)/library');
+      }}
+    />
+  );
 
   return (
     <View
@@ -364,22 +381,9 @@ export default function HomeScreen() {
             />
           )}
 
-        <HomeContinueWatching />
-
-        <HomeConnectionPanel
-          state={network.productState}
-          loading={loadingRemote}
-          error={remoteError}
-          onRetry={() => {
-            void loadRemoteHome();
-          }}
-          onOpenDownloads={() => {
-            router.push('/(tabs)/downloads');
-          }}
-          onOpenLibrary={() => {
-            router.push('/(tabs)/library');
-          }}
-        />
+        {offlineHome && connectionPanel}
+        <HomeContinueWatching presentation={offlineHome ? 'offline-compact' : undefined} />
+        {!offlineHome && connectionPanel}
 
         {showRemoteCatalog &&
           trendingMovies.length > 0 && (

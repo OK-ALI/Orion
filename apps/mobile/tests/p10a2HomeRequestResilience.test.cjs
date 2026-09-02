@@ -74,6 +74,7 @@ function harness({ state = 'online', epoch = 0 } = {}) {
     '../../src/services/listPerformance': { getRailRenderBudget: () => ({}) },
     '../../src/components/HeroBillboard': { HeroBillboard: 'HeroBillboard' },
     '../../src/components/HomeConnectionPanel': { HomeConnectionPanel: 'HomeConnectionPanel' },
+    './HomeOfflineIntroduction': { HomeOfflineIntroduction: 'HomeOfflineIntroduction' },
     '../../src/components/MediaCard': { MediaCard: 'MediaCard' },
     '../../src/features/library/HomeContinueWatching': { HomeContinueWatching: 'HomeContinueWatching' },
   };

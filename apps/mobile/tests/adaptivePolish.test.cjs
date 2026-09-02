@@ -82,7 +82,7 @@ test("Home Continue Watching uses a compact capped rail presentation", () => {
   const library = read("src/features/library/LibraryScreen.tsx");
   assert.match(card, /Math\.min\(330/);
   assert.match(card, /aspectRatio: 16 \/ 9/);
-  assert.match(home, /presentation="home-rail"/);
+  assert.match(home, /presentation=\{offlineCompact \? 'offline-compact' : 'home-rail'\}/);
   assert.match(library, /presentation="library-full"/);
   assert.match(card, /width: 44, height: 44/);
 });

@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { spacing } from '@orion/shared/tokens';
 import { useOrionTheme } from '../context/ThemeContext';
 import type { NetworkProductState } from '../context/networkStatePolicy';
+import { HomeOfflineIntroduction } from './HomeOfflineIntroduction';
 
 interface HomeConnectionPanelProps {
   state: NetworkProductState;
@@ -29,6 +30,10 @@ export function HomeConnectionPanel({
 }: HomeConnectionPanelProps) {
   const { theme } = useOrionTheme();
 
+  if (state === 'offline') {
+    return <HomeOfflineIntroduction onOpenDownloads={onOpenDownloads} onOpenLibrary={onOpenLibrary} />;
+  }
+
   if (
     state === 'online' &&
     !loading &&
@@ -36,9 +41,6 @@ export function HomeConnectionPanel({
   ) {
     return null;
   }
-
-  const offline =
-    state === 'offline';
 
   const degraded =
     state === 'degraded';
@@ -57,9 +59,7 @@ export function HomeConnectionPanel({
     state === 'online' &&
     !!error;
 
-  const eyebrow = offline
-    ? 'OFFLINE MODE'
-    : degraded
+  const eyebrow = degraded
       ? 'CINEMA DEGRADED'
       : reconnecting
         ? 'RECONNECTING'
@@ -69,9 +69,7 @@ export function HomeConnectionPanel({
             ? 'CINEMA REFRESH'
             : 'CINEMA';
 
-  const title = offline
-    ? 'Your local Orion is ready.'
-    : degraded
+  const title = degraded
       ? 'Cinema is temporarily unavailable.'
       : reconnecting
         ? 'Reconnecting to Orion Cinema.'
@@ -81,9 +79,7 @@ export function HomeConnectionPanel({
             ? 'Cinema did not refresh.'
             : 'Refreshing Orion Cinema.';
 
-  const body = offline
-    ? 'Continue Watching and your Library remain available. Verified Downloads can play without internet.'
-    : degraded
+  const body = degraded
       ? 'Internet transport is available, but the Cinema catalog service is not. Your local Library and Downloads still work.'
       : reconnecting
         ? 'Local features remain available while Orion validates the restored connection.'
@@ -94,13 +90,11 @@ export function HomeConnectionPanel({
             : 'Refreshing remote rails while local content remains usable.';
 
   const tone =
-    offline || degraded
+    degraded
       ? theme.warning
       : theme.accent;
 
-  const iconName = offline
-    ? 'cloud-offline-outline'
-    : degraded
+  const iconName = degraded
       ? 'warning-outline'
       : failedOnlineRefresh
         ? 'refresh-outline'
@@ -175,7 +169,7 @@ export function HomeConnectionPanel({
           {body}
         </Text>
 
-        {(offline || degraded) && (
+        {degraded && (
           <View style={styles.actions}>
             <Pressable
               accessibilityRole="button"
