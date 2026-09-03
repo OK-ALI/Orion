@@ -44,6 +44,7 @@ import DownloadModal from "../../../components/DownloadModal";
 import TrailerModal from "../../../components/TrailerModal";
 import BlockedStatsModal from "../../../components/BlockedStatsModal";
 import { formatDate } from "../../../shared/utils/date";
+import DetailOverview from "../../../components/common/DetailOverview";
 import { useBlockedStats } from "../../../shared/utils/useBlockedStats";
 import MediaCard from "../../../components/media/MediaCard";
 import { setupAmbientGlow } from "../../../shared/utils/playerAmbient";
@@ -136,7 +137,7 @@ export default function MovieDetails({ model }) {
                 )}
               </div>
             )}
-            <p className="detail-overview">{displayOverview}</p>
+            <DetailOverview text={displayOverview} />
             {!isWatched && displayPct > 0 && (
               <div className="progress-bar-row" style={{ marginBottom: 12 }}>
                 <div className="progress-bar-outer">

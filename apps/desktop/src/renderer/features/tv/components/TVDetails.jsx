@@ -52,6 +52,7 @@ import DownloadModal from "../../../components/DownloadModal";
 import TrailerModal from "../../../components/TrailerModal";
 import BlockedStatsModal from "../../../components/BlockedStatsModal";
 import { formatDate } from "../../../shared/utils/date";
+import DetailOverview from "../../../components/common/DetailOverview";
 import { useBlockedStats } from "../../../shared/utils/useBlockedStats";
 import {
   storage,
@@ -149,7 +150,7 @@ export default function TVDetails({ model }) {
                     )}
                   </div>
                 )}
-                <p className="detail-overview">{displayOverview}</p>
+                <DetailOverview text={displayOverview} />
                 <div className="detail-actions">
                   {restricted ? (
                     <button

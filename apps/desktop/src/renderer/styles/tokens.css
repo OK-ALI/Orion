@@ -183,6 +183,12 @@
   --sidebar-width: var(--sidebar-compact-width);
   --sidebar-expanded: var(--sidebar-expanded-width);
   --titlebar-height: 38px;
+  --desktop-page-inline: clamp(32px, 4vw, 58px);
+  --desktop-page-top: 40px;
+  --desktop-page-bottom: 80px;
+  --desktop-page-title-size: clamp(42px, 4vw, 52px);
+  --desktop-page-subtitle-size: 15px;
+  --desktop-page-header-gap: 28px;
   --media-card-compact: 154px;
   --media-card-standard: 176px;
   --media-card-collection: 164px;

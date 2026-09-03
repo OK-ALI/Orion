@@ -222,25 +222,8 @@ export function SettingsTopBar({ sectionRefs, contentRef }) {
   };
 
   return (
-    <div
-      style={{
-        position: "sticky",
-        top: 0,
-        zIndex: 100,
-        background: "var(--bg, #141414)",
-        borderBottom: "1px solid var(--border)",
-        padding: "0 48px",
-        backdropFilter: "blur(12px)",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "10px 0",
-        }}
-      >
+    <div className="settings-topbar">
+      <div className="settings-topbar-row">
         {/* ── Search area ── */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
           {searchOpen ? (

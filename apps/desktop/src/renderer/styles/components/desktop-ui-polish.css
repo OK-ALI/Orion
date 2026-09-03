@@ -1,0 +1,383 @@
+/* Desktop UI cohesion pass
+   Shared page grammar, hero composition, detail disclosure, and Settings geometry. */
+
+.orion-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 0 0 var(--desktop-page-header-gap);
+}
+
+.orion-page-header-copy {
+  min-width: 0;
+  max-width: 820px;
+}
+
+.orion-page-eyebrow {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: var(--weight-extrabold);
+  letter-spacing: .17em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.orion-page-header h1 {
+  margin: 0;
+  color: var(--text);
+  font: var(--weight-bold) var(--desktop-page-title-size)/1 var(--font-heading);
+  letter-spacing: -.035em;
+}
+
+.orion-page-header p {
+  margin: 10px 0 0;
+  color: var(--text3);
+  font-size: var(--desktop-page-subtitle-size);
+  line-height: 1.5;
+}
+
+.orion-page-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 1 auto;
+  padding-bottom: 2px;
+}
+
+/* One standard Desktop page grid. Feature landing pages and cinematic heroes are deliberate exceptions. */
+.discover-container {
+  padding: var(--desktop-page-top) var(--desktop-page-inline) var(--desktop-page-bottom);
+}
+
+.constellation-page {
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: var(--desktop-page-top) var(--desktop-page-inline) var(--desktop-page-bottom);
+}
+
+.downloads-page {
+  padding: var(--desktop-page-top) var(--desktop-page-inline) 70px;
+}
+
+.library-header {
+  padding: var(--desktop-page-top) var(--desktop-page-inline) 0;
+}
+
+.library-section {
+  padding-right: var(--desktop-page-inline);
+  padding-left: var(--desktop-page-inline);
+}
+
+.settings-content {
+  padding: var(--desktop-page-top) var(--desktop-page-inline) var(--desktop-page-bottom);
+}
+
+.library-header .orion-page-header {
+  margin-bottom: 18px;
+}
+
+.library-toolbar {
+  margin-top: 0;
+}
+
+.settings-content > .orion-page-header {
+  margin-bottom: 44px;
+}
+
+/* Discover's type switch belongs to the shared header action slot. */
+.discover-header .orion-page-header {
+  margin-bottom: 24px;
+}
+
+/* Home hero: keep the art unchanged and anchor the information stack lower. */
+.hero-banner-content {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  width: min(760px, calc(100vw - 150px));
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0 0 78px 48px;
+}
+
+.hero-banner-overview {
+  margin-top: 16px;
+  margin-bottom: 20px;
+}
+
+/* Movie / TV details: compact the synopsis by default so metadata and actions sit lower. */
+.detail-content {
+  padding: var(--sp-12) var(--sp-12) 30px;
+}
+
+.detail-info {
+  padding-bottom: 0;
+}
+
+.detail-overview-wrap {
+  max-width: 720px;
+  margin: 0 0 18px;
+}
+
+.detail-overview-wrap .detail-overview {
+  margin: 0;
+}
+
+.detail-overview.is-collapsed {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.detail-overview-toggle {
+  margin-top: 6px;
+  padding: 2px 0;
+  border: 0;
+  color: color-mix(in srgb, var(--on-media) 80%, transparent);
+  background: transparent;
+  font: var(--weight-semibold) 12px/1.4 var(--font-body);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--on-media) 28%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.detail-overview-toggle:hover {
+  color: var(--on-media);
+  text-decoration-color: currentColor;
+}
+
+.detail-overview-toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+  border-radius: 3px;
+}
+
+/* Settings toolbar stays above page content but below the auto-hide sidebar overlay.
+   Its controls still shift away from the revealed rail. */
+.settings-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  padding: 0 var(--desktop-page-inline);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-base) 94%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  transition:
+    padding-left var(--sidebar-transition-duration) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.settings-topbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+}
+
+.sidebar.mode-auto.revealed ~ .app-content .settings-topbar {
+  padding-left: calc(
+    var(--desktop-page-inline) +
+    var(--sidebar-expanded-width) -
+    var(--sidebar-rail-width)
+  );
+}
+
+@media (max-width: 820px) {
+  :root {
+    --desktop-page-inline: 28px;
+    --desktop-page-top: 34px;
+    --desktop-page-title-size: clamp(38px, 7vw, 46px);
+  }
+
+  .orion-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .orion-page-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    padding-bottom: 0;
+  }
+
+  .hero-banner-content {
+    width: min(720px, calc(100vw - 92px));
+    padding-right: 24px;
+    padding-bottom: 72px;
+    padding-left: 36px;
+  }
+
+  .detail-content {
+    gap: 28px;
+    padding: 36px 32px 28px;
+  }
+
+  .detail-poster {
+    width: 174px;
+  }
+
+  .settings-topbar-row {
+    flex-wrap: wrap;
+    padding: 8px 0;
+  }
+}
+
+@media (max-width: 650px) {
+  :root {
+    --desktop-page-inline: 22px;
+    --desktop-page-top: 28px;
+  }
+
+  .hero-banner-content {
+    width: calc(100vw - 74px);
+    padding-right: 20px;
+    padding-bottom: 68px;
+    padding-left: 28px;
+  }
+
+  .detail-content {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 28px 22px;
+  }
+
+  .detail-poster {
+    width: 148px;
+    transform: none;
+  }
+
+  .sidebar.mode-auto.revealed ~ .app-content .settings-topbar {
+    padding-left: var(--desktop-page-inline);
+  }
+}
+
+
+/* Projector Silver cinema-detail contrast.
+   Detail actions sit across the image-to-paper fade, so dark-theme white glass
+   becomes too pale on this light theme. Keep the cinematic composition while
+   restoring readable secondary controls and progress time. */
+[data-theme="light"] .detail-actions .btn-secondary {
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--text-primary)) !important;
+  color: var(--text-primary) !important;
+  border-color: color-mix(in srgb, var(--text-primary) 22%, transparent) !important;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--text-primary) 10%, transparent) !important;
+}
+
+[data-theme="light"] .detail-actions .btn-secondary:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+  border-color: color-mix(in srgb, var(--text-primary) 30%, transparent) !important;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--text-primary) 13%, transparent) !important;
+}
+
+[data-theme="light"] .detail-actions .btn-secondary:active {
+  background: color-mix(in srgb, var(--bg-hover) 88%, var(--text-primary)) !important;
+}
+
+[data-theme="light"] .detail-actions .btn.btn-restricted {
+  background: color-mix(in srgb, var(--bg-elevated) 90%, var(--text-primary)) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--border) !important;
+}
+
+[data-theme="light"] .detail-hero .progress-bar-row > span {
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 14%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  color: var(--text-secondary) !important;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  text-shadow: none;
+}
+
+/* Startup cloud synchronization inherits the already-applied Orion appearance. */
+.orion-sync-state {
+  position: relative;
+  display: flex;
+  height: 100%;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  overflow: hidden;
+  color: var(--text);
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 46%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 36%),
+    var(--bg-base);
+}
+
+.orion-sync-aura {
+  position: absolute;
+  width: min(42vw, 360px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, transparent);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 9%, transparent), transparent 68%);
+  box-shadow: 0 0 72px color-mix(in srgb, var(--accent) 10%, transparent);
+  filter: blur(18px);
+  pointer-events: none;
+}
+
+.orion-sync-spinner {
+  position: relative;
+  z-index: 1;
+  width: 38px;
+  height: 38px;
+  border: 3px solid color-mix(in srgb, var(--text-primary) 9%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.orion-sync-message {
+  position: relative;
+  z-index: 1;
+  color: var(--text);
+  font: var(--weight-semibold) 16px/1.35 var(--font-heading);
+  letter-spacing: -.01em;
+}
+
+.orion-sync-detail {
+  position: relative;
+  z-index: 1;
+  color: var(--text3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+body.no-anim .orion-sync-spinner,
+body[data-motion="calm"] .orion-sync-spinner {
+  animation: none;
+}
+
+/* Smart Connect keeps its modal workflow, but speaks the same Orion typography. */
+.download-dialog[aria-label="Orion Smart Connect"] {
+  font-family: var(--font-body);
+}
+
+.download-dialog[aria-label="Orion Smart Connect"] h2,
+.download-dialog[aria-label="Orion Smart Connect"] .smart-connect-verification h3 {
+  font-family: var(--font-heading);
+  letter-spacing: -.025em;
+}
+
+.download-dialog[aria-label="Orion Smart Connect"] .smart-connect-verification-eyebrow {
+  font-family: var(--font-body);
+  letter-spacing: .16em;
+}
+
+.download-dialog[aria-label="Orion Smart Connect"] [aria-label^="Desktop address"] strong,
+.download-dialog[aria-label="Orion Smart Connect"] .smart-connect-verification-phrase {
+  font-variant-numeric: tabular-nums;
+}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DownloadIcon, SearchIcon } from "../../components/common/Icons";
+import DesktopPageHeader from "../../components/common/DesktopPageHeader";
 import SubtitleDownloaderModal from "../../components/SubtitleDownloaderModal";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
 import LocalPlayer from "./components/LocalPlayer";
@@ -184,16 +185,21 @@ export default function DownloadsPage({
           setSubtitleDownload((current) => current ? { ...current, subtitlePaths } : current);
         }}
       />}
-      <header className="downloads-header page-header">
-        <div><span className="page-eyebrow">Offline media</span><h1>Downloads</h1><p>Manage active transfers and media available on this device.</p></div>
-        <div className="downloads-header-actions">
-          {counts.active > 0 && <button className="btn btn-secondary" onClick={pauseAll}>Pause all</button>}
-          {downloads.some((item) => ["paused", "interrupted"].includes(item.status)) && <button className="btn btn-secondary" onClick={resumeAll}>Resume interrupted</button>}
-          {counts.failed > 0 && <button className="btn btn-secondary" onClick={retryFailed}>Retry failed</button>}
-          {counts.failed > 0 && <button className="btn btn-ghost" onClick={clearFailed}>Clear failed</button>}
-          <button className="btn btn-secondary" onClick={() => onSettings?.("downloads")}>Download settings</button>
-        </div>
-      </header>
+      <DesktopPageHeader
+        eyebrow="Offline media"
+        title="Downloads"
+        subtitle="Manage active transfers and media available on this device."
+        className="downloads-header"
+        actions={(
+          <div className="downloads-header-actions">
+            {counts.active > 0 && <button className="btn btn-secondary" onClick={pauseAll}>Pause all</button>}
+            {downloads.some((item) => ["paused", "interrupted"].includes(item.status)) && <button className="btn btn-secondary" onClick={resumeAll}>Resume interrupted</button>}
+            {counts.failed > 0 && <button className="btn btn-secondary" onClick={retryFailed}>Retry failed</button>}
+            {counts.failed > 0 && <button className="btn btn-ghost" onClick={clearFailed}>Clear failed</button>}
+            <button className="btn btn-secondary" onClick={() => onSettings?.("downloads")}>Download settings</button>
+          </div>
+        )}
+      />
 
       <div className="downloads-toolbar">
         <div className="downloads-tabs">

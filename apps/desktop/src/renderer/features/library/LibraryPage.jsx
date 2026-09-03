@@ -6,6 +6,7 @@ import { useRatings, getRatingForItem } from "../../shared/utils/useRatings";
 import { isRestricted } from "../../shared/utils/ageRating";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
 import ConfirmModal from "../../components/common/ConfirmModal";
+import DesktopPageHeader from "../../components/common/DesktopPageHeader";
 import LocalPlayer from "../downloads/components/LocalPlayer";
 import { resetViewingToNotStarted } from "../player/services/viewingReset";
 
@@ -217,10 +218,11 @@ export default function LibraryPage({
   return (
     <div className="fade-in">
       <div className="library-header">
-        <div className="library-title">My Library</div>
-        <div className="library-sub">
-          Continue watching, saved titles, and recent history
-        </div>
+        <DesktopPageHeader
+          eyebrow="Your collection"
+          title="My Library"
+          subtitle="Continue watching, saved titles, and recent history."
+        />
         <div className="library-toolbar">
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your library" aria-label="Search your library" />
           <select value={sort} onChange={(event) => {

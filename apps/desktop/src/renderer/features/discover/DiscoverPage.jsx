@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { tmdbFetch } from "../../services/tmdb";
 import MediaCard from "../../components/media/MediaCard";
 import CinemaAvailabilityNotice from "../../components/common/CinemaAvailabilityNotice";
+import DesktopPageHeader from "../../components/common/DesktopPageHeader";
 import { REGION_PRESETS, SUBFILTER_PRESETS, getRegionQueryParams } from "../../shared/utils/discoverRegions";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
 import { PROVIDER_HUBS, WORLD_HUBS, findProviderIds, inferWatchRegion } from "./discoveryHubs";
@@ -256,29 +257,33 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, conn
       />
       {/* ── Page Header ── */}
       <div className="discover-header">
-        <div className="discover-title-row">
-          <h1>Discover</h1>
-          <div className="type-toggle">
-            <button
-              className={`toggle-btn ${type === "all" ? "active" : ""}`}
-              onClick={() => handleTypeChange("all")}
-            >
-              All
-            </button>
-            <button
-              className={`toggle-btn ${type === "movie" ? "active" : ""}`}
-              onClick={() => handleTypeChange("movie")}
-            >
-              Movies
-            </button>
-            <button
-              className={`toggle-btn ${type === "tv" ? "active" : ""}`}
-              onClick={() => handleTypeChange("tv")}
-            >
-              TV Shows
-            </button>
-          </div>
-        </div>
+        <DesktopPageHeader
+          eyebrow="Cinema"
+          title="Discover"
+          subtitle="Explore providers, story worlds, genres, and regions."
+          actions={(
+            <div className="type-toggle">
+              <button
+                className={`toggle-btn ${type === "all" ? "active" : ""}`}
+                onClick={() => handleTypeChange("all")}
+              >
+                All
+              </button>
+              <button
+                className={`toggle-btn ${type === "movie" ? "active" : ""}`}
+                onClick={() => handleTypeChange("movie")}
+              >
+                Movies
+              </button>
+              <button
+                className={`toggle-btn ${type === "tv" ? "active" : ""}`}
+                onClick={() => handleTypeChange("tv")}
+              >
+                TV Shows
+              </button>
+            </div>
+          )}
+        />
 
         {!selectedGenre && (
           <>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PersonCard from "../../../components/media/PersonCard";
+import DesktopPageHeader from "../../../components/common/DesktopPageHeader";
 import { storage, STORAGE_KEYS } from "../../../services/settingsStore";
 import { appendUniqueSearchResults, searchTmdbPeople } from "../../../services/search";
 import ConstellationEditorial from "./ConstellationEditorial";
@@ -174,7 +175,12 @@ export default function ConstellationPage({ apiKey, history = [], saved = [], of
 
   return (
     <div className="constellation-page fade-in">
-      <header className="constellation-header"><span className="eyebrow">People of cinema</span><h1>Constellation</h1><p>Discover the performers and creators behind every story</p></header>
+      <DesktopPageHeader
+        eyebrow="People of cinema"
+        title="Constellation"
+        subtitle="Discover the performers and creators behind every story."
+        className="constellation-header"
+      />
       <ConstellationFilters preferences={preferences} query={query} onPreference={updatePreference} onQuery={setQuery} />
       {usingCache && <div className="constellation-notice">{offline ? "Offline — showing a saved constellation." : "Showing saved people while Orion refreshes this constellation."}</div>}
       {error && <div className="constellation-warning"><span>{error}</span><button type="button" className="btn btn-ghost" onClick={() => setRetryKey((value) => value + 1)} disabled={offline}>Retry</button></div>}

@@ -1,7 +1,7 @@
 .gom-page {
-  width: min(1180px, calc(100% - 64px));
+  width: min(1180px, calc(100% - var(--desktop-page-inline) - var(--desktop-page-inline)));
   margin: 0 auto;
-  padding: 54px 0 88px;
+  padding: var(--desktop-page-top) 0 var(--desktop-page-bottom);
   color: var(--text-primary);
 }
 
@@ -486,10 +486,6 @@ body[data-motion="calm"] .gom-icon-button:hover:not(:disabled) {
 }
 
 @media (max-width: 980px) {
-  .gom-page {
-    width: min(100% - 36px, 900px);
-    padding-top: 34px;
-  }
   .gom-hero {
     grid-template-columns: 1fr;
     padding: 38px;
@@ -515,9 +511,6 @@ body[data-motion="calm"] .gom-icon-button:hover:not(:disabled) {
 }
 
 @media (max-width: 720px) {
-  .gom-page {
-    width: min(100% - 24px, 680px);
-  }
   .gom-hero {
     padding: 30px 24px;
   }

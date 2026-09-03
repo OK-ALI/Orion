@@ -10,29 +10,20 @@ import LibrarySettingsGroup from "./groups/LibrarySettingsGroup";
 import BackupSettingsGroup from "./groups/BackupSettingsGroup";
 import StorageSettingsGroup from "./groups/StorageSettingsGroup";
 import MusicAppearanceSettings from "./sections/MusicAppearanceSettings";
+import DesktopPageHeader from "../../components/common/DesktopPageHeader";
 
 export default function SettingsContent({ model }) {
   const { contentRef } = model;
   return (
 <div
         ref={contentRef}
-        className="fade-in"
-        style={{ padding: "40px 48px 80px" }}
+        className="fade-in settings-content"
       >
-        {/* Page title */}
-        <div
-          style={{
-            fontFamily: "var(--font-display)",
-            fontSize: 48,
-            letterSpacing: 1,
-            marginBottom: 6,
-          }}
-        >
-          SETTINGS
-        </div>
-        <div style={{ color: "var(--text3)", fontSize: 14, marginBottom: 48 }}>
-          Customize Orion on this Desktop.
-        </div>
+        <DesktopPageHeader
+          eyebrow="Orion Desktop"
+          title="Settings"
+          subtitle="Customize Orion on this Desktop."
+        />
 
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* GROUP: GENERAL                                                     */}

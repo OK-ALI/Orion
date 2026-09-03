@@ -824,51 +824,11 @@ export default function App() {
         {hasCustomTitlebar && <WindowTitlebar network={network} />}
         <div className="app-body">
           {syncMessage ? (
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              flex: 1,
-              gap: 20,
-              color: "var(--text)",
-              height: "100%",
-              background: "radial-gradient(circle at center, #0f0f1b 0%, #050508 100%)",
-              position: "relative",
-              overflow: "hidden"
-            }}>
-              <div style={{
-                position: "absolute",
-                width: "300px",
-                height: "300px",
-                background: "radial-gradient(circle, rgba(229, 9, 20, 0.08) 0%, rgba(0,0,0,0) 70%)",
-                filter: "blur(50px)",
-                pointerEvents: "none"
-              }} />
-              <div 
-                style={{
-                  width: 38,
-                  height: 38,
-                  border: "3px solid rgba(255, 255, 255, 0.06)",
-                  borderTopColor: "var(--accent)",
-                  borderRadius: "50%",
-                  animation: "spin 0.8s linear infinite",
-                  zIndex: 2
-                }} 
-              />
-              <div style={{ 
-                fontFamily: "var(--font-display), sans-serif",
-                fontSize: 16, 
-                fontWeight: 600, 
-                letterSpacing: 0.5,
-                color: "var(--text)",
-                zIndex: 2
-              }}>
-                {syncMessage}
-              </div>
-              <div style={{ fontSize: 12, color: "var(--text3)", zIndex: 2 }}>
-                Please wait while we set up your workspace...
-              </div>
+            <div className="orion-sync-state" role="status" aria-live="polite" aria-busy="true">
+              <div className="orion-sync-aura" aria-hidden="true" />
+              <div className="orion-sync-spinner" aria-hidden="true" />
+              <div className="orion-sync-message">{syncMessage}</div>
+              <div className="orion-sync-detail">Please wait while we set up your workspace...</div>
             </div>
           ) : content}
         </div>
