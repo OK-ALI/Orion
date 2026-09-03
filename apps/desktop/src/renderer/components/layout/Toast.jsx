@@ -1,13 +1,15 @@
 // ── Orion — Toast Notifications ───────────────────────────────────────────────
 import { useState, useEffect, useCallback, useRef } from "react";
+import "../../styles/components/toast-stack.css";
 
 const TOAST_DURATION = 4000;
 
 // Singleton event emitter so any part of the app can fire toasts
 const listeners = new Set();
+let nextToastId = 0;
 
 export function showToast(message, type = "info") {
-  listeners.forEach((fn) => fn({ message, type, id: Date.now() }));
+  listeners.forEach((fn) => fn({ message, type, id: ++nextToastId }));
 }
 
 export default function ToastContainer() {

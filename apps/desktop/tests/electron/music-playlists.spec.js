@@ -79,7 +79,9 @@ async function openAddToPlaylist(page, trackTitle) {
 test("Music Add to Playlist is a stable top-level overlay for empty, create, existing and Escape flows", async ({}, testInfo) => {
   const userDataDir = path.join(os.tmpdir(), `orion-music-playlists-${process.pid}-${testInfo.workerIndex}-${Date.now()}`);
   const app = await electron.launch({ args: [path.join(__dirname, "../.."), `--user-data-dir=${userDataDir}`, "--disable-gpu"] });
+  expect(await app.evaluate(({ app }) => app.getPath("userData"))).toBe(userDataDir);
   const page = await app.firstWindow();
+  await page.route(/^https?:\/\//, (route) => route.abort());
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.waitForTimeout(1000);
@@ -119,6 +121,7 @@ test("Music Add to Playlist is a stable top-level overlay for empty, create, exi
   await nameInput.fill("Night Drive");
   await page.getByRole("button", { name: "Create & Add" }).click();
   await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "Night Drive created and Playlist Flow Track added." })).toBeVisible();
   await expect.poll(async () => page.evaluate(() => window.electron.musicListPlaylists())).toEqual(expect.arrayContaining([
     expect.objectContaining({ name: "Night Drive", items: expect.arrayContaining([expect.objectContaining({ id: "playlist-flow-track" })]) }),
   ]));
@@ -163,6 +166,35 @@ test("Music Add to Playlist is a stable top-level overlay for empty, create, exi
   await expect.poll(async () => page.evaluate(() => window.electron.musicListPlaylists())).toEqual(expect.arrayContaining([
     expect.objectContaining({ artwork: expect.objectContaining({ kind: "preset", preset: "orion-glow" }) }),
   ]));
+
+  await expect(editDialog).toHaveCount(0);
+  const moreTrack = playlistPage.getByRole("button", { name: `More actions for ${track.title}` });
+  await moreTrack.click();
+  await page.getByRole("menuitem", { name: "Remove from favorites", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Playlist Flow Track removed from favorites." })).toBeVisible();
+  await moreTrack.click();
+  await page.getByRole("menuitem", { name: "Add to favorites", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Playlist Flow Track added to favorites." })).toBeVisible();
+
+  const beforeDelete = await page.evaluate(() => window.electron.musicListPlaylists());
+  const selectedName = await playlistPage.locator(".music-playlist-detail-copy h2").innerText();
+  const remove = playlistPage.getByRole("button", { name: "Delete playlist", exact: true });
+  await remove.click();
+  const confirmDelete = page.getByRole("dialog", { name: "Delete playlist?" });
+  await expect(confirmDelete.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(confirmDelete.getByRole("button", { name: "Delete playlist", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(confirmDelete).toHaveCount(0);
+  await expect(remove).toBeFocused();
+  expect(await page.evaluate(() => window.electron.musicListPlaylists())).toHaveLength(beforeDelete.length);
+  await remove.click();
+  await page.screenshot({ path: testInfo.outputPath("delete-playlist-confirmation.png") });
+  await confirmDelete.getByRole("button", { name: "Delete playlist", exact: true }).click();
+  await expect(confirmDelete).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: `${selectedName} deleted.` })).toBeVisible();
+  expect(await page.evaluate(() => window.electron.musicListPlaylists())).toHaveLength(beforeDelete.length - 1);
+  await page.screenshot({ path: testInfo.outputPath("playlist-acknowledgements.png") });
 
   expect(errors).toEqual([]);
   await app.close();

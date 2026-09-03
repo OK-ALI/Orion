@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import AudioEngine from "../player/AudioEngine";
+import ToastContainer from "../../../components/layout/Toast";
 import { storage, STORAGE_KEYS } from "../../../services/settingsStore";
 import { getPlaybackOwner } from "../../../app/playback/PlaybackCoordinator";
 import { normalizeQueueRecovery, previousQueueTarget, shuffledIndices } from "../utils/queueNavigation";
@@ -421,7 +422,7 @@ export function MusicProvider({ children }) {
     favorites, plugins, providers]);
 
   return <MusicContext.Provider value={value}><MusicConnectionContext.Provider value={connectionState}>
-    {children}<AudioEngine controller={value} />
+    {children}<AudioEngine controller={value} /><ToastContainer />
   </MusicConnectionContext.Provider></MusicContext.Provider>;
 }
 

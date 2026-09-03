@@ -178,8 +178,14 @@ function saveImportedPlaylist(playlist) {
   return savePlaylist({ ...playlist, id: undefined, name: uniquePlaylistName(playlist.name, names) });
 }
 
+function rememberCollectionDeletion(key, id) {
+  setState(key, [...new Set([...getState(key, []), String(id)])]);
+}
+
 function deletePlaylist(id) {
-  return openDatabase().prepare("DELETE FROM music_playlists WHERE id=?").run(String(id || "")).changes > 0;
+  const removed = openDatabase().prepare("DELETE FROM music_playlists WHERE id=?").run(String(id || "")).changes > 0;
+  if (removed) rememberCollectionDeletion("deleted_playlists", id);
+  return removed;
 }
 
 function listPlaylistFolders() {
@@ -198,8 +204,9 @@ function savePlaylistFolder(folder = {}) {
   const parentId = folder.parentId && folder.parentId !== id
     && db.prepare("SELECT 1 FROM music_playlist_folders WHERE id=?").get(String(folder.parentId)) ? String(folder.parentId) : null;
   const now = Date.now();
-  db.prepare(`INSERT OR REPLACE INTO music_playlist_folders(id,parent_id,name,position,created_at,updated_at)
-    VALUES(?,?,?,?,?,?)`).run(id, parentId, String(folder.name || "New folder").trim().slice(0, 120) || "New folder",
+  db.prepare(`INSERT INTO music_playlist_folders(id,parent_id,name,position,created_at,updated_at)
+    VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,
+    name=excluded.name,position=excluded.position,updated_at=excluded.updated_at`).run(id, parentId, String(folder.name || "New folder").trim().slice(0, 120) || "New folder",
     Math.max(0, Number(folder.position) || 0), existing?.created_at || now, now);
   return listPlaylistFolders().find((item) => item.id === id);
 }
@@ -207,7 +214,9 @@ function savePlaylistFolder(folder = {}) {
 function deletePlaylistFolder(id) {
   const db = openDatabase();
   db.prepare("UPDATE music_playlists SET folder_id=NULL WHERE folder_id=?").run(String(id || ""));
-  return db.prepare("DELETE FROM music_playlist_folders WHERE id=?").run(String(id || "")).changes > 0;
+  const removed = db.prepare("DELETE FROM music_playlist_folders WHERE id=?").run(String(id || "")).changes > 0;
+  if (removed) rememberCollectionDeletion("deleted_playlist_folders", id);
+  return removed;
 }
 
 function listFavorites() {
@@ -280,6 +289,8 @@ function exportPortableState() {
     version: 2,
     playlistFolders: listPlaylistFolders(),
     playlists: listPlaylists(),
+    deletedPlaylistIds: getState("deleted_playlists", []),
+    deletedPlaylistFolderIds: getState("deleted_playlist_folders", []),
     favorites: listFavorites(),
     history: listHistory(2000),
     providerPreferences: getState("provider_preferences", {}),
@@ -298,27 +309,73 @@ function uniquePlaylistName(name, existing) {
   return value;
 }
 
+function portableCollectionId(kind, value, index) {
+  if (typeof value.id === "string" && value.id.trim()) return value.id;
+  // Older ID-less exports get a stable identity; names alone never merge collections.
+  const digest = require("crypto").createHash("sha256").update(json({ value, index })).digest("hex");
+  return `backup:${kind}:${digest}`;
+}
+
 function importPortableState(value) {
   if (!value || typeof value !== "object" || ![1, 2].includes(Number(value.version))) throw new Error("Unsupported Music backup format.");
-  const clean = portableValue(value);
-  const existingNames = new Set(listPlaylists().map((item) => item.name.toLowerCase()));
+  const db = openDatabase();
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const result = mergePortableState(portableValue(value));
+    db.exec("COMMIT");
+    return result;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function mergePortableState(clean) {
+  const db = openDatabase();
   let playlists = 0; let folders = 0; let favorites = 0; let history = 0; let queueItems = 0;
-  const folderIds = new Map();
-  for (const folder of (clean.playlistFolders || []).slice(0, 500)) {
-    const saved = savePlaylistFolder({ name: folder.name, position: folder.position });
-    folderIds.set(folder.id, saved.id); folders += 1;
+  // Collection IDs are never reused. Retain deletion intent across stale cloud restores.
+  const mergeDeletions = (key, incoming) => {
+    const ids = [...new Set([...getState(key, []), ...(Array.isArray(incoming) ? incoming : [])]
+      .filter((id) => typeof id === "string" && id.length > 0))];
+    setState(key, ids);
+    return new Set(ids);
+  };
+  const deletedPlaylists = mergeDeletions("deleted_playlists", clean.deletedPlaylistIds);
+  const deletedFolders = mergeDeletions("deleted_playlist_folders", clean.deletedPlaylistFolderIds);
+  for (const id of deletedPlaylists) db.prepare("DELETE FROM music_playlists WHERE id=?").run(id);
+  for (const id of deletedFolders) {
+    db.prepare("UPDATE music_playlists SET folder_id=NULL WHERE folder_id=?").run(id);
+    db.prepare("DELETE FROM music_playlist_folders WHERE id=?").run(id);
   }
-  for (const folder of (clean.playlistFolders || []).slice(0, 500)) {
-    const id = folderIds.get(folder.id); const parentId = folderIds.get(folder.parentId);
-    if (id && parentId) savePlaylistFolder({ id, name: folder.name, position: folder.position, parentId });
+  const incomingFolders = (clean.playlistFolders || []).slice(0, 500).map((folder, index) => ({
+    ...folder, id: portableCollectionId("folder", folder, index),
+  }));
+  const existingFolders = new Map(listPlaylistFolders().map((folder) => [folder.id, folder]));
+  const changedFolders = [];
+  for (const folder of incomingFolders) {
+    const existing = existingFolders.get(folder.id);
+    if (deletedFolders.has(folder.id) || (existing && (Number(folder.updatedAt) || 0) <= existing.updatedAt)) continue;
+    const saved = savePlaylistFolder({ ...folder, parentId: null });
+    db.prepare("UPDATE music_playlist_folders SET created_at=?,updated_at=? WHERE id=?")
+      .run(Number(folder.createdAt) || saved.createdAt, Number(folder.updatedAt) || saved.updatedAt, saved.id);
+    changedFolders.push(folder); folders += 1;
   }
-  for (const playlist of (clean.playlists || []).slice(0, 500)) {
-    savePlaylist({ name: uniquePlaylistName(playlist.name, existingNames), description: playlist.description,
-      folderId: folderIds.get(playlist.folderId) || null, artwork: playlist.artwork,
+  for (const folder of changedFolders) {
+    const parent = folder.parentId !== folder.id && db.prepare("SELECT id FROM music_playlist_folders WHERE id=?").get(folder.parentId || "");
+    db.prepare("UPDATE music_playlist_folders SET parent_id=? WHERE id=?").run(parent?.id || null, folder.id);
+  }
+  const existingPlaylists = new Map(listPlaylists().map((playlist) => [playlist.id, playlist]));
+  for (const [index, playlist] of (clean.playlists || []).slice(0, 500).entries()) {
+    const id = portableCollectionId("playlist", playlist, index);
+    const existing = existingPlaylists.get(id);
+    if (deletedPlaylists.has(id) || (existing && (Number(playlist.updatedAt) || 0) <= existing.updatedAt)) continue;
+    const saved = savePlaylist({ ...playlist, id,
       items: Array.isArray(playlist.items) ? playlist.items.slice(0, 10_000) : [] });
+    db.prepare("UPDATE music_playlists SET created_at=?,updated_at=? WHERE id=?")
+      .run(Number(playlist.createdAt) || saved.createdAt, Number(playlist.updatedAt) || saved.updatedAt, id);
+    existingPlaylists.set(id, { ...saved, updatedAt: Number(playlist.updatedAt) || saved.updatedAt });
     playlists += 1;
   }
-  const db = openDatabase();
   for (const favorite of (clean.favorites || []).slice(0, 10_000)) {
     if (!favorite?.kind || !favorite?.identity) continue;
     db.prepare("INSERT OR IGNORE INTO music_favorites(kind,identity,payload_json,created_at) VALUES(?,?,?,?)")

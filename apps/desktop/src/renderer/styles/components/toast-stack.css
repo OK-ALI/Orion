@@ -1,0 +1,14 @@
+/* Scoped stack geometry avoids the separate single-toast positioning rules. */
+.toast-container {
+  top: calc(var(--titlebar-height, 36px) + var(--sp-4, 16px));
+  bottom: auto;
+  max-width: min(380px, calc(100vw - 32px));
+}
+
+.toast-container > .toast {
+  position: relative;
+  inset: auto;
+  transform: none;
+  overflow-wrap: anywhere;
+  animation: none;
+}

@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { favoriteIdentity } from "../utils/favorites";
+import { showToast } from "../../../components/layout/Toast";
+
+const pendingFavorites = new Map();
 
 const listeners = new Set();
 let globalFavorites = { tracks: [], albums: [], artists: [], loaded: false };
@@ -28,17 +31,28 @@ export const favoritesStore = {
   },
 
   async toggleFavorite(kind, ref, payload) {
-    if (!window.electron?.musicToggleFavorite) return;
-    try {
-      const identity = favoriteIdentity(ref);
-      const result = await window.electron.musicToggleFavorite(kind, identity, payload || ref);
-      
-      // Reload favorites after toggling
-      await this.loadFromDisk();
-      return result?.favorite;
-    } catch (e) {
-      console.error(`Failed to toggle favorite ${kind}:`, e);
-    }
+    const identity = favoriteIdentity(ref);
+    const key = `${kind}:${identity}`;
+    if (pendingFavorites.has(key)) return pendingFavorites.get(key);
+    const request = (async () => {
+      try {
+        const result = await window.electron?.musicToggleFavorite?.(kind, identity, payload || ref);
+        if (typeof result?.favorite !== "boolean") throw new Error("Favorite update failed");
+        await this.loadFromDisk();
+        const title = payload?.title || payload?.name || ref?.title || ref?.name || (kind === "track" ? "Track" : kind === "album" ? "Album" : "Artist");
+        const action = kind === "artist" ? (result.favorite ? "followed" : "unfollowed")
+          : result.favorite ? "added to favorites" : "removed from favorites";
+        showToast(`${title} ${action}.`, "success");
+        return result.favorite;
+      } catch {
+        showToast("Favorites could not be updated. Please try again.", "error");
+        return undefined;
+      } finally {
+        pendingFavorites.delete(key);
+      }
+    })();
+    pendingFavorites.set(key, request);
+    return request;
   },
 
   async addTrack(track) {

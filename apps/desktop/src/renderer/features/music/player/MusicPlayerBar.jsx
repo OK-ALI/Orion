@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
+import { useFavoritesStore } from "../stores/useFavoritesStore";
 import { useMusic } from "../context/MusicProvider";
 import { isMusicRemoteEligible } from "../context/MusicConnectionContext";
 import MusicArtwork from "../components/MusicArtwork";
@@ -75,7 +76,8 @@ export default function MusicPlayerBar({ page, onNavigate }) {
   const overlayRef = useRef(null);
   const overlayTriggerRef = useRef(null);
   const dragRef = useRef(null);
-  const [favorite, setFavorite] = useState(false);
+  const favorites = useFavoritesStore();
+  const favorite = favorites.isTrackFavorite(music.current);
   const [showRemaining, setShowRemaining] = useState(true);
   const [overlayPlacement, setOverlayPlacement] = useState("above");
   const [showStuckWarning, setShowStuckWarning] = useState(false);
@@ -173,23 +175,11 @@ export default function MusicPlayerBar({ page, onNavigate }) {
     }
   }, [music.playbackStatus, music.current?.id]);
 
-  useEffect(() => {
-    if (!music.current) return;
-    window.electron?.musicListFavorites?.().then((items) => {
-      const identity = `${music.current.provider || music.current.source?.provider || "unknown"}:${music.current.id}`;
-      setFavorite((items || []).some((item) => item.kind === "track" && item.identity === identity));
-    }).catch(() => {});
-  }, [music.current?.id, music.current?.provider]);
-
   const remaining = Math.max(0, music.progress.duration - music.progress.currentTime);
   const duration = Math.max(0, Number(music.progress.duration) || 0);
   const playedRatio = duration ? Math.min(1, Math.max(0, music.progress.currentTime / duration)) : 0;
   const openNowPlaying = () => onNavigate?.("music-now-playing", music.current);
-  const toggleFavorite = async () => {
-    const identity = `${music.current.provider || music.current.source?.provider || "unknown"}:${music.current.id}`;
-    const result = await window.electron?.musicToggleFavorite?.("track", identity, music.current);
-    if (typeof result?.favorite === "boolean") setFavorite(result.favorite);
-  };
+  const toggleFavorite = () => favorites.toggleFavorite("track", music.current, music.current);
   const openPanel = (name, trigger = document.activeElement) => {
     overlayTriggerRef.current = trigger;
     const next = music.panel === name ? null : name;
@@ -310,7 +300,7 @@ export default function MusicPlayerBar({ page, onNavigate }) {
         <div className="player-utilities">
           {!compact && (
             <>
-              <button className={`player-btn${favorite ? " active" : ""}`} onClick={toggleFavorite} aria-label="Favorite"><Icon name="heart" /></button>
+              <button className={`player-btn${favorite ? " active" : ""}`} onClick={toggleFavorite} aria-label="Favorite" aria-pressed={favorite} title={favorite ? "Remove from favorites" : "Add to favorites"}><Icon name="heart" /></button>
               <button className="player-btn" onClick={music.toggleMute} aria-label={music.muted ? "Unmute" : "Mute"}><Icon name={music.muted ? "muted" : "volume"} /></button>
               <input className="player-volume-slider" type="range" min="0" max="1" step="0.01" value={music.volume} onChange={(event) => music.setVolume(Number(event.target.value))} />
               <button data-music-overlay-trigger className={`player-btn${music.panel === "sources" ? " active" : ""}`} onClick={(event) => openPanel("sources", event.currentTarget)} aria-label="Change Source"><Icon name="sources" /></button>

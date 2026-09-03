@@ -80,6 +80,6 @@ function TrackMenuItems({ music, track, close, addToPlaylist }) {
     <button role="menuitem" onClick={addToPlaylist}>Add to playlist</button>
     <button role="menuitem" onClick={() => act(() => {
       music.favorites?.toggleFavorite?.("track", track, track);
-    })}>Toggle favorite</button>
+    })}>{music.favorites?.isTrackFavorite?.(track) ? "Remove from favorites" : "Add to favorites"}</button>
   </>;
 }

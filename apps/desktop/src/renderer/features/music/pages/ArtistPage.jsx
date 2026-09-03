@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useFavoritesStore } from "../stores/useFavoritesStore";
 import MusicEntityHero from "../components/MusicEntityHero";
 import MusicTrackList from "../components/MusicTrackList";
 import PlanetGrid from "../components/PlanetGrid";
@@ -7,8 +8,9 @@ import { isMusicRemoteEligible } from "../context/MusicConnectionContext";
 
 export default function ArtistPage({ selected, onNavigate }) {
   const music = useMusic();
-  const [followed, setFollowed] = useState(false);
+  const favorites = useFavoritesStore();
   const [details, setDetails] = useState({ status: "idle", artist: selected });
+  const followed = favorites.isArtistFavorite(details.artist);
   const [tracks, setTracks] = useState([]);
   const [albums, setAlbums] = useState([]);
   useEffect(() => {
@@ -28,8 +30,6 @@ export default function ArtistPage({ selected, onNavigate }) {
     }).catch((error) => { if (active) setDetails({ status: "error", error: error?.message || "Failed to profile artist.", artist: selected }); });
     return () => { active = false; };
   }, [selected?.id, selected?.provider, music.recoveryEpoch]);
-  useEffect(() => { if (!selected?.id) return; const identity = `${selected.source?.provider || selected.provider || "unknown"}:${selected.id}`;
-    window.electron?.musicListFavorites?.().then((items) => setFollowed((items || []).some((item) => item.kind === "artist" && item.identity === identity))).catch(() => {}); }, [selected?.id]);
 
   if (!details.artist) return <div className="music-page"><div className="music-empty"><h2>Signal lost</h2><p>The artist profile is unavailable.</p></div></div>;
   const artist = details.artist;
@@ -46,7 +46,7 @@ export default function ArtistPage({ selected, onNavigate }) {
       artworkTrack={{ ...artist, artworkUrl: artist.profileImageUrl || artist.artworkUrl }}
       artworkLabel={`Portrait for ${artist.name}`}
     >
-      <div className="music-actions"><button className="primary" disabled={!tracks.length} onClick={() => music.playTrack(tracks[0], tracks)}>Play</button><button disabled={!tracks.length} onClick={() => { const values = tracks.slice().sort(() => Math.random() - .5); music.playTrack(values[0], values); }}>Shuffle</button><button disabled={!isMusicRemoteEligible(music.connectionState)} onClick={() => music.startRadio(artist)}>{!isMusicRemoteEligible(music.connectionState) ? "Radio requires a connection" : "Radio"}</button><button className={followed ? "active" : ""} onClick={async () => { const identity = `${artist.source?.provider || artist.provider || "unknown"}:${artist.id}`; const result = await window.electron?.musicToggleFavorite?.("artist", identity, artist); setFollowed(result?.favorite === true); }}>{followed ? "Following" : "Follow"}</button></div>
+      <div className="music-actions"><button className="primary" disabled={!tracks.length} onClick={() => music.playTrack(tracks[0], tracks)}>Play</button><button disabled={!tracks.length} onClick={() => { const values = tracks.slice().sort(() => Math.random() - .5); music.playTrack(values[0], values); }}>Shuffle</button><button disabled={!isMusicRemoteEligible(music.connectionState)} onClick={() => music.startRadio(artist)}>{!isMusicRemoteEligible(music.connectionState) ? "Radio requires a connection" : "Radio"}</button><button className={followed ? "active" : ""} aria-pressed={followed} onClick={() => favorites.toggleFavorite("artist", artist, artist)}>{followed ? "Following" : "Follow"}</button></div>
     </MusicEntityHero>
     {details.status === "error" && <div className="music-provider-warning" role="status">{details.error}</div>}
     <section className="music-section"><h2>Top matching tracks</h2><MusicTrackList tracks={tracks.slice(0, 30)} layout="list" empty={details.status === "loading" ? "Mapping this artist's catalog…" : details.status === "error" ? "Track list unavailable." : "No playable tracks are available from the active sources."} /></section>

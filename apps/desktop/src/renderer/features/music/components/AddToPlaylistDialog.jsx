@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { notifyMusicCollectionsChanged } from "../utils/collections";
+import { showToast } from "../../../components/layout/Toast";
 
 function sameTrack(left, right) {
   if (!left || !right) return false;
@@ -15,6 +16,7 @@ export default function AddToPlaylistDialog({ track, close }) {
   const [actionStatus, setActionStatus] = useState("idle");
   const [error, setError] = useState("");
   const createInputRef = useRef(null);
+  const savingRef = useRef(false);
   const portalTarget = useMemo(() => document.querySelector(".music-planet-container") || document.body, []);
   const saving = actionStatus === "saving";
 
@@ -48,36 +50,44 @@ export default function AddToPlaylistDialog({ track, close }) {
   }, [close, saving]);
 
   const add = async (playlist) => {
+    if (savingRef.current) return;
     setError("");
     if ((playlist.items || []).some((item) => sameTrack(item, track))) {
+      showToast(`${track.title || "Track"} is already in ${playlist.name}.`);
       close();
       return;
     }
+    savingRef.current = true;
     setActionStatus("saving");
     try {
       const result = await window.electron?.musicSavePlaylist?.({ ...playlist, items: [...(playlist.items || []), track] });
-      if (result?.ok === false) throw new Error(result.error || "Playlist update failed.");
+      if (!result?.id || result.ok === false) throw new Error("This track could not be added. Please try again.");
       notifyMusicCollectionsChanged({ kind: "playlist", id: playlist.id });
+      showToast(`${track.title || "Track"} added to ${playlist.name}.`, "success");
       close();
-    } catch (nextError) {
+    } catch {
+      savingRef.current = false;
       setActionStatus("idle");
-      setError(nextError?.message || "This track could not be added to the playlist.");
+      setError("This track could not be added to the playlist. Please try again.");
     }
   };
 
   const create = async () => {
     const name = newName.trim();
-    if (!name || saving) return;
+    if (!name || savingRef.current) return;
     setError("");
+    savingRef.current = true;
     setActionStatus("saving");
     try {
       const result = await window.electron?.musicSavePlaylist?.({ name, description: "", items: [track] });
-      if (result?.ok === false) throw new Error(result.error || "Playlist creation failed.");
-      notifyMusicCollectionsChanged({ kind: "playlist", id: result?.id });
+      if (!result?.id || result.ok === false) throw new Error("The playlist could not be created. Please try again.");
+      notifyMusicCollectionsChanged({ kind: "playlist", id: result.id });
+      showToast(`${name} created and ${track.title || "track"} added.`, "success");
       close();
-    } catch (nextError) {
+    } catch {
+      savingRef.current = false;
       setActionStatus("idle");
-      setError(nextError?.message || "The playlist could not be created.");
+      setError("The playlist could not be created. Please try again.");
     }
   };
 
