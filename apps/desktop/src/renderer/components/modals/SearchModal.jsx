@@ -3,6 +3,7 @@ import { SearchIcon, CloseIcon } from "../common/Icons";
 import { filterSearchResults, findDuplicateSearchTitles, getSearchTitleKey, SEARCH_CINEMAS, searchTmdb } from "../../services/search";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
 import SearchResultRow from "../media/SearchResultRow";
+import CinemaAvailabilityNotice from "../common/CinemaAvailabilityNotice";
 import { resolveQuickSearchPlacement } from "../search/searchOrbGeometry";
 import QuickSearchFilterRail from "../search/QuickSearchFilterRail";
 import MusicQuickSearchRow from "../search/MusicQuickSearchRow";
@@ -23,6 +24,7 @@ export default function SearchModal({
   onSelect,
   onViewAll,
   onMusicNavigate,
+  onNavigate,
   onClose,
   offline,
   anchorRect = null,
@@ -38,6 +40,7 @@ export default function SearchModal({
   const [results, setResults] = useState([]);
   const [cinemaLoading, setCinemaLoading] = useState(false);
   const [cinemaError, setCinemaError] = useState("");
+  const [cinemaResolved, setCinemaResolved] = useState(false);
   const [history, setHistory] = useState(() => loadHistory(searchWorld));
   const [quickFilter, setQuickFilter] = useState("all");
   const [cinemaFilter, setCinemaFilter] = useState("global");
@@ -88,24 +91,26 @@ export default function SearchModal({
   }, [anchored, shouldRender, searchWorld]);
 
   useEffect(() => {
-    if (isMusic) { setResults([]); setCinemaLoading(false); setCinemaError(""); return undefined; }
-    const term = query.trim();
     const requestId = ++requestRef.current;
+    setResults([]); setCinemaResolved(false);
+    if (isMusic) { setCinemaLoading(false); setCinemaError(""); return undefined; }
+    const term = query.trim();
     setActiveIndex(0); setCinemaError("");
-    if (!term || offline) { setResults([]); setCinemaLoading(false); return undefined; }
+    if (!isOpen || !term || offline) { setCinemaLoading(false); return undefined; }
+    if (!apiKey) { setCinemaLoading(false); setCinemaError("Cinema search needs an available metadata service."); return undefined; }
+    setCinemaLoading(true);
     const timer = window.setTimeout(async () => {
-      setCinemaLoading(true);
       try {
         const response = await searchTmdb(term, 1, apiKey);
-        if (requestRef.current === requestId) setResults(response.results);
+        if (requestRef.current === requestId) { setResults(response.results); setCinemaResolved(true); }
       } catch {
         if (requestRef.current === requestId) { setResults([]); setCinemaError("Search is temporarily unavailable."); }
       } finally {
         if (requestRef.current === requestId) setCinemaLoading(false);
       }
     }, 380);
-    return () => window.clearTimeout(timer);
-  }, [apiKey, isMusic, offline, query]);
+    return () => { window.clearTimeout(timer); requestRef.current += 1; };
+  }, [apiKey, isMusic, isOpen, offline, query]);
 
   const saveHistory = useCallback((next) => storage.set(historyKeyFor(searchWorld), next), [searchWorld]);
   const addToHistory = useCallback((term) => {
@@ -136,6 +141,7 @@ export default function SearchModal({
   const visibleResults = isMusic ? visibleMusicResults : visibleCinemaResults;
   const loading = isMusic ? musicQuick.loading : cinemaLoading;
   const error = isMusic ? musicQuick.error : cinemaError;
+  const cinemaViewAllEligible = !offline && !cinemaLoading && !cinemaError && cinemaResolved;
 
   useEffect(() => { setActiveIndex(0); }, [cinemaFilter, musicFilter, quickFilter, searchWorld]);
   useEffect(() => {
@@ -180,7 +186,7 @@ export default function SearchModal({
       if (active) {
         if (isMusic) handleMusicSelect(active);
         else handleCinemaSelect(active);
-      } else handleViewAll();
+      } else if (isMusic || cinemaViewAllEligible) handleViewAll();
     }
   };
 
@@ -202,9 +208,9 @@ export default function SearchModal({
           <button type="button" className="btn btn-ghost btn-icon" onClick={query ? () => setQuery("") : onClose} aria-label={query ? "Clear search" : "Close search"}><CloseIcon /></button>
         </div>
         <div className="search-results" aria-live="polite">
-          {searchUnavailable && <div className="search-offline">No internet connection. Cinema search is unavailable.</div>}
+          {!isMusic && (searchUnavailable || cinemaError) && <CinemaAvailabilityNotice activity="search" connectionState={searchUnavailable ? "offline" : "online"} error={cinemaError} onNavigate={onNavigate ? (route) => { onNavigate(route); onClose(); } : undefined} />}
           {!searchUnavailable && loading && <div className="loader"><div className="spinner" /></div>}
-          {!searchUnavailable && !loading && error && <div className="search-empty">{error}</div>}
+          {isMusic && !loading && error && <div className="search-empty">{error}</div>}
 
           {!searchUnavailable && !loading && !error && query.trim() && isMusic && musicQuick.counts.all > 0 && (
             <div className="quick-search-filter-stack quick-search-filter-stack--music">
@@ -225,10 +231,10 @@ export default function SearchModal({
             </div>
           )}
 
-          {!loading && !error && query.trim().length >= (isMusic ? 2 : 1) && (isMusic ? musicQuick.counts.all === 0 : results.length === 0) && <div className="search-empty">No results for “{query}”</div>}
-          {!isMusic && !loading && !error && results.length > 0 && visibleCinemaResults.length === 0 && <div className="search-empty">No matching {cinemaFilter === "global" ? "results" : SEARCH_CINEMAS.find(({ id }) => id === cinemaFilter)?.label} titles on this result page.</div>}
+          {!searchUnavailable && !loading && !error && (isMusic || cinemaResolved) && query.trim().length >= (isMusic ? 2 : 1) && (isMusic ? musicQuick.counts.all === 0 : results.length === 0) && <div className="search-empty">No results for “{query}”</div>}
+          {!searchUnavailable && !isMusic && cinemaResolved && !loading && !error && results.length > 0 && visibleCinemaResults.length === 0 && <div className="search-empty">No matching {cinemaFilter === "global" ? "results" : SEARCH_CINEMAS.find(({ id }) => id === cinemaFilter)?.label} titles on this result page.</div>}
 
-          {!loading && visibleResults.length > 0 && (
+          {!searchUnavailable && !loading && visibleResults.length > 0 && (
             <div className="quick-search-result-grid">
               {isMusic
                 ? visibleMusicResults.map((entry, index) => <MusicQuickSearchRow key={entry.id} entry={entry} active={activeIndex === index} onHover={() => setActiveIndex(index)} onActivate={() => handleMusicSelect(entry)} />)
@@ -236,7 +242,7 @@ export default function SearchModal({
             </div>
           )}
 
-          {!searchUnavailable && !loading && !error && query.trim() && (
+          {query.trim() && (isMusic ? !loading && !error : cinemaViewAllEligible) && (
             <button type="button" className="search-view-all" onClick={handleViewAll}>
               {isMusic ? "View all Music results for" : "View all results for"} “{query.trim()}”
             </button>

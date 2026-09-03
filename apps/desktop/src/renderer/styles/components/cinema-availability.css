@@ -1,0 +1,14 @@
+.cinema-availability {
+  margin-bottom: var(--sp-6);
+  padding: var(--sp-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.cinema-availability h2 { margin: 0; font-size: var(--text-lg); line-height: 1.4; }
+.cinema-availability p { margin: var(--sp-2) 0 0; color: var(--text-secondary); line-height: 1.6; }
+.cinema-local-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-4); }
+.cinema-local-actions .btn { min-height: 40px; }
+.cinema-local-actions .btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.search-results > .cinema-availability { margin: var(--sp-3); }

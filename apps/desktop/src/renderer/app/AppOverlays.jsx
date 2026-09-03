@@ -46,6 +46,7 @@ export default function AppOverlays({ model }) {
           searchWorld={searchWorld}
           onSelect={handleSelectResult}
           onMusicNavigate={navigate}
+          onNavigate={navigate}
           onViewAll={(query) => navigate(searchWorld === "music" ? "music-search" : "search", searchWorld === "music" ? { query } : query)}
           onClose={closeSearch}
           offline={offline}

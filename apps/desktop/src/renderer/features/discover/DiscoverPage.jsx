@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { tmdbFetch } from "../../services/tmdb";
 import MediaCard from "../../components/media/MediaCard";
+import CinemaAvailabilityNotice from "../../components/common/CinemaAvailabilityNotice";
 import { REGION_PRESETS, SUBFILTER_PRESETS, getRegionQueryParams } from "../../shared/utils/discoverRegions";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
 import { PROVIDER_HUBS, WORLD_HUBS, findProviderIds, inferWatchRegion } from "./discoveryHubs";
@@ -44,7 +45,8 @@ const TV_GENRES = [
   { id: 37, name: "Western", gradient: "linear-gradient(135deg, #cd853f 0%, #8b5a2b 100%)" },
 ];
 
-export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSaved, watched = {} }) {
+export default function DiscoverPage({ apiKey, onNavigate, offline = false, connectionState = offline ? "offline" : "online", onCheckConnection, isSaved, watched = {} }) {
+  const canRequest = Boolean(apiKey) && (connectionState === "online" || connectionState === "degraded");
   const [type, setType] = useState("movie"); // "all" | "movie" | "tv"
   const [selectedGenre, setSelectedGenre] = useState(null); // null or genre object
   const [region, setRegion] = useState("all"); // "all" | "hollywood" | "bollywood" | "asian"
@@ -57,6 +59,8 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSa
     () => storage.get(STORAGE_KEYS.DISCOVERY_REGION) || inferWatchRegion(),
   );
   const [providerCatalog, setProviderCatalog] = useState({ movie: [], tv: [] });
+  const [providerReady, setProviderReady] = useState(false);
+  const [providerError, setProviderError] = useState("");
 
   // Filter & Sorting state
   const [sortBy, setSortBy] = useState("popularity.desc");
@@ -67,7 +71,15 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSa
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [requestError, setRequestError] = useState("");
+  const [regionError, setRegionError] = useState("");
+  const [resultsError, setResultsError] = useState("");
+  const [regionResolved, setRegionResolved] = useState(false);
+  const [resultsResolved, setResultsResolved] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+  const discoverRequestRef = useRef(0);
+  const requestError = (selectedGenre ? resultsError : regionError) || providerError;
+  const unavailableReason = requestError || (!apiKey ? "Cinema discovery needs an available metadata service." : "");
+  const discoverQueryKey = JSON.stringify([type, selectedGenre?.id, selectedHub?.id, hubFilter, watchRegion, sortBy, year, minRating, region, subfilter]);
   const scrollRef = useRef(null);
 
   const genres = type === "movie" ? MOVIE_GENRES : type === "tv" ? TV_GENRES : [];
@@ -80,14 +92,15 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSa
   };
 
   useEffect(() => {
-    if (!apiKey || offline) return;
     let active = true;
     const cacheKey = `watchProviderCatalog_${watchRegion}`;
     const cached = storage.get(cacheKey);
-    if (cached?.at && Date.now() - cached.at < 86_400_000) {
-      setProviderCatalog(cached.results || { movie: [], tv: [] });
-      return;
-    }
+    const hasCache = Array.isArray(cached?.results?.movie) && Array.isArray(cached?.results?.tv);
+    setProviderCatalog(hasCache ? cached.results : { movie: [], tv: [] });
+    setProviderReady(hasCache);
+    setProviderError("");
+    // Read the existing regional provider cache even while remote requests are paused.
+    if (!canRequest || (hasCache && cached.at && Date.now() - cached.at < 86_400_000)) return;
     Promise.all([
       tmdbFetch(`/watch/providers/movie?watch_region=${watchRegion}`, apiKey),
       tmdbFetch(`/watch/providers/tv?watch_region=${watchRegion}`, apiKey),
@@ -95,28 +108,36 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSa
         if (!active) return;
         const results = { movie: movie.results || [], tv: tv.results || [] };
         setProviderCatalog(results);
+        setProviderReady(true);
         storage.set(cacheKey, { at: Date.now(), results });
       })
-      .catch(() => setProviderCatalog({ movie: [], tv: [] }));
+      .catch(() => { if (active) setProviderError("Provider availability could not be refreshed. Your downloads and library remain available."); });
     return () => { active = false; };
-  }, [apiKey, offline, watchRegion]);
+  }, [apiKey, canRequest, watchRegion, retryKey]);
 
   const handleRegionChange = (newRegion) => {
     setRegion(newRegion);
     setSubfilter("all");
   };
 
+  // Query changes clear mismatched results; connection transitions retain the current query.
+  useEffect(() => {
+    setRegionItems([]);
+    setRegionResolved(false);
+    setRegionError("");
+  }, [region, subfilter, type]);
+
   // Fetch regional trending items when region or subfilter or type changes, if no genre is selected
   useEffect(() => {
-    if (region === "all" || selectedGenre || !apiKey || offline) {
-      setRegionItems([]);
+    if (region === "all" || selectedGenre || !canRequest) {
+      setLoadingRegionItems(false);
       return;
     }
 
     let mounted = true;
     const fetchRegionItems = async () => {
       setLoadingRegionItems(true);
-      setRequestError("");
+      setRegionError("");
       try {
         const { countryParam, languageParam } = getRegionQueryParams(region, subfilter);
         const requestTypes = type === "all" ? ["movie", "tv"] : [type];
@@ -124,10 +145,11 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSa
         const merged = responses.flatMap((data, index) => (data.results || []).map((item) => ({ ...item, media_type: requestTypes[index] })));
         if (mounted) {
           setRegionItems(merged.sort((a, b) => (b.popularity || 0) - (a.popularity || 0)));
+          setRegionResolved(true);
         }
       } catch (err) {
         console.error("Failed to fetch region items:", err);
-        if (mounted) setRequestError("Regional titles could not be refreshed. Existing results remain available.");
+        if (mounted) setRegionError("Regional titles could not be refreshed. Your downloads and library remain available.");
       } finally {
         if (mounted) setLoadingRegionItems(false);
       }
@@ -137,14 +159,15 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSa
     return () => {
       mounted = false;
     };
-  }, [region, subfilter, type, selectedGenre, apiKey, offline]);
+  }, [region, subfilter, type, selectedGenre, apiKey, canRequest, retryKey]);
 
   // Fetch results when filters/genre/region/subfilter change
   const fetchDiscoverResults = useCallback(
     async (pageNum = 1) => {
-      if (!selectedGenre || !apiKey || offline) return;
+      const requestId = ++discoverRequestRef.current;
+      if (!selectedGenre || !canRequest || (selectedHub?.kind === "provider" && !providerReady)) { setLoading(false); return; }
       setLoading(true);
-      setRequestError("");
+      setResultsError("");
       try {
         const { countryParam, languageParam } = getRegionQueryParams(region, subfilter);
         const requestTypes = type === "all" ? ["movie", "tv"] : [type];
@@ -164,6 +187,7 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSa
           const mediaSort = sortBy === "primary_release_date.desc" && mediaType === "tv" ? "first_air_date.desc" : sortBy;
           return tmdbFetch(`/discover/${mediaType}?sort_by=${mediaSort}${genreParam}${hubParam}${countryParam}${languageParam}${yearParam}${ratingParam}&page=${pageNum}`, apiKey);
         }));
+        if (requestId !== discoverRequestRef.current) return;
         const seen = new Set();
         const merged = responses.flatMap((data, index) => (data.results || []).map((item) => ({ ...item, media_type: requestTypes[index] })))
           .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
@@ -174,25 +198,30 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSa
         } else {
           setItems((prev) => [...prev, ...merged.filter((item) => !prev.some((old) => old.id === item.id && old.media_type === item.media_type))]);
         }
+        setResultsResolved(true);
         setPage(pageNum);
         setTotalPages(Math.max(...responses.map((data) => data.total_pages || 1)));
       } catch (err) {
         console.error("Discover fetch failed:", err);
-        setRequestError("Discover results could not be refreshed. Check the connection and retry.");
+        if (requestId === discoverRequestRef.current) setResultsError("Discover results could not be refreshed. Your downloads and library remain available.");
       } finally {
-        setLoading(false);
+        if (requestId === discoverRequestRef.current) setLoading(false);
       }
     },
-    [selectedGenre, selectedHub, hubFilter, providerCatalog, watchRegion, type, sortBy, year, minRating, region, subfilter, apiKey, offline],
+    [selectedGenre, selectedHub, hubFilter, providerCatalog, providerReady, watchRegion, type, sortBy, year, minRating, region, subfilter, apiKey, canRequest],
   );
 
   useEffect(() => {
-    if (selectedGenre) {
-      setItems([]);
-      setPage(1);
-      fetchDiscoverResults(1);
-    }
-  }, [selectedGenre, selectedHub, hubFilter, sortBy, year, minRating, region, subfilter, fetchDiscoverResults]);
+    setItems([]);
+    setPage(1);
+    setResultsResolved(false);
+    setResultsError("");
+  }, [discoverQueryKey]);
+
+  useEffect(() => {
+    fetchDiscoverResults(1);
+    return () => { discoverRequestRef.current += 1; };
+  }, [fetchDiscoverResults, retryKey]);
 
   const loadMore = () => {
     if (page < totalPages && !loading) {
@@ -220,7 +249,11 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSa
 
   return (
     <div className="discover-container" ref={scrollRef}>
-      {(offline || requestError) && <div className="constellation-warning"><span>{offline ? "Discover is offline. Saved library items and downloads remain available." : requestError}</span>{!offline && <button className="btn btn-ghost" onClick={() => selectedGenre ? fetchDiscoverResults(page || 1) : setRequestError("")}>Retry</button>}</div>}
+      <CinemaAvailabilityNotice
+        activity="discovery" connectionState={connectionState} error={unavailableReason}
+        retained={(selectedGenre ? items.length > 0 : regionItems.length > 0) || providerReady}
+        onNavigate={onNavigate} onCheckConnection={onCheckConnection} onRetry={() => setRetryKey((value) => value + 1)}
+      />
       {/* ── Page Header ── */}
       <div className="discover-header">
         <div className="discover-title-row">
@@ -269,7 +302,7 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSa
                     ? Boolean(findProviderIds(providerCatalog.movie, hub).length || findProviderIds(providerCatalog.tv, hub).length)
                     : Boolean(findProviderIds(providerCatalog[type] || [], hub).length);
                   return <button key={hub.id} className="discovery-hub-card" style={{ "--hub-gradient": hub.gradient }} onClick={() => handleSelectHub(hub, "provider")} disabled={!available}>
-                    <span>{hub.name}</span><small>{available ? `Explore in ${watchRegion}` : `Not listed in ${watchRegion}`}</small>
+                    <span>{hub.name}</span><small>{available ? `Explore in ${watchRegion}` : providerReady ? `Not listed in ${watchRegion}` : "Availability unavailable"}</small>
                   </button>;
                 })}
               </div>
@@ -409,7 +442,7 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSa
                     Browse All
                   </button>
                 </div>
-                {loadingRegionItems ? (
+                {loadingRegionItems && regionItems.length === 0 ? (
                   <div className="loader" style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <div className="spinner" />
                   </div>
@@ -425,11 +458,11 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSa
                       />
                     ))}
                   </div>
-                ) : (
+                ) : connectionState === "online" && !unavailableReason && regionResolved ? (
                   <div style={{ padding: "32px", textAlign: "center", color: "var(--text3)", background: "var(--surface)", borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
                     No trending titles found for this region.
                   </div>
-                )}
+                ) : null}
               </div>
             )}
 
@@ -474,13 +507,13 @@ export default function DiscoverPage({ apiKey, onNavigate, offline = false, isSa
               </div>
             )}
 
-            {!loading && items.length === 0 && (
+            {connectionState === "online" && !unavailableReason && resultsResolved && !loading && items.length === 0 && (
               <div className="discover-empty-state">
                 <p>No titles match the selected filters. Try adjusting your search criteria!</p>
               </div>
             )}
 
-            {!loading && page < totalPages && items.length > 0 && (
+            {canRequest && !unavailableReason && !loading && page < totalPages && items.length > 0 && (
               <div className="load-more-container">
                 <button className="btn btn-secondary load-more-btn" onClick={loadMore}>
                   Load More

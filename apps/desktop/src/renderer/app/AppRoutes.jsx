@@ -42,7 +42,7 @@ export default function AppRoutes({ model }) {
         />
       )}
       {page === "discover" && (
-        <DiscoverPage apiKey={apiKey} onNavigate={navigate} offline={offline} isSaved={isSaved} watched={watched} />
+        <DiscoverPage apiKey={apiKey} onNavigate={navigate} offline={offline} connectionState={homeConnectionState} onCheckConnection={onCheckHomeConnection} isSaved={isSaved} watched={watched} />
       )}
       {page === "search" && (
         <SearchResultsPage
