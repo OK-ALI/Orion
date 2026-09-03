@@ -601,6 +601,12 @@ export default function App() {
     pageRef, setShowSearch,
   });
 
+  const handlePlayHomeLocal = useCallback((download) => {
+    setMiniPlayer(null);
+    setPlaybackSession(null);
+    setExpandedLocalDownload(download);
+  }, []);
+
   const handleExpandMiniPlayer = useCallback((playbackState) => {
     setMiniPlayer((current) => {
       if (!current) return null;
@@ -934,7 +940,7 @@ export default function App() {
               </button>
             </div>
           )}
-          {!String(page).startsWith("music-") && apiKeyStatus === "unreachable" && (
+          {!String(page).startsWith("music-") && !(page === "home" && offline) && apiKeyStatus === "unreachable" && (
             <div className="api-status-banner api-status-warn">
               <span>
                 ⚠ Cannot reach TMDB, check your internet connection. Content may
@@ -961,6 +967,9 @@ export default function App() {
           saveProgress, selected, setDlSearchOpen, setDownloads, setHighlightDownload,
           setLibrarySort, setMiniPlayer: handleOpenMiniPlayer, toggleSave, trending, trendingTV, watched,
           onPlaybackSession: handlePlaybackSession,
+          homeConnectionState: network.productState,
+          onCheckHomeConnection: network.recheck,
+          onPlayHomeLocal: handlePlayHomeLocal,
           googleProfile,
         }} />
         </main>
@@ -969,7 +978,7 @@ export default function App() {
 
         <SearchOrb
           world={String(page).startsWith("music-") ? "music" : "cinema"}
-          hidden={page === "search" || page === "music-search"}
+          hidden={(page === "home" && Boolean(expandedLocalDownload)) || page === "search" || page === "music-search"}
           onOpenFullSearch={() => { closeSearch(); navigate(String(page).startsWith("music-") ? "music-search" : "search", String(page).startsWith("music-") ? { query: "" } : ""); }}
           onOpenQuickSearch={(rect) => openQuickSearch(rect, String(page).startsWith("music-") ? "music" : "cinema")}
         />

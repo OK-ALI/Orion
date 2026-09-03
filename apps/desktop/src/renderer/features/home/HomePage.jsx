@@ -6,6 +6,7 @@ import { useRatings, getRatingForItem } from "../../shared/utils/useRatings";
 import { isRestricted } from "../../shared/utils/ageRating";
 import { tmdbFetch } from "../../services/tmdb";
 import { loadHomeLayout } from "../../shared/utils/homeLayout";
+import { findLocalDownloadForItem } from "../../shared/utils/localMediaAvailability";
 
 function getRecentHistoryItems(history, count = 5) {
   if (!history || history.length === 0) return [];
@@ -34,6 +35,10 @@ export default function HomePage({
   progress,
   inProgress,
   offline,
+  connectionState = offline ? "offline" : "online",
+  downloads = [],
+  onPlayLocal,
+  onCheckConnection,
   onRetry,
   watched,
   onMarkWatched,
@@ -51,6 +56,10 @@ export default function HomePage({
   const [loadingAge, setLoadingAge] = useState(0);
   const [layout] = useState(() => loadHomeLayout() || { order: ["continue", "recommended", "trendingMovies", "trendingTV", "kdramas", "topRated"], visible: { continue: true, recommended: true, trendingMovies: true, trendingTV: true, kdramas: true, topRated: true } });
   const { order: rowOrder, visible: rowVisible } = layout;
+  const localContinue = useMemo(() => inProgress.flatMap((item) => {
+    const download = findLocalDownloadForItem(item, downloads);
+    return download ? [{ item, download }] : [];
+  }), [inProgress, downloads]);
 
   useEffect(() => {
     if (!loading) {
@@ -258,13 +267,61 @@ export default function HomePage({
     );
   };
 
-  if (offline) {
+  if (connectionState !== "online" || (loading && localContinue.length > 0)) {
+    const stateCopy = {
+      offline: ["You're offline", "Open your downloads or library while Cinema discovery is unavailable."],
+      checking: ["Checking connection", "Keep watching locally while Orion checks the connection."],
+      reconnecting: ["Reconnecting", "Keep watching locally while Orion checks the connection."],
+      degraded: ["Cinema service is limited", "Some remote content is unavailable. Your downloads and library remain available."],
+      online: ["Loading Cinema", "Your local stories are ready while Cinema loads."],
+    }[connectionState] || ["Checking connection", "Keep watching locally while Orion checks the connection."];
+
     return (
-      <div className="offline-placeholder">
-        <span className="page-state-eyebrow">Cinema is offline</span>
-        <h2>Your saved stories are still here</h2>
-        <p>Trending and discovery need a connection. Downloads, local playback and your library remain available.</p>
-        <button className="btn btn-primary" onClick={onRetry}>Retry</button>
+      <div className="homepage-container home-local-continuity">
+        <div className="homepage-content">
+          <section className="home-connection-state" aria-labelledby="home-local-title">
+            <div role="status" aria-live="polite" aria-atomic="true">
+              <p className="page-state-eyebrow">{stateCopy[0]}</p>
+              <h1 id="home-local-title">Your local Orion is still available.</h1>
+              <p className="home-connection-description">{stateCopy[1]}</p>
+            </div>
+            <div className="home-local-actions">
+              <button className="btn btn-primary" onClick={() => onNavigate?.("downloads")}>Open Downloads</button>
+              <button className="btn btn-secondary" onClick={() => onNavigate?.("library")}>Open Library</button>
+              <button className="btn btn-ghost" onClick={() => (onCheckConnection || onRetry)?.()}>Check connection</button>
+            </div>
+          </section>
+          {localContinue.length > 0 && (
+            <section className="home-section" aria-labelledby="home-local-continue-title">
+              <h2 id="home-local-continue-title" className="section-title">Continue Watching</h2>
+              <ul className="home-local-continue">
+                {localContinue.map(({ item, download }) => {
+                  const title = item.title || item.name;
+                  const episode = item.media_type === "tv" ? "S" + item.season + " E" + item.episode : "";
+                  const key = item.media_type === "tv"
+                    ? "tv_" + item.id + "_s" + item.season + "e" + item.episode
+                    : "movie_" + item.id;
+                  const percent = Math.max(0, Math.min(100, Math.round(Number(progress[key]) || 0)));
+                  return (
+                    <li key={key}>
+                      <button
+                        className="home-local-resume"
+                        aria-label={"Resume " + title + (episode ? " " + episode : "") + " locally"}
+                        onClick={() => onPlayLocal ? onPlayLocal(download) : onNavigate?.("downloads")}
+                      >
+                        <span className="home-local-story">
+                          <strong>{title}</strong>
+                          <span>{episode ? episode + " · " : ""}{percent}% watched</span>
+                        </span>
+                        <span className="home-local-resume-label">Resume local file</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+        </div>
       </div>
     );
   }

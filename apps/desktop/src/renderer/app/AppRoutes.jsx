@@ -24,6 +24,7 @@ export default function AppRoutes({ model }) {
     savedList, saveProgress, selected, setDlSearchOpen, setDownloads,
     setHighlightDownload, setLibrarySort, setMiniPlayer, toggleSave, trending,
     trendingTV, watched, onPlaybackSession, googleProfile,
+    homeConnectionState, onCheckHomeConnection, onPlayHomeLocal,
   } = model;
   return (
     <ErrorBoundary resetKey={`${page}:${selected?.id || selected || ""}`} context={`route:${page}`}>
@@ -33,6 +34,8 @@ export default function AppRoutes({ model }) {
           trending={trending} trendingTV={trendingTV} loading={loadingHome}
           onSelect={handleSelectResult} progress={progress} inProgress={inProgress}
           offline={offline} onRetry={retryHome} watched={watched}
+          connectionState={homeConnectionState} downloads={downloads}
+          onCheckConnection={onCheckHomeConnection} onPlayLocal={onPlayHomeLocal}
           onMarkWatched={markWatched} onMarkUnwatched={markUnwatched}
           history={history} saved={savedList} apiKey={apiKey} onNavigate={navigate}
           onSave={toggleSave} isSaved={isSaved}
