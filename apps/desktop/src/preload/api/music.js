@@ -2,6 +2,7 @@ const { MUSIC_IPC } = require("../../shared/musicConstants.cjs");
 
 module.exports = ({ ipcRenderer }) => ({
   musicGetStatus: () => ipcRenderer.invoke(MUSIC_IPC.STATUS),
+  musicSetConnectionState: (state) => ipcRenderer.invoke(MUSIC_IPC.CONNECTION_SET, state),
   musicListFolders: () => ipcRenderer.invoke(MUSIC_IPC.FOLDERS_LIST),
   musicAddFolder: () => ipcRenderer.invoke(MUSIC_IPC.FOLDERS_ADD),
   musicRemoveFolder: (id) => ipcRenderer.invoke(MUSIC_IPC.FOLDERS_REMOVE, id),

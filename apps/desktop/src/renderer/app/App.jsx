@@ -41,6 +41,7 @@ import { useSystemIntegration } from "./hooks/useSystemIntegration";
 import { useSmartConnectRemoteCommands } from "./hooks/useSmartConnectRemoteCommands";
 import { useSmartConnectTelemetry } from "./hooks/useSmartConnectTelemetry";
 import useNetworkStatus from "../shared/hooks/useNetworkStatus";
+import { MusicConnectionBridge } from "../features/music/context/MusicProvider";
 import useDesktopNetworkRecovery from "./hooks/useDesktopNetworkRecovery";
 import { DesktopSyncProviders } from "../features/account/DesktopSyncProviders";
 
@@ -895,6 +896,7 @@ export default function App() {
 
   return (
     <DesktopSyncProviders googleProfile={googleProfile} networkStatus={network.status} saved={saved} savedOrder={savedOrder} watched={watched} history={history} progress={progress}>
+      <MusicConnectionBridge connectionState={network.productState} />
       <ErrorBoundary>
         <div className={`app-shell${String(page).startsWith("music-") ? " music-world" : ""}`}>
         {hasCustomTitlebar && (

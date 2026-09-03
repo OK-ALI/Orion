@@ -38,7 +38,7 @@
     "musicGetStatus", "musicListFolders", "musicAddFolder", "musicRemoveFolder",
     "musicScan", "musicCancelScan", "onMusicScanProgress", "musicListTracks", "musicResolveTrack",
     "musicListTrackCandidates", "musicResolveCandidate", "musicGetArtwork", "musicGetDashboard", "musicGetDetails", "musicGetLyrics",
-    "musicSearch", "musicGetSearchSuggestions", "musicContinueSearch", "musicGetRadio", "musicListProviders", "musicSetActiveProvider", "musicConfigureProvider",
+    "musicSearch", "musicGetSearchSuggestions", "musicContinueSearch", "musicGetRadio", "musicListProviders", "musicSetActiveProvider", "musicSetConnectionState", "musicConfigureProvider",
     "musicListPlugins", "musicInstallPlugin", "musicSetPluginEnabled", "musicRemovePlugin",
     "musicListPlaylists", "musicListRemotePlaylists", "musicSavePlaylist", "musicDeletePlaylist", "musicImportPlaylist", "musicImportPlaylistFile", "musicExportPlaylistFile",
     "musicListPlaylistFolders", "musicSavePlaylistFolder", "musicDeletePlaylistFolder",

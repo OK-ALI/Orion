@@ -106,10 +106,11 @@ async function cacheArtworkBuffer(cacheId, value) {
   return fullPath;
 }
 
-async function cacheRemoteArtwork(url) {
+async function cacheRemoteArtwork(url, { localOnly = false } = {}) {
   const key = keyFor(url);
   const fullPath = path.join(directory(), `${key}-512.png`);
   if (fs.existsSync(fullPath)) return fullPath;
+  if (localOnly) throw new Error("Artwork requires a connection.");
   let current = new URL(url);
   let response;
   for (let redirects = 0; redirects < 4; redirects += 1) {

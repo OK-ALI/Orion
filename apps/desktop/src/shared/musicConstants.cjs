@@ -17,6 +17,7 @@ const MUSIC_EXTENSIONS = Object.freeze([
 
 const MUSIC_IPC = Object.freeze({
   STATUS: "music:status",
+  CONNECTION_SET: "music:connection:set",
   FOLDERS_LIST: "music:folders:list",
   FOLDERS_ADD: "music:folders:add",
   FOLDERS_REMOVE: "music:folders:remove",

@@ -32,7 +32,8 @@ function mergeKind(results, kind, query) {
   for (const result of results) {
     const items = result.value?.[kind] || [];
     for (const item of items) {
-      const key = `${String(item.name || item.title || "").toLowerCase()}\0${String(item.artistName || "").toLowerCase()}`;
+      const key = kind === "tracks" ? `${item.provider || item.source?.provider || result.providerId}:${item.id}`
+        : `${String(item.name || item.title || "").toLowerCase()}\0${String(item.artistName || "").toLowerCase()}`;
       const reference = item.source || { provider: result.providerId, id: item.id };
       const current = merged.get(key);
       const scored = {
@@ -69,6 +70,10 @@ function aggregateSearch(results, query) {
 }
 
 let registered = false;
+// A copy of App's product state, scoped to its renderer; no probes or recovery owner.
+const connectionStates = new WeakMap();
+const isOffline = (event) => connectionStates.get(event.sender) === "offline";
+const connectionRequired = () => ({ ok: false, error: "Remote Music requires a connection.", errors: ["Remote Music requires a connection."] });
 
 function folderId(folderPath) {
   return crypto.createHash("sha256").update(folderPath.toLowerCase()).digest("hex").slice(0, 20);
@@ -81,6 +86,11 @@ function safeSend(sender, channel, payload) {
 function register() {
   if (registered) return;
   registered = true;
+  ipcMain.handle(MUSIC_IPC.CONNECTION_SET, (event, state) => {
+    if (!["online", "offline", "degraded", "unknown", "checking"].includes(state)) return { ok: false };
+    connectionStates.set(event.sender, state);
+    return { ok: true };
+  });
   ipcMain.handle(MUSIC_IPC.STATUS, () => ({ ok: true, schemaVersion: require("../../shared/musicConstants.cjs").MUSIC_SCHEMA_VERSION,
     trackCount: database.openDatabase().prepare("SELECT COUNT(*) count FROM music_tracks WHERE missing=0").get().count }));
   ipcMain.handle(MUSIC_IPC.FOLDERS_LIST, () => database.listFolders().map((item) => ({
@@ -116,19 +126,21 @@ function register() {
   });
   ipcMain.handle(MUSIC_IPC.SCAN_CANCEL, () => ({ ok: scanner.cancelScan() }));
   ipcMain.handle(MUSIC_IPC.TRACKS_LIST, (_, options) => database.listTracks(options || {}));
-  ipcMain.handle(MUSIC_IPC.TRACK_GET_STREAM, async (_, track, providerId) => {
+  ipcMain.handle(MUSIC_IPC.TRACK_GET_STREAM, async (event, track, providerId) => {
+    if (isOffline(event) && track?.provider !== "local") return connectionRequired();
     try { return { ok: true, ...(await resolver.resolveTrack(track, providerId)) }; }
     catch (error) { return { ok: false, error: error?.message || "This track could not be resolved." }; }
   });
-  ipcMain.handle(MUSIC_IPC.TRACK_CANDIDATES, async (_, track, providerId) => {
+  ipcMain.handle(MUSIC_IPC.TRACK_CANDIDATES, async (event, track, providerId) => {
+    if (isOffline(event) && track?.provider !== "local") return { ...connectionRequired(), candidates: [] };
     try { return { ok: true, candidates: await resolver.listCandidateSummaries(track || {}, providerId) }; }
     catch (error) { return { ok: false, error: error?.message || "Music sources could not be loaded.", candidates: [] }; }
   });
-  ipcMain.handle(MUSIC_IPC.TRACK_RESOLVE_CANDIDATE, async (_, id) => {
-    try { return { ok: true, ...(await resolver.resolveCandidateGrant(id)) }; }
+  ipcMain.handle(MUSIC_IPC.TRACK_RESOLVE_CANDIDATE, async (event, id) => {
+    try { return { ok: true, ...(await resolver.resolveCandidateGrant(id, { localOnly: isOffline(event) })) }; }
     catch (error) { return { ok: false, error: error?.message || "That music source could not be played." }; }
   });
-  ipcMain.handle(MUSIC_IPC.ARTWORK_GET, async (_, track = {}) => {
+  ipcMain.handle(MUSIC_IPC.ARTWORK_GET, async (event, track = {}) => {
     const privateTrack = track.id ? database.getPrivateTrack(track.id) : null;
     if (privateTrack?.artwork_path && fs.existsSync(privateTrack.artwork_path)) {
       return { ok: true, ...tokens.createGrant({ kind: "artwork", filePath: privateTrack.artwork_path, mimeType: "image/png" }) };
@@ -136,10 +148,11 @@ function register() {
     const artworkUrl = artworkUrlFor(track);
     if (artworkUrl) {
       try {
-        const filePath = await cacheRemoteArtwork(artworkUrl);
+        const filePath = await cacheRemoteArtwork(artworkUrl, { localOnly: isOffline(event) });
         return { ok: true, ...tokens.createGrant({ kind: "artwork", filePath, mimeType: "image/png" }) };
       } catch {}
     }
+    if (isOffline(event)) return connectionRequired();
     const providerId = track.artworkProviderId || track.source?.provider;
     const artworkProvider = registry.get(providerId, "metadata");
     if (artworkProvider?.getArtwork && track.artworkId) {
@@ -151,16 +164,20 @@ function register() {
     }
     return { ok: false, error: "Artwork is unavailable." };
   });
-  ipcMain.handle(MUSIC_IPC.LYRICS_GET, async (_, track) => {
-    const providers = [registry.getActive("lyrics"), ...registry.list("lyrics")]
+  ipcMain.handle(MUSIC_IPC.LYRICS_GET, async (event, track) => {
+    const errors = [];
+    const providers = [registry.get("orion-embedded-lyrics", "lyrics"), registry.getActive("lyrics"), ...registry.list("lyrics")]
       .filter((provider, index, list) => provider && list.findIndex((item) => item.id === provider.id) === index);
     for (const provider of providers) {
       if (typeof provider.getLyrics !== "function") continue;
+      if (isOffline(event) && provider.id !== "orion-embedded-lyrics") continue;
       try {
         const lyrics = await provider.getLyrics(track || {});
         if (lyrics) return { ok: true, lyrics, providerId: provider.id };
-      } catch {}
+      } catch (error) { errors.push(registry.cleanError(error?.message || error)); }
     }
+    if (isOffline(event)) return connectionRequired();
+    if (errors.length) return { ok: false, error: "Lyrics providers are unavailable. Try again later.", errors };
     return { ok: false, error: "No lyrics are available for this track." };
   });
   ipcMain.handle(MUSIC_IPC.PROVIDERS_LIST, () => registry.list().map((provider) => ({
@@ -173,20 +190,33 @@ function register() {
   ipcMain.handle(MUSIC_IPC.PROVIDER_SAVE_CONFIG, async () => {
     return { ok: false, error: "This provider configuration is deprecated." };
   });
-  ipcMain.handle(MUSIC_IPC.SEARCH, async (_, query) => {
-    const providers = registry.list("metadata").filter((provider) => typeof provider.search === "function");
+  ipcMain.handle(MUSIC_IPC.SEARCH, async (event, query) => {
     const safeQuery = String(query || "").slice(0, 200);
+    const localSearch = async () => {
+      const provider = registry.get("orion-local-metadata", "metadata");
+      const value = await provider?.search(safeQuery);
+      const hasResults = Object.values(value || {}).some((items) => Array.isArray(items) && items.length);
+      return { availability: "local-only", errors: connectionRequired().errors,
+        results: hasResults ? [aggregateSearch([{ providerId: provider.id, value }], safeQuery)] : [] };
+    };
+    if (isOffline(event)) return localSearch();
+    const providers = registry.list("metadata").filter((provider) => typeof provider.search === "function");
     const response = await broker.queryProviders(providers, "search", [safeQuery], { timeout: 10_000 });
-    return { ...response, results: response.results.length ? [aggregateSearch(response.results, safeQuery)] : [] };
+    if (isOffline(event)) return localSearch();
+    const aggregate = aggregateSearch(response.results, safeQuery);
+    const hasResults = Object.values(aggregate.value).some((items) => items.length);
+    return { ...response, results: response.results.length && (hasResults || !response.errors.length) ? [aggregate] : [] };
   });
-  ipcMain.handle(MUSIC_IPC.SEARCH_SUGGESTIONS, async (_, query) => {
+  ipcMain.handle(MUSIC_IPC.SEARCH_SUGGESTIONS, async (event, query) => {
+    if (isOffline(event)) return { ...connectionRequired(), suggestions: [] };
     const safeQuery = String(query || "").trim().slice(0, 120);
     if (safeQuery.length < 2) return { suggestions: [], errors: [] };
     const providers = registry.list("metadata").filter((provider) => typeof provider.getSuggestions === "function");
     const response = await broker.queryProviders(providers, "getSuggestions", [safeQuery], { timeout: 6_000 });
     return { suggestions: [...new Set(response.results.flatMap((entry) => entry.value || []))].slice(0, 10), errors: response.errors };
   });
-  ipcMain.handle(MUSIC_IPC.SEARCH_CONTINUE, async (_, query, continuation) => {
+  ipcMain.handle(MUSIC_IPC.SEARCH_CONTINUE, async (event, query, continuation) => {
+    if (isOffline(event)) return connectionRequired();
     const provider = registry.list("metadata").find((entry) => typeof entry.continueSearch === "function");
     const token = String(continuation || "");
     if (!provider || !token || token.length > 4_000) return { ok: false, error: "No additional search page is available." };
@@ -195,7 +225,8 @@ function register() {
       return { ok: true, result: aggregateSearch([{ providerId: provider.id, providerName: provider.name, value }], String(query || "")) };
     } catch (error) { return { ok: false, error: error.message || "More results could not be loaded." }; }
   });
-  ipcMain.handle(MUSIC_IPC.RADIO_GET, async (_, item = {}) => {
+  ipcMain.handle(MUSIC_IPC.RADIO_GET, async (event, item = {}) => {
+    if (isOffline(event)) return { ...connectionRequired(), tracks: [] };
     const preferred = registry.get(item.source?.provider, "metadata");
     const providers = [preferred, ...registry.list("metadata")].filter((provider, index, all) => provider
       && typeof provider.getRadio === "function" && all.findIndex((entry) => entry?.id === provider.id) === index);
@@ -204,9 +235,11 @@ function register() {
     return tracks.length ? { ok: true, tracks, errors: response.errors }
       : { ok: false, tracks: [], errors: response.errors, error: "Radio is unavailable for this item." };
   });
-  ipcMain.handle(MUSIC_IPC.DASHBOARD_GET, async () => {
+  ipcMain.handle(MUSIC_IPC.DASHBOARD_GET, async (event) => {
+    if (isOffline(event)) return connectionRequired();
     const available = registry.list("dashboard").filter((provider) => typeof provider.getDashboard === "function" && (!provider.requiresConfiguration || provider.isConfigured?.()));
     const result = await broker.queryProviders(available, "getDashboard", [], { timeout: 12_000 });
+    if (isOffline(event)) return connectionRequired();
     const sections = result.results.flatMap((entry) => (entry.value?.sections || [])
       .map((section) => ({ ...section, providerId: entry.providerId })));
     const hasSuccessfulProvider = result.results.length > 0;
@@ -218,11 +251,13 @@ function register() {
       error: hasSuccessfulProvider ? "" : (result.errors[0] || "Music discovery is unavailable."),
     };
   });
-  ipcMain.handle(MUSIC_IPC.DETAILS_GET, async (_, kind, item = {}) => {
+  ipcMain.handle(MUSIC_IPC.DETAILS_GET, async (event, kind, item = {}) => {
     const operation = kind === "artist" ? "getArtist" : kind === "album" ? "getAlbum" : kind === "playlist" ? "getPlaylist" : null;
     if (!operation) return { ok: false, error: "Unsupported Music detail type." };
     const preferred = registry.get(item.source?.provider, "metadata");
-    const candidates = [preferred, ...registry.list("metadata")].filter((provider, index, all) => provider && typeof provider[operation] === "function" && all.findIndex((entry) => entry?.id === provider.id) === index);
+    const localDetail = item.source?.provider === "orion-local-metadata";
+    if (isOffline(event) && !localDetail) return connectionRequired();
+    const candidates = (localDetail ? [preferred] : [preferred, ...registry.list("metadata")]).filter((provider, index, all) => provider && typeof provider[operation] === "function" && all.findIndex((entry) => entry?.id === provider.id) === index);
     for (const provider of candidates) {
       try { return { ok: true, providerId: provider.id, value: await provider[operation](item) }; } catch {}
     }
@@ -239,7 +274,8 @@ function register() {
     try { return { ok: plugins.remove(id) }; } catch (error) { return { ok: false, error: error.message }; }
   });
   ipcMain.handle(MUSIC_IPC.PLAYLISTS_LIST, () => database.listPlaylists());
-  ipcMain.handle(MUSIC_IPC.PLAYLISTS_REMOTE_LIST, async () => {
+  ipcMain.handle(MUSIC_IPC.PLAYLISTS_REMOTE_LIST, async (event) => {
+    if (isOffline(event)) return { ...connectionRequired(), sources: [] };
     const providers = registry.list("playlists").filter((provider) => typeof provider.listPlaylists === "function"
       && (!provider.requiresConfiguration || provider.isConfigured?.()));
     const response = await broker.queryProviders(providers, "listPlaylists", [], { timeout: 10_000 });
@@ -251,7 +287,8 @@ function register() {
   ipcMain.handle(MUSIC_IPC.PLAYLIST_FOLDERS_LIST, () => database.listPlaylistFolders());
   ipcMain.handle(MUSIC_IPC.PLAYLIST_FOLDERS_SAVE, (_, folder) => ({ ok: true, folder: database.savePlaylistFolder(folder || {}) }));
   ipcMain.handle(MUSIC_IPC.PLAYLIST_FOLDERS_DELETE, (_, id) => ({ ok: database.deletePlaylistFolder(id) }));
-  ipcMain.handle(MUSIC_IPC.PLAYLISTS_IMPORT, async (_, providerId, value) => {
+  ipcMain.handle(MUSIC_IPC.PLAYLISTS_IMPORT, async (event, providerId, value) => {
+    if (isOffline(event)) return connectionRequired();
     const provider = registry.get(providerId, "playlists");
     if (!provider?.importPlaylist) return { ok: false, error: "Install and enable a playlist-import plugin first." };
     try { return { ok: true, playlist: database.savePlaylist(await provider.importPlaylist(value)) }; }

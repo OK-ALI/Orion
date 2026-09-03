@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { useMusicConnection } from "../context/MusicConnectionContext";
 import { buildSignalSources } from "../services/signalSources";
 
 export default function SourcesPage({ onNavigate }) {
+  const offline = useMusicConnection() === "offline";
   const [providers, setProviders] = useState([]);
   const [notice, setNotice] = useState("");
   const load = () => Promise.resolve(window.electron?.musicListProviders?.() || [])
@@ -9,7 +11,7 @@ export default function SourcesPage({ onNavigate }) {
   useEffect(() => { load(); }, []);
 
   const sources = useMemo(() => buildSignalSources(providers), [providers]);
-  const ready = sources.filter((source) => source.setupState === "ready").length;
+  const ready = sources.filter((source) => source.setupState === "ready" && (!offline || source.id === "local-library")).length;
 
   return (
     <div className="music-page music-sources-page music-signal-page">
@@ -24,7 +26,7 @@ export default function SourcesPage({ onNavigate }) {
 
       {notice && <div className="music-plugin-notice" role="status">{notice}</div>}
       <div className="music-signal-grid">
-        {sources.map((source) => <SignalSourceCard key={source.id} source={source} onNavigate={onNavigate} />)}
+        {sources.map((source) => <SignalSourceCard key={source.id} source={source} offline={offline} onNavigate={onNavigate} />)}
       </div>
       <div className="music-security-note">
         <strong>No raw streams leave the main process.</strong>
@@ -34,9 +36,10 @@ export default function SourcesPage({ onNavigate }) {
   );
 }
 
-function SignalSourceCard({ source, onNavigate }) {
+function SignalSourceCard({ source, offline, onNavigate }) {
+  const connectionRequired = offline && source.id !== "local-library";
   const health = source.health?.status || source.setupState;
-  const disabled = source.setupState !== "ready";
+  const disabled = connectionRequired || source.setupState !== "ready";
   return (
     <article className={`music-signal-card role-${source.role} status-${health}`}>
       <header>
@@ -45,7 +48,7 @@ function SignalSourceCard({ source, onNavigate }) {
           <small>{source.roleLabel}</small>
           <h2>{source.label}</h2>
         </div>
-        <b>{source.setupState}</b>
+        <b>{connectionRequired ? "Connection required" : source.setupState}</b>
       </header>
       <p>{source.description}</p>
       <div className="music-signal-meta">
@@ -56,7 +59,7 @@ function SignalSourceCard({ source, onNavigate }) {
       <footer>
         {source.id === "local-library" && <button onClick={() => onNavigate?.("music-library")}>Open Library</button>}
         {source.id === "spotify-import" && <button disabled>Import adapter pending</button>}
-        {source.id !== "local-library" && source.id !== "spotify-import" && <button disabled={disabled}>{disabled ? "Pending" : "Ready"}</button>}
+        {source.id !== "local-library" && source.id !== "spotify-import" && <button disabled={disabled}>{connectionRequired ? "Connection required" : disabled ? "Pending" : "Ready"}</button>}
       </footer>
     </article>
   );

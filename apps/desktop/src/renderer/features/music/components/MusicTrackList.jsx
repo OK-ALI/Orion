@@ -27,6 +27,9 @@ function MoreActionsIcon() {
 
 export default function MusicTrackList({ tracks = [], empty = "No tracks found.", layout = "list", compact = false }) {
   const music = useMusic();
+  const offline = music.connectionState === "offline";
+  const unavailable = (track) => track.missing ? "Local file is missing" : offline && track.provider !== "local" ? "Connection required" : "";
+  const play = (track) => { if (!unavailable(track)) music.playTrack(track, tracks); };
   const [menuState, setMenuState] = useState(null);
   const [playlistTrack, setPlaylistTrack] = useState(null);
 
@@ -36,9 +39,9 @@ export default function MusicTrackList({ tracks = [], empty = "No tracks found."
     return <div className="moon-track-list">{tracks.map((track, index) => <div
       key={`${track.provider || "music"}:${track.id}:${index}`}
       className={`moon-track-item ${music.current?.id === track.id ? "active" : ""}`}>
-      <button className="moon-track-play" onClick={() => music.playTrack(track, tracks)} aria-label={`Play ${track.title} by ${track.artistName || "Unknown artist"}`}>
+      <button className="moon-track-play" aria-disabled={!!unavailable(track)} onClick={() => play(track)} aria-label={`Play ${track.title} by ${track.artistName || "Unknown artist"}`}>
         <MusicArtwork className="art-container" track={{ ...track, artworkUrl: track.artworkUrl || track.album?.artworkUrl }} label={`Artwork for ${track.title || track.name || "track"}`} />
-        <span className="track-info"><strong>{track.title || track.name}</strong><small>{track.artistName || "Unknown artist"}</small></span>
+        <span className="track-info"><strong>{track.title || track.name}</strong><small>{track.artistName || "Unknown artist"}</small>{unavailable(track) && <small>{unavailable(track)}</small>}</span>
       </button>
       <button className="moon-track-playlist" onClick={() => setPlaylistTrack(track)} aria-label={`Add ${track.title} to playlist`}><PlaylistAddIcon /><span>Playlist</span></button>
     </div>)}{playlistTrack && <AddToPlaylistDialog track={playlistTrack} close={() => setPlaylistTrack(null)} />}</div>;
@@ -46,11 +49,11 @@ export default function MusicTrackList({ tracks = [], empty = "No tracks found."
 
   return <div className={`music-track-list${compact ? " is-compact" : ""}`}>
     {tracks.map((track, index) => <div key={`${track.provider || "music"}:${track.id}`} className={`music-track-row${music.current?.id === track.id ? " active" : ""}`}>
-      <button className="music-track-main" onClick={() => music.playTrack(track, tracks)} aria-label={`Play ${track.title} by ${track.artistName || "Unknown artist"}`}>
+      <button className="music-track-main" aria-disabled={!!unavailable(track)} onClick={() => play(track)} aria-label={`Play ${track.title} by ${track.artistName || "Unknown artist"}`}>
         <span className="music-track-number">{music.current?.id === track.id && music.playing
           ? <i className="music-playing-bars" aria-hidden="true"><b /><b /><b /></i> : index + 1}</span>
         <MusicArtwork className="music-track-art" track={track} />
-        <span className="music-track-copy"><strong>{track.title}</strong><small>{track.artistName || "Unknown artist"}</small></span>
+        <span className="music-track-copy"><strong>{track.title}</strong><small>{track.artistName || "Unknown artist"}</small>{unavailable(track) && <small>{unavailable(track)}</small>}</span>
         <span className="music-track-album">{track.albumTitle || "Single"}</span>
         <span className="music-track-duration">{duration(track.durationMs)}</span>
       </button>
@@ -72,7 +75,7 @@ function TrackMenuItems({ music, track, close, addToPlaylist }) {
   return <>
     <button role="menuitem" onClick={() => act(() => music.playNextTrack(track))}>Play next</button>
     <button role="menuitem" onClick={() => act(() => music.addToQueue(track))}>Add to queue</button>
-    <button role="menuitem" onClick={() => act(() => music.startRadio(track))}>Start radio</button>
+    <button role="menuitem" disabled={music.connectionState === "offline"} onClick={() => act(() => music.startRadio(track))}>{music.connectionState === "offline" ? "Radio requires a connection" : "Start radio"}</button>
     <button role="menuitem" onClick={addToPlaylist}>Add to playlist</button>
     <button role="menuitem" onClick={() => act(() => {
       music.favorites?.toggleFavorite?.("track", track, track);

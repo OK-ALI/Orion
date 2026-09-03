@@ -40,12 +40,12 @@ function createLocalProviders() {
       supportsLocalFiles: true,
       async searchForTrack(track) {
         const row = database.getPrivateTrack(track.id);
-        return row?.file_path ? [{ id: row.id, providerId: "orion-local-streaming", title: row.title,
+        return row?.provider === "local" && row.file_path ? [{ id: row.id, providerId: "orion-local-streaming", title: row.title,
           artistName: row.artist_name, durationMs: row.duration_ms, local: true }] : [];
       },
       async resolveCandidate(candidate) {
         const row = database.getPrivateTrack(candidate.id);
-        if (!row?.file_path || row.missing) throw new Error("The local music file is missing.");
+        if (row?.provider !== "local" || !row.file_path || row.missing) throw new Error("The local music file is missing.");
         return { kind: "local", filePath: row.file_path, mimeType: row.mime_type, expiresAt: Date.now() + 21_600_000 };
       },
     },

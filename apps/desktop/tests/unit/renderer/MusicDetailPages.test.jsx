@@ -62,6 +62,6 @@ describe("Music artist and album details", () => {
 
     expect(screen.getByRole("heading", { name: "Known Artist" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Catalog signal unavailable.")).toBeInTheDocument());
-    expect(screen.getByTestId("detail-tracks")).toHaveTextContent("No playable tracks are available from the active sources.");
+    expect(screen.getByTestId("detail-tracks")).toHaveTextContent("Track list unavailable.");
   });
 });

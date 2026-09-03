@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import MusicAvailabilityNotice from "../components/MusicAvailabilityNotice";
 import MusicTrackList from "../components/MusicTrackList";
 import PlanetGrid from "../components/PlanetGrid";
 import StarGrid from "../components/StarGrid";
@@ -9,7 +10,8 @@ import "../../../styles/features/music/music-search-controls.css";
 function mergeResults(groups, key) {
   const map = new Map();
   for (const group of groups || []) for (const item of group.value?.[key] || []) {
-    const identity = `${String(item.name || item.title).toLowerCase()}\0${String(item.artistName || "").toLowerCase()}`;
+    const identity = key === "tracks" ? `${item.provider || item.source?.provider || group.providerId}:${item.id}`
+      : `${String(item.name || item.title).toLowerCase()}\0${String(item.artistName || "").toLowerCase()}`;
     const existing = map.get(identity);
     map.set(identity, existing ? { ...existing, providerRefs: [...(existing.providerRefs || [existing.source]), item.source].filter(Boolean) } : item);
   }
@@ -18,6 +20,7 @@ function mergeResults(groups, key) {
 
 export default function MusicSearch({ selected, onNavigate }) {
   const music = useMusic();
+  const offline = music.connectionState === "offline";
   const [query, setQuery] = useState(() => String(selected?.query || ""));
   const [scope, setScope] = useState(() => ["all", "tracks", "albums", "artists", "playlists"].includes(selected?.scope) ? selected.scope : "all");
   const [response, setResponse] = useState({ results: [], errors: [] });
@@ -30,6 +33,18 @@ export default function MusicSearch({ selected, onNavigate }) {
   }, [selected?.query, selected?.scope]);
 
   useEffect(() => {
+    setResponse({ results: [], errors: [] });
+    setLoading(true);
+    if (offline) {
+      let cancelled = false;
+      Promise.resolve(window.electron?.musicListTracks?.({ query: query.trim(), limit: 100 }))
+        .then((tracks) => {
+          if (!cancelled) setResponse({ results: [{ providerId: "orion-local-metadata", value: { tracks: tracks || [] } }], errors: [] });
+        }).catch(() => {
+          if (!cancelled) setResponse({ results: [], errors: ["Local Music search is unavailable."] });
+        }).finally(() => { if (!cancelled) setLoading(false); });
+      return () => { cancelled = true; };
+    }
     if (query.trim().length < 2) {
       let cancelled = false;
       setLoading(true);
@@ -59,7 +74,7 @@ export default function MusicSearch({ selected, onNavigate }) {
       }).finally(() => { if (!cancelled) setLoading(false); });
     }, 350);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [query]);
+  }, [query, offline]);
 
   const tracks = useMemo(() => mergeResults(response.results, "tracks"), [response]);
   const artists = useMemo(() => mergeResults(response.results, "artists"), [response]);
@@ -69,7 +84,7 @@ export default function MusicSearch({ selected, onNavigate }) {
   const topResult = artists[0] || albums[0];
   const continuation = response.results?.[0]?.continuation || null;
   const loadMore = async () => {
-    if (!continuation || loadingMore) return;
+    if (offline || !continuation || loadingMore) return;
     setLoadingMore(true);
     const result = await window.electron?.musicContinueSearch?.(query.trim(), continuation);
     if (result?.ok && result.result) setResponse((current) => {
@@ -113,7 +128,8 @@ export default function MusicSearch({ selected, onNavigate }) {
         </div>
       </div>
       {loading && <div className="music-loading-status" role="status"><span className="music-button-loader"><i aria-hidden="true" /></span><span>{query.trim().length >= 2 ? `Searching for “${query}”…` : "Mapping music to explore…"}</span></div>}
-      {!!response.errors?.length && <div className="music-provider-warning">Some sources did not respond. Available results are shown.</div>}
+      {offline && <MusicAvailabilityNotice />}
+      {!!response.errors?.length && <div className="music-provider-warning" role="status">Some sources did not respond. Available results are shown.</div>}
       {!loading && resultCount > 0 && <div className="music-result-summary"><strong>{resultCount}</strong><span>{query.trim().length >= 2 ? "matches from active signals" : "signals ready to explore"}</span></div>}
       {scope === "all" && topResult && (
         <section className="music-search-feature">
@@ -130,9 +146,9 @@ export default function MusicSearch({ selected, onNavigate }) {
       {(scope === "all" || scope === "albums") && albums.length > 0 && <section className="music-section"><div className="music-section-heading"><div><span>Releases</span><h2>Albums</h2></div></div><PlanetGrid items={albums.slice(0, 10)} onNavigate={navigateResult} /></section>}
       {(scope === "all" || scope === "playlists") && playlists.length > 0 && <section className="music-section"><div className="music-section-heading"><div><span>Collections</span><h2>Playlists</h2></div></div><div className="music-open-list">{playlists.map((playlist) => <button key={playlist.id} onClick={async () => { const result = await window.electron?.musicGetDetails?.("playlist", playlist); const values = result?.value?.tracks || []; if (values.length) music.playTrack(values[0], values); }}><strong>{playlist.title}</strong><small>Open and play</small></button>)}</div></section>}
       {(scope === "all" || scope === "tracks") && tracks.length > 0 && <section className="music-section"><div className="music-section-heading"><div><span>Playable now</span><h2>Tracks</h2></div></div><MusicTrackList tracks={tracks} layout="list" /></section>}
-      {continuation && <div className="music-load-more"><button onClick={loadMore} disabled={loadingMore}>{loadingMore ? <><span className="music-button-loader"><i /></span>Loading more…</> : "Load more"}</button></div>}
-      {query.length >= 2 && !loading && !resultCount && <div className="music-empty">No music matched “{query}”. Try a title and artist together.</div>}
-      {query.trim().length < 2 && !loading && !resultCount && <div className="music-empty"><h2>Discovery is quiet</h2><p>Search for an artist, album or track from the Music Planet header, or retry when you are online.</p><button onClick={() => setQuery("Top songs")}>Explore top songs</button></div>}
+      {!offline && continuation && <div className="music-load-more"><button onClick={loadMore} disabled={loadingMore}>{loadingMore ? <><span className="music-button-loader"><i /></span>Loading more…</> : "Load more"}</button></div>}
+      {query.length >= 2 && !loading && !resultCount && !response.errors?.length && <div className="music-empty">{offline ? `No local music matched “${query}”.` : `No music matched “${query}”. Try a title and artist together.`}</div>}
+      {!offline && !response.errors?.length && query.trim().length < 2 && !loading && !resultCount && <div className="music-empty"><h2>Discovery is quiet</h2><p>Search for an artist, album or track from the Music Planet header, or retry when you are online.</p><button onClick={() => setQuery("Top songs")}>Explore top songs</button></div>}
     </div>
   );
 }

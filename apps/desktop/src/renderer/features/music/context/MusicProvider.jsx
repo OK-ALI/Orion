@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import AudioEngine from "../player/AudioEngine";
 import { storage, STORAGE_KEYS } from "../../../services/settingsStore";
 import { getPlaybackOwner } from "../../../app/playback/PlaybackCoordinator";
@@ -7,7 +7,19 @@ import { createVisualBus } from "../visual/musicVisualEngine";
 import { deterministicPalette, extractArtworkPalette } from "../visual/artworkPalette";
 import { useFavoritesStore, usePluginStore, useProvidersStore } from "../stores/musicStores";
 
+import { MusicConnectionContext } from "./MusicConnectionContext";
+
 const MusicContext = createContext(null);
+
+export function MusicConnectionBridge({ connectionState }) {
+  const music = useOptionalMusic();
+  const setConnectionState = music?.setConnectionState;
+  useLayoutEffect(() => {
+    setConnectionState?.(connectionState);
+    window.electron?.musicSetConnectionState?.(connectionState)?.catch?.(() => {});
+  }, [connectionState, setConnectionState]);
+  return null;
+}
 
 function readVisualPreferences() {
   const storedDockMode = storage.get(STORAGE_KEYS.MUSIC_PLAYER_DOCK_MODE);
@@ -45,6 +57,9 @@ export function MusicProvider({ children }) {
   const plugins = usePluginStore();
   const providers = useProvidersStore();
 
+  const [connectionState, setConnectionState] = useState("unknown");
+  const offlineRef = useRef(false);
+  offlineRef.current = connectionState === "offline";
   const [queue, setQueue] = useState([]);
   const [index, setIndex] = useState(-1);
   const [playing, setPlaying] = useState(false);
@@ -146,6 +161,12 @@ export function MusicProvider({ children }) {
     // audio element can continue playing it while the next source is loading.
     setStream(null);
     setPlaybackStatus("loading");
+    if (offlineRef.current && current.provider !== "local") {
+      shouldAutoplayRef.current = false;
+      setStream({ error: "Remote music requires a connection." });
+      setPlaying(false); setPlaybackStatus("error");
+      return undefined;
+    }
     window.electron?.musicResolveTrack?.(current).then((value) => {
       if (cancelled || resolveGeneration !== resolveGenerationRef.current) return;
       if (!value?.ok) {
@@ -226,6 +247,7 @@ export function MusicProvider({ children }) {
 
   const startRadio = useCallback(async (item = queueRef.current[indexRef.current]) => {
     if (!item) return { ok: false, error: "Choose a track, album or artist first." };
+    if (offlineRef.current) return { ok: false, error: "Radio requires a connection." };
     engineRef.current?.unlockAudio?.();
     const result = await window.electron?.musicGetRadio?.(item);
     if (!result?.ok || !result.tracks?.length) return result || { ok: false, error: "Radio is unavailable." };
@@ -254,6 +276,7 @@ export function MusicProvider({ children }) {
     } else if (currentIndex + 1 < items.length) next = currentIndex + 1;
     else if (repeat === "all") next = 0;
     if (next < 0) {
+      if (offlineRef.current) { setPlaying(false); setPlaybackStatus("paused"); return; }
       const seed = items[currentIndex];
       window.electron?.musicGetRadio?.(seed).then((result) => {
         const existing = new Set(items.map((item) => `${item.provider || ""}:${item.id}`));
@@ -296,10 +319,17 @@ export function MusicProvider({ children }) {
 
   const loadLyrics = useCallback(async () => {
     if (!current) return;
-    setLyrics({ status: "loading", value: null, error: "" });
-    const result = await window.electron?.musicGetLyrics?.(current);
-    setLyrics(result?.ok ? { status: "ready", value: result.lyrics, error: "" }
-      : { status: "error", value: null, error: result?.error || "No lyrics are available." });
+    const generation = resolveGenerationRef.current;
+    setLyrics((previous) => previous.value ? previous : { status: "loading", value: null, error: "" });
+    try {
+      const result = await window.electron?.musicGetLyrics?.(current);
+      if (generation !== resolveGenerationRef.current) return;
+      setLyrics((previous) => result?.ok ? { status: "ready", value: result.lyrics, error: "" }
+        : previous.value ? previous : { status: "error", value: null, error: result?.error || "Lyrics are unavailable." });
+    } catch {
+      if (generation === resolveGenerationRef.current) setLyrics((previous) => previous.value ? previous
+        : { status: "error", value: null, error: "Lyrics are unavailable. Try again later." });
+    }
   }, [current]);
 
   const loadCandidates = useCallback(async () => {
@@ -364,7 +394,7 @@ export function MusicProvider({ children }) {
     return () => window.removeEventListener("orion:video-playback-start", pause);
   }, []);
 
-  const value = useMemo(() => ({ queue, setQueue, index, current, playing, setPlaying, togglePlaying,
+  const value = useMemo(() => ({ connectionState, setConnectionState, queue, setQueue, index, current, playing, setPlaying, togglePlaying,
     playbackStatus, setPlaybackStatus, stream, progress, setProgress, buffered, setBuffered,
     volume, setVolume, muted, setMuted, toggleMute, repeat, setRepeat, shuffle, setShuffle,
     panel, setPanel, lyrics, loadLyrics, candidates, loadCandidates, selectCandidate,
@@ -373,13 +403,15 @@ export function MusicProvider({ children }) {
     stop, retryStream, engineRef, visualBus, visualPreferences, analyserState, setAnalyserState,
     analyserDiagnostics, setAnalyserDiagnostics, artwork, immersive, setImmersive,
     favorites, plugins, providers }),
-  [buffered, candidates, current, index, loadCandidates, loadLyrics, lyrics, muted, panel,
+  [connectionState, buffered, candidates, current, index, loadCandidates, loadLyrics, lyrics, muted, panel,
     addToQueue, clearUpcoming, playNext, playNextTrack, playPrevious, playTrack, playbackStatus, playing, progress, queue, removeFromQueue, moveQueueItem, startRadio,
     repeat, retryStream, seekBy, seekTo, selectCandidate, selectQueueItem, setVolume, shuffle,
     stop, stream, toggleMute, togglePlaying, volume, visualBus, visualPreferences, analyserState, analyserDiagnostics, artwork, immersive,
     favorites, plugins, providers]);
 
-  return <MusicContext.Provider value={value}>{children}<AudioEngine controller={value} /></MusicContext.Provider>;
+  return <MusicContext.Provider value={value}><MusicConnectionContext.Provider value={connectionState}>
+    {children}<AudioEngine controller={value} />
+  </MusicConnectionContext.Provider></MusicContext.Provider>;
 }
 
 export function useOptionalMusic() {

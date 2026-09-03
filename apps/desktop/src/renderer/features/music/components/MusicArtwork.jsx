@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useMusicConnection } from "../context/MusicConnectionContext";
 import { deterministicPalette } from "../visual/artworkPalette";
 import "../../../styles/features/music/artwork-fallback.css";
 
 export default function MusicArtwork({ track, currentArtwork, className = "", label = "", children, variant = "track", fit = "cover" }) {
+  const offline = useMusicConnection() === "offline";
   const [url, setUrl] = useState(currentArtwork?.url || "");
   const [status, setStatus] = useState(currentArtwork?.url ? "ready" : "loading");
   const palette = currentArtwork?.palette || deterministicPalette(`${track?.artistName}:${track?.albumTitle}:${track?.title}`);
@@ -18,7 +20,7 @@ export default function MusicArtwork({ track, currentArtwork, className = "", la
     }).catch(() => { if (!cancelled) setStatus("error"); });
     return () => { cancelled = true; };
   }, [track?.id, track?.artworkUrl, track?.profileImageUrl, track?.thumbnail, currentArtwork?.url]);
-  return <span className={`music-artwork is-${variant} fit-${fit} artwork-${status} ${className}`} role={label ? "img" : undefined} aria-label={label || undefined}
+  return <span className={`music-artwork is-${variant} fit-${fit} artwork-${status} ${className}`} role={label ? "img" : undefined} aria-label={label ? `${label}${offline && status === "error" ? " — artwork requires a connection if no local copy is available" : ""}` : undefined}
     style={{ "--art-base": palette.base, "--art-primary": palette.primary, "--art-spectral": palette.spectral,
       ...(url ? { backgroundImage: `url(${url})` } : {}) }}>
     {!url && status === "loading" && <span className="music-artwork-shimmer" aria-hidden="true" />}

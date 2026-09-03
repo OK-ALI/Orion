@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const registry = require("../providers/registry");
+const database = require("../database");
 const tokens = require("./tokenRegistry");
 
 const candidateGrants = new Map();
@@ -46,7 +47,16 @@ function providerOrder(providerId) {
 }
 
 async function discoverCandidates(track, providerId) {
-  const providers = providerOrder(providerId);
+  if (track?.provider === "local") {
+    const row = database.getPrivateTrack(track.id);
+    if (row?.provider !== "local" || !row.file_path || row.missing) throw new Error("The local music file is missing.");
+    const local = registry.get("orion-local-streaming", "streaming");
+    if (!local) throw new Error("The local Music provider is unavailable.");
+    const candidates = await local.searchForTrack(track);
+    if (!candidates?.length) throw new Error("The local music file is missing.");
+    return { candidates, errors: [] };
+  }
+  const providers = providerOrder(providerId).filter((provider) => provider.id !== "orion-local-streaming");
   if (!providers.length) throw new Error("No configured streaming provider can play this track.");
   const errors = [];
   const candidates = [];
@@ -111,6 +121,7 @@ async function resolveCandidate(candidate, providerId, { probe = true } = {}) {
 
 async function resolveTrack(track, providerId) {
   const { candidates, errors } = await discoverCandidates(track, providerId);
+  if (track?.provider === "local") return { ...(await resolveCandidate(candidates[0], "orion-local-streaming")), attempts: 1 };
   if (!candidates.length) {
     const toolError = errors.find((entry) => /tools are not installed/i.test(entry.message));
     throw new Error(toolError?.message || "No installed music source could find a playable version of this track.");
@@ -138,10 +149,11 @@ async function listCandidateSummaries(track, providerId) {
   });
 }
 
-async function resolveCandidateGrant(id) {
+async function resolveCandidateGrant(id, { localOnly = false } = {}) {
   const grant = candidateGrants.get(String(id || ""));
   candidateGrants.delete(String(id || ""));
   if (!grant || grant.expiresAt < Date.now()) throw new Error("That music source expired. Refresh sources and try again.");
+  if (localOnly && grant.providerId !== "orion-local-streaming") throw new Error("Remote music requires a connection.");
   return resolveCandidate(grant.candidate, grant.providerId);
 }
 
