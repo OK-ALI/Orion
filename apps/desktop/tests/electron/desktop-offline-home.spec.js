@@ -229,20 +229,32 @@ test("offline Home keeps local actions, exact local playback and theme-aware key
     await expect.poll(() => video.evaluate((element) => element.currentTime)).toBeGreaterThanOrEqual(120);
     expect(await page.evaluate(() => window.__homeRemoteRequests)).toBe(remoteRequests);
     expect(await page.locator(".home-local-continuity").count()).toBe(1);
-    await video.evaluate((element) => element.pause());
-    await player.getByRole("button", { name: "Close player", exact: true }).click();
-    await expect(page.locator(".search-orb")).toHaveAttribute("aria-hidden", "false");
-    // Restored product connectivity must not globally hide the API-session warning.
-    // The session was initialized as unreachable; its independent owner is unchanged.
+    const activePlayer = await video.elementHandle();
+    const originalGrant = await video.getAttribute("src");
+    const position = await video.evaluate((element) => element.currentTime);
+    const recoveryBoot = await page.evaluate(() => window.__homeBootId);
     await page.evaluate(() => {
+      window.__homeRecoveries = [];
+      window.addEventListener("orion:network-restored", (event) => window.__homeRecoveries.push(event.detail.recoveryEpoch));
       window.__homeOnline = true;
       window.dispatchEvent(new Event("online"));
     });
     await expect(page.locator(".titlebar-network")).toHaveClass(/is-online/);
+    expect(await video.evaluate((element, original) => element === original, activePlayer)).toBe(true);
+    expect(await video.getAttribute("src")).toBe(originalGrant);
+    expect(await video.evaluate((element) => element.currentTime)).toBeGreaterThanOrEqual(position);
+    expect(await video.evaluate((element) => element.paused)).toBe(false);
+    expect(await page.evaluate(() => window.__homeBootId)).toBe(recoveryBoot);
+    expect(await page.evaluate(() => window.__homeRecoveries)).toEqual([1]);
+    await expect(page.getByRole("status").filter({ hasText: "Connection restored" })).toBeVisible();
+    await video.evaluate((element) => element.pause());
+    await player.getByRole("button", { name: "Close player", exact: true }).click();
+    await expect(page.locator(".search-orb")).toHaveAttribute("aria-hidden", "false");
     await expect(home).toHaveCount(0);
     await expect(page.locator(".fade-in.homepage-container")).toBeVisible();
-    await expect(page.locator(".api-status-banner")).toContainText("Cannot reach TMDB");
-    await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+    // Slice D now revalidates the API session through the connection owner.
+    await expect(page.locator(".api-status-banner")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Retry", exact: true })).toHaveCount(0);
     await expect(page.locator(".homepage-content")).toHaveCSS("margin-top", "-38px");
     await expect(page.locator(".homepage-content")).toHaveCSS("display", "block");
     expect(errors).toEqual([]);

@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMusicConnection } from "../context/MusicConnectionContext";
+import { useOptionalMusic } from "../context/MusicProvider";
+import { useMusicConnection, isMusicRemoteEligible } from "../context/MusicConnectionContext";
 import { buildSignalSources } from "../services/signalSources";
 
 export default function SourcesPage({ onNavigate }) {
-  const offline = useMusicConnection() === "offline";
+  const offline = !isMusicRemoteEligible(useMusicConnection());
+  const recoveryEpoch = useOptionalMusic()?.recoveryEpoch || 0;
   const [providers, setProviders] = useState([]);
   const [notice, setNotice] = useState("");
   const load = () => Promise.resolve(window.electron?.musicListProviders?.() || [])
     .then(setProviders).catch(() => setNotice("Signal source health could not be read."));
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [recoveryEpoch]);
 
   const sources = useMemo(() => buildSignalSources(providers), [providers]);
   const ready = sources.filter((source) => source.setupState === "ready" && (!offline || source.id === "local-library")).length;

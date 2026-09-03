@@ -21,7 +21,8 @@ function SmartConnectSignal({ connected, paired }) {
   );
 }
 
-export default function SmartConnectModal({ onClose }) {
+export default function SmartConnectModal({ onClose, connectionState = "online" }) {
+  const [lanUnavailable, setLanUnavailable] = useState(false);
   const [pin, setPin] = useState("------");
   const [pinExpiresAt, setPinExpiresAt] = useState(0);
   const [secondsRemaining, setSecondsRemaining] = useState(0);
@@ -44,6 +45,7 @@ export default function SmartConnectModal({ onClose }) {
     if (info.pin) setPin(info.pin);
     if (info.pinExpiresAt) setPinExpiresAt(Number(info.pinExpiresAt));
     if (info.qrDataUrl) setQrDataUrl(info.qrDataUrl);
+    if (Array.isArray(info.availableIps)) setLanUnavailable(info.availableIps.length === 0);
     if (info.ip) setDesktopAddress(`${info.ip}:${Number(info.port || 8924)}`);
     setPendingPairing(info.pendingPairing || null);
     setNetworkPolicy(info.networkPolicy || null);
@@ -166,6 +168,16 @@ export default function SmartConnectModal({ onClose }) {
           </p>
         </div>
 
+        {connectionState === "offline" && (
+          <div className="smart-connect-verification" role="status" aria-live="polite">
+            Internet unavailable. Orion Connect can still work with devices on your local network.
+          </div>
+        )}
+        {lanUnavailable && (
+          <div className="smart-connect-verification" role="status">
+            No local network address is available. Join a local Wi-Fi or wired network to pair devices.
+          </div>
+        )}
         {networkPolicy?.publicNetwork && !networkPolicy?.allowed && (
           <div className="smart-connect-verification" role="alert">
             <strong>Public network blocked</strong>
@@ -216,7 +228,7 @@ export default function SmartConnectModal({ onClose }) {
                 boxShadow: "var(--shadow-glow)",
               }}
             >
-              {qrDataUrl
+              {lanUnavailable ? <span>Local network required</span> : qrDataUrl
                 ? <img src={qrDataUrl} alt="Smart Connect QR Code" style={{ width: 124, height: 124 }} />
                 : <span style={{ color: "var(--bg-base)", fontSize: 12, fontWeight: 700 }}>Preparing secure QR…</span>}
             </div>

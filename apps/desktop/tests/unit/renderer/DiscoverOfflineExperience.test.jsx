@@ -137,3 +137,18 @@ describe("Slice B Discover connection honesty", () => {
     expect(screen.queryByRole("button", { name: story.title })).not.toBeInTheDocument(); noFakeEmpty();
   });
 });
+
+it("rehydrates the same Discover query after recovery, retaining existing cards during the check", async () => {
+  const model = props("online");
+  const view = render(<DiscoverPage {...model} />);
+  fireEvent.click(screen.getByRole("button", { name: "Hollywood" }));
+  await screen.findByText(story.title);
+  view.rerender(<DiscoverPage {...model} connectionState="offline" offline />);
+  const card = screen.getByText(story.title);
+  view.rerender(<DiscoverPage {...model} connectionState="reconnecting" />);
+  expect(screen.getByText(story.title)).toBe(card);
+  mocks.tmdbFetch.mockClear();
+  view.rerender(<DiscoverPage {...model} connectionState="online" />);
+  await waitFor(() => expect(mocks.tmdbFetch).toHaveBeenCalled());
+  expect(screen.getByText(story.title)).toBeInTheDocument();
+});

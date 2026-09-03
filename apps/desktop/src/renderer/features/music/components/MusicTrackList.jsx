@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMusic } from "../context/MusicProvider";
+import { isMusicRemoteEligible } from "../context/MusicConnectionContext";
 import MusicArtwork from "./MusicArtwork";
 import AddToPlaylistDialog from "./AddToPlaylistDialog";
 import MusicTrackMenuPortal from "./MusicTrackMenuPortal";
@@ -27,7 +28,7 @@ function MoreActionsIcon() {
 
 export default function MusicTrackList({ tracks = [], empty = "No tracks found.", layout = "list", compact = false }) {
   const music = useMusic();
-  const offline = music.connectionState === "offline";
+  const offline = !isMusicRemoteEligible(music.connectionState);
   const unavailable = (track) => track.missing ? "Local file is missing" : offline && track.provider !== "local" ? "Connection required" : "";
   const play = (track) => { if (!unavailable(track)) music.playTrack(track, tracks); };
   const [menuState, setMenuState] = useState(null);

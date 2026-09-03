@@ -31,3 +31,20 @@ describe("SmartConnectModal signal", () => {
     }, "is-connected");
   });
 });
+
+it("keeps LAN pairing and QR available while internet is offline, and distinguishes unavailable LAN", async () => {
+  const info = { devices: [], pin: "123456", pinExpiresAt: Date.now() + 60_000, ip: "192.168.1.8", availableIps: ["192.168.1.8"], qrDataUrl: "data:image/png;base64,fixture" };
+  let receive;
+  window.electron = {
+    getSmartConnectInfo: vi.fn().mockResolvedValue(info),
+    onSmartConnectStatus: vi.fn((callback) => { receive = callback; return () => {}; }),
+  };
+  const view = render(<SmartConnectModal connectionState="offline" onClose={vi.fn()} />);
+  await waitFor(() => expect(view.getByText(/Internet unavailable/)).toBeInTheDocument());
+  expect(view.getByText(/devices on your local network/)).toBeInTheDocument();
+  expect(view.container.querySelector('img[src="data:image/png;base64,fixture"]')).toBeInTheDocument();
+  expect(view.getByText("192.168.1.8:8924")).toBeInTheDocument();
+  const { act } = await import("@testing-library/react");
+  act(() => receive({ ...info, availableIps: [], ip: "127.0.0.1" }));
+  expect(view.getByText(/No local network address/)).toBeInTheDocument();
+});

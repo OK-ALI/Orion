@@ -36,6 +36,7 @@ export default function HomePage({
   inProgress,
   offline,
   connectionState = offline ? "offline" : "online",
+  recoveryEpoch = 0,
   downloads = [],
   onPlayLocal,
   onCheckConnection,
@@ -50,6 +51,7 @@ export default function HomePage({
   onSave,
   isSaved,
 }) {
+  const canRequest = connectionState === "online" || connectionState === "degraded";
   const [recommendedItems, setRecommendedItems] = useState([]);
   const [topRatedItems, setTopRatedItems] = useState([]);
   const [kDramaItems, setKDramaItems] = useState([]);
@@ -112,7 +114,7 @@ export default function HomePage({
 
   // Personalised recommendations based on history
   useEffect(() => {
-    if (!apiKey || offline || !history || history.length === 0) return;
+    if (!apiKey || !canRequest || !history || history.length === 0) return;
     const sources = getRecentHistoryItems(history, 5);
     if (sources.length === 0) return;
 
@@ -123,14 +125,15 @@ export default function HomePage({
 
     const fetches = sources.map((source) => {
       const type = source.media_type === "tv" ? "tv" : "movie";
-      return tmdbFetch(`/${type}/${source.id}/recommendations`, apiKey)
+      return tmdbFetch(`/${type}/${source.id}/recommendations`, apiKey, { signal: controller.signal })
         .then((data) => {
+          if (controller.signal.aborted) return [];
           const results = (data.results || []).map((i) => ({
             ...i,
             media_type: type,
           }));
           if (results.length > 0) return results;
-          return tmdbFetch(`/${type}/${source.id}/similar`, apiKey).then((d) =>
+          return tmdbFetch(`/${type}/${source.id}/similar`, apiKey, { signal: controller.signal }).then((d) =>
             (d.results || []).map((i) => ({ ...i, media_type: type })),
           );
         })
@@ -139,6 +142,7 @@ export default function HomePage({
 
     Promise.all(fetches)
       .then((arrays) => {
+        if (controller.signal.aborted) return;
         const merged = [];
         const maxLen = Math.max(...arrays.map((a) => a.length));
         for (let i = 0; i < maxLen; i++) {
@@ -162,17 +166,18 @@ export default function HomePage({
       });
 
     return () => controller.abort();
-  }, [apiKey, offline, history?.length]);
+  }, [apiKey, canRequest, recoveryEpoch, history?.length]);
 
   // Fetch top rated movies + TV
   useEffect(() => {
-    if (!apiKey || offline) return;
+    if (!apiKey || !canRequest) return;
     const controller = new AbortController();
     Promise.all([
-      tmdbFetch("/movie/top_rated?page=1", apiKey),
-      tmdbFetch("/tv/top_rated?page=1", apiKey),
+      tmdbFetch("/movie/top_rated?page=1", apiKey, { signal: controller.signal }),
+      tmdbFetch("/tv/top_rated?page=1", apiKey, { signal: controller.signal }),
     ])
       .then(([moviesData, tvData]) => {
+        if (controller.signal.aborted) return;
         const movies = (moviesData.results || [])
           .slice(0, 8)
           .map((i) => ({ ...i, media_type: "movie" }));
@@ -192,17 +197,19 @@ export default function HomePage({
         console.warn("Top rated fetch failed", e);
       });
     return () => controller.abort();
-  }, [apiKey, offline]);
+  }, [apiKey, canRequest, recoveryEpoch]);
 
   // Fetch Korean drama / K-series row.
   useEffect(() => {
-    if (!apiKey || offline) return;
+    if (!apiKey || !canRequest) return;
     const controller = new AbortController();
     tmdbFetch(
       "/discover/tv?with_original_language=ko&with_genres=18&sort_by=popularity.desc&vote_count.gte=80&page=1",
       apiKey,
+      { signal: controller.signal },
     )
       .then((data) => {
+        if (controller.signal.aborted) return;
         const results = (data.results || [])
           .filter((i) => i.poster_path || i.backdrop_path)
           .slice(0, 20)
@@ -213,7 +220,7 @@ export default function HomePage({
         console.warn("K-drama fetch failed", e);
       });
     return () => controller.abort();
-  }, [apiKey, offline]);
+  }, [apiKey, canRequest, recoveryEpoch]);
 
   const trendingMovieItems = useMemo(
     () => trending.slice(0, 20).map((i) => ({ ...i, media_type: "movie" })),

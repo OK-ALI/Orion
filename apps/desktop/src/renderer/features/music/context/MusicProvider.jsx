@@ -7,17 +7,19 @@ import { createVisualBus } from "../visual/musicVisualEngine";
 import { deterministicPalette, extractArtworkPalette } from "../visual/artworkPalette";
 import { useFavoritesStore, usePluginStore, useProvidersStore } from "../stores/musicStores";
 
-import { MusicConnectionContext } from "./MusicConnectionContext";
+import { MusicConnectionContext, isMusicRemoteEligible } from "./MusicConnectionContext";
 
 const MusicContext = createContext(null);
 
-export function MusicConnectionBridge({ connectionState }) {
+export function MusicConnectionBridge({ connectionState, recoveryEpoch = 0 }) {
   const music = useOptionalMusic();
   const setConnectionState = music?.setConnectionState;
+  const acceptRecoveryEpoch = music?.acceptRecoveryEpoch;
   useLayoutEffect(() => {
     setConnectionState?.(connectionState);
     window.electron?.musicSetConnectionState?.(connectionState)?.catch?.(() => {});
-  }, [connectionState, setConnectionState]);
+    if (connectionState === "online") acceptRecoveryEpoch?.(recoveryEpoch);
+  }, [connectionState, setConnectionState, recoveryEpoch, acceptRecoveryEpoch]);
   return null;
 }
 
@@ -59,7 +61,16 @@ export function MusicProvider({ children }) {
 
   const [connectionState, setConnectionState] = useState("unknown");
   const offlineRef = useRef(false);
-  offlineRef.current = connectionState === "offline";
+  offlineRef.current = !isMusicRemoteEligible(connectionState);
+  const [recoveryEpoch, setRecoveryEpoch] = useState(0);
+  const handledRecoveryRef = useRef(0);
+  const refreshProviders = providers.loadFromDisk;
+  const acceptRecoveryEpoch = useCallback((epoch) => {
+    if (!Number.isSafeInteger(epoch) || epoch <= handledRecoveryRef.current) return;
+    handledRecoveryRef.current = epoch;
+    setRecoveryEpoch(epoch);
+    Promise.resolve(refreshProviders?.()).catch(() => {});
+  }, [refreshProviders]);
   const [queue, setQueue] = useState([]);
   const [index, setIndex] = useState(-1);
   const [playing, setPlaying] = useState(false);
@@ -394,7 +405,7 @@ export function MusicProvider({ children }) {
     return () => window.removeEventListener("orion:video-playback-start", pause);
   }, []);
 
-  const value = useMemo(() => ({ connectionState, setConnectionState, queue, setQueue, index, current, playing, setPlaying, togglePlaying,
+  const value = useMemo(() => ({ connectionState, setConnectionState, recoveryEpoch, acceptRecoveryEpoch, queue, setQueue, index, current, playing, setPlaying, togglePlaying,
     playbackStatus, setPlaybackStatus, stream, progress, setProgress, buffered, setBuffered,
     volume, setVolume, muted, setMuted, toggleMute, repeat, setRepeat, shuffle, setShuffle,
     panel, setPanel, lyrics, loadLyrics, candidates, loadCandidates, selectCandidate,
@@ -403,7 +414,7 @@ export function MusicProvider({ children }) {
     stop, retryStream, engineRef, visualBus, visualPreferences, analyserState, setAnalyserState,
     analyserDiagnostics, setAnalyserDiagnostics, artwork, immersive, setImmersive,
     favorites, plugins, providers }),
-  [connectionState, buffered, candidates, current, index, loadCandidates, loadLyrics, lyrics, muted, panel,
+  [connectionState, recoveryEpoch, acceptRecoveryEpoch, buffered, candidates, current, index, loadCandidates, loadLyrics, lyrics, muted, panel,
     addToQueue, clearUpcoming, playNext, playNextTrack, playPrevious, playTrack, playbackStatus, playing, progress, queue, removeFromQueue, moveQueueItem, startRadio,
     repeat, retryStream, seekBy, seekTo, selectCandidate, selectQueueItem, setVolume, shuffle,
     stop, stream, toggleMute, togglePlaying, volume, visualBus, visualPreferences, analyserState, analyserDiagnostics, artwork, immersive,

@@ -145,3 +145,62 @@ describe("Get Orion Mobile distribution page", () => {
   });
 
 });
+
+describe("Slice D release connection contract", () => {
+  beforeEach(() => { window.localStorage.clear(); fetchOrionMobileDistributionStatus.mockReset(); QRCode.toDataURL.mockReset().mockResolvedValue("data:image/png;base64,verified"); window.electron = { openExternal: vi.fn() }; });
+  it("offline is not unpublished; reconnect restores verified actions without remounting the page", async () => {
+    const check = vi.fn();
+    fetchOrionMobileDistributionStatus.mockResolvedValue(distribution({ version: "2.2.14", apk: "orion.apk" }));
+    const view = render(<GetOrionMobilePage connectionState="offline" onCheckConnection={check} recoveryEpoch={0} />);
+    const heading = screen.getByRole("heading", { name: "Take your universe with you." });
+    expect(screen.getByRole("status")).toHaveTextContent(/Internet required/i);
+    expect(screen.queryByText(/Awaiting first Mobile release/)).not.toBeInTheDocument();
+    expect(screen.queryAllByText("Not published")).toHaveLength(0);
+    expect(fetchOrionMobileDistributionStatus).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Check connection" }));
+    expect(check).toHaveBeenCalledTimes(1);
+    view.rerender(<GetOrionMobilePage connectionState="reconnecting" onCheckConnection={check} recoveryEpoch={0} />);
+    expect(fetchOrionMobileDistributionStatus).not.toHaveBeenCalled();
+    view.rerender(<GetOrionMobilePage connectionState="online" onCheckConnection={check} recoveryEpoch={1} />);
+    expect(await screen.findByRole("button", { name: /Download APK/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Take your universe with you." })).toBe(heading);
+    expect(fetchOrionMobileDistributionStatus).toHaveBeenCalledTimes(1);
+    view.rerender(<GetOrionMobilePage connectionState="offline" onCheckConnection={check} recoveryEpoch={1} />);
+    expect(screen.queryByRole("button", { name: /Download APK/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /installation QR/ })).not.toBeInTheDocument();
+  });
+  it("ignores a late release response after going offline", async () => {
+    let finish;
+    fetchOrionMobileDistributionStatus.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const view = render(<GetOrionMobilePage connectionState="online" />);
+    view.rerender(<GetOrionMobilePage connectionState="offline" />);
+    const { act } = await import("@testing-library/react");
+    await act(async () => finish(distribution({ version: "2.2.14", apk: "orion.apk" })));
+    expect(screen.getByRole("status")).toHaveTextContent(/Internet required/i);
+    expect(screen.queryByRole("button", { name: /Download APK/ })).not.toBeInTheDocument();
+  });
+  it("bounds an unresponsive release owner and keeps network diagnostics out of the UI", async () => {
+    vi.useFakeTimers();
+    try {
+      fetchOrionMobileDistributionStatus.mockReturnValue(new Promise(() => {}));
+      render(<GetOrionMobilePage />);
+      const { act } = await import("@testing-library/react");
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_001); });
+      expect(screen.getByRole("status")).toHaveTextContent("Release check unavailable");
+      expect(screen.queryAllByText("Not published")).toHaveLength(0);
+      expect(screen.getByRole("button", { name: "Check connection" })).toBeInTheDocument();
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+it("Check connection requeries a failed release service even when internet remains online", async () => {
+  window.localStorage.clear();
+  fetchOrionMobileDistributionStatus.mockReset().mockRejectedValueOnce(new Error("fixture")).mockResolvedValue(distribution({ version: "2.2.14", apk: "orion.apk" }));
+  const recheck = vi.fn().mockResolvedValue(undefined);
+  render(<GetOrionMobilePage connectionState="online" onCheckConnection={recheck} />);
+  await screen.findByText("Release check unavailable");
+  fireEvent.click(screen.getByRole("button", { name: "Check connection" }));
+  await waitFor(() => expect(fetchOrionMobileDistributionStatus).toHaveBeenCalledTimes(2));
+  expect(recheck).toHaveBeenCalledTimes(1);
+  expect(await screen.findByRole("button", { name: /Download APK/ })).toBeInTheDocument();
+});

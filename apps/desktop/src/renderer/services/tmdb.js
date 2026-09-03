@@ -62,3 +62,19 @@ export const fetchEpisodeGroup = async (groupId, apiKey) => {
 // imports (like `imgUrl`, `fetchAnilistData`, source registry constants) keep working.
 export * from "@orion/shared/api";
 export * from "@orion/shared/sources";
+
+// Reachability must never be satisfied by the shared content response cache.
+// The connection owner supplies cancellation and the bounded validation deadline.
+export async function validateTmdbService(apiKey, { signal } = {}) {
+  const response = await fetch("https://api.themoviedb.org/3/configuration", {
+    cache: "no-store",
+    signal,
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  Promise.resolve(response.body?.cancel?.()).catch(() => {});
+  if (!response.ok) {
+    const error = new Error("Metadata service unavailable");
+    error.status = response.status;
+    throw error;
+  }
+}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useOptionalMusic } from "../../features/music/context/MusicProvider";
 
 export const MUSIC_QUICK_FILTERS = [
   ["all", "All"],
@@ -70,6 +71,7 @@ function flattenResults(groups, filter) {
 }
 
 export function useMusicQuickSearch(query, filter) {
+  const music = useOptionalMusic();
   const [response, setResponse] = useState({ results: [], errors: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -101,8 +103,8 @@ export function useMusicQuickSearch(query, filter) {
         })
         .finally(() => { if (requestRef.current === requestId) setLoading(false); });
     }, 300);
-    return () => window.clearTimeout(timer);
-  }, [query]);
+    return () => { window.clearTimeout(timer); requestRef.current += 1; };
+  }, [query, music?.connectionState, music?.recoveryEpoch]);
 
   return useMemo(() => ({ ...flattenResults(response.results, filter), loading, error }), [error, filter, loading, response.results]);
 }

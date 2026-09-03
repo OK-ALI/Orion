@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import { useMusic } from "../context/MusicProvider";
+import { isMusicRemoteEligible } from "../context/MusicConnectionContext";
 import MusicArtwork from "../components/MusicArtwork";
 import AddToPlaylistDialog from "../components/AddToPlaylistDialog";
 import { computeThemeTokens } from "../visual/musicThemeTokens";
@@ -362,7 +363,7 @@ const PlayerPanel = forwardRef(function PlayerPanel({ music, close, type, placem
         {type === "queue" && <QueuePanel music={music} />}
         {type === "lyrics" && <LyricsContent lyrics={music.lyrics} />}
         {type === "more" && <div className="music-panel-actions" role="menu">
-          <button role="menuitem" disabled={music.connectionState === "offline"} onClick={() => { music.startRadio(); close(); }}>{music.connectionState === "offline" ? "Radio requires a connection" : "Start track radio"}</button>
+          <button role="menuitem" disabled={!isMusicRemoteEligible(music.connectionState)} onClick={() => { music.startRadio(); close(); }}>{!isMusicRemoteEligible(music.connectionState) ? "Radio requires a connection" : "Start track radio"}</button>
           <button role="menuitem" onClick={() => { close(); addToPlaylist(); }}>Add to playlist</button>
           <button role="menuitem" onClick={(event) => openPanel("queue", event.currentTarget)}>Open queue</button>
           <button role="menuitem" onClick={(event) => { music.loadLyrics(); openPanel("lyrics", event.currentTarget); }}>Open lyrics</button>

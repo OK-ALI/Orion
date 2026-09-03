@@ -5,6 +5,7 @@ import PlanetGrid from "../components/PlanetGrid";
 import StarGrid from "../components/StarGrid";
 import MusicArtwork from "../components/MusicArtwork";
 import { useMusic } from "../context/MusicProvider";
+import { isMusicRemoteEligible } from "../context/MusicConnectionContext";
 import "../../../styles/features/music/music-search-controls.css";
 
 function mergeResults(groups, key) {
@@ -20,7 +21,7 @@ function mergeResults(groups, key) {
 
 export default function MusicSearch({ selected, onNavigate }) {
   const music = useMusic();
-  const offline = music.connectionState === "offline";
+  const offline = !isMusicRemoteEligible(music.connectionState);
   const [query, setQuery] = useState(() => String(selected?.query || ""));
   const [scope, setScope] = useState(() => ["all", "tracks", "albums", "artists", "playlists"].includes(selected?.scope) ? selected.scope : "all");
   const [response, setResponse] = useState({ results: [], errors: [] });
@@ -74,7 +75,7 @@ export default function MusicSearch({ selected, onNavigate }) {
       }).finally(() => { if (!cancelled) setLoading(false); });
     }, 350);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [query, offline]);
+  }, [query, offline, music.recoveryEpoch]);
 
   const tracks = useMemo(() => mergeResults(response.results, "tracks"), [response]);
   const artists = useMemo(() => mergeResults(response.results, "artists"), [response]);
@@ -128,7 +129,7 @@ export default function MusicSearch({ selected, onNavigate }) {
         </div>
       </div>
       {loading && <div className="music-loading-status" role="status"><span className="music-button-loader"><i aria-hidden="true" /></span><span>{query.trim().length >= 2 ? `Searching for “${query}”…` : "Mapping music to explore…"}</span></div>}
-      {offline && <MusicAvailabilityNotice />}
+      {offline && <MusicAvailabilityNotice connectionState={music.connectionState} />}
       {!!response.errors?.length && <div className="music-provider-warning" role="status">Some sources did not respond. Available results are shown.</div>}
       {!loading && resultCount > 0 && <div className="music-result-summary"><strong>{resultCount}</strong><span>{query.trim().length >= 2 ? "matches from active signals" : "signals ready to explore"}</span></div>}
       {scope === "all" && topResult && (

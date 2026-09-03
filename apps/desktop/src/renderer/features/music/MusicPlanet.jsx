@@ -13,6 +13,7 @@ import PlaylistsSection from "./planet-sections/PlaylistsSection";
 import FavoritesSection from "./planet-sections/FavoritesSection";
 import SourcesSection from "./planet-sections/SourcesSection";
 import { useMusic } from "./context/MusicProvider";
+import { isMusicRemoteEligible } from "./context/MusicConnectionContext";
 import { favoriteTrackPreview } from "./utils/favorites";
 import { MUSIC_COLLECTIONS_CHANGED_EVENT } from "./utils/collections";
 import "../../styles/features/music/layout.css";
@@ -75,7 +76,7 @@ function rememberMusicHomeScroll(container) {
   return value;
 }
 
-function useMusicDashboard(offline) {
+export function useMusicDashboard(offline, recoveryEpoch = 0) {
   const [dashboard, setDashboard] = useState({ status: "idle", value: null, error: "" });
   const [requestId, setRequestId] = useState(0);
 
@@ -97,7 +98,7 @@ function useMusicDashboard(offline) {
         if (!cancelled) setDashboard({ status: "error", value: null, error: error?.message || "Music discovery is unavailable." });
       });
     return () => { cancelled = true; };
-  }, [requestId, offline]);
+  }, [requestId, offline, recoveryEpoch]);
 
   return { ...dashboard, retry: () => setRequestId((value) => value + 1) };
 }
@@ -171,8 +172,8 @@ export default function MusicPlanet({ page, selected, onNavigate }) {
   const savedHomeScrollRef = useRef(null);
   if (savedHomeScrollRef.current === null) savedHomeScrollRef.current = readMusicHomeScroll();
   const activeHomeChapterRef = useRef(savedHomeScrollRef.current.chapter || "home");
-  const offline = music.connectionState === "offline";
-  const dashboard = useMusicDashboard(offline);
+  const offline = !isMusicRemoteEligible(music.connectionState);
+  const dashboard = useMusicDashboard(offline, music.recoveryEpoch);
   const { tracks, playlists, history } = useLocalMusicPreview();
   const [sceneState, setSceneState] = useSceneFromScroll(scrollRef, "idle-space");
   const showDetail = DETAIL_PAGES.has(page);
@@ -359,12 +360,12 @@ export default function MusicPlanet({ page, selected, onNavigate }) {
           <button className="detail-back-button" onClick={navigateBack} aria-label="Back in Music Planet">
             ← Back
           </button>
-          {offline && page !== "music-search" && <MusicAvailabilityNotice />}
+          {offline && page !== "music-search" && <MusicAvailabilityNotice connectionState={music.connectionState} />}
           <MusicRoutes page={page} selected={selected} onNavigate={navigateWithinMusic} />
         </main>
       ) : (
         <main ref={scrollRef} className="music-planet-scroll-area">
-          {offline && <MusicAvailabilityNotice />}
+          {offline && <MusicAvailabilityNotice connectionState={music.connectionState} />}
           <IntroSection onSearch={handleSearch} />
           <NowPlayingSection music={music} onNavigate={navigateWithinMusic} />
           <LibrarySection tracks={tracks} history={history} onNavigate={navigateWithinMusic} />

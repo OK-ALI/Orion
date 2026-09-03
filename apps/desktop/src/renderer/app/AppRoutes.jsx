@@ -24,7 +24,7 @@ export default function AppRoutes({ model }) {
     savedList, saveProgress, selected, setDlSearchOpen, setDownloads,
     setHighlightDownload, setLibrarySort, setMiniPlayer, toggleSave, trending,
     trendingTV, watched, onPlaybackSession, googleProfile,
-    homeConnectionState, onCheckHomeConnection, onPlayHomeLocal,
+    homeConnectionState, onCheckHomeConnection, onPlayHomeLocal, recoveryEpoch,
   } = model;
   return (
     <ErrorBoundary resetKey={`${page}:${selected?.id || selected || ""}`} context={`route:${page}`}>
@@ -34,7 +34,7 @@ export default function AppRoutes({ model }) {
           trending={trending} trendingTV={trendingTV} loading={loadingHome}
           onSelect={handleSelectResult} progress={progress} inProgress={inProgress}
           offline={offline} onRetry={retryHome} watched={watched}
-          connectionState={homeConnectionState} downloads={downloads}
+          connectionState={homeConnectionState} recoveryEpoch={recoveryEpoch} downloads={downloads}
           onCheckConnection={onCheckHomeConnection} onPlayLocal={onPlayHomeLocal}
           onMarkWatched={markWatched} onMarkUnwatched={markUnwatched}
           history={history} saved={savedList} apiKey={apiKey} onNavigate={navigate}
@@ -115,7 +115,7 @@ export default function AppRoutes({ model }) {
         />
       )}
       {page === "get-mobile" && (
-        <GetOrionMobilePage />
+        <GetOrionMobilePage connectionState={homeConnectionState} onCheckConnection={onCheckHomeConnection} recoveryEpoch={recoveryEpoch} />
       )}
       {page === "downloads" && (
         <DownloadsPage

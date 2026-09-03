@@ -14,7 +14,7 @@ import {
 import { applyStoredAppearance } from "./startup/applyStartupAppearance";
 import { collectCompleteBackupData, collectLegacyCloudSyncData, restoreLegacyCloudSyncData } from "../services/backup";
 import { playPortalSound } from "../features/music/services/portalSound";
-import { tmdbFetch } from "../services/tmdb";
+import { tmdbFetch, validateTmdbService, clearTmdbCache } from "../services/tmdb";
 import { clearAppCaches } from "../services/settingsStore";
 
 import Sidebar from "../components/layout/Sidebar";
@@ -243,12 +243,26 @@ export default function App() {
   const [trending, setTrending] = useState([]);
   const [trendingTV, setTrendingTV] = useState([]);
   const [loadingHome, setLoadingHome] = useState(false);
-  const probeMetadataService = useCallback(async () => {
+  const probeMetadataService = useCallback(async ({ signal }) => {
     if (!apiKey) return;
-    await tmdbFetch("/configuration", apiKey);
-  }, [apiKey]);
+    try {
+      await validateTmdbService(apiKey, { signal });
+      if (!signal.aborted) setApiKeyStatus("ok");
+    } catch (error) {
+      if (!signal.aborted) setApiKeyStatus(error.status === 401 || error.status === 403 ? "invalid_token" : "unreachable");
+      throw error;
+    }
+  }, [apiKey, setApiKeyStatus]);
   const network = useNetworkStatus({ serviceProbe: apiKey ? probeMetadataService : null });
   const offline = network.productState === "offline";
+  useEffect(() => {
+    if (network.serviceReachable === false || network.productState === "offline") {
+      setApiKeyStatus((status) => status === "invalid_token" ? status : "unreachable");
+    }
+  }, [network.serviceReachable, network.productState, setApiKeyStatus]);
+  const ownsConnectionPresentation = String(page).startsWith("music-") ||
+    page === "get-mobile" ||
+    ((page === "home" || page === "discover") && network.productState !== "online");
 
   // ── Player accent + subtitle lang ─────────────────────────────────────────
   // Computed once here and passed as a prop to MoviePage / TVPage so neither
@@ -420,7 +434,12 @@ export default function App() {
     // The first application happens synchronously in main.jsx before React paints.
     applyStoredAppearance();
   }, []);
-  useDesktopNetworkRecovery(network, fetchTrending);
+  const recoverRemoteSurfaces = useCallback(() => {
+    clearTmdbCache();
+    fetchTrending();
+    showToast("Connection restored");
+  }, [fetchTrending, showToast]);
+  useDesktopNetworkRecovery(network, recoverRemoteSurfaces);
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const { navigate: baseNavigate, navigateBack: baseNavigateBack, pageRef } = useNavigation({
@@ -896,7 +915,7 @@ export default function App() {
 
   return (
     <DesktopSyncProviders googleProfile={googleProfile} networkStatus={network.status} saved={saved} savedOrder={savedOrder} watched={watched} history={history} progress={progress}>
-      <MusicConnectionBridge connectionState={network.productState} />
+      <MusicConnectionBridge connectionState={network.productState} recoveryEpoch={network.recoveryEpoch} />
       <ErrorBoundary>
         <div className={`app-shell${String(page).startsWith("music-") ? " music-world" : ""}`}>
         {hasCustomTitlebar && (
@@ -931,7 +950,7 @@ export default function App() {
         <main className="app-content">
           {/* ── API key status banner ── */}
           {/* Suspense boundary: lazy page chunks are fetched on first visit */}
-          {!String(page).startsWith("music-") && apiKeyStatus === "invalid_token" && (
+          {!ownsConnectionPresentation && apiKeyStatus === "invalid_token" && (
             <div className="api-status-banner api-status-error">
               <span>
                 ⚠ Your TMDB token is invalid, not set or has been revoked.
@@ -942,7 +961,7 @@ export default function App() {
               </button>
             </div>
           )}
-          {!String(page).startsWith("music-") && !(page === "home" && offline) && apiKeyStatus === "unreachable" && (
+          {!ownsConnectionPresentation && apiKeyStatus === "unreachable" && (
             <div className="api-status-banner api-status-warn">
               <span>
                 ⚠ Cannot reach TMDB, check your internet connection. Content may
@@ -951,15 +970,15 @@ export default function App() {
               <button
                 className="api-status-btn"
                 onClick={() =>
-                  setApiKeyStatus("checking") || window.location.reload()
+                  network.recheck()
                 }
               >
                 Retry
               </button>
             </div>
           )}
-          {network.status === "offline" && !["home", "discover"].includes(page) && !String(page).startsWith("music-") && apiKeyStatus !== "unreachable" && <div className="api-status-banner api-status-warn"><span>Orion is offline. Local playback, downloads and your libraries remain available.</span></div>}
-          {network.status === "degraded" && !String(page).startsWith("music-") && <div className="api-status-banner api-status-warn"><span>Your connection check is responding slowly. Existing and local content remain available.</span></div>}
+          {network.productState === "offline" && !ownsConnectionPresentation && apiKeyStatus !== "unreachable" && <div className="api-status-banner api-status-warn"><span>Orion is offline. Local playback, downloads and your libraries remain available.</span></div>}
+          {network.productState === "degraded" && !ownsConnectionPresentation && !["unreachable", "invalid_token"].includes(apiKeyStatus) && <div className="api-status-banner api-status-warn"><span>Some online services are unavailable. Existing and local content remain available.</span></div>}
           <AppRoutes model={{
             addHistory, apiKey, apiKeySource, changeApiKey, clearHistory, dlSearchOpen,
           downloads, handleDeleteDownload, handleDownloadStarted, handleGoToDownloads,
@@ -970,6 +989,7 @@ export default function App() {
           setLibrarySort, setMiniPlayer: handleOpenMiniPlayer, toggleSave, trending, trendingTV, watched,
           onPlaybackSession: handlePlaybackSession,
           homeConnectionState: network.productState,
+          recoveryEpoch: network.recoveryEpoch,
           onCheckHomeConnection: network.recheck,
           onPlayHomeLocal: handlePlayHomeLocal,
           googleProfile,
@@ -996,6 +1016,7 @@ export default function App() {
           expandedLocalDownload, setExpandedLocalDownload, addHistory,
           handleDeleteDownload, isSaved, watched,
           showConnectModal, setShowConnectModal,
+          connectionState: network.productState,
         }} />
          {worldTransition && <div className={`music-world-transition ${worldTransition}`} aria-hidden="true" />}
 

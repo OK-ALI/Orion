@@ -47,10 +47,18 @@ test("offline Music uses real local grants, assets and search without remote pro
       global.__sliceCRemoteCalls = [];
       for (const provider of registry.list()) {
         if (provider.id.startsWith("orion-local-") || provider.id === "orion-embedded-lyrics") continue;
+        // Registry entries are frozen. Replace only this isolated profile's adapters.
+        const fixtureProvider = { ...provider };
         for (const method of ["search", "searchForTrack", "resolveCandidate", "getLyrics", "getDashboard", "getRadio", "getSuggestions", "continueSearch", "getArtist", "getAlbum", "getPlaylist"]) {
           if (typeof provider[method] !== "function") continue;
-          provider[method] = async () => { global.__sliceCRemoteCalls.push(provider.id + ":" + method); throw new Error("Isolated remote provider unavailable"); };
+          fixtureProvider[method] = async () => {
+            global.__sliceCRemoteCalls.push(provider.id + ":" + method);
+            if (method === "getDashboard") return { sections: [] };
+            throw new Error("Isolated remote provider unavailable");
+          };
         }
+        registry.unregister(provider.id);
+        registry.register(fixtureProvider);
       }
       return { local: publicLocal, remote };
     });
@@ -59,7 +67,23 @@ test("offline Music uses real local grants, assets and search without remote pro
       return host === "127.0.0.1" || host === "localhost" ? route.continue() : route.abort("internetdisconnected");
     });
     await page.addInitScript(() => {
-      Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+      window.__musicOnline = false;
+      window.__musicBoot = Math.random();
+      window.__musicRecovered = [];
+      window.addEventListener("orion:network-restored", (event) => window.__musicRecovered.push(event.detail.recoveryEpoch));
+      Object.defineProperty(navigator, "onLine", { configurable: true, get: () => window.__musicOnline });
+      const originalFetch = window.fetch;
+      window.fetch = (input, options) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (url.includes("generate_204")) return Promise.resolve(new Response(null, { status: 204 }));
+        if (url.includes("/configuration")) return new Promise((resolve) => {
+          window.__finishMusicService = () => resolve(new Response("{}", { status: 200 }));
+        });
+        if (/^https?:/.test(url) && !/^http:\/\/127.0.0.1/.test(url)) {
+          return window.__musicOnline ? Promise.resolve(new Response(JSON.stringify({ results: [] }))) : Promise.reject(new Error("Isolated offline fixture"));
+        }
+        return originalFetch(input, options);
+      };
       localStorage.setItem("orion_google_auth_skipped", "true");
       localStorage.setItem("orion_google_sync_enabled", "false");
       localStorage.setItem("orion_autoCheckUpdates", "false");
@@ -108,6 +132,26 @@ test("offline Music uses real local grants, assets and search without remote pro
     await expect.poll(() => audio.evaluate((element) => element.currentTime)).toBeGreaterThan(20);
     await expect(page.getByRole("status", { name: "Music availability" })).toContainText("require a connection");
     await page.screenshot({ path: testInfo.outputPath("music-offline-local-library.png") });
+    const originalAudio = await audio.elementHandle();
+    const originalGrant = await audio.getAttribute("src");
+    const before = await page.evaluate(async () => ({ boot: window.__musicBoot, queue: await window.electron.musicLoadQueue() }));
+    await page.evaluate(() => { window.__musicOnline = true; window.dispatchEvent(new Event("online")); });
+    await expect(page.locator(".titlebar-network")).toHaveText("Reconnecting");
+    await expect(notice).toContainText("Reconnecting");
+    expect(await app.evaluate(() => global.__sliceCRemoteCalls)).toEqual([]);
+    expect(await audio.evaluate((element, original) => element === original, originalAudio)).toBe(true);
+    await page.evaluate(() => window.__finishMusicService());
+    await expect(page.locator(".titlebar-network")).toHaveClass(/is-online/);
+    await expect(notice).toHaveCount(0);
+    await expect.poll(() => app.evaluate(() => global.__sliceCRemoteCalls.length)).toBeGreaterThan(0);
+    expect(await audio.evaluate((element, original) => element === original, originalAudio)).toBe(true);
+    expect(await audio.getAttribute("src")).toBe(originalGrant);
+    expect(await audio.evaluate((element) => element.currentTime)).toBeGreaterThan(20);
+    expect(await audio.evaluate((element) => element.paused)).toBe(false);
+    const after = await page.evaluate(async () => ({ boot: window.__musicBoot, queue: await window.electron.musicLoadQueue() }));
+    expect(after).toEqual(before);
+    expect(await page.evaluate(() => window.__musicRecovered)).toEqual([1]);
+    await page.screenshot({ path: testInfo.outputPath("music-restored-local-playback.png") });
     expect(errors).toEqual([]);
   } finally {
     await app.close();

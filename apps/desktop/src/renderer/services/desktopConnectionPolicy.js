@@ -78,6 +78,7 @@ export function legacyDesktopNetworkStatus(
 export function shouldEmitDesktopRecovery(
   previousState,
   nextState,
+  outagePending = false,
 ) {
   const previous =
     normalizeDesktopConnectionState(
@@ -96,7 +97,8 @@ export function shouldEmitDesktopRecovery(
   return (
     previous === "offline" ||
     previous === "reconnecting" ||
-    previous === "degraded"
+    previous === "degraded" ||
+    outagePending
   );
 }
 

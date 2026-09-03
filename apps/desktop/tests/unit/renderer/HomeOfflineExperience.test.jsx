@@ -174,3 +174,20 @@ describe("P10A.3 Slice A Home local continuity", () => {
     ]));
   });
 });
+
+it("refreshes remote Home rows after a degraded recovery while keeping local continuity mounted", async () => {
+  const { act } = await import("@testing-library/react");
+  const props = homeProps({ apiKey: "fixture", offline: false, connectionState: "degraded", recoveryEpoch: 0 });
+  const view = render(<HomePage {...props} />);
+  await act(async () => {});
+  const resume = screen.getByRole("button", { name: /resume local story locally/i });
+  mocks.tmdbFetch.mockClear();
+  view.rerender(<HomePage {...props} connectionState="checking" />);
+  await act(async () => {});
+  expect(mocks.tmdbFetch).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: /resume local story locally/i })).toBe(resume);
+  view.rerender(<HomePage {...props} connectionState="online" recoveryEpoch={1} />);
+  await act(async () => {});
+  expect(mocks.tmdbFetch).toHaveBeenCalledWith("/movie/top_rated?page=1", "fixture", expect.anything());
+  expect(screen.getByRole("button", { name: /resume local story locally/i })).toBe(resume);
+});

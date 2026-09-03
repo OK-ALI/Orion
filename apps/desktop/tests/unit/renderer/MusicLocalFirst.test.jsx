@@ -3,8 +3,9 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest";
 
 vi.mock("../../../src/renderer/features/music/player/AudioEngine", () => ({ default: () => <audio data-testid="engine" /> }));
+const refreshProviders = vi.hoisted(() => vi.fn());
 vi.mock("../../../src/renderer/features/music/stores/musicStores", () => ({
-  useFavoritesStore: () => ({}), usePluginStore: () => ({}), useProvidersStore: () => ({}),
+  useFavoritesStore: () => ({}), usePluginStore: () => ({}), useProvidersStore: () => ({ loadFromDisk: refreshProviders }),
 }));
 import { MusicProvider, MusicConnectionBridge, useMusic } from "../../../src/renderer/features/music/context/MusicProvider";
 import MusicTrackList from "../../../src/renderer/features/music/components/MusicTrackList";
@@ -19,6 +20,7 @@ function Harness({ connection = "offline", children }) {
 }
 
 beforeEach(() => {
+  refreshProviders.mockClear();
   window.electron = {
     musicSetConnectionState: vi.fn().mockResolvedValue({ ok: true }),
     musicLoadQueue: vi.fn().mockResolvedValue({ items: [], index: -1 }),
@@ -107,4 +109,46 @@ it("an offline detail page explains unavailable remote content and radio without
   expect(await screen.findAllByText("Remote Music requires a connection.")).not.toHaveLength(0);
   expect(screen.queryByText("No playable tracks are available from the active sources.")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Radio requires a connection" })).toBeDisabled();
+});
+
+it.each(["checking", "reconnecting"])("%s keeps local playback/search usable without starting remote work", async (connection) => {
+  render(<Harness connection={connection}><MusicSearch selected={{ query: "Signal" }} /><MusicTrackList tracks={[local, remote]} /></Harness>);
+  await waitFor(() => expect(window.electron.musicListTracks).toHaveBeenCalled());
+  expect(window.electron.musicSearch).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Play Remote signal by Orion" })).toHaveAttribute("aria-disabled", "true");
+  act(() => controller.playTrack(local, [local, remote]));
+  await waitFor(() => expect(controller.stream?.url).toBeTruthy());
+  expect(screen.getByRole("status", { name: "Music availability" })).not.toHaveTextContent("You’re offline");
+});
+
+it("consumes each recovery epoch once, refreshing search without replacing queue, engine, grant or position", async () => {
+  const RecoveryHarness = ({ connection, epoch }) => <MusicProvider>
+    <MusicConnectionBridge connectionState={connection} recoveryEpoch={epoch} /><Probe />
+    <MusicSearch selected={{ query: "Signal" }} />
+  </MusicProvider>;
+  const view = render(<RecoveryHarness connection="offline" epoch={0} />);
+  await act(async () => {});
+  act(() => controller.playTrack(local, [local, remote]));
+  await waitFor(() => expect(controller.stream?.url).toBeTruthy());
+  act(() => controller.setProgress({ currentTime: 42, duration: 100 }));
+  const identity = { queue: controller.queue, current: controller.current, stream: controller.stream, progress: controller.progress, bus: controller.visualBus, engineRef: controller.engineRef, engine: screen.getByTestId("engine") };
+  view.rerender(<RecoveryHarness connection="reconnecting" epoch={0} />);
+  expect(window.electron.musicSearch).not.toHaveBeenCalled();
+  view.rerender(<RecoveryHarness connection="online" epoch={1} />);
+  await waitFor(() => expect(window.electron.musicSearch).toHaveBeenCalledTimes(1));
+  expect(controller.recoveryEpoch).toBe(1);
+  expect(refreshProviders).toHaveBeenCalledTimes(1);
+  view.rerender(<RecoveryHarness connection="online" epoch={1} />);
+  await act(async () => {});
+  expect(window.electron.musicSearch).toHaveBeenCalledTimes(1);
+  expect(refreshProviders).toHaveBeenCalledTimes(1);
+  expect(controller.queue).toBe(identity.queue);
+  expect(controller.current).toBe(identity.current);
+  expect(controller.stream).toBe(identity.stream);
+  expect(controller.progress).toBe(identity.progress);
+  expect(controller.visualBus).toBe(identity.bus);
+  expect(controller.engineRef).toBe(identity.engineRef);
+  expect(screen.getByTestId("engine")).toBe(identity.engine);
+  expect(controller.playing).toBe(true);
+  expect(window.electron.musicResolveTrack).toHaveBeenCalledTimes(1);
 });

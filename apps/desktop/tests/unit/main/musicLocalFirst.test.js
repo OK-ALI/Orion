@@ -75,6 +75,7 @@ function fixture({ missing = false, remoteMode = "success" } = {}) {
   ipc.register();
   const sender = {};
   const invoke = (channel, ...args) => handlers.get(channel)({ sender }, ...args);
+  invoke("music:connection:set", "online");
   return { calls, resolver, invoke, handlers, row, database, registry };
 }
 
@@ -211,3 +212,19 @@ test("search keeps local and remote tracks with identical metadata as distinct i
   assert.equal(tracks.length, 2);
   assert.deepEqual(new Set(tracks.map((track) => track.provider)), new Set(["local", "ytmusic"]));
 });
+
+for (const state of ["checking", "reconnecting", "unknown"]) {
+  test(`${state} is accepted without enabling remote Music; local grants and metadata survive`, async () => {
+    const f = fixture();
+    assert.equal(f.invoke("music:connection:set", state).ok, true);
+    assert.equal((await f.invoke("music:tracks:stream", localTrack)).ok, true);
+    assert.match((await f.invoke("music:tracks:stream", remoteTrack)).error, /connection/i);
+    assert.match((await f.invoke("music:dashboard:get")).error, /connection/i);
+    const result = await f.invoke("music:search", "Signal");
+    assert.equal(result.availability, "local-only");
+    assert.deepEqual(f.calls, ["grant:local"]);
+    f.invoke("music:connection:set", "degraded");
+    await f.invoke("music:search", "Signal");
+    assert.ok(f.calls.includes("remote-metadata"));
+  });
+}

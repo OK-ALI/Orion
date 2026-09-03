@@ -35,27 +35,8 @@ export function useApiSession() {
   }, []);
 
   useEffect(() => {
-    if (!apiKey) {
-      setApiKeyStatus("ok");
-      return;
-    }
-    setApiKeyStatus("checking");
-    const controller = new AbortController();
-    fetch("https://api.themoviedb.org/3/configuration", {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal: controller.signal,
-    })
-      .then((response) => {
-        setApiKeyStatus(
-          response.status === 401 || response.status === 403
-            ? "invalid_token"
-            : "ok",
-        );
-      })
-      .catch((error) => {
-        if (error.name !== "AbortError") setApiKeyStatus("unreachable");
-      });
-    return () => controller.abort();
+    // The existing connection owner validates this token, with a deadline and fencing.
+    setApiKeyStatus(apiKey ? "checking" : "ok");
   }, [apiKey]);
 
   const saveApiKey = useCallback((key) => {

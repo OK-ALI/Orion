@@ -258,7 +258,7 @@ describe("P10A.1-C Desktop connection policy", () => {
       );
 
     expect(app).toContain(
-      'tmdbFetch("/configuration", apiKey)',
+      'validateTmdbService(apiKey, { signal })',
     );
 
     expect(app).toContain(
@@ -266,7 +266,7 @@ describe("P10A.1-C Desktop connection policy", () => {
     );
 
     expect(app).toContain(
-      "useDesktopNetworkRecovery(network, fetchTrending)",
+      "useDesktopNetworkRecovery(network, recoverRemoteSurfaces)",
     );
 
     expect(app).not.toContain(

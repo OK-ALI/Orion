@@ -36,7 +36,7 @@ export default function ToastContainer() {
   return (
     <div className="toast-container">
       {toasts.map((t) => (
-        <div key={t.id} className={`toast toast-${t.type}`}>
+        <div key={t.id} className={`toast toast-${t.type}`} role="status" aria-live="polite" aria-atomic="true">
           <span>{t.message}</span>
         </div>
       ))}

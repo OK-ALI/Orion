@@ -86,6 +86,12 @@ test("Smart Connect reports live transport and applies pointer commands", async 
     const continueCinema = page.getByRole("button", { name: "Continue to Cinema" });
     if (await continueCinema.count()) await continueCinema.click();
 
+    // Internet status must not gate the existing authenticated LAN transport.
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+      window.dispatchEvent(new Event("offline"));
+    });
+    await expect(page.locator(".titlebar-network")).toHaveAttribute("aria-label", "Offline");
     let info = await page.evaluate(() => window.electron.getSmartConnectInfo());
     expect(info.connected).toBe(false);
     if (!info.networkPolicy?.allowed) {

@@ -115,7 +115,7 @@ export default function AppOverlays({ model }) {
             onClose={() => setShowUpdateModal(false)}
           />
         )}
-        {toast && <div className={`toast position-${toastPosition}`}>{toast}</div>}
+        {toast && <div className={`toast position-${toastPosition}`} role="status" aria-live="polite" aria-atomic="true">{toast}</div>}
         {miniTransition && (
           <div
             className="orion-mini-transition"
@@ -399,7 +399,7 @@ export default function AppOverlays({ model }) {
           <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
         )}
         {model.showConnectModal && (
-          <SmartConnectModal onClose={() => model.setShowConnectModal?.(false)} />
+          <SmartConnectModal connectionState={model.connectionState} onClose={() => model.setShowConnectModal?.(false)} />
         )}
     </>
   );

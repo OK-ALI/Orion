@@ -1,5 +1,6 @@
 // ── Orion — Custom Window Titlebar ────────────────────────────────────────────
 import { useState, useEffect } from "react";
+import { normalizeDesktopConnectionState } from "../../services/desktopConnectionPolicy";
 import {
   MinimizeIcon,
   MaximizeIcon,
@@ -12,6 +13,9 @@ export default function WindowTitlebar({
   googleProfile = null,
   onNavigate = null
 }) {
+  const connectionState = normalizeDesktopConnectionState(network.productState || network.status);
+  const connectionLabel = { online: "Online", offline: "Offline", degraded: "Degraded", checking: "Checking", reconnecting: "Reconnecting" }[connectionState];
+  const measured = (connectionState === "online" || connectionState === "degraded") && Number.isFinite(network.latencyMs);
   const [maximized, setMaximized] = useState(false);
   const [battery, setBattery] = useState(null);
   const [showProfileCard, setShowProfileCard] = useState(false);
@@ -44,15 +48,16 @@ export default function WindowTitlebar({
 
       <div className="titlebar-controls titlebar-no-drag">
         <div
-          className={`titlebar-network is-${network.status}${network.tier !== "unknown" ? ` is-${network.tier}` : ""}`}
-          title={network.status === "online" || network.status === "degraded"
-            ? `Online · ${network.latencyMs} ms round trip to Orion's metadata service`
-            : network.status === "checking" ? "Checking Orion connectivity" : "Orion is offline"}
-          aria-label={network.status === "online" || network.status === "degraded" ? `${network.status === "degraded" ? "Service degraded" : "Online"}, ${network.latencyMs} milliseconds latency` : network.status === "checking" ? "Checking network status" : "Offline"}
+          className={`titlebar-network is-${connectionState}${network.tier !== "unknown" ? ` is-${network.tier}` : ""}`}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          title={measured ? `${connectionLabel} · ${network.latencyMs} ms round trip to the internet probe` : `${connectionLabel} — Orion connectivity`}
+          aria-label={measured ? `${connectionState === "degraded" ? "Service degraded" : "Online"}, ${network.latencyMs} milliseconds latency` : connectionState === "checking" ? "Checking network status" : connectionLabel}
         >
           <span className="titlebar-network-dot" aria-hidden="true" />
-          <span>{network.status === "online" ? "Online" : network.status === "degraded" ? "Degraded" : network.status === "checking" ? "Checking" : "Offline"}</span>
-          {(network.status === "online" || network.status === "degraded") && <span className="titlebar-network-latency">{network.latencyMs} ms</span>}
+          <span>{connectionLabel}</span>
+          {measured && <span className="titlebar-network-latency">{network.latencyMs} ms</span>}
         </div>
         {battery?.available && battery?.visible !== false && (
           <div

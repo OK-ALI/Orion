@@ -796,3 +796,15 @@ body[data-motion="calm"] .sidebar-item-icon::before {
     color: #60a5fa;
     border: 1px solid rgba(59, 130, 246, 0.4);
 }
+
+/* Connection checks stay quiet and use the same semantic palette in every theme. */
+.titlebar-network.is-checking,
+.titlebar-network.is-reconnecting { color: var(--text-secondary); }
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .smart-connect-signal,
+  .smart-connect-signal * { animation: none !important; transition: none !important; }
+}
+body.no-anim .toast,
+body.no-anim .smart-connect-signal,
+body.no-anim .smart-connect-signal * { animation: none !important; transition: none !important; }

@@ -7,6 +7,7 @@ import {
 
 import {
   measureNetworkStatus,
+  withNetworkDeadline,
   medianLatency,
   NETWORK_PROBE_INTERVAL,
 } from "../../services/networkStatus";
@@ -63,11 +64,15 @@ export default function useNetworkStatus({
   const networkRef =
     useRef(initialRef.current);
 
+  // Remember an outage through intermediate checking states until it recovers.
+  const outageRef = useRef(initialRef.current.productState === "offline");
+
   const samplesRef =
     useRef([]);
 
   const manualProbeRef =
     useRef(null);
+  const serviceOwnerRef = useRef(serviceProbe);
 
   const commitNetwork =
     useCallback((next) => {
@@ -86,11 +91,16 @@ export default function useNetworkStatus({
             previous.productState,
         });
 
+      if (nextProductState === "offline" || nextProductState === "degraded") {
+        outageRef.current = true;
+      }
       const recovered =
         shouldEmitDesktopRecovery(
           previous.productState,
           nextProductState,
+          outageRef.current,
         );
+      if (recovered) outageRef.current = false;
 
       const committed = {
         ...previous,
@@ -127,9 +137,19 @@ export default function useNetworkStatus({
     let disposed = false;
     let timer = null;
     let generation = 0;
+    let inFlight = null;
+    let controller = null;
 
     const serviceRequired =
       typeof serviceProbe === "function";
+    const serviceChanged = serviceOwnerRef.current !== serviceProbe;
+    serviceOwnerRef.current = serviceProbe;
+    if (serviceChanged && serviceRequired && networkRef.current.productState === "online") {
+      commitNetwork({
+        transportStatus: "checking", serviceRequired, serviceReachable: null,
+        degradedReason: null,
+      });
+    }
 
     const schedule = () => {
       clearTimeout(timer);
@@ -143,9 +163,26 @@ export default function useNetworkStatus({
       }
     };
 
-    const probe = async () => {
-      const currentGeneration =
-        ++generation;
+    const probe = () => {
+      if (disposed) return Promise.resolve();
+      if (inFlight) return inFlight;
+      clearTimeout(timer);
+      const currentGeneration = ++generation;
+      controller = new AbortController();
+      const signal = controller.signal;
+      // Publish the promise before starting work so every trigger joins this check.
+      inFlight = Promise.resolve().then(() => runProbe(currentGeneration, signal))
+        .finally(() => {
+          if (currentGeneration === generation) {
+            inFlight = null;
+            controller = null;
+          }
+        });
+      return inFlight;
+    };
+
+    const runProbe = async (currentGeneration, signal) => {
+      if (disposed || currentGeneration !== generation) return;
 
       if (navigator.onLine === false) {
         samplesRef.current = [];
@@ -172,7 +209,8 @@ export default function useNetworkStatus({
 
       if (
         previousState === "offline" ||
-        previousState === "reconnecting"
+        previousState === "reconnecting" ||
+        previousState === "degraded"
       ) {
         commitNetwork({
           transportStatus:
@@ -188,7 +226,7 @@ export default function useNetworkStatus({
       }
 
       const transport =
-        await measureNetworkStatus();
+        await measureNetworkStatus({ signal });
 
       if (
         disposed ||
@@ -271,7 +309,8 @@ export default function useNetworkStatus({
         return;
       }
 
-      commitNetwork({
+      // A routine check does not revoke the last validated capability while pending.
+      if (networkRef.current.productState !== "online") commitNetwork({
         transportStatus:
           "online",
         serviceRequired: true,
@@ -285,7 +324,7 @@ export default function useNetworkStatus({
       });
 
       try {
-        await serviceProbe();
+        await withNetworkDeadline((serviceSignal) => serviceProbe({ signal: serviceSignal }), { signal });
 
         if (
           disposed ||
@@ -340,6 +379,9 @@ export default function useNetworkStatus({
 
     const handleOffline = () => {
       generation += 1;
+      controller?.abort();
+      controller = null;
+      inFlight = null;
       clearTimeout(timer);
       samplesRef.current = [];
 
@@ -365,10 +407,7 @@ export default function useNetworkStatus({
       }
     };
 
-    manualProbeRef.current = () => {
-      clearTimeout(timer);
-      void probe();
-    };
+    manualProbeRef.current = probe;
 
     window.addEventListener(
       "online",
@@ -390,6 +429,8 @@ export default function useNetworkStatus({
     return () => {
       disposed = true;
       generation += 1;
+      controller?.abort();
+      inFlight = null;
       clearTimeout(timer);
       samplesRef.current = [];
       manualProbeRef.current = null;
@@ -416,7 +457,7 @@ export default function useNetworkStatus({
 
   const recheck =
     useCallback(() => {
-      manualProbeRef.current?.();
+      return manualProbeRef.current?.()?.then(() => networkRef.current);
     }, []);
 
   return {
