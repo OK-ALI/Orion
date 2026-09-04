@@ -27,8 +27,12 @@ import { usePerformanceProfile } from '../../context/PerformanceContext';
 import { mmkvStorageAdapter } from '../../services/storageAdapter';
 import { LibrarySortDialog } from './LibrarySortDialog';
 import {
+  MOBILE_LIBRARY_MEDIA_FILTERS,
   MOBILE_LIBRARY_SORT_KEY,
   MOBILE_LIBRARY_SORT_OPTIONS,
+  MOBILE_LIBRARY_SORT_SHORT_LABELS,
+  countMobileLibraryMediaTypes,
+  filterMobileLibraryItems,
   normalizeMobileLibrarySort,
   sortMobileLibraryItems,
   type MobileLibrarySort,
@@ -36,6 +40,7 @@ import {
 
 type LibraryTab = 'saved' | 'continue' | 'history';
 type SavedFilter = 'all' | 'unwatched' | 'watched';
+type SavedMediaFilter = 'all' | 'movie' | 'tv';
 
 export interface LibraryPagerState {
   activeTab: LibraryTab;
@@ -79,6 +84,7 @@ export default function LibraryScreen() {
   } = useLibrary();
   const [activeTab, setActiveTab] = useState<LibraryTab>(() => validTab(params.tab));
   const [savedFilter, setSavedFilter] = useState<SavedFilter>('all');
+  const [savedMediaFilter, setSavedMediaFilter] = useState<SavedMediaFilter>('all');
   const [savedSort, setSavedSort] = useState<MobileLibrarySort>(() => (
     normalizeMobileLibrarySort(mmkvStorageAdapter.get(MOBILE_LIBRARY_SORT_KEY))
   ));
@@ -91,13 +97,21 @@ export default function LibraryScreen() {
     () => savedOrder.map((key) => saved[key]).filter(Boolean),
     [saved, savedOrder],
   );
+  const mediaFilterCounts = useMemo(
+    () => countMobileLibraryMediaTypes(savedItems),
+    [savedItems],
+  );
   const sortedSavedItems = useMemo(
     () => sortMobileLibraryItems(savedItems, savedSort),
     [savedItems, savedSort],
   );
+  const mediaFilteredSavedItems = useMemo(
+    () => filterMobileLibraryItems(sortedSavedItems, savedMediaFilter),
+    [savedMediaFilter, sortedSavedItems],
+  );
   const savedWatchRows = useMemo(
-    () => sortedSavedItems.map((item) => ({ item, state: savedItemWatchState(watched, item) })),
-    [sortedSavedItems, watched],
+    () => mediaFilteredSavedItems.map((item) => ({ item, state: savedItemWatchState(watched, item) })),
+    [mediaFilteredSavedItems, watched],
   );
   const savedFilterCounts = useMemo(() => {
     const watchedCount = savedWatchRows.filter((entry) => entry.state === 'watched').length;
@@ -113,10 +127,11 @@ export default function LibraryScreen() {
   );
   const filteredSavedItems = useMemo(
     () => savedFilter === 'all'
-      ? sortedSavedItems
+      ? mediaFilteredSavedItems
       : savedWatchRows.filter((entry) => entry.state === savedFilter).map((entry) => entry.item),
-    [savedFilter, savedWatchRows, sortedSavedItems],
+    [mediaFilteredSavedItems, savedFilter, savedWatchRows],
   );
+  const currentSortOption = MOBILE_LIBRARY_SORT_OPTIONS.find((option) => option.id === savedSort);
   const continueItems = useMemo(
     () => getContinueWatching(),
     [getContinueWatching, progress, watched],
@@ -291,59 +306,96 @@ export default function LibraryScreen() {
                 columnWrapperStyle={{ gap: gridGap }}
                 ListHeaderComponent={(
                   <View style={styles.savedFilterFrame}>
-                    <View style={styles.savedControls}>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={'Sort My List: ' + MOBILE_LIBRARY_SORT_OPTIONS.find((option) => option.id === savedSort)?.label}
-                        accessibilityHint="Opens My List sort options"
-                        onPress={() => setSortDialogOpen(true)}
-                        style={({ pressed }) => [
-                          styles.sortButton,
-                          { backgroundColor: theme.surface, borderColor: theme.border },
-                          pressed && styles.pressed,
-                        ]}
-                      >
-                        <Ionicons name="swap-vertical" size={18} color={theme.accent} />
-                        <Text style={[styles.sortButtonText, { color: theme.text }]}>
-                          {MOBILE_LIBRARY_SORT_OPTIONS.find((option) => option.id === savedSort)?.label}
-                        </Text>
-                        <Ionicons name="chevron-down" size={16} color={theme.textMuted} />
-                      </Pressable>
-                    </View>
                     <View
-                      style={[styles.savedFilters, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                      style={[styles.savedControlDeck, { backgroundColor: theme.surface, borderColor: theme.border }]}
                     >
-                      {SAVED_FILTERS.map((filter) => {
-                        const active = savedFilter === filter.id;
-                        return (
-                          <Pressable
-                            key={filter.id}
-                            accessibilityRole="tab"
-                            accessibilityLabel={`${filter.label} My List filter, ${savedFilterCounts[filter.id]} titles`}
-                            accessibilityHint={`Shows ${filter.label.toLowerCase()} titles in My List`}
-                            accessibilityState={{ selected: active }}
-                            onPress={() => {
-                              setSavedFilter(filter.id);
-                              AccessibilityInfo.announceForAccessibility(`${filter.label} My List filter, ${savedFilterCounts[filter.id]} titles`);
-                            }}
-                            style={({ pressed }) => [
-                              styles.savedFilter,
-                              {
-                                backgroundColor: active ? theme.accentSoft : 'transparent',
-                                borderColor: active ? theme.accent : 'transparent',
-                              },
-                              pressed && styles.pressed,
-                            ]}
-                          >
-                            <Text style={[styles.savedFilterLabel, { color: active ? theme.text : theme.textSecondary }]}>
-                              {filter.label}
-                            </Text>
-                            <Text style={[styles.savedFilterCount, { color: active ? theme.accent : theme.textMuted }]}>
-                              {savedFilterCounts[filter.id]}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
+                      <View style={styles.savedControlRow}>
+                        {MOBILE_LIBRARY_MEDIA_FILTERS.map((filter) => {
+                          const active = savedMediaFilter === filter.id;
+                          return (
+                            <Pressable
+                              key={filter.id}
+                              accessibilityRole="tab"
+                              accessibilityLabel={`${filter.label} My List filter, ${mediaFilterCounts[filter.id]} titles`}
+                              accessibilityHint={active ? 'Shows all media in My List' : `Shows only ${filter.label.toLowerCase()} in My List`}
+                              accessibilityState={{ selected: active }}
+                              onPress={() => {
+                                setSavedMediaFilter((current) => current === filter.id ? 'all' : filter.id);
+                                AccessibilityInfo.announceForAccessibility(active
+                                  ? `All media in My List, ${savedItems.length} titles`
+                                  : `${filter.label} in My List, ${mediaFilterCounts[filter.id]} titles`);
+                              }}
+                              style={({ pressed }) => [
+                                styles.savedControlCell,
+                                {
+                                  backgroundColor: active ? theme.accentSoft : 'transparent',
+                                  borderColor: active ? theme.accent : 'transparent',
+                                },
+                                pressed && styles.pressed,
+                              ]}
+                            >
+                              <Text numberOfLines={1} style={[styles.savedControlLabel, { color: active ? theme.text : theme.textSecondary }]}>
+                                {filter.label}
+                              </Text>
+                              <Text style={[styles.savedControlCount, { color: active ? theme.accent : theme.textMuted }]}>
+                                {mediaFilterCounts[filter.id]}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={'Sort My List: ' + currentSortOption?.label}
+                          accessibilityHint="Opens My List sort options"
+                          onPress={() => setSortDialogOpen(true)}
+                          style={({ pressed }) => [
+                            styles.savedControlCell,
+                            styles.sortControlCell,
+                            { backgroundColor: theme.background, borderColor: theme.border },
+                            pressed && styles.pressed,
+                          ]}
+                        >
+                          <Ionicons name="swap-vertical" size={16} color={theme.accent} />
+                          <Text numberOfLines={1} style={[styles.sortControlLabel, { color: theme.text }]}>
+                            {MOBILE_LIBRARY_SORT_SHORT_LABELS[savedSort]}
+                          </Text>
+                          <Ionicons name="chevron-down" size={14} color={theme.textMuted} />
+                        </Pressable>
+                      </View>
+                      <View style={[styles.savedControlDivider, { backgroundColor: theme.border }]} />
+                      <View style={styles.savedControlRow}>
+                        {SAVED_FILTERS.map((filter) => {
+                          const active = savedFilter === filter.id;
+                          return (
+                            <Pressable
+                              key={filter.id}
+                              accessibilityRole="tab"
+                              accessibilityLabel={`${filter.label} My List filter, ${savedFilterCounts[filter.id]} titles`}
+                              accessibilityHint={`Shows ${filter.label.toLowerCase()} titles in My List`}
+                              accessibilityState={{ selected: active }}
+                              onPress={() => {
+                                setSavedFilter(filter.id);
+                                AccessibilityInfo.announceForAccessibility(`${filter.label} My List filter, ${savedFilterCounts[filter.id]} titles`);
+                              }}
+                              style={({ pressed }) => [
+                                styles.savedControlCell,
+                                {
+                                  backgroundColor: active ? theme.accentSoft : 'transparent',
+                                  borderColor: active ? theme.accent : 'transparent',
+                                },
+                                pressed && styles.pressed,
+                              ]}
+                            >
+                              <Text numberOfLines={1} style={[styles.savedControlLabel, { color: active ? theme.text : theme.textSecondary }]}>
+                                {filter.label}
+                              </Text>
+                              <Text style={[styles.savedControlCount, { color: active ? theme.accent : theme.textMuted }]}>
+                                {savedFilterCounts[filter.id]}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
                     </View>
                   </View>
                 )}
@@ -465,13 +517,14 @@ const styles = StyleSheet.create({
   page: { flex: 1 },
   listContent: { paddingTop: 12, paddingBottom: 96, flexGrow: 1 },
   savedFilterFrame: { width: '100%', marginBottom: 14 },
-  savedControls: { width: '100%', maxWidth: 620, alignSelf: 'center', alignItems: 'flex-end', marginBottom: 8 },
-  sortButton: { minHeight: 44, borderWidth: 1, borderRadius: 22, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
-  sortButtonText: { fontSize: 13, fontWeight: '800' },
-  savedFilters: { width: '100%', maxWidth: 620, alignSelf: 'center', minHeight: 48, borderWidth: 1, borderRadius: 24, padding: 3, flexDirection: 'row', gap: 3 },
-  savedFilter: { flex: 1, minHeight: 42, borderWidth: 1, borderRadius: 21, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
-  savedFilterLabel: { fontSize: 13, fontWeight: '800' },
-  savedFilterCount: { minWidth: 14, fontSize: 11, fontWeight: '900', textAlign: 'center' },
+  savedControlDeck: { width: '100%', maxWidth: 620, alignSelf: 'center', borderWidth: 1, borderRadius: 24, padding: 3 },
+  savedControlRow: { width: '100%', flexDirection: 'row', gap: 3 },
+  savedControlDivider: { height: StyleSheet.hairlineWidth, marginHorizontal: 8, marginVertical: 3 },
+  savedControlCell: { flex: 1, minWidth: 0, minHeight: 44, borderWidth: 1, borderRadius: 21, paddingHorizontal: 5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  sortControlCell: { paddingHorizontal: 4 },
+  savedControlLabel: { minWidth: 0, flexShrink: 1, fontSize: 12, fontWeight: '800' },
+  savedControlCount: { minWidth: 14, fontSize: 11, fontWeight: '900', textAlign: 'center' },
+  sortControlLabel: { minWidth: 0, flexShrink: 1, fontSize: 12, fontWeight: '800' },
   continueList: { width: '100%', maxWidth: 880, alignSelf: 'center' },
   historyList: { width: '100%', maxWidth: 980, alignSelf: 'center' },
   emptyState: { minHeight: 300, paddingHorizontal: 28, alignItems: 'center', justifyContent: 'center' },
