@@ -31,6 +31,21 @@ beforeEach(() => {
     musicListTracks: vi.fn().mockResolvedValue([local]),
     musicSearch: vi.fn().mockResolvedValue({ results: [], errors: [] }),
   };
+  localStorage.removeItem("orion_reduceAnimations");
+});
+
+it("maps numeric reduced-motion storage into Music visual preferences", async () => {
+  localStorage.setItem("orion_reduceAnimations", "1");
+  const enabled = render(<Harness />);
+  await act(async () => {});
+  expect(controller.visualPreferences.reduceMotion).toBe(true);
+  enabled.unmount();
+
+  localStorage.setItem("orion_reduceAnimations", "0");
+  const disabled = render(<Harness />);
+  await act(async () => {});
+  expect(controller.visualPreferences.reduceMotion).toBe(false);
+  disabled.unmount();
 });
 
 it("bridges the existing state without remounting the engine or resetting a playing local queue", async () => {

@@ -47,7 +47,7 @@ function readVisualPreferences() {
     displayScale: storage.get(STORAGE_KEYS.MUSIC_DISPLAY_SCALE) || "comfortable",
     glassDensity: storage.get(STORAGE_KEYS.MUSIC_GLASS_DENSITY) || "balanced",
     playerDockMode: storedDockMode === "float" ? "float" : "dock",
-    reduceMotion: storage.get(STORAGE_KEYS.REDUCE_ANIMATIONS) === true,
+    reduceMotion: !!storage.get(STORAGE_KEYS.REDUCE_ANIMATIONS),
   };
 }
 
