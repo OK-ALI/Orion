@@ -1,4 +1,4 @@
-const MUSIC_SCHEMA_VERSION = 4;
+const MUSIC_SCHEMA_VERSION = 5;
 const MUSIC_CACHE_VERSION = 1;
 
 const MUSIC_PROVIDER_KINDS = Object.freeze({

@@ -5,6 +5,7 @@ const path = require("node:path");
 const os = require("node:os");
 const vm = require("node:vm");
 const { createRequire } = require("node:module");
+const { DatabaseSync } = require("node:sqlite");
 
 function fixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "orion-collections-"));
@@ -118,4 +119,119 @@ test("legacy backups lacking IDs are repeatable without merging differently name
   assert.equal(db.listPlaylists().length, 1);
   db.importPortableState({ version: 1, playlists: [{ name: "Legacy", items: [{ ...track, id: "other" }] }] });
   assert.equal(db.listPlaylists().length, 2);
+});
+
+test("migration v5 removes only legacy duplicate empty playlist folders", (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "orion-migration-v5-"));
+  const filename = path.join(directory, "music-library.sqlite");
+  const sqlite = new DatabaseSync(filename);
+
+  t.after(() => {
+    try { sqlite.close(); } catch {}
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+
+  sqlite.exec(`
+    PRAGMA foreign_keys=ON;
+
+    CREATE TABLE music_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
+    INSERT INTO music_meta(key, value)
+    VALUES('schema_version', '4');
+
+    CREATE TABLE music_playlist_folders (
+      id TEXT PRIMARY KEY,
+      parent_id TEXT REFERENCES music_playlist_folders(id) ON DELETE SET NULL,
+      name TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE music_playlists (
+      id TEXT PRIMARY KEY,
+      folder_id TEXT REFERENCES music_playlist_folders(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE music_state (
+      key TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL
+    );
+
+    INSERT INTO music_playlist_folders(
+      id, parent_id, name, position, created_at, updated_at
+    ) VALUES
+      ('dup-a', NULL, 'Everyday', 0, 10, 10),
+      ('dup-b', NULL, ' everyday ', 0, 20, 20),
+      ('dup-used', NULL, 'EVERYDAY', 0, 30, 30),
+      ('unique-empty', NULL, 'Keep Me', 0, 40, 40);
+
+    INSERT INTO music_playlists(id, folder_id)
+    VALUES('taste', 'dup-used');
+
+    INSERT INTO music_state(key, value_json)
+    VALUES(
+      'deleted_playlist_folders',
+      '["already-deleted"]'
+    );
+  `);
+
+  const { applyMigrations } = require("../../../src/main/music/migrations");
+
+  assert.equal(applyMigrations(sqlite), 5);
+
+  const folders = sqlite.prepare(`
+    SELECT id
+    FROM music_playlist_folders
+    ORDER BY id
+  `).all().map((row) => row.id);
+
+  assert.deepEqual(
+    folders,
+    ["dup-used", "unique-empty"]
+  );
+
+  assert.equal(
+    sqlite.prepare(`
+      SELECT folder_id
+      FROM music_playlists
+      WHERE id='taste'
+    `).get().folder_id,
+    "dup-used"
+  );
+
+  const tombstones = JSON.parse(
+    sqlite.prepare(`
+      SELECT value_json
+      FROM music_state
+      WHERE key='deleted_playlist_folders'
+    `).get().value_json
+  );
+
+  assert.deepEqual(
+    new Set(tombstones),
+    new Set(["already-deleted", "dup-a", "dup-b"])
+  );
+
+  assert.equal(
+    sqlite.prepare(`
+      SELECT COUNT(*) AS count
+      FROM music_playlist_folders f
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM music_playlists p
+        WHERE p.folder_id=f.id
+      )
+      AND EXISTS (
+        SELECT 1
+        FROM music_playlist_folders other
+        WHERE other.id<>f.id
+          AND lower(trim(other.name))=lower(trim(f.name))
+      )
+    `).get().count,
+    0
+  );
 });

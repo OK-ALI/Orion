@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { MUSIC_EXTENSIONS, MUSIC_PROVIDER_KINDS } = require("../../../src/shared/musicConstants.cjs");
+const { MUSIC_EXTENSIONS, MUSIC_PROVIDER_KINDS, MUSIC_SCHEMA_VERSION } = require("../../../src/shared/musicConstants.cjs");
 const { fileFingerprint, stableId } = require("../../../src/main/music/library/metadataReader");
 const { parseLyrics } = require("../../../src/main/music/library/lyrics");
 const tokens = require("../../../src/main/music/playback/tokenRegistry");
@@ -64,8 +64,8 @@ test("music candidate ranking favors matching official audio and duration", () =
 test("music database migrations are transactional and repeatable", () => {
   const { DatabaseSync } = require("node:sqlite");
   const database = new DatabaseSync(":memory:");
-  assert.equal(applyMigrations(database), 4);
-  assert.equal(applyMigrations(database), 4);
+  assert.equal(applyMigrations(database), MUSIC_SCHEMA_VERSION);
+  assert.equal(applyMigrations(database), MUSIC_SCHEMA_VERSION);
   const tables = database.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((row) => row.name);
   assert.ok(tables.includes("music_tracks"));
   assert.ok(tables.includes("music_playlists"));
