@@ -1,5 +1,7 @@
 export type WatchedCollection = Record<string, any>;
 
+export const SERIES_WATCHED_ACTIVE_SUMMARY_TTL_MS = 24 * 60 * 60 * 1000;
+
 function positiveNumber(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -146,13 +148,17 @@ function countWatchedEpisodesForSeason(
   return identities.size;
 }
 
-function releasedEpisodeTarget(item: any, season: any) {
+function releasedEpisodeTarget(
+  item: any,
+  season: any,
+  now = Date.now(),
+) {
   const seasonNumber = positiveNumber(season?.season_number ?? season?.season);
   const episodeCount = positiveNumber(season?.episode_count);
   if (seasonNumber == null || episodeCount == null) return null;
 
   const airDate = season?.air_date ? Date.parse(season.air_date) : Number.NaN;
-  if (Number.isFinite(airDate) && airDate > Date.now()) return 0;
+  if (Number.isFinite(airDate) && airDate > now) return 0;
 
   const nextEpisode = item?.next_episode_to_air;
   if (positiveNumber(nextEpisode?.season_number) === seasonNumber) {
@@ -180,6 +186,7 @@ type SeriesEpisodeEvaluation = {
 function evaluateSeriesFromEpisodeTruth(
   watched: WatchedCollection,
   item: any,
+  now = Date.now(),
 ): SeriesEpisodeEvaluation {
   if (!item || item.id == null) return null;
   const regularSeasons = Array.isArray(item.seasons)
@@ -190,7 +197,7 @@ function evaluateSeriesFromEpisodeTruth(
     const releasedTargets = regularSeasons
       .map((season: any) => ({
         seasonNumber: positiveNumber(season?.season_number),
-        target: releasedEpisodeTarget(item, season),
+        target: releasedEpisodeTarget(item, season, now),
       }))
       .filter((entry: any) => entry.seasonNumber != null && entry.target != null && entry.target > 0);
 
@@ -225,20 +232,100 @@ function nextEpisodeValidityBoundary(item: any) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function isTerminalSeriesStatus(item: any) {
+  const status = String(item?.status || '').trim().toLowerCase();
+  return status === 'ended' || status === 'canceled' || status === 'cancelled';
+}
+
+export function deriveSeriesWatchedSummaryValidity(
+  item: any,
+  now = Date.now(),
+): { terminal: boolean; validUntil: number | null } {
+  if (isTerminalSeriesStatus(item)) {
+    return { terminal: true, validUntil: null };
+  }
+
+  const announcedBoundary = nextEpisodeValidityBoundary(item);
+  return {
+    terminal: false,
+    validUntil: announcedBoundary ?? (now + SERIES_WATCHED_ACTIVE_SUMMARY_TTL_MS),
+  };
+}
+
 function isSeriesSummaryCurrent(record: any, now = Date.now()) {
   if (!record) return false;
   if (!isDerivedSeriesSummary(record)) return true;
+  if (record.series_terminal === true) return true;
   const validUntil = Number(record.valid_until);
-  return !Number.isFinite(validUntil) || validUntil <= 0 || now < validUntil;
+  return Number.isFinite(validUntil) && validUntil > 0 && now < validUntil;
+}
+
+export function nextSeriesWatchedSummaryExpiry(
+  watched: WatchedCollection,
+  now = Date.now(),
+): number | null {
+  let nearest: number | null = null;
+  for (const record of Object.values(watched)) {
+    if (!isDerivedSeriesSummary(record) || record?.series_terminal === true) continue;
+    const validUntil = Number(record?.valid_until);
+    if (!Number.isFinite(validUntil) || validUntil <= now) continue;
+    if (nearest == null || validUntil < nearest) nearest = validUntil;
+  }
+  return nearest;
+}
+
+export interface SeriesWatchedReconciliationCandidate {
+  seriesId: string;
+  signature: string;
+}
+
+/**
+ * Finds TV series whose durable episode truth cannot yet be represented by a
+ * current derived series marker. The signature lets the coordinator coalesce
+ * duplicate work while still retrying after episode truth changes.
+ */
+export function selectSeriesWatchedReconciliationCandidates(
+  watched: WatchedCollection,
+  now = Date.now(),
+): SeriesWatchedReconciliationCandidate[] {
+  const episodesBySeries = new Map<string, string[]>();
+
+  for (const [key, record] of Object.entries(watched)) {
+    const identity = watchedEpisodeIdentity(record);
+    if (!identity) continue;
+    const entries = episodesBySeries.get(identity.seriesId) || [];
+    entries.push(key + ':' + (Number(record?.timestamp) || 0));
+    episodesBySeries.set(identity.seriesId, entries);
+  }
+
+  return [...episodesBySeries.entries()]
+    .filter(([seriesId]) => !isSeriesSummaryCurrent(watched[seriesWatchedKey(seriesId)], now))
+    .map(([seriesId, episodeSignatures]) => {
+      const summary = watched[seriesWatchedKey(seriesId)];
+      const summarySignature = isDerivedSeriesSummary(summary)
+        ? [
+            'summary',
+            Number(summary?.timestamp) || 0,
+            Number(summary?.valid_until) || 0,
+            summary?.series_terminal === true ? 'terminal' : 'active',
+          ].join(':')
+        : 'summary:missing';
+      return {
+        seriesId,
+        signature: episodeSignatures.sort().join('|') + '|' + summarySignature,
+      };
+    })
+    .sort((left, right) => left.seriesId.localeCompare(right.seriesId));
 }
 
 export function withSeriesWatchedSummary(
   watched: WatchedCollection,
   item: any,
   now = Date.now(),
+  evaluationNow = Date.now(),
 ): WatchedCollection {
   if (!item || item.id == null) return watched;
-  const evaluation = evaluateSeriesFromEpisodeTruth(watched, item);
+  const evaluation = evaluateSeriesFromEpisodeTruth(watched, item, evaluationNow);
   if (evaluation == null) return watched;
   const key = seriesWatchedKey(item.id);
   const existing = watched[key];
@@ -247,8 +334,8 @@ export function withSeriesWatchedSummary(
     return withoutSeriesWatchedMarker(watched, item.id);
   }
 
-  const validUntil = nextEpisodeValidityBoundary(item);
-  if (validUntil != null && validUntil <= now) {
+  const validity = deriveSeriesWatchedSummaryValidity(item, evaluationNow);
+  if (validity.validUntil != null && validity.validUntil <= evaluationNow) {
     return withoutSeriesWatchedMarker(watched, item.id);
   }
 
@@ -265,7 +352,8 @@ export function withSeriesWatchedSummary(
       is_series_summary: true,
       derived_from_episodes: true,
       released_episode_target: evaluation.releasedEpisodeTarget,
-      valid_until: validUntil,
+      series_terminal: validity.terminal,
+      valid_until: validity.validUntil,
       timestamp: now,
     },
   };

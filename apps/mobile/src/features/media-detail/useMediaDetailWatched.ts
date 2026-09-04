@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLibraryVisual } from '../../context/LibraryContext';
+import { canonicalMediaDetailWatchedRecord } from './mediaDetailWatchedPolicy';
 
 export type SeasonWatchedDialog = {
   action: 'watch' | 'unwatch';
@@ -14,6 +15,7 @@ export type WatchedUndoNotice = {
 
 interface UseMediaDetailWatchedInput {
   data: any;
+  immediateRecord?: any;
   type: 'movie' | 'tv';
   seriesId: string | number;
   title: string;
@@ -23,6 +25,7 @@ interface UseMediaDetailWatchedInput {
 
 export function useMediaDetailWatched({
   data,
+  immediateRecord,
   type,
   seriesId,
   title,
@@ -42,8 +45,14 @@ export function useMediaDetailWatched({
   const [undoNotice, setUndoNotice] = useState<WatchedUndoNotice>(null);
 
   const mediaRecord = useMemo(
-    () => data ? { ...data, media_type: type } : null,
-    [data, type],
+    () => canonicalMediaDetailWatchedRecord({
+      data,
+      immediateRecord,
+      type,
+      routeId: seriesId,
+      fallbackTitle: title,
+    }),
+    [data, immediateRecord, seriesId, title, type],
   );
 
   const movieWatched = Boolean(type === 'movie' && mediaRecord && isWatched(mediaRecord));

@@ -116,6 +116,11 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
       const props = list?.props || result.props;
       return nodes(load(path.join(dir, 'MediaDetailFallback.tsx')).MediaDetailLocalCopies(props));
     },
+    fallbackNodes() {
+      const fallback = nodes(result).find((node) => node.type?.name === 'MediaDetailFallback');
+      assert.ok(fallback, 'Missing MediaDetailFallback');
+      return nodes(load(path.join(dir, 'MediaDetailFallback.tsx')).MediaDetailFallback(fallback.props));
+    },
     component(name) { return nodes(result).find((node) => (typeof node.type === 'function' ? node.type.name : node.type) === name); },
     connect(state, epoch = network.recoveryEpoch) { network = { productState: state, remoteReady: state === 'online', recoveryEpoch: epoch }; render(); },
     options(next) { options = { ...options, ...next }; params = { ...params, ...next }; render(); },
@@ -454,4 +459,26 @@ test('compact TV choices preserve explicit episode identity and access to all do
   const seeAll = choices.find(n => n.props.accessibilityLabel === 'See all downloads');
   assert.equal(style(seeAll.props.style).minHeight, 44); assert.equal(style(seeAll.props.style).borderColor, h.theme.border);
   seeAll.props.onPress(); assert.equal(h.routes[1], '/(tabs)/downloads'); h.unmount();
+});
+
+test('route-only movie exposes watched action while remote detail is loading', () => {
+  const h = harness({ state: 'online', type: 'movie' });
+  const fallback = h.component('MediaDetailFallback');
+  assert.ok(fallback);
+  assert.equal(fallback.props.loading, true);
+  assert.equal(fallback.props.copies.length, 0);
+  assert.equal(typeof fallback.props.onWatched, 'function');
+
+  const fallbackNodes = h.fallbackNodes();
+  const watchedAction = fallbackNodes.find((node) => node.props.accessibilityLabel === 'Mark watched');
+  assert.ok(watchedAction);
+  assert.equal(fallbackNodes.some((node) => node.props.accessibilityLabel === 'Add to My List'), false);
+  watchedAction.props.onPress();
+  assert.equal(h.watched, 1);
+  h.unmount();
+
+  const tv = harness({ state: 'online', type: 'tv' });
+  assert.equal(tv.component('MediaDetailFallback'), undefined);
+  assert.ok(tv.component('ActivityIndicator'));
+  tv.unmount();
 });

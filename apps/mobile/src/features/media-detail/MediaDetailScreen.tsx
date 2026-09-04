@@ -83,7 +83,8 @@ export default function MediaDetailScreen() {
   };
   const isMovie = type === 'movie';
   const watchedActions = useMediaDetailWatched({
-    data: data || (isMovie ? local.record : null),
+    data,
+    immediateRecord: local.record || { id, title: 'This movie', media_type: type },
     type,
     seriesId: id,
     title: isMovie ? (data?.title || local.record?.title || 'This movie') : (data?.name || local.record?.name || 'This show'),
@@ -153,7 +154,7 @@ export default function MediaDetailScreen() {
     pendingDownloadTargetRef.current = null;
     setDownloadTarget(null);
   }, [id, type, network.remoteReady]);
-  if (loading && !data && !local.record) {
+  if (loading && !data && !local.record && !isMovie) {
     return <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}><ActivityIndicator size="large" color={theme.accent} /></View>;
   }
   if (!data) {

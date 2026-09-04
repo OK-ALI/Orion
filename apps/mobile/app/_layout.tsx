@@ -30,6 +30,8 @@ import { MobileDownloadAvailabilityProvider } from '../src/features/downloads/Mo
 import { MobileNotificationCoordinator } from '../src/features/notifications/MobileNotificationCoordinator';
 import { MobileNotificationResponseRouter } from '../src/features/notifications/MobileNotificationResponseRouter';
 import { MobileUpdateAnnouncementBanner } from '../src/features/updates/MobileUpdateAnnouncementBanner';
+import { MobileWatchedSummaryCoordinator } from '../src/features/library/MobileWatchedSummaryCoordinator';
+import { MobileArtworkCacheCoordinator } from '../src/features/library/MobileArtworkCacheCoordinator';
 
 
 // Keep the splash screen visible while we fetch resources
@@ -120,6 +122,8 @@ function ThemedApplication() {
               <GestureHandlerRootView style={{ flex: 1 }}>
               <View style={[styles.container, { backgroundColor: theme.background }]}>
                 <MobileDownloadEngineCoordinator />
+                <MobileWatchedSummaryCoordinator />
+                <MobileArtworkCacheCoordinator />
                 <MobileNotificationCoordinator />
                 <MobileNotificationResponseRouter />
                 <MobileDiagnosticsBridge />

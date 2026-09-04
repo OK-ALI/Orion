@@ -24,6 +24,15 @@ import { savedItemWatchState } from './watchedState';
 import { useResponsiveLayout } from '../../services/responsive';
 import { getGridRenderBudget, getStackListRenderBudget } from '../../services/listPerformance';
 import { usePerformanceProfile } from '../../context/PerformanceContext';
+import { mmkvStorageAdapter } from '../../services/storageAdapter';
+import { LibrarySortDialog } from './LibrarySortDialog';
+import {
+  MOBILE_LIBRARY_SORT_KEY,
+  MOBILE_LIBRARY_SORT_OPTIONS,
+  normalizeMobileLibrarySort,
+  sortMobileLibraryItems,
+  type MobileLibrarySort,
+} from './librarySort';
 
 type LibraryTab = 'saved' | 'continue' | 'history';
 type SavedFilter = 'all' | 'unwatched' | 'watched';
@@ -70,6 +79,10 @@ export default function LibraryScreen() {
   } = useLibrary();
   const [activeTab, setActiveTab] = useState<LibraryTab>(() => validTab(params.tab));
   const [savedFilter, setSavedFilter] = useState<SavedFilter>('all');
+  const [savedSort, setSavedSort] = useState<MobileLibrarySort>(() => (
+    normalizeMobileLibrarySort(mmkvStorageAdapter.get(MOBILE_LIBRARY_SORT_KEY))
+  ));
+  const [sortDialogOpen, setSortDialogOpen] = useState(false);
   const [dialog, setDialog] = useState<LibraryDialogState>(null);
 
   useEffect(() => setActiveTab(validTab(params.tab)), [params.tab]);
@@ -78,9 +91,13 @@ export default function LibraryScreen() {
     () => savedOrder.map((key) => saved[key]).filter(Boolean),
     [saved, savedOrder],
   );
+  const sortedSavedItems = useMemo(
+    () => sortMobileLibraryItems(savedItems, savedSort),
+    [savedItems, savedSort],
+  );
   const savedWatchRows = useMemo(
-    () => savedItems.map((item) => ({ item, state: savedItemWatchState(watched, item) })),
-    [savedItems, watched],
+    () => sortedSavedItems.map((item) => ({ item, state: savedItemWatchState(watched, item) })),
+    [sortedSavedItems, watched],
   );
   const savedFilterCounts = useMemo(() => {
     const watchedCount = savedWatchRows.filter((entry) => entry.state === 'watched').length;
@@ -96,9 +113,9 @@ export default function LibraryScreen() {
   );
   const filteredSavedItems = useMemo(
     () => savedFilter === 'all'
-      ? savedItems
+      ? sortedSavedItems
       : savedWatchRows.filter((entry) => entry.state === savedFilter).map((entry) => entry.item),
-    [savedFilter, savedItems, savedWatchRows],
+    [savedFilter, savedWatchRows, sortedSavedItems],
   );
   const continueItems = useMemo(
     () => getContinueWatching(),
@@ -274,6 +291,25 @@ export default function LibraryScreen() {
                 columnWrapperStyle={{ gap: gridGap }}
                 ListHeaderComponent={(
                   <View style={styles.savedFilterFrame}>
+                    <View style={styles.savedControls}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={'Sort My List: ' + MOBILE_LIBRARY_SORT_OPTIONS.find((option) => option.id === savedSort)?.label}
+                        accessibilityHint="Opens My List sort options"
+                        onPress={() => setSortDialogOpen(true)}
+                        style={({ pressed }) => [
+                          styles.sortButton,
+                          { backgroundColor: theme.surface, borderColor: theme.border },
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Ionicons name="swap-vertical" size={18} color={theme.accent} />
+                        <Text style={[styles.sortButtonText, { color: theme.text }]}>
+                          {MOBILE_LIBRARY_SORT_OPTIONS.find((option) => option.id === savedSort)?.label}
+                        </Text>
+                        <Ionicons name="chevron-down" size={16} color={theme.textMuted} />
+                      </Pressable>
+                    </View>
                     <View
                       style={[styles.savedFilters, { backgroundColor: theme.surface, borderColor: theme.border }]}
                     >
@@ -376,6 +412,18 @@ export default function LibraryScreen() {
         </GestureDetector>
       </View>
 
+      <LibrarySortDialog
+        visible={sortDialogOpen}
+        selected={savedSort}
+        onDismiss={() => setSortDialogOpen(false)}
+        onSelect={(sort) => {
+          setSavedSort(sort);
+          mmkvStorageAdapter.set(MOBILE_LIBRARY_SORT_KEY, sort);
+          setSortDialogOpen(false);
+          const label = MOBILE_LIBRARY_SORT_OPTIONS.find((option) => option.id === sort)?.label || 'Custom order';
+          AccessibilityInfo.announceForAccessibility('My List sorted by ' + label + '.');
+        }}
+      />
       <OrionDialog
         visible={dialog?.type === 'clear'}
         title="Clear watch history?"
@@ -417,6 +465,9 @@ const styles = StyleSheet.create({
   page: { flex: 1 },
   listContent: { paddingTop: 12, paddingBottom: 96, flexGrow: 1 },
   savedFilterFrame: { width: '100%', marginBottom: 14 },
+  savedControls: { width: '100%', maxWidth: 620, alignSelf: 'center', alignItems: 'flex-end', marginBottom: 8 },
+  sortButton: { minHeight: 44, borderWidth: 1, borderRadius: 22, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  sortButtonText: { fontSize: 13, fontWeight: '800' },
   savedFilters: { width: '100%', maxWidth: 620, alignSelf: 'center', minHeight: 48, borderWidth: 1, borderRadius: 24, padding: 3, flexDirection: 'row', gap: 3 },
   savedFilter: { flex: 1, minHeight: 42, borderWidth: 1, borderRadius: 21, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
   savedFilterLabel: { fontSize: 13, fontWeight: '800' },

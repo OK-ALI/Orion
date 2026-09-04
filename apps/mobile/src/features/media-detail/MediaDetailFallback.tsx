@@ -70,12 +70,14 @@ export function MediaDetailFallback({ title, year, copies, message, checkingLoca
       {!!copies.length && <Text style={[styles.body, { color: theme.textSecondary }]}>Your local copy is ready to play.</Text>}
       {!remoteReady && <Text style={[styles.body, { color: theme.textMuted }]}>Streaming, trailers and new downloads need a connection.</Text>}
       <MediaDetailLocalCopies copies={copies} onPlay={onPlay} onOpenLibrary={onOpenLibrary} />
-      {!!copies.length && (
+      {(!!copies.length || !!onWatched) && (
         <View style={[styles.card, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={saved ? 'Remove from My List' : 'Add to My List'}
-            accessibilityState={{ selected: saved }} onPress={onSave} style={styles.button}>
-            <Text style={[styles.buttonText, { color: theme.text }]}>{saved ? 'In My List' : 'My List'}</Text>
-          </Pressable>
+          {!!copies.length && (
+            <Pressable accessibilityRole="button" accessibilityLabel={saved ? 'Remove from My List' : 'Add to My List'}
+              accessibilityState={{ selected: saved }} onPress={onSave} style={styles.button}>
+              <Text style={[styles.buttonText, { color: theme.text }]}>{saved ? 'In My List' : 'My List'}</Text>
+            </Pressable>
+          )}
           {onWatched && <Pressable accessibilityRole="button" accessibilityLabel={watched ? 'Mark unwatched' : 'Mark watched'}
             accessibilityState={{ selected: watched }} onPress={onWatched} style={styles.button}>
             <Text style={[styles.buttonText, { color: theme.text }]}>{watched ? 'Mark unwatched' : 'Mark watched'}</Text>

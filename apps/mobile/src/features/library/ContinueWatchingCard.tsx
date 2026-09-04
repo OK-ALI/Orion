@@ -5,6 +5,7 @@ import type { ContinueWatchingEntry } from '@orion/shared/types';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { progressDescription } from './playbackFormatting';
 import { useResponsiveLayout } from '../../services/responsive';
+import { useContinueWatchingArtwork } from './useContinueWatchingArtwork';
 
 interface ContinueWatchingCardProps {
   entry: ContinueWatchingEntry;
@@ -35,7 +36,7 @@ export function ContinueWatchingCard({
   const cardWidth = isLibrary
     ? '100%'
     : Math.min(330, Math.max(252, width * (compact ? 0.82 : 0.79)));
-  const artwork = imgUrl(presentation.backdropPath || presentation.posterPath, 'w780');
+  const artwork = useContinueWatchingArtwork(entry);
   const episodeContext = mediaIdentity.mediaType === 'tv'
     ? `S${mediaIdentity.season || 1} E${mediaIdentity.episode || 1}${presentation.episodeTitle ? ` · ${presentation.episodeTitle}` : ''}`
     : mediaIdentity.year ? String(mediaIdentity.year) : 'Movie';
