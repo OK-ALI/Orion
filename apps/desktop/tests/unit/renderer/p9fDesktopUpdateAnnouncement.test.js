@@ -103,6 +103,52 @@ describe("P9-F2 Desktop update announcement synchronization", () => {
     unsubscribe();
   });
 
+  it("finds a Desktop release behind more than 20 newer Mobile-only releases", async () => {
+    vi.stubGlobal("window", {
+      electron: {
+        getAppVersion: vi.fn().mockResolvedValue("2.1.2"),
+      },
+    });
+
+    const mobileOnlyReleases = Array.from({ length: 20 }, (_, index) => {
+      const version = `2.2.${20 - index}`;
+      const candidate = release(version);
+
+      return {
+        ...candidate,
+        assets: [{
+          name: `orion-mobile-v${version}.apk`,
+          browser_download_url: `https://example.test/orion-mobile-v${version}.apk`,
+          size: 100,
+          content_type: "application/vnd.android.package-archive",
+        }],
+      };
+    });
+    const releases = [...mobileOnlyReleases, release("2.1.2")];
+    const fetchMock = vi.fn(async (url) => {
+      if (String(url).includes("/releases?")) {
+        const perPage = Number(new URL(String(url)).searchParams.get("per_page"));
+        return {
+          ok: true,
+          json: async () => releases.slice(0, perPage),
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => integrityManifest("2.1.2"),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await checkForUpdates("preview");
+
+    expect(fetchMock.mock.calls[0][0]).toContain("per_page=100");
+    expect(result.latest).toBe("2.1.2");
+    expect(result.current).toBe("2.1.2");
+    expect(result.hasUpdate).toBe(false);
+  });
+
   it("keeps startup, Settings, channel changes, dismissal, and modal presentation on one announcement path", () => {
     const appSource = fs.readFileSync(
       path.join(desktopRoot, "src/renderer/app/App.jsx"),

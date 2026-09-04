@@ -70,7 +70,7 @@ import {
 } from "../../../shared/utils/ageRating";
 
 export function useTVEpisodeActions(context) {
-  const { autoplayDoneRef, currentSeasonEpisodes, d, downloadsByEpisodeKey, item, localCountdownStartedRef, onGoToDownloads, onHistory, playing, resetAutoplayRef, resolveError, resolvingUrl, restricted, selectedEp, selectedSeason, setCountdownStartedRef, setPendingEpToPlay, setResumeTime, setShowDownload, setShowResumePrompt, showFailoverPrompt, startPlayingEp, triggerAutoplayRef, webviewLoading } = context;
+  const { autoplayDoneRef, currentSeasonEpisodes, d, downloadsByEpisodeKey, item, localCountdownStartedRef, onGoToDownloads, onHistory, playing, prepareEpisodeDownload, resetAutoplayRef, resolveError, resolvingUrl, restricted, selectedEp, selectedSeason, setCountdownStartedRef, setPendingEpToPlay, setResumeTime, setShowResumePrompt, showFailoverPrompt, startPlayingEp, triggerAutoplayRef, webviewLoading } = context;
 const playEpisode = useCallback(
     (ep) => {
       const epProgressKey = `tv_${item.id}_s${selectedSeason}e${ep.episode_number}`;
@@ -107,10 +107,9 @@ const playEpisode = useCallback(
         onGoToDownloads?.(existing.id);
         return;
       }
-      startPlayingEp(ep, 0);
-      setShowDownload(true);
+      prepareEpisodeDownload(ep, selectedSeason);
     },
-    [downloadsByEpisodeKey, onGoToDownloads, selectedSeason],
+    [downloadsByEpisodeKey, onGoToDownloads, prepareEpisodeDownload, selectedSeason],
   );
 
   const startSeasonDownload = useCallback(() => {

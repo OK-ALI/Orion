@@ -125,6 +125,9 @@ const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadingSeason, setLoadingSeason] = useState(false);
   const [showDownload, setShowDownload] = useState(false);
+  const [downloadTarget, setDownloadTarget] = useState(null);
+  const [downloadResolutionActive, setDownloadResolutionActive] = useState(false);
+  const downloadResolutionPreflightRef = useRef(new Set());
   const [trailerKey, setTrailerKey] = useState(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const [m3u8Url, setM3u8Url] = useState(null);
@@ -137,14 +140,15 @@ const [details, setDetails] = useState(null);
   useEffect(() => {
     let disposed = false;
     let openedSessionId = null;
+    setCaptureSessionId(null);
     setM3u8Url(null);
     setM3u8Context(null);
     window.electron?.beginStreamCapture?.({
       mediaIdentity: {
         mediaType: "tv",
-        mediaId: item.id,
-        season: selectedSeason,
-        episode: selectedEp?.episode_number,
+        mediaId: downloadTarget?.mediaId ?? item.id,
+        season: downloadTarget?.season ?? selectedSeason,
+        episode: downloadTarget?.episode ?? selectedEp?.episode_number,
       },
       sourceId: playerSource,
       webContentsId: getReadyWebContentsId(webviewRef.current),
@@ -160,7 +164,7 @@ const [details, setDetails] = useState(null);
       disposed = true;
       if (openedSessionId) window.electron?.endStreamCapture?.(openedSessionId);
     };
-  }, [item.id, playerSource, selectedSeason, selectedEp?.episode_number]);
+  }, [downloadTarget?.key, item.id, playerSource, selectedSeason, selectedEp?.episode_number]);
   // Accent colour + subtitle lang come from App-level state (via props),
   // so they are always fresh after Settings save without any extra storage reads.
   const playerAccentColor = playerSettings?.accentColor ?? null;
@@ -663,14 +667,136 @@ const [details, setDetails] = useState(null);
     anilistData, anilistLoading, anilistSeasons, d, downloads, episodeGroupData, episodeGroupMap, failedSeasons, isAnime, item, onMarkUnwatched, onMarkWatched, seasonData, selectedEp, selectedSeason, setSelectedEp, watched
   });
 
-    const { currentEpDownload, currentProgressKey, handleFailoverNextSource, handleManualSkip, startPlayingEp } = useTVWebview({
-    anilistData, autoMarkedRef, d, downloadsByEpisodeKey, dubMode, durationRef, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, introSkipMode, isAnime, isAsync, item, lastKnownTimeRef, localCountdownStartedRef, onHistory, onMarkWatchedRef, onPlay, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressViaFrames, resetAutoplayRef, resolvedPlayerUrlRef, resolvingUrlRef, saveProgressRef, seekBackCooldownRef, selectedEp, selectedSeason, setCountdownStartedRef, setInterceptedSubs, setM3u8Url, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSelectedEp, setShowFailoverPrompt, setShowResumePrompt, setSkipPrompt, setSkipTimings, setWebviewLoading, skipPrompt, skipTimings, switchingToMiniPlayerRef, triggerAutoplayRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef
+  const prepareEpisodeDownload = useCallback((ep, season = selectedSeason) => {
+    if (!ep) return;
+    if (
+      playing &&
+      selectedEp &&
+      Number(season) === Number(selectedSeason) &&
+      Number(ep.episode_number) === Number(selectedEp.episode_number)
+    ) {
+      setDownloadResolutionActive(false);
+      setDownloadTarget(null);
+      setShowDownload(true);
+      return;
+    }
+
+    const rawSeason = ep._tmdbSeason ?? season;
+    const rawEpisode = ep._tmdbAbsolute ?? ep.episode_number;
+    const mapped = applyEpisodeMapping(item.id, rawSeason, rawEpisode, episodeGroupMap);
+    const episodeNumber = Number(ep.episode_number);
+    const seasonNumber = Number(season);
+    const displayYear = (d.first_air_date || "").slice(0, 4);
+
+    downloadResolutionPreflightRef.current = new Set();
+    setCaptureSessionId(null);
+    setM3u8Url(null);
+    setM3u8Context(null);
+    setSelectedEp(ep);
+    setDownloadTarget({
+      key: `tv:${item.id}:${seasonNumber}:${episodeNumber}:${playerSource}`,
+      mediaType: "tv",
+      mediaId: item.id,
+      tmdbId: item.id,
+      imdbId: d?.external_ids?.imdb_id || d?.imdb_id || null,
+      title,
+      episodeTitle: ep.name || `Episode ${episodeNumber}`,
+      mediaName: `${title}${displayYear ? ` (${displayYear})` : ""} S${String(seasonNumber).padStart(2, "0")} E${String(episodeNumber).padStart(2, "0")}`,
+      season: seasonNumber,
+      episode: episodeNumber,
+      providerSeason: mapped?.season ?? rawSeason,
+      providerEpisode: mapped?.episode ?? rawEpisode,
+      runtime: Number(ep.runtime) || null,
+      sourceId: playerSource,
+      translationType: dubMode,
+      episodeRecord: ep,
+    });
+    setDownloadResolutionActive(true);
+    setShowDownload(false);
+  }, [d?.external_ids?.imdb_id, d?.first_air_date, d?.imdb_id, dubMode, episodeGroupMap, item.id, playerSource, playing, selectedEp, selectedSeason, setSelectedEp, title]);
+
+  const closeDownload = useCallback(() => {
+    setShowDownload(false);
+    setDownloadResolutionActive(false);
+    setDownloadTarget(null);
+  }, []);
+
+    const { currentEpDownload, currentProgressKey, handleFailoverNextSource, handleManualSkip, startEpisodeDownloadResolution, startPlayingEp } = useTVWebview({
+    anilistData, autoMarkedRef, d, downloadResolutionActive, downloadsByEpisodeKey, dubMode, durationRef, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, introSkipMode, isAnime, isAsync, item, lastKnownTimeRef, localCountdownStartedRef, onHistory, onMarkWatchedRef, onPlay, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressViaFrames, resetAutoplayRef, resolvedPlayerUrlRef, resolvingUrlRef, saveProgressRef, seekBackCooldownRef, selectedEp, selectedSeason, setCountdownStartedRef, setInterceptedSubs, setM3u8Url, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSelectedEp, setShowFailoverPrompt, setShowResumePrompt, setSkipPrompt, setSkipTimings, setWebviewLoading, skipPrompt, skipTimings, switchingToMiniPlayerRef, triggerAutoplayRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef
   });
+  useEffect(() => {
+    if (
+      !downloadResolutionActive ||
+      !downloadTarget ||
+      showDownload ||
+      playing ||
+      !captureSessionId
+    ) {
+      return;
+    }
+    const ep = downloadTarget.episodeRecord;
+    if (!ep) return;
+    startEpisodeDownloadResolution(ep);
+  }, [
+    captureSessionId,
+    downloadResolutionActive,
+    downloadTarget,
+    playing,
+    showDownload,
+    startEpisodeDownloadResolution,
+  ]);
+
+  useEffect(() => {
+    if (
+      !downloadResolutionActive ||
+      !downloadTarget ||
+      !playing ||
+      !captureSessionId
+    ) {
+      return undefined;
+    }
+    if (
+      m3u8Context?.sessionId &&
+      m3u8Context.sessionId !== captureSessionId
+    ) {
+      return undefined;
+    }
+    const candidateId =
+      m3u8Context?.candidateId || m3u8Context?.id || null;
+    if (
+      !candidateId ||
+      downloadResolutionPreflightRef.current.has(candidateId)
+    ) {
+      return undefined;
+    }
+    downloadResolutionPreflightRef.current.add(candidateId);
+
+    let disposed = false;
+    Promise.resolve(window.electron?.preflightStream?.(candidateId))
+      .then((result) => {
+        if (disposed || !result?.ok) return;
+        setDownloadResolutionActive(false);
+        setPlaying(false);
+        setShowDownload(true);
+      })
+      .catch(() => {});
+
+    return () => {
+      disposed = true;
+    };
+  }, [
+    captureSessionId,
+    downloadResolutionActive,
+    downloadTarget,
+    m3u8Context,
+    playing,
+  ]);
+
 
 
 
     const { autoplayCountdown, autoplayNextLayout, cancelAutoplay, nextEp, playEpisode, playNow, prevEp, sourceHealth, startEpisodeDownload, startSeasonDownload } = useTVEpisodeActions({
-    autoplayDoneRef, currentSeasonEpisodes, d, downloadsByEpisodeKey, item, localCountdownStartedRef, onGoToDownloads, onHistory, playing, resetAutoplayRef, resolveError, resolvingUrl, restricted, selectedEp, selectedSeason, setCountdownStartedRef, setPendingEpToPlay, setResumeTime, setShowDownload, setShowResumePrompt, showFailoverPrompt, startPlayingEp, triggerAutoplayRef, webviewLoading
+    autoplayDoneRef, currentSeasonEpisodes, d, downloadsByEpisodeKey, item, localCountdownStartedRef, onGoToDownloads, onHistory, playing, prepareEpisodeDownload, resetAutoplayRef, resolveError, resolvingUrl, restricted, selectedEp, selectedSeason, setCountdownStartedRef, setPendingEpToPlay, setResumeTime, setShowDownload, setShowResumePrompt, showFailoverPrompt, startPlayingEp, triggerAutoplayRef, webviewLoading
   });
 
   const handleSetDownloaderFolder = useCallback((folder) => {
@@ -770,7 +896,7 @@ const [details, setDetails] = useState(null);
     ? !!watched?.[currentProgressKey]
     : false;
 
-    const viewModel = { ambientColor, autoplayCountdown, autoplayNextLayout, blockedAlltime, blockedSession, cancelAutoplay, currentEpDownload, currentEpWatched, currentProgressKey, currentSeasonEpisodes, d, displayEpisodeCount, displayGenres, displayOverview, displayScore, displaySeasonCount, downloaderFolder, downloadsByEpisodeKey, dubMode, durationRef, epMenu, episodeGroupCurrentEpisodes, getBlockedDomains, handleFailoverNextSource, handleManualSkip, handleSetDownloaderFolder, interceptedSubs, isAnime, isAsync, isSaved, isSeasonWatched, item, loadingSeason, m3u8Context, m3u8Url, markSeasonUnwatched, markSeasonWatched, mediaName, menuPos, nextEp, onBack, onDownloadStarted, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave: handleLibrarySave, onSettings, pendingEpToPlay, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, prevEp, progress, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, seasonData, seasonMenu, seasonWatchedMap, seasons, selectedEp, selectedSeason, setDubMode, setEpMenu, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSeasonMenu, setSelectedSeason, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, skipPrompt, skipTimings, sourceHealth, sourceRef, startEpisodeDownload, startPlayingEp, startSeasonDownload, supportsProgress, switchingToMiniPlayerRef, title, trailerKey, voiceBoost, watched, webviewLoading, webviewRef };
+    const viewModel = { ambientColor, autoplayCountdown, autoplayNextLayout, blockedAlltime, blockedSession, cancelAutoplay, closeDownload, currentEpDownload, currentEpWatched, currentProgressKey, currentSeasonEpisodes, d, displayEpisodeCount, displayGenres, displayOverview, displayScore, displaySeasonCount, downloadResolutionActive, downloadTarget, downloaderFolder, downloadsByEpisodeKey, dubMode, durationRef, epMenu, episodeGroupCurrentEpisodes, getBlockedDomains, handleFailoverNextSource, handleManualSkip, handleSetDownloaderFolder, interceptedSubs, isAnime, isAsync, isSaved, isSeasonWatched, item, loadingSeason, m3u8Context, m3u8Url, markSeasonUnwatched, markSeasonWatched, mediaName, menuPos, nextEp, onBack, onDownloadStarted, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave: handleLibrarySave, onSettings, pendingEpToPlay, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, prevEp, progress, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, seasonData, seasonMenu, seasonWatchedMap, seasons, selectedEp, selectedSeason, setDubMode, setEpMenu, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSeasonMenu, setSelectedSeason, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, skipPrompt, skipTimings, sourceHealth, sourceRef, startEpisodeDownload, startPlayingEp, startSeasonDownload, supportsProgress, switchingToMiniPlayerRef, title, trailerKey, voiceBoost, watched, webviewLoading, webviewRef };
     viewModel.cast = cast;
     viewModel.keyCrew = keyCrew;
     viewModel.creditsLoading = creditsLoading;

@@ -64,7 +64,7 @@ import {
 import { resetViewingToNotStarted } from "../../player/services/viewingReset";
 
 export default function MovieDetails({ model }) {
-  const { d, displayGenres, displayOverview, displayPct, displayScore, handlePlay, hasProgress, isSaved, isUnreleased, isWatched, movieDownload, onBack, onGoToDownloads, onMarkUnwatched, onMarkWatched, onSave, playing, progressKey, progressLabel, rating, restricted, saveProgress, setShowDownload, setShowTrailer, title, trailerKey } = model;
+  const { d, displayGenres, displayOverview, displayPct, displayScore, handlePlay, hasProgress, isSaved, isUnreleased, isWatched, movieDownload, onBack, onGoToDownloads, onMarkUnwatched, onMarkWatched, onSave, playing, progressKey, progressLabel, rating, restricted, saveProgress, openDownload, setShowTrailer, title, trailerKey } = model;
   return (
 <div className="detail-hero">
         <div
@@ -200,7 +200,7 @@ export default function MovieDetails({ model }) {
                   onClick={() =>
                     movieDownload
                       ? onGoToDownloads?.(movieDownload.id)
-                      : setShowDownload(true)
+                      : openDownload()
                   }
                   title={
                     movieDownload

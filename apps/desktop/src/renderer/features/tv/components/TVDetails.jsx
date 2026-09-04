@@ -72,7 +72,7 @@ import {
 import { ContextMenu, EpisodeDesc, PartialCircleIcon, VoiceBoostIcon } from "./EpisodeUi";
 
 export default function TVDetails({ model }) {
-  const { currentEpDownload, currentSeasonEpisodes, d, displayEpisodeCount, displayGenres, displayOverview, displayScore, displaySeasonCount, isSaved, onBack, onGoToDownloads, onSave, playEpisode, rating, restricted, selectedEp, setShowDownload, setShowTrailer, title, trailerKey } = model;
+  const { currentEpDownload, currentSeasonEpisodes, d, displayEpisodeCount, displayGenres, displayOverview, displayScore, displaySeasonCount, isSaved, onBack, onGoToDownloads, onSave, playEpisode, rating, restricted, selectedEp, setShowTrailer, startEpisodeDownload, title, trailerKey } = model;
   const watchNowEpisode = selectedEp || currentSeasonEpisodes?.[0] || null;
 
   return (
@@ -197,7 +197,7 @@ export default function TVDetails({ model }) {
                       onClick={() =>
                         currentEpDownload
                           ? onGoToDownloads?.(currentEpDownload.id)
-                          : setShowDownload(true)
+                          : startEpisodeDownload(selectedEp)
                       }
                       title={
                         currentEpDownload

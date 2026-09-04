@@ -27,4 +27,100 @@ describe("Library UI metadata and sorting", () => {
     expect(listener).toHaveBeenCalledWith(expect.objectContaining({ detail: "year" }));
     window.removeEventListener("orion:library-sort-changed", listener);
   });
+
+
+  it("filters My List by media type and watched state with live counts", () => {
+    const saved = [
+      { id: 1, media_type: "movie", title: "Watched Movie", year: "2024" },
+      { id: 2, media_type: "movie", title: "Fresh Movie", year: "2023" },
+      { id: 3, media_type: "tv", title: "Watched Series", year: "2022", seasons: [{ season_number: 1, episode_count: 1 }] },
+      { id: 4, media_type: "tv", title: "Fresh Series", year: "2021", seasons: [{ season_number: 1, episode_count: 1 }] },
+    ];
+
+    renderLibrary({
+      saved,
+      watched: {
+        movie_1: true,
+        tv_3_s1e1: true,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: /My List/ }));
+
+    expect(screen.getByRole("button", { name: "Movies, 2 titles" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "TV & Anime, 2 titles" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "All, 4 titles" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Unwatched, 2 titles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Watched, 2 titles" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Movies, 2 titles" }));
+    expect(screen.getByRole("button", { name: "All, 2 titles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unwatched, 1 titles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Watched, 1 titles" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Watched, 1 titles" }));
+    expect(screen.getByText("Watched Movie")).toBeInTheDocument();
+    expect(screen.queryByText("Fresh Movie")).not.toBeInTheDocument();
+    expect(screen.queryByText("Watched Series")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Movies, 2 titles" }));
+    expect(screen.getByRole("button", { name: "Watched, 2 titles" })).toBeInTheDocument();
+    expect(screen.getByText("Watched Movie")).toBeInTheDocument();
+    expect(screen.getByText("Watched Series")).toBeInTheDocument();
+  });
+
+  it("keeps a partially watched series in the Unwatched title filter", () => {
+    renderLibrary({
+      saved: [{
+        id: 7,
+        media_type: "tv",
+        title: "Partial Series",
+        year: "2024",
+        seasons: [{ season_number: 1, episode_count: 2 }],
+      }],
+      watched: {
+        tv_7_s1e1: true,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: /My List/ }));
+
+    expect(screen.getByRole("button", { name: "Unwatched, 1 titles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Watched, 0 titles" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Watched, 0 titles" }));
+    expect(screen.getByText("No watched titles match these filters")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Unwatched, 1 titles" }));
+    expect(screen.getByText("Partial Series")).toBeInTheDocument();
+  });
+
+  it("composes library search with My List filters and counts", () => {
+    renderLibrary({
+      saved: [
+        { id: 11, media_type: "movie", title: "Alpha Movie", year: "2024" },
+        { id: 12, media_type: "tv", title: "Alpha Series", year: "2024", seasons: [{ season_number: 1, episode_count: 1 }] },
+        { id: 13, media_type: "movie", title: "Beta Movie", year: "2024" },
+      ],
+      watched: {
+        tv_12_s1e1: true,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: /My List/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Search your library" }), {
+      target: { value: "Alpha" },
+    });
+
+    expect(screen.getByRole("button", { name: "Movies, 1 titles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "TV & Anime, 1 titles" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All, 2 titles" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "TV & Anime, 1 titles" }));
+    expect(screen.getByRole("button", { name: "Watched, 1 titles" })).toBeInTheDocument();
+    expect(screen.getByText("Alpha Series")).toBeInTheDocument();
+    expect(screen.queryByText("Alpha Movie")).not.toBeInTheDocument();
+    expect(screen.queryByText("Beta Movie")).not.toBeInTheDocument();
+  });
+
 });

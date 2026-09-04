@@ -81,7 +81,7 @@ async function getCurrentVersion() {
 
 async function fetchGithubReleases() {
   const res = await fetch(
-    `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20`,
+    `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100`,
     {
       headers: { Accept: "application/vnd.github+json" },
       signal: AbortSignal.timeout(8000),

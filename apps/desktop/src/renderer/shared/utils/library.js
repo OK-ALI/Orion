@@ -55,6 +55,20 @@ export function needsLibraryMetadata(item = {}) {
     || !item.backdrop_path;
 }
 
+
+export const DESKTOP_SERIES_WATCHED_PRESENTATION = Symbol.for("orion.desktop.series-watched-presentation");
+
+export function attachDesktopSeriesWatchedPresentation(watched = {}, summaries = {}) {
+  const presentation = { ...(watched || {}) };
+  Object.defineProperty(presentation, DESKTOP_SERIES_WATCHED_PRESENTATION, {
+    value: summaries || {},
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  return presentation;
+}
+
 export function getWatchedPresentationKey(item = {}) {
   if (item.id == null) return null;
   const mediaType = getLibraryMediaType(item);
@@ -87,6 +101,11 @@ function getKnownSeriesEpisodeKeys(item = {}) {
 export function isMediaItemWatched(item = {}, watched = {}) {
   const exactKey = getWatchedPresentationKey(item);
   if (exactKey) return !!watched?.[exactKey];
+
+  if (getLibraryMediaType(item) === "tv" && item.id != null) {
+    const summary = watched?.[DESKTOP_SERIES_WATCHED_PRESENTATION]?.[`tv_${item.id}`];
+    if (summary?.complete === true) return true;
+  }
 
   const seriesKeys = getKnownSeriesEpisodeKeys(item);
   return seriesKeys.length > 0 && seriesKeys.every((key) => !!watched?.[key]);

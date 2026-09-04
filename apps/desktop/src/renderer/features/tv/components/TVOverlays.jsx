@@ -73,7 +73,11 @@ import { ContextMenu, EpisodeDesc, PartialCircleIcon, VoiceBoostIcon } from "./E
 import { resetViewingToNotStarted } from "../../player/services/viewingReset";
 
 export default function TVOverlays({ model }) {
-  const { blockedAlltime, blockedSession, d, downloaderFolder, epMenu, getBlockedDomains, handleSetDownloaderFolder, interceptedSubs, isSeasonWatched, item, m3u8Context, m3u8Url, markSeasonUnwatched, markSeasonWatched, mediaName, onDownloadStarted, onMarkUnwatched, onMarkWatched, onSettings, pendingEpToPlay, progress, resumeTime, saveProgress, seasonMenu, selectedEp, selectedSeason, setEpMenu, setSeasonMenu, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowTrailer, showBlockedModal, showDownload, showResumePrompt, showTrailer, startPlayingEp, title, trailerKey, watched } = model;
+  const { blockedAlltime, blockedSession, closeDownload, d, downloadTarget, downloaderFolder, epMenu, getBlockedDomains, handleSetDownloaderFolder, interceptedSubs, isSeasonWatched, item, m3u8Context, m3u8Url, markSeasonUnwatched, markSeasonWatched, mediaName, onDownloadStarted, onMarkUnwatched, onMarkWatched, onSettings, pendingEpToPlay, progress, resumeTime, saveProgress, seasonMenu, selectedEp, selectedSeason, setEpMenu, setSeasonMenu, setShowBlockedModal, setShowResumePrompt, setShowTrailer, showBlockedModal, showDownload, showResumePrompt, showTrailer, startPlayingEp, title, trailerKey, watched } = model;
+  const modalSeason = downloadTarget?.season ?? selectedSeason;
+  const modalEpisode = downloadTarget?.episode ?? selectedEp?.episode_number;
+  const modalRuntime = downloadTarget?.runtime ?? selectedEp?.runtime;
+  const modalMediaName = downloadTarget?.mediaName || mediaName;
   return (
 <>
 {showTrailer && trailerKey && (
@@ -165,30 +169,30 @@ export default function TVOverlays({ model }) {
       )}
 {showDownload && (
         <DownloadModal
-          onClose={() => setShowDownload(false)}
+          onClose={closeDownload}
           captureSessionId={model.captureSessionId}
           m3u8Url={m3u8Url}
           m3u8Context={m3u8Context}
           subtitles={interceptedSubs}
-          mediaName={mediaName}
+          mediaName={modalMediaName}
           downloaderFolder={downloaderFolder}
           setDownloaderFolder={handleSetDownloaderFolder}
           onOpenSettings={onSettings}
           onDownloadStarted={onDownloadStarted}
           mediaId={item.id}
           mediaType="tv"
-          season={selectedSeason}
-          episode={selectedEp?.episode_number}
+          season={modalSeason}
+          episode={modalEpisode}
           posterPath={d.poster_path}
           tmdbId={item.id}
           expectedDurationSeconds={
-            Number(selectedEp?.runtime) > 0
-              ? Number(selectedEp.runtime) * 60
+            Number(modalRuntime) > 0
+              ? Number(modalRuntime) * 60
               : Number(d?.episode_run_time?.[0]) > 0
                 ? Number(d.episode_run_time[0]) * 60
                 : null
           }
-          expectedDurationConfidence={Number(selectedEp?.runtime) > 0 ? "exact" : "approximate"}
+          expectedDurationConfidence={Number(modalRuntime) > 0 ? "exact" : "approximate"}
         />
       )}
 </>

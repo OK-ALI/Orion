@@ -77,7 +77,7 @@ import { useCinemaPlaybackEvidence } from "../../player/hooks/useCinemaPlaybackE
 import { persistPlaybackProgressDetails } from "../../../services/viewingStateVerification";
 
 export function useMovieWebview(context) {
-  const { autoMarkedRef, autoplayDoneRef, d, dubMode, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, isWatched, item, lastKnownTimeRef, loading, onHistory, onMarkWatchedRef, onPlay, pipUrlRef, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressKey, progressViaFrames, resolvedPlayerUrlRef, resolvingUrlRef, saveProgress, saveProgressRef, seekBackCooldownRef, setInterceptedSubs, setM3u8Url, setPipOpen, setPlayerFullscreen, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setResumeTime, setShowFailoverPrompt, setShowResumePrompt, setWebviewLoading, switchingToMiniPlayerRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef } = context;
+  const { autoMarkedRef, autoplayDoneRef, d, downloadResolutionActive, dubMode, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, isWatched, item, lastKnownTimeRef, loading, onHistory, onMarkWatchedRef, onPlay, pipUrlRef, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressKey, progressViaFrames, resolvedPlayerUrlRef, resolvingUrlRef, saveProgress, saveProgressRef, seekBackCooldownRef, setInterceptedSubs, setM3u8Url, setPipOpen, setPlayerFullscreen, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setResumeTime, setShowFailoverPrompt, setShowResumePrompt, setWebviewLoading, switchingToMiniPlayerRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef } = context;
   const { healthEvidenceRef, playerEventProgressRef, attemptedSourcesRef, observePlaybackProgress, reportSourceHealth } = useCinemaPlaybackEvidence({
     playing, sourceId: playerSource, mediaType: "movie", resetKey: item.id, viewingKey: progressKey, webviewRef,
     lastKnownTimeRef, setWebviewLoading, setShowFailoverPrompt,
@@ -400,7 +400,7 @@ const applyVoiceBoost = useCallback(() => {
 
   // ── Auto-track progress + auto-watched every 5s ──────────────────────────
   useEffect(() => {
-    if (!playing || !sourceSupportsProgress(playerSource)) return;
+    if (downloadResolutionActive || !playing || !sourceSupportsProgress(playerSource)) return;
     let interval = null;
     const timer = setTimeout(() => {
       interval = setInterval(async () => {
@@ -518,7 +518,34 @@ const applyVoiceBoost = useCallback(() => {
       clearTimeout(timer);
       clearInterval(interval);
     };
-  }, [playing, progressKey, watchedThreshold, playerSource, progressViaFrames, observePlaybackProgress, reportSourceHealth]);
+  }, [downloadResolutionActive, playing, progressKey, watchedThreshold, playerSource, progressViaFrames, observePlaybackProgress, reportSourceHealth]);
+
+  const startMovieDownloadResolution = useCallback(() => {
+    playbackIntentRef.current = createStartPlaybackIntent({
+      time: 0,
+      intentType: PLAYBACK_INTENT.START_FROM_ZERO,
+      forceReset: false,
+    });
+    setShowResumePrompt(false);
+    setResumeTime(0);
+    setM3u8Url(null);
+    setInterceptedSubs([]);
+    resolvedPlayerUrlRef.current = null;
+    setResolvedPlayerUrl(null);
+    resolvingUrlRef.current = false;
+    setResolvingUrl(false);
+    setResolveError(null);
+    initialSeekDoneRef.current = false;
+    lastKnownTimeRef.current = 0;
+    seekBackCooldownRef.current = 0;
+    setPlaying(true);
+    setTimeout(() => {
+      playerWrapRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+  }, [playerWrapRef, setInterceptedSubs, setM3u8Url, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setResumeTime, setShowResumePrompt]);
 
   const startMoviePlayback = useCallback((time = 0, intentType = null) => {
     const forceReset = hasPlaybackReset(progressKey);
@@ -703,5 +730,5 @@ const applyVoiceBoost = useCallback(() => {
       if (closeH) window.electron?.offPipClosed?.(closeH);
     };
   }, [playing]);
-  return { handleFailoverNextSource, handlePlay, startMoviePlayback };
+  return { handleFailoverNextSource, handlePlay, startMovieDownloadResolution, startMoviePlayback };
 }

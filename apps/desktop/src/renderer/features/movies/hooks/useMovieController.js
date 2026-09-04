@@ -95,6 +95,9 @@ const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [showDownload, setShowDownload] = useState(false);
+  const [downloadTarget, setDownloadTarget] = useState(null);
+  const [downloadResolutionActive, setDownloadResolutionActive] = useState(false);
+  const downloadResolutionPreflightRef = useRef(new Set());
   const [trailerKey, setTrailerKey] = useState(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const [m3u8Url, setM3u8Url] = useState(null);
@@ -113,10 +116,14 @@ const [details, setDetails] = useState(null);
   useEffect(() => {
     let disposed = false;
     let openedSessionId = null;
+    setCaptureSessionId(null);
     setM3u8Url(null);
     setM3u8Context(null);
     window.electron?.beginStreamCapture?.({
-      mediaIdentity: { mediaType: "movie", mediaId: item.id },
+      mediaIdentity: {
+        mediaType: "movie",
+        mediaId: downloadTarget?.mediaId ?? item.id,
+      },
       sourceId: playerSource,
       webContentsId: getReadyWebContentsId(webviewRef.current),
     }).then((session) => {
@@ -131,7 +138,7 @@ const [details, setDetails] = useState(null);
       disposed = true;
       if (openedSessionId) window.electron?.endStreamCapture?.(openedSessionId);
     };
-  }, [item.id, playerSource]);
+  }, [downloadTarget?.key, item.id, playerSource]);
 
   // Accent colour + subtitle lang come from App-level state (via props),
   // so they are always fresh after Settings save without any extra storage reads.
@@ -595,14 +602,116 @@ const [details, setDetails] = useState(null);
     return () => window.electron.offSubtitleFound(handler);
   }, []);
 
-    const { handleFailoverNextSource, handlePlay, startMoviePlayback } = useMovieWebview({
-    autoMarkedRef, autoplayDoneRef, d, dubMode, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, isWatched, item, lastKnownTimeRef, loading, onHistory, onMarkWatchedRef, onPlay, pipUrlRef, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressKey, progressViaFrames, resolvedPlayerUrlRef, resolvingUrlRef, saveProgress, saveProgressRef, seekBackCooldownRef, setInterceptedSubs, setM3u8Url, setPipOpen, setPlayerFullscreen, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setResumeTime, setShowFailoverPrompt, setShowResumePrompt, setWebviewLoading, switchingToMiniPlayerRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef
+    const { handleFailoverNextSource, handlePlay, startMovieDownloadResolution, startMoviePlayback } = useMovieWebview({
+    autoMarkedRef, autoplayDoneRef, d, downloadResolutionActive, dubMode, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, isWatched, item, lastKnownTimeRef, loading, onHistory, onMarkWatchedRef, onPlay, pipUrlRef, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressKey, progressViaFrames, resolvedPlayerUrlRef, resolvingUrlRef, saveProgress, saveProgressRef, seekBackCooldownRef, setInterceptedSubs, setM3u8Url, setPipOpen, setPlayerFullscreen, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setResumeTime, setShowFailoverPrompt, setShowResumePrompt, setWebviewLoading, switchingToMiniPlayerRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef
   });
 
   const handleSetDownloaderFolder = useCallback((folder) => {
     setDownloaderFolder(folder);
     storage.set("downloaderFolder", folder);
   }, []);
+
+  const openDownload = useCallback(() => {
+    if (playing) {
+      setDownloadResolutionActive(false);
+      setDownloadTarget(null);
+      setShowDownload(true);
+      return;
+    }
+
+    downloadResolutionPreflightRef.current = new Set();
+    setCaptureSessionId(null);
+    setM3u8Url(null);
+    setM3u8Context(null);
+    setDownloadTarget({
+      key: `movie:${item.id}:${playerSource}`,
+      mediaType: "movie",
+      mediaId: item.id,
+      tmdbId: item.id,
+      imdbId: d?.imdb_id || null,
+      title,
+      season: null,
+      episode: null,
+      providerSeason: null,
+      providerEpisode: null,
+      sourceId: playerSource,
+      translationType: dubMode,
+    });
+    setDownloadResolutionActive(true);
+    setShowDownload(false);
+  }, [d?.imdb_id, dubMode, item.id, playerSource, playing, title]);
+
+  const closeDownload = useCallback(() => {
+    setShowDownload(false);
+    setDownloadResolutionActive(false);
+    setDownloadTarget(null);
+  }, []);
+
+  useEffect(() => {
+    if (
+      !downloadResolutionActive ||
+      !downloadTarget ||
+      showDownload ||
+      playing ||
+      !captureSessionId
+    ) {
+      return;
+    }
+    startMovieDownloadResolution();
+  }, [
+    captureSessionId,
+    downloadResolutionActive,
+    downloadTarget,
+    playing,
+    showDownload,
+    startMovieDownloadResolution,
+  ]);
+
+  useEffect(() => {
+    if (
+      !downloadResolutionActive ||
+      !downloadTarget ||
+      !playing ||
+      !captureSessionId
+    ) {
+      return undefined;
+    }
+    if (
+      m3u8Context?.sessionId &&
+      m3u8Context.sessionId !== captureSessionId
+    ) {
+      return undefined;
+    }
+    const candidateId =
+      m3u8Context?.candidateId || m3u8Context?.id || null;
+    if (
+      !candidateId ||
+      downloadResolutionPreflightRef.current.has(candidateId)
+    ) {
+      return undefined;
+    }
+    downloadResolutionPreflightRef.current.add(candidateId);
+
+    let disposed = false;
+    Promise.resolve(window.electron?.preflightStream?.(candidateId))
+      .then((result) => {
+        if (disposed || !result?.ok) return;
+        setDownloadResolutionActive(false);
+        setPlaying(false);
+        setShowDownload(true);
+      })
+      .catch(() => {});
+
+    return () => {
+      disposed = true;
+    };
+  }, [
+    captureSessionId,
+    downloadResolutionActive,
+    downloadTarget,
+    m3u8Context,
+    playing,
+  ]);
 
   // Prefer AniList metadata for anime when available
   const displayOverview =
@@ -648,7 +757,7 @@ const [details, setDetails] = useState(null);
       : `${m}:${String(s).padStart(2, "0")}`;
   };
 
-    const viewModel = { ambientColor, blockedAlltime, blockedSession, collection, d, displayGenres, displayOverview, displayPct, displayScore, downloaderFolder, dubMode, formatResumeTime, getBlockedDomains, handleFailoverNextSource, handlePlay, handleSetDownloaderFolder, hasProgress, interceptedSubs, isSaved, isSavedItem, isUnreleased, isWatched, item, m3u8Context, m3u8Url, mediaName, menuPos, movieDownload, onBack, onDownloadStarted, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave: handleLibrarySave, onSelect, onSettings, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progress, progressKey, progressLabel, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, sourceRef, startMoviePlayback, switchingToMiniPlayerRef, title, trailerKey, voiceBoost, watched, webviewLoading, webviewRef };
+    const viewModel = { ambientColor, blockedAlltime, blockedSession, closeDownload, collection, d, displayGenres, downloadResolutionActive, downloadTarget, displayOverview, displayPct, displayScore, downloaderFolder, dubMode, formatResumeTime, getBlockedDomains, handleFailoverNextSource, handlePlay, handleSetDownloaderFolder, hasProgress, interceptedSubs, isSaved, isSavedItem, isUnreleased, isWatched, item, m3u8Context, m3u8Url, mediaName, menuPos, movieDownload, onBack, onDownloadStarted, openDownload, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave: handleLibrarySave, onSelect, onSettings, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progress, progressKey, progressLabel, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, sourceRef, startMoviePlayback, switchingToMiniPlayerRef, title, trailerKey, voiceBoost, watched, webviewLoading, webviewRef };
     viewModel.cast = cast;
     viewModel.keyCrew = keyCrew;
     viewModel.creditsLoading = creditsLoading;

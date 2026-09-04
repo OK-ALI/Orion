@@ -9,6 +9,7 @@ import ConfirmModal from "../../components/common/ConfirmModal";
 import DesktopPageHeader from "../../components/common/DesktopPageHeader";
 import LocalPlayer from "../downloads/components/LocalPlayer";
 import { resetViewingToNotStarted } from "../player/services/viewingReset";
+import { getLibraryMediaType, isMediaItemWatched } from "../../shared/utils/library";
 
 export default function LibraryPage({
   history,
@@ -44,6 +45,8 @@ export default function LibraryPage({
     },
   );
   const [query, setQuery] = useState("");
+  const [savedMediaFilter, setSavedMediaFilter] = useState("all");
+  const [savedWatchFilter, setSavedWatchFilter] = useState("all");
   const [selectedDownload, setSelectedDownload] = useState(null);
   const [historyFilter, setHistoryFilter] = useState(
     () => storage.get(STORAGE_KEYS.LIBRARY_HISTORY_FILTER) || "all",
@@ -98,7 +101,7 @@ export default function LibraryPage({
 
   const handleDrop = (e, index) => {
     e.preventDefault();
-    if (query.trim()) return;
+    if (query.trim() || savedMediaFilter !== "all" || savedWatchFilter !== "all") return;
     if (draggedIndex === null || draggedIndex === index) return;
 
     const reordered = [...saved];
@@ -141,7 +144,53 @@ export default function LibraryPage({
     if (!needle) return true;
     return `${item.title || item.name || ""} ${item.episodeName || ""}`.toLowerCase().includes(needle);
   }, [query]);
-  const visibleSaved = useMemo(() => saved.filter(matchesQuery), [saved, matchesQuery]);
+  const queryMatchedSaved = useMemo(
+    () => saved.filter(matchesQuery),
+    [saved, matchesQuery],
+  );
+  const savedMediaCounts = useMemo(
+    () => queryMatchedSaved.reduce((counts, item) => {
+      const mediaType = getLibraryMediaType(item);
+      if (mediaType === "movie" || mediaType === "tv") counts[mediaType] += 1;
+      return counts;
+    }, { movie: 0, tv: 0 }),
+    [queryMatchedSaved],
+  );
+  const mediaFilteredSaved = useMemo(
+    () => savedMediaFilter === "all"
+      ? queryMatchedSaved
+      : queryMatchedSaved.filter((item) => getLibraryMediaType(item) === savedMediaFilter),
+    [queryMatchedSaved, savedMediaFilter],
+  );
+  const savedWatchRows = useMemo(
+    () => mediaFilteredSaved.map((item) => ({
+      item,
+      watched: isMediaItemWatched(item, watched),
+    })),
+    [mediaFilteredSaved, watched],
+  );
+  const savedWatchCounts = useMemo(() => {
+    const watchedCount = savedWatchRows.filter((entry) => entry.watched).length;
+    return {
+      all: savedWatchRows.length,
+      unwatched: savedWatchRows.length - watchedCount,
+      watched: watchedCount,
+    };
+  }, [savedWatchRows]);
+  const filteredSaved = useMemo(
+    () => savedWatchFilter === "all"
+      ? mediaFilteredSaved
+      : savedWatchRows
+        .filter((entry) => savedWatchFilter === "watched" ? entry.watched : !entry.watched)
+        .map((entry) => entry.item),
+    [mediaFilteredSaved, savedWatchFilter, savedWatchRows],
+  );
+  const visibleSaved = activeTab === "list" ? filteredSaved : queryMatchedSaved;
+  const canReorderSaved =
+    sort === "manual"
+    && !query.trim()
+    && savedMediaFilter === "all"
+    && savedWatchFilter === "all";
   const visibleContinue = useMemo(() => continueItems.filter(matchesQuery), [continueItems, matchesQuery]);
 
   const downloadedKeys = useMemo(() => {
@@ -290,7 +339,7 @@ export default function LibraryPage({
         </div>
       )}
 
-      {(activeTab === "overview" || activeTab === "list") && visibleSaved.length > 0 && (
+      {((activeTab === "overview" && visibleSaved.length > 0) || (activeTab === "list" && saved.length > 0)) && (
         <div className="library-section">
           <div className="library-section-title">
             My List ({visibleSaved.length})
@@ -307,7 +356,58 @@ export default function LibraryPage({
               </span>
             )}
           </div>
-          <div className="cards-grid library-card-grid">
+          {activeTab === "list" && (
+            <div className="library-my-list-controls" aria-label="My List filters">
+              <div className="library-filter-deck">
+                <div className="library-filter-group" role="group" aria-label="Filter My List by media type">
+                  {[
+                    { id: "movie", label: "Movies", count: savedMediaCounts.movie },
+                    { id: "tv", label: "TV & Anime", count: savedMediaCounts.tv },
+                  ].map((filter) => {
+                    const active = savedMediaFilter === filter.id;
+                    return (
+                      <button
+                        key={filter.id}
+                        type="button"
+                        className={`library-filter-pill${active ? " active" : ""}`}
+                        aria-pressed={active}
+                        aria-label={`${filter.label}, ${filter.count} titles`}
+                        onClick={() => setSavedMediaFilter((current) => current === filter.id ? "all" : filter.id)}
+                      >
+                        <span>{filter.label}</span>
+                        <strong>{filter.count}</strong>
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="library-filter-deck-divider" aria-hidden="true" />
+                <div className="library-filter-group" role="group" aria-label="Filter My List by watch state">
+                  {[
+                    { id: "all", label: "All" },
+                    { id: "unwatched", label: "Unwatched" },
+                    { id: "watched", label: "Watched" },
+                  ].map((filter) => {
+                    const active = savedWatchFilter === filter.id;
+                    return (
+                      <button
+                        key={filter.id}
+                        type="button"
+                        className={`library-filter-pill${active ? " active" : ""}`}
+                        aria-pressed={active}
+                        aria-label={`${filter.label}, ${savedWatchCounts[filter.id]} titles`}
+                        onClick={() => setSavedWatchFilter(filter.id)}
+                      >
+                        <span>{filter.label}</span>
+                        <strong>{savedWatchCounts[filter.id]}</strong>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+          {visibleSaved.length > 0 ? (
+            <div className="cards-grid library-card-grid">
             {visibleSaved.map((item, index) => {
               const r = getRating(item);
               const restr = itemRestricted(item);
@@ -318,13 +418,13 @@ export default function LibraryPage({
                 <div
                   key={itemId}
                   className={`watchlist-drag-card${isDragging ? " is-dragging" : ""}${isDragOver ? " drag-over" : ""}`}
-                  draggable={sort === "manual" && !query.trim()}
+                  draggable={canReorderSaved}
                   onDragStart={(e) => handleDragStart(e, index)}
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragLeave={handleDragLeave}
                   onDragEnd={handleDragEnd}
                   onDrop={(e) => handleDrop(e, index)}
-                  style={{ cursor: sort === "manual" && !query.trim() ? "grab" : "default" }}
+                  style={{ cursor: canReorderSaved ? "grab" : "default" }}
                 >
                   <MediaCard
                     item={item}
@@ -339,7 +439,19 @@ export default function LibraryPage({
                 </div>
               );
             })}
-          </div>
+            </div>
+          ) : (
+            <div className="library-filter-empty" role="status">
+              <strong>
+                {savedWatchFilter === "watched"
+                  ? "No watched titles match these filters"
+                  : savedWatchFilter === "unwatched"
+                    ? "No unwatched titles match these filters"
+                    : "No titles match these filters"}
+              </strong>
+              <span>Try another media type, watch state, or library search.</span>
+            </div>
+          )}
         </div>
       )}
 

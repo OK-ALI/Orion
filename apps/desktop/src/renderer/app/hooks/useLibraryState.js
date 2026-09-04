@@ -3,11 +3,22 @@ import { isContinueWatchingProgressEligible } from "@orion/shared/api/continueWa
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
 import { tmdbFetch } from "../../services/tmdb";
 import { buildDesktopPortableViewingStatePreview } from "../../features/library/viewingStatePortableAdapter";
+import {
+  DESKTOP_SERIES_WATCHED_SUMMARY_STORAGE_KEY,
+  desktopSeriesEpisodeSignature,
+  nextDesktopSeriesWatchedSummaryExpiry,
+  pruneDesktopSeriesWatchedSummaries,
+  runDesktopSeriesWatchedReconciliationBatch,
+  selectDesktopSeriesWatchedPresentationSummaries,
+  selectDesktopSeriesWatchedReconciliationCandidates,
+  withDesktopSeriesWatchedSummary,
+} from "../../features/library/desktopSeriesWatchedSummary";
 import { VERIFIED_HISTORY_UPDATED_EVENT } from "../../services/viewingStateVerification";
 import { WATCHED_SYNC_APPLIED_EVENT } from "../../services/watchedOneShotLocalStore";
 import { MY_LIST_SYNC_APPLIED_EVENT } from "../../services/myListSyncLocalStore";
 import { VIEWING_ACTIVITY_SYNC_APPLIED_EVENT } from "../../services/viewingActivityOneShotLocalStore";
 import {
+  attachDesktopSeriesWatchedPresentation,
   getLibraryMediaType,
   mergeLibraryOrder,
   needsLibraryMetadata,
@@ -21,9 +32,18 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
   const [progress, setProgress] = useState(() => storage.get("progress") || {});
   const [history, setHistory] = useState(() => storage.get("history") || []);
   const [watched, setWatched] = useState(() => storage.get("watched") || {});
+  const [seriesWatchedSummaries, setSeriesWatchedSummaries] = useState(
+    () => storage.get(DESKTOP_SERIES_WATCHED_SUMMARY_STORAGE_KEY) || {},
+  );
+  const [seriesWatchedReevaluationEpoch, setSeriesWatchedReevaluationEpoch] = useState(0);
+  const [seriesWatchedRecoveryEpoch, setSeriesWatchedRecoveryEpoch] = useState(0);
   const toastTimerRef = useRef(null);
   const savedRef = useRef(saved);
   const hydrationAttemptsRef = useRef(new Set());
+  const watchedRef = useRef(watched);
+  const seriesWatchedAttemptedRef = useRef(new Set());
+
+  watchedRef.current = watched;
 
   useEffect(() => { savedRef.current = saved; }, [saved]);
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
@@ -60,6 +80,139 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
     window.addEventListener(WATCHED_SYNC_APPLIED_EVENT, handleWatchedSyncApplied);
     return () => window.removeEventListener(WATCHED_SYNC_APPLIED_EVENT, handleWatchedSyncApplied);
   }, []);
+
+  const seriesWatchedCandidates = useMemo(
+    () => selectDesktopSeriesWatchedReconciliationCandidates(
+      watched,
+      seriesWatchedSummaries,
+      Date.now(),
+    ),
+    [watched, seriesWatchedSummaries, seriesWatchedReevaluationEpoch],
+  );
+  const seriesWatchedCandidateKey = seriesWatchedCandidates
+    .map((candidate) => `${candidate.seriesId}:${candidate.signature}`)
+    .join("||");
+  const nextSeriesWatchedExpiry = useMemo(
+    () => nextDesktopSeriesWatchedSummaryExpiry(
+      watched,
+      seriesWatchedSummaries,
+      Date.now(),
+    ),
+    [watched, seriesWatchedSummaries, seriesWatchedReevaluationEpoch],
+  );
+  const currentSeriesWatchedSummaries = useMemo(
+    () => selectDesktopSeriesWatchedPresentationSummaries(
+      watched,
+      seriesWatchedSummaries,
+      Date.now(),
+    ),
+    [watched, seriesWatchedSummaries, seriesWatchedReevaluationEpoch],
+  );
+  const watchedPresentation = useMemo(
+    () => attachDesktopSeriesWatchedPresentation(watched, currentSeriesWatchedSummaries),
+    [watched, currentSeriesWatchedSummaries],
+  );
+
+  useEffect(() => {
+    setSeriesWatchedSummaries((previous) => {
+      const next = pruneDesktopSeriesWatchedSummaries(previous, watched);
+      if (next === previous) return previous;
+      storage.set(DESKTOP_SERIES_WATCHED_SUMMARY_STORAGE_KEY, next);
+      return next;
+    });
+  }, [watched]);
+
+  useEffect(() => {
+    if (nextSeriesWatchedExpiry == null) return undefined;
+    const remaining = nextSeriesWatchedExpiry - Date.now() + 50;
+    const delay = Math.max(1, Math.min(24 * 60 * 60 * 1000, remaining));
+    const timer = setTimeout(() => {
+      setSeriesWatchedReevaluationEpoch((value) => value + 1);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [nextSeriesWatchedExpiry, seriesWatchedReevaluationEpoch]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setSeriesWatchedRecoveryEpoch((value) => value + 1);
+      setSeriesWatchedReevaluationEpoch((value) => value + 1);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        setSeriesWatchedReevaluationEpoch((value) => value + 1);
+      }
+    };
+    window.addEventListener("online", handleOnline);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!apiKey || seriesWatchedCandidates.length === 0) return undefined;
+    const pending = seriesWatchedCandidates.filter((candidate) => {
+      const attemptKey = `${seriesWatchedRecoveryEpoch}:${candidate.seriesId}:${candidate.signature}`;
+      if (seriesWatchedAttemptedRef.current.has(attemptKey)) return false;
+      seriesWatchedAttemptedRef.current.add(attemptKey);
+      return true;
+    });
+    if (pending.length === 0) return undefined;
+
+    let cancelled = false;
+    const activeControllers = new Set();
+    const resolved = [];
+
+    void runDesktopSeriesWatchedReconciliationBatch({
+      candidates: pending,
+      fetchSeries: (seriesId, signal) => tmdbFetch(
+        `/tv/${encodeURIComponent(seriesId)}`,
+        apiKey,
+        { signal },
+      ),
+      applySeries: (series, candidate) => {
+        resolved.push({ series, candidate });
+      },
+      isCurrent: (candidate) => (
+        desktopSeriesEpisodeSignature(watchedRef.current, candidate.seriesId)
+        === candidate.episodeSignature
+      ),
+      onController: (controller, active) => {
+        if (active) activeControllers.add(controller);
+        else activeControllers.delete(controller);
+      },
+    }).then(() => {
+      if (cancelled || resolved.length === 0) return;
+      setSeriesWatchedSummaries((previous) => {
+        let next = previous;
+        for (const { series, candidate } of resolved) {
+          if (
+            desktopSeriesEpisodeSignature(watchedRef.current, candidate.seriesId)
+            !== candidate.episodeSignature
+          ) {
+            continue;
+          }
+          next = withDesktopSeriesWatchedSummary(
+            next,
+            watchedRef.current,
+            series,
+            Date.now(),
+            Date.now(),
+          );
+        }
+        if (next === previous) return previous;
+        storage.set(DESKTOP_SERIES_WATCHED_SUMMARY_STORAGE_KEY, next);
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      for (const controller of activeControllers) controller.abort();
+      activeControllers.clear();
+    };
+  }, [apiKey, seriesWatchedCandidateKey, seriesWatchedCandidates, seriesWatchedRecoveryEpoch]);
 
   useEffect(() => {
     const handleMyListSyncApplied = (event) => {
@@ -295,5 +448,5 @@ export function useLibraryState({ librarySort, setToast, apiKey }) {
     storage.set("savedOrder", nextOrder);
   }, []);
 
-  return { addHistory, clearHistory, getMediaType, handleReorderSaved, history, inProgress, isSaved, markUnwatched, markWatched, progress, removeHistory, saved, savedList, savedOrder, saveProgress, showToast, toggleSave, watched };
+  return { addHistory, clearHistory, getMediaType, handleReorderSaved, history, inProgress, isSaved, markUnwatched, markWatched, progress, removeHistory, saved, savedList, savedOrder, saveProgress, showToast, toggleSave, watched: watchedPresentation };
 }

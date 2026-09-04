@@ -86,7 +86,7 @@ import { normalizePlayerEventProgress } from "../../player/services/playerEventP
 import { useCinemaPlaybackEvidence } from "../../player/hooks/useCinemaPlaybackEvidence";
 import { persistPlaybackProgressDetails } from "../../../services/viewingStateVerification";
 export function useTVWebview(context) {
-  const { anilistData, autoMarkedRef, d, downloadsByEpisodeKey, dubMode, durationRef, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, introSkipMode, isAnime, isAsync, item, lastKnownTimeRef, localCountdownStartedRef, onHistory, onMarkWatchedRef, onPlay, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressViaFrames, resetAutoplayRef, resolvedPlayerUrlRef, resolvingUrlRef, saveProgressRef, seekBackCooldownRef, selectedEp, selectedSeason, setCountdownStartedRef, setInterceptedSubs, setM3u8Url, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSelectedEp, setShowFailoverPrompt, setShowResumePrompt, setSkipPrompt, setSkipTimings, setWebviewLoading, skipPrompt, skipTimings, switchingToMiniPlayerRef, triggerAutoplayRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef } = context;
+  const { anilistData, autoMarkedRef, d, downloadResolutionActive, downloadsByEpisodeKey, dubMode, durationRef, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, introSkipMode, isAnime, isAsync, item, lastKnownTimeRef, localCountdownStartedRef, onHistory, onMarkWatchedRef, onPlay, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressViaFrames, resetAutoplayRef, resolvedPlayerUrlRef, resolvingUrlRef, saveProgressRef, seekBackCooldownRef, selectedEp, selectedSeason, setCountdownStartedRef, setInterceptedSubs, setM3u8Url, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSelectedEp, setShowFailoverPrompt, setShowResumePrompt, setSkipPrompt, setSkipTimings, setWebviewLoading, skipPrompt, skipTimings, switchingToMiniPlayerRef, triggerAutoplayRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef } = context;
   const currentProgressKey = selectedEp
     ? `tv_${item.id}_s${selectedSeason}e${selectedEp.episode_number}`
     : null;
@@ -451,7 +451,7 @@ export function useTVWebview(context) {
       introSkipMode !== "off" && playing && !!skipTimings && isAsync;
 
     if (!aniSkipActive) setSkipPrompt(null);
-    if (!playing || !currentProgressKey) return;
+    if (downloadResolutionActive || !playing || !currentProgressKey) return;
 
     const TICK = aniSkipActive ? 1000 : 5000;
     let tickCount = 0;
@@ -639,6 +639,7 @@ export function useTVWebview(context) {
       setSkipPrompt(null);
     };
   }, [
+    downloadResolutionActive,
     playing,
     skipTimings,
     playerSource,
@@ -751,6 +752,34 @@ export function useTVWebview(context) {
     };
   }, [playing, playerSource]);
 
+  const startEpisodeDownloadResolution = (ep) => {
+    if (!ep) return;
+    playbackIntentRef.current = createStartPlaybackIntent({
+      time: 0,
+      intentType: PLAYBACK_INTENT.START_FROM_ZERO,
+      forceReset: false,
+    });
+    initialSeekDoneRef.current = false;
+    lastKnownTimeRef.current = 0;
+    seekBackCooldownRef.current = 0;
+    setShowResumePrompt(false);
+    setM3u8Url(null);
+    setInterceptedSubs([]);
+    resolvedPlayerUrlRef.current = null;
+    setResolvedPlayerUrl(null);
+    resolvingUrlRef.current = false;
+    setResolvingUrl(false);
+    setResolveError(null);
+    setSelectedEp(ep);
+    setPlaying(true);
+    setTimeout(() => {
+      playerWrapRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+  };
+
   const startPlayingEp = (ep, time = 0, intentType = null) => {
     const epProgressKey = `tv_${item.id}_s${selectedSeason}e${ep.episode_number}`;
     const forceReset = hasPlaybackReset(epProgressKey);
@@ -790,5 +819,5 @@ export function useTVWebview(context) {
       episodeName: ep.name,
     });
   };
-  return { currentEpDownload, currentProgressKey, handleFailoverNextSource, handleManualSkip, startPlayingEp };
+  return { currentEpDownload, currentProgressKey, handleFailoverNextSource, handleManualSkip, startEpisodeDownloadResolution, startPlayingEp };
 }
