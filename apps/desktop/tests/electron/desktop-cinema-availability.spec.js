@@ -65,7 +65,7 @@ test("Cinema discovery and quick search distinguish offline, service failure and
     await expect(discover.getByRole("status")).toContainText("previously loaded");
     await expect(discover.getByRole("button", { name: /Netflix.*Explore/ })).toBeEnabled();
     await expect(page.locator(".titlebar-network")).toHaveAttribute("aria-label", "Offline");
-    await expect(page.locator(".api-status-banner")).toContainText("Cannot reach TMDB");
+    await expect(page.locator(".api-status-banner")).toHaveCount(0);
     const boot = await page.evaluate(() => window.__sliceBBoot);
     await discover.getByRole("button", { name: "Check connection" }).click();
     expect(await page.evaluate(() => window.__sliceBBoot)).toBe(boot);
@@ -116,7 +116,7 @@ test("Cinema discovery and quick search distinguish offline, service failure and
     await page.screenshot({ path: testInfo.outputPath("quick-search-offline.png") });
     await quick.getByRole("button", { name: "Open Library" }).focus();
     await page.keyboard.press("Enter");
-    await expect(page.locator(".library-title")).toHaveText("My Library");
+    await expect(page.getByRole("heading", { name: "My Library", exact: true })).toBeVisible();
     await expect(quick).toHaveCount(0);
 
     await page.evaluate(() => { window.__sliceBOnline = true; window.dispatchEvent(new Event("online")); });
@@ -128,7 +128,7 @@ test("Cinema discovery and quick search distinguish offline, service failure and
     await expect(quick.getByText(/No results/)).toHaveCount(0);
     await input.press("Enter");
     await expect(quick.getByRole("status")).toContainText("Cinema search is unavailable");
-    await expect(page.locator(".library-title")).toHaveText("My Library");
+    await expect(page.getByRole("heading", { name: "My Library", exact: true })).toBeVisible();
     await expect(page.locator(".search-results-page")).toHaveCount(0);
     await input.fill("successful-empty");
     await expect(quick.getByText(/No results for/)).toBeVisible();

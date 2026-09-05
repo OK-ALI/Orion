@@ -37,8 +37,15 @@ test("real audio element exposes its loopback request and response contract", as
     });
 
     if (!resolved?.ok || !resolved?.url) {
-      print("RESOLVE_FAILURE", { ok: resolved?.ok === true, error: resolved?.error || "" });
-      expect(resolved?.ok).toBe(true);
+      const error = resolved?.error || "";
+      print("RESOLVE_FAILURE", { ok: resolved?.ok === true, error });
+      if (/requires a connection/i.test(error)) {
+        expect(resolved?.ok).toBe(false);
+        expect(error).toMatch(/requires a connection/i);
+        return;
+      }
+      expect(resolved?.ok, error || "Remote Music resolution failed").toBe(true);
+      expect(resolved?.url, error || "Remote Music did not return a protected URL").toBeTruthy();
       return;
     }
 

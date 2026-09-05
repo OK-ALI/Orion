@@ -168,7 +168,7 @@ test("Music Planet provider host and C4 UX preserve exact local context", async 
 
     // Provider-host proof is local and deterministic. No live catalog result is required.
     const status = await page.evaluate(() => window.electron.musicGetStatus());
-    expect(status).toMatchObject({ ok: true, schemaVersion: 4, trackCount: 0 });
+    expect(status).toMatchObject({ ok: true, schemaVersion: 5, trackCount: 0 });
 
     const providers = await page.evaluate(() => window.electron.musicListProviders());
     expect(providers.some((provider) => provider.id === "ytmusic-metadata")).toBe(true);

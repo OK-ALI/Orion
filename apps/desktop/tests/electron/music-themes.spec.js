@@ -74,13 +74,19 @@ test("Music Planet keeps its readable orbital foreground in every supported them
     await expect(page.locator(".glass-music-player .player-meta")).toBeVisible();
     const colors = await page.evaluate(() => {
       const get = (selector) => getComputedStyle(document.querySelector(selector)).color;
+      const sceneRoot = document.querySelector(".music-planet-canvas-container");
+      const canvas = sceneRoot.querySelector("canvas");
+      const lightweightOrb = sceneRoot.querySelector(".music-lite-reactive-orb");
       return {
-        scene: getComputedStyle(document.querySelector(".music-planet-canvas-container")).backgroundColor,
+        scene: getComputedStyle(sceneRoot).backgroundColor,
         title: get(".music-planet-title"),
         subtitle: get(".music-planet-subtitle"),
         input: get(".music-hero-search input"),
         dock: get(".glass-music-player .player-meta"),
-        canvasOpacity: Number.parseFloat(getComputedStyle(document.querySelector(".music-planet-canvas-container canvas")).opacity || "0"),
+        renderMode: sceneRoot.dataset.musicRenderMode,
+        hasCanvas: Boolean(canvas),
+        hasLightweightOrb: Boolean(lightweightOrb),
+        canvasOpacity: canvas ? Number.parseFloat(getComputedStyle(canvas).opacity || "0") : null,
         heroSearchRadius: Number.parseFloat(getComputedStyle(document.querySelector(".music-hero-search")).borderTopLeftRadius || "0"),
         ...(() => {
           const root = document.querySelector(".music-planet-container");
@@ -115,8 +121,20 @@ test("Music Planet keeps its readable orbital foreground in every supported them
     expect(contrast(colors.input, colors.scene), `${theme} header input contrast`).toBeGreaterThanOrEqual(3);
     expect(contrast(colors.dock, colors.scene), `${theme} dock contrast`).toBeGreaterThanOrEqual(3);
     expect(contrast(colors.actionText, colors.actionBackground), `${theme} Music primary-action contrast`).toBeGreaterThanOrEqual(4.5);
+    expect(["full", "orb", "static"]).toContain(colors.renderMode);
+    if (colors.renderMode === "full") {
+      expect(colors.hasCanvas, `${theme} Quality Music canvas`).toBe(true);
+    } else if (colors.renderMode === "orb") {
+      expect(colors.hasCanvas, `${theme} Balanced Music avoids Three canvas`).toBe(false);
+      expect(colors.hasLightweightOrb, `${theme} Balanced Music lightweight orb`).toBe(true);
+    } else {
+      expect(colors.hasCanvas, `${theme} Efficiency Music avoids Three canvas`).toBe(false);
+      expect(colors.hasLightweightOrb, `${theme} Efficiency Music stays static`).toBe(false);
+    }
     if (theme === "light") {
-      expect(colors.canvasOpacity, "light Music core visibility").toBeGreaterThanOrEqual(0.58);
+      if (colors.renderMode === "full") {
+        expect(colors.canvasOpacity, "light Quality Music core visibility").toBeGreaterThanOrEqual(0.58);
+      }
       expect(colors.heroSearchRadius, "light Music search shell radius").toBeGreaterThanOrEqual(30);
       expect(colors.searchLayoutBackground, "light Music search layout stays transparent").toBe("rgba(0, 0, 0, 0)");
       expect(colors.searchLayoutImage, "light Music search layout has no raw background image").toBe("none");

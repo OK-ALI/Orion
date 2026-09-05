@@ -187,7 +187,7 @@ test("offline Home keeps local actions, exact local playback and theme-aware key
     await returnHome();
     await home.getByRole("button", { name: "Open Library" }).focus();
     await page.keyboard.press("Enter");
-    await expect(page.locator(".library-title")).toHaveText("My Library");
+    await expect(page.getByRole("heading", { name: "My Library", exact: true })).toBeVisible();
     await expect(page.locator(".api-status-banner")).toContainText("Cannot reach TMDB");
     await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
     await returnHome();

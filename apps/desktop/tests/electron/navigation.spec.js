@@ -28,7 +28,7 @@ test("Settings, Downloads, Discover, and Library render without page errors", as
       .find((element) => element.textContent.includes("Settings"))
       ?.click();
   });
-  await expect(page.getByText("SETTINGS", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
 
   await page.evaluate(() => {
     [...document.querySelectorAll(".sidebar-item")]
@@ -49,7 +49,7 @@ test("Settings, Downloads, Discover, and Library render without page errors", as
       .find((element) => element.textContent.includes("My Library"))
       ?.click();
   });
-  await expect(page.locator(".library-title")).toHaveText("My Library");
+  await expect(page.getByRole("heading", { name: "My Library", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: /Downloads/ })).toBeVisible();
   expect(errors).toEqual([]);
   await app.close();
