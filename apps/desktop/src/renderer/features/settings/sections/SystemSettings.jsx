@@ -50,6 +50,17 @@ export function tmdbTokenDetail(source) {
   return "Required for metadata, posters, and search";
 }
 
+function graphicsDiagnosticDetail(performanceStatus) {
+  const capability = performanceStatus?.graphicsCapability;
+  const adapterCount = Number(performanceStatus?.gpuAdapterCount) || 0;
+  const adapterText = adapterCount > 0 ? ` · ${adapterCount} adapter${adapterCount === 1 ? "" : "s"}` : "";
+  const switchable = performanceStatus?.switchableGraphics ? " · switchable graphics" : "";
+  if (capability === "hardware") return `Hardware accelerated${adapterText}${switchable}`;
+  if (capability === "limited") return `Limited Chromium acceleration${adapterText}${switchable}`;
+  if (capability === "software") return "Software rendering fallback";
+  return "Detecting Chromium graphics capability";
+}
+
 export function SystemCheckSection({ apiKey, apiKeySource = "missing", downloadPath }) {
   const [status, setStatus] = useState(null);
   const [performanceStatus, setPerformanceStatus] = useState(null);
@@ -133,6 +144,11 @@ export function SystemCheckSection({ apiKey, apiKeySource = "missing", downloadP
           detail: performanceStatus
             ? `${performanceStatus.tier} · CPU ${performanceStatus.cpuPercent}% · ${performanceStatus.freeMemoryMb} MB free`
             : "Collecting a local performance sample",
+        },
+        {
+          label: "Graphics acceleration",
+          ok: performanceStatus?.graphicsCapability === "hardware",
+          detail: graphicsDiagnosticDetail(performanceStatus),
         },
         {
           label: "Battery awareness",

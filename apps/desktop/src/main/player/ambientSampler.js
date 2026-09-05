@@ -1,6 +1,7 @@
 const { ipcMain, webContents, powerMonitor } = require("electron");
 const { extractPaletteFromBitmap } = require("./ambientPalette");
-const { boundedSampleRect, samplingInterval } = require("./ambientSampling");
+const { derivePlaybackPressure } = require("../performance/policy");
+const { ambientCaptureSize, boundedSampleRect, capAmbientProfile, samplingInterval } = require("./ambientSampling");
 
 const samplers = new Map();
 
@@ -29,7 +30,7 @@ async function videoIsPaused(contents) {
   return found;
 }
 
-function register(getMainWindow, getPerformanceTier = () => "balanced") {
+function register(getMainWindow, getPerformanceSnapshot = () => ({ tier: "balanced" })) {
   ipcMain.handle("ambient:start", async (event, options = {}) => {
     const targetId = String(options.targetId || "");
     const captureContentsId = Number(options.captureWebContentsId || options.webContentsId);
@@ -41,7 +42,9 @@ function register(getMainWindow, getPerformanceTier = () => "balanced") {
       const playbackContents = webContents.fromId(playbackContentsId);
       const owner = getMainWindow();
       if (!captureContents || captureContents.isDestroyed()) return stop(targetId);
-      if (owner && !owner.isDestroyed() && owner.isVisible() && !owner.isMinimized()) {
+      const performanceSnapshot = getPerformanceSnapshot?.() || { tier: "balanced" };
+      const playbackPressure = derivePlaybackPressure(performanceSnapshot);
+      if (owner && !owner.isDestroyed() && owner.isVisible() && !owner.isMinimized() && playbackPressure === "none") {
         try {
           const stateTarget = playbackContents && !playbackContents.isDestroyed()
             ? playbackContents
@@ -55,9 +58,10 @@ function register(getMainWindow, getPerformanceTier = () => "balanced") {
                 );
               } catch {}
             }
-            const efficiency = getPerformanceTier() === "efficiency";
+            const tier = performanceSnapshot.tier || "balanced";
+            const captureSize = ambientCaptureSize(tier);
             const image = await captureContents.capturePage(
-              boundedSampleRect(sourceRect, efficiency ? 160 : 320, efficiency ? 90 : 180),
+              boundedSampleRect(sourceRect, captureSize.width, captureSize.height),
             );
             if (!image.isEmpty()) {
               const colors = extractPalette(image);
@@ -68,8 +72,11 @@ function register(getMainWindow, getPerformanceTier = () => "balanced") {
       }
       const sampler = samplers.get(targetId);
       if (sampler) {
-        const profile = getPerformanceTier() === "efficiency" ? "low" : options.profile;
-        sampler.timer = setTimeout(tick, samplingInterval(profile, powerMonitor.isOnBatteryPower()));
+        const latestSnapshot = getPerformanceSnapshot?.() || performanceSnapshot;
+        const profile = capAmbientProfile(options.profile, latestSnapshot.tier || "balanced");
+        const baseDelay = samplingInterval(profile, powerMonitor.isOnBatteryPower());
+        const pressureDelay = derivePlaybackPressure(latestSnapshot) === "none" ? baseDelay : Math.max(2500, baseDelay);
+        sampler.timer = setTimeout(tick, pressureDelay);
       }
     };
     samplers.set(targetId, { timer: null, captureContentsId, playbackContentsId });

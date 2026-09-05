@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useMusic } from "../context/MusicProvider";
+import { usePerformanceTier } from "../../../shared/utils/usePerformanceTier";
+import { resolveMusicVisualBudget } from "./musicPerformanceBudget";
 
 const THEME_FALLBACKS = {
   "--bg-base": "#08070c",
@@ -49,6 +51,8 @@ function resolveColor(color) {
 export default function MusicVisualizer({ variant = "orbit", interactive = false, className = "" }) {
   const canvasRef = useRef(null);
   const music = useMusic();
+  const performanceTier = usePerformanceTier();
+  const budget = resolveMusicVisualBudget(performanceTier, music.visualPreferences);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
@@ -59,7 +63,7 @@ export default function MusicVisualizer({ variant = "orbit", interactive = false
       drawId = 0;
       const parent = canvas.parentElement || canvas;
       const rect = parent.getBoundingClientRect();
-      const ratio = Math.min(1.5, window.devicePixelRatio || 1);
+      const ratio = Math.min(budget.visualizerDpr, window.devicePixelRatio || 1);
       const width = Math.max(1, Math.round(rect.width * ratio));
       const height = Math.max(1, Math.round(rect.height * ratio));
       if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
@@ -82,7 +86,9 @@ export default function MusicVisualizer({ variant = "orbit", interactive = false
       gradient.addColorStop(0, primary); gradient.addColorStop(1, spectral);
       context.strokeStyle = gradient;
       context.globalAlpha = 0.42 + frame.energy * 0.5;
-      const count = variant === "compact" ? 28 : Math.min(72, bins.length);
+      const count = variant === "compact"
+        ? Math.min(budget.compactBins, bins.length)
+        : Math.min(budget.visualizerBins, bins.length);
       if (variant === "bars") {
         context.fillStyle = gradient;
         const barWidth = width / count;
@@ -124,6 +130,6 @@ export default function MusicVisualizer({ variant = "orbit", interactive = false
     draw();
     const resize = new ResizeObserver(draw); resize.observe(canvas.parentElement || canvas);
     return () => { unsubscribe(); resize.disconnect(); cancelAnimationFrame(drawId); };
-  }, [music.visualBus, music.visualPreferences.visualizer, variant]);
+  }, [budget, music.visualBus, music.visualPreferences.intensity, music.visualPreferences.visualizer, variant]);
   return <canvas ref={canvasRef} className={`music-visualizer music-visualizer-${variant} ${className}`} aria-hidden={!interactive} />;
 }

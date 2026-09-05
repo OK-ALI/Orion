@@ -59,6 +59,7 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
   offBatteryResumeDownloads: (handler) =>
     ipcRenderer.removeListener("battery:resume-downloads", handler),
   getPerformanceSnapshot: () => ipcRenderer.invoke("performance:get-snapshot"),
+  setPerformanceSelection: (selection) => ipcRenderer.invoke("performance:set-selection", selection),
   reportPlaybackHealth: (report) => ipcRenderer.send("performance:report-playback", report),
   onPerformanceSnapshot: (cb) => {
     const handler = (_, snapshot) => cb(snapshot);

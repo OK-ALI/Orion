@@ -1,12 +1,19 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { imgUrl } from "../../services/tmdb";
 import { PlayIcon, StarIcon } from "../common/Icons";
+import { getHeroReadyIndexes } from "../../shared/utils/performanceBudget";
+import { usePerformanceTier } from "../../shared/utils/usePerformanceTier";
 
 export default function HeroBanner({ items, onSelect, onSave, isSaved }) {
   const [active, setActive] = useState(0);
   const cycleRef = useRef(null);
 
   const count = items?.length || 0;
+  const performanceTier = usePerformanceTier();
+  const readyIndexes = useMemo(
+    () => getHeroReadyIndexes(active, count, performanceTier),
+    [active, count, performanceTier],
+  );
 
   const startCycle = useCallback(() => {
     clearInterval(cycleRef.current);
@@ -41,7 +48,9 @@ export default function HeroBanner({ items, onSelect, onSave, isSaved }) {
             key={item.id}
             className={`hero-banner-slide${active === idx ? " active" : ""}`}
             style={{
-              backgroundImage: `url(${imgUrl(item.backdrop_path, "original")})`,
+              backgroundImage: readyIndexes.has(idx) && item.backdrop_path
+                ? `url(${imgUrl(item.backdrop_path, "original")})`
+                : "none",
             }}
           />
         ))}

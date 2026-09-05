@@ -86,6 +86,28 @@ html[data-performance-tier="efficiency"] .poster-card {
   contain-intrinsic-size: 220px 330px;
 }
 
+/* P10A.5: preserve collection/result truth while deferring expensive off-screen
+   layout and paint on constrained systems. Chromium renders skipped content
+   automatically when it approaches the viewport or receives focus. */
+html[data-performance-tier="efficiency"] .library-card-grid > .watchlist-drag-card,
+html[data-performance-tier="efficiency"] .discover-results-grid > .media-card,
+html[data-performance-tier="efficiency"] .search-results-grid > .search-media-result,
+html[data-performance-tier="efficiency"] .continue-landscape-grid > .continue-landscape-card,
+html[data-performance-tier="efficiency"] .history-rows > .history-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 360px;
+}
+
+html[data-performance-tier="efficiency"] .hero-banner::after {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-performance-tier="efficiency"] .hero-banner-slide {
+  transform: none;
+  transition: opacity 450ms ease;
+}
+
 body.compact-mode {
   --media-card-compact: 132px;
   --media-card-standard: 148px;

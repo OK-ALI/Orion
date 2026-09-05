@@ -1,7 +1,8 @@
 const path = require("path");
 const { app, BrowserWindow, ipcMain, powerMonitor } = require("electron");
 const { extractPaletteFromBitmap } = require("./ambientPalette");
-const { boundedSampleRect, samplingInterval } = require("./ambientSampling");
+const { derivePlaybackPressure } = require("../performance/policy");
+const { ambientCaptureSize, boundedSampleRect, capAmbientProfile, samplingInterval } = require("./ambientSampling");
 
 const POPOUT_CSS = `
   video::cue {
@@ -67,6 +68,7 @@ function createPopoutWindowController({
   ensurePlayerSessions,
   setMiniPlayerStatus,
   getPerformanceTier = () => "balanced",
+  getPerformanceSnapshot = () => ({ tier: getPerformanceTier() }),
 }) {
   let popoutWindow = null;
   let activePlayback = null;
@@ -102,14 +104,17 @@ function createPopoutWindowController({
     stopAmbient();
     const tick = async () => {
       if (!isOpen()) return;
-      if (!popoutWindow.isMinimized() && popoutWindow.isVisible()) {
+      const performanceSnapshot = getPerformanceSnapshot?.() || { tier: getPerformanceTier() };
+      const playbackPressure = derivePlaybackPressure(performanceSnapshot);
+      if (!popoutWindow.isMinimized() && popoutWindow.isVisible() && playbackPressure === "none") {
         try {
           const state = await snapshotState();
           if (!state?.paused) {
             const cropRect = await queryVideoRect();
-            const efficiency = getPerformanceTier() === "efficiency";
+            const tier = performanceSnapshot.tier || getPerformanceTier();
+            const captureSize = ambientCaptureSize(tier);
             const image = await popoutWindow.webContents.capturePage(
-              boundedSampleRect(cropRect, efficiency ? 160 : 320, efficiency ? 90 : 180),
+              boundedSampleRect(cropRect, captureSize.width, captureSize.height),
             );
             if (!image.isEmpty()) {
               const sample = image.resize({ width: 32, height: 18, quality: "good" });
@@ -119,8 +124,11 @@ function createPopoutWindowController({
           }
         } catch {}
       }
-      const profile = getPerformanceTier() === "efficiency" ? "low" : "balanced";
-      ambientTimer = setTimeout(tick, samplingInterval(profile, powerMonitor.isOnBatteryPower()));
+      const latestSnapshot = getPerformanceSnapshot?.() || performanceSnapshot;
+      const profile = capAmbientProfile("balanced", latestSnapshot.tier || getPerformanceTier());
+      const baseDelay = samplingInterval(profile, powerMonitor.isOnBatteryPower());
+      const pressureDelay = derivePlaybackPressure(latestSnapshot) === "none" ? baseDelay : Math.max(2500, baseDelay);
+      ambientTimer = setTimeout(tick, pressureDelay);
     };
     tick();
   };

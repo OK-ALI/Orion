@@ -1,3 +1,5 @@
+import { resolveMusicVisualTier } from "./musicPerformanceBudget";
+
 /** @typedef {{ bass:number, mids:number, treble:number, energy:number, beat:number, timestamp:number, bins:Uint8Array }} MusicVisualFrame */
 
 /** @typedef {"idle"|"initializing"|"awaiting-gesture"|"active"|"silent"|"suspended"|"failed"} MusicAnalyserState */
@@ -129,9 +131,10 @@ export function createMusicAnalyser(audio, bus, getPreferences = () => ({}), onS
   const tick = (now) => {
     if (!active || !analyser || !data) return;
     const preferences = getPreferences();
-    const tier = preferences.adaptPerformance === false
-      ? (preferences.atmosphere === "immersive" ? "quality" : "balanced")
-      : (document.documentElement.dataset.performanceTier || "balanced");
+    const tier = resolveMusicVisualTier(
+      document.documentElement.dataset.performanceTier || "balanced",
+      preferences,
+    );
     const interval = tier === "quality" ? 1000 / 60 : tier === "efficiency" ? 1000 / 15 : 1000 / 30;
     if (now - lastFrameAt >= interval) {
       analyser.getByteFrequencyData(data);

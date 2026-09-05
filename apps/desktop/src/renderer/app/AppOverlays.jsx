@@ -1,14 +1,15 @@
-import { useState, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useRef } from "react";
 import KeyboardShortcutsModal from "../components/KeyboardShortcutsModal";
-import SearchModal from "../components/modals/SearchModal";
-import SmartConnectModal from "../components/modals/SmartConnectModal";
-import UpdateModal from "../components/UpdateModal";
 import MiniPlayer from "../components/MiniPlayer";
 import LocalPlayer from "../features/downloads/components/LocalPlayer";
 import { storage, STORAGE_KEYS } from "../services/settingsStore";
 import { observePlaybackEvidence } from "../features/player/services/playerEventProgress";
 import { markHistoryPlaybackVerified, persistPlaybackProgressDetails } from "../services/viewingStateVerification";
 import { imgUrl } from "../services/tmdb";
+
+const SearchModal = lazy(() => import("../components/modals/SearchModal"));
+const UpdateModal = lazy(() => import("../components/UpdateModal"));
+const SmartConnectModal = lazy(() => import("../components/modals/SmartConnectModal"));
 
 export default function AppOverlays({ model }) {
   const {
@@ -25,8 +26,13 @@ export default function AppOverlays({ model }) {
   const [toastPosition, setToastPosition] = useState(
     () => storage.get(STORAGE_KEYS.TOAST_POSITION) || "bottom-left"
   );
+  const [searchPresentationActivated, setSearchPresentationActivated] = useState(showSearch);
 
   const miniPlaybackEvidenceRef = useRef({ key: null, lastTime: null, advances: 0, ready: false });
+
+  useEffect(() => {
+    if (showSearch) setSearchPresentationActivated(true);
+  }, [showSearch]);
 
   useEffect(() => {
     const handleSettingsChanged = () => {
@@ -40,20 +46,24 @@ export default function AppOverlays({ model }) {
 
   return (
     <>
-        <SearchModal
-          isOpen={showSearch}
-          apiKey={apiKey}
-          searchWorld={searchWorld}
-          onSelect={handleSelectResult}
-          onMusicNavigate={navigate}
-          onNavigate={navigate}
-          onViewAll={(query) => navigate(searchWorld === "music" ? "music-search" : "search", searchWorld === "music" ? { query } : query)}
-          onClose={closeSearch}
-          offline={offline}
-          anchorRect={searchAnchorRect}
-          isSaved={isSaved}
-          watched={watched}
-        />
+        {(showSearch || searchPresentationActivated) && (
+          <Suspense fallback={null}>
+            <SearchModal
+              isOpen={showSearch}
+              apiKey={apiKey}
+              searchWorld={searchWorld}
+              onSelect={handleSelectResult}
+              onMusicNavigate={navigate}
+              onNavigate={navigate}
+              onViewAll={(query) => navigate(searchWorld === "music" ? "music-search" : "search", searchWorld === "music" ? { query } : query)}
+              onClose={closeSearch}
+              offline={offline}
+              anchorRect={searchAnchorRect}
+              isSaved={isSaved}
+              watched={watched}
+            />
+          </Suspense>
+        )}
         {updateBanner && (
           <div
             style={{
@@ -109,11 +119,13 @@ export default function AppOverlays({ model }) {
           </div>
         )}
         {showUpdateModal && updateBanner && (
-          <UpdateModal
-            updateInfo={updateBanner}
-            activeDownloads={activeDownloadCount}
-            onClose={() => setShowUpdateModal(false)}
-          />
+          <Suspense fallback={null}>
+            <UpdateModal
+              updateInfo={updateBanner}
+              activeDownloads={activeDownloadCount}
+              onClose={() => setShowUpdateModal(false)}
+            />
+          </Suspense>
         )}
         {toast && <div className={`toast position-${toastPosition}`} role="status" aria-live="polite" aria-atomic="true">{toast}</div>}
         {miniTransition && (
@@ -399,7 +411,12 @@ export default function AppOverlays({ model }) {
           <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
         )}
         {model.showConnectModal && (
-          <SmartConnectModal connectionState={model.connectionState} onClose={() => model.setShowConnectModal?.(false)} />
+          <Suspense fallback={null}>
+            <SmartConnectModal
+              connectionState={model.connectionState}
+              onClose={() => model.setShowConnectModal?.(false)}
+            />
+          </Suspense>
         )}
     </>
   );

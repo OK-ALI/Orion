@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { analyzeFrequencyData, createMusicAnalyser, createVisualBus, EMPTY_VISUAL_FRAME } from "../../../src/renderer/features/music/visual/musicVisualEngine";
 import { deterministicPalette, neutralizeMusicHighlight } from "../../../src/renderer/features/music/visual/artworkPalette";
 import { replayGainMultiplier } from "../../../src/renderer/features/music/player/AudioEngine";
+import { MUSIC_ORB_PLACEMENT, resolveMusicSceneParticleCount, resolveMusicVisualBudget, resolveMusicVisualTier } from "../../../src/renderer/features/music/visual/musicPerformanceBudget";
 
 describe("Music visual engine", () => {
   const originalAudioContext = window.AudioContext;
@@ -23,6 +24,57 @@ describe("Music visual engine", () => {
     expect(frame.mids).toBeGreaterThan(frame.treble);
     expect(frame.timestamp).toBe(42);
     expect(frame).not.toHaveProperty("image");
+  });
+
+  it("switches Music Planet render modes instead of throttling one heavy scene", () => {
+    expect(resolveMusicVisualBudget("efficiency", { adaptPerformance: true })).toMatchObject({
+      tier: "efficiency", sceneMode: "static", sceneLoop: "none", sceneFps: 0, starCap: 0, visualizerBins: 18,
+    });
+    expect(resolveMusicVisualBudget("balanced", { adaptPerformance: true })).toMatchObject({
+      tier: "balanced", sceneMode: "orb", sceneLoop: "signal", sceneFps: 30, starCap: 0, visualizerBins: 32,
+    });
+    expect(resolveMusicVisualBudget("quality", { adaptPerformance: true })).toMatchObject({
+      tier: "quality", sceneMode: "full", sceneLoop: "display", sceneFps: "display", sceneDpr: "native", sphereSegments: 128, visualizerBins: 72,
+    });
+  });
+
+  it("keeps Quality on the native display-synchronised full scene", () => {
+    const quality = resolveMusicVisualBudget("quality", { adaptPerformance: true });
+    expect(quality.sceneMode).toBe("full");
+    expect(quality.sceneLoop).toBe("display");
+    expect(quality.sceneFps).toBe("display");
+    expect(quality.sceneDpr).toBe("native");
+    expect(quality.sphereSegments).toBe(128);
+  });
+
+  it("never lets local Music richness exceed the active Desktop safety ceiling", () => {
+    expect(resolveMusicVisualTier("efficiency", { adaptPerformance: false, atmosphere: "immersive" })).toBe("efficiency");
+    expect(resolveMusicVisualTier("balanced", { adaptPerformance: false, atmosphere: "immersive" })).toBe("balanced");
+    expect(resolveMusicVisualTier("quality", { adaptPerformance: false, atmosphere: "pulse" })).toBe("balanced");
+    expect(resolveMusicVisualTier("quality", { adaptPerformance: false, atmosphere: "immersive" })).toBe("quality");
+    expect(resolveMusicVisualTier("quality", { lowGpu: true, atmosphere: "immersive" })).toBe("efficiency");
+  });
+
+  it("keeps the Music Planet orb on one stable placement across section changes", () => {
+    expect(MUSIC_ORB_PLACEMENT).toEqual({
+      world: [0, 0, -7],
+      left: "50%",
+      top: "48%",
+      fov: 60,
+    });
+  });
+
+  it("reserves the WebGL particle scene for Quality", () => {
+    const efficiency = resolveMusicVisualBudget("efficiency", { adaptPerformance: true });
+    const balanced = resolveMusicVisualBudget("balanced", { adaptPerformance: true });
+    const quality = resolveMusicVisualBudget("quality", { adaptPerformance: true });
+    expect(resolveMusicSceneParticleCount({ sceneStyle: "aurora", particleDensity: "high" }, efficiency)).toBe(0);
+    expect(resolveMusicSceneParticleCount({ sceneStyle: "aurora", particleDensity: "high" }, balanced)).toBe(0);
+    expect(resolveMusicSceneParticleCount({ sceneStyle: "aurora", particleDensity: "high" }, quality)).toBe(260);
+    expect(resolveMusicSceneParticleCount({ sceneStyle: "stars", particleDensity: "high" }, efficiency)).toBe(0);
+    expect(resolveMusicSceneParticleCount({ sceneStyle: "stars", particleDensity: "high" }, balanced)).toBe(0);
+    expect(resolveMusicSceneParticleCount({ sceneStyle: "stars", particleDensity: "high" }, quality)).toBe(5000);
+    expect(resolveMusicSceneParticleCount({ sceneStyle: "minimal", particleDensity: "high" }, quality)).toBe(0);
   });
 
   it("publishes frames imperatively without React state", () => {

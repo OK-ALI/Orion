@@ -181,11 +181,31 @@
 
 /**
  * @typedef {Object} AdaptivePerformanceState
- * @property {"efficiency"|"balanced"|"quality"} tier
+ * @property {"automatic"|"efficiency"|"balanced"|"quality"} selection
+ * @property {"efficiency"|"balanced"|"quality"} automaticTier Stable hardware baseline used by Automatic.
+ * @property {"efficiency"|"balanced"|"quality"} requestedTier Manual selection or the Automatic baseline before pressure clamping.
+ * @property {"efficiency"|"balanced"|"quality"} pressureTier Live resource/playback pressure ceiling.
+ * @property {"efficiency"|"balanced"|"quality"} tier Effective tier after pressure clamping and hysteresis.
+ * @property {number} totalMemoryMb
+ * @property {number} cpuCount
+ * @property {number} cpuSpeedMhz
+ * @property {boolean|null} hardwareAccelerationEnabled
+ * @property {"unknown"|"hardware"|"limited"|"software"} graphicsCapability
+ * @property {"balanced"|"quality"} graphicsTier Stable graphics ceiling used by Automatic and manual safety clamping.
+ * @property {number} gpuAdapterCount
+ * @property {number|null} activeGpuVendorId
+ * @property {number|null} activeGpuDeviceId
+ * @property {boolean} switchableGraphics
+ * @property {string} gpuCompositing
+ * @property {string} rasterization
+ * @property {string} webgl
+ * @property {string} webgl2
+ * @property {string} videoDecode
  * @property {number} cpuPercent
  * @property {number} freeMemoryMb
  * @property {number} eventLoopLagMs
  * @property {number} bufferingEvents
+ * @property {number} droppedFrames
  * @property {string} reason
  */
 

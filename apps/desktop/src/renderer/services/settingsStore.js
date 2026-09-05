@@ -45,6 +45,7 @@ export const STORAGE_KEYS = {
   FONT_SIZE: "fontSize",
   COMPACT_MODE: "compactMode",
   REDUCE_ANIMATIONS: "reduceAnimations",
+  PERFORMANCE_PROFILE: "performanceProfile",
   LIBRARY_SORT: "librarySort",
   LIBRARY_TAB: "libraryTab",
   LIBRARY_HISTORY_FILTER: "libraryHistoryFilter",

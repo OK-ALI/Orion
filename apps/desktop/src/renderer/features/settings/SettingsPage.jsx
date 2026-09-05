@@ -150,6 +150,7 @@ export default function SettingsPage({
   // ── Section refs for navigation ────────────────────────────────────────────
   const secUpdates = useRef(null);
   const secContent = useRef(null);
+  const secPerformance = useRef(null);
   const secPlayback = useRef(null);
   const secSystemIntegration = useRef(null);
   const secSubtitles = useRef(null);
@@ -166,6 +167,7 @@ export default function SettingsPage({
   const sectionRefs = {
     updates: secUpdates,
     content: secContent,
+    performance: secPerformance,
     playback: secPlayback,
     systemIntegration: secSystemIntegration,
     subtitles: secSubtitles,
@@ -410,7 +412,7 @@ export default function SettingsPage({
           flash, handleClearCache, handleSavePath, handleSaveThreshold, introSkipMode,
           invidiousBase, invidiousChecking, invidiousSaved, invidiousStatus, onChangeApiKey,
           pickFolder, ratingCountry, resetHovered, saveAgeSettings, saveInvidiousBase, saved, secBackup,
-          secContent, secDownloads, secInterface, secAppearance, secMusicAppearance, secLibrary, secNotifications,
+          secContent, secPerformance, secDownloads, secInterface, secAppearance, secMusicAppearance, secLibrary, secNotifications,
           secPlayback, secSystemIntegration, secStorage, secSubtitles, secUpdates, secGoogle, setAgeLimit,
           setAutoplayNextDuration, setAutoplayNextEnabled, setAutoplayNextLayout,
           setDownloadPath, setIntroSkipMode, setInvidiousBase, setInvidiousStatus,

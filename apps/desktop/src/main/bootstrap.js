@@ -120,6 +120,7 @@ const popoutController = createPopoutWindowController({
   ensurePlayerSessions,
   setMiniPlayerStatus: trayController.setMiniPlayerStatus,
   getPerformanceTier: () => performanceCoordinator.getSnapshot()?.tier || "balanced",
+  getPerformanceSnapshot: () => performanceCoordinator.getSnapshot() || { tier: "balanced" },
 });
 
 if (process.platform === "win32") {
@@ -434,7 +435,7 @@ playerIpc.register(getMainWindow, {
 });
 ambientSampler.register(
   getMainWindow,
-  () => performanceCoordinator.getSnapshot()?.tier || "balanced",
+  () => performanceCoordinator.getSnapshot() || { tier: "balanced" },
 );
 blockStats.init(getMainWindow);
 diagnosticsIpc.register({

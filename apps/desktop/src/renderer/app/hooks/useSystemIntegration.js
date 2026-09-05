@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { storage, STORAGE_KEYS } from "../../services/settingsStore";
+import { samplePlaybackHealth } from "../../shared/utils/playbackHealth";
 
 function batteryPreferences() {
   return {
@@ -7,6 +8,11 @@ function batteryPreferences() {
     alerts: storage.get(STORAGE_KEYS.BATTERY_ALERTS) !== false,
     automaticOptimization: storage.get(STORAGE_KEYS.BATTERY_OPTIMIZATION) !== false,
   };
+}
+
+function performanceSelection() {
+  const value = storage.get(STORAGE_KEYS.PERFORMANCE_PROFILE);
+  return ["automatic", "efficiency", "balanced", "quality"].includes(value) ? value : "automatic";
 }
 
 function mediaPreferences() {
@@ -102,35 +108,54 @@ export function useSystemIntegration({ playbackSession, onMediaCommand, setToast
 
   useEffect(() => {
     if (!window.electron) return undefined;
+    let disposed = false;
     let expected = performance.now() + 1000;
     let lagMs = 0;
+    let previousDroppedFrames = 0;
+    let healthBusy = false;
     const lagTimer = window.setInterval(() => {
       const now = performance.now();
       lagMs = Math.max(0, now - expected);
       expected = now + 1000;
     }, 1000);
     const apply = (snapshot) => {
-      if (!snapshot) return;
+      if (!snapshot || disposed) return;
       document.documentElement.dataset.performanceTier = snapshot.tier || "balanced";
       document.documentElement.dataset.performanceOnBattery = snapshot.onBattery ? "true" : "false";
+      document.documentElement.dataset.performanceSelection = snapshot.selection || "automatic";
       window.dispatchEvent(new CustomEvent("orion:performance-tier-changed", { detail: snapshot }));
     };
-    window.electron.getPerformanceSnapshot?.().then(apply).catch(() => {});
+    const syncPerformanceSelection = () => {
+      const selection = performanceSelection();
+      if (window.electron.setPerformanceSelection) {
+        window.electron.setPerformanceSelection(selection).then(apply).catch(() => {});
+      } else {
+        window.electron.getPerformanceSnapshot?.().then(apply).catch(() => {});
+      }
+    };
+    syncPerformanceSelection();
+    window.addEventListener("orion:performance-profile-changed", syncPerformanceSelection);
     const snapshotHandler = window.electron.onPerformanceSnapshot?.(apply);
     const healthTimer = window.setInterval(async () => {
-      let state = null;
-      if (playbackSession?.webContentsId) {
-        state = await window.electron.queryVideoProgress?.(playbackSession.webContentsId).catch(() => null);
+      if (healthBusy) return;
+      healthBusy = true;
+      try {
+        let state = null;
+        if (playbackSession?.webContentsId) {
+          state = await window.electron.queryVideoProgress?.(playbackSession.webContentsId).catch(() => null);
+        }
+        const sample = samplePlaybackHealth(state, previousDroppedFrames, lagMs);
+        previousDroppedFrames = sample.nextDroppedFrames;
+        window.electron.reportPlaybackHealth?.(sample.report);
+      } finally {
+        healthBusy = false;
       }
-      window.electron.reportPlaybackHealth?.({
-        eventLoopLagMs: lagMs,
-        bufferingEvents: state && !state.paused && Number(state.readyState) < 3 ? 1 : 0,
-        droppedFrames: Number(state?.droppedFrames) || 0,
-      });
-    }, 5000);
+    }, 2500);
     return () => {
+      disposed = true;
       window.clearInterval(lagTimer);
       window.clearInterval(healthTimer);
+      window.removeEventListener("orion:performance-profile-changed", syncPerformanceSelection);
       if (snapshotHandler) window.electron.offPerformanceSnapshot?.(snapshotHandler);
     };
   }, [playbackSession?.webContentsId]);

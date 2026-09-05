@@ -1,4 +1,5 @@
 import GeneralSettingsGroup from "./groups/GeneralSettingsGroup";
+import PerformanceSettingsGroup from "./groups/PerformanceSettingsGroup";
 import ContentSettingsGroup from "./groups/ContentSettingsGroup";
 import PlaybackSettingsGroup from "./groups/PlaybackSettingsGroup";
 import SystemIntegrationSettingsGroup from "./groups/SystemIntegrationSettingsGroup";
@@ -29,6 +30,7 @@ export default function SettingsContent({ model }) {
         {/* GROUP: GENERAL                                                     */}
         {/* ══════════════════════════════════════════════════════════════════ */}
         <GeneralSettingsGroup model={model} />
+        <PerformanceSettingsGroup model={model} />
 
         {/* ══════════════════════════════════════════════════════════════════ */}
         {/* GROUP: CONTENT                                                     */}
