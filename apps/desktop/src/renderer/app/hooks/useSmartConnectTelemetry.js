@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
 import { getRegisteredSource } from "@orion/shared/sources";
+import { playbackTargetKey, readRemotePlaybackState } from "../../features/player/services/remotePlaybackSession";
+import { settlePlaybackStateWithin } from "../../features/player/services/playbackSession";
+import { getPlaybackOwner, subscribePlaybackOwner } from "../playback/PlaybackCoordinator";
+import { getRemoteMusicSession } from "../../features/music/services/remoteMusicSession";
 
 function focusedRole() {
   const element = document.activeElement;
@@ -14,7 +18,7 @@ function focusedRole() {
 }
 
 function surfaceFor(page, session) {
-  if (String(page).startsWith("music-")) return "music";
+  if (session?.kind === "music") return "music";
   if (session?.mode === "mini") return "mini-player";
   if (session?.mode === "popout") return "popout";
   if (session?.local) return "local-player";
@@ -23,6 +27,7 @@ function surfaceFor(page, session) {
 }
 
 function finite(value) {
+  if (value == null || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
@@ -36,13 +41,14 @@ function sourceIdentity(session) {
   };
 }
 
-function controlTruth(session, observable, surface, preparing) {
+function controlTruth(session, observable, surface, preparing, state) {
   const identity = sourceIdentity(session);
-  const hasDirectBoundary = Boolean(session?.webContentsId);
-  const hasMediaSession = Boolean(session?.local || surface === "music");
-  const strategy = hasDirectBoundary ? "direct-video" : hasMediaSession ? "media-session" : "unavailable";
+  const hasDirectBoundary = Boolean(session?.webContentsId || session?.controlPlayback);
+  const hasMediaSession = surface === "music";
+  const ready = state?.controlReady ?? (Number(state?.readyState) >= 2);
+  const strategy = hasMediaSession ? "media-session" : hasDirectBoundary ? "direct-video" : "unavailable";
   const readiness = !session ? "unavailable" : hasDirectBoundary
-    ? (observable ? "ready" : preparing ? "loading" : "unobservable")
+    ? (ready ? "ready" : preparing ? "loading" : "unobservable")
     : hasMediaSession ? "limited" : "unavailable";
   // Cross-origin/unobservable players remain playable through their own UI, but
   // are never advertised as remotely controllable until an actual video is found.
@@ -53,12 +59,12 @@ function controlTruth(session, observable, surface, preparing) {
     canPause: canControl,
     canSkipPrevious: Boolean(session?.previousAction),
     canSkipNext: Boolean(session?.nextAction),
-    canSeek: observable,
+    canSeek: canControl && observable,
     canSetVolume: canControl,
-    canSetSpeed: observable,
+    canSetSpeed: canControl && observable,
     canToggleSubtitles: Boolean(session?.webContentsId),
-    canToggleFullscreen: Boolean(session),
-    canTogglePip: Boolean(session),
+    canToggleFullscreen: Boolean(session) && !hasMediaSession,
+    canTogglePip: Boolean(session) && !hasMediaSession,
     canNavigate: true,
   };
   return {
@@ -68,6 +74,7 @@ function controlTruth(session, observable, surface, preparing) {
     capabilities,
     target: session ? {
       version: 1,
+      ownerRevision: session.remoteRevision,
       sessionId: String(session.id || session.mediaId || session.item?.id || "active"),
       ...identity,
       surface,
@@ -86,12 +93,13 @@ export function useSmartConnectTelemetry({ page, playbackSession }) {
   const sessionRef = useRef(playbackSession);
   const pageRef = useRef(page);
   const targetSeenRef = useRef({ key: "", at: 0 });
+  const publishRef = useRef(() => {});
   sessionRef.current = playbackSession;
   pageRef.current = page;
 
   useEffect(() => {
     if (!window.electron?.onSmartConnectStatus) return undefined;
-    const apply = (status) => { connectedRef.current = Boolean(status?.connected); };
+    const apply = (status) => { connectedRef.current = Boolean(status?.connected); publishRef.current(); };
     window.electron.getSmartConnectInfo?.().then(apply).catch(() => {});
     return window.electron.onSmartConnectStatus(apply);
   }, []);
@@ -103,23 +111,24 @@ export function useSmartConnectTelemetry({ page, playbackSession }) {
       if (cancelled || running || !connectedRef.current || !window.electron?.updateSmartConnectTelemetry) return;
       running = true;
       try {
-        const session = sessionRef.current;
+        const playbackOwner = getPlaybackOwner();
+        const session = playbackOwner === "music" ? getRemoteMusicSession() : sessionRef.current;
+        const queriedKey = playbackTargetKey(session);
+        const state = await settlePlaybackStateWithin(readRemotePlaybackState(session, window.electron), 350);
+        if (cancelled || !connectedRef.current || playbackOwner !== getPlaybackOwner()
+          || queriedKey !== playbackTargetKey(getPlaybackOwner() === "music" ? getRemoteMusicSession() : sessionRef.current)) return;
         const role = focusedRole();
-        const state = session?.webContentsId
-          ? await window.electron.queryVideoProgress?.(session.webContentsId).catch(() => null)
-          : session?.playbackState || null;
-        if (cancelled) return;
         const currentTime = finite(state?.currentTime);
         const duration = finite(state?.duration);
         const observable = currentTime != null && duration != null && duration > 0;
-        const owner = String(pageRef.current).startsWith("music-") ? "music" : session?.local ? "local-video" : session ? "cinema" : "none";
+        const owner = !session ? "none" : playbackOwner === "music" ? "music" : session.local ? "local-video" : "cinema";
         const surface = surfaceFor(pageRef.current, session);
-        const targetKey = session ? `${session.id || session.mediaId || "active"}:${session.sourceId || session.playerSource || "source"}:${session.webContentsId || "pending"}` : "";
+        const targetKey = queriedKey;
         if (targetSeenRef.current.key !== targetKey) targetSeenRef.current = { key: targetKey, at: Date.now() };
-        const preparing = Boolean(session?.webContentsId) && !observable && Date.now() - targetSeenRef.current.at < 5_000;
-        const control = controlTruth(session, observable, surface, preparing);
+        const preparing = Boolean(session) && Date.now() - targetSeenRef.current.at < 5_000;
+        const control = controlTruth(session, observable, surface, preparing, state);
         const context = {
-          version: 1, route: String(pageRef.current || "home"), surface,
+          version: 1, playbackProtocolVersion: 1, route: String(pageRef.current || "home"), surface,
           focusedRole: role, canType: role === "text-input" || role === "search", playbackOwner: owner,
           fullscreen: Boolean(document.fullscreenElement || session?.fullscreen), miniPlayer: session?.mode === "mini", popout: session?.mode === "popout",
           capabilities: control.capabilities, controlTarget: control.target, observedAt: Date.now(),
@@ -127,7 +136,7 @@ export function useSmartConnectTelemetry({ page, playbackSession }) {
         const telemetry = session ? {
           version: 1, sessionId: String(session.id || session.mediaId || session.item?.id || "active"), sequence: ++sequenceRef.current,
           title: session.title || session.item?.name || session.item?.title || "Now Playing", mediaId: session.mediaId || session.item?.id || null,
-          playbackKind: session.local ? "local-video" : "cinema", sourceId: control.sourceId, sourceLabel: control.sourceLabel,
+          playbackKind: session.kind === "music" ? "music" : session.local ? "local-video" : "cinema", sourceId: control.sourceId, sourceLabel: control.sourceLabel,
           surface, controlState: control.readiness, controlStrategy: control.strategy,
           currentTime, duration, bufferedTime: finite(state?.bufferedTime),
           state: observable ? (state?.buffering ? "buffering" : state?.paused ? "paused" : "playing") : "unobservable",
@@ -137,14 +146,20 @@ export function useSmartConnectTelemetry({ page, playbackSession }) {
         await window.electron.updateSmartConnectTelemetry({ context, telemetry });
       } finally { running = false; }
     };
+    publishRef.current = publish;
+    const unsubscribeOwner = subscribePlaybackOwner(publish);
     publish();
     const timer = window.setInterval(publish, 500);
     document.addEventListener("focusin", publish);
     document.addEventListener("fullscreenchange", publish);
     return () => {
       cancelled = true; window.clearInterval(timer);
+      publishRef.current = () => {};
+      unsubscribeOwner();
       document.removeEventListener("focusin", publish);
       document.removeEventListener("fullscreenchange", publish);
     };
   }, []);
+
+  useEffect(() => { publishRef.current(); }, [page, playbackSession]);
 }

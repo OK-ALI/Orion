@@ -26,6 +26,7 @@ export type RemotePlaybackControlStrategy =
 
 export interface RemotePlaybackControlTargetV1 {
   version: 1;
+  ownerRevision?: string;
   sessionId: string;
   sourceId: string | null;
   sourceLabel: string;
@@ -55,6 +56,7 @@ export interface AdaptivePointerPolicy {
 
 export interface RemoteUiContextV1 {
   version: 1;
+  playbackProtocolVersion?: 1;
   route: string;
   surface: "browse" | "embedded-player" | "local-player" | "mini-player" | "popout" | "music" | "unknown";
   focusedRole: RemoteFocusedRole;
@@ -250,6 +252,8 @@ export interface SmartConnectRemoteCommand {
   value?: unknown;
   pointer?: SmartConnectPointerState;
   sentAt: number;
+  playbackProtocolVersion?: 1;
+  ownerRevision?: string;
 }
 
 export interface SmartConnectEnvelope<T = unknown> {

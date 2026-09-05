@@ -7,8 +7,10 @@ import {
   MINI_PLAYER_DEFAULT_WIDTH,
 } from "../shared/utils/miniPlayerGeometry";
 import { handleNativePlayerKey } from "../features/player/services/nativeKeyboard";
+import { controlHtmlMedia, readHtmlMedia } from "../features/player/services/remoteHtmlMedia";
+import { controlRemotePlayback } from "../features/player/services/remotePlaybackSession";
 
-export default function MiniPlayer({ url, title, context, initialState, subtitles = [], onClose, onExpand, onPopOut, onProgress, onReady, active = true }) {
+export default function MiniPlayer({ url, title, context, initialState, subtitles = [], onClose, onExpand, onPopOut, onProgress, onReady, remoteOwnerId, active = true }) {
   const isLocal = String(url || "").startsWith("orion-media://");
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [size, setSize] = useState({
@@ -40,6 +42,14 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
   const readyTimeoutRef = useRef(null);
   const readyReportedRef = useRef(false);
   const chromeTimerRef = useRef(null);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+  const restoreTimersRef = useRef([]);
+  const attachmentRef = useRef(null);
+  const clearRestoreTimers = () => {
+    restoreTimersRef.current.forEach(window.clearTimeout);
+    restoreTimersRef.current = [];
+  };
 
   const revealChrome = () => {
     setChromeVisible(true);
@@ -59,7 +69,23 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
   const reportReady = () => {
     if (readyReportedRef.current) return;
     readyReportedRef.current = true;
-    onReady?.({ webContentsId: webContentsIdRef.current, local: isLocal });
+    const video = nativeVideoRef.current;
+    const targetId = webContentsIdRef.current;
+    const remoteAttachmentId = crypto.randomUUID();
+    attachmentRef.current = remoteAttachmentId;
+    const valid = () => attachmentRef.current === remoteAttachmentId && (isLocal
+      ? video && video === nativeVideoRef.current && video.isConnected
+      : targetId && targetId === webContentsIdRef.current);
+    onReadyRef.current?.({
+      remoteOwnerId, remoteAttachmentId, webContentsId: targetId, local: isLocal, attached: true,
+      readPlaybackState: (options) => valid() ? (isLocal ? readHtmlMedia(video) : window.electron?.queryVideoProgress?.(targetId, options)) : null,
+      controlPlayback: async (command, operation) => {
+        if (!valid()) return { ok: false, error: "The mini-player target changed." };
+        // A restored handoff must not overwrite a subsequent user command.
+        clearRestoreTimers();
+        return isLocal ? controlHtmlMedia(video, command, operation) : controlRemotePlayback({ webContentsId: targetId }, command, window.electron, operation);
+      },
+    });
   };
 
   useEffect(() => {
@@ -105,8 +131,17 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
     if (isLocal || !active) return undefined;
     const wv = webviewRef.current;
     if (!wv) return;
+    let disposed = false;
+    clearRestoreTimers();
+    readyReportedRef.current = false;
+    restoredRef.current = false;
+    webContentsIdRef.current = null;
     const injectStyles = () => {
+      if (disposed) return;
       webContentsIdRef.current = getReadyWebContentsId(wv);
+      // Target attachment is separate from actual media readiness.
+      readyReportedRef.current = false;
+      reportReady();
       setLoading(false);
       setLoadError("");
       const css = `
@@ -137,14 +172,15 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       }, { captureElement: playerRef.current });
       if (!restoredRef.current && window.electron?.setVideoState) {
         restoredRef.current = true;
-        const restore = () => window.electron.setVideoState(webContentsIdRef.current, {
+        const targetId = webContentsIdRef.current;
+        const restore = () => !disposed && window.electron.setVideoState(targetId, {
           currentTime: Number(initialState?.currentTime) || 0,
           paused: Boolean(initialState?.paused),
           muted: Boolean(initialState?.muted),
           volume: Number(initialState?.volume ?? 1),
         }).catch(() => {});
-        window.setTimeout(restore, 350);
-        window.setTimeout(restore, 1400);
+        restoreTimersRef.current.push(window.setTimeout(restore, 350));
+        restoreTimersRef.current.push(window.setTimeout(restore, 1400));
       }
       window.clearTimeout(readyTimeoutRef.current);
       readyTimeoutRef.current = window.setTimeout(() => { setLoading(false); reportReady(); }, 2500);
@@ -163,6 +199,12 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
     wv.addEventListener("did-stop-loading", handleStop);
     wv.addEventListener("did-fail-load", handleFailure);
     return () => {
+      disposed = true;
+      clearRestoreTimers();
+      webContentsIdRef.current = null;
+      readyReportedRef.current = false;
+      attachmentRef.current = null;
+      onReadyRef.current?.({ remoteOwnerId, webContentsId: null, local: false });
       wv.removeEventListener("dom-ready", injectStyles);
       wv.removeEventListener("did-start-loading", handleStart);
       wv.removeEventListener("did-stop-loading", handleStop);
@@ -170,12 +212,13 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       ambientCleanupRef.current?.();
       window.clearTimeout(readyTimeoutRef.current);
     };
-  }, [active, initialState, isLocal, position.x, position.y, size.width, size.height]);
+  }, [active, isLocal, url, remoteOwnerId]);
 
   useEffect(() => {
     if (!isLocal || !active) return;
     const video = nativeVideoRef.current;
     if (!video) return;
+    readyReportedRef.current = false;
     const restore = () => {
       video.currentTime = Math.max(0, Number(initialState?.currentTime) || 0);
       video.volume = Math.max(0, Math.min(1, Number(initialState?.volume ?? 1)));
@@ -191,13 +234,17 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
     video.addEventListener("error", failed);
     if (video.readyState >= 2) ready();
     return () => {
+      readyReportedRef.current = false;
+      attachmentRef.current = null;
+      onReadyRef.current?.({ remoteOwnerId, webContentsId: null, local: true });
       video.removeEventListener("loadedmetadata", restore);
       video.removeEventListener("canplay", ready);
       video.removeEventListener("error", failed);
     };
-  }, [active, isLocal, initialState, url]);
+  }, [active, isLocal, url, remoteOwnerId]);
 
   useEffect(() => {
+    let disposed = false;
     const updatePlaybackState = async () => {
       if (!active) return;
       if (isLocal) {
@@ -210,7 +257,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       const id = webContentsIdRef.current;
       if (!id || !window.electron?.queryVideoProgress) return;
       const state = await window.electron.queryVideoProgress(id).catch(() => null);
-      if (!state) return;
+      if (disposed || id !== webContentsIdRef.current || !state) return;
       setLoading(false);
       setLoadError("");
       reportReady();
@@ -225,7 +272,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
       }
     };
     const timer = window.setInterval(updatePlaybackState, 1000);
-    return () => window.clearInterval(timer);
+    return () => { disposed = true; window.clearInterval(timer); };
   }, [active, url, isLocal, onProgress]);
 
   const snapshot = async () => {

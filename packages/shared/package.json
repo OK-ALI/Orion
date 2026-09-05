@@ -15,6 +15,7 @@
     "./api/*": "./src/api/*.ts",
     "./sources": "./src/sources/index.ts",
     "./smart-connect-protocol": "./src/smartConnectProtocol.cjs",
+    "./remote-media-play": "./src/remoteMediaPlay.cjs",
     "./cinema-block-rules": {
       "types": "./cinemaBlockRules.d.ts",
       "default": "./cinemaBlockRules.cjs"

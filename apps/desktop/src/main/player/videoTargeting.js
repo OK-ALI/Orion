@@ -35,6 +35,9 @@ const VIDEO_SCAN_SCRIPT = `
         const currentTime = Number(v.currentTime);
         return {
           index,
+          controlToken: v._orionControlToken ||= String(Date.now()) + ":" + Math.random(),
+          controlSource: v.currentSrc,
+          error: Boolean(v.error),
           currentTime: Number.isFinite(currentTime) ? currentTime : 0,
           duration: Number.isFinite(duration) && duration > 0 ? duration : 0,
           finiteDuration: Number.isFinite(duration) && duration > 0,
@@ -168,6 +171,7 @@ async function executeOnVideo(candidate, body) {
     (async () => {
       const v = document.querySelectorAll("video")[${index}];
       if (!v) return null;
+      ${candidate.controlToken ? `if (v._orionControlToken !== ${JSON.stringify(candidate.controlToken)} || v.currentSrc !== ${JSON.stringify(candidate.controlSource)}) return null;` : ""}
       ${body}
       return {
         currentTime: Number(v.currentTime) || 0,

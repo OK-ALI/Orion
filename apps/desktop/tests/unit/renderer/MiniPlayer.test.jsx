@@ -91,4 +91,49 @@ describe("MiniPlayer", () => {
     unmount();
     vi.useRealTimers();
   });
+  it("binds remote controls to the replacement and cancels delayed restore after a command", async () => {
+    vi.useFakeTimers();
+    window.matchMedia = vi.fn(() => ({ matches: false }));
+    window.electron = {
+      setVideoState: vi.fn(async () => ({ ok: true })),
+      controlVideo: vi.fn(async () => ({ ok: true })),
+      queryVideoProgress: vi.fn(async () => null),
+    };
+    const onReady = vi.fn();
+    const { container, unmount } = render(<MiniPlayer url="https://player.test/embed" title="Test"
+      remoteOwnerId="mini-new" initialState={{ paused: false }} onReady={onReady} />);
+    const webview = container.querySelector("webview");
+    webview.getWebContentsId = () => 72;
+    webview.insertCSS = vi.fn(async () => "css");
+    fireEvent(webview, new Event("dom-ready"));
+    const owner = onReady.mock.calls.at(-1)[0];
+    expect(owner).toMatchObject({ remoteOwnerId: "mini-new", webContentsId: 72, attached: true });
+    await act(async () => { expect((await owner.controlPlayback("pause")).ok).toBe(true); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1600); });
+    expect(window.electron.controlVideo).toHaveBeenCalledWith(72, "pause");
+    expect(window.electron.setVideoState).not.toHaveBeenCalled();
+    unmount();
+    expect(onReady.mock.calls.at(-1)[0]).toMatchObject({ remoteOwnerId: "mini-new", webContentsId: null });
+    expect((await owner.controlPlayback("play")).ok).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("invalidates the old attachment when the same webview loads a new document", async () => {
+    window.matchMedia = vi.fn(() => ({ matches: false }));
+    window.electron = { controlVideo: vi.fn(async () => ({ ok: true })) };
+    const onReady = vi.fn();
+    const { container } = render(<MiniPlayer url="https://player.test/embed" title="Test" remoteOwnerId="mini-1" onReady={onReady} />);
+    const webview = container.querySelector("webview");
+    webview.getWebContentsId = () => 72;
+    webview.insertCSS = vi.fn(async () => "css");
+    fireEvent(webview, new Event("dom-ready"));
+    const oldOwner = onReady.mock.calls.at(-1)[0];
+    fireEvent(webview, new Event("dom-ready"));
+    const currentOwner = onReady.mock.calls.at(-1)[0];
+    expect(oldOwner.remoteAttachmentId).not.toBe(currentOwner.remoteAttachmentId);
+    expect((await oldOwner.controlPlayback("play")).ok).toBe(false);
+    expect(window.electron.controlVideo).not.toHaveBeenCalled();
+    expect((await currentOwner.controlPlayback("pause")).ok).toBe(true);
+  });
+
 });

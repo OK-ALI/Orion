@@ -19,10 +19,10 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
   offWebviewLeaveFullscreen: (handler) =>
     ipcRenderer.removeListener("webview-leave-fullscreen", handler),
   playerStopped: () => ipcRenderer.send("player-stopped"),
-  queryVideoProgress: (webContentsId) =>
-    ipcRenderer.invoke("query-video-progress", webContentsId),
-  controlVideo: (webContentsId, action) =>
-    ipcRenderer.invoke("control-video", webContentsId, action),
+  queryVideoProgress: (webContentsId, options) =>
+    ipcRenderer.invoke("query-video-progress", webContentsId, options),
+  controlVideo: (webContentsId, action, operation) =>
+    ipcRenderer.invoke("control-video", webContentsId, action, operation),
   setVideoState: (webContentsId, state) =>
     ipcRenderer.invoke("set-video-state", webContentsId, state),
   resumeVideo: (webContentsId) =>

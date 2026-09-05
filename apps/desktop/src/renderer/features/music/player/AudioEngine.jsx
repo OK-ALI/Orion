@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { claimPlayback, getPlaybackOwner } from "../../../app/playback/PlaybackCoordinator";
 import { createMusicAnalyser } from "../visual/musicVisualEngine";
+import { readHtmlMedia, controlHtmlMedia } from "../../player/services/remoteHtmlMedia";
 
 export function replayGainMultiplier(decibels, enabled = true) {
   if (!enabled || !Number.isFinite(Number(decibels))) return 1;
@@ -73,6 +74,13 @@ export default function AudioEngine({ controller }) {
 
   useEffect(() => {
     engineRef.current = {
+      readRemoteState(expectedUrl) {
+        return expectedUrl && attachedStreamRef.current === expectedUrl ? readHtmlMedia(audioRef.current) : null;
+      },
+      controlRemote(command, operation, expectedUrl) {
+        if (!expectedUrl || attachedStreamRef.current !== expectedUrl) return Promise.resolve({ ok: false });
+        return controlHtmlMedia(audioRef.current, command, operation);
+      },
       seekTo(seconds) {
         const audio = audioRef.current;
         if (!audio || !Number.isFinite(audio.duration)) return;
@@ -85,8 +93,10 @@ export default function AudioEngine({ controller }) {
       },
       stop() {
         const audio = audioRef.current;
-        if (!audio) return;
+        if (!audio) return false;
+        audio._orionPendingRemotePlay?.();
         audio.pause(); audio.currentTime = 0;
+        return audio.paused;
       },
       unlockAudio() {
         document.documentElement.dataset.musicAnalyserUnlocks = String((Number(document.documentElement.dataset.musicAnalyserUnlocks) || 0) + 1);

@@ -5,6 +5,7 @@ const SMART_CONNECT_PROTOCOL_VERSION = 3;
 const TELEMETRY_STALE_AFTER_MS = 1500;
 
 function finiteOrNull(value) {
+  if (value == null || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
@@ -75,6 +76,8 @@ function normalizeSmartConnectCommand(input = {}, createId = () => "") {
     value: input.action === "cursor_move" ? undefined : input.value,
     pointer: normalizePointer(input.pointer) || legacyPointer,
     sentAt: Number(input.sentAt) || Date.now(),
+    playbackProtocolVersion: input.playbackProtocolVersion === 1 ? 1 : undefined,
+    ownerRevision: typeof input.ownerRevision === "string" ? input.ownerRevision.slice(0, 100) : undefined,
   };
 }
 

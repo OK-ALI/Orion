@@ -9,6 +9,7 @@ import { deterministicPalette, extractArtworkPalette } from "../visual/artworkPa
 import { useFavoritesStore, usePluginStore, useProvidersStore } from "../stores/musicStores";
 
 import { MusicConnectionContext, isMusicRemoteEligible } from "./MusicConnectionContext";
+import { updateRemoteMusicController } from "../services/remoteMusicSession";
 
 const MusicContext = createContext(null);
 
@@ -323,9 +324,12 @@ export function MusicProvider({ children }) {
   }, [progress.currentTime, seekTo]);
 
   const stop = useCallback((clearQueue = false) => {
-    engineRef.current?.stop?.();
+    shouldAutoplayRef.current = false;
+    resolveGenerationRef.current += 1;
+    const stopped = engineRef.current?.stop?.();
     setPlaying(false); setPlaybackStatus("idle");
     if (clearQueue) { setQueue([]); setIndex(-1); }
+    return stopped;
   }, []);
   const retryStream = useCallback(() => { shouldAutoplayRef.current = true; setResolveNonce((value) => value + 1); }, []);
 
@@ -406,20 +410,31 @@ export function MusicProvider({ children }) {
     return () => window.removeEventListener("orion:video-playback-start", pause);
   }, []);
 
+  const remoteQueueTarget = useCallback((action) => {
+    if (action === "previous") return previousQueueTarget({ currentTime: progress.currentTime, currentIndex: indexRef.current, history: historyRef.current }).index;
+    if (repeat === "one") return indexRef.current;
+    if (shuffle) return shuffleBagRef.current[0] ?? null;
+    if (indexRef.current + 1 < queueRef.current.length) return indexRef.current + 1;
+    return repeat === "all" && queueRef.current.length ? 0 : null;
+  }, [progress.currentTime, repeat, shuffle]);
+
   const value = useMemo(() => ({ connectionState, setConnectionState, recoveryEpoch, acceptRecoveryEpoch, queue, setQueue, index, current, playing, setPlaying, togglePlaying,
     playbackStatus, setPlaybackStatus, stream, progress, setProgress, buffered, setBuffered,
     volume, setVolume, muted, setMuted, toggleMute, repeat, setRepeat, shuffle, setShuffle,
     panel, setPanel, lyrics, loadLyrics, candidates, loadCandidates, selectCandidate,
     playTrack, playNext, playPrevious, addToQueue, playNextTrack, clearUpcoming, startRadio,
-    selectQueueItem, removeFromQueue, moveQueueItem, seekTo, seekBy,
+    selectQueueItem, removeFromQueue, moveQueueItem, seekTo, seekBy, remoteQueueTarget,
     stop, retryStream, engineRef, visualBus, visualPreferences, analyserState, setAnalyserState,
     analyserDiagnostics, setAnalyserDiagnostics, artwork, immersive, setImmersive,
     favorites, plugins, providers }),
-  [connectionState, recoveryEpoch, acceptRecoveryEpoch, buffered, candidates, current, index, loadCandidates, loadLyrics, lyrics, muted, panel,
+  [connectionState, recoveryEpoch, acceptRecoveryEpoch, buffered, candidates, current, index, loadCandidates, loadLyrics, lyrics, muted, panel, remoteQueueTarget,
     addToQueue, clearUpcoming, playNext, playNextTrack, playPrevious, playTrack, playbackStatus, playing, progress, queue, removeFromQueue, moveQueueItem, startRadio,
     repeat, retryStream, seekBy, seekTo, selectCandidate, selectQueueItem, setVolume, shuffle,
     stop, stream, toggleMute, togglePlaying, volume, visualBus, visualPreferences, analyserState, analyserDiagnostics, artwork, immersive,
     favorites, plugins, providers]);
+
+  useLayoutEffect(() => { updateRemoteMusicController(value); });
+  useLayoutEffect(() => () => updateRemoteMusicController(null), []);
 
   return <MusicContext.Provider value={value}><MusicConnectionContext.Provider value={connectionState}>
     {children}<AudioEngine controller={value} /><ToastContainer />

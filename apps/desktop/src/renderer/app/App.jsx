@@ -36,7 +36,9 @@ import {
   buildPlaybackHandoff,
   settlePlaybackStateWithin,
 } from "../features/player/services/playbackSession";
+import { acceptMiniPlaybackOwner, createMiniPlaybackSession, playbackTargetKey, readRemotePlaybackState } from "../features/player/services/remotePlaybackSession";
 import { getMiniPlayerBounds } from "../shared/utils/miniPlayerGeometry";
+import { useSystemPlaybackCommands } from "./hooks/useSystemPlaybackCommands";
 import { useSystemIntegration } from "./hooks/useSystemIntegration";
 import { useSmartConnectRemoteCommands } from "./hooks/useSmartConnectRemoteCommands";
 import { useSmartConnectTelemetry } from "./hooks/useSmartConnectTelemetry";
@@ -46,7 +48,7 @@ import useDesktopNetworkRecovery from "./hooks/useDesktopNetworkRecovery";
 import { DesktopSyncProviders } from "../features/account/DesktopSyncProviders";
 
 const WHATS_NEW_EDITION = "orion-x-music-planet";
-import { claimPlayback, getPlaybackOwner } from "./playback/PlaybackCoordinator";
+import { claimPlayback } from "./playback/PlaybackCoordinator";
 import MusicPlayerBar from "../features/music/player/MusicPlayerBar";
 import SearchOrb from "../components/search/SearchOrb";
 import { useSearchOverlayController } from "./hooks/useSearchOverlayController";
@@ -278,9 +280,15 @@ export default function App() {
   };
   const [playerSettings, setPlayerSettings] = useState(readPlayerSettings);
   const [miniPlayer, setMiniPlayer] = useState(null);
-  const [playbackSession, setPlaybackSession] = useState(null);
+  const [playbackSession, setPlaybackSessionState] = useState(null);
   const playbackSessionRef = useRef(null);
-  playbackSessionRef.current = playbackSession;
+  const setPlaybackSession = useCallback((update) => {
+    let next = typeof update === "function" ? update(playbackSessionRef.current) : update;
+    if (next) next = { ...next, remoteRevision: playbackTargetKey(next) === playbackTargetKey(playbackSessionRef.current)
+      ? playbackSessionRef.current?.remoteRevision || crypto.randomUUID() : crypto.randomUUID() };
+    playbackSessionRef.current = next;
+    setPlaybackSessionState(next);
+  }, []);
   const [miniTransition, setMiniTransition] = useState(null);
   const [expandedLocalDownload, setExpandedLocalDownload] = useState(null);
   const miniReadyResolverRef = useRef(null);
@@ -491,38 +499,39 @@ export default function App() {
       manualMiniRequestRef.current = false;
     }, 700);
     beginMiniTransition(payload);
-    const next = payload ? { ...payload, mode: "mini", handoffPending: true } : null;
+    const next = createMiniPlaybackSession(payload, crypto.randomUUID());
     setMiniPlayer(next);
     setPlaybackSession(next);
     window.setTimeout(() => {
-      setMiniPlayer((current) => current ? { ...current, handoffPending: false } : current);
+      setMiniPlayer((current) => current?.remoteOwnerId === next?.remoteOwnerId ? { ...current, handoffPending: false } : current);
     }, 360);
   }, [beginMiniTransition]);
 
   const createMiniHandoff = useCallback(async () => {
-    const session = playbackSession;
+    const session = playbackSessionRef.current;
     if (!session?.url) return false;
+    const targetKey = playbackTargetKey(session);
     const behavior = storage.get(STORAGE_KEYS.MINI_PLAYER_BEHAVIOR) || "auto";
     if (behavior === "manual") return false;
     if (behavior === "ask" && !window.confirm("Continue playing in the mini-player?")) return false;
     let playbackState = session.playbackState || {};
-    if (session.webContentsId && window.electron?.queryVideoProgress) {
+    if (session.webContentsId || session.readPlaybackState) {
       playbackState = await settlePlaybackStateWithin(
-        window.electron.queryVideoProgress(session.webContentsId),
+        readRemotePlaybackState(session, window.electron),
         160,
         null,
       ) || playbackState;
     }
-    const handoff = {
+    if (playbackTargetKey(playbackSessionRef.current) !== targetKey) return false;
+    const handoff = createMiniPlaybackSession({
       ...buildPlaybackHandoff(session, playbackState, "mini"),
-      handoffPending: true,
       shouldResume: !playbackState.paused,
-    };
+    }, crypto.randomUUID());
     beginMiniTransition(handoff);
     setMiniPlayer(handoff);
     setPlaybackSession(handoff);
     window.setTimeout(() => {
-      setMiniPlayer((current) => current?.id === handoff.id ? {
+      setMiniPlayer((current) => current?.remoteOwnerId === handoff.remoteOwnerId ? {
         ...current,
         handoffPending: false,
       } : current);
@@ -531,81 +540,22 @@ export default function App() {
   }, [beginMiniTransition, playbackSession]);
 
   const handleMiniReady = useCallback((owner) => {
-    miniReadyResolverRef.current?.();
-    miniReadyResolverRef.current = null;
-    if (owner) {
-      setPlaybackSession((current) => current ? { ...current, ...owner, mode: "mini" } : current);
+    const current = playbackSessionRef.current;
+    if (!current || current.mode !== "mini" || current.remoteOwnerId !== owner?.remoteOwnerId) return;
+    setPlaybackSession(acceptMiniPlaybackOwner(current, owner));
+    if (owner.attached) {
+      miniReadyResolverRef.current?.();
+      miniReadyResolverRef.current = null;
     }
   }, []);
 
-  const handleSystemMediaCommand = useCallback(async (command, expected = {}) => {
-    const failure = (session, failureCode, error, readiness = "unavailable") => ({
-      ok: false, error, commandResult: { applied: false, sessionId: session?.id || null, sourceId: session?.sourceId || session?.playerSource || null, readiness, failureCode },
-    });
-    if (getPlaybackOwner() === "music") return failure(null, "provider-control-limited", "Music is active, but this remote control boundary is limited.", "limited");
-    let session = playbackSessionRef.current;
-    if (!session) return failure(null, "player-unavailable", "No Cinema player is active.");
-    const identityMatches = (candidate) => (!expected?.sessionId || String(candidate?.id || candidate?.mediaId || candidate?.item?.id) === String(expected.sessionId))
-      && (!expected?.sourceId || String(candidate?.sourceId || candidate?.playerSource || "") === String(expected.sourceId));
-    if (!identityMatches(session)) return failure(session, "stale-control-target", "The player source changed before the command was applied.", "failed");
-
-    if (command === "play" && !session.webContentsId) {
-      const deadline = Date.now() + 3_500;
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => window.setTimeout(resolve, 120));
-        session = playbackSessionRef.current;
-        if (!session || !identityMatches(session)) return failure(session, "stale-control-target", "The player source changed while controls were preparing.", "failed");
-        if (session.webContentsId) break;
-      }
-      if (!session.webContentsId) return failure(session, "player-not-ready", "The provider player is not ready for remote control.", "loading");
-    }
-    if (command === "next") {
-      session.nextAction?.();
-      const ok = Boolean(session.nextAction);
-      return ok ? { ok, commandResult: { applied: true, appliedState: "unchanged", sessionId: session.id || null, sourceId: session.sourceId || session.playerSource || null, readiness: "ready" } }
-        : failure(session, "capability-unavailable", "No next item is available.", "limited");
-    }
-    if (command === "previous") {
-      const state = session.webContentsId
-        ? await window.electron?.queryVideoProgress?.(session.webContentsId).catch(() => null)
-        : null;
-      if (Number(state?.currentTime) > 5 || session.mediaType !== "tv") {
-        if (session.webContentsId) {
-          const response = await window.electron?.controlVideo?.(session.webContentsId, "restart");
-          if (!response?.ok) return failure(session, "provider-control-limited", response?.error || "The provider did not accept restart.", "limited");
-        } else {
-          window.dispatchEvent(new CustomEvent("orion:media-command", { detail: "restart" }));
-          return failure(session, "provider-control-limited", "This playback surface must be restarted in its own player.", "limited");
-        }
-      } else if (session.previousAction) session.previousAction();
-      else return failure(session, "capability-unavailable", "No previous item is available.", "limited");
-      return { ok: true, commandResult: { applied: true, appliedState: "unchanged", sessionId: session.id || null, sourceId: session.sourceId || session.playerSource || null, readiness: "ready" } };
-    }
-    if (command === "stop") {
-      if (session.webContentsId) {
-        const response = await window.electron?.controlVideo?.(session.webContentsId, "pause");
-        if (!response?.ok) return failure(session, "provider-control-limited", response?.error || "The provider did not accept stop.", "limited");
-      }
-      if (session.mode === "popout") window.electron?.closePipWindow?.();
-      window.dispatchEvent(new CustomEvent("orion:media-command", { detail: "stop" }));
-      setMiniPlayer(null);
-      setPlaybackSession(null);
-      return { ok: true, commandResult: { applied: true, appliedState: "paused", sessionId: session.id || null, sourceId: session.sourceId || session.playerSource || null, readiness: "ready" } };
-    }
-    const normalized = command === "playPause" ? "toggle" : command;
-    if (session.webContentsId) {
-      const response = await window.electron?.controlVideo?.(session.webContentsId, normalized);
-      if (!response?.ok) return failure(session, response?.error === "No active video was found yet." ? "player-not-ready" : "provider-control-limited", response?.error || "The player control boundary is unavailable.", response?.error === "No active video was found yet." ? "loading" : "limited");
-      const appliedState = normalized === "play" ? "playing" : normalized === "pause" ? "paused" : "unchanged";
-      return { ...response, commandResult: { applied: true, appliedState, sessionId: session.id || null, sourceId: session.sourceId || session.playerSource || null, readiness: "ready" } };
-    }
-    window.dispatchEvent(new CustomEvent("orion:media-command", { detail: normalized }));
-    return failure(session, "provider-control-limited", "This playback surface must be controlled in its provider player.", "limited");
-  }, []);
+  const handleSystemMediaCommand = useSystemPlaybackCommands({ playbackSessionRef, setPlaybackSession, setMiniPlayer });
 
   useSystemIntegration({ playbackSession, onMediaCommand: handleSystemMediaCommand, setToast });
 
   const handlePlaybackSession = useCallback((session) => {
+    // The old page can finish an effect while its mini/pop-out handoff commits.
+    if (["mini", "popout"].includes(playbackSessionRef.current?.mode)) return;
     if (session) {
       claimPlayback("video");
       setPlaybackSession({ ...session, mode: "embedded" });
@@ -615,11 +565,6 @@ export default function App() {
 
   useSmartConnectTelemetry({ page, playbackSession });
 
-  // ── Smart Connect Remote Commands ─────────────────────────────────────────
-  useSmartConnectRemoteCommands({
-    baseNavigate, baseNavigateBack, createMiniHandoff, handleSystemMediaCommand,
-    pageRef, setShowSearch,
-  });
 
   const handlePlayHomeLocal = useCallback((download) => {
     setMiniPlayer(null);
@@ -651,6 +596,26 @@ export default function App() {
     });
   }, [baseNavigate]);
 
+  const handleCloseMiniPlayer = useCallback((ownerId) => {
+    const current = playbackSessionRef.current;
+    if (ownerId && current?.remoteOwnerId !== ownerId) return;
+    setMiniPlayer(null);
+    if (current?.mode === "mini") setPlaybackSession(null);
+  }, []);
+
+  const handleMiniPopOut = useCallback(async (state) => {
+    const current = playbackSessionRef.current;
+    if (current?.mode !== "mini" || current.remoteOwnerId !== miniPlayer?.remoteOwnerId) return { ok: false, error: "The mini-player changed." };
+    const result = await window.electron?.openPipWindow?.(miniPlayer.url, miniPlayer.title, { ...state, orionContext: miniPlayer });
+    if (!result?.ok) return result || { ok: false, error: "The pop-out player is unavailable." };
+    const webContentsId = await window.electron?.getPipWebContentsId?.();
+    if (playbackSessionRef.current?.remoteOwnerId !== current.remoteOwnerId) return { ok: false, error: "The playback owner changed during handoff." };
+    setPlaybackSession({ ...current, mode: "popout", remoteOwnerId: crypto.randomUUID(), webContentsId,
+      readPlaybackState: undefined, controlPlayback: undefined, handoffPending: !webContentsId });
+    setMiniPlayer(null);
+    return result;
+  }, [miniPlayer]);
+
   // Sync Mini-Player state to Electron main process
   useEffect(() => {
     if (!window.electron) return;
@@ -666,7 +631,7 @@ export default function App() {
     if (!window.electron?.onStopMiniPlayer) return;
 
     const stopHandler = window.electron.onStopMiniPlayer(() => {
-      setMiniPlayer(null);
+      handleCloseMiniPlayer();
     });
 
     return () => {
@@ -703,7 +668,10 @@ export default function App() {
     }
     const beginsAnotherTitle = (targetPage === "movie" || targetPage === "tv") &&
       (!playbackSession || targetPage !== playbackSession.mediaType || Number(targetData?.id) !== Number(playbackSession.mediaId));
-    if (playbackSession?.mode === "embedded" && !beginsAnotherTitle) await createMiniHandoff();
+    if (playbackSessionRef.current?.mode === "embedded" && !beginsAnotherTitle) {
+      const continued = await createMiniHandoff();
+      if (!continued && playbackSessionRef.current?.mode === "embedded") setPlaybackSession(null);
+    }
     if (beginsAnotherTitle) {
       if (playbackSession?.webContentsId) window.electron?.controlVideo?.(playbackSession.webContentsId, "pause");
       setMiniPlayer(null);
@@ -726,9 +694,17 @@ export default function App() {
       transitionNavigation(baseNavigateBack);
       return;
     }
-    if (playbackSession?.mode === "embedded") await createMiniHandoff();
+    if (playbackSessionRef.current?.mode === "embedded") {
+      const continued = await createMiniHandoff();
+      if (!continued && playbackSessionRef.current?.mode === "embedded") setPlaybackSession(null);
+    }
     transitionNavigation(baseNavigateBack);
   }, [baseNavigateBack, createMiniHandoff, playbackSession, transitionNavigation]);
+
+  useSmartConnectRemoteCommands({
+    baseNavigate: navigate, baseNavigateBack: navigateBack, createMiniHandoff, handleSystemMediaCommand,
+    pageRef, setShowSearch,
+  });
 
   useEffect(() => {
     if (!window.electron?.onPipClosed) return;
@@ -737,7 +713,9 @@ export default function App() {
       if (!payload?.url || !context) return;
       const playbackState = { ...payload.state };
       delete playbackState.orionContext;
-      const mini = { ...context, url: payload.url, title: context.title || payload.title, playbackState, mode: "mini" };
+      const mini = createMiniPlaybackSession({ ...context, url: payload.url, title: context.title || payload.title, playbackState }, crypto.randomUUID());
+      // The pop-out has already closed; the replacement can attach immediately.
+      mini.handoffPending = false;
       setMiniPlayer(mini);
       setPlaybackSession(mini);
       if (pageRef.current === "movie" || pageRef.current === "tv") baseNavigateBack();
@@ -968,7 +946,7 @@ export default function App() {
         <AppOverlays model={{
           activeDownloadCount, apiKey, episodeCheckStatus, episodeDismissTimerRef,
           handleExpandMiniPlayer, handleSelectResult, hasCustomTitlebar, miniPlayer,
-          handleMiniReady, miniTransition,
+          handleMiniReady, handleCloseMiniPlayer, handleMiniPopOut, miniTransition,
           navigate, offline, openMiniPlayer: handleOpenMiniPlayer, setEpisodeCheckStatus, setMiniPlayer,
           setShowShortcuts, setShowUpdateModal, setUpdateBanner, showSearch, searchAnchorRect, searchWorld, closeSearch,
           showShortcuts, showUpdateModal, toast, updateBanner,

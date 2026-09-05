@@ -517,25 +517,27 @@ function register(getMainWindow, { writeSecretMigration }) {
     _updateAbortController?.abort();
   });
 
-  ipcMain.handle("query-video-progress", async (_, webContentsId) => {
+  ipcMain.handle("query-video-progress", async (_, webContentsId, options) => {
     try {
       const { webContents } = require("electron");
       const wc = webContents.fromId(Number(webContentsId));
       if (!wc || wc.isDestroyed()) return null;
 
       const primary = await findPrimaryVideo(collectFrames(wc.mainFrame), {
-        requireFiniteDuration: true,
+        requireFiniteDuration: options?.controlReadiness !== true,
       });
       if (!primary) return null;
 
       const userSeek = qualifyUserSeek(primary);
       return {
         currentTime: primary.currentTime,
-        duration: primary.duration,
+        duration: primary.finiteDuration ? primary.duration : null,
         paused: primary.paused,
         muted: primary.muted,
         volume: primary.volume,
         readyState: primary.readyState,
+        controlReady: !primary.error && primary.readyState >= 2,
+        playbackRate: primary.playbackRate,
         networkState: primary.networkState,
         bufferedAhead: primary.bufferedAhead,
         droppedFrames: primary.droppedFrames,
@@ -548,7 +550,12 @@ function register(getMainWindow, { writeSecretMigration }) {
     }
   });
 
-  ipcMain.handle("control-video", async (_, webContentsId, action) => {
+  ipcMain.handle("control-video", async (event, webContentsId, action, options) => {
+    const { beginRemoteVideoOperation, cancelRemoteVideoOperation, remoteVideoScript } = require("./remoteVideoOperation");
+    if (action === "cancelRemoteOperation") {
+      cancelRemoteVideoOperation(event.sender.id, options?.id);
+      return { ok: true };
+    }
     const scripts = {
       toggle: `if (v.paused) { await v.play(); } else { v.pause(); }`,
       play: `await v.play();`,
@@ -593,6 +600,8 @@ function register(getMainWindow, { writeSecretMigration }) {
       return { ok: false, error: "Unsupported player action" };
     }
 
+    const operation = options ? beginRemoteVideoOperation(event.sender.id, options) : null;
+    if (options && !operation) return { ok: false, error: "The remote command expired or the player is busy." };
     try {
       const { webContents } = require("electron");
       const wc = webContents.fromId(Number(webContentsId));
@@ -606,13 +615,17 @@ function register(getMainWindow, { writeSecretMigration }) {
         return { ok: false, error: "No active video was found yet." };
       }
 
-      const result = await executeOnVideo(primary, selectedScript);
+      if (operation && !operation.valid()) return { ok: false, error: "The remote command expired." };
+      if (operation) operation.frame = primary.frame;
+      const result = await executeOnVideo(primary, operation ? remoteVideoScript(operation, action, selectedScript) : selectedScript);
       if (!result) {
         return { ok: false, error: "The active video changed while applying the command." };
       }
       return { ok: true, ...result };
     } catch (error) {
       return { ok: false, error: error.message };
+    } finally {
+      operation?.finish();
     }
   });
 

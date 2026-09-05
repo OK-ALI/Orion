@@ -349,13 +349,17 @@ export function useConnectController() {
     const sequence = ++sequenceRef.current;
     const command = createRemoteCommand(action, value, deviceId, sequence);
     markSent(command.id);
+    if (remoteContext?.playbackProtocolVersion === 1) {
+      command.playbackProtocolVersion = 1;
+      command.ownerRevision = remoteContext.controlTarget?.ownerRevision;
+    }
     const connectionId = connectionRef.current.connectionId;
     const ackPromise = new Promise<any>((resolve) => {
       const timer = setTimeout(() => {
         pendingAcks.current.delete(command.id);
         forgetSent(command.id);
         resolve({ ok: false, error: 'Desktop acknowledgement timed out.' });
-      }, 2200);
+      }, action === 'play' && command.playbackProtocolVersion === 1 ? 7000 : 2200);
       pendingAcks.current.set(command.id, { resolve, timer, sequence, deviceId, connectionId });
     });
     const sent = await sendSecureEnvelope({ version: SMART_CONNECT_PROTOCOL_VERSION, type: 'command', deviceId, connectionId, sequence, commandId: command.id, payload: command }).catch(() => false);

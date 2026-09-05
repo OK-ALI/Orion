@@ -12,6 +12,7 @@ const { loadOrCreateSecureIdentity, signChallenge, verifyDeviceSignature } = req
 const { createTrustState, eligibleLanAddresses, privateAddress } = require("../smartConnect/secureTrust");
 const { createRealtimeDiagnostics } = require("../smartConnect/realtimeDiagnostics");
 const { createServiceAdvertisement } = require("../smartConnect/serviceAdvertisement");
+const { dispatchPlaybackCommand } = require("../smartConnect/playbackDispatch");
 
 const PORT = 8924;
 const PROTOCOL_VERSION = SMART_CONNECT_PROTOCOL_VERSION;
@@ -300,21 +301,8 @@ function requireSecureRequest(req, body = {}) {
 
 function normalizeCommand(input = {}) { return normalizeSmartConnectCommand(input, () => crypto.randomUUID()); }
 
-function dispatchCommand(command) {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      pendingCommands.delete(command.id);
-      resolve({
-        id: command.id,
-        sequence: command.sequence,
-        ok: false,
-        appliedAt: Date.now(),
-        error: "Desktop did not acknowledge the command in time.",
-      });
-    }, COMMAND_TIMEOUT_MS);
-    pendingCommands.set(command.id, { resolve, timer });
-    notifyDesktopRenderer("orion:remote-command", command);
-  });
+function dispatchCommand(command, socket) {
+  return dispatchPlaybackCommand(command, socket, pendingCommands, notifyDesktopRenderer, COMMAND_TIMEOUT_MS);
 }
 
 function sendSocket(socket, type, deviceId, payload) {
@@ -427,7 +415,7 @@ if (!rate.ok) {
   return;
 }
         const command = normalizeCommand(envelope.payload);
-        const ack = await dispatchCommand(command);
+        const ack = await dispatchCommand(command, socket);
         sendSocket(socket, "ack", session.deviceId, ack);
       } catch (error) {
         sendSocket(socket, "error", session.deviceId, { error: error.message, commandId: String(envelope?.commandId || envelope?.payload?.id || ""), sequence: envelope?.payload?.sequence });
@@ -438,6 +426,13 @@ if (!rate.ok) {
     }, 15_000);
     socket.on("close", () => {
       clearInterval(watchdog);
+      for (const [id, pending] of pendingCommands) {
+        if (pending.socket !== socket) continue;
+        clearTimeout(pending.timer);
+        pendingCommands.delete(id);
+        notifyDesktopRenderer("orion:remote-command", { action: "cancel_playback_operation", id });
+        pending.resolve({ id, sequence: pending.sequence, ok: false, error: "The controller disconnected." });
+      }
       realtimeDiagnostics.stop();
       if (connectedSockets.get(session.deviceId) === socket) {
         connectedSockets.delete(session.deviceId);

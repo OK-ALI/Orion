@@ -15,7 +15,7 @@ export default function AppOverlays({ model }) {
   const {
     activeDownloadCount, apiKey, episodeCheckStatus, episodeDismissTimerRef,
     handleExpandMiniPlayer, handleSelectResult, hasCustomTitlebar, miniPlayer,
-    handleMiniReady, miniTransition,
+    handleMiniReady, handleCloseMiniPlayer, handleMiniPopOut, miniTransition,
     navigate, offline, openMiniPlayer, setEpisodeCheckStatus, setMiniPlayer,
     setShowShortcuts, setShowUpdateModal, setUpdateBanner, showSearch, searchAnchorRect, searchWorld, closeSearch,
     showShortcuts, showUpdateModal, toast, updateBanner, saveProgress, markWatched,
@@ -343,6 +343,8 @@ export default function AppOverlays({ model }) {
         )}
         {miniPlayer && (
           <MiniPlayer
+            key={miniPlayer.remoteOwnerId}
+            remoteOwnerId={miniPlayer.remoteOwnerId}
             url={miniPlayer.url}
             title={miniPlayer.title}
             context={miniPlayer.context || (miniPlayer.mediaType === "tv" ? `Season ${miniPlayer.season}, episode ${miniPlayer.episode}` : "Movie")}
@@ -373,23 +375,9 @@ export default function AppOverlays({ model }) {
               saveProgress?.(key, percent);
               if (transition.ready && state.duration - state.currentTime <= 20 && state.currentTime > 0) markWatched?.(key);
             }}
-            onClose={() => setMiniPlayer(null)}
+            onClose={() => handleCloseMiniPlayer(miniPlayer.remoteOwnerId)}
             onExpand={handleExpandMiniPlayer}
-            onPopOut={async (playbackState) => {
-              if (!window.electron?.openPipWindow) {
-                return {
-                  ok: false,
-                  error: "Orion's desktop bridge is unavailable. Restart the app.",
-                };
-              }
-              const result = await window.electron.openPipWindow(
-                miniPlayer.url,
-                miniPlayer.title,
-                { ...playbackState, orionContext: miniPlayer },
-              );
-              if (result?.ok) setMiniPlayer(null);
-              return result;
-            }}
+            onPopOut={handleMiniPopOut}
           />
         )}
         {expandedLocalDownload && (

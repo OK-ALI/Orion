@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 const REMOTE_CURSOR_INACTIVITY_MS = 4_000;
 let lastCursorActivityAt = 0;
@@ -228,6 +228,11 @@ export function useSmartConnectRemoteCommands({
   pageRef,
   setShowSearch,
 }) {
+  const pendingPlaybackRef = useRef(new Map());
+  useEffect(() => () => {
+    pendingPlaybackRef.current.forEach((controller) => controller.abort());
+    pendingPlaybackRef.current.clear();
+  }, []);
   useEffect(() => {
 const rendererDiagnosticsTimer = rendererDiagnosticsEnabled ? window.setInterval(() => {
   const diagnostics = rendererRealtimeDiagnostics;
@@ -243,6 +248,14 @@ const rendererDiagnosticsTimer = rendererDiagnosticsEnabled ? window.setInterval
 }, 1000) : null;
     const handleRemoteCommand = async (payload) => {
       const { action, value } = payload || {};
+      if (action === "cancel_playback_operation") {
+        pendingPlaybackRef.current.get(payload.id)?.abort();
+        return;
+      }
+      const controller = new AbortController();
+      const execution = { deadlineAt: payload?.deadlineAt, signal: controller.signal };
+      const expected = { ...(value && typeof value === "object" ? value : {}), ownerRevision: payload?.ownerRevision };
+      if (payload?.id) pendingPlaybackRef.current.set(payload.id, controller);
 
 if (rendererDiagnosticsEnabled && (action === "cursor_move" || action === "scroll")) {
   rendererRealtimeDiagnostics.received += 1;
@@ -251,18 +264,20 @@ if (rendererDiagnosticsEnabled && (action === "cursor_move" || action === "scrol
 const targetScroll = getScrollContainer();
       let commandResult = { ok: true };
 
+      try {
+      if (execution.deadlineAt && Date.now() >= execution.deadlineAt) throw new Error("Command expired.");
       if (action === "cursor_move") moveCursor(payload);
       if (action === "cursor_click") clickCursor();
       if (action === "scroll") {
         const deltaY = Math.max(-240, Math.min(240, Number(value?.deltaY) || 0));
         getScrollContainer()?.scrollBy?.({ top: deltaY, behavior: "auto" });
       }
-      if (action === "navigate_page" && value) baseNavigate(value);
+      if (action === "navigate_page" && value) await baseNavigate(value);
       if (action === "sidebar_next" || action === "sidebar_prev") {
         const current = SIDEBAR_PAGES.indexOf(pageRef.current || "home");
         const offset = action === "sidebar_next" ? 1 : -1;
         const next = (current + offset + SIDEBAR_PAGES.length) % SIDEBAR_PAGES.length;
-        baseNavigate(SIDEBAR_PAGES[next]);
+        await baseNavigate(SIDEBAR_PAGES[next]);
       }
       if (action === "focus_card_next" || action === "focus_card_prev") {
         moveSpatialFocus(action);
@@ -270,7 +285,7 @@ const targetScroll = getScrollContainer();
       if (action === "seek_to") {
         const seconds = Number(value?.seconds ?? value);
         commandResult = Number.isFinite(seconds)
-          ? await handleSystemMediaCommand(`seek:${seconds}`, value)
+          ? await handleSystemMediaCommand(`seek:${seconds}`, expected, execution)
           : { ok: false, error: "The requested seek position is invalid." };
       }
       if (action === "play_media") {
@@ -332,8 +347,8 @@ const targetScroll = getScrollContainer();
           );
         }
       }
-      if (action === "back") baseNavigateBack();
-      if (action === "home") baseNavigate("home");
+      if (action === "back") await baseNavigateBack();
+      if (action === "home") await baseNavigate("home");
       if (action === "menu") {
         window.dispatchEvent(new CustomEvent("orion:toggle-sidebar"));
       }
@@ -357,10 +372,10 @@ const targetScroll = getScrollContainer();
         toggle_subtitles: "toggleSubtitles",
       };
       if (mediaCommands[action]) {
-        commandResult = await handleSystemMediaCommand(mediaCommands[action], value);
+        commandResult = await handleSystemMediaCommand(mediaCommands[action], expected, execution);
       }
       if (action === "set_speed") {
-        commandResult = await handleSystemMediaCommand(`speed:${Number(value)}`);
+        commandResult = await handleSystemMediaCommand(`speed:${Number(value)}`, expected, execution);
       }
       if (action === "toggle_fullscreen") {
         commandResult = (await window.electron?.toggleFullscreen?.()) || {
@@ -370,6 +385,11 @@ const targetScroll = getScrollContainer();
       }
       if (action === "toggle_pip") createMiniHandoff();
 
+      } catch {
+        commandResult = { ok: false, error: "Desktop could not apply this command." };
+      } finally {
+        if (payload?.id) pendingPlaybackRef.current.delete(payload.id);
+      }
       const isRealtimeCommand = action === "cursor_move" || action === "scroll";
 if (!isRealtimeCommand && payload?.id && window.electron?.acknowledgeSmartConnectCommand) {
         window.electron
