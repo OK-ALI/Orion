@@ -493,6 +493,14 @@ export default function App() {
   useEffect(() => () => window.clearTimeout(manualMiniResetTimerRef.current), []);
 
   const handleOpenMiniPlayer = useCallback((payload) => {
+    if (!payload) {
+      manualMiniRequestRef.current = false;
+      window.clearTimeout(manualMiniResetTimerRef.current);
+      setMiniPlayer(null);
+      setPlaybackSession(null);
+      return;
+    }
+
     manualMiniRequestRef.current = true;
     window.clearTimeout(manualMiniResetTimerRef.current);
     manualMiniResetTimerRef.current = window.setTimeout(() => {
@@ -500,10 +508,11 @@ export default function App() {
     }, 700);
     beginMiniTransition(payload);
     const next = createMiniPlaybackSession(payload, crypto.randomUUID());
+    if (!next) return;
     setMiniPlayer(next);
     setPlaybackSession(next);
     window.setTimeout(() => {
-      setMiniPlayer((current) => current?.remoteOwnerId === next?.remoteOwnerId ? { ...current, handoffPending: false } : current);
+      setMiniPlayer((current) => current?.remoteOwnerId === next.remoteOwnerId ? { ...current, handoffPending: false } : current);
     }, 360);
   }, [beginMiniTransition]);
 
