@@ -1,0 +1,19 @@
+{
+    "schemaVersion":  1,
+    "tag":  "v2.2.17",
+    "version":  "2.2.17",
+    "artifacts":  [
+                      {
+                          "name":  "Orion.Setup.2.2.17.exe",
+                          "size":  100597696,
+                          "sha256":  "043b875fe0699dce53368ec22c6440ab136e259da50c66febdc918f2a2758544",
+                          "signerSha256":  "99b64a75f98bbe40ac9a435753c41b5159297df9870fb3fe7a927d2d50db6dc5"
+                      },
+                      {
+                          "name":  "Orion-2.2.17-win.zip",
+                          "size":  136495462,
+                          "sha256":  "6ef4564a7df840048963c438f3e9f96bde38bde3d6fcb86c36ce158daf051d05",
+                          "signerSha256":  null
+                      }
+                  ]
+}

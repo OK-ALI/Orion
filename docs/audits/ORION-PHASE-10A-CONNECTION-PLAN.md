@@ -1,7 +1,7 @@
 # PROJECT ORION PHASE 10A - CONNECTION PLAN
 
 **Canonical name:** `ORION-PHASE-10A-CONNECTION-PLAN.md`
-**Status:** CANONICAL PHASE 10A EXECUTION AUTHORITY
+**Status:** CANONICAL PHASE 10A EXECUTION AUTHORITY - COMPLETE & LOCKED
 **Date established:** September 1, 2026
 **Phase identity:** Phase 10A - Connection: Offline Experience, Cross-Platform Product Hardening & Performance
 **Phase classification:** Post-Phase-10 bridge tranche; not Phase 10 reopening and not Phase 11
@@ -1324,7 +1324,7 @@ Phase 10A is COMPLETE only when all of the following are true:
 
 # 21. Immediate execution boundary
 
-## Current boundary - September 2, 2026
+## Previous boundary - September 2, 2026 (historical)
 
 P10A.2 is **COMPLETE / PHYSICALLY ACCEPTED / FROZEN**; its automated, physical and final-candidate evidence is recorded in section 15.
 
@@ -1362,3 +1362,14 @@ while preserving local capability, modernizing Desktop download presentation and
 Phase 10A does not replace what Phase 10 proved.
 
 It makes the rest of Orion behave like it knows that capability exists.
+
+# Phase 10A closure - September 5, 2026
+
+Acceptance is complete with the evidence qualifications and one-time manual-upgrade exception recorded in [the Phase 10A completion audit](ORION-PHASE-10A-COMPLETION-AUDIT.md). This closure supersedes the historical execution-boundary text above.
+
+- Accepted source and Desktop v2.2.17 Preview tag: `6d9c5a846051e622399daf4bb93abc78d4f8f35a`.
+- Mobile remains 2.2.16 / Android code50; its existing release is unchanged.
+- Prior testing is accepted from retained P10A.2 records and the user's confirmation of subsequent successful testing; missing detailed historical measurements are not reconstructed.
+- Desktop 2.1.2 was manually upgraded to 2.2.17 at the user's explicit instruction because of the older updater issue. Installed payload/version and user-confirmed successful updating are recorded. This does not claim a real upgrade through the repaired updater.
+- Lock marker: f8611c6d18738f4d187b5d1e19fdf1c4766bf4c6.
+- The source candidate tag remains fixed. Master Audit reconciliation remains deferred and earns no new percentage credit here.
