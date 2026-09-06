@@ -64,3 +64,23 @@ test('Desktop receives unified remote scroll commands', () => {
   assert.match(hook, /action === ['"]scroll['"]/);
   assert.match(hook, /scrollBy/);
 });
+
+test('pointer keeps movement realtime but sends discrete click through the reliable acknowledgement lane', () => {
+  const pointer = read('src/features/connect/useRemotePointer.ts');
+  const controller = read('src/features/connect/useConnectController.ts');
+  assert.match(pointer, /void reliableRef\.current\('cursor_click'\)/);
+  assert.doesNotMatch(pointer, /sendRef\.current\('cursor_click'\)/);
+  assert.match(controller, /useRemotePointer\(fireAndForgetRef, sendCommandRef\)/);
+  assert.match(controller, /FIRE_AND_FORGET_ACTIONS = new Set\(\['cursor_move', 'scroll'\]\)/);
+});
+
+test('pointer health consumes native socket pressure and lowers the adaptive realtime rate', () => {
+  const pointer = read('src/features/connect/useRemotePointer.ts');
+  const controller = read('src/features/connect/useConnectController.ts');
+  const nativeBridge = read('src/services/nativeSecureConnect.ts');
+  assert.match(controller, /backpressured: socketBackpressured/);
+  assert.match(controller, /onPressure: \(pressure\) => setSocketBackpressured/);
+  assert.match(pointer, /health\.backpressured/);
+  assert.match(pointer, /constrained \? 24 : healthy \? 40 : 30/);
+  assert.match(nativeBridge, /orionSmartConnectPressure/);
+});

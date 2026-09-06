@@ -35,6 +35,10 @@ class OrionSecureConnectModule(private val context: ReactApplicationContext) : R
   private var socket: WebSocket? = null
   private var socketFingerprint: String? = null
   private val alias = "orion_smart_connect_device_v3"
+  private val realtimeHighWaterBytes = 32L * 1024L
+  private val realtimeLowWaterBytes = 8L * 1024L
+  private var realtimeBackpressured = false
+  private var realtimeDroppedUpdates = 0L
 
   override fun getName() = "OrionSecureConnect"
 
@@ -112,6 +116,7 @@ class OrionSecureConnectModule(private val context: ReactApplicationContext) : R
       .build()
     socket = pinnedClient(fingerprint).newWebSocket(request, object : WebSocketListener() {
       override fun onOpen(webSocket: WebSocket, response: Response) {
+        resetRealtimePressure()
         emit("orionSmartConnectOpen", Arguments.createMap().apply { putBoolean("open", true) })
         promise.resolve(true)
       }
@@ -133,13 +138,52 @@ class OrionSecureConnectModule(private val context: ReactApplicationContext) : R
   }
 
   @ReactMethod fun sendSocket(payload: String, promise: Promise) { promise.resolve(socket?.send(payload) == true) }
-  @ReactMethod fun sendRealtimeSocket(payload: String, promise: Promise) { promise.resolve(socket?.send(payload) == true) }
-  @ReactMethod fun sendRealtimeSocketFireAndForget(payload: String) { socket?.send(payload) }
+  @ReactMethod fun sendRealtimeSocket(payload: String, promise: Promise) { promise.resolve(sendRealtime(payload)) }
+  @ReactMethod fun sendRealtimeSocketFireAndForget(payload: String) { sendRealtime(payload) }
   @ReactMethod fun closeSocket(promise: Promise) { closeSocketInternal(); promise.resolve(null) }
   @ReactMethod fun addListener(eventName: String) = Unit
   @ReactMethod fun removeListeners(count: Double) = Unit
 
-  private fun closeSocketInternal() { socket?.close(1000, "Client closed"); socket = null }
+  private fun sendRealtime(payload: String): Boolean {
+    val activeSocket = socket ?: return false
+    val queuedBytes = activeSocket.queueSize()
+    if (realtimeBackpressured) {
+      if (queuedBytes > realtimeLowWaterBytes) {
+        realtimeDroppedUpdates += 1
+        return false
+      }
+      updateRealtimePressure(false, queuedBytes)
+    }
+    if (queuedBytes >= realtimeHighWaterBytes) {
+      realtimeDroppedUpdates += 1
+      updateRealtimePressure(true, queuedBytes)
+      return false
+    }
+    val sent = activeSocket.send(payload)
+    if (!sent) updateRealtimePressure(true, activeSocket.queueSize())
+    return sent
+  }
+
+  private fun updateRealtimePressure(backpressured: Boolean, queueBytes: Long) {
+    if (realtimeBackpressured == backpressured) return
+    realtimeBackpressured = backpressured
+    emitRealtimePressure(queueBytes)
+  }
+
+  private fun emitRealtimePressure(queueBytes: Long) {
+    emit("orionSmartConnectPressure", Arguments.createMap().apply {
+      putBoolean("backpressured", realtimeBackpressured)
+      putDouble("queueBytes", queueBytes.toDouble())
+      putDouble("droppedUpdates", realtimeDroppedUpdates.toDouble())
+    })
+  }
+
+  private fun resetRealtimePressure() {
+    realtimeBackpressured = false
+    realtimeDroppedUpdates = 0L
+  }
+
+  private fun closeSocketInternal() { socket?.close(1000, "Client closed"); socket = null; resetRealtimePressure() }
 
   private fun keyPair(): java.security.KeyPair {
     val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }

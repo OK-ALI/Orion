@@ -2,6 +2,7 @@ import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 
 export interface SecureDeviceIdentity { deviceId: string; publicKey: string; algorithm: string }
 export interface SecureResponse { status: number; body: string; fingerprint: string }
+export interface SecureSocketPressure { backpressured: boolean; queueBytes: number; droppedUpdates: number }
 
 const module = NativeModules.OrionSecureConnect as undefined | {
   getIdentity(): Promise<SecureDeviceIdentity>;
@@ -60,7 +61,12 @@ export const sendRealtimeSmartConnectSocket = (payload: string) => {
 export const closeSecureSmartConnectSocket = () => module?.closeSocket() ?? Promise.resolve();
 
 export function subscribeSecureSmartConnect(
-  handlers: { onMessage(data: string): void; onClose(): void; onFailure(message: string): void },
+  handlers: {
+    onMessage(data: string): void;
+    onClose(): void;
+    onFailure(message: string): void;
+    onPressure?(pressure: SecureSocketPressure): void;
+  },
 ) {
   if (!module) return () => {};
   const emitter = new NativeEventEmitter(module as any);
@@ -68,6 +74,11 @@ export function subscribeSecureSmartConnect(
     emitter.addListener('orionSmartConnectMessage', (event) => handlers.onMessage(String(event?.data || ''))),
     emitter.addListener('orionSmartConnectClosed', handlers.onClose),
     emitter.addListener('orionSmartConnectFailure', (event) => handlers.onFailure(String(event?.message || 'Secure connection failed.'))),
+    emitter.addListener('orionSmartConnectPressure', (event) => handlers.onPressure?.({
+      backpressured: Boolean(event?.backpressured),
+      queueBytes: Math.max(0, Number(event?.queueBytes) || 0),
+      droppedUpdates: Math.max(0, Number(event?.droppedUpdates) || 0),
+    })),
   ];
   return () => subscriptions.forEach((subscription) => subscription.remove());
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { LayoutChangeEvent, PanResponder } from 'react-native';
 
 type FireAndForgetSender = (action: string, value?: unknown) => void;
+type ReliableSender = (action: string, value?: unknown) => Promise<unknown>;
 
 type PointerHealth = { medianRttMs?: number | null; telemetryAgeMs?: number | null; backpressured?: boolean };
 const POINTER_DIAGNOSTICS_ENABLED = Boolean(
@@ -9,7 +10,10 @@ const POINTER_DIAGNOSTICS_ENABLED = Boolean(
     .__ORION_SMART_CONNECT_DIAGNOSTICS__,
 );
 
-export function useRemotePointer(sendRef: React.MutableRefObject<FireAndForgetSender>) {
+export function useRemotePointer(
+  sendRef: React.MutableRefObject<FireAndForgetSender>,
+  reliableRef: React.MutableRefObject<ReliableSender>,
+) {
   const cursorRef = useRef({ xRatio: 0.5, yRatio: 0.5 });
   const touchpadLayoutRef = useRef({ width: 320, height: 230 });
   const lastTouchPosRef = useRef({ x: 0, y: 0 });
@@ -172,7 +176,7 @@ export function useRemotePointer(sendRef: React.MutableRefObject<FireAndForgetSe
       flushRealtime();
       setIsPointerGestureActive(false);
       if (!gestureWasMultiTouchRef.current && Math.abs(gesture.dx) < 6 && Math.abs(gesture.dy) < 6) {
-        sendRef.current('cursor_click');
+        void reliableRef.current('cursor_click');
       }
       gestureWasMultiTouchRef.current = false;
     },

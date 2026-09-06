@@ -80,7 +80,7 @@ function originAllowed(req) {
 function acceptCommandRate(socket, droppable, action) {
   const now = Date.now();
   const policy = secureTrust.networkPolicy();
-  const isRealtime = action === "cursor_move";
+  const isRealtime = action === "cursor_move" || action === "scroll";
 
   if (isRealtime) {
     if (!socket.realtimeRateWindowAt || now - socket.realtimeRateWindowAt >= COMMAND_RATE_WINDOW_MS) {
@@ -346,6 +346,46 @@ function configureSockets() {
     connectedSockets.set(session.deviceId, socket);
     session.lastSeenAt = Date.now();
     const realtimeDiagnostics = createRealtimeDiagnostics();
+    let pendingRealtimeCursor = null;
+    let pendingRealtimeScroll = null;
+    let realtimeIpcTimer = null;
+    const flushRealtimeIpc = () => {
+      if (realtimeIpcTimer) clearTimeout(realtimeIpcTimer);
+      realtimeIpcTimer = null;
+      const commands = [pendingRealtimeCursor, pendingRealtimeScroll]
+        .filter(Boolean)
+        .sort((left, right) => Number(left.sequence || 0) - Number(right.sequence || 0));
+      pendingRealtimeCursor = null;
+      pendingRealtimeScroll = null;
+      for (const command of commands) {
+        realtimeDiagnostics.record("forwarded");
+        notifyDesktopRenderer("orion:remote-command", command);
+      }
+    };
+    const queueRealtimeIpc = (command) => {
+      if (command.action === "cursor_move") {
+        if (pendingRealtimeCursor) realtimeDiagnostics.record("coalesced");
+        pendingRealtimeCursor = command;
+      } else if (command.action === "scroll") {
+        const deltaY = Number(command.value?.deltaY) || 0;
+        if (pendingRealtimeScroll) realtimeDiagnostics.record("coalesced");
+        const accumulated = Math.max(
+          -240,
+          Math.min(240, Number(pendingRealtimeScroll?.value?.deltaY || 0) + deltaY),
+        );
+        pendingRealtimeScroll = {
+          ...command,
+          value: { ...(command.value || {}), deltaY: accumulated },
+        };
+      }
+      if (!realtimeIpcTimer) realtimeIpcTimer = setTimeout(flushRealtimeIpc, 16);
+    };
+    const clearRealtimeIpc = () => {
+      if (realtimeIpcTimer) clearTimeout(realtimeIpcTimer);
+      realtimeIpcTimer = null;
+      pendingRealtimeCursor = null;
+      pendingRealtimeScroll = null;
+    };
     sendSocket(socket, "status", session.deviceId, { connected: true });
     if (currentContext) sendSocket(socket, "context", session.deviceId, currentContext);
     if (currentPlayback) sendSocket(socket, "telemetry", session.deviceId, currentPlayback);
@@ -369,7 +409,7 @@ const realtimeAction = action === "cursor_move" || action === "scroll";
 
 if (realtimeAction) realtimeDiagnostics.record("received");
 
-const droppable = action === "cursor_move";
+const droppable = realtimeAction;
         const rate = acceptCommandRate(socket, droppable, action);
 if (!rate.ok) {
   if (realtimeAction) realtimeDiagnostics.record("rateRejected");
@@ -385,10 +425,12 @@ if (!rate.ok) {
           droppable,
         );
         if (!replay.ok) {
+
           if (realtimeAction) realtimeDiagnostics.record("replayRejected");
           if (!replay.droppable) sendSocket(socket, "error", session.deviceId, { error: "Replay or duplicate command rejected.", commandId: String(envelope.commandId || envelope.payload?.id || ""), sequence: envelope.payload?.sequence });
           return;
         }
+        if (!realtimeAction) flushRealtimeIpc();
         if (envelope.payload?.action === "smart_connect_rename") {
           session.deviceName = sanitizeDeviceName(envelope.payload?.value);
           saveSessions();
@@ -410,8 +452,7 @@ if (!rate.ok) {
         }
         if (action === 'cursor_move' || action === 'scroll') {
   const command = normalizeCommand(envelope.payload);
-  realtimeDiagnostics.record("forwarded");
-  notifyDesktopRenderer("orion:remote-command", command);
+  queueRealtimeIpc(command);
   return;
 }
         const command = normalizeCommand(envelope.payload);
@@ -433,6 +474,7 @@ if (!rate.ok) {
         notifyDesktopRenderer("orion:remote-command", { action: "cancel_playback_operation", id });
         pending.resolve({ id, sequence: pending.sequence, ok: false, error: "The controller disconnected." });
       }
+      clearRealtimeIpc();
       realtimeDiagnostics.stop();
       if (connectedSockets.get(session.deviceId) === socket) {
         connectedSockets.delete(session.deviceId);
@@ -441,6 +483,7 @@ if (!rate.ok) {
     });
     socket.on("error", () => {
       clearInterval(watchdog);
+      clearRealtimeIpc();
       realtimeDiagnostics.stop();
       if (connectedSockets.get(session.deviceId) === socket) {
         connectedSockets.delete(session.deviceId);

@@ -38,6 +38,7 @@ export function useConnectController() {
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
   const [pairError, setPairError] = useState('');
   const [remoteError, setRemoteError] = useState('');
+  const [socketBackpressured, setSocketBackpressured] = useState(false);
   const [qrNotice, setQrNotice] = useState('');
   const [pendingTranscript, setPendingTranscript] = useState<PairingTranscript | null>(null);
   const [pendingEndpoint, setPendingEndpoint] = useState<TrustedEndpoint | null>(null);
@@ -77,12 +78,16 @@ export function useConnectController() {
   }>());
   const sendCommandRef = useRef<(cmd: string, value?: any) => Promise<any>>(async () => ({ ok: false, error: 'Remote transport is not ready.' }));
   const fireAndForgetRef = useRef<(cmd: string, value?: any) => void>(() => {});
-  const { clearPendingPointer, cursorRef, isPointerGestureActive, panResponder, onTouchpadLayout, pointerMode, setPointerMode, updatePointerHealth } = useRemotePointer(fireAndForgetRef);
+  const { clearPendingPointer, cursorRef, isPointerGestureActive, panResponder, onTouchpadLayout, pointerMode, setPointerMode, updatePointerHealth } = useRemotePointer(fireAndForgetRef, sendCommandRef);
   const { latency, remoteContext, setRemoteContext, telemetry, ingestTelemetry, isScrubbing, setIsScrubbing, markSent, forgetSent, recordAck } = useLiveTelemetry(setNowPlaying);
 
   useEffect(() => {
-    updatePointerHealth({ medianRttMs: latency.medianRttMs, telemetryAgeMs: latency.telemetryAgeMs });
-  }, [latency.medianRttMs, latency.telemetryAgeMs, updatePointerHealth]);
+    updatePointerHealth({
+      medianRttMs: latency.medianRttMs,
+      telemetryAgeMs: latency.telemetryAgeMs,
+      backpressured: socketBackpressured,
+    });
+  }, [latency.medianRttMs, latency.telemetryAgeMs, socketBackpressured, updatePointerHealth]);
 
   const rejectAllPendingAcks = (reason: string) => {
     for (const [commandId, pending] of pendingAcks.current.entries()) {
@@ -183,8 +188,9 @@ export function useConnectController() {
 
   useEffect(() => subscribeSecureSmartConnect({
     onMessage: consumeSocketMessage,
-    onClose: () => { clearPendingPointer('socket-closed'); rejectAllPendingAcks('Socket connection closed.'); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
-    onFailure: (message) => { clearPendingPointer('socket-failed'); rejectAllPendingAcks(message); setRemoteError(message); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
+    onClose: () => { clearPendingPointer('socket-closed'); setSocketBackpressured(false); rejectAllPendingAcks('Socket connection closed.'); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
+    onFailure: (message) => { clearPendingPointer('socket-failed'); setSocketBackpressured(false); rejectAllPendingAcks(message); setRemoteError(message); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
+    onPressure: (pressure) => setSocketBackpressured(Boolean(pressure.backpressured)),
   }), [deviceId]);
 
   useEffect(() => {

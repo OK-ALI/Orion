@@ -146,3 +146,20 @@ test("Desktop enforces protocol-v3 origin, network, replay, and rate policies", 
   assert.match(trust, /DUPLICATE_COMMAND/);
   assert.match(trust, /publicNetworkAllowedUntil/);
 });
+
+test("P11.2 realtime transport is pressure-bounded while reliable commands remain on the reliable lane", () => {
+  const nativeModule = readMobile("plugins/orion-nsd-native/OrionSecureConnectModule.kt");
+  const desktop = readRepo("apps/desktop/src/main/ipc/smartConnectIpc.js");
+  const diagnostics = readRepo("apps/desktop/src/main/smartConnect/realtimeDiagnostics.js");
+  assert.match(nativeModule, /realtimeHighWaterBytes/);
+  assert.match(nativeModule, /activeSocket\.queueSize\(\)/);
+  assert.match(nativeModule, /orionSmartConnectPressure/);
+  assert.match(nativeModule, /sendSocket\(payload: String, promise: Promise\) \{ promise\.resolve\(socket\?\.send\(payload\) == true\) \}/);
+  assert.match(desktop, /action === "cursor_move" \|\| action === "scroll"/);
+  assert.match(desktop, /const droppable = realtimeAction/);
+  assert.match(desktop, /queueRealtimeIpc\(command\)/);
+  assert.match(desktop, /if \(!realtimeAction\) flushRealtimeIpc\(\)/);
+  assert.match(desktop, /pendingRealtimeCursor/);
+  assert.match(desktop, /pendingRealtimeScroll/);
+  assert.match(diagnostics, /coalesced/);
+});
