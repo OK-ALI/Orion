@@ -84,3 +84,18 @@ test('pointer health consumes native socket pressure and lowers the adaptive rea
   assert.match(pointer, /constrained \? 24 : healthy \? 40 : 30/);
   assert.match(nativeBridge, /orionSmartConnectPressure/);
 });
+
+
+test('passive trusted phones keep telemetry but require explicit Take Control before remote input', () => {
+  const controller = read('src/features/connect/useConnectController.ts');
+  const surface = read('src/features/connect/UnifiedRemoteSurface.tsx');
+  assert.match(controller, /CONTROLLER_MANAGEMENT_ACTIONS/);
+  assert.match(controller, /smart_connect_take_control/);
+  assert.match(controller, /controllerAccess\.isActiveController/);
+  assert.match(controller, /applyControllerAccess\(envelope\.payload\?\.controller\)/);
+  assert.match(controller, /!controllerAccess\.isActiveController && !CONTROLLER_MANAGEMENT_ACTIONS\.has\(action\)/);
+  assert.match(surface, /CONTROLLER ACCESS/);
+  assert.match(surface, /Take Control/);
+  assert.match(surface, /disabled=\{!controllerActive \|\| !canSeek\}/);
+  assert.match(surface, /disabled=\{!isActiveController\}/);
+});

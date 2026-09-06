@@ -163,3 +163,19 @@ test("P11.2 realtime transport is pressure-bounded while reliable commands remai
   assert.match(desktop, /pendingRealtimeScroll/);
   assert.match(diagnostics, /coalesced/);
 });
+
+
+test("P11.2 controller ownership gates command authority and cleans up takeover work", () => {
+  const desktop = readRepo("apps/desktop/src/main/ipc/smartConnectIpc.js");
+  const ownership = readRepo("apps/desktop/src/main/smartConnect/controllerOwnership.js");
+  assert.match(desktop, /createControllerOwnership/);
+  assert.match(desktop, /smart_connect_take_control/);
+  assert.match(desktop, /CONTROLLER_NOT_ACTIVE/);
+  assert.match(desktop, /cancelPendingCommandsForSocket/);
+  assert.match(desktop, /clearSmartConnectRealtime/);
+  assert.match(desktop, /controllerOwnership\.disconnect/);
+  assert.match(desktop, /broadcastControllerStatus/);
+  assert.match(ownership, /preferredDeviceId/);
+  assert.match(ownership, /takeControl/);
+  assert.match(ownership, /role.*active.*passive.*vacant/s);
+});

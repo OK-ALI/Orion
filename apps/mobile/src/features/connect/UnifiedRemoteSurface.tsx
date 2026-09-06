@@ -14,8 +14,8 @@ function RemoteAction({ action, icon, label, value, disabled = false, pending, c
   </Pressable>;
 }
 
-function PlaybackPanel({ playback, capabilities, controller, pendingActions, command, styles, theme, legacyStyles }: any) {
-  const action = (props: any) => <RemoteAction {...props} pending={pendingActions.has(props.action)} command={command} styles={styles} theme={theme} />;
+function PlaybackPanel({ playback, capabilities, controller, controllerActive, pendingActions, command, styles, theme, legacyStyles }: any) {
+  const action = (props: any) => <RemoteAction {...props} disabled={!controllerActive || props.disabled} pending={pendingActions.has(props.action)} command={command} styles={styles} theme={theme} />;
   if (!playback.hasMedia) return <View style={styles.contextCard}>
     <Text style={styles.eyebrow}>DESKTOP CONTEXT</Text>
     <Text style={styles.title}>{controller.remoteContext?.route ? `Browsing ${controller.remoteContext.route}` : 'Desktop connected'}</Text>
@@ -47,7 +47,7 @@ function PlaybackPanel({ playback, capabilities, controller, pendingActions, com
       </View>
     </View>
     <MeasuredScrubber currentTime={playback.currentTime || 0} duration={playback.duration || 0} bufferedTime={playback.bufferedTime || 0}
-      disabled={!canSeek} formatTime={controller.formatTime} onScrubbing={controller.setIsScrubbing}
+      disabled={!controllerActive || !canSeek} formatTime={controller.formatTime} onScrubbing={controller.setIsScrubbing}
       onSeek={(seconds: number) => command('seek_to', { ...target, seconds })} styles={legacyStyles} />
     {!playback.duration ? <Text style={styles.timingUnavailable}>Playback timing unavailable</Text> : null}
     <View style={styles.transport}>
@@ -61,9 +61,9 @@ function PlaybackPanel({ playback, capabilities, controller, pendingActions, com
   </View>;
 }
 
-const RemoteTouchpad = memo(function RemoteTouchpad({ pointerMode, setPointerMode, onLayout, panHandlers, styles, theme }: any) {
+const RemoteTouchpad = memo(function RemoteTouchpad({ pointerMode, setPointerMode, onLayout, panHandlers, styles, theme, disabled = false }: any) {
   const absolute = pointerMode === 'absolute';
-  return <View style={styles.touchpadBlock}>
+  return <View style={[styles.touchpadBlock, disabled && styles.controllerDisabled]} pointerEvents={disabled ? 'none' : 'auto'}>
     <View style={styles.touchpadHeader}><View style={styles.touchpadCopy}>
       <Text style={styles.eyebrow}>TOUCHPAD ({absolute ? 'DIRECT 1:1 MIRROR' : 'TRACKPAD'})</Text>
       <Text style={styles.meta}>{absolute ? 'Touch area mirrors desktop 1:1 \u00B7 tap selects' : 'One finger moves \u00B7 tap selects \u00B7 two fingers scroll'}</Text>
@@ -82,28 +82,44 @@ export function UnifiedRemoteSurface({ controller, theme, isLandscape, legacySty
   const [text, setText] = useState('');
   const context = controller.remoteContext;
   const capabilities = context?.capabilities || {};
+  const isActiveController = Boolean(controller.isActiveController);
+  const activeControllerName = String(controller.activeControllerName || '');
   const command = useCallback<Command>(async (action, value) => {
     setPendingActions((previous) => new Set(previous).add(action));
     try { return await controller.sendRemoteCommand(action, value); }
     finally { setPendingActions((previous) => { const next = new Set(previous); next.delete(action); return next; }); }
   }, [controller.sendRemoteCommand]);
-  const action = (props: any) => <RemoteAction {...props} pending={pendingActions.has(props.action)} command={command} styles={styles} theme={theme} />;
+  const action = (props: any) => <RemoteAction {...props} disabled={!isActiveController || props.disabled} pending={pendingActions.has(props.action)} command={command} styles={styles} theme={theme} />;
 
   return <ScrollView scrollEnabled={!controller.isPointerGestureActive} contentContainerStyle={[styles.root, isLandscape && styles.rootLandscape]} keyboardShouldPersistTaps="handled">
-    <View style={isLandscape ? styles.leftPane : undefined}><PlaybackPanel playback={controller.nowPlaying} capabilities={capabilities} controller={controller} pendingActions={pendingActions} command={command} styles={styles} theme={theme} legacyStyles={legacyStyles} /></View>
+    <View style={isLandscape ? styles.leftPane : undefined} pointerEvents={isActiveController ? 'auto' : 'none'}>
+      <PlaybackPanel playback={controller.nowPlaying} capabilities={capabilities} controller={controller} controllerActive={isActiveController} pendingActions={pendingActions} command={command} styles={styles} theme={theme} legacyStyles={legacyStyles} />
+    </View>
     <View style={isLandscape ? styles.rightPane : undefined}>
-      <RemoteTouchpad pointerMode={controller.pointerMode} setPointerMode={controller.setPointerMode} onLayout={controller.onTouchpadLayout} panHandlers={controller.panResponder.panHandlers} styles={styles} theme={theme} />
+      {!isActiveController ? <View style={styles.controllerCard}>
+        <View style={styles.controllerCopy}>
+          <Text style={styles.eyebrow}>CONTROLLER ACCESS</Text>
+          <Text style={styles.controllerTitle}>{activeControllerName ? `${activeControllerName} is controlling Orion Desktop` : 'No phone currently controls Orion Desktop'}</Text>
+          <Text style={styles.meta}>You can keep watching live context and playback status from this trusted phone.</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Take Control" disabled={!controller.canTakeControl || pendingActions.has('smart_connect_take_control')}
+          onPress={() => void command('smart_connect_take_control')} style={({ pressed }) => [styles.takeControl, pressed && styles.pressed, (!controller.canTakeControl || pendingActions.has('smart_connect_take_control')) && styles.disabled]}>
+          {pendingActions.has('smart_connect_take_control') ? <ActivityIndicator color={theme.onAccent} /> : <Ionicons name="radio-button-on" size={19} color={theme.onAccent} />}
+          <Text style={styles.takeControlText}>Take Control</Text>
+        </Pressable>
+      </View> : null}
+      <RemoteTouchpad pointerMode={controller.pointerMode} setPointerMode={controller.setPointerMode} onLayout={controller.onTouchpadLayout} panHandlers={controller.panResponder.panHandlers} styles={styles} theme={theme} disabled={!isActiveController} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
         {action({ action: 'home', icon: 'home-outline', label: 'Home' })}{action({ action: 'back', icon: 'arrow-back', label: 'Back' })}
         {capabilities.canToggleSubtitles && action({ action: 'toggle_subtitles', icon: 'chatbox-ellipses-outline', label: 'Subtitles' })}
         {capabilities.canToggleFullscreen && action({ action: 'toggle_fullscreen', icon: 'expand-outline', label: 'Fullscreen' })}
         {capabilities.canTogglePip && action({ action: 'toggle_pip', icon: 'duplicate-outline', label: 'PiP' })}
-        {context?.canType && <Pressable style={styles.action} onPress={() => setShowMore(true)}><Ionicons name="keypad-outline" size={21} color={theme.text} /><Text style={styles.actionLabel}>Type</Text></Pressable>}
-        <Pressable style={styles.action} onPress={() => setShowMore(true)}><Ionicons name="ellipsis-horizontal" size={21} color={theme.text} /><Text style={styles.actionLabel}>More</Text></Pressable>
+        {context?.canType && <Pressable disabled={!isActiveController} style={[styles.action, !isActiveController && styles.disabled]} onPress={() => setShowMore(true)}><Ionicons name="keypad-outline" size={21} color={theme.text} /><Text style={styles.actionLabel}>Type</Text></Pressable>}
+        <Pressable disabled={!isActiveController} style={[styles.action, !isActiveController && styles.disabled]} onPress={() => setShowMore(true)}><Ionicons name="ellipsis-horizontal" size={21} color={theme.text} /><Text style={styles.actionLabel}>More</Text></Pressable>
       </ScrollView>
       {controller.remoteError ? <Text style={styles.error}>{controller.remoteError}</Text> : null}
     </View>
-    <Modal visible={showMore} transparent animationType="fade" onRequestClose={() => setShowMore(false)}><Pressable style={styles.scrim} onPress={() => setShowMore(false)}><Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
+    <Modal visible={showMore && isActiveController} transparent animationType="fade" onRequestClose={() => setShowMore(false)}><Pressable style={styles.scrim} onPress={() => setShowMore(false)}><Pressable style={styles.sheet} onPress={(event) => event.stopPropagation()}>
       <View style={styles.sheetHeader}><Text style={styles.sheetTitle}>Remote tools</Text><Pressable onPress={() => setShowMore(false)}><Ionicons name="close" size={24} color={theme.text} /></Pressable></View>
       {context?.canType && <View style={styles.typeRow}><TextInput value={text} onChangeText={setText} placeholder="Type on Desktop" placeholderTextColor={theme.textMuted} style={styles.input} /><Pressable style={styles.send} onPress={() => { void command('send_text', text); setText(''); }}><Ionicons name="send" size={19} color={theme.onAccent} /></Pressable></View>}
       <Text style={styles.eyebrow}>ACCESSIBILITY D-PAD</Text><View style={styles.dpad}>{action({ action: 'up', icon: 'chevron-up', label: 'Up' })}<View style={styles.dpadRow}>{action({ action: 'left', icon: 'chevron-back', label: 'Left' })}{action({ action: 'select', icon: 'radio-button-on', label: 'Select' })}{action({ action: 'right', icon: 'chevron-forward', label: 'Right' })}</View>{action({ action: 'down', icon: 'chevron-down', label: 'Down' })}</View>
@@ -115,6 +131,7 @@ export function UnifiedRemoteSurface({ controller, theme, isLandscape, legacySty
 
 function createStyles(theme: any) { return StyleSheet.create({
   root: { paddingHorizontal: 18, paddingBottom: 44, gap: 14 }, rootLandscape: { flexDirection: 'row', alignItems: 'stretch' }, leftPane: { width: '43%', minWidth: 280 }, rightPane: { flex: 1, gap: 12, minWidth: 0 },
+  controllerCard: { padding: 14, borderRadius: 20, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.borderStrong, gap: 12 }, controllerCopy: { gap: 2 }, controllerTitle: { color: theme.text, fontSize: 15, lineHeight: 20, fontWeight: '800' }, controllerDisabled: { opacity: .55 }, takeControl: { minHeight: 48, borderRadius: 16, backgroundColor: theme.accent, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 16 }, takeControlText: { color: theme.onAccent, fontSize: 13, fontWeight: '800' },
   playbackCard: { padding: 14, borderRadius: 22, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border, gap: 8 }, contextCard: { padding: 16, borderRadius: 22, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border },
   playbackCopy: { minWidth: 0 }, eyebrow: { color: theme.accent, fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }, title: { color: theme.text, fontSize: 19, lineHeight: 23, fontWeight: '800', marginTop: 3 }, meta: { color: theme.textSecondary, fontSize: 13, lineHeight: 18, marginTop: 3 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5 }, statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: theme.textMuted }, statusDotReady: { backgroundColor: theme.success || theme.accent }, statusText: { flexShrink: 1, color: theme.textSecondary, fontSize: 11, fontWeight: '700' }, timingUnavailable: { color: theme.textMuted, fontSize: 12, fontWeight: '600' },

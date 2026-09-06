@@ -21,7 +21,22 @@ import {
 } from './secureConnectClient';
 
 type ConnectionState = 'idle' | 'discovering' | 'pairing' | 'connected' | 'reconnecting' | 'endpoint-lost' | 'token-rejected' | 'code-expired' | 'locked-out' | 'protocol-mismatch' | 'failed';
+type ControllerRole = 'active' | 'passive' | 'vacant';
+interface ControllerAccessState {
+  revision: number;
+  role: ControllerRole;
+  hasActiveController: boolean;
+  isActiveController: boolean;
+  canTakeControl: boolean;
+  activeControllerName: string;
+}
 interface TrustedEndpoint extends SecureEndpoint { discoveryMethod?: string; lastVerifiedAt?: number }
+
+const DEFAULT_CONTROLLER_ACCESS: ControllerAccessState = {
+  revision: 0, role: 'vacant', hasActiveController: false, isActiveController: false,
+  canTakeControl: false, activeControllerName: '',
+};
+const CONTROLLER_MANAGEMENT_ACTIONS = new Set(['smart_connect_take_control', 'smart_connect_rename', 'smart_connect_unpair']);
 
 const readJson = <T,>(key: string): T | null => {
   try { return JSON.parse(mmkvStorageAdapter.get(key) || 'null') as T; } catch { return null; }
@@ -39,6 +54,7 @@ export function useConnectController() {
   const [pairError, setPairError] = useState('');
   const [remoteError, setRemoteError] = useState('');
   const [socketBackpressured, setSocketBackpressured] = useState(false);
+  const [controllerAccess, setControllerAccess] = useState<ControllerAccessState>(DEFAULT_CONTROLLER_ACCESS);
   const [qrNotice, setQrNotice] = useState('');
   const [pendingTranscript, setPendingTranscript] = useState<PairingTranscript | null>(null);
   const [pendingEndpoint, setPendingEndpoint] = useState<TrustedEndpoint | null>(null);
@@ -105,6 +121,22 @@ export function useConnectController() {
     rejectAllPendingAcks('Connection closed.');
     await closeSecureSmartConnectSocket().catch(() => {});
     connectionRef.current.connected = false;
+    setControllerAccess(DEFAULT_CONTROLLER_ACCESS);
+  };
+
+  const applyControllerAccess = (value: any) => {
+    if (!value || typeof value !== 'object') return;
+    const role: ControllerRole = value.role === 'active' || value.role === 'passive' || value.role === 'vacant'
+      ? value.role
+      : value.isActiveController ? 'active' : value.hasActiveController ? 'passive' : 'vacant';
+    setControllerAccess({
+      revision: Math.max(0, Number(value.revision) || 0),
+      role,
+      hasActiveController: Boolean(value.hasActiveController),
+      isActiveController: Boolean(value.isActiveController),
+      canTakeControl: Boolean(value.canTakeControl),
+      activeControllerName: String(value.activeControllerName || '').slice(0, 80),
+    });
   };
 
   const consumeSocketMessage = (raw: string) => {
@@ -131,6 +163,7 @@ export function useConnectController() {
         if (playback) { setIsPlaying(playback.state === 'playing'); setVolume(Math.round((playback.volume ?? 1) * 100)); setIsMuted(Boolean(playback.muted)); }
       }
       if (envelope.type === 'status') {
+        applyControllerAccess(envelope.payload?.controller);
         setIsConnected(envelope.payload?.connected !== false);
         setConnectionState('connected');
         reconnectAttemptRef.current = 0;
@@ -138,6 +171,7 @@ export function useConnectController() {
         updateMobileDiagnostics({ smartConnectState: 'connected', smartConnectReconnectAttempt: 0, smartConnectLastAuthenticatedAt: Date.now() });
       }
       if (envelope.type === 'error') {
+        applyControllerAccess(envelope.payload?.controller);
         const errorCommandId = envelope.payload?.commandId;
         if (errorCommandId) {
           const pending = pendingAcks.current.get(errorCommandId);
@@ -339,7 +373,7 @@ export function useConnectController() {
   const FIRE_AND_FORGET_ACTIONS = new Set(['cursor_move', 'scroll']);
 
   const sendFireAndForget = (action: string, value?: any) => {
-    if (!isConnected || !connectionRef.current.connected) return;
+    if (!isConnected || !connectionRef.current.connected || !controllerAccess.isActiveController) return;
     const sequence = ++sequenceRef.current;
     const command = createRemoteCommand(action, value, deviceId, sequence);
     sendRealtimeSecureEnvelope({ version: SMART_CONNECT_PROTOCOL_VERSION, type: 'command', deviceId, connectionId: connectionRef.current.connectionId, sequence, commandId: command.id, payload: command });
@@ -348,6 +382,14 @@ export function useConnectController() {
 
   const sendRemoteCommand = async (action: string, value?: any) => {
     if (!isConnected || !connectionRef.current.connected) return { ok: false, error: 'Desktop is not live.' };
+    if (!controllerAccess.isActiveController && !CONTROLLER_MANAGEMENT_ACTIONS.has(action)) {
+      return {
+        ok: false,
+        error: controllerAccess.hasActiveController
+          ? `${controllerAccess.activeControllerName || 'Another trusted phone'} is controlling Orion Desktop.`
+          : 'Take control of Orion Desktop before sending remote commands.',
+      };
+    }
     if (FIRE_AND_FORGET_ACTIONS.has(action)) {
       sendFireAndForget(action, value);
       return { ok: true };
@@ -379,6 +421,7 @@ export function useConnectController() {
       }
     }
     const ack = await ackPromise;
+    if (ack?.controller) applyControllerAccess(ack.controller);
     const controlResult = ack?.commandResult;
     if (ack?.authoritativeTelemetry) ingestTelemetry(ack.authoritativeTelemetry);
     const applied = !controlResult || controlResult.applied !== false;
@@ -392,6 +435,8 @@ export function useConnectController() {
     return normalizedAck;
   };
   sendCommandRef.current = sendRemoteCommand;
+
+  const takeControl = async () => sendRemoteCommand('smart_connect_take_control');
 
   const renameThisDevice = async (name: string) => {
     const clean = name.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 80) || 'Orion Mobile';
@@ -429,6 +474,8 @@ export function useConnectController() {
     showPairingModal, speeds: ['1.0x', '1.25x', '1.5x', '2.0x'], volume, connectionState,
     discoveredDesktops, chooseDiscoveredDesktop, discoverDesktop, runSubnetFallback, deviceName,
     renameThisDevice, desktopPort, lockoutSeconds, attemptsRemaining, prepareDirectIp, remoteContext,
+    controllerAccess, controllerRole: controllerAccess.role, isActiveController: controllerAccess.isActiveController,
+    activeControllerName: controllerAccess.activeControllerName, canTakeControl: controllerAccess.canTakeControl, takeControl,
     telemetry, latency, isScrubbing, setIsScrubbing, pendingTranscript,
     confirmVerificationPhrase, rejectVerificationPhrase,
     isPointerGestureActive, onTouchpadLayout, pointerMode, setPointerMode,

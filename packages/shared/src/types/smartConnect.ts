@@ -117,7 +117,7 @@ export interface SmartConnectPairingTranscript {
 }
 export interface SmartConnectSocketTicket { ticketId: string; deviceId: string; expiresAt: number }
 export interface SmartConnectProtocolV3Envelope<T = unknown> {
-  version: 3; type: "command" | "ack" | "context" | "telemetry" | "heartbeat" | "error";
+  version: 3; type: "command" | "ack" | "status" | "context" | "telemetry" | "heartbeat" | "error";
   deviceId: string; connectionId: string; sequence: number; commandId?: string; payload: T;
 }
 export interface SmartConnectReplayWindow { lastSequence: number; rememberedCommandIds: string[]; updatedAt: number }
@@ -188,12 +188,22 @@ export interface SmartConnectTrustedEndpoint {
   method: SmartConnectDiscoveryMethod;
 }
 
+export interface SmartConnectControllerStatus {
+  revision: number;
+  role: "active" | "passive" | "vacant";
+  hasActiveController: boolean;
+  isActiveController: boolean;
+  canTakeControl: boolean;
+  activeControllerName: string;
+}
+
 export interface SmartConnectDeviceSummary {
   deviceId: string;
   deviceName: string;
   createdAt: number;
   lastSeenAt: number;
   connected: boolean;
+  activeController?: boolean;
 }
 
 export interface SmartConnectDeviceUpdate {
@@ -237,6 +247,7 @@ export type SmartConnectCommandAction =
   | "cursor_move"
   | "cursor_click"
   | "scroll"
+  | "smart_connect_take_control"
   | "smart_connect_rename"
   | "smart_connect_unpair";
 
@@ -272,6 +283,7 @@ export interface SmartConnectCommandAck {
   pointer?: SmartConnectPointerState;
   authoritativeTelemetry?: SmartConnectPlaybackTelemetryV1;
   commandResult?: SmartConnectPlaybackCommandResult;
+  controller?: SmartConnectControllerStatus;
 }
 
 export interface SmartConnectPairingSession {

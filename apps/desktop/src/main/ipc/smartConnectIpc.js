@@ -11,6 +11,7 @@ const { SMART_CONNECT_PROTOCOL_VERSION, normalizeSmartConnectCommand, normalizeP
 const { loadOrCreateSecureIdentity, signChallenge, verifyDeviceSignature } = require("../smartConnect/secureIdentity");
 const { createTrustState, eligibleLanAddresses, privateAddress } = require("../smartConnect/secureTrust");
 const { createRealtimeDiagnostics } = require("../smartConnect/realtimeDiagnostics");
+const { createControllerOwnership } = require("../smartConnect/controllerOwnership");
 const { createServiceAdvertisement } = require("../smartConnect/serviceAdvertisement");
 const { dispatchPlaybackCommand } = require("../smartConnect/playbackDispatch");
 
@@ -41,6 +42,7 @@ const pairedSessions = new Map();
 const pendingCommands = new Map();
 const connectedSockets = new Map();
 const secureTrust = createTrustState();
+const controllerOwnership = createControllerOwnership();
 const authChallenges = new Map();
 let secureIdentity = null;
 
@@ -103,6 +105,24 @@ function acceptCommandRate(socket, droppable, action) {
     : { ok: false, droppable: Boolean(droppable), reason: "COMMAND_RATE_LIMITED" };
 }
 
+function controllerDeviceName(deviceId) {
+  const session = [...pairedSessions.values()].find((item) => item.deviceId === String(deviceId || ""));
+  return sanitizeDeviceName(session?.deviceName || session?.device);
+}
+
+function controllerStatusFor(deviceId) {
+  return controllerOwnership.snapshot(deviceId, controllerDeviceName);
+}
+
+function controllerSummary() {
+  const activeDeviceId = controllerOwnership.activeControllerId();
+  return {
+    revision: controllerStatusFor("").revision,
+    hasActiveController: Boolean(activeDeviceId),
+    activeControllerName: activeDeviceId ? controllerDeviceName(activeDeviceId) : "",
+  };
+}
+
 function publicDevices() {
   return [...pairedSessions.values()].map(({ deviceId, deviceName, device, createdAt, lastSeenAt, rePairRequired }) => ({
     deviceId,
@@ -111,6 +131,7 @@ function publicDevices() {
     lastSeenAt,
     rePairRequired: Boolean(rePairRequired),
     connected: socketIsOpen(connectedSockets.get(deviceId)),
+    activeController: controllerOwnership.isActive(deviceId),
   }));
 }
 
@@ -305,6 +326,32 @@ function dispatchCommand(command, socket) {
   return dispatchPlaybackCommand(command, socket, pendingCommands, notifyDesktopRenderer, COMMAND_TIMEOUT_MS);
 }
 
+function cancelPendingCommandsForSocket(socket, reason) {
+  if (!socket) return;
+  for (const [id, pending] of pendingCommands) {
+    if (pending.socket !== socket) continue;
+    clearTimeout(pending.timer);
+    pendingCommands.delete(id);
+    notifyDesktopRenderer("orion:remote-command", { action: "cancel_playback_operation", id });
+    pending.resolve({ id, sequence: pending.sequence, ok: false, error: reason });
+  }
+}
+
+function clearControllerSocketWork(socket, reason) {
+  socket?.clearSmartConnectRealtime?.();
+  cancelPendingCommandsForSocket(socket, reason);
+}
+
+function broadcastControllerStatus() {
+  for (const [deviceId, socket] of connectedSockets) {
+    if (!socketIsOpen(socket)) continue;
+    sendSocket(socket, "status", deviceId, {
+      connected: true,
+      controller: controllerStatusFor(deviceId),
+    });
+  }
+}
+
 function sendSocket(socket, type, deviceId, payload) {
   if (socket.readyState === socket.OPEN) {
     socket.outgoingSequence = Number(socket.outgoingSequence || 0) + 1;
@@ -386,7 +433,9 @@ function configureSockets() {
       pendingRealtimeCursor = null;
       pendingRealtimeScroll = null;
     };
-    sendSocket(socket, "status", session.deviceId, { connected: true });
+    socket.clearSmartConnectRealtime = clearRealtimeIpc;
+    controllerOwnership.connect(session.deviceId);
+    broadcastControllerStatus();
     if (currentContext) sendSocket(socket, "context", session.deviceId, currentContext);
     if (currentPlayback) sendSocket(socket, "telemetry", session.deviceId, currentPlayback);
     notifyConnectionStatus();
@@ -431,6 +480,25 @@ if (!rate.ok) {
           return;
         }
         if (!realtimeAction) flushRealtimeIpc();
+        if (action === "smart_connect_take_control") {
+          const transition = controllerOwnership.takeControl(session.deviceId);
+          if (transition.changed && transition.previousDeviceId) {
+            const previousSocket = connectedSockets.get(transition.previousDeviceId);
+            if (previousSocket && previousSocket !== socket) {
+              clearControllerSocketWork(previousSocket, "Controller ownership changed.");
+            }
+          }
+          broadcastControllerStatus();
+          notifyConnectionStatus();
+          sendSocket(socket, "ack", session.deviceId, {
+            id: envelope.payload?.id,
+            sequence: envelope.payload?.sequence,
+            ok: true,
+            appliedAt: Date.now(),
+            controller: controllerStatusFor(session.deviceId),
+          });
+          return;
+        }
         if (envelope.payload?.action === "smart_connect_rename") {
           session.deviceName = sanitizeDeviceName(envelope.payload?.value);
           saveSessions();
@@ -442,12 +510,30 @@ if (!rate.ok) {
         }
         if (envelope.payload?.action === "smart_connect_unpair") {
           pairedSessions.delete(`v3:${session.deviceId}`);
+          controllerOwnership.forget(session.deviceId);
+          clearControllerSocketWork(socket, "The controller was unpaired.");
           saveSessions();
           sendSocket(socket, "ack", session.deviceId, {
             id: envelope.payload?.id, sequence: envelope.payload?.sequence, ok: true, appliedAt: Date.now(),
           });
+          connectedSockets.delete(session.deviceId);
+          broadcastControllerStatus();
           setTimeout(() => socket.close(), 30);
           notifyConnectionStatus();
+          return;
+        }
+        if (!controllerOwnership.isActive(session.deviceId)) {
+          if (!realtimeAction) {
+            sendSocket(socket, "error", session.deviceId, {
+              code: "CONTROLLER_NOT_ACTIVE",
+              error: controllerStatusFor(session.deviceId).hasActiveController
+                ? "Another trusted phone is the active Orion controller."
+                : "Take control of Orion Desktop before sending remote commands.",
+              commandId: String(envelope.commandId || envelope.payload?.id || ""),
+              sequence: envelope.payload?.sequence,
+              controller: controllerStatusFor(session.deviceId),
+            });
+          }
           return;
         }
         if (action === 'cursor_move' || action === 'scroll') {
@@ -467,26 +553,23 @@ if (!rate.ok) {
     }, 15_000);
     socket.on("close", () => {
       clearInterval(watchdog);
-      for (const [id, pending] of pendingCommands) {
-        if (pending.socket !== socket) continue;
-        clearTimeout(pending.timer);
-        pendingCommands.delete(id);
-        notifyDesktopRenderer("orion:remote-command", { action: "cancel_playback_operation", id });
-        pending.resolve({ id, sequence: pending.sequence, ok: false, error: "The controller disconnected." });
-      }
-      clearRealtimeIpc();
+      clearControllerSocketWork(socket, "The controller disconnected.");
       realtimeDiagnostics.stop();
       if (connectedSockets.get(session.deviceId) === socket) {
         connectedSockets.delete(session.deviceId);
+        controllerOwnership.disconnect(session.deviceId);
+        broadcastControllerStatus();
         notifyConnectionStatus();
       }
     });
     socket.on("error", () => {
       clearInterval(watchdog);
-      clearRealtimeIpc();
+      clearControllerSocketWork(socket, "The controller connection failed.");
       realtimeDiagnostics.stop();
       if (connectedSockets.get(session.deviceId) === socket) {
         connectedSockets.delete(session.deviceId);
+        controllerOwnership.disconnect(session.deviceId);
+        broadcastControllerStatus();
         notifyConnectionStatus();
       }
     });
@@ -499,6 +582,7 @@ function notifyConnectionStatus() {
     paired: devices.length > 0,
     connected: devices.some((device) => device.connected),
     devices,
+    controller: controllerSummary(),
     pin: currentPin,
     pinExpiresAt,
     pendingPairing: activePairingId ? secureTrust.transcript(activePairingId) : null,
@@ -540,6 +624,7 @@ async function startSmartConnectServer(getMainWindow) {
             paired: true,
             connected: socketIsOpen(connectedSockets.get(session.deviceId)),
             device: session.deviceName,
+            controller: controllerStatusFor(session.deviceId),
             playback: currentPlayback,
             pairingGuard: pairingGuardSnapshot(),
             certificateFingerprint: secureIdentity.certificateFingerprint,
@@ -713,6 +798,7 @@ ipcMain.handle("smart-connect:get-info", async () => {
     paired: pairedSessions.size > 0,
     connected: publicDevices().some((device) => device.connected),
     devices: publicDevices(),
+    controller: controllerSummary(),
     pairingGuard: pairingGuardSnapshot(),
     certificateFingerprint: secureIdentity?.certificateFingerprint || "",
     secureTransport: true,
@@ -802,8 +888,12 @@ ipcMain.handle("smart-connect:revoke-device", (_, deviceId) => {
       removed = true;
     }
   }
-  connectedSockets.get(target)?.close();
+  const targetSocket = connectedSockets.get(target);
+  if (targetSocket) clearControllerSocketWork(targetSocket, "The controller was revoked.");
+  targetSocket?.close();
   connectedSockets.delete(target);
+  controllerOwnership.forget(target);
+  broadcastControllerStatus();
   if (removed) saveSessions();
   notifyConnectionStatus();
   return { ok: removed, devices: [...pairedSessions.values()] };
@@ -822,8 +912,12 @@ ipcMain.handle("smart-connect:rename-device", (_, deviceId, deviceName) => {
 
 ipcMain.handle("smart-connect:disconnect", () => {
   pairedSessions.clear();
-  for (const socket of connectedSockets.values()) socket.close();
+  for (const socket of connectedSockets.values()) {
+    clearControllerSocketWork(socket, "Smart Connect was disconnected.");
+    socket.close();
+  }
   connectedSockets.clear();
+  controllerOwnership.reset();
   saveSessions();
   createPin();
   notifyConnectionStatus();
