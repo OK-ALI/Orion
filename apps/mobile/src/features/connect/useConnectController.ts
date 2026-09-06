@@ -91,6 +91,7 @@ export function useConnectController() {
     sequence: number;
     deviceId: string;
     connectionId: string;
+    controllerRevision: number | null;
   }>());
   const sendCommandRef = useRef<(cmd: string, value?: any) => Promise<any>>(async () => ({ ok: false, error: 'Remote transport is not ready.' }));
   const fireAndForgetRef = useRef<(cmd: string, value?: any) => void>(() => {});
@@ -145,10 +146,16 @@ export function useConnectController() {
       if (envelope.type === 'ack') {
         const ackId = String(envelope.payload?.id || '');
         const pending = pendingAcks.current.get(ackId);
+        const ackRevision = envelope.payload?.controllerRevision;
+        const revisionMatches = !pending
+          || pending.controllerRevision == null
+          || ackRevision == null
+          || pending.controllerRevision === Number(ackRevision);
         const identityMatches = pending
           && pending.sequence === Number(envelope.payload?.sequence)
           && pending.deviceId === String(envelope.deviceId || '')
-          && pending.connectionId === String(envelope.connectionId || '');
+          && pending.connectionId === String(envelope.connectionId || '')
+          && revisionMatches;
         if (pending && identityMatches) {
           clearTimeout(pending.timer);
           pendingAcks.current.delete(ackId);
@@ -375,7 +382,7 @@ export function useConnectController() {
   const sendFireAndForget = (action: string, value?: any) => {
     if (!isConnected || !connectionRef.current.connected || !controllerAccess.isActiveController) return;
     const sequence = ++sequenceRef.current;
-    const command = createRemoteCommand(action, value, deviceId, sequence);
+    const command = createRemoteCommand(action, value, deviceId, sequence, controllerAccess.revision);
     sendRealtimeSecureEnvelope({ version: SMART_CONNECT_PROTOCOL_VERSION, type: 'command', deviceId, connectionId: connectionRef.current.connectionId, sequence, commandId: command.id, payload: command });
   };
   fireAndForgetRef.current = sendFireAndForget;
@@ -395,20 +402,21 @@ export function useConnectController() {
       return { ok: true };
     }
     const sequence = ++sequenceRef.current;
-    const command = createRemoteCommand(action, value, deviceId, sequence);
+    const command = createRemoteCommand(action, value, deviceId, sequence, controllerAccess.revision);
     markSent(command.id);
     if (remoteContext?.playbackProtocolVersion === 1) {
       command.playbackProtocolVersion = 1;
       command.ownerRevision = remoteContext.controlTarget?.ownerRevision;
     }
     const connectionId = connectionRef.current.connectionId;
+    const expectedControllerRevision = CONTROLLER_MANAGEMENT_ACTIONS.has(action) ? null : controllerAccess.revision;
     const ackPromise = new Promise<any>((resolve) => {
       const timer = setTimeout(() => {
         pendingAcks.current.delete(command.id);
         forgetSent(command.id);
         resolve({ ok: false, error: 'Desktop acknowledgement timed out.' });
       }, action === 'play' && command.playbackProtocolVersion === 1 ? 7000 : 2200);
-      pendingAcks.current.set(command.id, { resolve, timer, sequence, deviceId, connectionId });
+      pendingAcks.current.set(command.id, { resolve, timer, sequence, deviceId, connectionId, controllerRevision: expectedControllerRevision });
     });
     const sent = await sendSecureEnvelope({ version: SMART_CONNECT_PROTOCOL_VERSION, type: 'command', deviceId, connectionId, sequence, commandId: command.id, payload: command }).catch(() => false);
     if (!sent) {

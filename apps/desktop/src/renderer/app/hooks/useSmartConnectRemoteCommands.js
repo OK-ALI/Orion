@@ -265,6 +265,7 @@ const targetScroll = getScrollContainer();
       let commandResult = { ok: true };
 
       try {
+      if (controller.signal.aborted) throw new Error("Controller operation cancelled.");
       if (execution.deadlineAt && Date.now() >= execution.deadlineAt) throw new Error("Command expired.");
       if (action === "cursor_move") moveCursor(payload);
       if (action === "cursor_click") clickCursor();
@@ -396,6 +397,7 @@ if (!isRealtimeCommand && payload?.id && window.electron?.acknowledgeSmartConnec
           .acknowledgeSmartConnectCommand({
             id: payload.id,
             sequence: payload.sequence || 0,
+            controllerRevision: Number.isFinite(Number(payload?.controllerRevision)) ? Number(payload.controllerRevision) : undefined,
             ok: commandResult?.ok !== false,
             error: commandResult?.error,
             commandResult: commandResult?.commandResult,

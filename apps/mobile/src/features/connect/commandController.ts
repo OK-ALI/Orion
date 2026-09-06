@@ -5,6 +5,7 @@ export function createRemoteCommand(
   value: unknown,
   deviceId: string,
   sequence: number,
+  controllerRevision?: number,
 ): SmartConnectRemoteCommand {
   return {
     id: `${deviceId || 'mobile'}-${Date.now()}-${sequence}`,
@@ -18,6 +19,7 @@ export function createRemoteCommand(
         }
       : undefined,
     sentAt: Date.now(),
+    controllerRevision: Number.isFinite(Number(controllerRevision)) ? Math.max(0, Number(controllerRevision)) : undefined,
   };
 }
 

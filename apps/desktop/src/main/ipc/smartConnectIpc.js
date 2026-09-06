@@ -12,6 +12,7 @@ const { loadOrCreateSecureIdentity, signChallenge, verifyDeviceSignature } = req
 const { createTrustState, eligibleLanAddresses, privateAddress } = require("../smartConnect/secureTrust");
 const { createRealtimeDiagnostics } = require("../smartConnect/realtimeDiagnostics");
 const { createControllerOwnership } = require("../smartConnect/controllerOwnership");
+const { createReliableCommandScheduler } = require("../smartConnect/reliableCommandScheduler");
 const { createServiceAdvertisement } = require("../smartConnect/serviceAdvertisement");
 const { dispatchPlaybackCommand } = require("../smartConnect/playbackDispatch");
 
@@ -333,13 +334,14 @@ function cancelPendingCommandsForSocket(socket, reason) {
     clearTimeout(pending.timer);
     pendingCommands.delete(id);
     notifyDesktopRenderer("orion:remote-command", { action: "cancel_playback_operation", id });
-    pending.resolve({ id, sequence: pending.sequence, ok: false, error: reason });
+    pending.resolve({ id, sequence: pending.sequence, ok: false, error: reason, controllerRevision: pending.controllerRevision });
   }
 }
 
 function clearControllerSocketWork(socket, reason) {
   socket?.clearSmartConnectRealtime?.();
-  cancelPendingCommandsForSocket(socket, reason);
+  if (socket?.clearSmartConnectReliable) socket.clearSmartConnectReliable(reason);
+  else cancelPendingCommandsForSocket(socket, reason);
 }
 
 function broadcastControllerStatus() {
@@ -434,6 +436,31 @@ function configureSockets() {
       pendingRealtimeScroll = null;
     };
     socket.clearSmartConnectRealtime = clearRealtimeIpc;
+    const controllerRevisionNow = () => Number(controllerStatusFor(session.deviceId).revision) || 0;
+    const reliableScheduler = createReliableCommandScheduler({
+      maxDepth: 24,
+      isCurrent: (entry) => (
+        connectedSockets.get(session.deviceId) === socket
+        && socketIsOpen(socket)
+        && socket.smartConnectConnectionId === entry.connectionId
+        && controllerOwnership.isActive(session.deviceId)
+        && controllerRevisionNow() === entry.controllerRevision
+      ),
+      isPreemptible: (entry) => (
+        entry.command?.action === "play"
+        && entry.command?.playbackProtocolVersion === 1
+      ),
+      execute: (entry) => dispatchCommand(entry.command, socket),
+      cancelActive: (_entry, reason) => cancelPendingCommandsForSocket(socket, reason),
+      deliver: (entry, ack) => {
+        sendSocket(socket, "ack", session.deviceId, {
+          ...ack,
+          controllerRevision: entry.controllerRevision,
+          controller: controllerStatusFor(session.deviceId),
+        });
+      },
+    });
+    socket.clearSmartConnectReliable = (reason) => reliableScheduler.invalidate(() => true, reason);
     controllerOwnership.connect(session.deviceId);
     broadcastControllerStatus();
     if (currentContext) sendSocket(socket, "context", session.deviceId, currentContext);
@@ -536,14 +563,46 @@ if (!rate.ok) {
           }
           return;
         }
+        const controllerRevision = controllerRevisionNow();
+        const suppliedControllerRevision = envelope.payload?.controllerRevision;
+        if (suppliedControllerRevision != null && Number(suppliedControllerRevision) !== controllerRevision) {
+          if (!realtimeAction) {
+            sendSocket(socket, "error", session.deviceId, {
+              code: "CONTROLLER_REVISION_STALE",
+              error: "Controller ownership changed before this command reached Orion Desktop.",
+              commandId: String(envelope.commandId || envelope.payload?.id || ""),
+              sequence: envelope.payload?.sequence,
+              controllerRevision,
+              controller: controllerStatusFor(session.deviceId),
+            });
+          }
+          return;
+        }
         if (action === 'cursor_move' || action === 'scroll') {
-  const command = normalizeCommand(envelope.payload);
-  queueRealtimeIpc(command);
-  return;
-}
+          const command = normalizeCommand(envelope.payload);
+          command.controllerRevision = controllerRevision;
+          queueRealtimeIpc(command);
+          return;
+        }
         const command = normalizeCommand(envelope.payload);
-        const ack = await dispatchCommand(command, socket);
-        sendSocket(socket, "ack", session.deviceId, ack);
+        command.controllerRevision = controllerRevision;
+        const scheduled = reliableScheduler.enqueue({
+          command,
+          controllerRevision,
+          connectionId: socket.smartConnectConnectionId,
+        });
+        if (!scheduled.ok) {
+          sendSocket(socket, "error", session.deviceId, {
+            code: scheduled.code,
+            error: scheduled.code === "RELIABLE_QUEUE_FULL"
+              ? "Reliable remote input is temporarily saturated. Try again."
+              : "Reliable remote input is unavailable.",
+            commandId: String(envelope.commandId || envelope.payload?.id || ""),
+            sequence: envelope.payload?.sequence,
+            controllerRevision,
+            controller: controllerStatusFor(session.deviceId),
+          });
+        }
       } catch (error) {
         sendSocket(socket, "error", session.deviceId, { error: error.message, commandId: String(envelope?.commandId || envelope?.payload?.id || ""), sequence: envelope?.payload?.sequence });
       }
@@ -863,6 +922,11 @@ ipcMain.handle("smart-connect:update-telemetry", (_, data) => {
 ipcMain.handle("smart-connect:ack-command", (_, ack) => {
   const pending = pendingCommands.get(String(ack?.id || ""));
   if (!pending) return { ok: false, error: "Unknown command acknowledgement." };
+  const expectedRevision = Number(pending.controllerRevision) || 0;
+  const acknowledgedRevision = Number(ack?.controllerRevision) || 0;
+  if (expectedRevision && acknowledgedRevision !== expectedRevision) {
+    return { ok: false, error: "Stale controller acknowledgement." };
+  }
   clearTimeout(pending.timer);
   pendingCommands.delete(String(ack.id));
   pending.resolve({
@@ -874,6 +938,7 @@ ipcMain.handle("smart-connect:ack-command", (_, ack) => {
     pointer: ack.pointer || undefined,
     authoritativeTelemetry: currentPlayback || undefined,
     commandResult: ack.commandResult || undefined,
+    controllerRevision: expectedRevision || undefined,
   });
   return { ok: true };
 });

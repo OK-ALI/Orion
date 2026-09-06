@@ -78,6 +78,7 @@ function normalizeSmartConnectCommand(input = {}, createId = () => "") {
     sentAt: Number(input.sentAt) || Date.now(),
     playbackProtocolVersion: input.playbackProtocolVersion === 1 ? 1 : undefined,
     ownerRevision: typeof input.ownerRevision === "string" ? input.ownerRevision.slice(0, 100) : undefined,
+    controllerRevision: Number.isFinite(Number(input.controllerRevision)) ? Math.max(0, Number(input.controllerRevision)) : undefined,
   };
 }
 

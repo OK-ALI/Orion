@@ -99,3 +99,15 @@ test('passive trusted phones keep telemetry but require explicit Take Control be
   assert.match(surface, /disabled=\{!controllerActive \|\| !canSeek\}/);
   assert.match(surface, /disabled=\{!isActiveController\}/);
 });
+
+
+test('reliable acknowledgements carry controller revision without breaking legacy v3 acknowledgements', () => {
+  const controller = read('src/features/connect/useConnectController.ts');
+  const commandController = read('src/features/connect/commandController.ts');
+  assert.match(controller, /createRemoteCommand\(action, value, deviceId, sequence, controllerAccess\.revision\)/);
+  assert.match(controller, /controllerRevision: expectedControllerRevision/);
+  assert.match(controller, /pending\.controllerRevision == null/);
+  assert.match(controller, /ackRevision == null/);
+  assert.match(controller, /pending\.controllerRevision === Number\(ackRevision\)/);
+  assert.match(commandController, /controllerRevision\?: number/);
+});

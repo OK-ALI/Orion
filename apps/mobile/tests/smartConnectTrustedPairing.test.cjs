@@ -179,3 +179,25 @@ test("P11.2 controller ownership gates command authority and cleans up takeover 
   assert.match(ownership, /takeControl/);
   assert.match(ownership, /role.*active.*passive.*vacant/s);
 });
+
+
+test("P11.2 reliable scheduling is bounded, preemptible, and controller-epoch fenced", () => {
+  const desktop = readRepo("apps/desktop/src/main/ipc/smartConnectIpc.js");
+  const scheduler = readRepo("apps/desktop/src/main/smartConnect/reliableCommandScheduler.js");
+  const playback = readRepo("apps/desktop/src/main/smartConnect/playbackDispatch.js");
+  const renderer = readRepo("apps/desktop/src/renderer/app/hooks/useSmartConnectRemoteCommands.js");
+  const protocol = readRepo("packages/shared/src/smartConnectProtocol.cjs");
+  assert.match(desktop, /createReliableCommandScheduler/);
+  assert.match(desktop, /maxDepth: 24/);
+  assert.match(desktop, /CONTROLLER_REVISION_STALE/);
+  assert.match(desktop, /reliableScheduler\.enqueue/);
+  assert.match(desktop, /clearSmartConnectReliable/);
+  assert.match(scheduler, /RELIABLE_QUEUE_FULL/);
+  assert.match(scheduler, /isPreemptible/);
+  assert.match(scheduler, /Superseded by a newer reliable command/);
+  assert.match(scheduler, /CONTROLLER_EPOCH_STALE/);
+  assert.match(playback, /controllerRevision/);
+  assert.match(renderer, /controller\.signal\.aborted/);
+  assert.match(renderer, /controllerRevision:/);
+  assert.match(protocol, /controllerRevision/);
+});

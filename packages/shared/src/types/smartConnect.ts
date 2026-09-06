@@ -265,6 +265,7 @@ export interface SmartConnectRemoteCommand {
   sentAt: number;
   playbackProtocolVersion?: 1;
   ownerRevision?: string;
+  controllerRevision?: number;
 }
 
 export interface SmartConnectEnvelope<T = unknown> {
@@ -284,6 +285,7 @@ export interface SmartConnectCommandAck {
   authoritativeTelemetry?: SmartConnectPlaybackTelemetryV1;
   commandResult?: SmartConnectPlaybackCommandResult;
   controller?: SmartConnectControllerStatus;
+  controllerRevision?: number;
 }
 
 export interface SmartConnectPairingSession {
