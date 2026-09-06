@@ -10,22 +10,22 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
-test("P11.1 production candidate owns aligned Desktop and Mobile 2.2.19 identities", () => {
+test("P11.2 production candidate owns aligned Desktop and Mobile 2.2.20 identities", () => {
   const desktopPackage = readJson(path.join(desktopRoot, "package.json"));
   const rootPackage = readJson(path.join(repoRoot, "package.json"));
   const packageLock = readJson(path.join(repoRoot, "package-lock.json"));
   const mobilePackage = readJson(path.join(repoRoot, "apps/mobile/package.json"));
   const mobileApp = readJson(path.join(repoRoot, "apps/mobile/app.json"));
 
-  assert.equal(desktopPackage.version, "2.2.19");
-  assert.equal(packageLock.packages["apps/desktop"].version, "2.2.19");
+  assert.equal(desktopPackage.version, "2.2.20");
+  assert.equal(packageLock.packages["apps/desktop"].version, "2.2.20");
 
   assert.equal(rootPackage.version, "2.1.2");
   assert.equal(packageLock.version, "2.1.2");
   assert.equal(packageLock.packages[""].version, "2.1.2");
 
-  assert.equal(mobilePackage.version, "2.2.19");
-  assert.equal(packageLock.packages["apps/mobile"].version, "2.2.19");
-  assert.equal(mobileApp.expo.version, "2.2.19");
-  assert.equal(mobileApp.expo.android.versionCode, 52);
+  assert.equal(mobilePackage.version, "2.2.20");
+  assert.equal(packageLock.packages["apps/mobile"].version, "2.2.20");
+  assert.equal(mobileApp.expo.version, "2.2.20");
+  assert.equal(mobileApp.expo.android.versionCode, 53);
 });
