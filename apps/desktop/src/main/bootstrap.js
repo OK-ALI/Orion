@@ -182,14 +182,33 @@ function createWindow() {
   mainWindow.on("enter-full-screen", () => publishMaximizedState(true));
   mainWindow.on("leave-full-screen", () => publishMaximizedState(false));
 
-  // Force long-lived disk caching for TMDB images in the default session.
+  // Default session response header adjustments:
+  // 1. Force long-lived disk caching for TMDB images.
+  // 2. Allow GitHub release asset / integrity metadata fetches from renderer without CORS rejection.
   session.defaultSession.webRequest.onHeadersReceived(
-    { urls: ["*://image.tmdb.org/*"] },
+    {
+      urls: [
+        "*://image.tmdb.org/*",
+        "*://github.com/*",
+        "*://*.githubusercontent.com/*",
+      ],
+    },
     (details, callback) => {
       const headers = { ...details.responseHeaders };
-      headers["cache-control"] = ["public, max-age=604800, immutable"]; // 7 days
-      delete headers["pragma"];
-      delete headers["expires"];
+      const url = details.url || "";
+
+      if (url.includes("image.tmdb.org")) {
+        headers["cache-control"] = ["public, max-age=604800, immutable"]; // 7 days
+        delete headers["pragma"];
+        delete headers["expires"];
+      }
+
+      if (url.includes("github.com") || url.includes("githubusercontent.com")) {
+        headers["access-control-allow-origin"] = ["*"];
+        headers["access-control-allow-headers"] = ["*"];
+        headers["access-control-allow-methods"] = ["GET, HEAD, OPTIONS"];
+      }
+
       callback({ responseHeaders: headers });
     },
   );

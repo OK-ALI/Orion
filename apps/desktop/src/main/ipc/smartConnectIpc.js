@@ -51,20 +51,10 @@ const pairingStore = createPairingStore({
   tokenIdleTtlMs: TOKEN_IDLE_TTL_MS,
 });
 const {
-  pairedSessions,
-  ensureDesktopInstanceId,
-  createPin,
-  ensureFreshPin,
-  setPin,
-  getPinState,
-  pairingGuardSnapshot,
-  recordFailure,
-  clearPairingGuard,
-  loadPairingGuard,
-  savePairingGuard, // smart-connect-pairing-guard.json persistence via savePairingGuard()
-  loadSessions,
-  saveSessions,
-  secureSession,
+  pairedSessions, ensureDesktopInstanceId, createPin, ensureFreshPin,
+  setPin, getPinState, pairingGuardSnapshot, recordFailure,
+  clearPairingGuard, loadPairingGuard, savePairingGuard, loadSessions,
+  saveSessions, secureSession,
 } = pairingStore;
 
 function completeSecurePairing(transcript) {
