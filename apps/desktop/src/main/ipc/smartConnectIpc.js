@@ -53,8 +53,8 @@ const pairingStore = createPairingStore({
 const {
   pairedSessions, ensureDesktopInstanceId, createPin, ensureFreshPin,
   setPin, getPinState, pairingGuardSnapshot, recordFailure,
-  clearPairingGuard, loadPairingGuard, savePairingGuard, loadSessions,
-  saveSessions, secureSession,
+  clearPairingGuard, loadPairingGuard, savePairingGuard, /* smart-connect-pairing-guard.json savePairingGuard() */
+  loadSessions, saveSessions, secureSession,
 } = pairingStore;
 
 function completeSecurePairing(transcript) {
