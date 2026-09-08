@@ -23,7 +23,7 @@ export function useRemotePointer(
   const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRealtimeSendAtRef = useRef(0);
   const frameIntervalRef = useRef(33);
-  const policyRef = useRef({ activeRateHz: 30 as 24 | 30 | 40 | 60, rttClass: 'moderate', backpressure: 'clear', coalescedUpdates: 0, droppedUpdates: 0 });
+  const policyRef = useRef({ activeRateHz: 30 as 24 | 30 | 40 | 60 | 90, rttClass: 'moderate', backpressure: 'clear', coalescedUpdates: 0, droppedUpdates: 0 });
   const gestureWasMultiTouchRef = useRef(false);
   const [pointerMode, setPointerMode] = useState<'relative' | 'absolute'>('relative');
   const [isPointerGestureActive, setIsPointerGestureActive] = useState(false);
@@ -89,7 +89,7 @@ export function useRemotePointer(
     const age = Number(health.telemetryAgeMs);
     const constrained = health.backpressured || (Number.isFinite(rtt) && rtt > 180) || (Number.isFinite(age) && age > 1500);
     const healthy = !constrained && (!Number.isFinite(rtt) || rtt <= 80) && (!Number.isFinite(age) || age <= 900);
-    const rate = constrained ? 24 : healthy ? 60 : 30;
+    const rate = constrained ? 24 : healthy ? 90 : 40;
     frameIntervalRef.current = Math.round(1000 / rate);
     policyRef.current.activeRateHz = rate;
     policyRef.current.rttClass = constrained ? 'constrained' : healthy ? 'healthy' : 'moderate';
@@ -187,12 +187,51 @@ export function useRemotePointer(
     },
   })).current;
 
+  const scrollPanResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onStartShouldSetPanResponderCapture: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponderCapture: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: (event) => {
+      diagnosticsRef.current.grants += 1;
+      if (POINTER_DIAGNOSTICS_ENABLED) console.debug('[SmartConnect scroll] gesture granted');
+      setIsPointerGestureActive(true);
+      const touch = event.nativeEvent.touches?.[0] || event.nativeEvent;
+      lastScrollYRef.current = touch?.pageY || 0;
+    },
+    onPanResponderMove: (event) => {
+      diagnosticsRef.current.moves += 1;
+      const touch = event.nativeEvent.touches?.[0] || event.nativeEvent;
+      const currentY = touch?.pageY || 0;
+      const stepY = currentY - lastScrollYRef.current;
+      lastScrollYRef.current = currentY;
+      if (Math.abs(stepY) > 100) return;
+      if (Math.abs(stepY) >= 0.5) {
+        // Dragging down on the scroll strip scrolls the desktop down
+        queueScroll(-stepY * 1.8);
+      }
+    },
+    onPanResponderRelease: () => {
+      diagnosticsRef.current.releases += 1;
+      if (POINTER_DIAGNOSTICS_ENABLED) console.debug('[SmartConnect scroll] gesture released');
+      flushRealtime();
+      setIsPointerGestureActive(false);
+    },
+    onPanResponderTerminate: () => {
+      diagnosticsRef.current.terminations += 1;
+      if (POINTER_DIAGNOSTICS_ENABLED) console.debug('[SmartConnect scroll] gesture terminated');
+      clearPendingPointer('scroll-gesture-terminated');
+    },
+  })).current;
+
   return {
     clearPendingPointer,
     cursorRef,
     isPointerGestureActive,
     onTouchpadLayout,
     panResponder,
+    scrollPanResponder,
     pointerMode,
     setPointerMode,
     updatePointerHealth,

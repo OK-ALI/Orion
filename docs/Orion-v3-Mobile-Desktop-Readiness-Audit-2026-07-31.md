@@ -1,20 +1,37 @@
 # Orion v3 Mobile and Desktop Readiness Audit
 
 **Audit date:** July 31, 2026  
-**Starting audit baseline:** Orion Desktop 2.0.1 and Orion Mobile 2.0.1
-**Proposed release:** Orion 3.0 with Mobile Companion support  
-**Status:** Living reference audit and implementation roadmap; Phase 9 completion does not imply Orion 3.0 release readiness
+**Starting audit baseline (historical):** Orion Desktop 2.0.1 and Orion Mobile 2.0.1
+
+**Current source identities:** Orion Desktop/root 2.1.2; Orion Mobile 2.2.11 / Android code45
+
+**Proposed release:** Orion 3.0.0 with Mobile Companion support
+
+**Status:** Living reference audit and implementation roadmap; Phases 0 through 10 are complete and locked, but Orion 3.0.0 is not release-ready
 
 ## Living Roadmap Status
 
-> **Overall Orion v3 implementation completion: 87%**
+> **Overall Orion v3 implementation completion: 94%**
 >
-> **Last verified:** August 24, 2026
+> **Last verified:** September 1, 2026
 > **Release readiness:** Not ready  
-> **Current stage:** Phases 0 through 9 are COMPLETE & LOCKED. Phase 10 Mobile downloads and Offline Library is the next active implementation phase; Phase 11 remains the deferred Orion Connect expansion and Phase 12 remains final release validation.
-> **Critical open blockers:** a real resumable Mobile downloader and Offline Library; the explicitly deferred Orion Connect expansion in Phase 11; and the complete Phase 12 release-validation matrix.
+> **Current stage:** Phases 0 through 10 are COMPLETE & LOCKED. Phase 10A Connection is a separately scoped, currently unweighted follow-on boundary; Phase 11 remains the deferred Orion Connect expansion and Phase 12 remains final release validation.
+> **Critical open blockers:** the explicitly deferred Orion Connect expansion in Phase 11 and the complete Phase 12 release-validation matrix. Phase 10A carries no Master Audit percentage credit until its own completion evidence is frozen and explicitly reconciled.
 
 The percentage is weighted by release risk. It is not based on the number of files changed or the number of visible screens. A high-risk playback or security phase contributes more than a small presentation task.
+
+### Current version and release truth - September 1, 2026
+
+This table is authoritative for present package and publication identity. Version numbers in dated phase tables and Progress Log rows remain historical evidence and must not be read as the current installed, source or published identity.
+
+| Identity | Current value | Authority and meaning |
+|---|---|---|
+| Monorepo/root package | `2.1.2` | Local `package.json` and `package-lock.json`; unchanged at the accepted Phase 10 implementation checkpoint |
+| Desktop source package | `2.1.2` | Local `apps/desktop/package.json` and workspace lock entry; the published Desktop Preview remains [v2.1.2](https://github.com/OK-ALI/Orion/releases/tag/v2.1.2) with `Orion.Setup.2.1.2.exe` |
+| Mobile source package | `2.2.11` | Local `apps/mobile/package.json`, `apps/mobile/app.json` and workspace lock entry; Android package `com.okali.orion`; `versionCode 45` |
+| Latest Mobile Preview | [v2.2.11](https://github.com/OK-ALI/Orion/releases/tag/v2.2.11), prerelease | Published as `Orion Mobile 2.2.11 Preview` on August 31, 2026 with exactly the APK and strict integrity manifest; tag target `66f647af1a5f77d4792fe82ea2d4662fc3f05351` |
+| Latest Stable release | [v2.0.1](https://github.com/OK-ALI/Orion/releases/tag/v2.0.1) | GitHub's latest non-prerelease remains `Orion X Music Planet v2.0.1`; neither Desktop 2.1.2 nor Mobile 2.2.11 is represented as Stable |
+| Current Phase 10A branch head | `f02e9f891457fb1a9870d8ea33e05a08ec48b552` | Adds only the Phase 10A Connection plan after the Phase 10 audit; it does not change the locked package identities or move the `v2.2.11` tag |
 
 ### Canonical Phase 7-8 reconciliation - August 21, 2026
 
@@ -35,7 +52,7 @@ Phase 8 intentionally keeps Continue Watching as a local derived view, applicati
 
 ### Canonical Phase 9 reconciliation - August 24, 2026
 
-This section is the current source of truth for the Phase 9 boundary. Older Phase 9 Progress Log rows preserve what was accepted at those earlier checkpoints, but any older statement that treats Expo runtime updates or Play Core as a required Orion Mobile production path is superseded by the architecture below.
+This section is the current source of truth for the Phase 9 acceptance boundary. Its `2.1.x` identities are historical updater evidence, not current package versions; the current version table above supersedes them for present identity. Older Phase 9 Progress Log rows preserve what was accepted at those earlier checkpoints, but any older statement that treats Expo runtime updates or Play Core as a required Orion Mobile production path is superseded by the architecture below.
 
 | Boundary | Canonical evidence | Verified result |
 |---|---|---|
@@ -47,6 +64,20 @@ This section is the current source of truth for the Phase 9 boundary. Older Phas
 | Post-F9 Mobile banner parity amendment | Installed Mobile `2.1.9/code11` detected real Preview `v2.1.10`; full-width Orion/Desktop red banner, safe-area/Menu clearance, portrait/landscape behavior, `View Update`, dismiss and cross-platform visual grammar were physically accepted | **PHYSICALLY GREEN** |
 | Mobile 2.1.10 trigger target | Source checkpoint `919f7b31f23bdc2a14201a8e044ca6f0bec413d3`; APK SHA-256 `7078FADC0D16E48FBD22BB57C9799018EB8B1B88B52231436B1B94969653C8B2`; code `12`; banner/updater source unchanged from 2.1.9 | Identity-only real Preview offer used to trigger the new banner. It is **not** claimed physically installed. |
 | Phase 9 scoring | `V3-P9-001` through `V3-P9-010` reconciled against implementation, automated, package/release and physical evidence | Phase 9 `100%`; weighted contribution `5.0%`; Orion v3 exact total `87.28%`, rounded to `87%` |
+
+### Canonical Phase 10 reconciliation - September 1, 2026
+
+This section is the current source of truth for the Phase 10 boundary. Earlier P10.1-P10.3 rows and checklist notes preserve valid stage history, but their partial/open status is superseded by the final lock below.
+
+| Boundary | Canonical evidence | Verified result |
+|---|---|---|
+| Phase 10 implementation | Accepted production implementation `66f647af1a5f77d4792fe82ea2d4662fc3f05351`; zero-diff lock `50987dc2492f02ba7aa3dd9e235ba08a589a6b1c` | Mobile Downloads and Offline Library are complete and locked; the `v2.2.11` tag remains correctly attached to the accepted implementation checkpoint |
+| Master contracts | `docs/audits/ORION-V3-P10-F-PHASE-10-COMPLETION-AUDIT.md` | `V3-P10-001` through `V3-P10-016` accepted |
+| Final engineering gates | Mobile Node `584/584`; TypeScript; 178-file source-size policy; Expo Doctor `20/20`; production web export; Android/JVM `17/17` suites and `118/118` tests; Cinema production parity `47/47`; Cinema JVM parity `17/17`; resource parity `1/1`; distribution identity `3/3` | **PASS** at the accepted implementation boundary |
+| Production artifact and publication | `orion-mobile-v2.2.11.apk`; Android `code45`; package `com.okali.orion`; APK SHA-256 `0A68F73C0B7D27C0021AE213162CE9165D2E935264906873FFE37CDEB58D1C0B`; permanent signer SHA-256 `4422EC4BC16B1C83C914A0AD1B688BE8F7C158FF7F99BCD223A909966AC7A1BD`; immutable GitHub Preview `v2.2.11` | Signed production identity, integrity manifest, publication assets and tag target verified |
+| Physical acceptance | F1 native updater **PASS**; F2 SAF finalization/offline playback **PASS**; F4 Offline Player function/geometry **PASS** | Real in-app signed upgrade, finalized selected-library media, offline playback and final player controls/geometry accepted |
+| Deferred compatibility boundary | F3 Redmi/Xiaomi seek-progress investigation | Explicitly deferred and non-blocking; no OEM-specific workaround or hidden PASS is claimed |
+| Phase 10 scoring | Phase weight `8%` x completion `100%` | Weighted contribution `8.0%`; Orion v3 exact total `94.48%`, rounded to `94%` |
 
 ### Status legend
 
@@ -72,10 +103,10 @@ This section is the current source of truth for the Phase 9 boundary. Older Phas
 | 7. Complete Mobile UX and performance | 8% | 100% | 8.0% | Complete / locked |
 | 8. Google identity and portable profiles | 6% | 100% | 6.0% | Complete |
 | 9. Distribution, updates, availability and notifications | 5% | 100% | 5.0% | Complete / locked |
-| 10. Mobile downloads and Offline Library | 8% | 10% | 0.8% | In progress |
+| 10. Mobile downloads and Offline Library | 8% | 100% | 8.0% | Complete / locked |
 | 11. Deferred Orion Connect expansion | 2% | 10% | 0.2% | Deferred |
 | 12. Release validation | 4% | 7% | 0.28% | Foundation only |
-| **Total** | **100%** |  | **87.28%, rounded to 87%** | **Not release-ready** |
+| **Total** | **100%** |  | **94.48%, rounded to 94%** | **Not release-ready** |
 
 ### How to update the percentage
 
@@ -282,7 +313,7 @@ the physical eight-provider/orientation matrix passes.
   - **V3-P8-006A C3 checkpoint:** History and verified playback Progress now have steady-state cross-platform Orion Cloud synchronization after explicit enrollment. Desktop and Mobile reuse the existing PortableProfileV3/CloudProfileStore architecture, profile-scoped checkpoints, conditional writes, semantic read-back verification and existing Library owners.
   - **Continue Watching remains derived locally.** It is reconstructed from synchronized verified Progress and is not an independent Cloud namespace.
   - **C3 physical acceptance:** Mobile -> Desktop History/Progress propagation passed; Desktop -> Mobile propagation passed; Continue Watching re-derived correctly on the receiving device; Auto Sync OFF prevented automatic propagation; explicit Sync now reconciled successfully.
-  - **Offline playback physical test:** N/A under the current streaming-only offline UX. Downloaded offline playback remains Phase 10 work. Automated offline/reconciliation safety remains required.
+  - **Offline playback physical test at the Phase 8 boundary:** N/A under the then-current streaming-only offline UX. Downloaded offline playback remained later Phase 10 work and is now accepted by the canonical Phase 10 reconciliation above. Automated offline/reconciliation safety remained required.
   - **C3 automated closeout:** Mobile 239/239 tests, 137-file source-size gate, Expo Doctor 20/20 and web export passed; Desktop 106/106 Node tests, 262/262 renderer tests across 59 files, source/binding/IPC/secret/theme/cycle gates and production build passed; Electron E2E passed 22/22 after repairing one stale hidden-Sidebar test-harness assumption.
   - **V3-P8-006 functional sync scope is complete.** Portable Preferences are intentionally excluded so Desktop and Mobile retain independent application preferences. Music Planet remains Desktop-only in Orion v3 and cross-platform Music synchronization is deferred until Mobile has a Music Planet product surface.
 - [x] **V3-P8-007:** Add record revisions, merge rules and deletion tombstones.
@@ -357,35 +388,36 @@ Phase 8 must not lock immediately after the final functional synchronization dom
 
 **Phase 9 production architecture:** Google Play / Play Core is not part of Orion Mobile's current distribution plan. Expo runtime updates/recovery are also retired from production under the P9-F6 architectural amendment. The sole production Mobile application-update path is the permanently signed direct GitHub APK lifecycle: canonical release discovery -> eligibility/rollout -> integrity/signer/package/version verification -> Orion-native download -> Android installer handoff -> in-place replacement -> relaunch/current settlement. P9-F9 is complete. The post-F9 Desktop-parity Mobile banner amendment is physically green. `v2.1.10` remains an identity-only trigger target and is not claimed physically installed.
 
-### Phase 10 — Mobile downloads and Offline Library
+### Phase 10 — Mobile downloads and Offline Library — complete / locked
 
-- [ ] **V3-P10-001:** Replace the engineering-oriented locked page with a premium, six-theme Downloads surface; keep Download actions disabled until the corresponding candidate and engine paths pass validation.
+- [x] **V3-P10-001:** Replace the engineering-oriented locked page with a premium, six-theme Downloads surface; keep Download actions disabled until the corresponding candidate and engine paths pass validation.
 - [x] **V3-P10-002:** Add versioned `MobileDownloadCandidateV1`, `MobileDownloadJobV1`, `MobileDownloadAssetV1` and `OfflineMediaEntryV1` contracts with non-sensitive, restart-safe persistence.
-  - **P10.1 checkpoint (2026-08-24):** `V3-P10-002` is complete at `9a105730d6d18d122d9553ebd19eff86b1f36dda`. The product surface and dual-destination foundations for `V3-P10-001` and `V3-P10-014` are implemented, but those contracts remain open for later physical/native acceptance.
+  - **Historical P10.1 checkpoint (2026-08-24):** `V3-P10-002` completed at `9a105730d6d18d122d9553ebd19eff86b1f36dda`. At this stage, the product surface and dual-destination foundations for `V3-P10-001` and `V3-P10-014` remained open; the September 1 final acceptance below supersedes that partial status.
 - [x] **V3-P10-003:** Capture download candidates within the active playback session and classify direct video, HLS, DASH and MIME-detected extensionless media without exposing raw URLs, cookies or credentials to presentation code.
 - [x] **V3-P10-004:** Preflight candidate reachability, expiry, request context, manifest shape, storage requirements and DRM/protection status; unsupported or protected media remains unavailable with an honest reason.
 - [x] **V3-P10-005:** Build an Android-owned foreground download service with WorkManager recovery, durable queue ownership, progress notifications and restart/reboot continuation.
 - [x] **V3-P10-006:** Implement the accepted Mobile production transfer boundary: authorized finite HLS/DASH fragment acquisition with bounded concurrency and deterministic fragment accounting. Direct execution is retired from Mobile production after physical evidence, and live/changing/open-ended manifests fail closed until a bounded finalizable refresh contract exists.
 - [x] **V3-P10-007:** Add a narrow job-scoped request-context broker for providers that require the active WebView's permitted headers/cookies; it may access only the selected manifest and discovered descendants and must never become a general proxy.
   - **P10.2 checkpoint (2026-08-24):** `V3-P10-003`, `V3-P10-004` and `V3-P10-007` are complete at `5d7aec10b9b73cdedb0cde6f00dd6a60c5227fdf`. Real Videasy and VidSrc playback physically proved Fabric-scoped session delivery, subresource observation, direct/HLS/extensionless classification, truthful ready/unsupported/action-required preflight, descendant-origin fail-closed behavior and real `contextReady=true` candidates without diagnostic credential leakage. The remaining `ViewManagerPropertyUpdater` warning is non-blocking because direct runtime evidence proves Orion's Fabric delegate is receiving and applying the custom capture prop.
-  - **P10.3 acceptance (2026-08-24):** `V3-P10-005`, `V3-P10-006`, `V3-P10-008` and `V3-P10-009` are complete at the native-engine boundary. Signed Preview `2.1.16/code18` physically proved multi-provider HLS capture for VidSrc, Videasy, VidKing, VixSrc and VSEmbed, real fragmented transfer, foreground notification progress truth, pause/resume, retained-fragment network recovery and verified Movie/TV completion. Candidate 6 then closed Retry All, battery/storage WorkManager policy and optional Phase 9 Downloads completion/failure/action-needed alerts with focused `52/52`, full Mobile `384/384`, 169-file source-size, Expo Doctor `20/20`, web export and Android compile green. Production Direct remains retired and finite HLS/DASH is the accepted Mobile transfer boundary. `V3-P10-014` remains open for P10.4 Device Storage fragment finalization / dual-destination product completion; full interruption/reboot/low-storage/subtitle/expiry/integrity matrices remain `V3-P10-016`.
-- [x] **V3-P10-008:** Add pause, resume, retry, cancel, retry-all and durable recovery policy after network loss, application termination, reboot, low battery and storage pressure. Full representative interruption/reboot/low-storage matrix remains `V3-P10-016`.
+  - **Historical P10.3 acceptance (2026-08-24):** `V3-P10-005`, `V3-P10-006`, `V3-P10-008` and `V3-P10-009` completed at the native-engine boundary. Signed Preview `2.1.16/code18` physically proved multi-provider HLS capture for VidSrc, Videasy, VidKing, VixSrc and VSEmbed, real fragmented transfer, foreground notification progress truth, pause/resume, retained-fragment network recovery and verified Movie/TV completion. Candidate 6 then closed Retry All, battery/storage WorkManager policy and optional Phase 9 Downloads completion/failure/action-needed alerts with focused `52/52`, full Mobile `384/384`, 169-file source-size, Expo Doctor `20/20`, web export and Android compile green. Production Direct remained retired and finite HLS/DASH became the accepted Mobile transfer boundary. At this stage, `V3-P10-014` and the full `V3-P10-016` matrix remained open; the September 1 final acceptance below supersedes that partial status.
+- [x] **V3-P10-008:** Add pause, resume, retry, cancel, retry-all and durable recovery policy after network loss, application termination, reboot, low battery and storage pressure. The representative interruption/reboot/low-storage boundary is accepted under `V3-P10-016`.
 - [x] **V3-P10-009:** Validate completed assets before atomic finalization; detect missing/empty/range-mismatched fragments, finalization/index failures and corrupt fragmented metadata, retain repairable partial jobs, and never report false completion. Monolithic-container validation is required only when a future finalizer emits a monolithic container.
-- [ ] **V3-P10-010:** Preserve supported audio tracks, embedded/captured subtitles, episode identity, artwork and source attribution beside the downloaded asset.
-- [ ] **V3-P10-011:** Build adaptive queue, active, completed and failed views with search, filters, sorting, storage usage, per-job diagnostics and clear recovery actions across all six themes.
-- [ ] **V3-P10-012:** Add an Offline Library and route completed assets through Orion's unified native player with seek, subtitles, audio selection, playback speed and honest unsupported-format diagnostics.
-- [ ] **V3-P10-013:** Integrate offline playback with History, Continue Watching, watched state and the existing Resume dialog without requiring network access.
-- [ ] **V3-P10-014:** Use Android scoped storage and user-selected destinations without broad legacy storage permission; verify free space before starting and before final processing.
-- [ ] **V3-P10-015:** Back up portable download metadata only; exclude media bytes, partial fragments, credentials, signed URLs, cookies and machine-specific paths from Google profiles.
-- [ ] **V3-P10-016:** Pass direct/HLS/DASH, interruption, reboot, low-storage, subtitles, source expiry, integrity, offline playback, deletion and upgrade matrices on representative Android devices.
+- [x] **V3-P10-010:** Preserve supported audio tracks, embedded/captured subtitles, episode identity, artwork and source attribution beside the downloaded asset.
+- [x] **V3-P10-011:** Build adaptive queue, active, completed and failed views with search, filters, sorting, storage usage, per-job diagnostics and clear recovery actions across all six themes.
+- [x] **V3-P10-012:** Add an Offline Library and route completed assets through Orion's unified native player with seek, subtitles, audio selection, playback speed and honest unsupported-format diagnostics.
+- [x] **V3-P10-013:** Integrate offline playback with History, Continue Watching, watched state and the existing Resume dialog without requiring network access.
+- [x] **V3-P10-014:** Use Android scoped storage and user-selected destinations without broad legacy storage permission; verify free space before starting and before final processing.
+- [x] **V3-P10-015:** Back up portable download metadata only; exclude media bytes, partial fragments, credentials, signed URLs, cookies and machine-specific paths from Google profiles.
+- [x] **V3-P10-016:** Pass the representative Direct-retirement, finite HLS/DASH, interruption, reboot, low-storage, subtitles, source-expiry, integrity, offline-playback, deletion and production-upgrade acceptance boundary on Android.
 
-Desktop is the behavioral reference, not reusable Mobile implementation. Its proven
-pattern is scoped `CaptureSession` detection, opaque candidates, preflight, captured
-browser request context, a per-job restricted HLS proxy, managed fragmented tools,
-durable records and local playback. Mobile must recreate those boundaries with
-Android-native services and Media3-compatible download/playback components rather
-than attempting to run Electron session code or silently bundling unrestricted
-Desktop tooling.
+**Phase 10 final acceptance (2026-09-01):** `V3-P10-001` through `V3-P10-016` are complete. The accepted production implementation is `66f647af1a5f77d4792fe82ea2d4662fc3f05351`; the zero-diff implementation lock is `50987dc2492f02ba7aa3dd9e235ba08a589a6b1c`; and the consolidated authority is `docs/audits/ORION-V3-P10-F-PHASE-10-COMPLETION-AUDIT.md`. Published Mobile `v2.2.11/code45` passed the native updater, finalized SAF download/offline playback and final Offline Player functionality/geometry checks. The Redmi/Xiaomi seek-progress investigation remains an explicit non-blocking compatibility track, not a hidden pass or a Phase 10 reopen.
+
+Desktop remained the behavioral reference rather than reusable Mobile implementation.
+Mobile recreated the accepted trust boundaries with opaque candidates, truthful
+preflight, job-scoped request context, Android-owned foreground execution,
+WorkManager recovery, finite HLS/DASH acquisition, exact artifact verification,
+SAF finalization and asset-ID-owned offline playback. Electron session code and
+unrestricted Desktop tooling are not part of the Mobile production path.
 
 ### Phase 11 — Deferred Orion Connect expansion
 
@@ -448,6 +480,8 @@ Every roadmap update should add one row. Do not delete older entries.
 
 | Date | Checklist IDs | Change | Evidence | Overall completion |
 |---|---|---|---|---:|
+| 2026-09-01 | Master version and release truth | Reconciled current identities separately from historical phase evidence: root/Desktop source `2.1.2`, Mobile source and published Preview `2.2.11/code45`, and latest Stable `v2.0.1`. Corrected the future-candidate rule so immutable `v2.2.11` is never reused and corrected the stale clean-device gate reference to `V3-P12-009`. | Local root/Desktop/Mobile manifests; accepted Phase 10 implementation `66f647af1a5f77d4792fe82ea2d4662fc3f05351`; live GitHub release records for `v2.0.1`, `v2.1.2` and `v2.2.11`; live `v2.2.11` tag target and asset metadata; branch head `f02e9f891457fb1a9870d8ea33e05a08ec48b552`. | 94% |
+| 2026-09-01 | P10-F; V3-P10-001-V3-P10-016 | Reconciled the complete Phase 10 evidence into the Master Audit. Mobile Downloads and Offline Library are complete and locked across product presentation, secure candidate/preflight ownership, native durable transfer, SAF finalization, management, metadata/subtitles/audio, offline playback, viewing-state integration, portable-profile exclusions and representative resilience. Phase 10 is scored at 100% / 8.0 weighted points, raising Orion v3 from 87.28% to 94.48% exact (94% rounded). | Consolidated audit `docs/audits/ORION-V3-P10-F-PHASE-10-COMPLETION-AUDIT.md`; accepted implementation `66f647af1a5f77d4792fe82ea2d4662fc3f05351`; zero-diff lock `50987dc2492f02ba7aa3dd9e235ba08a589a6b1c`; published signed `v2.2.11/code45` APK SHA-256 `0A68F73C0B7D27C0021AE213162CE9165D2E935264906873FFE37CDEB58D1C0B`; Mobile `584/584`; Android/JVM `17/17` suites and `118/118` tests; final parity/version gates green; F1/F2/F4 physical PASS. F3 Redmi/Xiaomi remains explicit deferred non-blocking compatibility work. | 94% |
 | 2026-08-24 | P10.3; V3-P10-005, V3-P10-006, V3-P10-008, V3-P10-009; V3-P10-014 native foundation | Completed and physically accepted the Android-owned Mobile fragment engine at the P10.3 boundary. Mobile now captures and ranks multiple ready HLS/DASH candidates, executes finite HLS/DASH fragments with durable native progress, foreground ownership, pause/resume/retry/retry-all/cancel, network/battery/storage recovery policy, verified-fragment retention, integrity gating and atomic Orion Library fragmented-bundle finalization. Direct production execution is retired; changing/live/open-ended manifests fail closed. | Candidate 5/2.1.16 physical acceptance on S24 Ultra: VidSrc, Videasy, VidKing, VixSrc and VSEmbed all HLS-ready; real VidSrc + Videasy transfer; native notification title/progress/fragments/size/speed/ETA; pause/resume; paused Active semantics; network interruption recovery; verified Movie and TV episode completion. Candidate 6 focused `52/52`; full Mobile `384/384`; source-size 169; Expo Doctor `20/20`; web export; Android compile green; Candidate 6 keeps 2.1.16/code18 identity and transfer core unchanged. | 87% |
 | 2026-08-24 | P10.2; V3-P10-003, V3-P10-004, V3-P10-007 | Completed active-playback download-candidate capture, real provider preflight and the narrow request-context security boundary. Fabric custom-prop delivery was physically repaired without creating a parallel WebView architecture. Videasy and VidSrc produced real direct/HLS/extensionless candidate truth, including ready, unsupported and action-required states. | Candidate checkpoint `3a84de3e7383551e5f86d16be6c48c9cddb237ce`; trace checkpoint `684c2903cb1675f212a63b4ef0ed64a38a34e58c`; accepted Fabric repair `5d7aec10b9b73cdedb0cde6f00dd6a60c5227fdf`; focused P10.2 `13/13`; native compile green; signed `2.1.13/code15` Preview APK SHA-256 `1FA3993724EED6AFC3DD4DE4671B4916840AF00EA265BD1A0A8C815E856072C7`; representative Videasy -> VidSrc physical source-switch pass; three ready `contextReady=true` candidates; redaction green. | 87% |
 | 2026-08-24 | P10.1; V3-P10-002; V3-P10-001/V3-P10-014 foundations | Completed the P10.1 product, contract and destination-ownership foundation. Added the four versioned Mobile download contracts, restart-safe non-sensitive persistence, canonical state/progress truth, exact episode identity, dual destination settings, premium honest Downloads foundation and Downloads notification ownership under the existing Phase 9 notification architecture. `V3-P10-002` is complete; `V3-P10-001` and `V3-P10-014` remain open. | Checkpoint `9a105730d6d18d122d9553ebd19eff86b1f36dda`; executable P10.1 acceptance 12/12; full Mobile 332/332; typecheck; 162-file source-size; Expo Doctor 20/20; production web export; shared contract strict compile; exact 22-file commit; local/remote SHA equality; clean worktree. | 87% |
@@ -555,7 +589,7 @@ History, progress, percentages, completion, or watched records.
 Phase 0 implementation is complete. The generated standalone Android APK was
 inspected and contains its JavaScript bundle, so it does not depend on Metro.
 Installation and launch on a separate clean physical device remain an external
-release-verification action tracked by **V3-P11-010**, not evidence fabricated
+release-verification action tracked by **V3-P12-009**, not evidence fabricated
 by this checkpoint.
 
 ### Roadmap maintenance rules
@@ -566,16 +600,18 @@ by this checkpoint.
 - Never mark a checklist item complete based only on a screenshot or a build succeeding.
 - Never reduce the list of known blockers to increase the percentage.
 - Reopen a checked item if a regression invalidates its acceptance.
-- Use `2.1.x` production identities when a real signed update-validation target is required; reserve Orion `3.0.0` for the final release milestone.
+- Use a new, strictly increasing and purpose-specific `2.x` identity when a real signed update-validation target is required. Any future Mobile candidate must be newer than immutable `v2.2.11/code45`; Desktop/root remain `2.1.2` until an explicit Desktop release requires a bump. Reserve Orion `3.0.0` for the final release milestone.
 - Preserve this document as the authoritative Orion v3 execution tracker.
 
 ## Executive Summary
 
-Orion v3 Phases 0 through 9 are complete and locked at their accepted evidence boundaries. The completed foundation now covers safety/observability, playback truth, History/Continue Watching, trailer reliability, the rebaselined secure Orion Connect foundation, streaming safety/source reliability, the unified Mobile player, complete Mobile UX/performance, Google identity/portable profiles, and Phase 9 distribution/updates/availability/notifications.
+Orion v3 Phases 0 through 10 are complete and locked at their accepted evidence boundaries. The completed foundation now covers safety/observability, playback truth, History/Continue Watching, trailer reliability, the rebaselined secure Orion Connect foundation, streaming safety/source reliability, the unified Mobile player, complete Mobile UX/performance, Google identity/portable profiles, Phase 9 distribution/updates/availability/notifications, and Phase 10 Mobile Downloads/Offline Library.
 
 Phase 9 closes with real production-path evidence rather than source-only claims. Desktop physically completed its configured `2.0.1 -> 2.1.0` Preview self-update and Get Orion Mobile QR/direct-APK flow. Mobile physically completed the native signed-APK updater lifecycle through `2.1.9/code11`, with integrity, signer, package/version validation, in-place Android replacement, preserved install history/state, relaunch/current settlement, and final Desktop-parity update-banner acceptance against the real identity-only `v2.1.10` Preview trigger.
 
 Expo runtime updates/recovery are retired from Orion Mobile production by the P9-F6 architectural amendment. Play Core is also outside Orion's current direct-GitHub distribution plan. These are accepted architecture boundaries, not open Phase 9 defects.
+
+Phase 10 closes on accepted implementation `66f647af1a5f77d4792fe82ea2d4662fc3f05351` and zero-diff lock `50987dc2492f02ba7aa3dd9e235ba08a589a6b1c`. Published Mobile `v2.2.11/code45` physically passed Orion's native updater, SAF finalized download/offline playback and the final Offline Player function/geometry boundary. All `V3-P10-001` through `V3-P10-016` contracts are complete. The Redmi/Xiaomi seek-progress track remains explicitly deferred and non-blocking.
 
 The five physical Smart Connect outcomes that did not pass remain preserved as deferred Phase 11 work rather than being represented as Phase 4 successes:
 
@@ -585,13 +621,13 @@ The five physical Smart Connect outcomes that did not pass remain preserved as d
 - Pointer movement still needs latency refinement.
 - Mobile does not yet expose Desktop's healthy source catalog for source switching.
 
-Orion is still not ready for the Orion 3.0 release. The remaining major release blockers are Phase 10's real resumable Mobile downloader and Offline Library, the explicitly deferred Phase 11 Orion Connect expansion, and the complete Phase 12 clean-install/upgrade/regression matrix. Casting remains a separate post-v3 milestone.
+Orion is still not ready for the Orion 3.0 release. The remaining weighted release blockers are the explicitly deferred Phase 11 Orion Connect expansion and the complete Phase 12 clean-install/upgrade/regression matrix. Phase 10A Connection is a separate unweighted follow-on boundary and earns no Master Audit credit yet. Casting remains a separate post-v3 milestone.
 
 ## Code-Verified Baseline
 
-The dated Progress Log is the source of truth for individual build, package, release and physical results. The latest Phase 9 evidence includes focused and full Desktop/Mobile application gates, source-size/export/release-build checks, signed production package verification, canonical integrity manifests, live Preview publication checks, genuine in-app update execution, post-update settlement and physical cross-platform update UX acceptance.
+The dated Progress Log is the source of truth for individual build, package, release and physical results. The latest Phase 10 evidence adds full Mobile/Android/JVM/parity/version gates, a signed and integrity-verified production APK, immutable Preview publication, genuine in-app update execution, SAF finalized media, offline playback and final Offline Player acceptance to the previously locked Phase 9 distribution evidence.
 
-Phase 9 production identities progressed through the `2.1.x` Preview sequence. The last explicitly proven installed Mobile package is `2.1.9/code11`; `v2.1.10/code12` is an identity-only published trigger target used to validate the 2.1.9 banner and is not claimed physically installed. Orion `3.0.0` remains reserved for the final release milestone.
+Phase 10 production identities progressed through the `2.2.x` Preview sequence. The final accepted and published Phase 10 package is `v2.2.11/code45`, permanently signed with the established Orion signer and tied to the accepted implementation checkpoint. The older `v2.1.10/code12` identity-only Phase 9 trigger remains historical evidence rather than the current package. Orion `3.0.0` remains reserved for the final release milestone.
 
 ## Priority Audit
 
@@ -605,7 +641,7 @@ Phase 9 production identities progressed through the `2.1.x` Preview sequence. T
 | P1 | Cross-device profile | Phase 8 is complete/locked with Orion-owned OAuth, Portable Profile v3, bidirectional sync/conflict recovery and account/profile fencing | Preserve profile migration, conflict, offline and unknown-namespace behavior in Phase 12 |
 | P1 | Distribution and updates | Phase 9 accepted: Desktop signed self-update/Get Orion Mobile and Mobile native signed GitHub/APK lifecycle are complete; Expo runtime is retired and Play Core is outside current scope | Preserve integrity, rollout, rollback/recovery, banner, release-note and relaunch checks as recurring production regressions |
 | P1 | Notifications | Phase 9 accepted: local-first categories, quiet hours, deduplication, contextual permission and deep links are implemented and physically validated | Preserve category controls, permission, deduplication and deep-link behavior in Phase 12 release regression |
-| P1 | Mobile downloads | The visible Mobile page is intentionally locked and has no durable fragment engine or Offline Library | Android-owned candidate capture, resumable fragment jobs, integrity verification, scoped storage and unified offline playback |
+| P1 | Mobile downloads | Phase 10 is complete/locked with secure candidate/preflight ownership, durable finite HLS/DASH jobs, integrity-checked SAF finalization, Downloads management, Offline Library and Orion Offline Player | Preserve the locked production boundary and rerun the representative download/storage/offline-playback regression matrix in Phase 12 |
 | Deferred | Connect expansion | Five physical Phase 4 findings and player-surface cursor ownership remain open | Resume only after the core Mobile viewing and ownership experience is complete |
 | Deferred | TV casting | Remote control foundations exist, but casting is a different protocol category | Separate post-v3 casting milestone |
 
@@ -1197,7 +1233,9 @@ Recommended:
 - Treat Custom as a first-class differentiator with live preview, validated controls, reset behavior and portable-profile support where the corresponding setting is cross-platform.
 - Do not expose Desktop-only controls on Mobile unless the Mobile runtime can apply and validate them.
 
-### Downloads locked state
+### Downloads locked state (historical; superseded by Phase 10)
+
+> This July 31 observation records the pre-Phase-10 product state. Phase 10 later replaced the locked surface and completed the production Downloads and Offline Library capability at the September 1, 2026 lock.
 
 Observed:
 
@@ -1303,16 +1341,17 @@ Orion Mobile production updates now use one accepted application-update boundary
 - Preserve truthful action-required, retry/failure and recovery/rollback semantics rather than hiding failures.
 - If Android installer completion races an immediate Package Manager query, re-query read-only and compare `versionName`, `versionCode`, `lastUpdateTime` and preserved `firstInstallTime`; do not uninstall, clear data or substitute `adb install`.
 
-### Accepted Phase 9 physical boundary
+### Accepted Phase 9 physical boundary (historical updater evidence)
 
 - P9-F9 proved the full native lifecycle from `2.1.7/code9 -> 2.1.8/code10` and later `2.1.8/code10 -> 2.1.9/code11` through Orion.
-- The last explicitly proven installed Mobile package is `2.1.9/code11`.
+- The last explicitly proven installed Mobile package at the Phase 9 boundary was `2.1.9/code11`.
 - `v2.1.10/code12` is an identity-only real Preview trigger target whose banner/updater source is unchanged from 2.1.9; it was used to make installed 2.1.9 render the real update offer.
 - The post-F9 full-width red Mobile update banner is physically accepted in portrait and landscape with safe-area/Menu clearance, actionable `View Update`, explicit dismiss and Desktop-consistent visual grammar.
+- Phase 10 supersedes those identities for current truth: Mobile `v2.2.11/code45` is the accepted published package, and F1 physically passed its Orion-native in-place signed update chain.
 
 ## 9. Desktop Orion 3.0 Mobile Companion Center
 
-Desktop should not receive a version-only bump. Orion 3.0 should introduce a complete Mobile Companion Center:
+Desktop should not receive a version-only bump. Orion 3.0.0 should introduce a complete Mobile Companion Center:
 
 - Get Orion Mobile QR.
 - Pair this device QR and code.
@@ -1588,15 +1627,15 @@ apps/desktop/src/main/smart-connect/
 - Expose installer, version, compatibility, update-state and provider-availability status clearly and consistently on both platforms.
 - Provide local-first notification categories, quiet hours, deduplication, whitelisted deep links and contextual permission prompts.
 
-### Phase 10: Mobile downloads and Offline Library
+### Phase 10: Mobile downloads and Offline Library — complete / locked
 
-- Replace the locked engineering copy with a premium six-theme Downloads experience, while keeping unavailable actions honest until the engine passes.
-- Capture active-session direct, HLS, DASH and extensionless media as opaque, scoped candidates and preflight reachability, expiry, request context, storage and protection status.
-- Recreate Desktop's proven scoped capture, fragment accounting and restricted request-context boundaries through Android-native foreground services, WorkManager recovery and Media3-compatible components.
-- Add resumable range and fragment jobs, bounded concurrency, pause/resume/retry, battery/network/storage policy and atomic integrity-checked finalization.
-- Preserve supported artwork, metadata, audio tracks and subtitles and expose completed media through a responsive six-theme Offline Library.
-- Play completed assets through Orion's unified native player and integrate offline Resume, History, Continue Watching and watched state without requiring network access.
-- Use scoped storage, portable metadata-only backup and explicit unsupported/DRM diagnostics; never expose credentials or report false completion.
+- Replaced the locked engineering copy with a premium six-theme Downloads experience with capability-aware, honest actions.
+- Captures active-session Direct, HLS, DASH and extensionless media as opaque scoped candidates and preflights reachability, expiry, request context, storage and protection status.
+- Recreated Desktop's proven trust boundaries through Android-owned foreground execution, WorkManager recovery and bounded broker-backed media acquisition.
+- Delivers durable finite HLS/DASH fragment jobs, bounded concurrency, pause/resume/retry/recovery, battery/network/storage policy and atomic integrity-checked SAF finalization; production Direct execution is intentionally retired.
+- Preserves supported artwork, metadata, audio tracks and subtitles and exposes completed media through the responsive Offline Library.
+- Plays finalized assets through Orion's accepted native Offline Player and integrates offline Resume, History, Continue Watching and watched state without requiring network access.
+- Uses scoped storage, portable metadata-only backup and explicit unsupported/protected diagnostics without exposing credentials or reporting false completion.
 
 ### Phase 11: Deferred Orion Connect expansion
 
@@ -1620,7 +1659,7 @@ apps/desktop/src/main/smart-connect/
 - Desktop/Mobile compatibility matrix.
 - Signed Android production build.
 
-Set both packages to 3.0.0 only after the complete acceptance matrix passes.
+Set the root, Desktop and Mobile package identities to 3.0.0 only after the complete acceptance matrix passes.
 
 ## 13. Test and Acceptance Matrix
 
@@ -1786,21 +1825,11 @@ Remote control and casting must remain distinct architectural capabilities.
 
 ## Final Verdict
 
-Orion Mobile should not be rebuilt from scratch. Its functioning metadata, provider navigation, theme foundation, Smart Connect transport, command acknowledgements, and ordinary-page laser are valuable.
+Orion Mobile was correctly evolved rather than rebuilt from scratch. Phases 0 through 10 now preserve its functioning metadata, provider navigation and theme foundations while locking playback truth, History/Continue Watching, trailer reliability, the secure Orion Connect foundation, native provider shielding, the unified player, adaptive Mobile UX, portable profiles, production distribution/updates and Mobile Downloads/Offline Library.
 
-The correct v3 strategy is to preserve those foundations while replacing the unreliable boundaries:
+The Master V3 implementation total is `94.48%`, rounded to `94%`. Phase 10 is `100%` complete with an `8.0%` weighted contribution and is frozen at lock `50987dc2492f02ba7aa3dd9e235ba08a589a6b1c`.
 
-1. Playback truth.
-2. History and Continue Watching.
-3. Trailer identity and candidate handling.
-4. Live Smart Connect UX.
-5. Player-surface pointer routing.
-6. Native provider shielding.
-7. Adaptive Mobile composition.
-8. Portable cross-device profiles.
-9. Runtime-safe updates.
-
-This order prevents Orion from displaying invented progress, stale remote state, false shield confidence, or unreliable synchronization. It also creates the contracts needed for a later TV-casting milestone without prematurely coupling casting to Smart Connect.
+Orion 3.0 remains not release-ready until the weighted Phase 11 Orion Connect expansion and Phase 12 final release-validation matrix close. Phase 10A Connection is separately scoped and currently unweighted; it must receive its own frozen completion evidence before any later Master Audit reconciliation. TV casting remains a distinct post-v3 milestone.
 
 <!-- V3-P8-COUNT-SEMANTICS-DATA-TRUTH-CLOSURE-2026-08-21 -->
 

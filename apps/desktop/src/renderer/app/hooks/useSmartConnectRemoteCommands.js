@@ -227,6 +227,20 @@ function moveCursor(payload) {
   cursor.dataset.xRatio = String(target.xRatio);
   cursor.dataset.yRatio = String(target.yRatio);
 
+  try {
+    const elementUnderCursor = document.elementFromPoint(target.x, target.y);
+    if (elementUnderCursor) {
+      elementUnderCursor.dispatchEvent(
+        new MouseEvent("mousemove", {
+          clientX: target.x,
+          clientY: target.y,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    }
+  } catch {}
+
   scheduleRemoteCursorCleanup();
   scheduleRemoteHoverCheck();
 

@@ -25,11 +25,11 @@ test('connected Smart Connect uses one unified adaptive surface', () => {
 test('pointer input coalesces movement and supports two-finger scrolling', () => {
   const pointer = read('src/features/connect/useRemotePointer.ts');
 
-  assert.match(pointer, /activeRateHz: 30 as 24 \| 30 \| 40 \| 60/);
-  assert.match(pointer, /constrained \? 24 : healthy \? 60 : 30/);
+  assert.match(pointer, /activeRateHz: 30 as 24 \| 30 \| 40 \| 60 \| 90/);
+  assert.match(pointer, /constrained \? 24 : healthy \? 90 : 40/);
   assert.match(pointer, /frameIntervalRef\.current = Math\.round\(1000 \/ rate\)/);
   const desktop = read('../desktop/src/main/ipc/smartConnectIpc.js');
-  assert.match(desktop, /REALTIME_IPC_COALESCE_MS = 8/);
+  assert.match(desktop, /REALTIME_IPC_COALESCE_MS = 4/);
   assert.match(desktop, /setTimeout\(flushRealtimeIpc, REALTIME_IPC_COALESCE_MS\)/);
   assert.match(pointer, /touches\.length >= 2/);
   assert.match(pointer, /pendingScrollRef/);
@@ -84,7 +84,7 @@ test('pointer health consumes native socket pressure and lowers the adaptive rea
   assert.match(controller, /backpressured: socketBackpressured/);
   assert.match(controller, /onPressure: \(pressure\) => setSocketBackpressured/);
   assert.match(pointer, /health\.backpressured/);
-  assert.match(pointer, /constrained \? 24 : healthy \? 60 : 30/);
+  assert.match(pointer, /constrained \? 24 : healthy \? 90 : 40/);
   assert.match(nativeBridge, /orionSmartConnectPressure/);
 });
 
@@ -113,4 +113,21 @@ test('reliable acknowledgements carry controller revision without breaking legac
   assert.match(controller, /ackRevision == null/);
   assert.match(controller, /pending\.controllerRevision === Number\(ackRevision\)/);
   assert.match(commandController, /controllerRevision\?: number/);
+});
+
+test('vertical scroll strip and context title formatting are integrated in remote surface', () => {
+  const surface = read('src/features/connect/UnifiedRemoteSurface.tsx');
+  const pointer = read('src/features/connect/useRemotePointer.ts');
+  const controller = read('src/features/connect/useConnectController.ts');
+
+  assert.match(pointer, /scrollPanResponder/);
+  assert.match(controller, /scrollPanResponder/);
+  assert.match(surface, /scrollStrip/);
+  assert.match(surface, /scrollThumbGrip/);
+  assert.match(surface, /Vertical scroll strip/);
+  assert.match(surface, /formatContextTitle/);
+  assert.match(surface, /'music-home': 'Music Planet: Home'/);
+  assert.match(surface, /'get-mobile': 'Get Orion Mobile'/);
+  assert.match(surface, /home: 'Browsing Home'/);
+  assert.match(surface, /movie: 'Browsing Movies'/);
 });

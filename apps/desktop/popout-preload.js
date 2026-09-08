@@ -143,7 +143,7 @@ function stepRemoteCursorVisual(current, target, deltaMs) {
   }
 
   const boundedDelta = Math.max(1, Math.min(34, Number(deltaMs) || 16.67));
-  const tauMs = distance >= 180 ? 5.5 : distance >= 72 ? 7 : 9;
+  const tauMs = distance >= 180 ? 4 : distance >= 72 ? 5 : 6;
   const alpha = 1 - Math.exp(-boundedDelta / tauMs);
   const x = current.x + dx * alpha;
   const y = current.y + dy * alpha;

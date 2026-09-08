@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Management;
 using System.Runtime.InteropServices;
@@ -135,7 +136,88 @@ namespace OrionSystemControl {
             }
         }
 
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        public struct PHYSICAL_MONITOR {
+            public IntPtr hPhysicalMonitor;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string szPhysicalMonitorDescription;
+        }
+
+        public delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT {
+            public int left;
+            public int top;
+            public int right;
+            public int bottom;
+        }
+
+        [DllImport("user32.dll")]
+        public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
+
+        [DllImport("dxva2.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetNumberOfPhysicalMonitorsFromHMONITOR(IntPtr hMonitor, out uint pdwNumberOfPhysicalMonitors);
+
+        [DllImport("dxva2.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetPhysicalMonitorsFromHMONITOR(IntPtr hMonitor, uint dwPhysicalMonitorArraySize, [Out] PHYSICAL_MONITOR[] pPhysicalMonitorArray);
+
+        [DllImport("dxva2.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool DestroyPhysicalMonitors(uint dwPhysicalMonitorArraySize, [In] PHYSICAL_MONITOR[] pPhysicalMonitorArray);
+
+        [DllImport("dxva2.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetMonitorBrightness(IntPtr hMonitor, out uint pdwMinimumBrightness, out uint pdwCurrentBrightness, out uint pdwMaximumBrightness);
+
+        [DllImport("dxva2.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SetMonitorBrightness(IntPtr hMonitor, uint dwNewBrightness);
+
+        struct PhysicalMonitorGroup {
+            public uint count;
+            public PHYSICAL_MONITOR[] monitors;
+        }
+
+        static List<PhysicalMonitorGroup> GetPhysicalMonitorGroups() {
+            var hMonitors = new List<IntPtr>();
+            try {
+                EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, delegate(IntPtr hMon, IntPtr hdc, ref RECT r, IntPtr d) {
+                    hMonitors.Add(hMon);
+                    return true;
+                }, IntPtr.Zero);
+            } catch { }
+
+            var groups = new List<PhysicalMonitorGroup>();
+            foreach (var hMon in hMonitors) {
+                uint count = 0;
+                try {
+                    if (GetNumberOfPhysicalMonitorsFromHMONITOR(hMon, out count) && count > 0) {
+                        var mons = new PHYSICAL_MONITOR[count];
+                        if (GetPhysicalMonitorsFromHMONITOR(hMon, count, mons)) {
+                            groups.Add(new PhysicalMonitorGroup { count = count, monitors = mons });
+                        }
+                    }
+                } catch { }
+            }
+            return groups;
+        }
+
+        static void ReleasePhysicalMonitorGroups(List<PhysicalMonitorGroup> groups) {
+            if (groups == null) return;
+            foreach (var g in groups) {
+                try {
+                    if (g.monitors != null && g.count > 0) {
+                        DestroyPhysicalMonitors(g.count, g.monitors);
+                    }
+                } catch { }
+            }
+        }
+
         static string GetBrightnessJson() {
+            // 1. Try WMI (built-in laptop displays)
             try {
                 using (var searcher = new ManagementObjectSearcher("root\\wmi", "SELECT * FROM WmiMonitorBrightness"))
                 using (var results = searcher.Get()) {
@@ -147,14 +229,34 @@ namespace OrionSystemControl {
                         }
                     }
                 }
-                return "{\"ok\":true,\"supported\":false}";
-            } catch {
-                return "{\"ok\":true,\"supported\":false}";
-            }
+            } catch { }
+
+            // 2. Try DDC/CI Physical Monitor API (external desktop monitors)
+            try {
+                var groups = GetPhysicalMonitorGroups();
+                try {
+                    foreach (var g in groups) {
+                        for (int i = 0; i < g.count; i++) {
+                            uint min = 0, cur = 0, max = 100;
+                            if (GetMonitorBrightness(g.monitors[i].hPhysicalMonitor, out min, out cur, out max)) {
+                                int percent = (max > min) ? (int)Math.Round(((double)(cur - min) / (max - min)) * 100.0) : (int)cur;
+                                percent = Math.Max(0, Math.Min(100, percent));
+                                return "{\"ok\":true,\"supported\":true,\"brightness\":" + percent + "}";
+                            }
+                        }
+                    }
+                } finally {
+                    ReleasePhysicalMonitorGroups(groups);
+                }
+            } catch { }
+
+            return "{\"ok\":true,\"supported\":false}";
         }
 
         static string SetBrightnessJson(int brightness) {
             brightness = Math.Max(0, Math.Min(100, brightness));
+
+            // 1. Try WMI (built-in laptop displays)
             try {
                 using (var searcher = new ManagementObjectSearcher("root\\wmi", "SELECT * FROM WmiMonitorBrightnessMethods"))
                 using (var results = searcher.Get()) {
@@ -163,10 +265,34 @@ namespace OrionSystemControl {
                         return "{\"ok\":true,\"supported\":true,\"brightness\":" + brightness + "}";
                     }
                 }
-                return "{\"ok\":false,\"supported\":false,\"error\":\"Display brightness control not supported\"}";
-            } catch (Exception ex) {
-                return "{\"ok\":false,\"supported\":false,\"error\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}";
-            }
+            } catch { }
+
+            // 2. Try DDC/CI Physical Monitor API (external desktop monitors)
+            try {
+                var groups = GetPhysicalMonitorGroups();
+                bool anySuccess = false;
+                try {
+                    foreach (var g in groups) {
+                        for (int i = 0; i < g.count; i++) {
+                            uint min = 0, cur = 0, max = 100;
+                            if (GetMonitorBrightness(g.monitors[i].hPhysicalMonitor, out min, out cur, out max)) {
+                                uint targetVal = (max > min) ? (uint)Math.Round(min + ((double)brightness / 100.0) * (max - min)) : (uint)brightness;
+                                if (SetMonitorBrightness(g.monitors[i].hPhysicalMonitor, targetVal)) {
+                                    anySuccess = true;
+                                }
+                            }
+                        }
+                    }
+                } finally {
+                    ReleasePhysicalMonitorGroups(groups);
+                }
+
+                if (anySuccess) {
+                    return "{\"ok\":true,\"supported\":true,\"brightness\":" + brightness + "}";
+                }
+            } catch { }
+
+            return "{\"ok\":false,\"supported\":false,\"error\":\"Display brightness control not supported\"}";
         }
 
         static void Main(string[] args) {

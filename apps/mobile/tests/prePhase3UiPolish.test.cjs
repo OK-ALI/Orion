@@ -12,10 +12,10 @@ test("landscape playback prompt stays bounded in a deterministic two-column grid
   const source = read("src/features/playback/ResumePlaybackPrompt.tsx");
   assert.match(source, /Math\.min\(width - spacing\[6\], 640\)/);
   assert.match(source, /maxWidth: 640/);
-  assert.match(source, /actionButtonCompact/);
-  assert.match(source, /flexBasis: '48%'/);
-  assert.match(source, /flexShrink: 0/);
-  assert.match(source, /justifyContent: 'center'/);
+  assert.match(source, /actionsCompactRow/);
+  assert.match(source, /actionButtons\.slice\(0, 2\)/);
+  assert.match(source, /actionButtons\.slice\(2\)/);
+  assert.doesNotMatch(source, /flexWrap: 'wrap'/);
 });
 
 test("start over remains an explicit zero-position request through every player surface", () => {

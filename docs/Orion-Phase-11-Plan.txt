@@ -1,0 +1,468 @@
+ORION PHASE 11 — RELIABLE ORION CONNECT
+AUTHORITATIVE REMAINDER PLAN
+
+Current branch:
+codex/orion-v3-p11-reliable-connect
+
+Phase 11 starting checkpoint:
+fa2dfee005c8e35bd98c3f8d9bccc514af6490d1
+
+P11.1 implementation checkpoint:
+f90c3159a1bd24cf35edd11e8836eb89db86350d
+
+P11.1 mini-player repair checkpoint:
+c75a7b50abd24ff4568bfe0ff32267cea2196d30
+
+P11.1 replacement production-validation candidate:
+43c7b5f356d31aa1aaea205bbd1a10eabf7bd261
+
+Replacement candidate identities:
+- Desktop 2.2.19
+- Mobile 2.2.19
+- Android versionCode 52
+- root package identity remains 2.1.2
+
+============================================================
+P11.1 — PLAYBACK + CONTEXT TRUTH
+STATUS: PHYSICAL VALIDATION COMPLETE AT ACCEPTED EVIDENCE BOUNDARY
+============================================================
+
+Core ownership:
+- Reliable startup Play with bounded preparation/failure.
+- Truthful playback ownership and Mobile playback context.
+- Mini-player handoff correctness.
+- Cancellation of stale/pending playback operations.
+- Stop/source/disconnect/expiry cleanup.
+- Music Planet playback truth.
+- Provider-control-only states reported honestly.
+
+PHYSICAL CASE 1
+Status: PASS
+
+Observed provider classes:
+
+1. Auto-start sources
+- Provider starts playback automatically.
+- No Mobile startup Play command is required.
+- Playback behaves normally.
+
+2. Provider-gated sources
+- Provider requires its own startup control.
+- Orion Connect reports provider controls only.
+- Playback timing is unavailable when provider timing cannot be read.
+- Mobile returns a healthy bounded failure.
+- No indefinite Loading.
+- No duplicate Play.
+- No late ghost playback observed.
+
+Direct-control preparation-stage Play:
+- Not represented by current Cinema provider inventory.
+- Not classified as failure.
+
+Provider/WebView startup-button interaction belongs to P11.3.
+
+PHYSICAL CASE 2
+Status: PASS
+
+Validated:
+- Home -> Mini Player handoff.
+- Correct surviving playback owner.
+- Mobile context remained correct.
+- Pause worked.
+- Resume worked.
+- Stop worked.
+- Context cleared correctly.
+- No late owner/context resurrection.
+
+Provider observation:
+- Vidking can intermittently enter repeated loading/reload behavior.
+- Classification:
+  PROVIDER-SPECIFIC OBSERVATION / NOT CURRENTLY A P11.1 BLOCKER.
+- Escalate only if equivalent behavior appears across providers or Orion
+  itself is shown to cause the repeated reload.
+
+PHYSICAL CASE 3
+Status:
+DIRECT PENDING CINEMA PLAY RACE NOT REPRESENTED BY CURRENT PROVIDER INVENTORY
+
+Reason:
+- Auto-start providers require no Mobile startup Play.
+- Provider-gated sources return bounded failure and do not leave a direct
+  pending Play operation that can be manually raced.
+
+Observed:
+- No physical stale-source resurrection.
+- No ghost playback.
+- No duplicate hidden playback.
+
+Automated cancellation coverage remains accepted for:
+- source change
+- Stop
+- disconnect
+- teardown
+- expiry
+- stale owner replacement
+
+PHYSICAL CASE 4A — MUSIC PLANET
+Status: PASS
+
+Validated:
+- Correct track/context.
+- Controls Ready.
+- Pause.
+- Resume.
+- Seek.
+- Previous.
+- Next.
+- Stop.
+- Live playback timing.
+
+PHYSICAL CASE 4B
+Status:
+PENDING TRACK-LOOKUP STOP WINDOW NOT PRACTICALLY REPRODUCIBLE
+
+Reason:
+- Track resolution is generally too fast to intercept physically.
+- During unresolved/non-authoritative states the expected Stop race is not
+  reliably exposed to the user.
+
+Observed:
+- No physical late-track resurrection.
+- No physical stale Music context resurrection.
+
+Automated pending-resolver cancellation coverage remains accepted.
+
+ADDITIONAL PHYSICAL OBSERVATION — SEEK SCRUBBING
+Status:
+DEFER TO P11.4 SEEK RECONCILIATION / UX TUNING
+
+Validated on:
+- Cinema playback where timing is available.
+- Music Planet.
+
+Observed:
+- Normal live playback progress is healthy.
+- Progress moves normally.
+- Final seek destination is correct.
+- During an active held/dragged seek, incoming playback telemetry can fight
+  the local scrub position.
+- The thumb can move backward/forward temporarily before settling at the
+  intended position.
+
+Classification:
+- NOT a P11.1 playback-truth blocker.
+- P11.4 must inspect and tune state ownership/reconciliation.
+
+P11.1 production updater acceptance:
+- Desktop 2.2.18 -> 2.2.19 through Orion Preview updater: PASS.
+- Mobile 2.2.18 -> 2.2.19 through Orion in-app updater: PASS.
+- Installed matched physical pair: Desktop 2.2.19 + Mobile 2.2.19.
+
+P11.1 completion verdict:
+COMPLETE AT ACCEPTED EVIDENCE BOUNDARY.
+
+============================================================
+P11.2 — BOUNDED ORDERED INPUT + CONTROLLER OWNERSHIP
+============================================================
+
+Ownership:
+- Bounded ordered input scheduling.
+- Native socket-pressure handling.
+- Pre-IPC gesture/input coalescing.
+- Reliable-command ordering.
+- High-rate input must not starve reliable commands.
+- Multiple trusted phones.
+- Exactly one active controller.
+- Explicit controller takeover.
+- Cancellation/cleanup when controller ownership changes.
+- Prevent delayed commands from a previous controller taking effect.
+- No cursor/gesture catch-up backlog.
+- No stuck high-rate input after disconnect/takeover.
+
+Performance remains governed by Phase 11 targets.
+
+============================================================
+P11.3 — SURFACE-AWARE POINTER + PROVIDER CONTROL
+============================================================
+
+Ownership:
+- Desktop playback-surface pointer registry.
+- Correct coordinate mapping.
+- Correct routing to active/surviving playback surface.
+- Embedded provider/WebView pointer routing.
+- Mobile trackpad can reach provider-owned controls.
+- Provider startup Play buttons become clickable where technically supported.
+- Provider fullscreen/subtitles/volume UI can be operated through pointer
+  routing where exposed.
+- Surface replacement/handoff must not leave stale pointer targets.
+- Compact Desktop cursor arrow.
+- Subtle halo.
+- No cursor trail.
+- No catch-up backlog.
+- Correct pointer behavior across full player / mini-player / other supported
+  playback surfaces.
+
+Important boundary:
+P11.1 truthfully reports provider-control-only.
+P11.3 supplies interaction with that provider-owned surface.
+
+============================================================
+P11.4 — REMOTE CONTROLS + MOBILE ORION CONNECT UX POLISH
+============================================================
+
+A. WINDOWS / PC SYSTEM CONTROLS
+
+Add first-class Orion Connect capabilities for Windows master output:
+
+- system.volume.get
+- system.volume.set
+- system.volume.mute
+
+Requirements:
+- Mobile can read authoritative Windows master volume.
+- Mobile can set Windows master volume.
+- Mobile can mute/unmute Windows master audio.
+- If Windows volume changes externally through keyboard/taskbar/system,
+  Mobile state should update rather than remain stale.
+- PC Volume must remain available even when Cinema says:
+  "Provider controls only".
+- This is a system-level control, separate from provider/player volume.
+
+Display brightness:
+
+- display.brightness.get
+- display.brightness.set
+
+Requirements:
+- Capability-aware.
+- Internal/laptop displays supported where Windows exposes authoritative
+  brightness control.
+- External monitors only when genuinely supported.
+- Unsupported brightness must be unavailable/disabled honestly.
+- Never display a fake slider/state.
+
+B. CONTROL MODEL
+
+Orion Connect must distinguish:
+
+1. PLAYER CONTROLS
+2. PROVIDER-SURFACE CONTROLS
+3. PC / SYSTEM CONTROLS
+
+Example provider-only Cinema state:
+
+Playback startup:
+Provider controls only.
+
+Playback timing:
+Unavailable if provider does not expose it.
+
+PC Volume:
+Still available.
+
+PC Mute:
+Still available.
+
+Display Brightness:
+Available only when capability is advertised.
+
+Provider startup/volume/subtitle interaction:
+Handled through P11.3 surface routing.
+
+C. MUSIC PLANET
+
+Preserve and polish:
+- Play.
+- Pause.
+- Seek.
+- Previous / Next.
+- Queue/track selection where supported.
+- Volume / Mute.
+- Stop.
+- Correct track/context.
+- Correct pending-resolution behavior.
+- Truthful timing.
+
+D. SEEK SCRUBBING RECONCILIATION — CINEMA + MUSIC
+
+This is an explicit P11.4 requirement.
+
+Current observed issue:
+- Live timing is correct.
+- Final seek destination is correct.
+- While finger is actively dragging/holding a seek position, incoming
+  authoritative telemetry can temporarily move the thumb away from the user's
+  selected position before it settles.
+
+Required model:
+
+NORMAL:
+Desktop authoritative telemetry owns displayed progress.
+
+ACTIVE SCRUB:
+Local Mobile scrub position owns the thumb and displayed target time.
+
+During active scrub:
+- Incoming telemetry may continue to be received.
+- It must not visually fight the user's finger.
+- The progress thumb must not oscillate because of stale snapshots.
+
+SEEK COMMIT:
+- Bound/coalesce seek traffic.
+- Commit the final intended seek target.
+- Avoid flooding Desktop with unnecessary seek events.
+
+POST-SEEK RECONCILIATION:
+- Ignore/reconcile stale telemetry generated before the committed seek.
+- When authoritative Desktop telemetry confirms the new playback position,
+  return ownership smoothly to normal live telemetry.
+- No target -> old position -> target visual bounce.
+- Backward movement remains valid after a genuine user seek or legitimate
+  playback-state change.
+
+Apply to:
+- Music Planet.
+- Cinema sources where authoritative playback timing exists.
+
+Do not fabricate timing for provider-only sources.
+
+E. MOBILE ORION CONNECT UI/UX POLISH
+
+Improve the content/control region while preserving Orion's page identity.
+
+Required:
+- Better spacing between controls.
+- Better grouping and visual hierarchy.
+- More consistent button dimensions.
+- More consistent icon sizing.
+- Responsive portrait-phone layout.
+- Safe-area correctness.
+- Comfortable touch targets.
+- Long title/provider truncation.
+- No unnecessary layout jumps when playback capability changes.
+- Theme-aware behavior.
+- Compact PC Volume/Mute controls.
+- Capability-aware Display Brightness controls.
+- Trackpad proportions tuned for available viewport.
+- Now Playing content density tuned without harming readability.
+- Secondary controls separated cleanly from primary remote interactions.
+
+STRICT UI PRESERVATION RULE 1 — SEARCH FLOATER
+
+DO NOT:
+- redesign it
+- move it
+- merge it into another command grid
+- remove it
+
+The existing Search shortcut floater is intentionally preserved.
+
+STRICT UI PRESERVATION RULE 2 — FIXED PAGE TITLE LAYOUT
+
+DO NOT ALTER THE FIXED ORION PAGE TITLE / HEADER LAYOUT.
+
+Its:
+- positioning
+- dimensions
+- hierarchy
+- spacing identity
+- page-title visual language
+
+must remain intact.
+
+Reason:
+It matches Orion's shared identity across pages.
+
+P11.4 polish happens below/around this fixed layout without shifting or
+redesigning it.
+
+STRICT UI PRESERVATION RULE 3 — FEATURE NAME
+
+Menu/page navigation currently uses:
+Smart Connect
+
+Correct canonical name:
+Orion Connect
+
+Required P11.4 naming correction:
+Smart Connect -> Orion Connect
+
+Scope:
+- Navigation/page label correction only.
+- Page already uses Orion Connect.
+- Do not rename protocol internals merely because the visible menu label changes.
+
+============================================================
+P11.5 — BROAD VALIDATION + SIGNED CANDIDATE + PHASE LOCK
+============================================================
+
+Automated gates:
+- Broad Desktop tests.
+- Broad Mobile tests.
+- Protocol compatibility.
+- Desktop bindings.
+- IPC boundary preservation.
+- Distribution/version gates.
+- Production builds.
+- Integrity/signing checks.
+
+Physical acceptance:
+- Matched installed Desktop + Mobile candidate pair.
+- Cinema/provider scenarios.
+- Provider/WebView pointer routing.
+- Provider startup-control interaction.
+- Mini-player ownership/handoff.
+- Home / Back.
+- Stop/context clearing.
+- Source replacement.
+- Pending-operation cancellation where physically reproducible.
+- Music Planet controls.
+- Windows master volume/mute.
+- External Windows volume changes reflected on Mobile.
+- Display brightness where hardware supports it.
+- Multiple trusted phones.
+- Active-controller takeover.
+- Continuous gesture stress.
+- Interleaved reliable commands.
+- Orion Connect Mobile UX/device-size pass.
+- Light/dark/theme pass.
+- Search floater preservation.
+- Fixed page-title/header preservation.
+- Orion Connect navigation-label verification.
+- Seek scrubbing stability on Music and timed Cinema sources.
+
+Performance targets:
+- ordinary ack command RTT median <= 80 ms
+- ordinary ack command RTT p95 <= 250 ms
+- sampled pointer render-confirmation RTT p95 <= 150 ms
+- 2 minutes continuous gestures
+- >= 50 interleaved reliable commands
+- no unexplained timeout
+- no stuck Loading
+- no cursor catch-up backlog
+- playback/context transitions visible on Mobile within 1 second
+- idle remotes perform no unnecessary high-frequency work
+
+Never derive one-way latency by subtracting unsynchronized clocks.
+Do not silently relax performance targets.
+
+After successful P11.5:
+- Phase 11 completion audit.
+- Phase 11 lock.
+- Then Phase 12.
+
+============================================================
+PHASE 12 — FINAL ORION RELEASE VALIDATION
+============================================================
+
+Phase 12 remains final release qualification.
+
+It owns:
+- final signed release matrix
+- clean-device validation
+- final updater/install lifecycle
+- final release qualification
+
+Orion 3.0.0 remains reserved for final release only.
+
+Phase 11 does NOT authorize Orion 3.0 stable release.

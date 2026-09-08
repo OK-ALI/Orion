@@ -35,6 +35,7 @@ const allowedGlobals = new Set([
   "Map",
   "Math",
   "MediaSource",
+  "MouseEvent",
   "MutationObserver",
   "NaN",
   "Node",

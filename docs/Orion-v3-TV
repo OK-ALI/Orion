@@ -1,0 +1,402 @@
+# Orion TV v3.0 — Complete Plan
+
+## Executive Summary
+
+Orion TV is a **Tizen Web Application** for Samsung Smart TVs that runs the full Orion cinema/media experience on a 10-foot (lean-back) display. It is controlled **exclusively** via **Orion Connect on Mobile**, which will be restructured into **Orion Hub** — the centralized command center for Desktop, TV, and future devices.
+
+---
+
+## Architecture Decision: Build from Scratch vs. Reuse?
+
+### Verdict: **Hybrid — Heavy Reuse with a New TV Shell**
+
+We do **not** need to build from scratch. The existing architecture was designed for this expansion. Here's what we reuse and what's new:
+
+### ✅ Reuse Directly (70%+ of the work is already done)
+
+| Component | Current Location | Reuse For TV |
+|---|---|---|
+| **Smart Connect Protocol v3** | [`smartConnectProtocol.cjs`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/packages/shared/src/smartConnectProtocol.cjs) | TV ↔ Mobile communication (identical protocol) |
+| **Shared Types** | [`smartConnect.ts`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/packages/shared/src/types/smartConnect.ts) | All type definitions (envelopes, telemetry, commands) |
+| **Secure Identity / Trust** | [`secureIdentity.js`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/desktop/src/main/smartConnect/secureIdentity.js), [`secureTrust.js`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/desktop/src/main/smartConnect/secureTrust.js) | TV pairing & authentication (port to Node/Tizen) |
+| **Pairing Store** | [`pairingStore.js`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/desktop/src/main/smartConnect/pairingStore.js) | TV pairing session management |
+| **Controller Ownership** | [`controllerOwnership.js`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/desktop/src/main/smartConnect/controllerOwnership.js) | Multi-device controller arbitration |
+| **Reliable Command Scheduler** | [`reliableCommandScheduler.js`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/desktop/src/main/smartConnect/reliableCommandScheduler.js) | Command queueing/retry for TV |
+| **Service Advertisement (mDNS)** | [`serviceAdvertisement.js`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/desktop/src/main/smartConnect/serviceAdvertisement.js) | TV broadcasts as `orion-connect-tv` service |
+| **Cinema Block Rules** | [`cinemaBlockRules.cjs`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/packages/shared/cinemaBlockRules.cjs) | Source resolution for TV |
+| **Media Types / Sources** | [`media.ts`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/packages/shared/src/types/media.ts), [`sources/`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/packages/shared/src/sources) | Content catalog shared data |
+| **Mobile Connect Controller** | [`useConnectController.ts`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/mobile/src/features/connect/useConnectController.ts) | Hub will extend this to target Desktop OR TV |
+| **Mobile Discovery** | [`smartConnectDiscovery.ts`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/mobile/src/services/smartConnectDiscovery.ts) | Discover both Desktop AND TV on LAN |
+| **Portable Profile / Sync** | [`portableProfile.ts`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/packages/shared/src/types/portableProfile.ts) | Sync watch history, My List to TV |
+
+### 🆕 New Components Required (~30%)
+
+| Component | Purpose |
+|---|---|
+| **`apps/tv/`** | New Tizen web app — the TV shell |
+| **TV Connect Server** | WebSocket server running inside the TV app (mirrors Desktop's `smartConnectIpc.js`) |
+| **TV Renderer (10-foot UI)** | React-based lean-back UI with spatial navigation (D-pad/pointer) |
+| **TV Player** | HTML5 `<video>` player with Samsung AVPlay integration for DRM content |
+| **TV-specific command actions** | New actions: `tv.power`, `tv.input`, `tv.volume` (hardware CEC) |
+| **Orion Hub (Mobile restructure)** | Refactored connect layer to manage multiple device targets |
+
+---
+
+## Phase Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     ORION ECOSYSTEM v3.0                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────┐     ┌──────────────┐     ┌──────────────┐     │
+│  │  Desktop  │     │   Orion TV   │     │  Future Dev  │     │
+│  │ (Electron)│     │   (Tizen)    │     │  (Android TV)│     │
+│  │  :8924    │     │   :8925      │     │   :8925      │     │
+│  └─────┬────┘     └──────┬───────┘     └──────┬───────┘     │
+│        │                 │                     │             │
+│        │    Smart Connect Protocol v3          │             │
+│        │    (WSS + mDNS + Secure Pairing)      │             │
+│        │                 │                     │             │
+│        └────────┬────────┴─────────────────────┘             │
+│                 │                                            │
+│         ┌──────┴───────┐                                     │
+│         │  Orion Hub   │  ← Formerly "Orion Connect"         │
+│         │   (Mobile)   │     Central command for all devices │
+│         │  React Native│                                     │
+│         └──────────────┘                                     │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐     │
+│  │              @orion/shared (packages/shared)         │     │
+│  │  Protocol · Types · Sources · Cinema Rules           │     │
+│  └─────────────────────────────────────────────────────┘     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Naming Decision: "Orion Hub"**
+> The current plan renames the Mobile's `Orion Connect` feature to **"Orion Hub"** across the UI — the sidebar, the screen header, and all copy. The underlying module folders stay at `connect/` to avoid churn. Confirm if "Orion Hub" is the final name, or if you have a different branding in mind.
+
+> [!IMPORTANT]
+> **TV Port: 8925**
+> The plan assigns `port 8925` to TV's WebSocket server (Desktop is `8924`). This allows both Desktop and TV to run on the same LAN without collision, and the Mobile's discovery service can distinguish them by port + service type. Confirm this is acceptable.
+
+> [!IMPORTANT]
+> **Samsung Tizen Development Prerequisites**
+> To deploy to your Samsung 7 Series TV, you'll need:
+> 1. **Enable Developer Mode** on the TV (Apps → enter `12345` → set your PC's IP)
+> 2. **Install Tizen Studio** (or use a lightweight CLI via `tizen-cli` / SDB)
+> 3. **Create a Samsung developer certificate** (Author + Distributor certs tied to TV's DUID)
+> 
+> This is a one-time setup. The TV app is then pushed via WiFi using SDB. No Samsung Seller Office submission is needed for personal use.
+
+> [!WARNING]
+> **Samsung TV has NO physical remote for Orion**
+> The TV app's UI is designed for **Mobile-only control**. There is no built-in D-pad navigation fallback. If the Mobile disconnects, the TV shows a "Connect Orion Hub" pairing screen. This is by design per your spec, but worth confirming — Samsung Seller Office certification (if ever desired) would require D-pad navigation support.
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> **Q1: Content sources on TV — what should TV play?**
+> Desktop currently plays Cinema (streaming via embedded webviews/iframes), Local Video files, and Music. For TV:
+> - **Cinema streams** — Yes, these will work via HTML5 video player on TV
+> - **Local video** — Should TV support playing local files? (From USB? From network share? Or only Mobile-cast?)
+> - **Music** — Should the TV app include the Music Planet experience, or is TV strictly video?
+
+> [!IMPORTANT]
+> **Q2: Cast from Mobile?**
+> Should Mobile be able to "cast" content it's browsing directly to the TV? (e.g., user finds a movie on Mobile → taps "Play on TV" → TV starts playing). This is different from using Mobile purely as a remote for the TV's own browse UI.
+
+> [!IMPORTANT]
+> **Q3: Desktop ↔ TV interaction?**
+> Should Desktop be able to cast/send content to TV, or is TV completely independent from Desktop (both controlled only via Mobile Hub)?
+
+> [!IMPORTANT]
+> **Q4: TV Volume Control**
+> When Mobile controls "volume" on TV, should it:
+> - Control the **app-level** HTML5 video volume (software), OR
+> - Control the **TV hardware volume** via Samsung Tizen API (`tizen.tvaudiocontrol`)?
+> - Or both (a "TV Volume" and a "Media Volume" like we have system volume vs media volume on Desktop)?
+
+---
+
+## Proposed Changes
+
+### Phase 13.1 — Orion Hub (Mobile Restructure)
+
+The core Mobile restructure to support multi-device targeting. This is the foundation for everything else.
+
+---
+
+#### [MODIFY] [`useConnectController.ts`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/mobile/src/features/connect/useConnectController.ts)
+
+**Major refactor: Extract device-agnostic transport into a shared base, add device targeting.**
+
+- Add a `targetDevice` concept: `{ type: 'desktop' | 'tv', instanceId, host, port, name }`
+- Current Desktop-specific logic stays, but wrapped behind `targetDevice.type === 'desktop'` guards
+- New `targetDevice.type === 'tv'` path shares 95% of the socket/pairing/command logic
+- New state: `connectedDevices: Map<instanceId, DeviceConnection>` — Hub can be paired with multiple devices simultaneously
+- Active control targets one device at a time (the `activeTarget`)
+
+#### [NEW] `useHubDeviceManager.ts`
+
+**New hook that manages the multi-device registry above `useConnectController`.**
+
+- Persists paired devices list (Desktop + TV entries) in MMKV
+- Provides `switchActiveDevice(instanceId)` to change which device receives commands
+- Provides device status (online/offline/connected) for each paired device
+- Auto-reconnect logic for all paired devices (background keepalive)
+
+#### [MODIFY] [`UnifiedRemoteSurface.tsx`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/mobile/src/features/connect/UnifiedRemoteSurface.tsx)
+
+- Add a **device switcher strip** at the top: `[🖥 Desktop] [📺 TV]` tabs showing connected devices
+- When TV is the active target, hide Desktop-only controls (System Volume/Brightness) and show TV-specific controls
+- Touchpad, D-pad, Playback, Keyboard tabs remain — they work identically for both targets
+
+#### [MODIFY] [`ConnectScreen.tsx`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/mobile/src/features/connect/ConnectScreen.tsx)
+
+- Rename header from "Orion Connect" → "Orion Hub"
+- Show paired devices list with status indicators
+- "Add Device" button opens the pairing modal with device type selection (Desktop / TV)
+
+#### [MODIFY] [`SidebarDrawer.tsx`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/mobile/src/components/SidebarDrawer.tsx)
+
+- Rename sidebar item from "Orion Connect" → "Orion Hub"
+- Update icon to a hub/network icon
+
+#### [MODIFY] [`smartConnectDiscovery.ts`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/mobile/src/services/smartConnectDiscovery.ts)
+
+- Discovery now scans for **both** `orion-connect` (Desktop, port 8924) AND `orion-connect-tv` (TV, port 8925)
+- Results include a `deviceType: 'desktop' | 'tv'` field
+- Subnet scan probes both ports
+
+---
+
+### Phase 13.2 — Shared Protocol Extension
+
+---
+
+#### [MODIFY] [`smartConnect.ts`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/packages/shared/src/types/smartConnect.ts)
+
+- Add `SmartConnectDeviceType = 'desktop' | 'tv'`
+- Add TV-specific command actions: `'tv.power.off'`, `'tv.input.switch'`, `'tv.volume.set'`, `'tv.volume.mute'`, `'tv.cast.play'`, `'tv.cast.stop'`
+- Add `SmartConnectDeviceCapabilities` interface (what a device supports — e.g., TV has `tvHardwareVolume: true`, Desktop has `systemControl: true`)
+
+#### [MODIFY] [`smartConnectProtocol.cjs`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/packages/shared/src/smartConnectProtocol.cjs)
+
+- `normalizePlaybackTelemetry()` — add `deviceType` field
+- Add TV-specific surface values: `'tv-browse'`, `'tv-player'`, `'tv-screensaver'`
+
+---
+
+### Phase 13.3 — Orion TV App (New Tizen Web Application)
+
+This is the new `apps/tv/` workspace package. It's a **React web app** bundled as a Tizen `.wgt` widget.
+
+---
+
+#### [NEW] `apps/tv/package.json`
+
+```json
+{
+  "name": "@orion/tv",
+  "version": "3.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:tizen": "vite build && node scripts/package-tizen.js",
+    "deploy": "node scripts/deploy-tizen.js"
+  }
+}
+```
+
+- Uses **Vite** to bundle React + the TV UI
+- `build:tizen` produces a `.wgt` file for Samsung deployment
+- `deploy` pushes to TV via SDB
+
+#### [NEW] `apps/tv/config.xml`
+
+Tizen widget manifest declaring:
+- App ID, version, privileges (network access, TV audio control, TV input device, media playback)
+- Content entry: `index.html`
+- Samsung 7 Series resolution: `1920×1080` with responsive viewport meta
+
+#### [NEW] `apps/tv/src/main.jsx`
+
+React entry point for the TV app. Renders `<TVApp />`.
+
+#### [NEW] `apps/tv/src/app/TVApp.jsx`
+
+Root component with:
+- **TV Boot Screen** — "Waiting for Orion Hub" pairing display (shown when no mobile is connected)
+- **TV Home** — lean-back browsing UI (Cinema, Discover, Library, Music)
+- **TV Player** — full-screen media player
+- **TV Screensaver** — ambient mode when idle
+
+#### [NEW] `apps/tv/src/server/tvConnectServer.js`
+
+**The TV's WebSocket server** — this is the TV equivalent of Desktop's [`smartConnectIpc.js`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/desktop/src/main/ipc/smartConnectIpc.js):
+
+- Runs an **HTTPS + WSS** server on port `8925` inside the TV app
+- Handles pairing (PIN displayed on TV screen, entered on Mobile)
+- Authenticates secure socket connections from Mobile
+- Dispatches commands to the TV renderer (navigate, play, seek, volume, etc.)
+- Broadcasts playback telemetry back to Mobile
+- Reuses: `secureIdentity`, `secureTrust`, `pairingStore`, `controllerOwnership`, `reliableCommandScheduler` — all ported/imported from shared
+
+> [!NOTE]
+> Samsung Tizen web apps run in a WebKit-based browser environment. They support WebSocket, WebCrypto, and HTTPS via `fetch`. The server-side WebSocket will run via a **lightweight embedded WS server** within the Tizen app's service worker / background page, or via a Tizen Hybrid app with a native service component.
+
+#### [NEW] `apps/tv/src/server/tvPlaybackDispatch.js`
+
+TV equivalent of [`playbackDispatch.js`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/apps/desktop/src/main/smartConnect/playbackDispatch.js):
+- Routes playback commands to the TV's HTML5 video player
+- Routes TV hardware commands to Tizen APIs (`tizen.tvaudiocontrol`, `tizen.tvdisplaycontrol`)
+
+#### [NEW] `apps/tv/src/ui/TVNavigation.jsx`
+
+Spatial navigation system for the TV UI:
+- Focus management driven by Mobile pointer/D-pad commands
+- Visual focus ring indicator
+- Smooth scrolling and page transitions optimized for 10-foot viewing
+
+#### [NEW] `apps/tv/src/ui/TVBrowse.jsx`
+
+Lean-back browsing experience:
+- Large card carousels (Cinema, Trending, My List)
+- Hero banner with auto-play trailers
+- Responsive grid that scales from 55" Samsung to various Android TV sizes
+
+#### [NEW] `apps/tv/src/ui/TVPlayer.jsx`
+
+Full-screen media player:
+- HTML5 `<video>` with Samsung AVPlay fallback for DRM content
+- Overlay HUD controlled from Mobile (scrubber position synced via telemetry)
+- Subtitle rendering
+- Quality/speed selection
+
+#### [NEW] `apps/tv/src/ui/TVPairingScreen.jsx`
+
+"Connect Orion Hub" screen:
+- Shows a 6-digit PIN code + QR code (same pairing flow as Desktop)
+- Animated Orion branding
+- Instructions: "Open Orion Hub on your phone → Add Device → TV"
+
+#### [NEW] `apps/tv/src/styles/tv.css`
+
+TV-specific design system:
+- Large typography (minimum 28px body text for 10-foot readability)
+- High-contrast colors for ambient lighting conditions
+- Safe area margins (TV overscan zones — typically 5% margins)
+- Responsive breakpoints for different TV sizes (720p, 1080p, 4K)
+
+---
+
+### Phase 13.4 — Responsive TV Layout System
+
+Design specifically for your Samsung 7 Series (55") and future Android TVs.
+
+---
+
+#### [NEW] `apps/tv/src/styles/responsive.css`
+
+```
+/* Base: 1080p (1920×1080) — Samsung 7 Series */
+/* Scale: 720p for older/smaller TVs */
+/* Scale: 4K for premium displays */
+/* Safe area: 5% margins on all sides */
+```
+
+- Uses `vw`/`vh` units with CSS custom properties for scale factors
+- Card sizes, font sizes, spacing all defined as design tokens
+- Tested breakpoints:
+  - `1280×720` (720p — small/budget TVs)
+  - `1920×1080` (1080p — Samsung 7 Series target)
+  - `3840×2160` (4K — future premium TVs)
+
+---
+
+### Phase 13.5 — Android TV Future-Proofing
+
+The TV app is built as a **standard web app** (React + Vite). For Android TV deployment later:
+
+- Android TV supports **WebView-based apps** via a thin Android shell (similar to Capacitor/Cordova)
+- The same React codebase runs inside an Android WebView
+- Or: we build a React Native for TV variant (using `react-native-tvos` / Android TV extensions)
+- The Smart Connect server code is identical — just the packaging differs
+
+> [!NOTE]
+> No Android TV code is written in this phase. The architecture is designed so that when the time comes, we wrap the same `apps/tv/` web app in an Android WebView shell, or create `apps/tv-android/` as a thin native wrapper.
+
+---
+
+### Phase 13.6 — Integration & Workspace Config
+
+---
+
+#### [MODIFY] [`package.json`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/package.json) (root)
+
+- Add `"apps/tv"` to workspaces array
+
+#### [MODIFY] [`turbo.json`](file:///c:/Projects/Orion%20-%20A%20Multiverse%20of%20Stories/turbo.json)
+
+- Include TV in build/test/check pipelines
+
+#### [NEW] `apps/tv/scripts/package-tizen.js`
+
+Build script that:
+1. Runs `vite build` → produces `dist/`
+2. Generates `config.xml` with correct version
+3. Packages into `.wgt` using Tizen CLI
+4. Signs with developer certificate
+
+#### [NEW] `apps/tv/scripts/deploy-tizen.js`
+
+Deployment script that:
+1. Connects to TV via SDB (using TV's IP)
+2. Installs the `.wgt` package
+3. Launches the app
+
+---
+
+## Implementation Order
+
+| Phase | Deliverable | Effort |
+|---|---|---|
+| **13.1** | Orion Hub (Mobile restructure) | 2-3 sessions |
+| **13.2** | Shared protocol extensions | 1 session |
+| **13.3** | Orion TV app scaffold + Connect server | 3-4 sessions |
+| **13.4** | TV UI (Browse, Player, Pairing, Responsive) | 3-4 sessions |
+| **13.5** | Integration, testing on Samsung 7 Series | 1-2 sessions |
+| **13.6** | Release v3.0 TV + Hub v3.1 | 1 session |
+
+**Total: ~11-15 sessions** (Phase 13)
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- `npm run check` in `apps/tv/` — builds Vite bundle, runs unit tests
+- `npm run check` in `apps/mobile/` — verifies Hub restructure doesn't break existing Desktop connect
+- `npm run check` in `packages/shared/` — validates protocol extensions
+- Smart Connect protocol compatibility test: Desktop ↔ Mobile still works after Hub changes
+
+### Manual Verification
+1. **Mobile → Desktop** (regression): Verify Orion Hub can still pair with and control Desktop exactly as before
+2. **Mobile → TV**: Pair Hub with Samsung 7 Series, verify:
+   - PIN pairing flow works
+   - Touchpad controls TV cursor
+   - D-pad navigates TV UI
+   - Playback controls work (play/pause, seek, volume)
+   - Telemetry syncs back to Hub
+3. **Device switching**: Connect Hub to both Desktop AND TV simultaneously, switch between them
+4. **Responsive**: Test TV UI at 1080p (Samsung 7 Series) and simulate 720p/4K viewports
+5. **Signed release**: Build TV `.wgt`, deploy to Samsung via SDB, verify production behavior

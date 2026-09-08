@@ -55,6 +55,7 @@ function dispatchPlaybackCommand(command, socket, pendingCommands, notify, ordin
 }
 
 function initSystemControlBroadcasting(getConnectedSockets, sendSocket) {
+  systemControl.init();
   systemControl.onSystemVolumeChanged((snap) => {
     try {
       const sockets = typeof getConnectedSockets === "function" ? getConnectedSockets() : getConnectedSockets;

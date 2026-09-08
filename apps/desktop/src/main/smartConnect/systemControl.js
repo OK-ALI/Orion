@@ -48,14 +48,15 @@ function ensureDaemon() {
         try {
           const parsed = JSON.parse(trimmed);
           if (parsed.status === "ready") {
+            cachedState.initialized = true;
+            void getSystemVolume();
+            void getDisplayBrightness();
             continue;
           }
           if (parsed.event === "volume_changed") {
             cachedState.volume = Number(parsed.volume) || 0;
             cachedState.muted = Boolean(parsed.muted);
-            for (const listener of volumeListeners) {
-              try { listener(cachedState); } catch {}
-            }
+            notifyListeners();
             continue;
           }
           const next = requestQueue.shift();
@@ -120,12 +121,20 @@ function sendDaemonCommand(commandLine) {
   });
 }
 
+function notifyListeners() {
+  const snap = getSystemSnapshot();
+  for (const listener of volumeListeners) {
+    try { listener(snap); } catch {}
+  }
+}
+
 async function getSystemVolume() {
   const result = await sendDaemonCommand("volume get");
   if (result?.ok) {
     cachedState.volume = Number(result.volume) || 0;
     cachedState.muted = Boolean(result.muted);
     cachedState.initialized = true;
+    notifyListeners();
   }
   return result;
 }
@@ -136,6 +145,7 @@ async function setSystemVolume(percent) {
   if (result?.ok) {
     cachedState.volume = Number(result.volume) || safePercent;
     cachedState.muted = Boolean(result.muted);
+    notifyListeners();
   }
   return result;
 }
@@ -146,6 +156,7 @@ async function setSystemMute(mode) {
   if (result?.ok) {
     cachedState.volume = Number(result.volume) || cachedState.volume;
     cachedState.muted = Boolean(result.muted);
+    notifyListeners();
   }
   return result;
 }
@@ -157,6 +168,7 @@ async function getDisplayBrightness() {
     if (result.supported && result.brightness != null) {
       cachedState.brightness = Number(result.brightness);
     }
+    notifyListeners();
   }
   return result;
 }
@@ -167,6 +179,7 @@ async function setDisplayBrightness(percent) {
   if (result?.ok && result.supported) {
     cachedState.brightness = safePercent;
     cachedState.brightnessSupported = true;
+    notifyListeners();
   }
   return result;
 }
@@ -195,7 +208,12 @@ if (app) {
   app.once("before-quit", stopSystemControl);
 }
 
+function init() {
+  ensureDaemon();
+}
+
 module.exports = {
+  init,
   getSystemVolume,
   setSystemVolume,
   setSystemMute,

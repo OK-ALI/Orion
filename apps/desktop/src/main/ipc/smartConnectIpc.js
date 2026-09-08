@@ -27,7 +27,7 @@ const ATTEMPT_WINDOW_MS = PIN_TTL_MS;
 const LOCKOUT_MS = 2 * 60 * 1000;
 const ALLOWED_REMOTE_ORIGIN = "orion://mobile";
 const COMMAND_RATE_WINDOW_MS = 1000;
-const REALTIME_IPC_COALESCE_MS = 8;
+const REALTIME_IPC_COALESCE_MS = 4;
 
 let server = null;
 let socketServer = null;
@@ -307,6 +307,9 @@ function configureSockets() {
     if (currentContext) sendSocket(socket, "context", session.deviceId, currentContext);
     if (currentPlayback) sendSocket(socket, "telemetry", session.deviceId, currentPlayback);
     sendSocket(socket, "system_status", session.deviceId, systemControl.getSystemSnapshot());
+    void Promise.all([systemControl.getSystemVolume(), systemControl.getDisplayBrightness()]).then(() => {
+      sendSocket(socket, "system_status", session.deviceId, systemControl.getSystemSnapshot());
+    }).catch(() => {});
     notifyConnectionStatus();
     socket.on("message", async (raw) => {
       let envelope;

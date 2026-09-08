@@ -1,9 +1,9 @@
 export const REMOTE_POINTER_VISUAL_SETTLE_PX = 0.35;
 
 const MAX_FRAME_DELTA_MS = 34;
-const SMALL_MOTION_TAU_MS = 9;
-const MEDIUM_MOTION_TAU_MS = 7;
-const FAST_MOTION_TAU_MS = 5.5;
+const SMALL_MOTION_TAU_MS = 6;
+const MEDIUM_MOTION_TAU_MS = 5;
+const FAST_MOTION_TAU_MS = 4;
 
 export function clampRemotePointerRatio(value) {
   const numeric = Number(value);

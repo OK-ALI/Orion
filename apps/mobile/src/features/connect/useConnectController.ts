@@ -99,7 +99,7 @@ export function useConnectController() {
   }>());
   const sendCommandRef = useRef<(cmd: string, value?: any) => Promise<any>>(async () => ({ ok: false, error: 'Remote transport is not ready.' }));
   const fireAndForgetRef = useRef<(cmd: string, value?: any) => void>(() => {});
-  const { clearPendingPointer, cursorRef, isPointerGestureActive, panResponder, onTouchpadLayout, pointerMode, setPointerMode, updatePointerHealth } = useRemotePointer(fireAndForgetRef, sendCommandRef);
+  const { clearPendingPointer, cursorRef, isPointerGestureActive, panResponder, scrollPanResponder, onTouchpadLayout, pointerMode, setPointerMode, updatePointerHealth } = useRemotePointer(fireAndForgetRef, sendCommandRef);
   const { latency, remoteContext, setRemoteContext, telemetry, ingestTelemetry, isScrubbing, setIsScrubbing, markSent, forgetSent, recordAck } = useLiveTelemetry(setNowPlaying);
 
   useEffect(() => {
@@ -510,7 +510,7 @@ export function useConnectController() {
       { id: 'library', label: 'Library', icon: 'library-outline' }, { id: 'downloads', label: 'Downloads', icon: 'download-outline' },
       { id: 'music-home', label: 'Music', icon: 'musical-notes-outline' }, { id: 'settings', label: 'Settings', icon: 'settings-outline' },
     ],
-    pairError, pairingMethod, panResponder, pinCode, pulseAnim, qrNotice, remoteError, remoteText,
+    pairError, pairingMethod, panResponder, scrollPanResponder, pinCode, pulseAnim, qrNotice, remoteError, remoteText,
     requestCameraPermission, scanLineAnim, searchTarget, sendRemoteCommand, setActiveTab,
     setCurrentSpeedIndex, setQrNotice, setDesktopIp, setNavFocusMode, setPairingMethod, setPinCode,
     setRemoteText, setSearchTarget, setShowDisconnectModal, setShowPairingModal, showDisconnectModal,

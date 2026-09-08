@@ -248,12 +248,12 @@ test("pop-out visual cursor remains non-interactive, latest-target-only, and cle
   assert.doesNotMatch(preloadSource, /remoteCursor(?:Queue|History|Points)/);
   assert.match(smoothingSource, /REMOTE_POINTER_VISUAL_SETTLE_PX\s*=\s*0\.35/);
   assert.match(smoothingSource, /MAX_FRAME_DELTA_MS\s*=\s*34/);
-  assert.match(smoothingSource, /SMALL_MOTION_TAU_MS\s*=\s*9/);
-  assert.match(smoothingSource, /MEDIUM_MOTION_TAU_MS\s*=\s*7/);
-  assert.match(smoothingSource, /FAST_MOTION_TAU_MS\s*=\s*5\.5/);
+  assert.match(smoothingSource, /SMALL_MOTION_TAU_MS\s*=\s*6/);
+  assert.match(smoothingSource, /MEDIUM_MOTION_TAU_MS\s*=\s*5/);
+  assert.match(smoothingSource, /FAST_MOTION_TAU_MS\s*=\s*4/);
   assert.match(preloadSource, /REMOTE_CURSOR_SETTLE_PX\s*=\s*0\.35/);
   assert.match(preloadSource, /Math\.min\(34,/);
-  assert.match(preloadSource, /distance\s*>=\s*180\s*\?\s*5\.5\s*:\s*distance\s*>=\s*72\s*\?\s*7\s*:\s*9/);
+  assert.match(preloadSource, /distance\s*>=\s*180\s*\?\s*4\s*:\s*distance\s*>=\s*72\s*\?\s*5\s*:\s*6/);
 
   assert.match(rendererSource, /target\.route\?\.kind\s*===\s*"detached"/);
   assert.match(rendererSource, /mainCursor\.style\.opacity\s*=\s*"0"/);
