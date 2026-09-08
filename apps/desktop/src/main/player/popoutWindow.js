@@ -397,7 +397,19 @@ function createPopoutWindowController({
     ipcMain.handle("popout-control", (_event, action, value) => controlPlayback(action, value));
   };
 
-  return { close, controlPlayback, isOpen, register };
+  const getWebContentsId = () =>
+    isOpen() ? Number(popoutWindow.webContents.id) || null : null;
+  const ownsWebContents = (contents) =>
+    Boolean(isOpen() && contents && Number(contents.id) === getWebContentsId());
+
+  return {
+    close,
+    controlPlayback,
+    getWebContentsId,
+    isOpen,
+    ownsWebContents,
+    register,
+  };
 }
 
 module.exports = { createPopoutWindowController };

@@ -49,6 +49,7 @@ import MediaCard from "../../../components/media/MediaCard";
 import VoiceBoostIcon from "../../../components/media/VoiceBoostIcon";
 import { setupAmbientGlow } from "../../../shared/utils/playerAmbient";
 import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
+import { registerRemotePointerSurface } from "../../player/services/remotePointerSurfaces";
 import { describeCinemaSourceHealth, useCinemaSourceHealth } from "../../player/hooks/useCinemaSourceHealth";
 import {
   storage,
@@ -67,6 +68,16 @@ import {
 export default function MoviePlayer({ model }) {
   const { d, ambientColor, blockedSession, displayPct, dubMode, handleFailoverNextSource, isUnreleased, item, m3u8Url, menuPos, movieDownload, onBack, onGoToDownloads, onOpenMiniPlayer, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progressKey, progressLabel, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, revealPlayerControls, saveProgress, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, sourceRef, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
   const sourceHealthRecords = useCinemaSourceHealth("movie", showSourceMenu || playing);
+  useEffect(() => {
+    if (!playing || restricted || isUnreleased || pipOpen) return undefined;
+    return registerRemotePointerSurface({
+      id: `movie-provider:${item?.id ?? "active"}`,
+      kind: "webview",
+      priority: 120,
+      getElement: () => webviewRef.current,
+      getWebContentsId: () => getReadyWebContentsId(webviewRef.current),
+    });
+  }, [playing, restricted, isUnreleased, pipOpen, item?.id, webviewRef]);
   return (
 <>
 {playing && !restricted && !isUnreleased && (

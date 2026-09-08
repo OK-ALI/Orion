@@ -17,10 +17,30 @@ const {
   normalizeSha256,
   verifyDownloadedUpdate,
 } = require("../updates/integrity");
+const { createPointerInputRouter } = require("./pointerInput");
 
 let _updateAbortController = null;
 
-function register(getMainWindow, { writeSecretMigration }) {
+function register(getMainWindow, { writeSecretMigration, getPopoutController } = {}) {
+  const { webContents } = require("electron");
+  const pointerInput = createPointerInputRouter({
+    getMainWindow,
+    resolveWebContentsById: (id) => webContents.fromId(Number(id)),
+    isTrustedDetachedTarget: (sender, target) => {
+      const mainWindow = getMainWindow?.();
+      if (!mainWindow || mainWindow.isDestroyed?.() || mainWindow.webContents?.id !== sender?.id) {
+        return false;
+      }
+      return Boolean(getPopoutController?.()?.ownsWebContents?.(target));
+    },
+  });
+
+  ipcMain.on("player:pointer-move", (event, payload) => {
+    pointerInput.move(event.sender, payload);
+  });
+  ipcMain.handle("player:pointer-click", (event, payload) =>
+    pointerInput.click(event.sender, payload),
+  );
   ipcMain.handle("player:renderer-webcontents-id", (event) => event.sender.id);
   ipcMain.handle(
     "open-path-at-time",

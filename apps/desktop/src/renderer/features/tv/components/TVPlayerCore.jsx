@@ -1,80 +1,44 @@
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, memo } from "react";
+import { EPISODE_GROUP_IDS, applyEpisodeMapping, buildEpisodeGroupMap } from "../../../shared/utils/episodeMappings";
 import {
-  useState,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useMemo,
-  useCallback,
-  memo,
-} from "react";
-import {
-  EPISODE_GROUP_IDS,
-  applyEpisodeMapping,
-  buildEpisodeGroupMap,
-} from "../../../shared/utils/episodeMappings";
-import {
-  tmdbFetch,
-  imgUrl,
-  PLAYER_SOURCES,
-  getSourceUrl,
-  sourceSupportsProgress,
-  sourceProgressViaFrames,
-  sourceIsAsync,
-  fetchAnilistData,
-  fetchEpisodeGroup,
-  buildAnilistSeasons,
-  cleanAnilistDescription,
-  isAnimeContent,
-  ANIME_DEFAULT_SOURCE,
-  NON_ANIME_DEFAULT_SOURCE,
-  NEEDS_INTERCEPT,
-  getNextNonAsyncSource,
+  tmdbFetch, imgUrl, PLAYER_SOURCES, getSourceUrl, sourceSupportsProgress,
+  sourceProgressViaFrames, sourceIsAsync, fetchAnilistData, fetchEpisodeGroup,
+  buildAnilistSeasons, cleanAnilistDescription, isAnimeContent, ANIME_DEFAULT_SOURCE,
+  NON_ANIME_DEFAULT_SOURCE, NEEDS_INTERCEPT, getNextNonAsyncSource,
 } from "../../../services/tmdb";
 import {
-  BookmarkIcon,
-  BookmarkFillIcon,
-  BackIcon,
-  StarIcon,
-  PlayIcon,
-  TVIcon,
-  DownloadIcon,
-  WatchedIcon,
-  TrailerIcon,
-  RatingShieldIcon,
-  RatingLockIcon,
-  SourceIcon,
-  ShieldBlockIcon,
-  PopOutIcon,
-  MiniPlayerIcon,
+  BookmarkIcon, BookmarkFillIcon, BackIcon, StarIcon, PlayIcon, TVIcon,
+  DownloadIcon, WatchedIcon, TrailerIcon, RatingShieldIcon, RatingLockIcon,
+  SourceIcon, ShieldBlockIcon, PopOutIcon, MiniPlayerIcon,
 } from "../../../components/common/Icons";
 import { setupAmbientGlow } from "../../../shared/utils/playerAmbient";
 import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
+import { registerRemotePointerSurface } from "../../player/services/remotePointerSurfaces";
 import { describeCinemaSourceHealth, useCinemaSourceHealth } from "../../player/hooks/useCinemaSourceHealth";
 import DownloadModal from "../../../components/DownloadModal";
 import TrailerModal from "../../../components/TrailerModal";
 import BlockedStatsModal from "../../../components/BlockedStatsModal";
 import { formatDate } from "../../../shared/utils/date";
 import { useBlockedStats } from "../../../shared/utils/useBlockedStats";
-import {
-  storage,
-  STORAGE_KEYS,
-  getFailoverSource,
-  setFailoverSource,
-  clearFailoverSource,
-} from "../../../services/settingsStore";
+import { storage, STORAGE_KEYS, getFailoverSource, setFailoverSource, clearFailoverSource } from "../../../services/settingsStore";
 import { useAutoplay } from "../../../shared/utils/useAutoplay";
 import { fetchAniSkipTimings } from "../../../shared/utils/aniSkip";
-import {
-  fetchTVRating,
-  isRestricted,
-  getAgeLimitSetting,
-  getRatingCountry,
-} from "../../../shared/utils/ageRating";
+import { fetchTVRating, isRestricted, getAgeLimitSetting, getRatingCountry } from "../../../shared/utils/ageRating";
 import { ContextMenu, EpisodeDesc, PartialCircleIcon, VoiceBoostIcon } from "./EpisodeUi";
 
 export default function TVPlayerCore({ model }) {
   const { autoplayCountdown, autoplayNextLayout, blockedSession, cancelAutoplay, currentEpDownload, currentEpWatched, currentProgressKey, dubMode, handleFailoverNextSource, handleManualSkip, isAnime, isAsync, item, m3u8Url, menuPos, nextEp, onBack, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, prevEp, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, revealPlayerControls, selectedEp, selectedSeason, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, skipPrompt, sourceHealth, sourceRef, supportsProgress, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
   const sourceHealthRecords = useCinemaSourceHealth("tv", showSourceMenu || Boolean(selectedEp));
+  useEffect(() => {
+    if (!playerEp || pipOpen) return undefined;
+    return registerRemotePointerSurface({
+      id: `tv-provider:${item?.id ?? "active"}:${playerEp?.season ?? "s"}:${playerEp?.episode ?? "e"}`,
+      kind: "webview",
+      priority: 120,
+      getElement: () => webviewRef.current,
+      getWebContentsId: () => getReadyWebContentsId(webviewRef.current),
+    });
+  }, [playerEp, pipOpen, item?.id, webviewRef]);
   return (
 <>
 <div

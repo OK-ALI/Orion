@@ -23,7 +23,7 @@ export function useRemotePointer(
   const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRealtimeSendAtRef = useRef(0);
   const frameIntervalRef = useRef(33);
-  const policyRef = useRef({ activeRateHz: 30 as 24 | 30 | 40, rttClass: 'moderate', backpressure: 'clear', coalescedUpdates: 0, droppedUpdates: 0 });
+  const policyRef = useRef({ activeRateHz: 30 as 24 | 30 | 40 | 60, rttClass: 'moderate', backpressure: 'clear', coalescedUpdates: 0, droppedUpdates: 0 });
   const gestureWasMultiTouchRef = useRef(false);
   const [pointerMode, setPointerMode] = useState<'relative' | 'absolute'>('relative');
   const [isPointerGestureActive, setIsPointerGestureActive] = useState(false);
@@ -89,7 +89,7 @@ export function useRemotePointer(
     const age = Number(health.telemetryAgeMs);
     const constrained = health.backpressured || (Number.isFinite(rtt) && rtt > 180) || (Number.isFinite(age) && age > 1500);
     const healthy = !constrained && (!Number.isFinite(rtt) || rtt <= 80) && (!Number.isFinite(age) || age <= 900);
-    const rate = constrained ? 24 : healthy ? 40 : 30;
+    const rate = constrained ? 24 : healthy ? 60 : 30;
     frameIntervalRef.current = Math.round(1000 / rate);
     policyRef.current.activeRateHz = rate;
     policyRef.current.rttClass = constrained ? 'constrained' : healthy ? 'healthy' : 'moderate';

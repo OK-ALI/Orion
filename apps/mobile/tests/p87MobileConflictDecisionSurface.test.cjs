@@ -3,8 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const mobileRoot = path.resolve(__dirname, '..');
+
 function read(relative) {
-  return fs.readFileSync(path.join(process.cwd(), relative), 'utf8');
+  return fs.readFileSync(path.join(mobileRoot, relative), 'utf8');
 }
 
 test('P8.7 Mobile exposes explicit device-or-cloud decisions for every reviewable steady-state conflict domain', () => {

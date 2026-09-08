@@ -3,6 +3,7 @@ import { CloseIcon, MiniPlayerIcon, PopOutIcon } from "../../../components/commo
 import { storage, STORAGE_KEYS } from "../../../services/settingsStore";
 import { handleNativePlayerKey } from "../../player/services/nativeKeyboard";
 import { observePlaybackEvidence } from "../../player/services/playerEventProgress";
+import { registerRemotePointerSurface } from "../../player/services/remotePointerSurfaces";
 import { markHistoryPlaybackVerified, persistPlaybackProgressDetails } from "../../../services/viewingStateVerification";
 
 function progressKey(media) {
@@ -28,6 +29,16 @@ export default function LocalPlayer({
   const [error, setError] = useState("");
   const [ambientColors, setAmbientColors] = useState(["#6d3bd1", "#168aa4"]);
   const key = useMemo(() => media ? progressKey(media) : null, [media]);
+
+  useEffect(() => {
+    if (!media) return undefined;
+    return registerRemotePointerSurface({
+      id: `local-player:${download.id}`,
+      kind: "renderer",
+      priority: 220,
+      getElement: () => videoRef.current,
+    });
+  }, [download.id, media]);
 
   useEffect(() => {
     playbackEvidenceRef.current = { lastTime: null, advances: 0, ready: false };

@@ -14,10 +14,245 @@ contextBridge.exposeInMainWorld("electronPopout", {
 // ---------------------------------------------------------------------------
 
 const BAR_H = 44;
+const REMOTE_CURSOR_INACTIVITY_MS = 4_000;
+const REMOTE_CURSOR_MAX_SIGNAL_AGE_MS = 250;
+const REMOTE_CURSOR_SETTLE_PX = 0.35;
+const REMOTE_CURSOR_CHANNEL = "popout-remote-pointer";
+
+let remoteCursorTarget = null;
+let remoteCursorPosition = null;
+let remoteCursorFrameAt = 0;
+let remoteCursorRaf = null;
+let remoteCursorInactivityTimer = null;
+let remoteCursorPressedTimer = null;
 
 function css(el, styles) {
   Object.assign(el.style, styles);
 }
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function injectRemoteCursorStyle() {
+  if (document.getElementById("__orion_remote_cursor_style__")) return;
+  const style = document.createElement("style");
+  style.id = "__orion_remote_cursor_style__";
+  style.textContent = `
+    #__orion_remote_cursor__ {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      pointer-events: none !important;
+      z-index: 2147483647;
+      will-change: transform;
+      contain: layout style;
+      opacity: 0;
+      transition: opacity 90ms linear;
+    }
+    #__orion_remote_cursor__::before {
+      content: "";
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      left: -9px;
+      top: -9px;
+      border: 1px solid rgba(255, 86, 94, 0.72);
+      border-radius: 50%;
+      background: rgba(229, 9, 20, 0.14);
+      box-shadow: 0 0 9px rgba(229, 9, 20, 0.24);
+      opacity: 0.5;
+      transform: scale(0.82);
+      transition: opacity 90ms ease, transform 90ms ease;
+    }
+    #__orion_remote_cursor__ > span {
+      position: absolute;
+      top: -1px;
+      left: -1px;
+      width: 18px;
+      height: 23px;
+      background: #e50914;
+      clip-path: polygon(5% 0, 82% 57%, 53% 60%, 69% 93%, 53% 100%, 36% 65%, 15% 87%);
+      filter: drop-shadow(0 1px 1px rgba(0,0,0,0.82)) drop-shadow(0 0 4px rgba(229,9,20,0.36));
+      transform-origin: 2px 2px;
+      transition: transform 80ms ease, filter 90ms ease;
+    }
+    #__orion_remote_cursor__.is-pressed::before {
+      opacity: 0.9;
+      transform: scale(0.7);
+    }
+    #__orion_remote_cursor__.is-pressed > span {
+      transform: scale(0.78);
+      filter: drop-shadow(0 0 7px rgba(255,86,94,0.9));
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #__orion_remote_cursor__,
+      #__orion_remote_cursor__::before,
+      #__orion_remote_cursor__ > span { transition: none; }
+    }
+  `;
+  (document.head || document.documentElement)?.appendChild(style);
+}
+
+function getOrCreateRemoteCursor() {
+  injectRemoteCursorStyle();
+  let cursor = document.getElementById("__orion_remote_cursor__");
+  if (!cursor && document.body) {
+    cursor = document.createElement("div");
+    cursor.id = "__orion_remote_cursor__";
+    const glyph = document.createElement("span");
+    cursor.appendChild(glyph);
+    document.body.appendChild(cursor);
+  }
+  return cursor;
+}
+
+function prefersReducedRemoteCursorMotion() {
+  try {
+    return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+  } catch {
+    return false;
+  }
+}
+
+function normalizeRemoteCursorPoint(payload = {}) {
+  const maxX = Math.max(0, (Number(window.innerWidth) || 1) - 1);
+  const maxY = Math.max(0, (Number(window.innerHeight) || 1) - 1);
+  const rawX = Number(payload.x);
+  const rawY = Number(payload.y);
+  return {
+    x: clamp(Number.isFinite(rawX) ? rawX : 0, 0, maxX),
+    y: clamp(Number.isFinite(rawY) ? rawY : 0, 0, maxY),
+    receivedAt: performance.now(),
+  };
+}
+
+function stepRemoteCursorVisual(current, target, deltaMs) {
+  if (!target) return { position: current || null, settled: true };
+  if (!current || prefersReducedRemoteCursorMotion()) {
+    return { position: { x: target.x, y: target.y }, settled: true };
+  }
+
+  const dx = target.x - current.x;
+  const dy = target.y - current.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance <= REMOTE_CURSOR_SETTLE_PX) {
+    return { position: { x: target.x, y: target.y }, settled: true };
+  }
+
+  const boundedDelta = Math.max(1, Math.min(34, Number(deltaMs) || 16.67));
+  const tauMs = distance >= 180 ? 5.5 : distance >= 72 ? 7 : 9;
+  const alpha = 1 - Math.exp(-boundedDelta / tauMs);
+  const x = current.x + dx * alpha;
+  const y = current.y + dy * alpha;
+  const remaining = Math.hypot(target.x - x, target.y - y);
+  if (remaining <= REMOTE_CURSOR_SETTLE_PX) {
+    return { position: { x: target.x, y: target.y }, settled: true };
+  }
+  return { position: { x, y }, settled: false };
+}
+
+function applyRemoteCursorVisual(position) {
+  const cursor = getOrCreateRemoteCursor();
+  if (!cursor || !position) return;
+  cursor.style.transform = `translate3d(${position.x}px, ${position.y}px, 0)`;
+  cursor.style.opacity = "1";
+}
+
+function clearRemoteCursorVisual() {
+  remoteCursorTarget = null;
+  remoteCursorPosition = null;
+  remoteCursorFrameAt = 0;
+
+  if (remoteCursorRaf) {
+    cancelAnimationFrame(remoteCursorRaf);
+    remoteCursorRaf = null;
+  }
+  if (remoteCursorInactivityTimer) {
+    clearTimeout(remoteCursorInactivityTimer);
+    remoteCursorInactivityTimer = null;
+  }
+  if (remoteCursorPressedTimer) {
+    clearTimeout(remoteCursorPressedTimer);
+    remoteCursorPressedTimer = null;
+  }
+
+  const cursor = document.getElementById("__orion_remote_cursor__");
+  if (cursor) {
+    cursor.style.opacity = "0";
+    cursor.classList.remove("is-pressed");
+  }
+}
+
+function scheduleRemoteCursorInactivityCleanup() {
+  if (remoteCursorInactivityTimer) clearTimeout(remoteCursorInactivityTimer);
+  remoteCursorInactivityTimer = setTimeout(() => {
+    remoteCursorInactivityTimer = null;
+    clearRemoteCursorVisual();
+  }, REMOTE_CURSOR_INACTIVITY_MS);
+}
+
+function renderRemoteCursorFrame(timestamp) {
+  remoteCursorRaf = null;
+  if (!remoteCursorTarget) return;
+
+  const frameAt = Number.isFinite(Number(timestamp)) ? Number(timestamp) : performance.now();
+  const deltaMs = remoteCursorFrameAt > 0 ? frameAt - remoteCursorFrameAt : 16.67;
+  remoteCursorFrameAt = frameAt;
+
+  const result = stepRemoteCursorVisual(remoteCursorPosition, remoteCursorTarget, deltaMs);
+  remoteCursorPosition = result.position;
+  applyRemoteCursorVisual(remoteCursorPosition);
+
+  if (!result.settled && remoteCursorTarget) {
+    remoteCursorRaf = requestAnimationFrame(renderRemoteCursorFrame);
+  }
+}
+
+function handleRemoteCursorSignal(_event, payload = {}) {
+  if (payload.action === "hide") {
+    clearRemoteCursorVisual();
+    return;
+  }
+
+  const sentAt = Number(payload.sentAt);
+  if (
+    Number.isFinite(sentAt) &&
+    sentAt > 0 &&
+    Date.now() - sentAt > REMOTE_CURSOR_MAX_SIGNAL_AGE_MS
+  ) {
+    return;
+  }
+
+  remoteCursorTarget = normalizeRemoteCursorPoint(payload);
+  scheduleRemoteCursorInactivityCleanup();
+
+  if (payload.action === "click") {
+    const cursor = getOrCreateRemoteCursor();
+    cursor?.classList.add("is-pressed");
+    if (remoteCursorPressedTimer) clearTimeout(remoteCursorPressedTimer);
+    remoteCursorPressedTimer = setTimeout(() => {
+      getOrCreateRemoteCursor()?.classList.remove("is-pressed");
+      remoteCursorPressedTimer = null;
+    }, 120);
+  }
+
+  if (!remoteCursorPosition) {
+    remoteCursorPosition = { x: remoteCursorTarget.x, y: remoteCursorTarget.y };
+    remoteCursorFrameAt = remoteCursorTarget.receivedAt;
+    applyRemoteCursorVisual(remoteCursorPosition);
+    return;
+  }
+
+  if (!remoteCursorRaf) {
+    remoteCursorRaf = requestAnimationFrame(renderRemoteCursorFrame);
+  }
+}
+
+ipcRenderer.on(REMOTE_CURSOR_CHANNEL, handleRemoteCursorSignal);
+window.addEventListener("pagehide", clearRemoteCursorVisual);
 
 const ICON_MINIMIZE =
   '<svg width="10" height="1" viewBox="0 0 10 1" fill="none">' +
@@ -230,6 +465,7 @@ let _lastUrl = location.href;
 const _onNav = () => {
   if (location.href !== _lastUrl) {
     _lastUrl = location.href;
+    clearRemoteCursorVisual();
     setTimeout(injectTitlebar, 50);
   }
 };

@@ -53,6 +53,8 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
   getVideoDuration: (filePath) =>
     ipcRenderer.invoke("get-video-duration", filePath),
   getRendererWebContentsId: () => ipcRenderer.invoke("player:renderer-webcontents-id"),
+  sendRemotePointerMove: (payload) => ipcRenderer.send("player:pointer-move", payload),
+  clickRemotePointer: (payload) => ipcRenderer.invoke("player:pointer-click", payload),
   openLocalMedia: (downloadId) =>
     ipcRenderer.invoke("local-media:open", downloadId),
   offloadFile: (downloadId) =>

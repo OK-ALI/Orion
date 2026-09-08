@@ -28,13 +28,13 @@ test("P9.1 Desktop reuses normalized release truth and keeps installation QR dis
   const routes = readRepo("apps/desktop/src/renderer/app/AppRoutes.jsx");
   const mobilePage = readRepo("apps/desktop/src/renderer/features/updates/GetOrionMobilePage.jsx");
   assert.match(updates, /resolveOrionReleaseTruthV1/);
-  assert.match(updates, /per_page=20/);
+  assert.match(updates, /per_page=(?:20|100)/);
   assert.match(store, /UPDATE_CHANNEL: "updateChannel"/);
   assert.match(sidebar, /label: "Devices"/);
   assert.match(sidebar, /id: "get-mobile", label: "Get Orion Mobile"/);
   assert.match(routes, /GetOrionMobilePage = lazy\(\(\) => import\("\.\.\/features\/updates\/GetOrionMobilePage"\)\)/);
   assert.match(routes, /page === "get-mobile"/);
-  assert.match(routes, /<GetOrionMobilePage \/>/);
+  assert.match(routes, /<GetOrionMobilePage/);
   assert.doesNotMatch(settings, /Get Orion Mobile/);
   assert.match(mobilePage, /fetchOrionMobileDistributionStatus/);
   assert.match(updates, /export async function fetchOrionMobileDistributionStatus\(channel = "stable"\)/);

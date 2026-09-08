@@ -1,8 +1,19 @@
 import { useEffect, useRef } from "react";
+import {
+  clearDetachedRemotePointerTarget,
+  resolveRemotePointerTarget,
+  setDetachedRemotePointerTarget,
+} from "../../features/player/services/remotePointerSurfaces";
+import {
+  createRemotePointerTarget,
+  stepRemotePointerVisual,
+} from "../../features/player/services/remotePointerSmoothing";
 
 const REMOTE_CURSOR_INACTIVITY_MS = 4_000;
 let lastCursorActivityAt = 0;
-let latestCursorPayload = null;
+let latestCursorTarget = null;
+let renderedCursorPosition = null;
+let lastCursorFrameAt = 0;
 let hoverCheckTimer = null;
 let rafHandle = null;
 let remoteCursorInactivityTimer = null;
@@ -14,8 +25,13 @@ const rendererDiagnosticsEnabled =
 const rendererRealtimeDiagnostics = {
   received: 0,
   cursorMoveCalled: 0,
+  nativeMovesDispatched: 0,
   rafTicks: 0,
   cursorFramesRendered: 0,
+  interpolatedFrames: 0,
+  settledFrames: 0,
+  maxVisualLagPx: 0,
+  maxVisualSettleMs: 0,
 };
 
 const SIDEBAR_PAGES = [
@@ -54,8 +70,21 @@ function getOrCreateVirtualCursor() {
 }
 
 function clearRemoteCursor() {
-  latestCursorPayload = null;
+  const detachedRoute = latestCursorTarget?.route?.kind === "detached"
+    ? latestCursorTarget.route
+    : null;
+
+  latestCursorTarget = null;
+  renderedCursorPosition = null;
+  lastCursorFrameAt = 0;
   lastCursorActivityAt = 0;
+
+  if (detachedRoute) {
+    window.electron?.sendRemotePointerMove?.({
+      ...detachedRoute,
+      visualAction: "hide",
+    });
+  }
 
   if (remoteCursorInactivityTimer) {
     window.clearTimeout(remoteCursorInactivityTimer);
@@ -98,11 +127,13 @@ function updateRemoteHover(element) {
   const input = candidate?.matches?.("input:not([type='password']), textarea, [contenteditable='true']");
   cursor.dataset.kind = input ? "text" : candidate ? "interactive" : "default";
 }
-function scheduleRemoteCursorCleanup() {
+function scheduleRemoteCursorCleanup({ showMainCursor = true } = {}) {
   lastCursorActivityAt = performance.now();
 
-  const cursor = getOrCreateVirtualCursor();
-  cursor.style.opacity = "1";
+  if (showMainCursor) {
+    const cursor = getOrCreateVirtualCursor();
+    cursor.style.opacity = "1";
+  }
 
   if (remoteCursorInactivityTimer) {
     window.clearTimeout(remoteCursorInactivityTimer);
@@ -113,77 +144,221 @@ function scheduleRemoteCursorCleanup() {
     clearRemoteCursor();
   }, REMOTE_CURSOR_INACTIVITY_MS);
 }
+function prefersReducedRemotePointerMotion() {
+  try {
+    return Boolean(
+      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches,
+    );
+  } catch {
+    return false;
+  }
+}
+
+function applyRemoteCursorVisual(cursor, position) {
+  if (!cursor || !position) return;
+
+  cursor.style.transform =
+    `translate3d(${position.x}px, ${position.y}px, 0)`;
+  cursor.style.opacity = "1";
+  cursor.dataset.renderX = String(position.x);
+  cursor.dataset.renderY = String(position.y);
+}
+
+function scheduleRemoteHoverCheck() {
+  if (hoverCheckTimer) return;
+
+  hoverCheckTimer = window.setTimeout(() => {
+    hoverCheckTimer = null;
+
+    const target = latestCursorTarget;
+    if (!target || target.route?.kind === "detached") {
+      updateRemoteHover(null);
+      return;
+    }
+
+    const element = document.elementFromPoint(target.x, target.y);
+    updateRemoteHover(element);
+  }, 50);
+}
+
 function moveCursor(payload) {
   rendererRealtimeDiagnostics.cursorMoveCalled += 1;
 
-  latestCursorPayload = payload;
+  const pointer = payload?.pointer || payload?.value || payload || {};
+  const target = createRemotePointerTarget(
+    pointer,
+    window.innerWidth,
+    window.innerHeight,
+    performance.now(),
+  );
+  target.route = resolveRemotePointerTarget(target.x, target.y, {
+    xRatio: target.xRatio,
+    yRatio: target.yRatio,
+  });
+  latestCursorTarget = target;
+
+  // Route the newest authoritative point immediately. Visual interpolation is
+  // deliberately decoupled so smoothing never adds a renderer-frame delay to
+  // provider/native pointer input.
+  window.electron?.sendRemotePointerMove?.(target.route);
+  rendererRealtimeDiagnostics.nativeMovesDispatched += 1;
+
+  if (target.route?.kind === "detached") {
+    if (rafHandle) {
+      cancelAnimationFrame(rafHandle);
+      rafHandle = null;
+    }
+    renderedCursorPosition = null;
+    lastCursorFrameAt = 0;
+    const mainCursor = document.querySelector(".orion-virtual-cursor");
+    if (mainCursor) {
+      mainCursor.style.opacity = "0";
+      mainCursor.classList.remove("is-pressed");
+    }
+    hoveredRemoteElement?.classList.remove("spatial-remote-focused");
+    hoveredRemoteElement = null;
+    scheduleRemoteCursorCleanup({ showMainCursor: false });
+    return;
+  }
+
+  const cursor = getOrCreateVirtualCursor();
+  cursor.dataset.x = String(target.x);
+  cursor.dataset.y = String(target.y);
+  cursor.dataset.xRatio = String(target.xRatio);
+  cursor.dataset.yRatio = String(target.yRatio);
+
   scheduleRemoteCursorCleanup();
+  scheduleRemoteHoverCheck();
+
+  if (!renderedCursorPosition) {
+    renderedCursorPosition = { x: target.x, y: target.y };
+    lastCursorFrameAt = target.receivedAt;
+    applyRemoteCursorVisual(cursor, renderedCursorPosition);
+    rendererRealtimeDiagnostics.cursorFramesRendered += 1;
+    rendererRealtimeDiagnostics.settledFrames += 1;
+    return;
+  }
 
   if (!rafHandle) {
     rafHandle = requestAnimationFrame(renderCursorFrame);
   }
 }
-function renderCursorFrame() {
+
+function renderCursorFrame(timestamp) {
   rafHandle = null;
   rendererRealtimeDiagnostics.rafTicks += 1;
 
-  const payload = latestCursorPayload;
-  latestCursorPayload = null;
+  const target = latestCursorTarget;
+  if (!target) return;
 
-  if (!payload) return;
+  const frameAt = Number.isFinite(Number(timestamp))
+    ? Number(timestamp)
+    : performance.now();
+  const deltaMs =
+    lastCursorFrameAt > 0 ? frameAt - lastCursorFrameAt : 16.67;
+  lastCursorFrameAt = frameAt;
 
+  const result = stepRemotePointerVisual(
+    renderedCursorPosition,
+    target,
+    deltaMs,
+    { reducedMotion: prefersReducedRemotePointerMotion() },
+  );
+
+  renderedCursorPosition = result.position;
   rendererRealtimeDiagnostics.cursorFramesRendered += 1;
 
-  const cursor = getOrCreateVirtualCursor();
-  const pointer = payload?.pointer || payload?.value || payload || {};
-
-  const x = Math.max(
-    0,
-    Math.min(1, Number(pointer.x ?? pointer.xRatio) || 0),
+  const visualLagPx = Math.hypot(
+    target.x - renderedCursorPosition.x,
+    target.y - renderedCursorPosition.y,
+  );
+  rendererRealtimeDiagnostics.maxVisualLagPx = Math.max(
+    rendererRealtimeDiagnostics.maxVisualLagPx,
+    visualLagPx,
   );
 
-  const y = Math.max(
-    0,
-    Math.min(1, Number(pointer.y ?? pointer.yRatio) || 0),
+  if (result.settled) {
+    rendererRealtimeDiagnostics.settledFrames += 1;
+    rendererRealtimeDiagnostics.maxVisualSettleMs = Math.max(
+      rendererRealtimeDiagnostics.maxVisualSettleMs,
+      Math.max(0, frameAt - target.receivedAt),
+    );
+  } else {
+    rendererRealtimeDiagnostics.interpolatedFrames += 1;
+  }
+
+  applyRemoteCursorVisual(
+    getOrCreateVirtualCursor(),
+    renderedCursorPosition,
   );
 
-  const clientX = Math.round(x * window.innerWidth);
-  const clientY = Math.round(y * window.innerHeight);
-
-  cursor.style.transform =
-    `translate3d(${clientX}px, ${clientY}px, 0)`;
-
-  cursor.style.opacity = "1";
-  cursor.dataset.x = String(clientX);
-  cursor.dataset.y = String(clientY);
-
-  if (!hoverCheckTimer) {
-    hoverCheckTimer = window.setTimeout(() => {
-      hoverCheckTimer = null;
-
-      const element = document.elementFromPoint(clientX, clientY);
-
-      updateRemoteHover(element);
-    }, 50);
+  if (!result.settled && latestCursorTarget) {
+    rafHandle = requestAnimationFrame(renderCursorFrame);
   }
 }
-function clickCursor() {
+
+async function clickCursor() {
   const cursor = document.querySelector(".orion-virtual-cursor");
-  if (!cursor) return;
-  scheduleRemoteCursorCleanup();
-  const clientX = Number(cursor.dataset.x) || (cursor.getBoundingClientRect().left + 10);
-  const clientY = Number(cursor.dataset.y) || (cursor.getBoundingClientRect().top + 10);
-  const element = document.elementFromPoint(clientX, clientY);
+  if (!latestCursorTarget && !cursor) return { ok: true };
+
+  const target = latestCursorTarget || {
+    x: Number(cursor.dataset.x) || (cursor.getBoundingClientRect().left + 10),
+    y: Number(cursor.dataset.y) || (cursor.getBoundingClientRect().top + 10),
+    xRatio: Math.max(0, Math.min(1, Number(cursor.dataset.xRatio) || 0)),
+    yRatio: Math.max(0, Math.min(1, Number(cursor.dataset.yRatio) || 0)),
+  };
+
+  const route =
+    target.route ||
+    resolveRemotePointerTarget(target.x, target.y, {
+      xRatio: target.xRatio,
+      yRatio: target.yRatio,
+    });
+
+  const detached = route?.kind === "detached";
+  scheduleRemoteCursorCleanup({ showMainCursor: !detached });
+
+  if (!detached && cursor) {
+    // A click is a reliable action. Visually converge to the authoritative
+    // point before dispatch so the click never lands ahead of the cursor.
+    renderedCursorPosition = { x: target.x, y: target.y };
+    applyRemoteCursorVisual(cursor, renderedCursorPosition);
+
+    cursor.classList.add("is-pressed");
+    if (pressedCursorTimer) window.clearTimeout(pressedCursorTimer);
+    pressedCursorTimer = window.setTimeout(() => {
+      cursor.classList.remove("is-pressed");
+      pressedCursorTimer = null;
+    }, 120);
+  }
+
+  if (window.electron?.clickRemotePointer) {
+    try {
+      const result = await window.electron.clickRemotePointer(route);
+      return result?.ok
+        ? { ok: true }
+        : {
+            ok: false,
+            error:
+              result?.error ||
+              "The remote pointer target did not accept the click.",
+          };
+    } catch {
+      return {
+        ok: false,
+        error: "The remote pointer target did not accept the click.",
+      };
+    }
+  }
+
+  // Compatibility fallback for renderer environments without the native input
+  // bridge. Production P11.3 builds use the surface-aware path above.
+  const element = document.elementFromPoint(target.x, target.y);
   const clickable =
     element?.closest(".media-card, button, a, [role='button'], input") ||
     element;
-  cursor.classList.add("is-pressed");
-  if (pressedCursorTimer) window.clearTimeout(pressedCursorTimer);
-  pressedCursorTimer = window.setTimeout(() => {
-    cursor.classList.remove("is-pressed");
-    pressedCursorTimer = null;
-  }, 150);
   clickable?.click?.();
+  return { ok: true };
 }
 
 function moveSpatialFocus(action) {
@@ -233,18 +408,60 @@ export function useSmartConnectRemoteCommands({
     pendingPlaybackRef.current.forEach((controller) => controller.abort());
     pendingPlaybackRef.current.clear();
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+
+    const syncPopoutPointerTarget = async () => {
+      try {
+        const id = await window.electron?.getPipWebContentsId?.();
+        if (disposed) return;
+        if (Number.isInteger(Number(id)) && Number(id) > 0) {
+          setDetachedRemotePointerTarget(Number(id));
+        } else {
+          clearDetachedRemotePointerTarget();
+        }
+      } catch {
+        if (!disposed) clearDetachedRemotePointerTarget();
+      }
+    };
+
+    const openedHandler = window.electron?.onPipOpened?.(() => {
+      clearRemoteCursor();
+      syncPopoutPointerTarget();
+    });
+    const closedHandler = window.electron?.onPipClosed?.(() => {
+      clearRemoteCursor();
+      clearDetachedRemotePointerTarget();
+    });
+
+    syncPopoutPointerTarget();
+
+    return () => {
+      disposed = true;
+      if (openedHandler) window.electron?.offPipOpened?.(openedHandler);
+      if (closedHandler) window.electron?.offPipClosed?.(closedHandler);
+      clearDetachedRemotePointerTarget();
+    };
+  }, []);
+
   useEffect(() => {
 const rendererDiagnosticsTimer = rendererDiagnosticsEnabled ? window.setInterval(() => {
   const diagnostics = rendererRealtimeDiagnostics;
 
   console.log(
-    `[SmartConnect renderer] received=${diagnostics.received} cursorMoveCalled=${diagnostics.cursorMoveCalled} rafTicks=${diagnostics.rafTicks} cursorFramesRendered=${diagnostics.cursorFramesRendered}`,
+    `[SmartConnect renderer] received=${diagnostics.received} cursorMoveCalled=${diagnostics.cursorMoveCalled} nativeMoves=${diagnostics.nativeMovesDispatched} rafTicks=${diagnostics.rafTicks} cursorFrames=${diagnostics.cursorFramesRendered} interpolated=${diagnostics.interpolatedFrames} settled=${diagnostics.settledFrames} maxVisualLagPx=${diagnostics.maxVisualLagPx.toFixed(1)} maxVisualSettleMs=${diagnostics.maxVisualSettleMs.toFixed(1)}`,
   );
 
   diagnostics.received = 0;
   diagnostics.cursorMoveCalled = 0;
+  diagnostics.nativeMovesDispatched = 0;
   diagnostics.rafTicks = 0;
   diagnostics.cursorFramesRendered = 0;
+  diagnostics.interpolatedFrames = 0;
+  diagnostics.settledFrames = 0;
+  diagnostics.maxVisualLagPx = 0;
+  diagnostics.maxVisualSettleMs = 0;
 }, 1000) : null;
     const handleRemoteCommand = async (payload) => {
       const { action, value } = payload || {};
@@ -268,7 +485,7 @@ const targetScroll = getScrollContainer();
       if (controller.signal.aborted) throw new Error("Controller operation cancelled.");
       if (execution.deadlineAt && Date.now() >= execution.deadlineAt) throw new Error("Command expired.");
       if (action === "cursor_move") moveCursor(payload);
-      if (action === "cursor_click") clickCursor();
+      if (action === "cursor_click") commandResult = await clickCursor();
       if (action === "scroll") {
         const deltaY = Math.max(-240, Math.min(240, Number(value?.deltaY) || 0));
         getScrollContainer()?.scrollBy?.({ top: deltaY, behavior: "auto" });

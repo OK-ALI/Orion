@@ -432,6 +432,7 @@ subtitlesIpc.register({
 allmangaIpc.register();
 playerIpc.register(getMainWindow, {
   writeSecretMigration: storageIpc.writeSecretMigration,
+  getPopoutController: () => popoutController,
 });
 ambientSampler.register(
   getMainWindow,

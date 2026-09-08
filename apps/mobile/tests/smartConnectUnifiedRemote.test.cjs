@@ -25,9 +25,12 @@ test('connected Smart Connect uses one unified adaptive surface', () => {
 test('pointer input coalesces movement and supports two-finger scrolling', () => {
   const pointer = read('src/features/connect/useRemotePointer.ts');
 
-  assert.match(pointer, /activeRateHz: 30 as 24 \| 30 \| 40/);
-  assert.match(pointer, /constrained \? 24 : healthy \? 40 : 30/);
+  assert.match(pointer, /activeRateHz: 30 as 24 \| 30 \| 40 \| 60/);
+  assert.match(pointer, /constrained \? 24 : healthy \? 60 : 30/);
   assert.match(pointer, /frameIntervalRef\.current = Math\.round\(1000 \/ rate\)/);
+  const desktop = read('../desktop/src/main/ipc/smartConnectIpc.js');
+  assert.match(desktop, /REALTIME_IPC_COALESCE_MS = 8/);
+  assert.match(desktop, /setTimeout\(flushRealtimeIpc, REALTIME_IPC_COALESCE_MS\)/);
   assert.match(pointer, /touches\.length >= 2/);
   assert.match(pointer, /pendingScrollRef/);
   assert.match(pointer, /cursor_move/);
@@ -81,7 +84,7 @@ test('pointer health consumes native socket pressure and lowers the adaptive rea
   assert.match(controller, /backpressured: socketBackpressured/);
   assert.match(controller, /onPressure: \(pressure\) => setSocketBackpressured/);
   assert.match(pointer, /health\.backpressured/);
-  assert.match(pointer, /constrained \? 24 : healthy \? 40 : 30/);
+  assert.match(pointer, /constrained \? 24 : healthy \? 60 : 30/);
   assert.match(nativeBridge, /orionSmartConnectPressure/);
 });
 

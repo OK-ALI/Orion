@@ -9,6 +9,7 @@ import {
 import { handleNativePlayerKey } from "../features/player/services/nativeKeyboard";
 import { controlHtmlMedia, readHtmlMedia } from "../features/player/services/remoteHtmlMedia";
 import { controlRemotePlayback } from "../features/player/services/remotePlaybackSession";
+import { registerRemotePointerSurface } from "../features/player/services/remotePointerSurfaces";
 
 export default function MiniPlayer({ url, title, context, initialState, subtitles = [], onClose, onExpand, onPopOut, onProgress, onReady, remoteOwnerId, active = true }) {
   const isLocal = String(url || "").startsWith("orion-media://");
@@ -46,6 +47,18 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
   onReadyRef.current = onReady;
   const restoreTimersRef = useRef([]);
   const attachmentRef = useRef(null);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    return registerRemotePointerSurface({
+      id: `mini-player:${remoteOwnerId || "active"}`,
+      kind: isLocal ? "renderer" : "webview",
+      priority: 300,
+      getElement: () => isLocal ? nativeVideoRef.current : webviewRef.current,
+      getWebContentsId: () => isLocal ? null : getReadyWebContentsId(webviewRef.current),
+    });
+  }, [active, isLocal, remoteOwnerId, url]);
+
   const clearRestoreTimers = () => {
     restoreTimersRef.current.forEach(window.clearTimeout);
     restoreTimersRef.current = [];

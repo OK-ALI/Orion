@@ -58,7 +58,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.cjs",
     "check:source-size": "node scripts/check-source-size.cjs",
-    "check:expo": "expo-doctor",
+    "check:expo": "cross-env EXPO_OFFLINE=1 expo-doctor",
     "build:web": "expo export --platform web",
     "check": "npm run typecheck && npm test && npm run check:source-size && npm run check:expo && npm run build:web"
   },
