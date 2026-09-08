@@ -36,7 +36,7 @@ const NAV_SECTIONS = [
     id: 'connect',
     label: 'CONNECT',
     items: [
-      { id: 'connect', name: 'Smart Remote', icon: 'wifi-outline', activeIcon: 'wifi', route: '/connect' },
+      { id: 'connect', name: 'Orion Connect', icon: 'wifi-outline', activeIcon: 'wifi', route: '/connect' },
     ],
   },
   {

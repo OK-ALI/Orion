@@ -176,7 +176,7 @@ for (const entry of cases) {
       assert.equal(downloads.props.accessibilityLabel, entry.local ? 'Downloads. Local media remains available.' : 'Downloads');
       assert.equal(h.routes.length, 0, 'Rendering never redirects');
       for (const [name, route] of [['Home', '/'], ['Discover & Search', '/discover'], ['Library', '/library'],
-        ['Smart Remote', '/connect'], ['Settings', '/settings']]) {
+        ['Orion Connect', '/connect'], ['Settings', '/settings']]) {
         const button = h.find(name); assert.ok(button); assert.equal(button.props.accessibilityRole, 'button');
         assert.notEqual(button.props.disabled, true); assert.notEqual(button.props.accessibilityState?.disabled, true);
         button.props.onPress(); assert.equal(h.routes.at(-1), route);

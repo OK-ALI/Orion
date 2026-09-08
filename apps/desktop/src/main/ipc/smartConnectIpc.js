@@ -14,7 +14,7 @@ const { createRealtimeDiagnostics } = require("../smartConnect/realtimeDiagnosti
 const { createControllerOwnership } = require("../smartConnect/controllerOwnership");
 const { createReliableCommandScheduler } = require("../smartConnect/reliableCommandScheduler");
 const { createServiceAdvertisement } = require("../smartConnect/serviceAdvertisement");
-const { dispatchPlaybackCommand } = require("../smartConnect/playbackDispatch");
+const { dispatchPlaybackCommand, initSystemControlBroadcasting, systemControl } = require("../smartConnect/playbackDispatch");
 const { createPairingStore, sanitizeDeviceName } = require("../smartConnect/pairingStore");
 
 const PORT = 8924;
@@ -306,6 +306,7 @@ function configureSockets() {
     broadcastControllerStatus();
     if (currentContext) sendSocket(socket, "context", session.deviceId, currentContext);
     if (currentPlayback) sendSocket(socket, "telemetry", session.deviceId, currentPlayback);
+    sendSocket(socket, "system_status", session.deviceId, systemControl.getSystemSnapshot());
     notifyConnectionStatus();
     socket.on("message", async (raw) => {
       let envelope;
@@ -650,6 +651,7 @@ async function startSmartConnectServer(getMainWindow) {
   });
 
   configureSockets();
+  initSystemControlBroadcasting(() => connectedSockets, sendSocket);
   const listenAddress = eligibleLanAddresses()[0];
   if (!listenAddress) throw new Error("SMART_CONNECT_PRIVATE_LAN_UNAVAILABLE");
   server.listen(PORT, listenAddress, () => {
@@ -759,8 +761,7 @@ ipcMain.handle("smart-connect:revoke-device", (_, deviceId) => {
     if (session.deviceId === target) { pairedSessions.delete(token); removed = true; }
   }
   const targetSocket = connectedSockets.get(target);
-  if (targetSocket) clearControllerSocketWork(targetSocket, "The controller was revoked.");
-  targetSocket?.close();
+  if (targetSocket) { clearControllerSocketWork(targetSocket, "The controller was revoked."); targetSocket.close(); }
   connectedSockets.delete(target);
   controllerOwnership.forget(target);
   broadcastControllerStatus();

@@ -21,7 +21,8 @@
     "check": "npm run check:source-size && npm run check:bindings && npm run check:ipc && npm run check:secrets && npm run check:theme-colors && npm run check:cycles && npm test && npm run build",
     "dev": "vite build --watch",
     "start": "vite build && electron .",
-    "dist:win": "cross-env ELECTRON_DIST=1 vite build && electron-builder --win --publish never",
+    "build:syscontrol": "node scripts/build-syscontrol.js",
+    "dist:win": "node scripts/build-syscontrol.js && cross-env ELECTRON_DIST=1 vite build && electron-builder --win --publish never",
     "dist:linux": "cross-env ELECTRON_DIST=1 vite build && electron-builder --linux deb AppImage --publish never",
     "dist:mac": "cross-env ELECTRON_DIST=1 vite build && electron-builder --mac --universal --publish never"
   },
@@ -128,6 +129,10 @@
       {
         "from": "public/icon.ico",
         "to": "icon.ico"
+      },
+      {
+        "from": "bin/orion-syscontrol.exe",
+        "to": "bin/orion-syscontrol.exe"
       }
     ],
     "directories": {

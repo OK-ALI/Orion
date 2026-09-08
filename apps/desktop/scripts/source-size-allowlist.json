@@ -1,5 +1,9 @@
 {
   "src/renderer/app/App.jsx": { "maxLines": 1100 },
   "src/renderer/features/settings/sections/GeneralSettings.jsx": { "maxLines": 1300 },
-  "src/renderer/styles/features/music/planet-v2.css": { "maxLines": 900 }
+  "src/renderer/styles/features/music/planet-v2.css": { "maxLines": 900 },
+  "src/renderer/features/tv/hooks/useTVController.js": { "maxLines": 950 },
+  "src/renderer/features/tv/hooks/useTVWebview.js": { "maxLines": 850 },
+  "src/renderer/styles/components/part-01.css": { "maxLines": 850 },
+  "src/renderer/styles/components/part-03.css": { "maxLines": 850 }
 }

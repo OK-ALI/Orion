@@ -1,1 +1,12 @@
-{}
+{
+  "files.watcherExclude": {
+    "**/apps/desktop/release/**": true,
+    "**/android/app/build/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true
+  },
+  "search.exclude": {
+    "**/apps/desktop/release/**": true
+  }
+}

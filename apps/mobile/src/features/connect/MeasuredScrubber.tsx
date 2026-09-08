@@ -1,15 +1,27 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, Text, View } from 'react-native';
 
 export function MeasuredScrubber({ currentTime, duration, bufferedTime = 0, disabled, formatTime, onScrubbing, onSeek, styles }: any) {
   const widthRef = useRef(1);
   const previewRef = useRef<number | null>(null);
   const [preview, setPreview] = useState<number | null>(null);
-  const target = preview ?? currentTime;
+  const [committed, setCommitted] = useState<{ value: number; time: number } | null>(null);
+
+  useEffect(() => {
+    if (!committed) return;
+    const diff = Math.abs(currentTime - committed.value);
+    const age = Date.now() - committed.time;
+    if (diff <= 2 || age > 2500) {
+      setCommitted(null);
+    }
+  }, [currentTime, committed]);
+
+  const target = preview ?? (committed ? committed.value : currentTime);
   const pan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => !disabled,
     onMoveShouldSetPanResponder: () => !disabled,
     onPanResponderGrant: (event) => {
+      setCommitted(null);
       onScrubbing(true);
       const value = Math.max(0, Math.min(duration, (event.nativeEvent.locationX / widthRef.current) * duration));
       previewRef.current = value; setPreview(value);
@@ -21,7 +33,11 @@ export function MeasuredScrubber({ currentTime, duration, bufferedTime = 0, disa
     onPanResponderRelease: () => {
       const value = previewRef.current;
       previewRef.current = null; setPreview(null); onScrubbing(false);
-      if (value != null) void onSeek(Math.round(value));
+      if (value != null) {
+        const rounded = Math.round(value);
+        setCommitted({ value: rounded, time: Date.now() });
+        void onSeek(rounded);
+      }
     },
     onPanResponderTerminate: () => { previewRef.current = null; setPreview(null); onScrubbing(false); },
   }), [disabled, duration, onScrubbing, onSeek]);

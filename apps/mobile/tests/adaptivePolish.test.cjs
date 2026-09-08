@@ -116,7 +116,7 @@ test("Phase 7 drawer keeps destinations grouped without expanding Connect functi
   assert.match(drawer, /name: 'Discover & Search'/);
   assert.match(drawer, /name: 'Library'/);
   assert.match(drawer, /name: 'Downloads'/);
-  assert.match(drawer, /name: 'Smart Remote'/);
+  assert.match(drawer, /name: 'Orion Connect'/);
   assert.match(drawer, /name: 'Settings'/);
   assert.match(drawer, /backgroundColor: theme\.accent, borderColor: theme\.accent, shadowColor: theme\.accent/);
 

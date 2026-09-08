@@ -72,6 +72,10 @@ export function useConnectController() {
   const [isPlaying, setIsPlaying] = useState(true);
   const [volume, setVolume] = useState(85);
   const [isMuted, setIsMuted] = useState(false);
+  const [systemVolume, setSystemVolume] = useState(50);
+  const [systemMuted, setSystemMuted] = useState(false);
+  const [displayBrightness, setDisplayBrightness] = useState(100);
+  const [brightnessSupported, setBrightnessSupported] = useState(false);
   const [currentSpeedIndex, setCurrentSpeedIndex] = useState(0);
   const [remoteText, setRemoteText] = useState('');
   const { attemptsRemaining, lockoutSeconds, lockoutUntil, setAttemptsRemaining, setLockoutUntil } = usePairingGuardState();
@@ -168,6 +172,15 @@ export function useConnectController() {
         const playback = envelope.payload as SmartConnectPlaybackTelemetryV1 | null;
         ingestTelemetry(playback);
         if (playback) { setIsPlaying(playback.state === 'playing'); setVolume(Math.round((playback.volume ?? 1) * 100)); setIsMuted(Boolean(playback.muted)); }
+      }
+      if (envelope.type === 'system_status') {
+        const status = envelope.payload;
+        if (status && typeof status === 'object') {
+          if (typeof status.volume === 'number' && Number.isFinite(status.volume)) setSystemVolume(Math.round(status.volume));
+          if (typeof status.muted === 'boolean') setSystemMuted(status.muted);
+          if (typeof status.brightness === 'number' && Number.isFinite(status.brightness)) setDisplayBrightness(Math.round(status.brightness));
+          if (typeof status.brightnessSupported === 'boolean') setBrightnessSupported(status.brightnessSupported);
+        }
       }
       if (envelope.type === 'status') {
         applyControllerAccess(envelope.payload?.controller);
@@ -431,6 +444,12 @@ export function useConnectController() {
     const ack = await ackPromise;
     if (ack?.controller) applyControllerAccess(ack.controller);
     const controlResult = ack?.commandResult;
+    if (controlResult && typeof controlResult === 'object') {
+      if (typeof controlResult.volume === 'number' && Number.isFinite(controlResult.volume)) setSystemVolume(Math.round(controlResult.volume));
+      if (typeof controlResult.muted === 'boolean') setSystemMuted(controlResult.muted);
+      if (typeof controlResult.brightness === 'number' && Number.isFinite(controlResult.brightness)) setDisplayBrightness(Math.round(controlResult.brightness));
+      if (typeof controlResult.brightnessSupported === 'boolean') setBrightnessSupported(controlResult.brightnessSupported);
+    }
     if (ack?.authoritativeTelemetry) ingestTelemetry(ack.authoritativeTelemetry);
     const applied = !controlResult || controlResult.applied !== false;
     const normalizedAck = ack?.ok && !applied
@@ -443,6 +462,22 @@ export function useConnectController() {
     return normalizedAck;
   };
   sendCommandRef.current = sendRemoteCommand;
+
+  const setSysVolume = async (v: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(v)));
+    setSystemVolume(clamped);
+    return sendRemoteCommand('system.volume.set', clamped);
+  };
+  const toggleSysMute = async () => {
+    const next = !systemMuted;
+    setSystemMuted(next);
+    return sendRemoteCommand('system.volume.mute', next);
+  };
+  const setDispBrightness = async (b: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(b)));
+    setDisplayBrightness(clamped);
+    return sendRemoteCommand('display.brightness.set', clamped);
+  };
 
   const takeControl = async () => sendRemoteCommand('smart_connect_take_control');
 
@@ -487,6 +522,8 @@ export function useConnectController() {
     telemetry, latency, isScrubbing, setIsScrubbing, pendingTranscript,
     confirmVerificationPhrase, rejectVerificationPhrase,
     isPointerGestureActive, onTouchpadLayout, pointerMode, setPointerMode,
+    systemVolume, systemMuted, displayBrightness, brightnessSupported,
+    setSystemVolume: setSysVolume, toggleSystemMute: toggleSysMute, setDisplayBrightness: setDispBrightness,
   };
 }
 
