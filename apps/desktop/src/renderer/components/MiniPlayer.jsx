@@ -556,6 +556,7 @@ export default function MiniPlayer({ url, title, context, initialState, subtitle
               src={url}
               partition="persist:player"
               allowpopups="false"
+              webpreferences="backgroundThrottling=no,contextIsolation=yes"
               style={{ width: "100%", height: "100%", border: "none", position: "relative", zIndex: 2 }}
             />
           )}

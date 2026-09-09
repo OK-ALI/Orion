@@ -1,4 +1,4 @@
-const { globalShortcut, ipcMain, shell } = require("electron");
+const { globalShortcut, ipcMain, shell, powerSaveBlocker } = require("electron");
 
 const FALLBACK_SHORTCUTS = Object.freeze({
   MediaPlayPause: "toggle",
@@ -9,7 +9,24 @@ const FALLBACK_SHORTCUTS = Object.freeze({
 
 function createMediaControls({ getMainWindow, getPopoutController }) {
   let state = { active: false, mediaSessionAvailable: true };
+  let powerBlockerId = null;
   const registered = new Set();
+
+  const syncPowerSaveBlocker = (active) => {
+    try {
+      if (!powerSaveBlocker) return;
+      if (active) {
+        if (powerBlockerId === null || !powerSaveBlocker.isStarted(powerBlockerId)) {
+          powerBlockerId = powerSaveBlocker.start("prevent-display-sleep");
+        }
+      } else {
+        if (powerBlockerId !== null && powerSaveBlocker.isStarted(powerBlockerId)) {
+          powerSaveBlocker.stop(powerBlockerId);
+          powerBlockerId = null;
+        }
+      }
+    } catch {}
+  };
 
   const send = (command) => {
     const popout = getPopoutController?.();
@@ -64,15 +81,23 @@ function createMediaControls({ getMainWindow, getPopoutController }) {
         album: String(value.album || "").slice(0, 180),
       };
       syncFallbacks();
+      syncPowerSaveBlocker(state.active);
       return { ok: true, fallbackKeys: registered.size };
     });
   }
 
   function destroy() {
     unregisterFallbacks();
+    syncPowerSaveBlocker(false);
   }
 
-  return { register, destroy, send, getState: () => ({ ...state }) };
+  return {
+    register,
+    destroy,
+    send,
+    getState: () => ({ ...state }),
+    setPlaybackPowerState: (active) => syncPowerSaveBlocker(Boolean(active)),
+  };
 }
 
 module.exports = { FALLBACK_SHORTCUTS, createMediaControls };

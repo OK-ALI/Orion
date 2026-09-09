@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MeasuredScrubber } from './MeasuredScrubber';
 
@@ -259,14 +259,14 @@ function SystemControlsPanel({ controller, controllerActive, styles, theme }: an
   );
 }
 
-const RemoteTouchpad = memo(function RemoteTouchpad({ pointerMode, setPointerMode, onLayout, panHandlers, scrollPanHandlers, styles, theme, disabled = false }: any) {
+const RemoteTouchpad = memo(function RemoteTouchpad({ pointerMode, setPointerMode, onLayout, panHandlers, scrollPanHandlers, horizontalScrollPanHandlers, styles, theme, disabled = false }: any) {
   const absolute = pointerMode === 'absolute';
   return (
     <View style={[styles.touchpadBlock, disabled && styles.controllerDisabled]} pointerEvents={disabled ? 'none' : 'auto'}>
       <View style={styles.touchpadHeader}>
         <View style={styles.touchpadCopy}>
           <Text style={styles.eyebrow}>TOUCHPAD ({absolute ? 'DIRECT 1:1 MIRROR' : 'TRACKPAD'})</Text>
-          <Text style={styles.meta}>{absolute ? 'Touch area mirrors desktop 1:1 \u00B7 tap selects' : 'One finger moves \u00B7 tap selects \u00B7 scroll strip or 2 fingers scroll'}</Text>
+          <Text style={styles.meta}>{absolute ? 'Touch area mirrors desktop 1:1 \u00B7 tap selects' : 'One finger moves \u00B7 tap selects \u00B7 scroll strips or 2 fingers scroll'}</Text>
         </View>
         <Pressable style={styles.latency} onPress={() => setPointerMode(absolute ? 'relative' : 'absolute')}>
           <Text style={styles.latencyText}>{absolute ? '1:1 Direct' : 'Trackpad'}</Text>
@@ -285,6 +285,14 @@ const RemoteTouchpad = memo(function RemoteTouchpad({ pointerMode, setPointerMod
           <Ionicons name="chevron-down" size={14} color={theme.textMuted} />
         </View>
       </View>
+      <View accessibilityLabel="Horizontal scroll strip" style={styles.horizontalScrollStrip} {...horizontalScrollPanHandlers}>
+        <Ionicons name="chevron-back" size={14} color={theme.textMuted} />
+        <View style={styles.horizontalScrollThumbGrip}>
+          <Ionicons name="swap-horizontal" size={16} color={theme.accent} />
+          <Text style={styles.horizontalScrollLabel}>HORIZONTAL SCROLL</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={14} color={theme.textMuted} />
+      </View>
     </View>
   );
 });
@@ -294,6 +302,8 @@ export function UnifiedRemoteSurface({ controller, theme, isLandscape, legacySty
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
   const [showMore, setShowMore] = useState(false);
   const [text, setText] = useState('');
+  const liveDebounceRef = useRef<any>(null);
+  const inputRef = useRef<any>(null);
   const context = controller.remoteContext;
   const capabilities = context?.capabilities || {};
   const isActiveController = Boolean(controller.isActiveController);
@@ -303,6 +313,60 @@ export function UnifiedRemoteSurface({ controller, theme, isLandscape, legacySty
     try { return await controller.sendRemoteCommand(action, value); }
     finally { setPendingActions((previous) => { const next = new Set(previous); next.delete(action); return next; }); }
   }, [controller.sendRemoteCommand]);
+
+  const lastLiveSendAtRef = useRef(0);
+  const pendingLiveTextRef = useRef<string | null>(null);
+
+  const handleLiveTextChange = useCallback((newText: string) => {
+    setText(newText);
+    pendingLiveTextRef.current = newText;
+
+    if (liveDebounceRef.current) {
+      clearTimeout(liveDebounceRef.current);
+      liveDebounceRef.current = null;
+    }
+
+    const now = Date.now();
+    const elapsed = now - lastLiveSendAtRef.current;
+
+    if (elapsed >= 16) {
+      lastLiveSendAtRef.current = now;
+      pendingLiveTextRef.current = null;
+      void controller.sendRemoteCommand('send_text', { text: newText, submit: false });
+    } else {
+      liveDebounceRef.current = setTimeout(() => {
+        liveDebounceRef.current = null;
+        lastLiveSendAtRef.current = Date.now();
+        const pending = pendingLiveTextRef.current;
+        pendingLiveTextRef.current = null;
+        if (pending !== null) {
+          void controller.sendRemoteCommand('send_text', { text: pending, submit: false });
+        }
+      }, 16 - elapsed);
+    }
+  }, [controller]);
+
+  const handleClearText = useCallback(() => {
+    if (liveDebounceRef.current) {
+      clearTimeout(liveDebounceRef.current);
+      liveDebounceRef.current = null;
+    }
+    lastLiveSendAtRef.current = Date.now();
+    pendingLiveTextRef.current = null;
+    setText('');
+    void controller.sendRemoteCommand('send_text', { text: '', submit: false });
+  }, [controller]);
+
+  const handleSendExplicit = useCallback(() => {
+    if (liveDebounceRef.current) {
+      clearTimeout(liveDebounceRef.current);
+      liveDebounceRef.current = null;
+    }
+    pendingLiveTextRef.current = null;
+    void command('send_text', { text, submit: true });
+    Keyboard.dismiss();
+  }, [command, text]);
+
   const action = (props: any) => (
     <RemoteAction {...props} disabled={!isActiveController || props.disabled} pending={pendingActions.has(props.action)} command={command} styles={styles} theme={theme} />
   );
@@ -333,7 +397,7 @@ export function UnifiedRemoteSurface({ controller, theme, isLandscape, legacySty
             </Pressable>
           </View>
         ) : null}
-        <RemoteTouchpad pointerMode={controller.pointerMode} setPointerMode={controller.setPointerMode} onLayout={controller.onTouchpadLayout} panHandlers={controller.panResponder.panHandlers} scrollPanHandlers={controller.scrollPanResponder?.panHandlers} styles={styles} theme={theme} disabled={!isActiveController} />
+        <RemoteTouchpad pointerMode={controller.pointerMode} setPointerMode={controller.setPointerMode} onLayout={controller.onTouchpadLayout} panHandlers={controller.panResponder.panHandlers} scrollPanHandlers={controller.scrollPanResponder?.panHandlers} horizontalScrollPanHandlers={controller.horizontalScrollPanResponder?.panHandlers} styles={styles} theme={theme} disabled={!isActiveController} />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
           {action({ action: 'home', icon: 'home-outline', label: 'Home' })}
           {action({ action: 'back', icon: 'arrow-back', label: 'Back' })}
@@ -341,7 +405,14 @@ export function UnifiedRemoteSurface({ controller, theme, isLandscape, legacySty
           {capabilities.canToggleFullscreen && action({ action: 'toggle_fullscreen', icon: 'expand-outline', label: 'Fullscreen' })}
           {capabilities.canTogglePip && action({ action: 'toggle_pip', icon: 'duplicate-outline', label: 'PiP' })}
           {context?.canType && (
-            <Pressable disabled={!isActiveController} style={[styles.action, !isActiveController && styles.disabled]} onPress={() => setShowMore(true)}>
+            <Pressable
+              disabled={!isActiveController}
+              style={[styles.action, !isActiveController && styles.disabled]}
+              onPress={() => {
+                setShowMore(true);
+                setTimeout(() => inputRef.current?.focus(), 150);
+              }}
+            >
               <Ionicons name="keypad-outline" size={21} color={theme.text} />
               <Text style={styles.actionLabel}>Type</Text>
             </Pressable>
@@ -364,13 +435,39 @@ export function UnifiedRemoteSurface({ controller, theme, isLandscape, legacySty
             </View>
             {context?.canType && (
               <View style={styles.typeRow}>
-                <TextInput value={text} onChangeText={setText} placeholder="Type on Desktop" placeholderTextColor={theme.textMuted} style={styles.input} />
-                <Pressable style={styles.send} onPress={() => { void command('send_text', text); setText(''); }}>
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    ref={inputRef}
+                    value={text}
+                    onChangeText={handleLiveTextChange}
+                    placeholder="Type on Desktop"
+                    placeholderTextColor={theme.textMuted}
+                    style={styles.input}
+                    returnKeyType="send"
+                    onSubmitEditing={handleSendExplicit}
+                  />
+                  {text.length > 0 ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Clear text"
+                      style={styles.clearBtn}
+                      onPress={handleClearText}
+                    >
+                      <Ionicons name="close-circle" size={18} color={theme.textMuted} />
+                    </Pressable>
+                  ) : null}
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Send text"
+                  style={styles.send}
+                  onPress={handleSendExplicit}
+                >
                   <Ionicons name="send" size={19} color={theme.onAccent} />
                 </Pressable>
               </View>
             )}
-            <Text style={styles.eyebrow}>ACCESSIBILITY D-PAD</Text>
+            <Text style={styles.eyebrow}>TV & ACCESSIBILITY D-PAD</Text>
             <View style={styles.dpad}>
               {action({ action: 'up', icon: 'chevron-up', label: 'Up' })}
               <View style={styles.dpadRow}>
@@ -435,14 +532,19 @@ function createStyles(theme: any) {
     touchpadText: { color: theme.textSecondary, fontWeight: '700', textAlign: 'center', paddingHorizontal: 16 },
     scrollStrip: { width: 44, minHeight: 210, borderRadius: 22, borderWidth: 1, borderColor: theme.borderStrong, backgroundColor: theme.surface, alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14 },
     scrollThumbGrip: { width: 30, height: 46, borderRadius: 15, backgroundColor: theme.elevated, borderWidth: 1, borderColor: theme.border, alignItems: 'center', justifyContent: 'center' },
+    horizontalScrollStrip: { height: 42, width: '100%', borderRadius: 21, borderWidth: 1, borderColor: theme.borderStrong, backgroundColor: theme.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, marginTop: 10 },
+    horizontalScrollThumbGrip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 30, paddingHorizontal: 12, borderRadius: 15, backgroundColor: theme.elevated, borderWidth: 1, borderColor: theme.border },
+    horizontalScrollLabel: { color: theme.textSecondary, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
     rail: { flexDirection: 'row', gap: 12, paddingVertical: 6, paddingHorizontal: 2, marginTop: 4 },
     error: { color: theme.danger, padding: 12, backgroundColor: theme.dangerSoft || theme.accentSoft, borderRadius: 14 },
     scrim: { flex: 1, backgroundColor: theme.scrim || 'rgba(0, 0, 0, 0.72)', justifyContent: 'flex-end', padding: 16 },
     sheet: { maxHeight: '82%', padding: 18, borderRadius: 28, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.borderStrong, gap: 16 },
     sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     sheetTitle: { color: theme.text, fontSize: 22, fontWeight: '800' },
-    typeRow: { flexDirection: 'row', gap: 8 },
-    input: { flex: 1, minHeight: 50, borderRadius: 15, borderWidth: 1, borderColor: theme.border, color: theme.text, paddingHorizontal: 14, backgroundColor: theme.elevated },
+    typeRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+    inputWrapper: { flex: 1, position: 'relative', justifyContent: 'center' },
+    input: { flex: 1, minHeight: 50, borderRadius: 15, borderWidth: 1, borderColor: theme.border, color: theme.text, paddingLeft: 14, paddingRight: 38, backgroundColor: theme.elevated },
+    clearBtn: { position: 'absolute', right: 8, width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
     send: { width: 50, height: 50, borderRadius: 15, backgroundColor: theme.accent, alignItems: 'center', justifyContent: 'center' },
     dpad: { alignItems: 'center', gap: 7 },
     dpadRow: { flexDirection: 'row', gap: 8 },

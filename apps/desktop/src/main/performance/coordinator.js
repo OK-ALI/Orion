@@ -38,7 +38,8 @@ function createPerformanceCoordinator({ getMainWindow, getBatteryStatus, downloa
       ["queued", "preflighting", "downloading", "processing"].includes(entry.status),
     );
     const playbackPressure = derivePlaybackPressure(playback);
-    if (playbackPressure !== "none") {
+    const onBattery = Boolean(lastSnapshot?.onBattery);
+    if (playbackPressure !== "none" || (onBattery && playback.playbackActive)) {
       stablePlaybackSamples = 0;
       for (const entry of active.slice(1)) {
         if (autoPaused.has(entry.id)) continue;
@@ -48,15 +49,17 @@ function createPerformanceCoordinator({ getMainWindow, getBatteryStatus, downloa
     } else {
       stablePlaybackSamples += 1;
     }
-    if (playbackPressure === "severe" && active[0] && !primaryRestarted) {
+    if ((playbackPressure === "severe" || (onBattery && playback.playbackActive)) && active[0] && !primaryRestarted) {
       const primary = active[0];
-      primaryRestarted = true;
-      const original = Number(primary.fragmentConcurrency) || 6;
-      primary.fragmentConcurrency = 2;
-      primary.performanceOriginalFragmentConcurrency = original;
-      downloads.saveDownloads?.();
-      downloads.pauseDownload(primary.id, "Restarting with lower stream pressure");
-      setTimeout(() => send("performance:resume-downloads", { ids: [primary.id], restarted: true }), 800).unref?.();
+      if ((Number(primary.fragmentConcurrency) || 6) > 2) {
+        primaryRestarted = true;
+        const original = Number(primary.fragmentConcurrency) || 6;
+        primary.fragmentConcurrency = 2;
+        primary.performanceOriginalFragmentConcurrency = original;
+        downloads.saveDownloads?.();
+        downloads.pauseDownload(primary.id, "Restarting with lower stream pressure");
+        setTimeout(() => send("performance:resume-downloads", { ids: [primary.id], restarted: true }), 800).unref?.();
+      }
     }
     if (stablePlaybackSamples < 6) return;
     const resumable = [];

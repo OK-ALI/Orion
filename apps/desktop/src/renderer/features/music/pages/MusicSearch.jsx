@@ -34,6 +34,15 @@ export default function MusicSearch({ selected, onNavigate }) {
   }, [selected?.query, selected?.scope]);
 
   useEffect(() => {
+    const handleRemoteMusicSearch = (e) => {
+      const text = typeof e.detail === "string" ? e.detail : (e.detail?.query != null ? String(e.detail.query) : "");
+      setQuery(text);
+    };
+    window.addEventListener("orion:music-search", handleRemoteMusicSearch);
+    return () => window.removeEventListener("orion:music-search", handleRemoteMusicSearch);
+  }, []);
+
+  useEffect(() => {
     setResponse({ results: [], errors: [] });
     setLoading(true);
     if (offline) {

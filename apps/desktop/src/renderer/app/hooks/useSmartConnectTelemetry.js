@@ -129,7 +129,15 @@ export function useSmartConnectTelemetry({ page, playbackSession }) {
         const control = controlTruth(session, observable, surface, preparing, state);
         const context = {
           version: 1, playbackProtocolVersion: 1, route: String(pageRef.current || "home"), surface,
-          focusedRole: role, canType: role === "text-input" || role === "search", playbackOwner: owner,
+          focusedRole: role,
+          canType: Boolean(
+            role === "text-input" ||
+            role === "search" ||
+            ["search", "constellation", "settings"].includes(pageRef.current) ||
+            String(pageRef.current || "").startsWith("music") ||
+            (typeof document !== "undefined" && Boolean(document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA" || document.activeElement.isContentEditable)))
+          ),
+          playbackOwner: owner,
           fullscreen: Boolean(document.fullscreenElement || session?.fullscreen), miniPlayer: session?.mode === "mini", popout: session?.mode === "popout",
           capabilities: control.capabilities, controlTarget: control.target, observedAt: Date.now(),
         };

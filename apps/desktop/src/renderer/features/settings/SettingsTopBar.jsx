@@ -193,6 +193,18 @@ export function SettingsTopBar({ sectionRefs, contentRef }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [searchOpen]);
 
+  useEffect(() => {
+    const handleRemoteSettingsSearch = (e) => {
+      const text = typeof e.detail === "string" ? e.detail : String(e.detail?.query || "");
+      setSearchOpen(true);
+      setQuery(text);
+      findMatches(text);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    };
+    window.addEventListener("orion:settings-search", handleRemoteSettingsSearch);
+    return () => window.removeEventListener("orion:settings-search", handleRemoteSettingsSearch);
+  }, []);
+
   const scrollTo = (id) => {
     const el = sectionRefs[id]?.current;
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });

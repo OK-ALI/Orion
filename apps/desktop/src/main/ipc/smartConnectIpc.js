@@ -44,11 +44,8 @@ let secureIdentity = null;
 let activePairingId = null;
 
 const pairingStore = createPairingStore({
-  pinTtlMs: PIN_TTL_MS,
-  attemptWindowMs: ATTEMPT_WINDOW_MS,
-  lockoutMs: LOCKOUT_MS,
-  maxPairAttempts: MAX_PAIR_ATTEMPTS,
-  tokenIdleTtlMs: TOKEN_IDLE_TTL_MS,
+  pinTtlMs: PIN_TTL_MS, attemptWindowMs: ATTEMPT_WINDOW_MS, lockoutMs: LOCKOUT_MS,
+  maxPairAttempts: MAX_PAIR_ATTEMPTS, tokenIdleTtlMs: TOKEN_IDLE_TTL_MS,
 });
 const {
   pairedSessions, ensureDesktopInstanceId, createPin, ensureFreshPin,
@@ -248,14 +245,19 @@ function configureSockets() {
         pendingRealtimeCursor = command;
       } else if (command.action === "scroll") {
         const deltaY = Number(command.value?.deltaY) || 0;
+        const deltaX = Number(command.value?.deltaX) || 0;
         if (pendingRealtimeScroll) realtimeDiagnostics.record("coalesced");
-        const accumulated = Math.max(
+        const accumulatedY = Math.max(
           -240,
           Math.min(240, Number(pendingRealtimeScroll?.value?.deltaY || 0) + deltaY),
         );
+        const accumulatedX = Math.max(
+          -240,
+          Math.min(240, Number(pendingRealtimeScroll?.value?.deltaX || 0) + deltaX),
+        );
         pendingRealtimeScroll = {
           ...command,
-          value: { ...(command.value || {}), deltaY: accumulated },
+          value: { ...(command.value || {}), deltaY: accumulatedY, deltaX: accumulatedX },
         };
       }
       if (!realtimeIpcTimer) realtimeIpcTimer = setTimeout(flushRealtimeIpc, REALTIME_IPC_COALESCE_MS);
@@ -316,7 +318,8 @@ function configureSockets() {
         }
         if (envelope.type !== "command") return;
         const action = envelope.payload?.action;
-const realtimeAction = action === "cursor_move" || action === "scroll";
+        const isLiveTyping = action === "send_text" && envelope.payload?.value && typeof envelope.payload.value === "object" && envelope.payload.value.submit === false;
+        const realtimeAction = action === "cursor_move" || action === "scroll" || isLiveTyping;
 
 if (realtimeAction) realtimeDiagnostics.record("received");
 
@@ -419,6 +422,12 @@ if (!rate.ok) {
           queueRealtimeIpc(command);
           return;
         }
+        if (isLiveTyping) {
+          const command = normalizeCommand(envelope.payload);
+          command.controllerRevision = controllerRevision;
+          notifyDesktopRenderer("orion:remote-command", command);
+          return;
+        }
         const command = normalizeCommand(envelope.payload);
         command.controllerRevision = controllerRevision;
         const scheduled = reliableScheduler.enqueue({
@@ -509,21 +518,13 @@ async function startSmartConnectServer(getMainWindow) {
       const session = requireSecureRequest(req);
       const instanceId = ensureDesktopInstanceId();
       return json(res, 200, {
-        ok: true,
-        version: PROTOCOL_VERSION,
-        instanceId,
-        displayName: `Orion Desktop (${os.hostname()})`,
-        ip: getLocalIpAddress(),
-        availableIps: getAllLocalIpAddresses(),
-        port: PORT,
-        paired: Boolean(session),
-        connected: session ? socketIsOpen(connectedSockets.get(session.deviceId)) : false,
+        ok: true, version: PROTOCOL_VERSION, instanceId, displayName: `Orion Desktop (${os.hostname()})`,
+        ip: getLocalIpAddress(), availableIps: getAllLocalIpAddresses(), port: PORT,
+        paired: Boolean(session), connected: session ? socketIsOpen(connectedSockets.get(session.deviceId)) : false,
         ...(session
           ? { device: session.deviceName, controller: controllerStatusFor(session.deviceId), playback: currentPlayback }
           : { rePairRequired: publicDevices().some((d) => d.rePairRequired) }),
-        pairingGuard: pairingGuardSnapshot(),
-        certificateFingerprint: secureIdentity.certificateFingerprint,
-        secureTransport: true,
+        pairingGuard: pairingGuardSnapshot(), certificateFingerprint: secureIdentity.certificateFingerprint, secureTransport: true,
       });
     }
 

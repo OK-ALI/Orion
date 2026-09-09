@@ -68,8 +68,8 @@ body.no-anim .constellation-rail--loading span,body.no-anim .constellation-grid-
   isolation: isolate;
 }
 .smart-connect-signal.is-connected {
-  --smart-connect-signal-color: var(--success);
-  --smart-connect-signal-soft: var(--success-soft);
+  --smart-connect-signal-color: var(--accent);
+  --smart-connect-signal-soft: var(--accent-soft);
 }
 .smart-connect-signal.is-reconnecting {
   --smart-connect-signal-color: var(--warning);

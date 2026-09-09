@@ -32,14 +32,16 @@ const ROOT_DIR = path.join(__dirname, "..", "..");
 // ── Performance flags ────────────────────────────────────────────────────────
 app.commandLine.appendSwitch(
   "js-flags",
-  "--max-old-space-size=256 --expose-gc",
+  "--max-old-space-size=512 --expose-gc",
 );
 app.commandLine.appendSwitch(
   "disable-features",
   "UseSandboxedXdgPortal",
 );
-app.commandLine.appendSwitch("enable-features", "NetworkServiceInProcess2");
-app.commandLine.appendSwitch("disk-cache-size", String(80 * 1024 * 1024));
+app.commandLine.appendSwitch("enable-features", "NetworkServiceInProcess2,ParallelDownloading");
+app.commandLine.appendSwitch("disk-cache-size", String(512 * 1024 * 1024));
+app.commandLine.appendSwitch("disable-background-timer-throttling");
+app.commandLine.appendSwitch("disable-renderer-backgrounding");
 // Streaming webviews, the app shell, and a pop-out window need independent
 // renderers. A limit of three caused the pop-out renderer to fail to launch.
 app.commandLine.appendSwitch("renderer-process-limit", "8");
@@ -158,9 +160,9 @@ function createWindow() {
       // access; disabling only the preload sandbox restores the typed IPC bridge.
       sandbox: false,
       webviewTag: true,
-      backgroundThrottling: true,
+      backgroundThrottling: false,
       spellcheck: false,
-      additionalArguments: ["--js-flags=--max-old-space-size=256 --expose-gc"],
+      additionalArguments: ["--js-flags=--max-old-space-size=512 --expose-gc"],
     },
   });
 
@@ -220,10 +222,16 @@ function createWindow() {
     ensurePlayerSessions();
 
     try {
+      wc.setBackgroundThrottling(false);
       if (wc.session === session.fromPartition("persist:player")) {
         bindWebContentsToActive(wc.id);
         playerWcIds.add(wc.id);
-        wc.once("destroyed", () => playerWcIds.delete(wc.id));
+        wc.once("destroyed", () => {
+          playerWcIds.delete(wc.id);
+          if (playerWcIds.size === 0) mediaControls.setPlaybackPowerState?.(false);
+        });
+        wc.on("media-started-playing", () => mediaControls.setPlaybackPowerState?.(true));
+        wc.on("media-paused", () => mediaControls.setPlaybackPowerState?.(false));
 
         // Consistent YouTube-style keyboard controls inside sandboxed player webviews.
         wc.on("before-input-event", async (event, input) => {

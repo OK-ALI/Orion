@@ -44,7 +44,13 @@ function register(getMainWindow, getPerformanceSnapshot = () => ({ tier: "balanc
       if (!captureContents || captureContents.isDestroyed()) return stop(targetId);
       const performanceSnapshot = getPerformanceSnapshot?.() || { tier: "balanced" };
       const playbackPressure = derivePlaybackPressure(performanceSnapshot);
-      if (owner && !owner.isDestroyed() && owner.isVisible() && !owner.isMinimized() && playbackPressure === "none") {
+      const onBattery = powerMonitor.isOnBatteryPower();
+      const skipAmbientCapture = onBattery && (
+        playbackPressure !== "none" ||
+        Number(performanceSnapshot.bufferingEvents) > 0 ||
+        (Number.isFinite(performanceSnapshot.batteryLevel) && performanceSnapshot.batteryLevel <= 0.15)
+      );
+      if (owner && !owner.isDestroyed() && owner.isVisible() && !owner.isMinimized() && playbackPressure === "none" && !skipAmbientCapture) {
         try {
           const stateTarget = playbackContents && !playbackContents.isDestroyed()
             ? playbackContents
@@ -58,7 +64,7 @@ function register(getMainWindow, getPerformanceSnapshot = () => ({ tier: "balanc
                 );
               } catch {}
             }
-            const tier = performanceSnapshot.tier || "balanced";
+            const tier = onBattery ? "efficiency" : (performanceSnapshot.tier || "balanced");
             const captureSize = ambientCaptureSize(tier);
             const image = await captureContents.capturePage(
               boundedSampleRect(sourceRect, captureSize.width, captureSize.height),

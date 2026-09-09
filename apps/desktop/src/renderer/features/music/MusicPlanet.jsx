@@ -344,7 +344,16 @@ export default function MusicPlanet({ page, selected, onNavigate }) {
     onNavigate("music-home", { restoreMusicScroll: true });
   }, [onNavigate, selected]);
 
-  const handleSearch = (query) => navigateWithinMusic("music-search", { query });
+  const handleSearch = useCallback((query) => navigateWithinMusic("music-search", { query }), [navigateWithinMusic]);
+
+  useEffect(() => {
+    const handleRemoteMusicSearch = (e) => {
+      const text = typeof e.detail === "string" ? e.detail : String(e.detail?.query || "");
+      if (page !== "music-search" && text) handleSearch(text);
+    };
+    window.addEventListener("orion:music-search", handleRemoteMusicSearch);
+    return () => window.removeEventListener("orion:music-search", handleRemoteMusicSearch);
+  }, [handleSearch, page]);
 
   return (
     <div className="music-planet-container" {...musicAppearance}>

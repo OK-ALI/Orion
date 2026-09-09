@@ -282,6 +282,7 @@ export default function TrailerModal({ trailerKey, title, onClose }) {
               src={currentSrc}
               partition="persist:trailer"
               allowpopups="false"
+              webpreferences="backgroundThrottling=no,contextIsolation=yes"
               style={{
                 position: "absolute",
                 inset: 0,

@@ -18,8 +18,10 @@ export function useRemotePointer(
   const touchpadLayoutRef = useRef({ width: 320, height: 230 });
   const lastTouchPosRef = useRef({ x: 0, y: 0 });
   const lastScrollYRef = useRef(0);
+  const lastScrollXRef = useRef(0);
   const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
   const pendingScrollRef = useRef(0);
+  const pendingScrollXRef = useRef(0);
   const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastRealtimeSendAtRef = useRef(0);
   const frameIntervalRef = useRef(33);
@@ -37,18 +39,20 @@ export function useRemotePointer(
     realtimeTimerRef.current = null;
     const cursor = pendingCursorRef.current;
     const scrollDelta = pendingScrollRef.current;
+    const scrollDeltaX = pendingScrollXRef.current;
     pendingCursorRef.current = null;
     pendingScrollRef.current = 0;
+    pendingScrollXRef.current = 0;
 
     if (cursor) {
       diagnosticsRef.current.cursorSends += 1;
       sendRef.current('cursor_move', cursor);
     }
-    if (Math.abs(scrollDelta) >= 0.5) {
+    if (Math.abs(scrollDelta) >= 0.5 || Math.abs(scrollDeltaX) >= 0.5) {
       diagnosticsRef.current.scrollSends += 1;
-      sendRef.current('scroll', { deltaY: -scrollDelta });
+      sendRef.current('scroll', { deltaY: -scrollDelta, deltaX: scrollDeltaX });
     }
-    if (cursor || Math.abs(scrollDelta) >= 0.5) lastRealtimeSendAtRef.current = Date.now();
+    if (cursor || Math.abs(scrollDelta) >= 0.5 || Math.abs(scrollDeltaX) >= 0.5) lastRealtimeSendAtRef.current = Date.now();
   }, [sendRef]);
 
   const scheduleRealtime = useCallback(() => {
@@ -73,11 +77,18 @@ export function useRemotePointer(
     scheduleRealtime();
   }, [scheduleRealtime]);
 
+  const queueHorizontalScroll = useCallback((deltaX: number) => {
+    if (pendingScrollXRef.current) policyRef.current.coalescedUpdates += 1;
+    pendingScrollXRef.current += deltaX;
+    scheduleRealtime();
+  }, [scheduleRealtime]);
+
   const clearPendingPointer = useCallback((reason = 'transport-reset') => {
     if (realtimeTimerRef.current !== null) clearTimeout(realtimeTimerRef.current);
     realtimeTimerRef.current = null;
     pendingCursorRef.current = null;
     pendingScrollRef.current = 0;
+    pendingScrollXRef.current = 0;
     lastRealtimeSendAtRef.current = 0;
     gestureWasMultiTouchRef.current = false;
     setIsPointerGestureActive(false);
@@ -225,6 +236,43 @@ export function useRemotePointer(
     },
   })).current;
 
+  const horizontalScrollPanResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onStartShouldSetPanResponderCapture: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponderCapture: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: (event) => {
+      diagnosticsRef.current.grants += 1;
+      if (POINTER_DIAGNOSTICS_ENABLED) console.debug('[SmartConnect horizontal scroll] gesture granted');
+      setIsPointerGestureActive(true);
+      const touch = event.nativeEvent.touches?.[0] || event.nativeEvent;
+      lastScrollXRef.current = touch?.pageX || 0;
+    },
+    onPanResponderMove: (event) => {
+      diagnosticsRef.current.moves += 1;
+      const touch = event.nativeEvent.touches?.[0] || event.nativeEvent;
+      const currentX = touch?.pageX || 0;
+      const stepX = currentX - lastScrollXRef.current;
+      lastScrollXRef.current = currentX;
+      if (Math.abs(stepX) > 100) return;
+      if (Math.abs(stepX) >= 0.5) {
+        queueHorizontalScroll(-stepX * 1.8);
+      }
+    },
+    onPanResponderRelease: () => {
+      diagnosticsRef.current.releases += 1;
+      if (POINTER_DIAGNOSTICS_ENABLED) console.debug('[SmartConnect horizontal scroll] gesture released');
+      flushRealtime();
+      setIsPointerGestureActive(false);
+    },
+    onPanResponderTerminate: () => {
+      diagnosticsRef.current.terminations += 1;
+      if (POINTER_DIAGNOSTICS_ENABLED) console.debug('[SmartConnect horizontal scroll] gesture terminated');
+      clearPendingPointer('horizontal-scroll-gesture-terminated');
+    },
+  })).current;
+
   return {
     clearPendingPointer,
     cursorRef,
@@ -232,6 +280,7 @@ export function useRemotePointer(
     onTouchpadLayout,
     panResponder,
     scrollPanResponder,
+    horizontalScrollPanResponder,
     pointerMode,
     setPointerMode,
     updatePointerHealth,

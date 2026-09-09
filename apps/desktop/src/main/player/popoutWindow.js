@@ -320,6 +320,7 @@ function createPopoutWindowController({
       if (!app.isPackaged) console.error("[popout] preload failed", error?.message || error);
     });
     popoutWindow.webContents.on("did-attach-webview", (_attachedEvent, contents) => {
+      try { contents.setBackgroundThrottling(false); } catch {}
       contents.setWindowOpenHandler(() => ({ action: "deny" }));
       contents.on("dom-ready", () => injectCss(contents));
     });

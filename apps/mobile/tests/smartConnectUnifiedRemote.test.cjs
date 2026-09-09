@@ -115,7 +115,7 @@ test('reliable acknowledgements carry controller revision without breaking legac
   assert.match(commandController, /controllerRevision\?: number/);
 });
 
-test('vertical scroll strip and context title formatting are integrated in remote surface', () => {
+test('vertical and horizontal scroll strips and context title formatting are integrated in remote surface', () => {
   const surface = read('src/features/connect/UnifiedRemoteSurface.tsx');
   const pointer = read('src/features/connect/useRemotePointer.ts');
   const controller = read('src/features/connect/useConnectController.ts');
@@ -125,9 +125,44 @@ test('vertical scroll strip and context title formatting are integrated in remot
   assert.match(surface, /scrollStrip/);
   assert.match(surface, /scrollThumbGrip/);
   assert.match(surface, /Vertical scroll strip/);
+
+  // Horizontal scroll strip assertions
+  assert.match(pointer, /horizontalScrollPanResponder/);
+  assert.match(controller, /horizontalScrollPanResponder/);
+  assert.match(surface, /horizontalScrollStrip/);
+  assert.match(surface, /horizontalScrollThumbGrip/);
+  assert.match(surface, /Horizontal scroll strip/);
+
+  // TV & Accessibility D-Pad label
+  assert.match(surface, /TV & ACCESSIBILITY D-PAD/);
+
   assert.match(surface, /formatContextTitle/);
   assert.match(surface, /'music-home': 'Music Planet: Home'/);
   assert.match(surface, /'get-mobile': 'Get Orion Mobile'/);
   assert.match(surface, /home: 'Browsing Home'/);
   assert.match(surface, /movie: 'Browsing Movies'/);
 });
+
+test('connect and disconnect sound effects are wired into controller connection lifecycle', () => {
+  const controller = read('src/features/connect/useConnectController.ts');
+  const soundEffects = read('src/features/connect/connectSoundEffects.ts');
+
+  assert.match(controller, /playConnectSound/);
+  assert.match(controller, /playDisconnectSound/);
+  assert.match(soundEffects, /playConnectSound/);
+  assert.match(soundEffects, /playDisconnectSound/);
+  assert.match(soundEffects, /connect\.mp3/);
+  assert.match(soundEffects, /disconnect\.mp3/);
+});
+
+test('live remote typing debounces text streaming and handles explicit submission', () => {
+  const surface = read('src/features/connect/UnifiedRemoteSurface.tsx');
+  const controller = read('src/features/connect/useConnectController.ts');
+  assert.match(surface, /handleLiveTextChange/);
+  assert.match(surface, /handleSendExplicit/);
+  assert.match(surface, /handleClearText/);
+  assert.match(surface, /inputWrapper/);
+  assert.match(surface, /close-circle/);
+  assert.match(controller, /action === 'send_text' && value && typeof value === 'object' && value\.submit === false/);
+});
+

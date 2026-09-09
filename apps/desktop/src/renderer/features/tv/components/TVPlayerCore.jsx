@@ -423,6 +423,7 @@ export default function TVPlayerCore({ model }) {
                   }
                   partition="persist:player"
                   allowpopups="false"
+                  webpreferences="backgroundThrottling=no,contextIsolation=yes"
                   preload={window.electron?.playerWebviewPreloadPath || undefined}
                   sandbox="allow-scripts allow-same-origin allow-forms"
                   style={{

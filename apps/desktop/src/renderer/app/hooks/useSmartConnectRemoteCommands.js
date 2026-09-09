@@ -8,6 +8,17 @@ import {
   createRemotePointerTarget,
   stepRemotePointerVisual,
 } from "../../features/player/services/remotePointerSmoothing";
+import {
+  SIDEBAR_PAGES,
+  getScrollContainer,
+  getHorizontalScrollContainer,
+  advanceMediaCarousel,
+  applyHorizontalScroll,
+  setNativeInputValue,
+  moveSpatialFocus,
+} from "./smartConnectNavigationHelpers";
+
+export { advanceMediaCarousel, applyHorizontalScroll };
 
 const REMOTE_CURSOR_INACTIVITY_MS = 4_000;
 let lastCursorActivityAt = 0;
@@ -34,26 +45,7 @@ const rendererRealtimeDiagnostics = {
   maxVisualSettleMs: 0,
 };
 
-const SIDEBAR_PAGES = [
-  "home",
-  "search",
-  "discover",
-  "constellation",
-  "library",
-  "downloads",
-  "music-home",
-  "settings",
-];
 
-function getScrollContainer() {
-  return (
-    document.querySelector(".app-content") ||
-    document.querySelector(".music-planet-container") ||
-    document.querySelector(".page-content") ||
-    document.scrollingElement ||
-    window
-  );
-}
 
 function getOrCreateVirtualCursor() {
   let cursor = document.querySelector(".orion-virtual-cursor");
@@ -375,39 +367,7 @@ async function clickCursor() {
   return { ok: true };
 }
 
-function moveSpatialFocus(action) {
-  const selector =
-    ".media-card, [role='button'], .poster-container, .card, .search-media-result";
-  let cards = Array.from(document.querySelectorAll(selector));
-  if (cards.length === 0) {
-    cards = Array.from(document.querySelectorAll("button, [tabindex='0']"));
-  }
-  if (cards.length === 0) return;
-  cards.forEach((element) => {
-    if (!element.hasAttribute("tabindex")) element.setAttribute("tabindex", "0");
-  });
-  const focused = document.querySelector(".spatial-remote-focused");
-  let index = focused ? cards.indexOf(focused) : cards.indexOf(document.activeElement);
-  const nextIndex =
-    action === "focus_card_next"
-      ? index === -1
-        ? 0
-        : (index + 1) % cards.length
-      : index === -1
-        ? cards.length - 1
-        : (index - 1 + cards.length) % cards.length;
-  document
-    .querySelectorAll(".spatial-remote-focused")
-    .forEach((element) => element.classList.remove("spatial-remote-focused"));
-  const target = cards[nextIndex];
-  target?.classList.add("spatial-remote-focused");
-  target?.focus?.();
-  target?.scrollIntoView?.({
-    behavior: "smooth",
-    block: "center",
-    inline: "center",
-  });
-}
+
 
 export function useSmartConnectRemoteCommands({
   baseNavigate,
@@ -502,7 +462,12 @@ const targetScroll = getScrollContainer();
       if (action === "cursor_click") commandResult = await clickCursor();
       if (action === "scroll") {
         const deltaY = Math.max(-240, Math.min(240, Number(value?.deltaY) || 0));
-        getScrollContainer()?.scrollBy?.({ top: deltaY, behavior: "auto" });
+        const deltaX = Math.max(-240, Math.min(240, Number(value?.deltaX) || 0));
+        if (deltaX !== 0) {
+          applyHorizontalScroll(deltaX, deltaY, hoveredRemoteElement);
+        } else {
+          getScrollContainer()?.scrollBy?.({ top: deltaY, behavior: "auto" });
+        }
       }
       if (action === "navigate_page" && value) await baseNavigate(value);
       if (action === "sidebar_next" || action === "sidebar_prev") {
@@ -585,8 +550,49 @@ const targetScroll = getScrollContainer();
         window.dispatchEvent(new CustomEvent("orion:toggle-sidebar"));
       }
       if (action === "send_text") {
-        setShowSearch(true);
-        if (value) baseNavigate("search", value);
+        const textValue = typeof value === "string" ? value : (value?.text != null ? String(value.text) : "");
+        const shouldSubmit = typeof value === "string" ? true : Boolean(value?.submit);
+        const activeEl = typeof document !== "undefined" ? document.activeElement : null;
+        const isInputActive = Boolean(
+          activeEl && (
+            activeEl.tagName === "INPUT" ||
+            activeEl.tagName === "TEXTAREA" ||
+            activeEl.isContentEditable
+          )
+        );
+
+        if (isInputActive) {
+          activeEl.focus?.();
+          setNativeInputValue(activeEl, textValue);
+          if (shouldSubmit && typeof window !== "undefined" && window.KeyboardEvent) {
+            activeEl.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+          }
+        } else {
+          const currentRoute = String(pageRef?.current || "home");
+          if (currentRoute === "constellation") {
+            window.dispatchEvent(new CustomEvent("orion:constellation-search", { detail: textValue }));
+          } else if (currentRoute === "settings") {
+            window.dispatchEvent(new CustomEvent("orion:settings-search", { detail: textValue }));
+          } else if (currentRoute.startsWith("music")) {
+            window.dispatchEvent(new CustomEvent("orion:music-search", { detail: textValue }));
+            if (currentRoute !== "music-search") {
+              baseNavigate?.("music-search", { query: textValue });
+            }
+          } else if (currentRoute === "search") {
+            const searchInput = document.querySelector(".search-input-full");
+            if (searchInput) {
+              setNativeInputValue(searchInput, textValue);
+              if (shouldSubmit && typeof window !== "undefined" && window.KeyboardEvent) {
+                searchInput.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+              }
+            } else {
+              baseNavigate?.("search", textValue);
+            }
+          } else {
+            setShowSearch?.(true);
+            if (textValue) baseNavigate?.("search", textValue);
+          }
+        }
       }
 
       const mediaCommands = {
@@ -622,7 +628,10 @@ const targetScroll = getScrollContainer();
       } finally {
         if (payload?.id) pendingPlaybackRef.current.delete(payload.id);
       }
-      const isRealtimeCommand = action === "cursor_move" || action === "scroll";
+      const isRealtimeCommand =
+        action === "cursor_move" ||
+        action === "scroll" ||
+        (action === "send_text" && typeof value !== "string" && !value?.submit);
 if (!isRealtimeCommand && payload?.id && window.electron?.acknowledgeSmartConnectCommand) {
         window.electron
           .acknowledgeSmartConnectCommand({

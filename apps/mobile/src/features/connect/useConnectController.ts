@@ -14,6 +14,7 @@ import { clearPairingGuard, writePairingGuard } from './pairingGuardStore';
 import { usePairingGuardState } from './usePairingGuardState';
 import { useLiveTelemetry } from './useLiveTelemetry';
 import { useRemotePointer } from './useRemotePointer';
+import { playConnectSound, playDisconnectSound } from './connectSoundEffects';
 import {
   authenticateSecureSocket, closeSecureSmartConnectSocket, confirmSecurePairing,
   rejectSecurePairing, sendRealtimeSecureEnvelope, sendSecureEnvelope, startSecurePairing, subscribeSecureSmartConnect,
@@ -44,6 +45,7 @@ const readJson = <T,>(key: string): T | null => {
 
 export function useConnectController() {
   const [isConnected, setIsConnected] = useState(false);
+  const isConnectedRef = useRef(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [desktopIp, setDesktopIp] = useState('');
@@ -99,7 +101,7 @@ export function useConnectController() {
   }>());
   const sendCommandRef = useRef<(cmd: string, value?: any) => Promise<any>>(async () => ({ ok: false, error: 'Remote transport is not ready.' }));
   const fireAndForgetRef = useRef<(cmd: string, value?: any) => void>(() => {});
-  const { clearPendingPointer, cursorRef, isPointerGestureActive, panResponder, scrollPanResponder, onTouchpadLayout, pointerMode, setPointerMode, updatePointerHealth } = useRemotePointer(fireAndForgetRef, sendCommandRef);
+  const { clearPendingPointer, cursorRef, isPointerGestureActive, panResponder, scrollPanResponder, horizontalScrollPanResponder, onTouchpadLayout, pointerMode, setPointerMode, updatePointerHealth } = useRemotePointer(fireAndForgetRef, sendCommandRef);
   const { latency, remoteContext, setRemoteContext, telemetry, ingestTelemetry, isScrubbing, setIsScrubbing, markSent, forgetSent, recordAck } = useLiveTelemetry(setNowPlaying);
 
   useEffect(() => {
@@ -184,7 +186,12 @@ export function useConnectController() {
       }
       if (envelope.type === 'status') {
         applyControllerAccess(envelope.payload?.controller);
-        setIsConnected(envelope.payload?.connected !== false);
+        const nextConnected = envelope.payload?.connected !== false;
+        if (nextConnected && !isConnectedRef.current) {
+          playConnectSound();
+        }
+        isConnectedRef.current = nextConnected;
+        setIsConnected(nextConnected);
         setConnectionState('connected');
         reconnectAttemptRef.current = 0;
         setRemoteError('');
@@ -242,8 +249,16 @@ export function useConnectController() {
 
   useEffect(() => subscribeSecureSmartConnect({
     onMessage: consumeSocketMessage,
-    onClose: () => { clearPendingPointer('socket-closed'); setSocketBackpressured(false); rejectAllPendingAcks('Socket connection closed.'); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
-    onFailure: (message) => { clearPendingPointer('socket-failed'); setSocketBackpressured(false); rejectAllPendingAcks(message); setRemoteError(message); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect(); },
+    onClose: () => {
+      if (isConnectedRef.current) playDisconnectSound();
+      isConnectedRef.current = false;
+      clearPendingPointer('socket-closed'); setSocketBackpressured(false); rejectAllPendingAcks('Socket connection closed.'); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect();
+    },
+    onFailure: (message) => {
+      if (isConnectedRef.current) playDisconnectSound();
+      isConnectedRef.current = false;
+      clearPendingPointer('socket-failed'); setSocketBackpressured(false); rejectAllPendingAcks(message); setRemoteError(message); setIsConnected(false); connectionRef.current.connected = false; scheduleReconnect();
+    },
     onPressure: (pressure) => setSocketBackpressured(Boolean(pressure.backpressured)),
   }), [deviceId]);
 
@@ -410,7 +425,10 @@ export function useConnectController() {
           : 'Take control of Orion Desktop before sending remote commands.',
       };
     }
-    if (FIRE_AND_FORGET_ACTIONS.has(action)) {
+    if (
+      FIRE_AND_FORGET_ACTIONS.has(action) ||
+      (action === 'send_text' && value && typeof value === 'object' && value.submit === false)
+    ) {
       sendFireAndForget(action, value);
       return { ok: true };
     }
@@ -489,6 +507,8 @@ export function useConnectController() {
 
   const handleDisconnect = async () => {
     disconnectingRef.current = true;
+    if (isConnectedRef.current) playDisconnectSound();
+    isConnectedRef.current = false;
     if (isConnected) await sendRemoteCommand('smart_connect_unpair');
     setIsConnected(false); setShowDisconnectModal(false); setPinCode(''); setConnectionState('idle');
     connectionRef.current.endpoint = null; await closeTransport();
@@ -510,7 +530,7 @@ export function useConnectController() {
       { id: 'library', label: 'Library', icon: 'library-outline' }, { id: 'downloads', label: 'Downloads', icon: 'download-outline' },
       { id: 'music-home', label: 'Music', icon: 'musical-notes-outline' }, { id: 'settings', label: 'Settings', icon: 'settings-outline' },
     ],
-    pairError, pairingMethod, panResponder, scrollPanResponder, pinCode, pulseAnim, qrNotice, remoteError, remoteText,
+    pairError, pairingMethod, panResponder, scrollPanResponder, horizontalScrollPanResponder, pinCode, pulseAnim, qrNotice, remoteError, remoteText,
     requestCameraPermission, scanLineAnim, searchTarget, sendRemoteCommand, setActiveTab,
     setCurrentSpeedIndex, setQrNotice, setDesktopIp, setNavFocusMode, setPairingMethod, setPinCode,
     setRemoteText, setSearchTarget, setShowDisconnectModal, setShowPairingModal, showDisconnectModal,

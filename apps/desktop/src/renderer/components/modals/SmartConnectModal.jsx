@@ -147,11 +147,11 @@ export default function SmartConnectModal({ onClose, connectionState = "online" 
           maxHeight: "min(820px, calc(100vh - 48px))",
           overflowY: "auto",
           background: "var(--bg-elevated)",
-          border: connected ? "1px solid var(--success)" : "1px solid var(--border-accent)",
+          border: "1px solid var(--border-accent)",
           borderRadius: 22,
           padding: 24,
           textAlign: "center",
-          boxShadow: connected ? "0 0 30px var(--success-soft)" : "var(--shadow-glow)",
+          boxShadow: connected ? "var(--shadow-glow), 0 0 28px var(--accent-soft)" : "var(--shadow-glow)",
         }}
       >
         <button className="download-dialog-close" onClick={onClose} aria-label="Close Smart Connect">
@@ -293,11 +293,12 @@ export default function SmartConnectModal({ onClose, connectionState = "online" 
             style={{
               display: "grid",
               gap: 8,
-              padding: 14,
+              padding: 12,
               marginBottom: 18,
-              borderRadius: 14,
-              background: connected ? "var(--success-soft)" : "var(--surface-translucent)",
-              border: `1px solid ${connected ? "var(--success)" : "var(--border)"}`,
+              borderRadius: 16,
+              background: "var(--surface-translucent)",
+              border: `1px solid ${connected ? "var(--border-accent)" : "var(--border)"}`,
+              boxShadow: connected ? "0 4px 20px var(--accent-soft)" : "none",
             }}
           >
             {devices.map((device) => (
@@ -308,19 +309,46 @@ export default function SmartConnectModal({ onClose, connectionState = "online" 
                   alignItems: "center",
                   justifyContent: "space-between",
                   gap: 12,
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  background: "var(--surface2)",
-                  border: "1px solid var(--border)",
+                  padding: "10px 14px",
+                  borderRadius: 12,
+                  background: device.connected ? "var(--accent-soft)" : "var(--surface2)",
+                  border: `1px solid ${device.connected ? "var(--border-accent)" : "var(--border)"}`,
                 }}
               >
                 <div style={{ minWidth: 0, flex: 1, textAlign: "left" }}>
-                  <strong style={{ display: "block", color: "var(--text1)" }}>
-                    <span style={{ color: device.connected ? "var(--success)" : "var(--warning)" }}>● </span>
-                    {device.deviceName || "Orion Mobile"}
+                  <strong style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text1)" }}>
+                    <span
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: "50%",
+                        background: device.connected ? "var(--accent)" : "var(--warning)",
+                        boxShadow: device.connected ? "0 0 6px var(--accent)" : "none",
+                        display: "inline-block",
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span>{device.deviceName || "Orion Mobile"}</span>
+                    {device.connected && (
+                      <span
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 800,
+                          letterSpacing: 0.8,
+                          padding: "1px 6px",
+                          borderRadius: 999,
+                          background: "var(--accent)",
+                          color: "var(--on-accent, #fff)",
+                          textTransform: "uppercase",
+                          marginLeft: 4,
+                        }}
+                      >
+                        LIVE
+                      </span>
+                    )}
                   </strong>
-                  <span style={{ color: "var(--text3)", fontSize: 11 }}>
-                    {device.connected ? "Live now" : "Offline"} · Last active{" "}
+                  <span style={{ color: "var(--text3)", fontSize: 11, display: "block", marginTop: 2 }}>
+                    {device.connected ? "Active remote connected" : "Offline"} · Last active{" "}
                     {device.lastSeenAt ? new Date(device.lastSeenAt).toLocaleString() : "recently"}
                   </span>
                   {device.rePairRequired && (
@@ -375,7 +403,7 @@ export default function SmartConnectModal({ onClose, connectionState = "online" 
         <div
           style={{
             fontSize: 12,
-            color: connected ? "var(--success)" : paired ? "var(--warning)" : "var(--text3)",
+            color: connected ? "var(--accent)" : paired ? "var(--warning)" : "var(--text3)",
             fontWeight: 700,
             marginBottom: 16,
           }}
