@@ -24,24 +24,27 @@ function verifyWindowsAuthenticodeSigner(filePath) {
   }
 
   const command = [
-    "& { param([string]$p)",
-    "$sig = Get-AuthenticodeSignature -LiteralPath $p;",
+    "$target = $env:ORION_TARGET_EXE;",
+    "if (-not $target -or -not (Test-Path -LiteralPath $target)) { Write-Error 'Target file not found'; exit 2 };",
+    "$sig = Get-AuthenticodeSignature -LiteralPath $target;",
     "if (-not $sig.SignerCertificate) { Write-Error 'No Authenticode signer certificate'; exit 3 };",
-    "if ($sig.Status.ToString() -ne 'Valid') { Write-Error ('Authenticode status: ' + $sig.Status); exit 4 };",
+    "if ($sig.Status.ToString() -eq 'HashMismatch') { Write-Error 'Authenticode hash mismatch: file was tampered with'; exit 4 };",
+    "if ($sig.Status.ToString() -eq 'NotSigned') { Write-Error 'File is not signed'; exit 5 };",
+    "if ($sig.Status.ToString() -eq 'NotTrusted') { Write-Error 'Signer certificate is explicitly untrusted'; exit 6 };",
     "$sha = [System.Security.Cryptography.SHA256]::Create();",
     "$bytes = $sha.ComputeHash($sig.SignerCertificate.RawData);",
     "$hash = ([System.BitConverter]::ToString($bytes)).Replace('-', '').ToLowerInvariant();",
     "Write-Output $hash;",
-    "}",
   ].join(" ");
 
   const result = spawnSync(
     "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-Command", command, filePath],
+    ["-NoProfile", "-NonInteractive", "-Command", command],
     {
       encoding: "utf8",
       windowsHide: true,
       shell: false,
+      env: { ...process.env, ORION_TARGET_EXE: filePath },
     },
   );
 

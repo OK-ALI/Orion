@@ -116,3 +116,13 @@ test("P9.2 update execution is exposed by Updates preload ownership, not Downloa
   assert.match(updates, /downloadAndInstallUpdate/);
   assert.doesNotMatch(downloads, /downloadAndInstallUpdate/);
 });
+
+test("P9.2 verifyWindowsAuthenticodeSigner reads signer fingerprint from signed installer", () => {
+  if (process.platform !== "win32") return;
+  const exePath = path.resolve(__dirname, "../../../release/publish-3.1.0/Orion.Setup.3.1.0.exe");
+  if (!fs.existsSync(exePath)) return;
+
+  const { verifyWindowsAuthenticodeSigner } = require("../../../src/main/updates/integrity");
+  const digest = verifyWindowsAuthenticodeSigner(exePath);
+  assert.equal(digest, "99b64a75f98bbe40ac9a435753c41b5159297df9870fb3fe7a927d2d50db6dc5");
+});
