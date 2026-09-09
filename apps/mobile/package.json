@@ -1,6 +1,6 @@
 {
   "name": "@orion/mobile",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "main": "expo-router/entry",
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
