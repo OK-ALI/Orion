@@ -538,7 +538,7 @@ Expo Go may validate visual state transitions only when dependencies permit. It 
 
 No phase beyond Phase 1 is authorized by this plan amendment. Every phase requires its own explicit implementation authorization and evidence at the stated tier.
 
-### Phase 0 — Evidence and version baseline (complete)
+### Phase 0 — Evidence and version baseline (evidence complete; audit ACK accepted)
 
 1. **Goal:** Freeze Orion Mobile, Music Planet, Orion Cloud, and workspace evidence.
 2. **Scope:** root manifests/workflows; `apps/mobile`; Music Planet; shared PortableProfile and Cloud adapters.
@@ -549,7 +549,7 @@ No phase beyond Phase 1 is authorized by this plan amendment. Every phase requir
 7. **Exit:** exact matrix and no-unplanned-upgrade decision recorded.
 8. **Out of scope:** dependency changes, live account access, implementation.
 
-### Phase 1 — WAVEN project foundation (complete at CODE/TEST ONLY tier)
+### Phase 1 — WAVEN project foundation (automated gate passed; physical ACK pending)
 
 1. **Goal:** Provide a clean Android-first Expo workspace in the monorepo.
 2. **Scope/files:** `apps/waven/{package.json,app.json,eas.json,metro.config.js,tsconfig.json,app,src,assets,tests}` and lockfile registration.
@@ -696,7 +696,7 @@ No phase beyond Phase 1 is authorized by this plan amendment. Every phase requir
 3. **Reuse:** Orion updater components only after the read-only audit classifies each as **REUSE**, **ADAPT**, **REWRITE**, or **NOT APPLICABLE**.
 4. **Backend:** production Google package/signature registration and provider readiness; GitHub release metadata for direct distribution.
 5. **Validation classification:** updater end-to-end and release lock are **DISTRIBUTED RELEASE ACCEPTANCE REQUIRED**. A development build may test components but cannot satisfy acceptance.
-6. **Tests:** section 16 architecture plus the complete section 17 physical matrix using the exact GitHub artifact family.
+6. **Tests:** section 17 architecture plus the complete section 18 physical matrix using the exact GitHub artifact family.
 7. **Exit:** clean and in-place update paths pass; state/Cloud continuity is proven; evidence is approved before release lock.
 8. **Dependencies:** all release-scope phases.
 9. **Out of scope:** executing a release without explicit authorization; Orion Desktop rename.
@@ -712,15 +712,75 @@ No phase beyond Phase 1 is authorized by this plan amendment. Every phase requir
 7. **Dependencies:** mature WAVEN brand/system and separate authorization.
 8. **Out of scope:** WAVEN v1 Android foundation and initial Android release.
 
-## 15. Android development and validation model
+## 15. Phase weighting, completion percentage, and ACK governance
+
+### 15.1 Completion rule
+
+WAVEN v1 progress is milestone-based, not an estimate of effort spent. Each Phase 0–12 has a fixed weight totaling **100%**. A phase contributes its full weight only when every exit criterion passes, its required physical-validation tier passes, its evidence is recorded, and its **Completion ACK** is `ACCEPTED`. Partial implementation, code completion, Expo Go success, or a development build does not earn partial overall percentage.
+
+The only physical-validation exception is a phase with no runtime/device surface, currently Phase 0. Such a phase may complete through an evidence-review ACK that explicitly records `Physical validation: NOT APPLICABLE`. Phase 13 is post-v1 Desktop migration work and has a 0% WAVEN v1 weight; it still requires its own Desktop completion ACK.
+
+**Overall WAVEN v1 completion formula:**
+
+`Overall % = sum of weights for Phase 0–12 whose Completion ACK is ACCEPTED`
+
+If later regression evidence invalidates an accepted phase, its ACK becomes `REOPENED`, its weight is removed from the total, and dependent phase ACKs must be reviewed. Percentages are never advanced merely because calendar time passed or work was started.
+
+### 15.2 Authoritative phase ledger
+
+| Phase | Deliverable | V1 weight | Required final validation before ACK | Current state | Completion ACK | Earned |
+|---:|---|---:|---|---|---|---:|
+| 0 | Evidence and version baseline | 4% | Code/evidence review; physical N/A | Evidence complete | `ACK-P00-2026-09-14` — ACCEPTED (audit-only) | 4% |
+| 1 | WAVEN project foundation | 6% | Compatible Expo Go physical run or WAVEN development-build physical run, plus current automated checks | Automated gate passed; physical pending | PENDING | 0% |
+| 2 | Shared Orion Cloud Android adapter | 8% | Development-build physical identity/Drive lifecycle; later release regression | Not started / not authorized | PENDING | 0% |
+| 3 | Shared music domain/provider contracts | 8% | Physical provider integration in the implementation runtime plus automated contract parity | Not started / not authorized | PENDING | 0% |
+| 4 | Android playback core | 12% | Development-build physical playback/lifecycle/MediaSession soak; later release reacceptance | Not started / not authorized | PENDING | 0% |
+| 5 | Design system and navigation | 7% | Expo Go-compatible physical UI/accessibility matrix or development-build equivalent | Not started / not authorized | PENDING | 0% |
+| 6 | Search, discovery, and details | 7% | Physical online/degraded/offline provider flow in the correct runtime | Not started / not authorized | PENDING | 0% |
+| 7 | Local Library, favorites, playlists, history | 8% | Development-build physical persistence, restart, account isolation, and migration | Not started / not authorized | PENDING | 0% |
+| 8 | Offline awareness and connectivity resilience | 8% | Development-build physical connectivity matrix in section 13.8 | Not started / not authorized | PENDING | 0% |
+| 9 | WAVEN domains in Orion Cloud | 9% | Development-build physical two-device/account/offline conflict matrix; later release reacceptance | Not started / not authorized | PENDING | 0% |
+| 10 | Full player, lyrics, and atmosphere | 7% | Development-build physical player/lyrics/accessibility/lifecycle matrix | Not started / not authorized | PENDING | 0% |
+| 11 | Downloads, reliability, and performance | 6% | Development-build physical storage/restart/soak matrix; distributed acceptance if downloads ship | Not started / not authorized | PENDING | 0% |
+| 12 | Release engineering, updater, distributed acceptance | 10% | Permanently signed GitHub Preview/Prerelease; clean install and in-place update on physical matrix | Not started / not authorized | PENDING | 0% |
+| 13 | Future Desktop Music Planet → WAVEN migration | 0% (post-v1) | Dedicated Desktop runtime/update/UX acceptance | Not started / not authorized | PENDING | 0% |
+
+**Current authoritative WAVEN v1 completion: 4%.** Phase 1 has passed its automated gate but remains incomplete and earns 0% until physical validation and its Completion ACK are accepted. No later phase is authorized or complete.
+
+### 15.3 Completion ACK record required for every phase
+
+Each phase must end with a durable ACK block in this ledger or an adjacent evidence record containing:
+
+- phase number, name, and fixed weight;
+- exact Git commit/ref and dependency-lock identity;
+- validation classification and required tier;
+- build/artifact identifier, package ID, versionName/versionCode, and signing certificate when applicable;
+- automated test report and exact pass/fail counts;
+- physical device/API/OEM matrix and execution date;
+- Expo Go version or development-build/release artifact identity, as applicable;
+- scenario evidence, redacted logs, screenshots/video, defects, waivers, and residual risks;
+- clean-install and in-place-update evidence when applicable;
+- Orion Cloud/offline continuity evidence when applicable;
+- reviewer/owner, ACK ID, decision date, and `ACCEPTED`, `REJECTED`, or `REOPENED` decision.
+
+`ACCEPTED` means all phase exit criteria and the required physical gate passed. `REJECTED` leaves the phase incomplete. `REOPENED` withdraws previously earned percentage until regression evidence passes again. A technical test summary without the decision record is not a Completion ACK.
+
+### 15.4 Dependency and release accounting
+
+- Downstream work may begin only when separately authorized; starting it does not change overall percentage.
+- A downstream phase cannot receive an ACK while a required dependency is unaccepted unless an explicit, documented exception explains the risk and owner.
+- Phase 12 cannot be accepted until all release-scope Phase 1–11 ACKs are accepted or explicitly excluded from the candidate with documented scope.
+- WAVEN v1 reaches **100%** only when Phase 0–12 contribute their full accepted weights and the exact signed distributed candidate passes the final physical gate.
+- Stable promotion, if authorized, does not retroactively replace Preview/Prerelease acceptance evidence; both records remain traceable.
+## 16. Android development and validation model
 
 The automated baseline plus three device/distribution tiers are distinct bodies of evidence. A feature can progress through several, but none may be relabeled as a stronger tier.
 
-### 15.1 Code / automated test evidence
+### 16.1 Code / automated test evidence
 
 Includes typecheck, lint where applicable, unit/integration tests, Expo config validation, Expo Doctor, static checks, and web/export checks when useful. This is the current WAVEN evidence level.
 
-### 15.2 Tier 1 — Expo Go development testing
+### 16.2 Tier 1 — Expo Go development testing
 
 Purpose: fast physical feedback for capabilities actually present in the stock Expo Go runtime, such as layout, safe areas, navigation, typography, split-color headings, theme/artwork presentation, pure JS data flows, supported animations, accessible semantics, and Search/Home/Library presentation.
 
@@ -731,13 +791,13 @@ Rules:
 - Do not weaken production architecture merely to stay inside Expo Go.
 - Do not upgrade WAVEN because Expo Go prefers a newer SDK.
 
-### 15.3 Tier 2 — WAVEN development build / development client
+### 16.3 Tier 2 — WAVEN development build / development client
 
 Purpose: validate WAVEN's real native dependency graph: custom config/native modules, Google identity and Drive, Orion Cloud bridge, background playback, MediaSession, notifications, audio focus, headset/Bluetooth, lifecycle, storage/filesystem/downloads, native analysis if approved, and updater component integration.
 
 A development build counts as **DEVELOPMENT DEVICE VALIDATION**, never final release acceptance. Review generated native output before locking it. Debug/development signing and adb installation cannot establish release-signed behavior.
 
-### 15.4 Tier 3 — Signed distributed WAVEN candidate
+### 16.4 Tier 3 — Signed distributed WAVEN candidate
 
 Required production-path chain:
 
@@ -745,7 +805,7 @@ Required production-path chain:
 
 Expo Go, emulator results, debug/development APKs, development clients, unsigned local artifacts, source inspection, and unit tests cannot substitute for this tier.
 
-### 15.5 Feature classification matrix
+### 16.5 Feature classification matrix
 
 | Deliverable | Expo Go | Development build | Distributed candidate |
 |---|---|---|---|
@@ -758,15 +818,15 @@ Expo Go, emulator results, debug/development APKs, development clients, unsigned
 | Downloads/filesystem | Not suitable | Required | Required if shipped |
 | In-app updater | Not meaningful end to end | Component-only | Required |
 
-### 15.6 Expo/React Native version discipline
+### 16.6 Expo/React Native version discipline
 
 Do not upgrade WAVEN because a newer SDK exists, Expo Go prefers it, a tutorial uses it, or a dependency advertises newer APIs. Any proposed generation change must document the benefit and evaluate Orion Mobile, WAVEN, `@orion/shared`, Metro, Expo Router, New Architecture, Hermes, Reanimated/Worklets, MMKV/Nitro, Cloud plugins, Google bridges, playback/MediaSession, Gradle, AGP, Kotlin, JDK, SDK levels, generated-native diff, signing, clean install, in-place update, and physical-device behavior. Orion Mobile must never be upgraded as a WAVEN side effect.
 
-## 16. WAVEN in-app update and GitHub distribution architecture
+## 17. WAVEN in-app update and GitHub distribution architecture
 
 Direct-distribution builds are expected to support a WAVEN-owned in-app update experience. This is a locked product direction, not current implementation evidence.
 
-### 16.1 Required read-only Orion Mobile updater audit
+### 17.1 Required read-only Orion Mobile updater audit
 
 Before design or implementation, trace current Orion Mobile code end to end and record:
 
@@ -781,13 +841,13 @@ Before design or implementation, trace current Orion Mobile code end to end and 
 
 Classify each Orion component as **REUSE**, **ADAPT**, **REWRITE**, or **NOT APPLICABLE**. Do not assume a verbatim copy.
 
-### 16.2 Target WAVEN update flow
+### 17.2 Target WAVEN update flow
 
 `existing permanently signed WAVEN → eligible newer GitHub Preview/Prerelease → update details shown → correct APK downloaded → visible progress/cancel/retry/error → artifact verified → Android installer handoff → same-signature upgrade → relaunch on new version → local and Cloud-compatible state verified`
 
 The updater must not accept arbitrary assets, silently downgrade, expose sensitive URLs/tokens in logs, or treat download completion as install success.
 
-### 16.3 Preview/Prerelease channel
+### 17.3 Preview/Prerelease channel
 
 The future candidate flow is:
 
@@ -795,7 +855,7 @@ The future candidate flow is:
 
 The GitHub artifact family is acceptance truth. An unrelated local APK cannot substitute. Release metadata must identify versionName, versionCode, package ID, minimum supported updater/source version, ABI/variant if relevant, SHA-256, size, Git SHA, release notes, and known issues.
 
-### 16.4 Clean install versus in-place update
+### 17.4 Clean install versus in-place update
 
 Both are required and recorded separately:
 
@@ -804,11 +864,11 @@ Both are required and recorded separately:
 
 For storage/schema changes, each release must name the oldest supported source version. Once a permanent signed baseline exists, later acceptance normally includes both the immediately previous Preview and that oldest supported schema source.
 
-### 16.5 State and Orion Cloud continuity across updates
+### 17.5 State and Orion Cloud continuity across updates
 
 Validate that updates preserve or intentionally reacquire: Google subject association, secure account snapshot, Drive authorization, Orion Cloud checkpoints, WAVEN namespaces, Library, favorites, playlists, policy-bounded history, preferences, queue where promised, offline pending operations, account isolation, logout/disconnect semantics, and Cloud-compatible migrations. No pending local or Cloud operation may be silently lost.
 
-## 17. Distributed physical acceptance gate
+## 18. Distributed physical acceptance gate
 
 - **Minimum initial candidate:** `0.9.0-preview.1` or a higher explicitly approved prerelease. Foundation `0.1.0` is not eligible.
 - **Artifacts:** a permanently release-signed universal APK for direct acceptance and, if store delivery remains planned, a release-signed AAB from the same commit/config. Record SHA-256, size, package ID, versionName/versionCode, signing-certificate SHA-256, Git SHA, Node/npm/JDK/Gradle/AGP/Kotlin/SDK versions, and build command.
@@ -822,7 +882,7 @@ Validate that updates preserve or intentionally reacquire: Google subject associ
 - **Accessibility/performance:** TalkBack, large text, reduced motion, contrast, low-memory behavior, startup, frame pacing, battery, memory, and data usage.
 - **Evidence before lock:** per-device install/update record; screenshots/video for visible flows; redacted structured logs; automated reports; performance/battery/memory results; Cloud fixtures; conflict/recovery proof; updater metadata and verification evidence; crash-free soak; accessibility and security/privacy reviews; explicit owner sign-off.
 
-## 18. Risks, blockers, and open decisions
+## 19. Risks, blockers, and open decisions
 
 1. The root lockfile was already modified and TV is untracked. Preserve and review the combined diff before any commit.
 2. Node is not pinned at repository root; CI uses 22 while the audited machine used 24.14.1.
@@ -843,7 +903,7 @@ Validate that updates preserve or intentionally reacquire: Google subject associ
 17. Losing the permanent signing key would break in-place updates; key custody and recovery policy must be approved before the first distributed baseline.
 18. Rollback is constrained by Android versionCode and schema compatibility; it must never be implied without an explicit safe design.
 
-## 19. Recommended first implementation checkpoint
+## 20. Recommended first implementation checkpoint
 
 The next implementation checkpoint remains **Shared Orion Cloud Android Adapter Extraction**, but this documentation consolidation does **not** authorize it or any other phase.
 
