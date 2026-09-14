@@ -6,13 +6,10 @@ const test = require('node:test');
 const wavenRoot = path.resolve(__dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(wavenRoot, relativePath), 'utf8');
 
-const index = read('app/index.tsx');
 const route = read('app/playback-debug.tsx');
 const harness = read('src/features/playback/debug/PlaybackDebugHarness.tsx');
 
-test('P4.3 exposes the playback harness only through a development-only foundation link', () => {
-  assert.match(index, /__DEV__/);
-  assert.match(index, /href="\/playback-debug"/);
+test('P4.3 keeps the playback harness on its bounded development route while Phase 5 removes validation links from product Home', () => {
   assert.match(route, /PlaybackDebugHarness/);
   assert.match(harness, /if \(!__DEV__\)/);
 });

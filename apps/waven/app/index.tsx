@@ -1,113 +1,239 @@
-import { LinearGradient } from 'expo-linear-gradient';
-import { Link } from 'expo-router';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { SplitAccentHeading } from '../src/components/brand/SplitAccentHeading';
-import { OrionCloudReadOnlyGateCard } from '../src/features/orion-cloud/OrionCloudReadOnlyGateCard';
-import { wavenColors } from '../src/theme/tokens';
+import { useRouter } from 'expo-router';
+import { StyleSheet, Text, View } from 'react-native';
+import { WavenArtworkFallback } from '../src/components/artwork/WavenArtworkFallback';
+import { WavenPressable } from '../src/components/interaction/WavenPressable';
+import { WavenAppShell } from '../src/components/shell/WavenAppShell';
+import { WavenSurface } from '../src/components/surfaces/WavenSurface';
+import { useWavenLayout } from '../src/hooks/useWavenLayout';
+import {
+  wavenColors,
+  wavenRadii,
+  wavenSpacing,
+  wavenTypography,
+} from '../src/theme/tokens';
 
-const P4_PHYSICAL_VALIDATION = process.env.EXPO_PUBLIC_WAVEN_P4_PHYSICAL_VALIDATION === '1';
+export default function WavenHomeScreen() {
+  const router = useRouter();
+  const layout = useWavenLayout();
 
-export default function WavenFoundationScreen() {
   return (
-    <LinearGradient
-      colors={[wavenColors.black, wavenColors.surface, wavenColors.black]}
-      style={styles.background}
-    >
-      <SafeAreaView style={styles.safeArea}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.brandBlock}>
-            <Image
-              accessibilityLabel="WAVEN brand mark"
-              resizeMode="contain"
-              source={require('../assets/icon.png')}
-              style={styles.icon}
+    <WavenAppShell brandTagline>
+      <View style={styles.page}>
+        <View style={styles.homeBody}>
+          <WavenSurface
+            style={[
+              styles.hero,
+              layout.isCompact ? styles.heroCompact : styles.heroRegular,
+            ]}
+          >
+            <WavenArtworkFallback
+              accessibilityLabel="WAVEN sound artwork"
+              seed="home-start-listening"
+              size={layout.heroArtworkSize}
             />
-            <Text accessibilityLabel="WAVEN" style={styles.wordmark}>
-              <Text>WA</Text>
-              <Text style={styles.wordmarkAccent}>V</Text>
-              <Text>EN</Text>
-            </Text>
-            <Text style={styles.subtitle}>Where Music Lives.</Text>
-            <SplitAccentHeading lead="Foundation" accent="Ready" />
-            <Text style={styles.note}>
-              Phase 2.2 wires WAVEN to the shared Orion Cloud Android adapter under a read-only
-              preservation gate. No primary-profile create or write path is available here.
-            </Text>
+            <View style={styles.heroCopy}>
+              <Text style={styles.eyebrow}>START LISTENING</Text>
+              <Text style={styles.heroMeta}>Songs · Artists · Albums · Playlists</Text>
+              <WavenPressable
+                accessibilityLabel="Search music"
+                accessibilityRole="button"
+                containerStyle={styles.heroActionContainer}
+                onPress={() => router.replace('/search')}
+              >
+                <View style={styles.heroAction}>
+                  <Text style={styles.heroActionText}>Search Music</Text>
+                  <Text accessible={false} style={styles.heroActionArrow}>›</Text>
+                </View>
+              </WavenPressable>
+            </View>
+          </WavenSurface>
+
+          <View style={styles.section}>
+            <Text accessibilityRole="header" style={styles.sectionTitle}>Recently Played</Text>
+            <View style={styles.quietState}>
+              <View accessible={false} style={styles.quietSignal}>
+                <View style={[styles.quietBar, { height: 9 }]} />
+                <View style={[styles.quietBar, styles.quietBarActive, { height: 16 }]} />
+                <View style={[styles.quietBar, { height: 12 }]} />
+              </View>
+              <Text style={styles.quietBody}>Your first plays will collect here.</Text>
+            </View>
           </View>
 
-          <OrionCloudReadOnlyGateCard />
-
-          {(__DEV__ || P4_PHYSICAL_VALIDATION) ? (
-            <Link href="/playback-debug" style={styles.playbackHarnessLink}>
-              Open Phase 4 Playback Harness
-            </Link>
-          ) : null}
-        </ScrollView>
-      </SafeAreaView>
-    </LinearGradient>
+          <View style={styles.section}>
+            <Text accessibilityRole="header" style={styles.sectionTitle}>Your Music</Text>
+            <WavenPressable
+              accessibilityLabel="Open Library"
+              accessibilityRole="button"
+              onPress={() => router.replace('/library')}
+            >
+              <View style={styles.libraryShortcut}>
+                <View accessible={false} style={styles.libraryIcon}>
+                  <View style={[styles.libraryBar, { height: 13 }]} />
+                  <View style={[styles.libraryBar, { height: 18 }]} />
+                  <View style={[styles.libraryBar, { height: 10 }]} />
+                </View>
+                <View style={styles.libraryShortcutCopy}>
+                  <Text style={styles.libraryShortcutTitle}>Open Your Library</Text>
+                  <Text style={styles.libraryShortcutBody}>Albums, artists, playlists and liked music.</Text>
+                </View>
+                <Text accessible={false} style={styles.shortcutArrow}>›</Text>
+              </View>
+            </WavenPressable>
+          </View>
+        </View>
+      </View>
+    </WavenAppShell>
   );
 }
 
 const styles = StyleSheet.create({
-  background: {
+  page: {
     flex: 1,
   },
-  safeArea: {
+  homeBody: {
+    flex: 1,
+    gap: wavenSpacing.xl,
+    justifyContent: 'space-between',
+    paddingTop: wavenSpacing.md,
+  },
+  hero: {
+    overflow: 'hidden',
+    padding: wavenSpacing.lg,
+  },
+  heroRegular: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: wavenSpacing.lg,
+  },
+  heroCompact: {
+    alignItems: 'flex-start',
+    gap: wavenSpacing.md,
+  },
+  heroCopy: {
     flex: 1,
   },
-  content: {
-    alignItems: 'center',
-    paddingHorizontal: 28,
-    paddingTop: 28,
-    paddingBottom: 48,
-  },
-  brandBlock: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  icon: {
-    width: 180,
-    height: 180,
-    marginBottom: 14,
-  },
-  wordmark: {
-    color: wavenColors.coolWhite,
-    fontSize: 34,
+  eyebrow: {
+    color: wavenColors.interactionBlue,
+    fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 8,
+    letterSpacing: 1.45,
   },
-  wordmarkAccent: {
-    color: wavenColors.activeBlue,
-  },
-  subtitle: {
-    color: wavenColors.silver,
-    fontSize: 15,
-    letterSpacing: 1.5,
-    marginTop: 8,
-    marginBottom: 32,
-  },
-  note: {
-    color: wavenColors.steelGray,
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 14,
-    maxWidth: 520,
-    textAlign: 'center',
-  },
-  playbackHarnessLink: {
-    borderColor: wavenColors.deepBlue,
-    borderRadius: 999,
-    borderWidth: 1,
-    color: wavenColors.skyBlue,
+  heroMeta: {
+    color: wavenColors.textSecondary,
     fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 19,
+    marginTop: 8,
+  },
+  heroActionContainer: {
+    alignSelf: 'flex-start',
+    marginTop: wavenSpacing.md,
+  },
+  heroAction: {
+    alignItems: 'center',
+    backgroundColor: wavenColors.blueWash,
+    borderColor: wavenColors.blueEdge,
+    borderRadius: wavenRadii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    minHeight: 44,
+    paddingHorizontal: 15,
+  },
+  heroActionText: {
+    color: wavenColors.textPrimary,
+    fontSize: wavenTypography.label.fontSize,
+    fontWeight: wavenTypography.label.fontWeight,
+  },
+  heroActionArrow: {
+    color: wavenColors.interactionBlue,
+    fontSize: 21,
+    lineHeight: 21,
+    marginLeft: 9,
+    marginTop: -2,
+  },
+  section: {
+    gap: 12,
+  },
+  sectionTitle: {
+    color: wavenColors.textPrimary,
+    fontSize: wavenTypography.section.fontSize,
+    fontWeight: wavenTypography.section.fontWeight,
+    lineHeight: wavenTypography.section.lineHeight,
+  },
+  quietState: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 48,
+  },
+  quietSignal: {
+    alignItems: 'center',
+    backgroundColor: wavenColors.blueWash,
+    borderColor: wavenColors.borderSubtle,
+    borderRadius: wavenRadii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: 3,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  quietBar: {
+    backgroundColor: wavenColors.textMuted,
+    borderRadius: 2,
+    width: 3,
+  },
+  quietBarActive: {
+    backgroundColor: wavenColors.interactionBlue,
+  },
+  quietBody: {
+    color: wavenColors.textMuted,
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  libraryShortcut: {
+    alignItems: 'center',
+    backgroundColor: wavenColors.glassSoft,
+    borderColor: wavenColors.borderSubtle,
+    borderRadius: wavenRadii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    minHeight: 72,
+    paddingHorizontal: wavenSpacing.md,
+    paddingVertical: 12,
+  },
+  libraryIcon: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: 3,
+    justifyContent: 'center',
+    marginRight: 14,
+    width: 26,
+  },
+  libraryBar: {
+    backgroundColor: wavenColors.interactionBlue,
+    borderRadius: 2,
+    width: 4,
+  },
+  libraryShortcutCopy: {
+    flex: 1,
+  },
+  libraryShortcutTitle: {
+    color: wavenColors.textPrimary,
+    fontSize: 14,
     fontWeight: '700',
-    letterSpacing: 0.6,
-    marginTop: 24,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+  },
+  libraryShortcutBody: {
+    color: wavenColors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
+  },
+  shortcutArrow: {
+    color: wavenColors.textMuted,
+    fontSize: 24,
+    marginLeft: 10,
   },
 });
