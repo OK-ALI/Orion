@@ -206,7 +206,7 @@ Initial independent identity:
 - Android application ID: `com.okali.waven`
 - foundation version: `0.1.0`, Android versionCode `1`
 
-The workspace includes only a foundation screen, design tokens, split-accent heading primitive, structure notes, and baseline tests. Playback, providers, Cloud writes, EAS registration, signing, and Desktop branding changes are intentionally absent.
+The workspace includes only a foundation screen, design tokens, split-accent heading primitive, structure notes, and baseline tests. Playback, providers, Orion Cloud writes, EAS registration, signing, and Desktop branding changes are intentionally absent.
 
 ### Icon record
 
@@ -293,7 +293,7 @@ There is no evidence of Firebase, Supabase, a bespoke Orion account server, or a
 
 Mobile uses Android Credential Manager with `GetSignInWithGoogleOption`. `OrionGoogleIdentityModule.kt:66-83` maps `google.uniqueId` to `accountId`, returns profile fields, and deliberately withholds the Google ID token from JavaScript. `AccountContext.tsx:73-86` creates the persisted Orion account snapshot.
 
-Desktop uses Google OAuth authorization-code flow with PKCE and a local loopback callback (`googleAuthIpc.js:171-198,624-764`). It fetches Google `userinfo`; the `sub` is the identity used to authorize PortableProfile writes (`portableProfileIpc.js:38-45`). Mobile `uniqueId` and Desktop `sub` are expected to represent the same Google subject, and this equivalence must be verified on a development account before WAVEN Cloud writes are enabled.
+Desktop uses Google OAuth authorization-code flow with PKCE and a local loopback callback (`googleAuthIpc.js:171-198,624-764`). It fetches Google `userinfo`; the `sub` is the identity used to authorize PortableProfile writes (`portableProfileIpc.js:38-45`). Mobile `uniqueId` and Desktop `sub` are expected to represent the same Google subject, and this equivalence must be verified on a development account before WAVEN's Orion Cloud writes are enabled.
 
 ### 8.3 Backend provider and cloud data model
 
@@ -446,7 +446,7 @@ Do not sync ephemeral provider URLs, signed/expiring streams, cookies, OAuth tok
 ### 11.3 Account and device behavior
 
 - WAVEN sign-in uses the ecosystem Google subject and its own local display/session snapshot.
-- WAVEN Cloud consent requests only `drive.appdata` unless a later approved feature requires another scope.
+- Orion Cloud consent in WAVEN requests only `drive.appdata` unless a later approved feature requires another scope.
 - Local-only use remains supported when signed out or offline.
 - Account switching must bind a distinct local profile before any sync and must never expose one account's music library to another.
 - `updatedBy` should become a privacy-safe device-install identifier or an explicitly defined writer ID if WAVEN requires device-level diagnostics; current Mobile writes often use account ID, which does not identify the device.
@@ -562,7 +562,7 @@ No phase beyond Phase 1 is authorized by this plan amendment. Every phase requir
 9. **Not established:** Android, Expo Go, development client, playback, Cloud, offline, signing, updater, or release acceptance.
 10. **Exit:** npm recognizes `@orion/waven`; checks pass without upgrading Orion.
 11. **Dependencies:** Phase 0.
-12. **Out of scope:** providers, playback, Cloud writes, production signing.
+12. **Out of scope:** providers, playback, Orion Cloud writes, production signing.
 
 ### Phase 2 — Shared Orion Cloud Android adapter extraction (not authorized)
 
@@ -651,7 +651,7 @@ No phase beyond Phase 1 is authorized by this plan amendment. Every phase requir
 10. **Development-build physical tests:** the full connectivity matrix in section 13.8, including background/process recovery and native playback behavior.
 11. **Distributed acceptance:** release-path regression for offline startup, local playback, mutations, Cloud recovery, and state preservation on the signed GitHub candidate.
 12. **Exit criteria:** one state owner; Library works offline; offline-capable tracks play; network-only features explain limits; queue/navigation survive where possible; Cloud pauses safely; pending changes recover; reconnection is automatic and ordered; duplicates/flapping do not corrupt state; development-device evidence exists.
-13. **Dependencies:** Phases 4 and 7, with Phase 6 integration; must precede WAVEN Cloud namespace enablement.
+13. **Dependencies:** Phases 4 and 7, with Phase 6 integration; must precede WAVEN namespace enablement in Orion Cloud.
 14. **Out of scope:** downloadable-media implementation, pretending remote streams are offline, DRM/catalog infrastructure, or release acceptance from Expo Go.
 
 ### Phase 9 — WAVEN domains in Orion Cloud (not authorized)
@@ -918,4 +918,4 @@ Required outputs after explicit authorization:
 7. development-build device evidence for sign-in, consent, read, revoke, sign-out, offline, and recovery;
 8. no WAVEN music namespace writes until the shared adapter and schemas pass review.
 
-This checkpoint reduces the highest ecosystem risk while keeping Orion Mobile and WAVEN on one proven dependency generation. Phase 8 offline resilience is required before Phase 9 enables WAVEN Cloud namespace synchronization. Phase 12 later owns updater and signed distribution acceptance.
+This checkpoint reduces the highest ecosystem risk while keeping Orion Mobile and WAVEN on one proven dependency generation. Phase 8 offline resilience is required before Phase 9 enables WAVEN namespace synchronization through Orion Cloud. Phase 12 later owns updater and signed distribution acceptance.
