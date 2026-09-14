@@ -6,6 +6,8 @@ import { SplitAccentHeading } from '../src/components/brand/SplitAccentHeading';
 import { OrionCloudReadOnlyGateCard } from '../src/features/orion-cloud/OrionCloudReadOnlyGateCard';
 import { wavenColors } from '../src/theme/tokens';
 
+const P4_PHYSICAL_VALIDATION = process.env.EXPO_PUBLIC_WAVEN_P4_PHYSICAL_VALIDATION === '1';
+
 export default function WavenFoundationScreen() {
   return (
     <LinearGradient
@@ -39,7 +41,7 @@ export default function WavenFoundationScreen() {
 
           <OrionCloudReadOnlyGateCard />
 
-          {__DEV__ ? (
+          {(__DEV__ || P4_PHYSICAL_VALIDATION) ? (
             <Link href="/playback-debug" style={styles.playbackHarnessLink}>
               Open Phase 4 Playback Harness
             </Link>

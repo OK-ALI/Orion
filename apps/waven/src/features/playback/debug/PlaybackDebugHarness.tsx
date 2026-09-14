@@ -25,6 +25,8 @@ import {
   subscribeNativePlayback,
 } from '../native/WavenPlaybackNative';
 
+const P4_PHYSICAL_VALIDATION = process.env.EXPO_PUBLIC_WAVEN_P4_PHYSICAL_VALIDATION === '1';
+
 const HARNESS_QUEUE: readonly NativePlaybackQueueItem[] = [
   {
     queueId: 'p43-harness-track-a',
@@ -92,7 +94,8 @@ export function PlaybackDebugHarness() {
   const currentQueueId = snapshot?.currentQueueId ?? HARNESS_QUEUE[0].queueId;
 
   useEffect(() => {
-    if (!__DEV__ || Platform.OS !== 'android') return undefined;
+    const harnessEnabled = __DEV__ || P4_PHYSICAL_VALIDATION;
+    if (!harnessEnabled || Platform.OS !== 'android') return undefined;
 
     try {
       const subscription = subscribeNativePlayback(setSnapshot);
@@ -197,7 +200,8 @@ export function PlaybackDebugHarness() {
   }, [run, snapshot?.repeatMode]);
 
   if (!__DEV__) {
-    return (
+    if (!P4_PHYSICAL_VALIDATION) {
+      return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.disabledCard}>
           <Text style={styles.title}>Playback Harness Disabled</Text>
@@ -205,7 +209,8 @@ export function PlaybackDebugHarness() {
           <Link href="/" style={styles.link}>Return to WAVEN</Link>
         </View>
       </SafeAreaView>
-    );
+      );
+    }
   }
 
   return (
