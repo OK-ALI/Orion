@@ -10,6 +10,13 @@ const {
 const androidDirectory = path.resolve(__dirname, "..", "android");
 const gradleWrapper = process.platform === "win32" ? "gradlew.bat" : "./gradlew";
 const projectDirectory = path.resolve(__dirname, "..");
+const repositoryDirectory = path.resolve(projectDirectory, "..", "..");
+const orionCloudAndroidDirectory = path.join(
+  repositoryDirectory,
+  "packages",
+  "shared",
+  "orion-cloud-android",
+);
 const debugApk = path.join(
   androidDirectory,
   "app",
@@ -117,9 +124,9 @@ if (
 }
 
 const googleIdentityNativeSourceDirectory = path.join(
-  projectDirectory,
-  "plugins",
-  "orion-google-identity-native",
+  orionCloudAndroidDirectory,
+  "native",
+  "identity",
 );
 const googleIdentityNativeTargetDirectory = path.join(
   androidDirectory,
@@ -156,9 +163,9 @@ const googleIdentityDependencies = [
 ];
 
 const googleDriveAuthorizationNativeSourceDirectory = path.join(
-  projectDirectory,
-  "plugins",
-  "orion-google-drive-authorization-native",
+  orionCloudAndroidDirectory,
+  "native",
+  "drive",
 );
 const googleDriveAuthorizationNativeTargetDirectory = path.join(
   androidDirectory,

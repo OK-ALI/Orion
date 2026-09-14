@@ -6,10 +6,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const mobileRoot = path.resolve(__dirname, "..");
+const repositoryRoot = path.resolve(mobileRoot, "..", "..");
+const sharedCloudRoot = path.join(repositoryRoot, "packages", "shared", "orion-cloud-android");
 const read = (relative) => fs.readFileSync(path.join(mobileRoot, relative), "utf8");
+const readSharedCloud = (relative) => fs.readFileSync(path.join(sharedCloudRoot, relative), "utf8");
 
 test("P8.2 Android Drive authorization requests only the private app-data scope", () => {
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveAuthorizationModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveAuthorizationModule.kt");
   assert.match(native, /https:\/\/www\.googleapis\.com\/auth\/drive\.appdata/);
   assert.match(native, /AuthorizationRequest\.builder\(\)/);
   assert.match(native, /setRequestedScopes\(listOf\(Scope\(DRIVE_APPDATA_SCOPE\)\)\)/);
@@ -18,7 +21,7 @@ test("P8.2 Android Drive authorization requests only the private app-data scope"
 });
 
 test("P8.2 Drive authorization resolves Google consent without exposing OAuth tokens to JavaScript", () => {
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveAuthorizationModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveAuthorizationModule.kt");
   const bridge = read("src/features/account/nativeGoogleDriveAuthorization.ts");
 
   assert.match(native, /Identity\.getAuthorizationClient\(activity\)/);
@@ -34,7 +37,7 @@ test("P8.2 Drive authorization resolves Google consent without exposing OAuth to
 });
 
 test("P8.2 Drive authorization is generated and standalone-build synchronized without prebuild", () => {
-  const plugin = read("plugins/withOrionGoogleDriveAuthorization.js");
+  const plugin = readSharedCloud("withOrionGoogleDriveAuthorization.js");
   const appConfig = read("app.json");
   const build = read("scripts/build-android-standalone.cjs");
 
@@ -63,7 +66,7 @@ test("P8.2 Drive authorization stays separate from sync and library mutation", (
 
 test("P8.2 account disconnect clears cached Drive tokens without implicitly revoking the Drive grant", () => {
   const context = read("src/context/AccountContext.tsx");
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveAuthorizationModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveAuthorizationModule.kt");
 
   assert.match(context, /clearGoogleDriveAuthorizationCache/);
   assert.doesNotMatch(context, /revokeGoogleDriveAppData/);
@@ -72,7 +75,7 @@ test("P8.2 account disconnect clears cached Drive tokens without implicitly revo
 });
 
 test("P8.2 Drive authorization can explicitly revoke only Orion's app-data grant", () => {
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveAuthorizationModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveAuthorizationModule.kt");
   const bridge = read("src/features/account/nativeGoogleDriveAuthorization.ts");
 
   assert.match(native, /RevokeAccessRequest\.builder\(\)/);
@@ -101,7 +104,7 @@ test("P8.2 Drive Ready state exposes an explicit confirmed removal action", () =
 });
 
 test("P8.2 Drive authorization silently restores an existing app-data grant after process restart", () => {
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveAuthorizationModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveAuthorizationModule.kt");
   const bridge = read("src/features/account/nativeGoogleDriveAuthorization.ts");
 
   const checkStart = native.indexOf("fun checkAppDataAuthorization");
@@ -138,7 +141,7 @@ test("P8.2 Account restores Drive readiness without automatically launching cons
 });
 
 test("P8.2 silent Drive restoration preserves explicit revocation and library boundaries", () => {
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveAuthorizationModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveAuthorizationModule.kt");
   const accountUi = read("src/features/settings/AccountSettingsContent.tsx");
 
   assert.match(native, /putBoolean\("authorized", alreadyGranted\)/);

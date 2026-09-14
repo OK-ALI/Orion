@@ -6,7 +6,10 @@ const path = require("node:path");
 const test = require("node:test");
 
 const mobileRoot = path.resolve(__dirname, "..");
+const repositoryRoot = path.resolve(mobileRoot, "..", "..");
+const sharedCloudRoot = path.join(repositoryRoot, "packages", "shared", "orion-cloud-android");
 const read = (relative) => fs.readFileSync(path.join(mobileRoot, relative), "utf8");
+const readSharedCloud = (relative) => fs.readFileSync(path.join(sharedCloudRoot, relative), "utf8");
 
 test("P8.7 Candidate 1.5 exposes only bounded safe Orion Cloud failure codes", () => {
   const store = read("src/features/account/googleDriveCloudProfileStore.ts");
@@ -52,7 +55,7 @@ test("P8.7 Candidate 1.5 keeps error recovery inside the existing Account row gr
 });
 
 test("P8.7 Candidate 1.5 native transport logs failure code without cloud content", () => {
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveProfileStoreModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveProfileStoreModule.kt");
   assert.match(native, /LOG_TAG = "OrionCloudProfile"/);
   assert.match(native, /PortableProfileV3 transport failure code=\$code/);
   assert.match(native, /throw IllegalStateException\("GOOGLE_DRIVE_PROFILE_DUPLICATE"\)/);
@@ -61,7 +64,7 @@ test("P8.7 Candidate 1.5 native transport logs failure code without cloud conten
 
 
 test("P8.7 Candidate 1.5 discovers the hidden profile with the documented q-free appDataFolder listing path", () => {
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveProfileStoreModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveProfileStoreModule.kt");
   const start = native.indexOf("private fun findProfileFiles");
   const end = native.indexOf("private fun fetchMetadata", start);
   assert.ok(start >= 0 && end > start);
@@ -77,7 +80,7 @@ test("P8.7 Candidate 1.5 discovers the hidden profile with the documented q-free
 });
 
 test("P8.7 Candidate 1.5 logs only the bounded Drive request stage when transport fails", () => {
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveProfileStoreModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveProfileStoreModule.kt");
   assert.match(native, /val stage: String/);
   assert.match(native, /stage = "metadata"/);
   assert.match(native, /stage = "download"/);
@@ -89,7 +92,7 @@ test("P8.7 Candidate 1.5 logs only the bounded Drive request stage when transpor
 
 
 test("P8.7 Candidate 1.5 update upload is API-version neutral and cannot send a v3-only fields selector to Drive v2", () => {
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveProfileStoreModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveProfileStoreModule.kt");
   const start = native.indexOf("private fun updateProfile");
   const end = native.indexOf("private data class HttpResponse", start);
   assert.ok(start >= 0 && end > start);

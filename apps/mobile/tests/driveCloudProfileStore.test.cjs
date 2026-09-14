@@ -6,10 +6,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const mobileRoot = path.resolve(__dirname, "..");
+const repositoryRoot = path.resolve(mobileRoot, "..", "..");
+const sharedCloudRoot = path.join(repositoryRoot, "packages", "shared", "orion-cloud-android");
 const read = (relative) => fs.readFileSync(path.join(mobileRoot, relative), "utf8");
+const readSharedCloud = (relative) => fs.readFileSync(path.join(sharedCloudRoot, relative), "utf8");
 
 test("P8.2 Drive CloudProfileStore uses appDataFolder and a hidden deterministic profile file", () => {
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveProfileStoreModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveProfileStoreModule.kt");
 
   assert.match(native, /spaces=appDataFolder/);
   assert.match(native, /parents[\s\S]*appDataFolder/);
@@ -22,7 +25,7 @@ test("P8.2 Drive CloudProfileStore uses appDataFolder and a hidden deterministic
 });
 
 test("P8.2 Drive profile I/O keeps the OAuth token native-only", () => {
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveProfileStoreModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveProfileStoreModule.kt");
   const store = read("src/features/account/googleDriveCloudProfileStore.ts");
 
   assert.match(native, /OrionGoogleDriveTokenVault\.tokenFor\(accountEmail\)/);
@@ -43,7 +46,7 @@ test("P8.2 GoogleDriveCloudProfileStore implements the backend-neutral contract 
 });
 
 test("P8.2 Drive writes are atomic for both ETag and version revision tokens", () => {
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveProfileStoreModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveProfileStoreModule.kt");
 
   assert.match(native, /DRIVE_V2_API = "https:\/\/www\.googleapis\.com\/drive\/v2"/);
   assert.match(native, /DRIVE_V2_UPLOAD_API = "https:\/\/www\.googleapis\.com\/upload\/drive\/v2"/);
@@ -60,7 +63,7 @@ test("P8.2 Drive writes are atomic for both ETag and version revision tokens", (
 });
 
 test("P8.2 Drive writes verify one unique profile after create and update", () => {
-  const native = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveProfileStoreModule.kt");
+  const native = readSharedCloud("native/drive/OrionGoogleDriveProfileStoreModule.kt");
 
   assert.match(native, /val createdId = createProfile[\s\S]*val afterMatches = findProfileFiles\(token, key\)[\s\S]*afterMatches\.size != 1 \|\| afterMatches\.first\(\) != createdId/);
   assert.match(native, /updateProfile\([\s\S]*val afterMatches = findProfileFiles\(token, key\)[\s\S]*afterMatches\.size != 1 \|\| afterMatches\.first\(\) != current\.id/);
@@ -68,8 +71,8 @@ test("P8.2 Drive writes verify one unique profile after create and update", () =
 });
 
 test("P8.2 standalone and Expo generation synchronize the Drive profile store native module", () => {
-  const packageSource = read("plugins/orion-google-drive-authorization-native/OrionGoogleDriveAuthorizationPackage.kt");
-  const plugin = read("plugins/withOrionGoogleDriveAuthorization.js");
+  const packageSource = readSharedCloud("native/drive/OrionGoogleDriveAuthorizationPackage.kt");
+  const plugin = readSharedCloud("withOrionGoogleDriveAuthorization.js");
   const build = read("scripts/build-android-standalone.cjs");
 
   assert.match(packageSource, /OrionGoogleDriveProfileStoreModule\(context\)/);

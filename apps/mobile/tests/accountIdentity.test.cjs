@@ -6,7 +6,10 @@ const path = require("node:path");
 const test = require("node:test");
 
 const mobileRoot = path.resolve(__dirname, "..");
+const repositoryRoot = path.resolve(mobileRoot, "..", "..");
+const sharedCloudRoot = path.join(repositoryRoot, "packages", "shared", "orion-cloud-android");
 const read = (relative) => fs.readFileSync(path.join(mobileRoot, relative), "utf8");
+const readSharedCloud = (relative) => fs.readFileSync(path.join(sharedCloudRoot, relative), "utf8");
 
 test("P8.1 activates Account without prematurely exposing Sync", () => {
   const architecture = read("src/features/settings/settingsArchitecture.ts");
@@ -29,7 +32,7 @@ test("P8.1 account session uses SecureStore and does not own portable library st
 });
 
 test("P8.1 native Google bridge exposes profile identity but not the ID token", () => {
-  const native = read("plugins/orion-google-identity-native/OrionGoogleIdentityModule.kt");
+  const native = readSharedCloud("native/identity/OrionGoogleIdentityModule.kt");
   assert.match(native, /GetSignInWithGoogleOption/);
   assert.match(native, /google\.uniqueId/);
   assert.match(native, /google\.email/);
@@ -38,7 +41,7 @@ test("P8.1 native Google bridge exposes profile identity but not the ID token", 
 });
 
 test("P8.1 uses stable Credential Manager dependencies through an Expo config plugin", () => {
-  const plugin = read("plugins/withOrionGoogleIdentity.js");
+  const plugin = readSharedCloud("withOrionGoogleIdentity.js");
   assert.match(plugin, /androidx\.credentials:credentials:1\.6\.0/);
   assert.match(plugin, /androidx\.credentials:credentials-play-services-auth:1\.6\.0/);
   assert.match(plugin, /googleid:1\.2\.0/);
@@ -101,7 +104,7 @@ test("P8.1 Google action uses the supplied multicolor G asset instead of a theme
 
 
 test("P8.1 native Google bridge uses the React activity context required by Credential Manager", () => {
-  const native = read("plugins/orion-google-identity-native/OrionGoogleIdentityModule.kt");
+  const native = readSharedCloud("native/identity/OrionGoogleIdentityModule.kt");
   assert.match(native, /val activity = reactContext\.currentActivity/);
   assert.match(native, /CredentialManager\.create\(reactContext\)/);
   assert.match(native, /context = activity/);
