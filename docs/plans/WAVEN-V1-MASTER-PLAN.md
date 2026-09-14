@@ -536,7 +536,7 @@ Expo Go may validate visual state transitions only when dependencies permit. It 
 
 ## 14. Phased implementation roadmap
 
-No phase beyond Phase 1 is authorized by this plan amendment. Every phase requires its own explicit implementation authorization and evidence at the stated tier.
+Phase 2 is explicitly authorized for controlled implementation under the Cloud Data Preservation Gate recorded below. No phase beyond Phase 2 is authorized. Every later phase requires its own explicit implementation authorization and evidence at the stated tier.
 
 ### Phase 0 — Evidence and version baseline (evidence complete; audit ACK accepted)
 
@@ -585,19 +585,36 @@ No phase beyond Phase 1 is authorized by this plan amendment. Every phase requir
 - **UX observation:** the official black-background WAVEN launcher icon remains unchanged; a transparent in-app presentation mark is deferred to the WAVEN design-system work.
 - **Acceptance conclusion:** all Phase 1 foundation exit requirements and the required compatible Expo Go physical gate are satisfied. Phase 1 earns its full 6% weight. This ACK does not authorize Phase 2.
 
-### Phase 2 — Shared Orion Cloud Android adapter extraction (not authorized)
+### Phase 2 — Shared Orion Cloud Android adapter extraction (authorized; implementation pending)
+
+#### Phase 2 Implementation Authorization - `AUTH-P02-2026-09-14`
+
+- **Decision:** `AUTHORIZED` for Phase 2 implementation only.
+- **Authorization date:** 2026-09-14.
+- **Authorized start ref:** branch `waven/v1`, commit `87f352dcd9c0a72cca9478fcda158498587266bd` (`docs(waven): accept phase 1 foundation`).
+- **Phase 2 source audit:** completed read-only before authorization. Orion reference source was audited at commit `2c479f70f50e8e2e428ddce743ba60763143eece`.
+- **Orion source handoff identity:** `WAVEN-P2-SOURCE-HANDOFF-1.zip`, SHA-256 `DCE21352308047F5EDCB1C8662FC3D9C0210D495163F1DD2697CC0D3BFCFD741`.
+- **WAVEN implementation handoff identity:** `WAVEN-P2-WORKSPACE-HANDOFF-1.zip`, SHA-256 `A1507453C1786C7CED584CDF62500D6B86DB4AE667BF7DACAEB392AD8AE96C17`.
+- **Implementation sequence:** P2.1 structural extraction with no live Cloud access; P2.2 WAVEN native wiring and read-only visibility proof; P2.3 controlled physical identity/Drive lifecycle only after the preservation gate permits mutation.
+- **Cloud Data Preservation Gate:** no live Orion Cloud mutation is allowed during structural extraction. `PortableProfileV3` schema meaning, existing V3 fields, known namespace semantics, unknown namespace round-tripping, tombstones, stable reads, optimistic concurrency, strong conditional writes, read-back verification, profile-key identity, and bounded error behavior must remain unchanged.
+- **Native credential invariant:** Google access, refresh, and ID tokens must not cross into JavaScript. Existing native-only token handling is preserved.
+- **Existing profile identity:** `orion-primary-profile-v3` and the deterministic `orion-portable-profile-v3-*` Drive file identity must not be renamed or silently replaced.
+- **Read-only visibility gate:** before WAVEN is permitted to create or update a primary Orion Cloud profile, a physical WAVEN development build must authenticate the intended account and prove read-only visibility of the intended existing Orion Cloud profile. If that profile is unexpectedly missing, duplicated, inaccessible, or isolated behind a different app-data identity, STOP. WAVEN must not create a replacement profile or perform a write.
+- **Controlled-write gate:** any later Phase 2 Cloud mutation requires a recorded preimage/revision, explicit expected delta, conditional write, read-back verification, Orion Mobile regression, and rollback/recovery procedure. Existing production Orion Cloud data must never be used as an uncontrolled mutation target.
+- **Completion accounting:** authorization earns no percentage. Phase 2 remains `0%` until its required development-build physical gate and Completion ACK are accepted. Overall WAVEN v1 completion remains `10%`.
+- **Downstream authorization:** Phase 3 and all later phases remain unauthorized.
 
 1. **Goal:** Parameterize existing ecosystem behavior without redesigning Orion Cloud.
 2. **Likely files:** shared Cloud contracts; a shared/parameterized Android plugin; adapted sources from Orion Mobile Google identity/Drive plugins.
-3. **Reuse:** subject identity, native-only token vault, Drive transport, stable read, conditional write, read-back, error codes.
-4. **New code:** app-neutral module/package generation, shared transaction coordination, compatibility tests.
+3. **Reuse:** subject identity, native-only token vault, Drive transport, stable read, conditional write, read-back verification, profile-key identity, error codes, and existing PortableProfileV3 preservation semantics.
+4. **New code:** app-neutral shared Android module/plugin generation, compatibility wiring, transaction coordination where required, and extraction/regression tests.
 5. **Backend:** existing Google ecosystem; any Android OAuth client remains part of Orion Cloud, not a new identity system.
-6. **Risks:** hard-coded Orion names, package/signature registration, module collision, token regression.
+6. **Risks:** hard-coded Orion Mobile assumptions, package/signature registration, module collision, OAuth/app-data identity isolation, accidental shadow-profile creation, token regression, and altered concurrency semantics.
 7. **Validation classification:** **DEVELOPMENT BUILD REQUIRED**; **DISTRIBUTED RELEASE ACCEPTANCE REQUIRED** before release.
-8. **Tests:** plugin idempotence, generated-native diff, Android compile, identity equivalence, sign-in/authorize/read/revoke/sign-out/offline on device, Orion Mobile regression.
-9. **Exit:** one parameterized adapter serves Orion Mobile and WAVEN; no token crosses JavaScript.
+8. **Tests:** plugin idempotence, generated-native diff, Android compile, Orion Mobile behavior equivalence, identity equivalence, sign-in/authorize/read/revoke/sign-out/offline on device, read-only existing-profile visibility before any WAVEN write, controlled expected-delta write/read-back only after that gate passes, and Orion Mobile regression after Cloud interaction.
+9. **Exit:** one shared Orion Cloud Android adapter serves Orion Mobile and WAVEN; no token crosses JavaScript; WAVEN has proven access to the intended Orion Cloud identity without creating a duplicate or shadow profile; existing Orion Mobile Cloud behavior remains regression-green.
 10. **Dependencies:** Phase 1.
-11. **Out of scope:** WAVEN music namespaces and automatic sync.
+11. **Out of scope:** WAVEN music namespaces, automatic music sync, PortableProfile schema migration, and unrelated Orion Mobile native systems.
 
 ### Phase 3 — Shared music domain and provider contracts (not authorized)
 
@@ -753,7 +770,7 @@ If later regression evidence invalidates an accepted phase, its ACK becomes `REO
 |---:|---|---:|---|---|---|---:|
 | 0 | Evidence and version baseline | 4% | Code/evidence review; physical N/A | Evidence complete | `ACK-P00-2026-09-14` — ACCEPTED (audit-only) | 4% |
 | 1 | WAVEN project foundation | 6% | Compatible Expo Go physical run or WAVEN development-build physical run, plus current automated checks | Automated and Expo Go physical evidence complete | `ACK-P01-2026-09-14` — ACCEPTED | 6% |
-| 2 | Shared Orion Cloud Android adapter | 8% | Development-build physical identity/Drive lifecycle; later release regression | Not started / not authorized | PENDING | 0% |
+| 2 | Shared Orion Cloud Android adapter | 8% | Development-build physical identity/Drive lifecycle; later release regression | Authorized; implementation pending under Cloud Data Preservation Gate | PENDING | 0% |
 | 3 | Shared music domain/provider contracts | 8% | Physical provider integration in the implementation runtime plus automated contract parity | Not started / not authorized | PENDING | 0% |
 | 4 | Android playback core | 12% | Development-build physical playback/lifecycle/MediaSession soak; later release reacceptance | Not started / not authorized | PENDING | 0% |
 | 5 | Design system and navigation | 7% | Expo Go-compatible physical UI/accessibility matrix or development-build equivalent | Not started / not authorized | PENDING | 0% |
@@ -766,7 +783,7 @@ If later regression evidence invalidates an accepted phase, its ACK becomes `REO
 | 12 | Release engineering, updater, distributed acceptance | 10% | Permanently signed GitHub Preview/Prerelease; clean install and in-place update on physical matrix | Not started / not authorized | PENDING | 0% |
 | 13 | Future Desktop Music Planet → WAVEN migration | 0% (post-v1) | Dedicated Desktop runtime/update/UX acceptance | Not started / not authorized | PENDING | 0% |
 
-**Current authoritative WAVEN v1 completion: 10%.** Phase 0 contributes 4% and Phase 1 contributes 6% through accepted Completion ACKs. No later phase is authorized or complete.
+**Current authoritative WAVEN v1 completion: 10%.** Phase 0 contributes 4% and Phase 1 contributes 6% through accepted Completion ACKs. Phase 2 is authorized but remains incomplete and earns 0% until its Completion ACK is accepted. No phase beyond Phase 2 is authorized or complete.
 
 ### 15.3 Completion ACK record required for every phase
 
