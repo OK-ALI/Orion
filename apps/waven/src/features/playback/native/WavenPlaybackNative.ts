@@ -36,12 +36,11 @@ type NativePlaybackBridge = {
   removeListeners(count: number): void;
 };
 
-const bridge = NativeModules.WavenPlayback as NativePlaybackBridge | undefined;
-
 function requireAndroidBridge(): NativePlaybackBridge {
   if (Platform.OS !== "android") {
     throw new Error("WAVEN Phase 4 native playback is Android-only.");
   }
+  const bridge = NativeModules.WavenPlayback as NativePlaybackBridge | undefined;
   if (!bridge) {
     throw new Error(
       "WavenPlayback native module is unavailable. Use a WAVEN development build; Expo Go is not sufficient.",

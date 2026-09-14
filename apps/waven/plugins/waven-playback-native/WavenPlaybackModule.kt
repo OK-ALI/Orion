@@ -18,10 +18,12 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.facebook.react.module.annotations.ReactModule
 import com.google.common.util.concurrent.ListenableFuture
 import java.util.concurrent.Executor
 
 @OptIn(UnstableApi::class)
+@ReactModule(name = WavenPlaybackModule.NAME)
 class WavenPlaybackModule(
   private val reactContext: ReactApplicationContext,
 ) : ReactContextBaseJavaModule(reactContext), Player.Listener {
@@ -32,7 +34,7 @@ class WavenPlaybackModule(
   private var controller: MediaController? = null
   private var listenerCount = 0
 
-  override fun getName(): String = "WavenPlayback"
+  override fun getName(): String = NAME
 
   @ReactMethod
   fun addListener(eventName: String) {
@@ -368,6 +370,10 @@ class WavenPlaybackModule(
     } catch (_: Throwable) {
       // System playback remains native-owned even when the JS observer is gone.
     }
+  }
+
+  companion object {
+    const val NAME = "WavenPlayback"
   }
 
   override fun invalidate() {
