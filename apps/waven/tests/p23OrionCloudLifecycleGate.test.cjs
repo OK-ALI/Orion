@@ -24,40 +24,102 @@ test("P2.3A exposes native Drive revocation through an intentional lifecycle wra
 test("P2.3A keeps Drive revocation distinct from local authorization cache clearing", () => {
   assert.match(driveBridge, /await nativeModule\.revokeAppData/);
   assert.match(driveBridge, /await nativeModule\.clearAuthorizationCache\(\)/);
-  assert.match(lifecycleCard, /Clear local test session \(does not revoke\)/);
-  assert.match(lifecycleCard, /it does not revoke the Drive grant/);
+
+  assert.match(
+    lifecycleCard,
+    /Clear local test session \(does not revoke\)/,
+  );
+
+  assert.match(
+    lifecycleCard,
+    /Google Drive grant and Orion Cloud data were not revoked or changed/,
+  );
 });
 
-test("P2.3A lifecycle UI revokes only the grant and requires reauthorization before reading", () => {
+test("P2.3A lifecycle UI still requires reauthorization after Drive revocation", () => {
   assert.match(lifecycleCard, /Revoke private Drive access/);
   assert.match(lifecycleCard, /Drive access revoked/);
-  assert.match(lifecycleCard, /profile and its data were not deleted or modified/);
+  assert.match(
+    lifecycleCard,
+    /profile and its data were not deleted or modified/,
+  );
+
   assert.match(lifecycleCard, /setDriveAuthorized\(false\)/);
-  assert.match(lifecycleCard, /disabled=\{!profile \|\| busy \|\| driveAuthorized\}/);
+
+  assert.match(
+    lifecycleCard,
+    /disabled=\{!profile \|\| busy \|\| driveAuthorized\}/,
+  );
+
   assert.match(
     lifecycleCard,
     /disabled=\{!profile \|\| !driveAuthorized \|\| phase !== 'authorized' \|\| busy\}/,
   );
-  assert.match(lifecycleCard, /Reauthorize private Drive data to repeat the read-only verification/);
+
+  assert.match(
+    lifecycleCard,
+    /Reauthorize private Drive data to repeat the preservation checks/,
+  );
+
   assert.match(lifecycleCard, /Existing profile visible/);
   assert.match(lifecycleCard, /PortableProfileV3/);
 });
 
-test("P2.3A preserves the absolute read-only profile boundary", () => {
+test("P2.3A ordinary profile probe remains absolutely read-only", () => {
   assert.match(readOnlyProbe, /readPortableProfile/);
-  assert.doesNotMatch(readOnlyProbe, /writePortableProfile/);
-  assert.doesNotMatch(readOnlyProbe, /createPortableProfile|updatePortableProfile|deletePortableProfile/);
-  assert.doesNotMatch(readOnlyProbe, /\.(?:create|update|delete)\s*\(/);
-  assert.doesNotMatch(lifecycleCard, /writePortableProfile|createPortableProfile|updatePortableProfile|deletePortableProfile/);
+
+  assert.doesNotMatch(
+    readOnlyProbe,
+    /writePortableProfile/,
+  );
+
+  assert.doesNotMatch(
+    readOnlyProbe,
+    /createPortableProfile|updatePortableProfile|deletePortableProfile/,
+  );
+
+  assert.doesNotMatch(
+    readOnlyProbe,
+    /\.(?:create|update|delete)\s*\(/,
+  );
+
+  // P2.3D may import its separately guarded controlled-write adapter,
+  // but the UI must never reach the native profile store directly.
+  assert.doesNotMatch(
+    lifecycleCard,
+    /NativeModules\.OrionGoogleDriveProfileStore/,
+  );
+
+  assert.doesNotMatch(
+    lifecycleCard,
+    /\.writePortableProfile\s*\(/,
+  );
 });
 
 test("P2.3A introduces neither music synchronization nor JavaScript OAuth tokens", () => {
-  const lifecycleSources = [driveBridge, lifecycleCard, readOnlyProbe].join("\n");
+  const lifecycleSources = [
+    driveBridge,
+    lifecycleCard,
+    readOnlyProbe,
+  ].join("\n");
+
   assert.doesNotMatch(
     lifecycleSources,
     /wavenFavorites|wavenPlaylists|wavenListeningHistory|wavenPlaybackState|wavenPreferences/,
   );
-  assert.doesNotMatch(lifecycleSources, /automatic\s+sync|auto[- ]sync/i);
-  assert.doesNotMatch(identityBridge, /accessToken|refreshToken|idToken/);
-  assert.doesNotMatch(driveBridge, /accessToken|refreshToken|idToken/);
+
+  assert.doesNotMatch(
+    lifecycleSources,
+    /automatic\s+sync|auto[- ]sync/i,
+  );
+
+  assert.doesNotMatch(
+    identityBridge,
+    /accessToken|refreshToken|idToken/,
+  );
+
+  assert.doesNotMatch(
+    driveBridge,
+    /accessToken|refreshToken|idToken/,
+  );
 });
