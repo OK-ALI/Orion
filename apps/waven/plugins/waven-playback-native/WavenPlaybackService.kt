@@ -2,6 +2,8 @@ package com.okali.waven.playback
 
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -25,9 +27,30 @@ import java.util.concurrent.ConcurrentHashMap
 class WavenPlaybackService : MediaSessionService() {
   private var player: ExoPlayer? = null
   private var mediaSession: MediaSession? = null
+  private lateinit var recoveryStore: WavenPlaybackRecoveryStore
+  private val mainHandler = Handler(Looper.getMainLooper())
+
+  private val persistenceListener = object : Player.Listener {
+    override fun onEvents(player: Player, events: Player.Events) {
+      persistNow(player)
+    }
+  }
+
+  private val positionCheckpoint = object : Runnable {
+    override fun run() {
+      player?.let { active ->
+        if (active.mediaItemCount > 0) {
+          persistNow(active)
+        }
+      }
+      mainHandler.postDelayed(this, POSITION_CHECKPOINT_MS)
+    }
+  }
 
   override fun onCreate() {
     super.onCreate()
+    recoveryStore = WavenPlaybackRecoveryStore(this)
+    sourceLeases.clear()
 
     val upstream = DefaultDataSource.Factory(
       this,
@@ -49,6 +72,7 @@ class WavenPlaybackService : MediaSessionService() {
             ?: throw IOException("WAVEN_SOURCE_UNRESOLVED:$queueId")
 
           if (source.expired()) {
+            unregisterSource(queueId)
             throw IOException("WAVEN_SOURCE_EXPIRED:$queueId")
           }
 
@@ -83,6 +107,22 @@ class WavenPlaybackService : MediaSessionService() {
       .build()
 
     player = activePlayer
+
+    recoveryStore.restore()?.let { restored ->
+      activePlayer.setMediaItems(
+        restored.mediaItems,
+        restored.currentIndex,
+        restored.positionMs,
+      )
+      activePlayer.repeatMode = restored.repeatMode
+      activePlayer.shuffleModeEnabled = restored.shuffleEnabled
+      // Cold recovery never auto-starts an unresolved provider stream.
+      activePlayer.playWhenReady = false
+    }
+
+    activePlayer.addListener(persistenceListener)
+    mainHandler.postDelayed(positionCheckpoint, POSITION_CHECKPOINT_MS)
+
     mediaSession = MediaSession.Builder(this, activePlayer)
       .setCallback(SessionCallback())
       .build()
@@ -93,12 +133,18 @@ class WavenPlaybackService : MediaSessionService() {
   ): MediaSession? = mediaSession
 
   override fun onTaskRemoved(rootIntent: android.content.Intent?) {
+    player?.let(::persistNow)
     if (player?.isPlaying != true) {
       stopSelf()
     }
   }
 
   override fun onDestroy() {
+    mainHandler.removeCallbacks(positionCheckpoint)
+    player?.let { active ->
+      persistNow(active)
+      active.removeListener(persistenceListener)
+    }
     mediaSession?.release()
     mediaSession = null
     player?.release()
@@ -169,13 +215,7 @@ class WavenPlaybackService : MediaSessionService() {
     val source = sourceLeases[queueId]
 
     return request.buildUpon()
-      .setUri(
-        Uri.Builder()
-          .scheme(WavenPlaybackContract.SOURCE_SCHEME)
-          .authority("queue")
-          .appendPath(queueId)
-          .build(),
-      )
+      .setUri(WavenPlaybackContract.sourcePlaceholder(queueId))
       .setRequestMetadata(MediaItem.RequestMetadata.Builder().build())
       .apply {
         source?.mimeType?.let { setMimeType(it) }
@@ -183,7 +223,13 @@ class WavenPlaybackService : MediaSessionService() {
       .build()
   }
 
+  private fun persistNow(activePlayer: Player) {
+    recoveryStore.save(activePlayer)
+  }
+
   companion object {
+    private const val POSITION_CHECKPOINT_MS = 5_000L
+
     private val sourceLeases =
       ConcurrentHashMap<String, WavenPlaybackContract.SourceLease>()
 

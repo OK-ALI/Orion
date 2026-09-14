@@ -6,6 +6,7 @@ import {
 } from "react-native";
 import type {
   NativePlaybackQueueItem,
+  PlaybackRecoveryState,
   PlaybackSnapshot,
   ResolvedPlaybackSource,
 } from "../contracts";
@@ -29,6 +30,7 @@ type NativePlaybackBridge = {
   setRepeatMode(mode: "off" | "one" | "all"): Promise<PlaybackSnapshot>;
   setShuffleEnabled(enabled: boolean): Promise<PlaybackSnapshot>;
   getSnapshot(): Promise<PlaybackSnapshot>;
+  getRecoveryStateJson(): Promise<string | null>;
   stop(): Promise<PlaybackSnapshot>;
   addListener(eventName: string): void;
   removeListeners(count: number): void;
@@ -71,6 +73,24 @@ export async function resolveNativeQueueItem(
   source: ResolvedPlaybackSource,
 ): Promise<PlaybackSnapshot> {
   return requireAndroidBridge().resolveQueueItem(queueId, source);
+}
+
+export async function getPersistedPlaybackRecoveryState(): Promise<PlaybackRecoveryState | null> {
+  const raw = await requireAndroidBridge().getRecoveryStateJson();
+  if (!raw) return null;
+
+  const parsed = JSON.parse(raw) as Partial<PlaybackRecoveryState>;
+  if (
+    parsed.version !== 1 ||
+    !Array.isArray(parsed.queue) ||
+    typeof parsed.currentIndex !== "number" ||
+    typeof parsed.positionMs !== "number" ||
+    typeof parsed.savedAtMs !== "number"
+  ) {
+    throw new Error("WAVEN playback recovery state is invalid.");
+  }
+
+  return parsed as PlaybackRecoveryState;
 }
 
 export const nativePlayback = {

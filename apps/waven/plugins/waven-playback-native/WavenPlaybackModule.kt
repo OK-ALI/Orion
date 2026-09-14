@@ -177,6 +177,15 @@ class WavenPlaybackModule(
   }
 
   @ReactMethod
+  fun getRecoveryStateJson(promise: Promise) {
+    try {
+      promise.resolve(WavenPlaybackRecoveryStore(reactContext).readRawJson())
+    } catch (error: Throwable) {
+      promise.reject("WAVEN_RECOVERY_READ_FAILED", error.message, error)
+    }
+  }
+
+  @ReactMethod
   fun stop(promise: Promise) = withController(promise) { active ->
     active.pause()
     active.clearMediaItems()
@@ -298,7 +307,11 @@ class WavenPlaybackModule(
     player: Player,
     error: PlaybackException,
   ): com.facebook.react.bridge.WritableMap {
-    val message = error.cause?.message ?: error.message ?: "Playback failed."
+    val messages = generateSequence(error as Throwable?) { it.cause }
+      .mapNotNull { it.message }
+      .toList()
+    val message = messages.firstOrNull() ?: "Playback failed."
+    val causeText = messages.joinToString(" | ")
     val queueId =
       if (player.currentMediaItemIndex in 0 until player.mediaItemCount) {
         player.getMediaItemAt(player.currentMediaItemIndex).mediaId
@@ -307,25 +320,42 @@ class WavenPlaybackModule(
       }
 
     val code = when {
-      message.contains("WAVEN_SOURCE_UNRESOLVED") -> "source-unresolved"
-      message.contains("WAVEN_SOURCE_EXPIRED") -> "source-expired"
-      message.contains("WAVEN_SOURCE_INVALID") -> "source-invalid"
-      error.errorCode in PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED..
-        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> "network"
-      error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED -> "decoder"
+      causeText.contains("WAVEN_SOURCE_UNRESOLVED") -> "source-unresolved"
+      causeText.contains("WAVEN_SOURCE_EXPIRED") -> "source-expired"
+      causeText.contains("WAVEN_SOURCE_INVALID") -> "source-invalid"
+      error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+        error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
+        error.errorCode == PlaybackException.ERROR_CODE_TIMEOUT -> "network"
+      error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
+        error.errorCode == PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE -> "http"
+      error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> "not-found"
+      error.errorCode == PlaybackException.ERROR_CODE_IO_NO_PERMISSION ||
+        error.errorCode == PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED ||
+        error.errorCode == PlaybackException.ERROR_CODE_PERMISSION_DENIED -> "permission"
+      error.errorCode == PlaybackException.ERROR_CODE_AUTHENTICATION_EXPIRED -> "authentication"
+      error.errorCode == PlaybackException.ERROR_CODE_NOT_AVAILABLE_IN_REGION ||
+        error.errorCode == PlaybackException.ERROR_CODE_PARENTAL_CONTROL_RESTRICTED ||
+        error.errorCode == PlaybackException.ERROR_CODE_PREMIUM_ACCOUNT_REQUIRED -> "restricted"
+      error.errorCode in PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED..
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> "format"
+      error.errorCode in PlaybackException.ERROR_CODE_DECODER_INIT_FAILED..
+        PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED -> "decoder"
       else -> "unknown"
+    }
+
+    val retryAction = when (code) {
+      "source-unresolved", "source-expired" -> "resolve-source"
+      "network", "http" -> "retry"
+      "authentication" -> "reauthenticate"
+      else -> "none"
     }
 
     return Arguments.createMap().apply {
       putString("code", code)
       putString("message", message)
       putString("queueId", queueId)
-      putBoolean(
-        "recoverable",
-        code == "source-unresolved" ||
-          code == "source-expired" ||
-          code == "network",
-      )
+      putBoolean("recoverable", retryAction != "none")
+      putString("retryAction", retryAction)
     }
   }
 

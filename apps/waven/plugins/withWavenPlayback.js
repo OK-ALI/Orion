@@ -26,6 +26,7 @@ const NATIVE_FILES = Object.freeze([
   "WavenPlaybackContract.kt",
   "WavenPlaybackModule.kt",
   "WavenPlaybackPackage.kt",
+  "WavenPlaybackRecoveryStore.kt",
   "WavenPlaybackService.kt",
 ]);
 

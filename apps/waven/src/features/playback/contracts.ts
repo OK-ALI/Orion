@@ -46,19 +46,34 @@ export const PLAYBACK_ERROR_CODES = [
   "source-expired",
   "source-invalid",
   "network",
+  "http",
+  "not-found",
   "decoder",
+  "format",
   "permission",
+  "authentication",
+  "restricted",
   "native-unavailable",
   "unknown",
 ] as const;
 
 export type PlaybackErrorCode = (typeof PLAYBACK_ERROR_CODES)[number];
 
+export const PLAYBACK_RETRY_ACTIONS = [
+  "resolve-source",
+  "retry",
+  "reauthenticate",
+  "none",
+] as const;
+
+export type PlaybackRetryAction = (typeof PLAYBACK_RETRY_ACTIONS)[number];
+
 export interface PlaybackError {
   code: PlaybackErrorCode;
   message: string;
   queueId?: string | null;
   recoverable: boolean;
+  retryAction: PlaybackRetryAction;
 }
 
 export interface PlaybackSnapshot {
@@ -73,4 +88,22 @@ export interface PlaybackSnapshot {
   repeatMode: "off" | "one" | "all";
   shuffleEnabled: boolean;
   error: PlaybackError | null;
+}
+
+/**
+ * Small Phase 4 recovery record owned by the native playback service.
+ * It is intentionally not the Phase 7 library/history database.
+ *
+ * `wasPlayWhenReady` is informational after a cold restore: WAVEN restores
+ * paused and must obtain a fresh provider source before playback can continue.
+ */
+export interface PlaybackRecoveryState {
+  version: 1;
+  queue: PlaybackQueueIntentItem[];
+  currentIndex: number;
+  positionMs: number;
+  repeatMode: "off" | "one" | "all";
+  shuffleEnabled: boolean;
+  wasPlayWhenReady: boolean;
+  savedAtMs: number;
 }
