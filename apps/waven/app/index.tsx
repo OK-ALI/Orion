@@ -1,4 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
+import { Link } from 'expo-router';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SplitAccentHeading } from '../src/components/brand/SplitAccentHeading';
@@ -37,6 +38,12 @@ export default function WavenFoundationScreen() {
           </View>
 
           <OrionCloudReadOnlyGateCard />
+
+          {__DEV__ ? (
+            <Link href="/playback-debug" style={styles.playbackHarnessLink}>
+              Open Phase 4 Playback Harness
+            </Link>
+          ) : null}
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>
@@ -88,5 +95,17 @@ const styles = StyleSheet.create({
     marginTop: 14,
     maxWidth: 520,
     textAlign: 'center',
+  },
+  playbackHarnessLink: {
+    borderColor: wavenColors.deepBlue,
+    borderRadius: 999,
+    borderWidth: 1,
+    color: wavenColors.skyBlue,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    marginTop: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
   },
 });
