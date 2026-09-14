@@ -34,8 +34,27 @@ test('pins the observed Orion Android SDK and Kotlin baseline', () => {
   assert.equal(android.kotlinVersion, '2.1.20');
 });
 
-test('does not inherit Cinema-only or hard-coded Orion native plugins', () => {
+test('allows only the authorized shared Orion Cloud native plugins', () => {
   const serializedPlugins = JSON.stringify(appJson.expo.plugins);
-  assert.doesNotMatch(serializedPlugins, /withOrionCinemaWebView|withOrionNsd|withOrionUpdates/);
-  assert.doesNotMatch(serializedPlugins, /withOrionGoogleIdentity|withOrionGoogleDriveAuthorization/);
+
+  assert.doesNotMatch(
+    serializedPlugins,
+    /withOrionCinemaWebView|withOrionNsd|withOrionUpdates/,
+  );
+
+  const stringPlugins = appJson.expo.plugins.filter(
+    (plugin) => typeof plugin === 'string',
+  );
+
+  const orionNativePlugins = stringPlugins
+    .filter((plugin) => plugin.includes('withOrion'))
+    .sort();
+
+  assert.deepEqual(
+    orionNativePlugins,
+    [
+      './plugins/withOrionGoogleDriveAuthorization.js',
+      './plugins/withOrionGoogleIdentity.js',
+    ].sort(),
+  );
 });

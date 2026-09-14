@@ -1,7 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SplitAccentHeading } from '../src/components/brand/SplitAccentHeading';
+import { OrionCloudReadOnlyGateCard } from '../src/features/orion-cloud/OrionCloudReadOnlyGateCard';
 import { wavenColors } from '../src/theme/tokens';
 
 export default function WavenFoundationScreen() {
@@ -11,21 +12,28 @@ export default function WavenFoundationScreen() {
       style={styles.background}
     >
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.content}>
-          <Image
-            accessibilityLabel="WAVEN brand mark"
-            resizeMode="contain"
-            source={require('../assets/icon.png')}
-            style={styles.icon}
-          />
-          <Text style={styles.wordmark}>WAVEN</Text>
-          <Text style={styles.subtitle}>Where Music Lives.</Text>
-          <SplitAccentHeading lead="Foundation" accent="Ready" />
-          <Text style={styles.note}>
-            Expo and React Native are pinned to Orion Mobile&apos;s proven baseline. Music and Orion Cloud
-            features will enter through explicit shared contracts in later checkpoints.
-          </Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.brandBlock}>
+            <Image
+              accessibilityLabel="WAVEN brand mark"
+              resizeMode="contain"
+              source={require('../assets/icon.png')}
+              style={styles.icon}
+            />
+            <Text style={styles.wordmark}>WAVEN</Text>
+            <Text style={styles.subtitle}>Where Music Lives.</Text>
+            <SplitAccentHeading lead="Foundation" accent="Ready" />
+            <Text style={styles.note}>
+              Phase 2.2 wires WAVEN to the shared Orion Cloud Android adapter under a read-only
+              preservation gate. No primary-profile create or write path is available here.
+            </Text>
+          </View>
+
+          <OrionCloudReadOnlyGateCard />
+        </ScrollView>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -39,15 +47,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
     paddingHorizontal: 28,
+    paddingTop: 28,
+    paddingBottom: 48,
+  },
+  brandBlock: {
+    alignItems: 'center',
+    width: '100%',
   },
   icon: {
-    width: 220,
-    height: 220,
-    marginBottom: 18,
+    width: 180,
+    height: 180,
+    marginBottom: 14,
   },
   wordmark: {
     color: wavenColors.coolWhite,
@@ -60,14 +72,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     letterSpacing: 1.5,
     marginTop: 8,
-    marginBottom: 42,
+    marginBottom: 32,
   },
   note: {
     color: wavenColors.steelGray,
     fontSize: 14,
     lineHeight: 21,
     marginTop: 14,
-    maxWidth: 420,
+    maxWidth: 520,
     textAlign: 'center',
   },
 });

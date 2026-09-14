@@ -27,6 +27,8 @@
       "expo-status-bar",
       "expo-asset",
       "expo-font",
+      "./plugins/withOrionGoogleIdentity.js",
+      "./plugins/withOrionGoogleDriveAuthorization.js",
       [
         "expo-splash-screen",
         {
