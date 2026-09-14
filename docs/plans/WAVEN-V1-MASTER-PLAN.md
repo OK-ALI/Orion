@@ -711,7 +711,7 @@ Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 and
 - **Residual/release boundary:** the Phase 4 harness/URI/raw-state UI is validation scaffolding, not final WAVEN product UI. Permanent signing, GitHub Preview/Prerelease distribution, clean install/in-place update, and distributed playback reacceptance remain Phase 12 release work.
 - **Acceptance conclusion:** the owner accepts the Phase 4 development-device exit boundary. Phase 4 earns its full 12% weight, raising authoritative WAVEN v1 completion from 26% to **38%**. This ACK does not authorize Phase 5.
 
-### Phase 5 — WAVEN design system and navigation (not authorized)
+### Phase 5 — WAVEN design system and navigation (authorized; implementation pending)
 
 1. **Goal:** Deliver Music Planet product intent as a native Android-first WAVEN shell.
 2. **Scope:** typed theme tokens, Expo Router groups/layouts, safe area, reusable surfaces, empty/loading/error states, accessibility and reduced motion.
@@ -722,6 +722,30 @@ Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 and
 7. **Exit:** reusable components meet accessibility and performance budgets.
 8. **Dependencies:** Phase 1; integrates with Phase 4.
 9. **Out of scope:** production playback and final immersive player.
+
+#### Phase 5 Implementation Authorization — `AUTH-P05-2026-09-14`
+
+- **Decision:** `AUTHORIZED` for Phase 5 implementation only.
+- **Authorization date:** 2026-09-14.
+- **Reviewer/owner:** WAVEN project owner.
+- **Authorized start ref:** branch `waven/v1`, commit `3bf3a96df462a01f0773192e970f2f80629094a1` (`docs(waven): reconcile phase 2-4 acceptance`).
+- **Completion accounting:** authorization earns no percentage. WAVEN v1 remains **38% complete** until Phase 5 is implemented, validated, and accepted under a separate Completion ACK.
+- **Independent visual identity:** WAVEN owns its own black, silver, and WAVEN-blue design language. Orion is an ecosystem-quality reference only and does not supply WAVEN UI layouts, typography, colors, components, or visual tokens.
+- **Music Planet inheritance boundary:** Desktop Music Planet remains the primary product-experience ancestor for listening hierarchy, artwork importance, one-player continuity, queue/lyrics/source relationships, state handling, and collection semantics. Desktop sidebar geometry, orbital/cosmic presentation, purple palette, hover/cursor behavior, Electron/DOM/CSS architecture, floating/resizable controls, and Desktop-specific interaction mechanics are not copied.
+- **Primary mobile shell:** the Phase 5 shell direction is `Home · Search · Library`. Now Playing is reached through the persistent player and is not a fourth primary tab. Profile/Settings remain outside primary navigation; provider/source management remains secondary rather than occupying a primary tab.
+- **Brand presentation:** WAVEN branding is restrained and centered. The preferred wordmark treatment keeps `WAVEN` centered with the `V` carrying WAVEN blue. WAVEN blue remains the interaction/accent color; artwork-derived colors may later influence atmosphere but do not replace WAVEN blue as the UI state color.
+- **Startup and sign-in experience:** Phase 5 owns WAVEN's startup presentation and authentication UX: native splash visual treatment, a short responsive WAVEN launch/handoff animation, startup/loading states, welcome/sign-in presentation, Google Sign-In surface and interaction states, accessibility, and the transition into the main application shell. The operating-system splash must remain lightweight and fast; richer motion belongs to the in-app handoff and must not become a mandatory long intro on repeated launches. Phase 5 reuses the already-established Google identity/Orion Cloud authentication plumbing and does not duplicate credentials, native identity modules, or create a second authentication architecture. WAVEN-specific Orion Cloud music synchronization remains Phase 9 scope.
+- **Fallback artwork direction:** Phase 5 must establish one coherent WAVEN-owned fallback-art system for missing artwork, using restrained WAVEN identity rather than unrelated synthetic album covers. The same fallback language must be reusable across cards, lists, mini-player, later full-player, lock-screen, and media-notification metadata surfaces.
+- **Motion-system requirement:** motion is a Phase 5 foundation requirement rather than deferred polish. WAVEN motion is prioritized as `interaction > spatial > atmosphere`. Phase 5 may establish press/touch feedback, navigation continuity, mini-player expansion foundations, player-state microinteractions, haptics where supported, playing indicators, sheet transitions, and a WAVEN waveform-style playback progress/seek presentation driven by playback position. Real audio-analysis/reactive waveform behavior remains deferred to the later immersive-player phase.
+- **Reduced-motion/performance rule:** essential interaction feedback and navigation continuity take priority over decorative atmosphere. Reduced Motion must receive simplified fades/state changes. Battery-saver, thermal-constrained, and lower-capability devices may suppress atmospheric animation while preserving responsiveness and playback control.
+- **Responsive-first requirement:** WAVEN must not be designed around the owner's Galaxy S24 Ultra dimensions. Phase 5 must support compact, standard, and large Android phones through density-independent/adaptive layout rules, safe areas, display scaling, large text, gesture navigation, 3-button navigation, unusual aspect ratios, and sensible foldable/tablet behavior. The S24 Ultra is a physical validation device, not a layout template.
+- **P4 playback boundary:** the validated Media3 `MediaSessionService` remains the sole authoritative playback owner. Phase 5 UI may consume/control that owner through the existing native boundary but must not create a second player, duplicate queue ownership, persist raw playback URLs, or redesign the validated P4 service architecture.
+- **Notification boundary:** Phase 5 may define WAVEN artwork/fallback/icon presentation and future notification-settings UX, but it must not reopen the validated P4 Android media-notification/lock-screen ownership merely for cosmetic reasons.
+- **Phase 5 implementation scope:** typed design/layout/motion tokens, responsive application shell, Expo Router structure, safe-area handling, reusable surfaces/components, loading/empty/error patterns, accessibility semantics, Home/Search/Library destination shells, persistent mini-player shell, coherent fallback artwork, and motion foundations.
+- **Deferred functional scope:** production Search/provider integration remains Phase 6; Library persistence/favorites/playlists/history ownership remains Phase 7; offline/connectivity architecture remains Phase 8; WAVEN Orion Cloud music namespaces remain Phase 9; final immersive player, lyrics, artwork atmosphere, and richer audio-reactive experiences remain Phase 10; downloads remain Phase 11.
+- **Dependency and ecosystem boundary:** this authorization does not approve an Expo/React Native/dependency upgrade, Orion Cloud mutation, Desktop Music Planet modification, Orion Mobile modification, or unrelated protected-area change.
+- **Validation approach:** Phase 5 will be intentionally iterative: `implement → run → physically inspect → discuss → refine → lock the slice → continue`. Visual or interaction details may be revised whenever physical use exposes awkward, confusing, static, inaccessible, or insufficiently responsive behavior. Direction is frozen; individual pixels and interaction details are evidence-responsive.
+- **Phase boundary:** this authorization covers Phase 5 only and does not authorize Phase 6 or any later phase.
 
 ### Phase 6 — Search, discovery, and detail experiences (not authorized)
 
