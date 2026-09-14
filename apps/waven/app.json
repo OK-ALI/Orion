@@ -27,6 +27,7 @@
       "expo-status-bar",
       "expo-asset",
       "expo-font",
+      "./plugins/withWavenPlayback.js",
       "./plugins/withOrionGoogleIdentity.js",
       "./plugins/withOrionGoogleDriveAuthorization.js",
       [
