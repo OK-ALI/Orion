@@ -17,3 +17,6 @@ export * from "./api";
 
 // Source Registry
 export * from "./sources";
+
+// Music Domain Contracts
+export * from "./music";
