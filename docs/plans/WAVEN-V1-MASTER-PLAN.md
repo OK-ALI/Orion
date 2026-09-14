@@ -3,7 +3,7 @@
 - **Status:** Single authoritative WAVEN v1 audit and implementation plan
 - **Prepared:** 2026-09-14
 - **Product:** WAVEN — *Where Music Lives.*
-- **Source of truth:** Local Orion workspace at `C:\Projects\Orion - A Multiverse of Stories`
+- **Source of truth:** Local WAVEN workspace at `C:\Projects\WAVEN-v1`; Orion workspace evidence is reference-only unless a later phase explicitly authorizes Orion changes.
 - **Dedicated branch:** `waven/v1`
 
 ## 1. Decision summary
@@ -17,7 +17,7 @@ There must be no separate **WAVEN Cloud**. WAVEN will participate in **Orion Clo
 The supplied icon has been copied unchanged into `apps/waven/assets/icon.png`. It is the current reference/application icon, not a redesigned derivative.
 Offline behavior is a first-class product mode and is intentionally separate from downloadable media. Direct-distribution builds are expected to gain a WAVEN in-app updater based on a future read-only audit of Orion Mobile's current updater, with GitHub Preview/Prerelease artifacts and same-signature physical update acceptance.
 
-The current milestone remains **CODE/TEST ONLY**. Expo Go, a WAVEN development build, and a permanently signed distributed candidate are distinct future evidence tiers; success in one must never be promoted into another.
+Current accepted implementation status is **Phases 0–4 complete at their recorded evidence tiers, 38% overall**. Phase 5 is not authorized. Expo Go, WAVEN development-device evidence, and a permanently signed distributed candidate remain distinct evidence tiers; success in one must never be promoted into another.
 
 ## 2. Instruction and evidence boundary
 
@@ -536,7 +536,7 @@ Expo Go may validate visual state transitions only when dependencies permit. It 
 
 ## 14. Phased implementation roadmap
 
-Phase 2 is explicitly authorized for controlled implementation under the Cloud Data Preservation Gate recorded below. No phase beyond Phase 2 is authorized. Every later phase requires its own explicit implementation authorization and evidence at the stated tier.
+Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 and every later phase remain unauthorized and require their own explicit implementation authorization. This section was reconciled on 2026-09-14 after the local implementation history advanced faster than the master-plan ledger; the reconciliation records already-made owner decisions without altering implementation commit chronology.
 
 ### Phase 0 — Evidence and version baseline (evidence complete; audit ACK accepted)
 
@@ -585,7 +585,7 @@ Phase 2 is explicitly authorized for controlled implementation under the Cloud D
 - **UX observation:** the official black-background WAVEN launcher icon remains unchanged; a transparent in-app presentation mark is deferred to the WAVEN design-system work.
 - **Acceptance conclusion:** all Phase 1 foundation exit requirements and the required compatible Expo Go physical gate are satisfied. Phase 1 earns its full 6% weight. This ACK does not authorize Phase 2.
 
-### Phase 2 — Shared Orion Cloud Android adapter extraction (authorized; implementation pending)
+### Phase 2 — Shared Orion Cloud Android adapter extraction (complete; ACK accepted)
 
 #### Phase 2 Implementation Authorization - `AUTH-P02-2026-09-14`
 
@@ -601,8 +601,8 @@ Phase 2 is explicitly authorized for controlled implementation under the Cloud D
 - **Existing profile identity:** `orion-primary-profile-v3` and the deterministic `orion-portable-profile-v3-*` Drive file identity must not be renamed or silently replaced.
 - **Read-only visibility gate:** before WAVEN is permitted to create or update a primary Orion Cloud profile, a physical WAVEN development build must authenticate the intended account and prove read-only visibility of the intended existing Orion Cloud profile. If that profile is unexpectedly missing, duplicated, inaccessible, or isolated behind a different app-data identity, STOP. WAVEN must not create a replacement profile or perform a write.
 - **Controlled-write gate:** any later Phase 2 Cloud mutation requires a recorded preimage/revision, explicit expected delta, conditional write, read-back verification, Orion Mobile regression, and rollback/recovery procedure. Existing production Orion Cloud data must never be used as an uncontrolled mutation target.
-- **Completion accounting:** authorization earns no percentage. Phase 2 remains `0%` until its required development-build physical gate and Completion ACK are accepted. Overall WAVEN v1 completion remains `10%`.
-- **Downstream authorization:** Phase 3 and all later phases remain unauthorized.
+- **Historical completion accounting at authorization:** authorization itself earned no percentage. Phase 2 later completed its required gate and was accepted under `ACK-P02-2026-09-14` below.
+- **Historical downstream state at authorization:** Phase 3 and later phases were still unauthorized at this Phase 2 authorization checkpoint. Later owner decisions are recorded in their own phase blocks below.
 
 1. **Goal:** Parameterize existing ecosystem behavior without redesigning Orion Cloud.
 2. **Likely files:** shared Cloud contracts; a shared/parameterized Android plugin; adapted sources from Orion Mobile Google identity/Drive plugins.
@@ -616,7 +616,23 @@ Phase 2 is explicitly authorized for controlled implementation under the Cloud D
 10. **Dependencies:** Phase 1.
 11. **Out of scope:** WAVEN music namespaces, automatic music sync, PortableProfile schema migration, and unrelated Orion Mobile native systems.
 
-### Phase 3 — Shared music domain and provider contracts (not authorized)
+#### Phase 2 Completion ACK — `ACK-P02-2026-09-14`
+
+- **Phase:** 2 — Shared Orion Cloud Android adapter extraction.
+- **Weight:** 8%.
+- **Decision:** `ACCEPTED`.
+- **Decision date:** 2026-09-14.
+- **Reviewer/owner:** WAVEN project owner.
+- **Validated implementation ref:** branch `waven/v1`, commit `1256d5afeb0decefdd4afb6a2c4ff99d65c1cd8f` (`feat(waven): add controlled Orion Cloud preservation gate`).
+- **Dependency-lock identity:** root `package-lock.json` SHA-256 `1BF49DED104A676060C78A3B8803778AFF9FCF47F188D18AED48BC5BCA2B0E04`.
+- **Validation classification:** development-device/native Orion Cloud validation. Distributed release reacceptance remains required before release and is not claimed by this ACK.
+- **Automated evidence:** shared adapter extraction, WAVEN native wiring, lifecycle/recovery, read-only preservation, and controlled-write safety gates passed during Phase 2. The retained Phase 2 regression set was subsequently observed green as `20/20` pre-existing P2 tests when Phase 3.1 began.
+- **Physical/device evidence:** accepted on Samsung Galaxy S24 Ultra family hardware running Android 16/API 36. WAVEN authenticated the intended Orion Cloud account, reached the existing `orion-primary-profile-v3` identity through the shared native Google/Drive path, exercised the required authorize/read/revoke/sign-out/offline/recovery lifecycle, and did not create a duplicate/shadow profile. OAuth/access/refresh/ID tokens remained outside JavaScript.
+- **Controlled Orion Cloud mutation evidence:** exactly one live, content-identical no-op write was explicitly authorized for Phase 2. It preserved exact payload bytes, SHA-256, byte length, PortableProfileV3 revision, namespaces, and conflict-safe conditional-write/read-back semantics. That authorization was one-time only and is exhausted; no second live Orion Cloud write is authorized by this ACK or by any later phase unless the owner explicitly approves a new mutation.
+- **Scope boundary:** no WAVEN music namespace synchronization was enabled; Phase 2 established the shared ecosystem adapter only.
+- **Acceptance conclusion:** Phase 2 exit requirements were accepted at the development-device boundary. Phase 2 earns its full 8% weight. This historical ACK does not itself authorize Phase 3.
+
+### Phase 3 — Shared music domain and provider contracts (complete; ACK accepted)
 
 1. **Goal:** Extract only platform-neutral behavior from Music Planet.
 2. **Likely files:** shared music types/package plus evidence from models, registry, broker, resolver, queue utilities, and tests.
@@ -629,17 +645,71 @@ Phase 2 is explicitly authorized for controlled implementation under the Cloud D
 9. **Dependencies:** Phase 1; may proceed alongside Phase 2 only after separate authorization.
 10. **Out of scope:** native playback and provider expansion.
 
-### Phase 4 — Android playback core (not authorized)
+#### Phase 3 Completion ACK — `ACK-P03-2026-09-14`
+
+- **Phase:** 3 — Shared music domain and provider contracts.
+- **Weight:** 8%.
+- **Decision:** `ACCEPTED`.
+- **Decision date:** 2026-09-14.
+- **Reviewer/owner:** WAVEN project owner.
+- **Authorization-history reconciliation:** Phase 3 was separately authorized and completed in the prior development session, but no durable `AUTH-P03-*` token was committed to this plan. This reconciliation does not invent a retroactive authorization token.
+- **Validated implementation ref:** branch `waven/v1`, commit `dbfbbec83becbbea453820cea69b9e5387916ee9` (`feat(shared): add music provider registry contract`).
+- **Implementation checkpoints:** P3.1 `e0f0aa1e3d7d0bda559207671315db4a933a42eb`; P3.2 `036869f10a4fb584870b8f7c3dad6728def7b563`; P3.3/final `dbfbbec83becbbea453820cea69b9e5387916ee9`.
+- **Dependency-lock identity:** root `package-lock.json` SHA-256 `1BF49DED104A676060C78A3B8803778AFF9FCF47F188D18AED48BC5BCA2B0E04`.
+- **Automated evidence:** P3.1 `25/25` tests PASS; P3.2 `29/29` PASS; P3.3 `33/33` PASS. `@orion/shared` typecheck and WAVEN typecheck passed at each implementation checkpoint.
+- **Contract result:** `@orion/shared/music` became the shared owner for normalized music entities, provider descriptors, executable capability contracts, and provider-registry/selection state. `MusicStreamingCapability<TResolved = unknown>` intentionally remained generic so Phase 4 could own the concrete Android playback-source boundary.
+- **Provider parity evidence:** the extracted contracts matched the evidence-backed active Music Planet set: Local/Core, YouTube Music, LRCLib, and Spotify Charts. Inactive/legacy source files were not promoted merely because they existed.
+- **Security/scope boundary:** application-facing registry snapshots remain descriptor-only; credentials/private configuration are not exposed; raw playback URL persistence, native playback, provider expansion, Orion Cloud music sync, Desktop Electron/Node implementation, and unrelated protected areas remained outside Phase 3.
+- **Physical-tier disposition:** Phase 3 is platform-neutral contract work. No separate Android native playback/device claim is made here; the owner accepted code/automated contract parity plus active-provider evidence as the Phase 3 completion boundary. Native playback integration was intentionally deferred to Phase 4.
+- **Protected boundaries:** `apps/desktop`, `apps/mobile`, `packages/shared/orion-cloud-android`, and `apps/waven/src/infrastructure/orionCloud` remained unchanged through Phase 3.
+- **Acceptance conclusion:** Phase 3 earns its full 8% weight. Accepted WAVEN v1 completion became 26% at this checkpoint.
+
+### Phase 4 — Android playback core (complete; ACK accepted)
 
 1. **Goal:** Build reliable playback before feature-heavy UI.
 2. **Scope:** background native audio owner, MediaSession, notification/lock-screen controls, audio focus, headset/Bluetooth commands, lifecycle recovery, queue persistence, JIT source resolution.
 3. **Reuse:** queue/navigation policy and stable provider references; never DOM audio/Web Audio.
 4. **Risks:** engine choice, OEM restrictions, battery, foreground-service policy, stream expiry.
-5. **Validation classification:** **DEVELOPMENT BUILD REQUIRED** and **DISTRIBUTED RELEASE ACCEPTANCE REQUIRED**.
+5. **Validation classification:** **DEVELOPMENT BUILD REQUIRED** for the Phase 4 ACK; **DISTRIBUTED RELEASE REACCEPTANCE REQUIRED** before release.
 6. **Tests:** interruptions, background/lock screen, process recovery, media buttons, network loss, 30-minute physical soak.
 7. **Exit:** correct queue/player state through backgrounding, interruption, and recovery on representative devices.
 8. **Dependencies:** Phase 3; a native need may trigger a documented version review, never an automatic Expo upgrade.
 9. **Out of scope:** downloads, visualizer, final player polish.
+
+#### Phase 4 Implementation Authorization — `AUTH-P04-2026-09-14`
+
+- **Decision:** `AUTHORIZED` for Phase 4 implementation only.
+- **Authorization date:** 2026-09-14.
+- **Reviewer/owner:** WAVEN project owner.
+- **Authorized start ref:** branch `waven/v1`, commit `dbfbbec83becbbea453820cea69b9e5387916ee9` (`feat(shared): add music provider registry contract`).
+- **Locked architectural boundary:** one WAVEN-owned Android Media3 `MediaSessionService` is the authoritative player/session owner; UI/JS controls it through the native controller boundary. Resolved URI/header leases remain ephemeral and raw provider playback URLs are never persisted. Expo Audio does not own WAVEN playback.
+- **Cloud boundary:** Phase 4 requires no Orion Cloud write and does not inherit Phase 2's exhausted one-time mutation authorization.
+- **Scope boundary:** authorization covered the native playback core and minimum validation harness only. It did not authorize final player UI, downloads, general offline architecture, WAVEN Orion Cloud music namespaces, or Phase 5.
+
+#### Phase 4 Completion ACK — `ACK-P04-2026-09-14`
+
+- **Phase:** 4 — Android playback core.
+- **Weight:** 12%.
+- **Decision:** `ACCEPTED`.
+- **Decision date:** 2026-09-14.
+- **Reviewer/owner:** WAVEN project owner.
+- **Final validated implementation ref:** branch `waven/v1`, commit `9eb6738ed7fbf83f269d7feefabbd4b4ed447515` (`test(waven): add self-contained playback validation carrier`).
+- **Implementation chain:** P4.1 `a794b1d7250bfcc8a72c24ab98555fbd87593c77` (Media3 playback spine); P4.2 `4ea37c68d06167a461b0e3c8d365add6674eb4fb` (recovery/state); P4.3 `64b6025e4bba086786b67f6f17f3044a0c6cd690` (validation harness); P4.3a `dd08847f781405d6e4f31ea3d07bce4abce8af93` (New Architecture module registration repair); P4.3b `9eb6738ed7fbf83f269d7feefabbd4b4ed447515` (self-contained physical-validation carrier).
+- **Dependency-lock identity:** root `package-lock.json` SHA-256 `1BF49DED104A676060C78A3B8803778AFF9FCF47F188D18AED48BC5BCA2B0E04`. No automatic framework/toolchain upgrade occurred.
+- **Automated/native evidence:** P4.2 retained typecheck and `45/45` tests PASS; P4.3 retained typecheck and `50/50` tests PASS plus fresh Android generation/Media3/native compile; P4.3a source gate passed typecheck and `54/54` tests. P4.3b's bounded source gate passed before its carrier build; this record intentionally does not invent an exact final test count that was not preserved in the handoff evidence. Native Android generation/compile gates proved the single Media3 owner, MediaSessionService, foreground media playback configuration, recovery integration, and Android SDK 36 compatibility.
+- **Validation artifact:** `WAVEN-P04-P43B-STANDALONE-64b6025.apk`, 54,724,571 bytes, SHA-256 `D536CED9D13A6EBB141A3F7BF8EB2462B445D6E0BF46026F813A9C2D0ACA79FA`, package `com.okali.waven`. It embeds the Hermes/JS bundle and the explicit physical-validation flag. APK signature verification passed. The filename retains an earlier short SHA because the carrier was built before the later P4.3a/P4.3b checkpoint commits while containing those working-tree repairs. This is development-device validation, not permanently signed distributed release acceptance.
+- **App/version disposition:** Phase 4 did not introduce a release-version milestone; the foundation application identity remains `@orion/waven`, package `com.okali.waven`, version `0.1.0`, Android versionCode `1`. Permanent release signing and release-version policy remain Phase 12 work.
+- **Physical matrix:** executed 2026-09-14 on Samsung Galaxy S24 Ultra family hardware (`SM-S928B` / `SM-S928B/DS`), Android 16/API 36. Unique device identifiers are intentionally not recorded.
+- **Native bridge / source resolution:** self-contained launch reached the real `WavenPlayback` native module and Media3 service. Stable two-item queue loading, `source-unresolved`, HTTP/network taxonomy, JIT source resolution, real duration/state reporting, and audible playback all passed.
+- **Playback/session scenarios:** play/pause, next/previous, exact ±15,000 ms seeking, background playback, foreground return, Android notification controls/metadata/progress, lock-screen controls/metadata, MediaSession transport, and Recents-swipe survival all passed. Swiping the WAVEN Activity away left playback and the media notification alive, proving service ownership independent of the UI task.
+- **Audio routing/focus scenarios:** permanent media-focus loss yielded and stayed paused; a transient alarm paused WAVEN and automatic resume succeeded after dismissal. Galaxy Buds 2 Pro routing plus Bluetooth play/pause/next/previous passed. Disconnect/becoming-noisy automatically paused without blasting audio through the phone speaker.
+- **Recovery/persistence evidence:** stable queue IDs, current index, position, repeat/shuffle, prior play intent, timestamp, and schema were persisted. Diagnostic recovery payload SHA-256 was `DB7F17EE76C39247971EF888F51FD3BDEAAFFEAE245690938A8599D0BFFB7C85`. Raw URLs, headers, resolved-source data, MIME, and ephemeral lease data were absent. Force-stop/process-death recovery restored stable queue/index/position paused with no autoplay and required fresh JIT source resolution.
+- **Network/error recovery:** loss of usable network eventually produced a recoverable `network` error with retry semantics. After Wi-Fi returned, playback resumed using the still-valid in-memory lease without persisting that lease across process death.
+- **Queue/state controls:** repeat-one and shuffle state changes passed. Stop/clear returned an empty queue, null current item, zero position, and idle state while retaining player preference state as designed.
+- **Soak evidence and owner disposition:** the roadmap's original test target above remains a 30-minute physical soak. The actual continuous real-world soak performed was approximately 15 minutes and included background use, app switching, an alarm interruption/resume, WhatsApp/video use, and Galaxy Buds routing without crash, dead session, or lost queue/player state. The owner explicitly declined to rewrite the historical 30-minute target and accepted this approximately 15-minute run, together with the comprehensive scenario matrix above, as the final Phase 4 soak evidence. This ACK does **not** claim that a 30-minute soak occurred.
+- **Final physical snapshot:** `error: null`, `buffering: false`, `playing: false`, `repeatMode: one`, `shuffleEnabled: false`, duration `372715` ms, both harness tracks intact, current index `0`, current queue ID `p43-harness-track-a`, position `15363` ms, state `paused`.
+- **Residual/release boundary:** the Phase 4 harness/URI/raw-state UI is validation scaffolding, not final WAVEN product UI. Permanent signing, GitHub Preview/Prerelease distribution, clean install/in-place update, and distributed playback reacceptance remain Phase 12 release work.
+- **Acceptance conclusion:** the owner accepts the Phase 4 development-device exit boundary. Phase 4 earns its full 12% weight, raising authoritative WAVEN v1 completion from 26% to **38%**. This ACK does not authorize Phase 5.
 
 ### Phase 5 — WAVEN design system and navigation (not authorized)
 
@@ -770,9 +840,9 @@ If later regression evidence invalidates an accepted phase, its ACK becomes `REO
 |---:|---|---:|---|---|---|---:|
 | 0 | Evidence and version baseline | 4% | Code/evidence review; physical N/A | Evidence complete | `ACK-P00-2026-09-14` — ACCEPTED (audit-only) | 4% |
 | 1 | WAVEN project foundation | 6% | Compatible Expo Go physical run or WAVEN development-build physical run, plus current automated checks | Automated and Expo Go physical evidence complete | `ACK-P01-2026-09-14` — ACCEPTED | 6% |
-| 2 | Shared Orion Cloud Android adapter | 8% | Development-build physical identity/Drive lifecycle; later release regression | Authorized; implementation pending under Cloud Data Preservation Gate | PENDING | 0% |
-| 3 | Shared music domain/provider contracts | 8% | Physical provider integration in the implementation runtime plus automated contract parity | Not started / not authorized | PENDING | 0% |
-| 4 | Android playback core | 12% | Development-build physical playback/lifecycle/MediaSession soak; later release reacceptance | Not started / not authorized | PENDING | 0% |
+| 2 | Shared Orion Cloud Android adapter | 8% | Development-build physical identity/Drive lifecycle; later release regression | Complete; shared adapter and Cloud preservation gate accepted | `ACK-P02-2026-09-14` — ACCEPTED | 8% |
+| 3 | Shared music domain/provider contracts | 8% | Contract parity at accepted scope; native playback integration deferred to Phase 4 | Complete; shared music contracts/provider registry accepted | `ACK-P03-2026-09-14` — ACCEPTED | 8% |
+| 4 | Android playback core | 12% | Development-build physical playback/lifecycle/MediaSession soak; later release reacceptance | Complete; development-device playback matrix accepted | `ACK-P04-2026-09-14` — ACCEPTED | 12% |
 | 5 | Design system and navigation | 7% | Expo Go-compatible physical UI/accessibility matrix or development-build equivalent | Not started / not authorized | PENDING | 0% |
 | 6 | Search, discovery, and details | 7% | Physical online/degraded/offline provider flow in the correct runtime | Not started / not authorized | PENDING | 0% |
 | 7 | Local Library, favorites, playlists, history | 8% | Development-build physical persistence, restart, account isolation, and migration | Not started / not authorized | PENDING | 0% |
@@ -783,7 +853,7 @@ If later regression evidence invalidates an accepted phase, its ACK becomes `REO
 | 12 | Release engineering, updater, distributed acceptance | 10% | Permanently signed GitHub Preview/Prerelease; clean install and in-place update on physical matrix | Not started / not authorized | PENDING | 0% |
 | 13 | Future Desktop Music Planet → WAVEN migration | 0% (post-v1) | Dedicated Desktop runtime/update/UX acceptance | Not started / not authorized | PENDING | 0% |
 
-**Current authoritative WAVEN v1 completion: 10%.** Phase 0 contributes 4% and Phase 1 contributes 6% through accepted Completion ACKs. Phase 2 is authorized but remains incomplete and earns 0% until its Completion ACK is accepted. No phase beyond Phase 2 is authorized or complete.
+**Current authoritative WAVEN v1 completion: 38%.** Phases 0–4 contribute `4% + 6% + 8% + 8% + 12% = 38%` through accepted Completion ACKs. Phase 5 and every later phase remain unauthorized and earn 0% until separately authorized, implemented, validated, and accepted.
 
 ### 15.3 Completion ACK record required for every phase
 
@@ -816,7 +886,7 @@ The automated baseline plus three device/distribution tiers are distinct bodies 
 
 ### 16.1 Code / automated test evidence
 
-Includes typecheck, lint where applicable, unit/integration tests, Expo config validation, Expo Doctor, static checks, and web/export checks when useful. This is the current WAVEN evidence level.
+Includes typecheck, lint where applicable, unit/integration tests, Expo config validation, Expo Doctor, static checks, and web/export checks when useful. This remains a distinct evidence level and does not replace the device/distribution evidence recorded for later phases.
 
 ### 16.2 Tier 1 — Expo Go development testing
 
@@ -941,19 +1011,10 @@ Validate that updates preserve or intentionally reacquire: Google subject associ
 17. Losing the permanent signing key would break in-place updates; key custody and recovery policy must be approved before the first distributed baseline.
 18. Rollback is constrained by Android versionCode and schema compatibility; it must never be implied without an explicit safe design.
 
-## 20. Recommended first implementation checkpoint
+## 20. Current post-Phase-4 checkpoint
 
-The next implementation checkpoint remains **Shared Orion Cloud Android Adapter Extraction**, but this documentation consolidation does **not** authorize it or any other phase.
+Phases 0–4 are accepted and the authoritative WAVEN v1 completion is **38%**. The canonical Phase 4 implementation/validation-carrier checkpoint is `9eb6738ed7fbf83f269d7feefabbd4b4ed447515`. The package-lock identity remains `1BF49DED104A676060C78A3B8803778AFF9FCF47F188D18AED48BC5BCA2B0E04`.
 
-Required outputs after explicit authorization:
+Phase 5 is **not authorized** by the Phase 4 ACK. Before any Phase 5 implementation, conduct the dedicated WAVEN UI/UX design-freeze discussion requested by the owner. That discussion should preserve the locked product direction: Music Planet as the primary experience ancestor rather than a Desktop layout template; phone-first black/silver/WAVEN-blue identity; a deliberate WAVEN motion system; mini-player/full-player continuity; touch/gesture/accessibility discipline; and layered artwork-informed atmosphere with reduced-motion, battery, thermal, and low-end fallbacks.
 
-1. one parameterized config/native package consumed by Orion Mobile regression and WAVEN development harnesses;
-2. proof that Mobile `google.uniqueId` and Desktop `userinfo.sub` match for the same test account;
-3. no token crossing into JavaScript;
-4. read-only PortableProfileV3 access from WAVEN through the same `appDataFolder` file;
-5. mixed-client unknown-namespace preservation tests;
-6. reviewed generated-native diffs confirming Gradle `9.3.1`, AGP `8.12.0`, Kotlin `2.1.20`, SDK 36/36/24, and JDK 17 compatibility;
-7. development-build device evidence for sign-in, consent, read, revoke, sign-out, offline, and recovery;
-8. no WAVEN music namespace writes until the shared adapter and schemas pass review.
-
-This checkpoint reduces the highest ecosystem risk while keeping Orion Mobile and WAVEN on one proven dependency generation. Phase 8 offline resilience is required before Phase 9 enables WAVEN namespace synchronization through Orion Cloud. Phase 12 later owns updater and signed distribution acceptance.
+After that design direction is explicitly frozen, Phase 5 still requires a separate owner authorization before source changes begin. No Phase 5 work, Orion Cloud mutation, dependency upgrade, release publication, or Desktop Music Planet migration is implied by this documentation reconciliation.
