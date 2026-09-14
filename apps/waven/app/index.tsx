@@ -23,7 +23,11 @@ export default function WavenFoundationScreen() {
               source={require('../assets/icon.png')}
               style={styles.icon}
             />
-            <Text style={styles.wordmark}>WAVEN</Text>
+            <Text accessibilityLabel="WAVEN" style={styles.wordmark}>
+              <Text>WA</Text>
+              <Text style={styles.wordmarkAccent}>V</Text>
+              <Text>EN</Text>
+            </Text>
             <Text style={styles.subtitle}>Where Music Lives.</Text>
             <SplitAccentHeading lead="Foundation" accent="Ready" />
             <Text style={styles.note}>
@@ -66,6 +70,9 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '800',
     letterSpacing: 8,
+  },
+  wordmarkAccent: {
+    color: wavenColors.activeBlue,
   },
   subtitle: {
     color: wavenColors.silver,
