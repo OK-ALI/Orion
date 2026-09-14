@@ -20,6 +20,7 @@ export interface OrionCloudDriveAuthorizationCheckResult {
 interface OrionGoogleDriveAuthorizationNativeModule {
   checkAppDataAuthorization(accountEmail: string): Promise<OrionCloudDriveAuthorizationCheckResult>;
   authorizeAppData(accountEmail: string): Promise<OrionCloudDriveAuthorizationResult>;
+  revokeAppData(accountEmail: string): Promise<boolean>;
   clearAuthorizationCache(): Promise<boolean>;
 }
 
@@ -27,6 +28,16 @@ const nativeModule = NativeModules.OrionGoogleDriveAuthorization as OrionGoogleD
 
 export function isNativeOrionDriveAuthorizationAvailable(): boolean {
   return Platform.OS === 'android' && !!nativeModule;
+}
+
+function requireAccountEmail(accountEmail: string): string {
+  const normalizedEmail = accountEmail.trim();
+  if (!normalizedEmail) {
+    throw Object.assign(new Error('A connected Google account is required for Orion Cloud Drive access.'), {
+      code: 'GOOGLE_DRIVE_ACCOUNT_MISSING',
+    });
+  }
+  return normalizedEmail;
 }
 
 export async function checkOrionDriveReadAccess(
@@ -37,7 +48,7 @@ export async function checkOrionDriveReadAccess(
       code: 'GOOGLE_DRIVE_AUTH_UNAVAILABLE',
     });
   }
-  return nativeModule.checkAppDataAuthorization(accountEmail.trim());
+  return nativeModule.checkAppDataAuthorization(requireAccountEmail(accountEmail));
 }
 
 export async function authorizeOrionDriveReadAccess(
@@ -48,7 +59,16 @@ export async function authorizeOrionDriveReadAccess(
       code: 'GOOGLE_DRIVE_AUTH_UNAVAILABLE',
     });
   }
-  return nativeModule.authorizeAppData(accountEmail.trim());
+  return nativeModule.authorizeAppData(requireAccountEmail(accountEmail));
+}
+
+export async function revokeOrionDriveAccess(accountEmail: string): Promise<void> {
+  if (!isNativeOrionDriveAuthorizationAvailable() || !nativeModule) {
+    throw Object.assign(new Error('Orion Cloud Drive authorization is unavailable on this build.'), {
+      code: 'GOOGLE_DRIVE_AUTH_UNAVAILABLE',
+    });
+  }
+  await nativeModule.revokeAppData(requireAccountEmail(accountEmail));
 }
 
 export async function clearOrionDriveAuthorizationCache(): Promise<void> {

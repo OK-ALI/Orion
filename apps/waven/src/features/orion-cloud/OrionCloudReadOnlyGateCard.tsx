@@ -19,6 +19,7 @@ import {
   checkOrionDriveReadAccess,
   clearOrionDriveAuthorizationCache,
   isNativeOrionDriveAuthorizationAvailable,
+  revokeOrionDriveAccess,
 } from '../../infrastructure/orionCloud/nativeGoogleDriveAuthorization';
 import {
   isNativeOrionCloudReadOnlyProbeAvailable,
@@ -34,6 +35,8 @@ type GatePhase =
   | 'reading'
   | 'found'
   | 'missing'
+  | 'revoking'
+  | 'revoked'
   | 'error';
 
 const GOOGLE_WEB_CLIENT_ID = (process.env.EXPO_PUBLIC_ORION_GOOGLE_WEB_CLIENT_ID || '').trim();
@@ -47,8 +50,9 @@ function errorCode(error: unknown): string {
 export function OrionCloudReadOnlyGateCard() {
   const [phase, setPhase] = useState<GatePhase>('idle');
   const [profile, setProfile] = useState<WavenGoogleIdentityProfile | null>(null);
+  const [driveAuthorized, setDriveAuthorized] = useState(false);
   const [message, setMessage] = useState(
-    'This gate can sign in, request private Drive app-data access, and read the existing Orion primary profile. It cannot create or write one.',
+    'This gate can sign in, request or revoke private Drive app-data access, and read the existing Orion primary profile. It cannot create, write, update, or delete one.',
   );
 
   const nativeReady =
@@ -58,13 +62,18 @@ export function OrionCloudReadOnlyGateCard() {
     isNativeOrionCloudReadOnlyProbeAvailable();
 
   const configured = nativeReady && !!GOOGLE_WEB_CLIENT_ID;
-  const busy = phase === 'signing-in' || phase === 'authorizing' || phase === 'reading';
+  const busy =
+    phase === 'signing-in' ||
+    phase === 'authorizing' ||
+    phase === 'reading' ||
+    phase === 'revoking';
 
   const status = useMemo(() => {
     if (!nativeReady) return 'Development build required';
     if (!GOOGLE_WEB_CLIENT_ID) return 'OAuth configuration required';
     if (phase === 'found') return 'Existing profile visible';
     if (phase === 'missing') return 'STOP: profile not visible';
+    if (phase === 'revoked') return 'Drive access revoked';
     if (phase === 'authorized') return 'Read access ready';
     if (profile) return 'Google identity ready';
     return 'Ready for read-only check';
@@ -79,14 +88,17 @@ export function OrionCloudReadOnlyGateCard() {
       setProfile(nextProfile);
       const existingGrant = await checkOrionDriveReadAccess(nextProfile.email);
       if (existingGrant.authorized) {
+        setDriveAuthorized(true);
         setPhase('authorized');
         setMessage('Google identity and private Drive app-data authorization are ready. The profile has not been read yet.');
       } else {
+        setDriveAuthorized(false);
         setPhase('signed-in');
         setMessage('Google identity is ready. Drive app-data permission still requires explicit authorization.');
       }
     } catch (error) {
       setProfile(null);
+      setDriveAuthorized(false);
       setPhase('error');
       setMessage(`Google identity failed safely (${errorCode(error)}). No Orion Cloud data was changed.`);
     }
@@ -98,6 +110,7 @@ export function OrionCloudReadOnlyGateCard() {
     setMessage('Requesting the existing Orion Cloud private app-data scope. No profile write is available.');
     try {
       await authorizeOrionDriveReadAccess(profile.email);
+      setDriveAuthorized(true);
       setPhase('authorized');
       setMessage('Private Drive app-data access is authorized. Run the explicit read-only visibility check next.');
     } catch (error) {
@@ -106,8 +119,29 @@ export function OrionCloudReadOnlyGateCard() {
     }
   };
 
+  const revokeDriveAccess = async () => {
+    if (!profile || !driveAuthorized || busy) return;
+    setPhase('revoking');
+    setMessage(
+      'Revoking only the Google Drive app-data authorization. The Orion Cloud profile and its data will not be deleted or modified.',
+    );
+    try {
+      await revokeOrionDriveAccess(profile.email);
+      setDriveAuthorized(false);
+      setPhase('revoked');
+      setMessage(
+        'Drive access revoked. The Orion Cloud profile and its data were not deleted or modified. Reauthorize private Drive data to repeat the read-only verification.',
+      );
+    } catch (error) {
+      setPhase('error');
+      setMessage(
+        `Drive access revocation failed safely (${errorCode(error)}). Authorization was not reported as revoked, and no Orion Cloud profile data was changed.`,
+      );
+    }
+  };
+
   const verifyVisibility = async () => {
-    if (!profile || phase !== 'authorized') return;
+    if (!profile || !driveAuthorized || phase !== 'authorized') return;
     setPhase('reading');
     setMessage('Reading only the existing Orion primary profile. Create and write operations are unavailable.');
     try {
@@ -138,14 +172,15 @@ export function OrionCloudReadOnlyGateCard() {
       clearOrionGoogleCredentialState(),
     ]);
     setProfile(null);
+    setDriveAuthorized(false);
     setPhase('idle');
     setMessage('Local identity and authorization caches were cleared. The Google Drive grant and Orion Cloud data were not revoked or changed.');
   };
 
   return (
     <View style={styles.card}>
-      <Text style={styles.eyebrow}>PHASE 2.2</Text>
-      <Text style={styles.title}>Orion Cloud Read-Only Gate</Text>
+      <Text style={styles.eyebrow}>PHASE 2.3A</Text>
+      <Text style={styles.title}>Orion Cloud Read-Only Lifecycle Gate</Text>
       <Text style={styles.status}>{status}</Text>
       <Text style={styles.message}>{message}</Text>
 
@@ -169,24 +204,37 @@ export function OrionCloudReadOnlyGateCard() {
         />
 
         <GateButton
-          disabled={!profile || busy || phase === 'authorized' || phase === 'found'}
+          disabled={!profile || busy || driveAuthorized}
           label={phase === 'authorizing' ? 'Authorizing…' : '2. Authorize private Drive data'}
           onPress={authorize}
         />
 
         <GateButton
-          disabled={!profile || phase !== 'authorized' || busy}
+          disabled={!profile || !driveAuthorized || phase !== 'authorized' || busy}
           label={phase === 'reading' ? 'Reading…' : '3. Verify existing profile, read only'}
           onPress={verifyVisibility}
         />
 
         <GateButton
           secondary
+          disabled={!profile || !driveAuthorized || busy}
+          label={phase === 'revoking' ? 'Revoking…' : 'Revoke private Drive access'}
+          onPress={revokeDriveAccess}
+        />
+
+        <GateButton
+          secondary
           disabled={busy}
-          label="Clear local test session"
+          label="Clear local test session (does not revoke)"
           onPress={resetLocalSession}
         />
       </View>
+
+      <Text style={styles.lifecycleNote}>
+        Clear local session removes local/native authorization caches and Credential Manager state;
+        it does not revoke the Drive grant. Revoke private Drive access removes only that grant.
+        Neither action deletes or changes Orion Cloud profile data.
+      </Text>
 
       {busy && <ActivityIndicator color={wavenColors.activeBlue} style={styles.spinner} />}
     </View>
@@ -295,6 +343,12 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: wavenColors.silver,
+  },
+  lifecycleNote: {
+    color: wavenColors.steelGray,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 14,
   },
   spinner: {
     marginTop: 16,
