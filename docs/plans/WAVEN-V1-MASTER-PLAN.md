@@ -549,7 +549,7 @@ No phase beyond Phase 1 is authorized by this plan amendment. Every phase requir
 7. **Exit:** exact matrix and no-unplanned-upgrade decision recorded.
 8. **Out of scope:** dependency changes, live account access, implementation.
 
-### Phase 1 — WAVEN project foundation (automated gate passed; physical ACK pending)
+### Phase 1 — WAVEN project foundation (complete; ACK accepted)
 
 1. **Goal:** Provide a clean Android-first Expo workspace in the monorepo.
 2. **Scope/files:** `apps/waven/{package.json,app.json,eas.json,metro.config.js,tsconfig.json,app,src,assets,tests}` and lockfile registration.
@@ -557,12 +557,33 @@ No phase beyond Phase 1 is authorized by this plan amendment. Every phase requir
 4. **New code:** independent app identity, tokens, foundation screen, boundaries, and tests.
 5. **Backend:** none contacted.
 6. **UI/native:** supplied icon and black/silver/blue foundation. Confirm Expo 57 Hermes/New Architecture output in the first reviewed native generation.
-7. **Validation classification:** completed **CODE / AUTOMATED TEST EVIDENCE**; foundation UI is **EXPO GO SUITABLE** later, but no Expo Go evidence exists yet.
-8. **Recorded evidence:** TypeScript pass; 4/4 foundation tests; Expo Doctor 20/20; web export with 1,115 modules.
-9. **Not established:** Android, Expo Go, development client, playback, Cloud, offline, signing, updater, or release acceptance.
-10. **Exit:** npm recognizes `@orion/waven`; checks pass without upgrading Orion.
+7. **Validation classification:** completed **CODE / AUTOMATED TEST EVIDENCE** and **EXPO GO DEVELOPMENT EVIDENCE**.
+8. **Recorded evidence:** TypeScript passes; 4/4 foundation tests pass; web export succeeds with 1,115 modules; the recorded foundation baseline previously passed Expo Doctor 20/20. A current online Expo Doctor recheck reports 19/20 because Expo's remote SDK metadata now recommends newer SDK 57 patch versions for 11 Expo packages; all other checks pass and no dependency upgrade is authorized because WAVEN intentionally remains on the proven Orion Mobile generation.
+9. **Physical evidence:** Samsung Galaxy S24 Ultra (`SM-S928B/DS`), Android 16 / One UI 8.5, Expo Go client `57.0.9` with SDK 57 support. Initial launch, foundation rendering, reload, and background/resume all pass. This establishes Phase 1 Expo Go physical evidence only; development-client/native-build, playback, Orion Cloud, offline, signing, updater, and release acceptance remain unestablished.
+10. **Exit:** npm recognizes `@orion/waven`; the foundation builds and renders physically without upgrading Orion or the locked WAVEN dependency generation.
 11. **Dependencies:** Phase 0.
 12. **Out of scope:** providers, playback, Orion Cloud writes, production signing.
+
+#### Phase 1 Completion ACK — `ACK-P01-2026-09-14`
+
+- **Phase:** 1 — WAVEN project foundation.
+- **Weight:** 6%.
+- **Decision:** `ACCEPTED`.
+- **Decision date:** 2026-09-14.
+- **Reviewer/owner:** WAVEN project owner.
+- **Validated implementation ref:** branch `waven/v1`, commit `ea506630028ca17f3f075a6b9cdae0876b5697fd` (`docs(waven): clarify Orion Cloud terminology`).
+- **Dependency-lock identity:** root `package-lock.json` SHA-256 `1BF49DED104A676060C78A3B8803778AFF9FCF47F188D18AED48BC5BCA2B0E04`.
+- **WAVEN package identity:** `apps/waven/package.json` SHA-256 `B53EA1D5C9B055A515EEEE12861F1C0A13E3A0A396E079B6B3BB0E33E771C29C`; package `@orion/waven`; app package ID `com.okali.waven`; foundation version `0.1.0`, Android versionCode `1`.
+- **Master-plan pre-ACK identity:** SHA-256 `479CDB5512AF7EBC61A7C1DADB042EA91C91E88AE357C302A808E33DD84B8748`.
+- **Automated evidence:** TypeScript PASS; foundation tests PASS `4/4`; web export PASS with `1,115` modules bundled; npm workspace recognition PASS. The recorded baseline Expo Doctor run passed `20/20`; current online revalidation is `19/20` solely because Expo's remote compatibility metadata now recommends newer SDK 57 patch versions for 11 Expo packages.
+- **Dependency-drift disposition:** accepted as a non-blocking validation waiver for Phase 1. WAVEN remains on the exact proven Orion Mobile SDK generation (`Expo 57.0.19`, React Native `0.86.3`, Expo Router `57.0.18`) rather than performing an unplanned patch upgrade during foundation acceptance.
+- **Physical matrix:** executed 2026-09-14 on Samsung Galaxy S24 Ultra (`SM-S928B/DS`), Android 16, One UI 8.5, Expo Go `57.0.9`, supported SDK 57. Unique device identifiers such as serial number and IMEIs are intentionally not recorded.
+- **Physical scenarios:** initial Expo Go launch PASS; black/silver/blue foundation render PASS; safe-area/layout presentation PASS; Expo Go reload PASS; background → foreground resume PASS; WAVEN remained rendered and usable after resume.
+- **Observed development warnings:** one React development warning stated that a state update occurred before a component mounted; no WAVEN crash or failing WAVEN source stack was established. After background/resume, Expo Go also displayed `Cannot connect to Expo CLI` from its development HMR/LogBox path; dismissing it returned to the intact WAVEN screen. These warnings are retained as development-runtime observations and must not be relabeled as native-build or release evidence.
+- **Signing/artifact:** not applicable to this Phase 1 Expo Go gate. No signed APK, development-client artifact, updater path, or distributed release acceptance is claimed.
+- **Residual risks / deferred proof:** generated Android/Hermes/New Architecture output remains to be reviewed at the first native-generation checkpoint; permanent signing is not configured; Orion Cloud, playback, offline behavior, background audio, MediaSession, updater behavior, and distributed acceptance remain outside Phase 1.
+- **UX observation:** the official black-background WAVEN launcher icon remains unchanged; a transparent in-app presentation mark is deferred to the WAVEN design-system work.
+- **Acceptance conclusion:** all Phase 1 foundation exit requirements and the required compatible Expo Go physical gate are satisfied. Phase 1 earns its full 6% weight. This ACK does not authorize Phase 2.
 
 ### Phase 2 — Shared Orion Cloud Android adapter extraction (not authorized)
 
@@ -731,7 +752,7 @@ If later regression evidence invalidates an accepted phase, its ACK becomes `REO
 | Phase | Deliverable | V1 weight | Required final validation before ACK | Current state | Completion ACK | Earned |
 |---:|---|---:|---|---|---|---:|
 | 0 | Evidence and version baseline | 4% | Code/evidence review; physical N/A | Evidence complete | `ACK-P00-2026-09-14` — ACCEPTED (audit-only) | 4% |
-| 1 | WAVEN project foundation | 6% | Compatible Expo Go physical run or WAVEN development-build physical run, plus current automated checks | Automated gate passed; physical pending | PENDING | 0% |
+| 1 | WAVEN project foundation | 6% | Compatible Expo Go physical run or WAVEN development-build physical run, plus current automated checks | Automated and Expo Go physical evidence complete | `ACK-P01-2026-09-14` — ACCEPTED | 6% |
 | 2 | Shared Orion Cloud Android adapter | 8% | Development-build physical identity/Drive lifecycle; later release regression | Not started / not authorized | PENDING | 0% |
 | 3 | Shared music domain/provider contracts | 8% | Physical provider integration in the implementation runtime plus automated contract parity | Not started / not authorized | PENDING | 0% |
 | 4 | Android playback core | 12% | Development-build physical playback/lifecycle/MediaSession soak; later release reacceptance | Not started / not authorized | PENDING | 0% |
@@ -745,7 +766,7 @@ If later regression evidence invalidates an accepted phase, its ACK becomes `REO
 | 12 | Release engineering, updater, distributed acceptance | 10% | Permanently signed GitHub Preview/Prerelease; clean install and in-place update on physical matrix | Not started / not authorized | PENDING | 0% |
 | 13 | Future Desktop Music Planet → WAVEN migration | 0% (post-v1) | Dedicated Desktop runtime/update/UX acceptance | Not started / not authorized | PENDING | 0% |
 
-**Current authoritative WAVEN v1 completion: 4%.** Phase 1 has passed its automated gate but remains incomplete and earns 0% until physical validation and its Completion ACK are accepted. No later phase is authorized or complete.
+**Current authoritative WAVEN v1 completion: 10%.** Phase 0 contributes 4% and Phase 1 contributes 6% through accepted Completion ACKs. No later phase is authorized or complete.
 
 ### 15.3 Completion ACK record required for every phase
 
