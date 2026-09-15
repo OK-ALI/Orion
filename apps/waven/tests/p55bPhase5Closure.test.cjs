@@ -29,15 +29,17 @@ test('P5.5B gives Clear Search a real minimum touch target', () => {
   );
 });
 
-test('P5.5B reconciles the authoritative Phase 5 publication record', () => {
+test('P5.5B records the authoritative Phase 5 Completion ACK', () => {
   assert.match(master, /P5\.2 `1dab4ec40e1e93f4d411fcb9ab809b1c78599c3c`/);
   assert.match(master, /P5\.3 `3f3cf303375acd11f65169efe839d9247a040b4d`/);
   assert.match(master, /P5\.4 `353301c45acd30aed9f25533724e16ccdb5245a8`/);
   assert.match(master, /P5\.5A `0d949a8aad1863f3dd8bfbc5e0d132f526714079`/);
-  assert.match(master, /native Google identity\/sign-in has been physically accepted/i);
-  assert.match(master, /P5\.5B closure audit\/reconciliation remains before Completion ACK/);
-  assert.match(master, /Overall completion remains \*\*38%\*\*/);
-  assert.match(master, /Phase 6 remains \*\*NOT AUTHORIZED\*\*/);
+  assert.match(master, /P5\.5B `68d55a57456ace75cd87ab6fdf702aec246409b5`/);
+  assert.match(master, /Phase 5 Completion ACK — `ACK-P05-2026-09-16`/);
+  assert.match(master, /\*\*Decision:\*\* `ACCEPTED`/);
+  assert.match(master, /Current authoritative WAVEN v1 completion: 45%/);
+  assert.match(master, /This ACK does \*\*not\*\* authorize Phase 6/);
+  assert.doesNotMatch(master, /P5\.5B closure audit\/reconciliation remains before Completion ACK/);
 });
 
 test('P5.5B records the accepted black-surface blue-accent design rule', () => {
@@ -51,4 +53,7 @@ test('P5.5B records the accepted black-surface blue-accent design rule', () => {
   );
   assert.match(design, /P5\.5A product-language, transition, and interaction-material lock/);
   assert.match(design, /must not label that inert shell state as actively “SEARCHING”/);
+  assert.match(design, /Phase 5 completion lock — 2026-09-16/);
+  assert.match(design, /ACK-P05-2026-09-16/);
+  assert.match(design, /68d55a57456ace75cd87ab6fdf702aec246409b5/);
 });

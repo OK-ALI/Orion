@@ -664,6 +664,14 @@ Physical review accepted the following as the current WAVEN direction:
 
 Before Phase 5 Completion ACK, shell-only states must remain visibly truthful about their current capability. In particular, the P5 Search shell may echo a typed search term but must not label that inert shell state as actively “SEARCHING” before Phase 6 owns real provider requests/results. All changed interactive controls must continue to honor the established 48dp touch-target and accessibility rules.
 
+### Phase 5 completion lock — 2026-09-16
+
+Phase 5 is accepted under `ACK-P05-2026-09-16` with final published closure checkpoint `68d55a57456ace75cd87ab6fdf702aec246409b5`.
+
+The locked Phase 5 design boundary includes the black/silver/WAVEN-blue visual system, restrained WAVEN Glass, atmospheric continuity, Home/Search/Library primary shell, persistent compact Mini Player, coherent fallback artwork, real accessibility/touch-target rules, responsive layout classes, Reduced Motion behavior, product-safe language, the Entry → Home atmospheric handoff, WAVEN-black selected/interactive surfaces with blue retained as accent, and truthful shell-only Search presentation before provider work exists.
+
+The final P5.5B gate passed TypeScript and `116/116` automated tests, and the changed Search presentation/touch geometry passed physical review on Samsung Galaxy S24 Ultra / Android 16. This completion lock does not authorize Phase 6 and does not claim permanently signed distributed acceptance.
+
 ### Phase boundary
 - P5 owns presentation and UX.
 - Existing identity plumbing is reused.
