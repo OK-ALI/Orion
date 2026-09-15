@@ -47,7 +47,6 @@ export default function WavenSearchScreen() {
             <Pressable
               accessibilityLabel="Clear search"
               accessibilityRole="button"
-              hitSlop={8}
               onPress={() => setQuery('')}
               style={styles.clearButton}
             >
@@ -90,7 +89,7 @@ export default function WavenSearchScreen() {
           </View>
         ) : (
           <View style={styles.queryState}>
-            <Text style={styles.queryLabel}>SEARCHING {scope.toUpperCase()}</Text>
+            <Text style={styles.queryLabel}>YOUR SEARCH · {scope.toUpperCase()}</Text>
             <Text numberOfLines={2} style={styles.queryText}>“{query}”</Text>
           </View>
         )}
@@ -152,9 +151,9 @@ const styles = StyleSheet.create({
   },
   clearButton: {
     alignItems: 'center',
-    height: 36,
+    height: wavenLayout.minimumTouchTarget,
     justifyContent: 'center',
-    width: 36,
+    width: wavenLayout.minimumTouchTarget,
   },
   clearText: {
     color: wavenColors.textSecondary,

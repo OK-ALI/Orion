@@ -43,10 +43,10 @@ The persistent WAVEN identity is:
 
 - **Black:** environment and depth
 - **Silver / cool white:** structure, hierarchy, readable content
-- **WAVEN blue:** life, identity, active state, interaction
+- **WAVEN blue:** life, identity, active-state accents, interaction emphasis
 - **Artwork-derived colors:** temporary atmosphere only
 
-Artwork color may tint the environment, especially around the player and detail heroes, but it must never replace WAVEN blue as the interaction color.
+Artwork color may tint the environment, especially around the player and detail heroes, but it must never replace WAVEN blue as the interaction accent. Active controls do not need blue-filled surfaces: the accepted P5.5A rule keeps primary/selected interaction fills WAVEN black and uses blue selectively for edges, icons, arrows, waveform/progress, focus, and identity.
 
 Avoid introducing unrelated purple, magenta, yellow, green, or rainbow accents merely because a reference uses them.
 
@@ -301,10 +301,10 @@ Artwork colors may extend beyond artwork and tint the surrounding environment.
 
 ### WAVEN translation
 - Dark glass search surface
-- Selected filter state in WAVEN blue
-- Inactive filters in silver/black glass
-- Artwork-derived environmental glow behind relevant content
-- WAVEN blue remains the interaction color
+- Selected filters use a WAVEN-black active surface with a restrained WAVEN-blue edge/accent
+- Inactive filters remain silver/black glass
+- Artwork-derived environmental glow sits behind relevant content
+- WAVEN blue remains the interaction accent rather than becoming a large filled slab
 
 ### Do not copy
 - Yellow active states
@@ -604,7 +604,7 @@ Revision 4H makes a deliberately narrow polish:
 5. No new blur implementation, dependency, Cloud behavior, provider behavior, playback behavior, or phase scope is introduced.
 6. The intended result is continuous glass with no visible internal rectangular machinery.
 
-### P5.2 Revision 4H physical checkpoint lock — 2026-09-15
+### P5.2 Revision 4H physical checkpoint lock — 2026-09-15 (historical intermediate record)
 
 The owner physically reviewed the current P5.2 presentation on a Samsung Galaxy S24 Ultra and accepts this visual/material boundary. This checkpoint locks the approved direction without claiming all of P5.2 complete.
 
@@ -622,6 +622,47 @@ The owner physically reviewed the current P5.2 presentation on a Samsung Galaxy 
 - Real Google identity/sign-in has **not** been physically accepted in a compatible native/development build. Expo Go fallback evidence cannot substitute for that native evidence tier.
 - P5.2 therefore remains **IN PROGRESS**. Phase 5 has no Completion ACK, overall WAVEN v1 completion remains **38%**, and Phase 6 remains **NOT AUTHORIZED**.
 - This checkpoint authorizes no Orion Cloud write, no Drive music work, no WAVEN music synchronization, no playback-owner change, and no later-phase implementation.
+
+### P5.2 completion reconciliation — native identity accepted
+
+The Rev4H checkpoint above is intentionally retained as historical evidence of the state at that moment. Its pending-native-identity note was later satisfied: the physical Samsung Galaxy S24 Ultra WAVEN native/development path completed the real Google chooser and returned into Home through the existing identity bridge. This does not promote that evidence into permanently signed distributed acceptance.
+
+### P5.3 Mini Player design lock
+
+The accepted compact player remains intentionally narrow in scope:
+
+- artwork, title/artist, Play/Pause, and a read-only compact waveform/progress treatment;
+- native Media3 remains the sole playback/queue owner;
+- overflowing titles may use the accepted continuous forward-only marquee;
+- Reduced Motion keeps the title static and suppresses nonessential player motion;
+- direct waveform seeking, Previous/Next, Up Next, richer transport, Quick Player, and final Full Player behavior remain later-surface work.
+
+### P5.4 accessibility/responsive lock
+
+The Phase 5 shell must preserve the physically accepted accessibility and geometry behavior:
+
+- real minimum touch targets for audited controls;
+- large-text recovery rather than clipped/overlapping hierarchy;
+- TalkBack semantics, selected-state announcement, and logical focus;
+- Android Back history for user navigation;
+- gesture and 3-button navigation safe areas;
+- compact/standard/roomy/tablet-like responsive classes without treating the S24 Ultra as a fixed template;
+- Reduced Motion-safe navigation, Entry, Mini Player, and marquee behavior.
+
+### P5.5A product-language, transition, and interaction-material lock
+
+Physical review accepted the following as the current WAVEN direction:
+
+- normal product surfaces do not expose development/build/Expo/internal implementation vocabulary;
+- Entry stays minimal and no longer repeats account-choice guidance already expressed by its actions;
+- Entry → Home uses an atmospheric continuity handoff rather than an abrupt route snap;
+- primary and selected interaction surfaces use WAVEN black;
+- WAVEN blue remains selective and valuable through active icons, edges, arrows, waveform/progress, focus, and identity rather than coating entire controls;
+- this material rule applies to the accepted Bottom Navigation selection pill, Search/Library selected filters, Home primary action, Library Find Music action, and Mini Player Play/Pause surface.
+
+### P5.5B closure truthfulness rule
+
+Before Phase 5 Completion ACK, shell-only states must remain visibly truthful about their current capability. In particular, the P5 Search shell may echo a typed search term but must not label that inert shell state as actively “SEARCHING” before Phase 6 owns real provider requests/results. All changed interactive controls must continue to honor the established 48dp touch-target and accessibility rules.
 
 ### Phase boundary
 - P5 owns presentation and UX.

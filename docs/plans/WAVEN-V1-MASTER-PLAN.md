@@ -17,7 +17,7 @@ There must be no separate **WAVEN Cloud**. WAVEN will participate in **Orion Clo
 The supplied icon has been copied unchanged into `apps/waven/assets/icon.png`. It is the current reference/application icon, not a redesigned derivative.
 Offline behavior is a first-class product mode and is intentionally separate from downloadable media. Direct-distribution builds are expected to gain a WAVEN in-app updater based on a future read-only audit of Orion Mobile's current updater, with GitHub Preview/Prerelease artifacts and same-signature physical update acceptance.
 
-Current accepted completion status is **Phases 0–4 complete at their recorded evidence tiers, 38% overall**. Phase 5 is **authorized and in progress** under `AUTH-P05-2026-09-14`; its P5.1 UI shell foundation is published at `5db4d4f01b597d746389ed7f8e766a532df411ed`, and its P5.2 Rev4H visual/material checkpoint is physically accepted while real native Google identity remains pending. P5.2 and Phase 5 are therefore still in progress, Phase 5 has no Completion ACK and earns **0%** so far, and Phase 6 remains unauthorized. Expo Go, WAVEN development-device evidence, and a permanently signed distributed candidate remain distinct evidence tiers; success in one must never be promoted into another.
+Current accepted completion status is **Phases 0–4 complete at their recorded evidence tiers, 38% overall**. Phase 5 is **authorized and in progress** under `AUTH-P05-2026-09-14`. Published Phase 5 checkpoints now include P5.1 `5db4d4f01b597d746389ed7f8e766a532df411ed`, P5.2 `1dab4ec40e1e93f4d411fcb9ab809b1c78599c3c`, P5.3 `3f3cf303375acd11f65169efe839d9247a040b4d`, P5.4 `353301c45acd30aed9f25533724e16ccdb5245a8`, and P5.5A `0d949a8aad1863f3dd8bfbc5e0d132f526714079`. Native Google identity/sign-in has been physically accepted on the Samsung Galaxy S24 Ultra through the WAVEN native/development path; this does **not** claim permanently signed distributed acceptance, which remains a later release-engineering gate. Phase 5 still has no Completion ACK and earns **0%** until the closure audit, final evidence reconciliation, and Completion ACK are accepted. Phase 6 remains unauthorized. Expo Go, WAVEN development-device evidence, and a permanently signed distributed candidate remain distinct evidence tiers; success in one must never be promoted into another.
 
 ## 2. Instruction and evidence boundary
 
@@ -760,7 +760,7 @@ Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 is 
 - **Phase accounting:** this checkpoint does **not** complete Phase 5 and earns no partial percentage. Overall WAVEN v1 completion remains **38%** pending a separate Phase 5 Completion ACK.
 - **Next bounded Phase 5 slice:** P5.2 owns WAVEN startup/entry/sign-in presentation using the existing Google identity plumbing. It must not create a second authentication system, perform Orion Cloud music synchronization, authorize a new Orion Cloud write, or enter Phase 6 scope.
 
-#### Phase 5.2 Rev4H Visual/Material Checkpoint — presentation accepted; P5.2 still in progress
+#### Phase 5.2 Rev4H Visual/Material Checkpoint — historical intermediate record
 
 - **Checkpoint state:** the current P5.2 working boundary remains uncommitted on top of P5.1 checkpoint `5db4d4f01b597d746389ed7f8e766a532df411ed`; no P5.2 commit or push is claimed by this documentation record.
 - **Physical device:** Samsung Galaxy S24 Ultra family hardware through Expo Go for the JS/UI/local-state evidence tier.
@@ -775,6 +775,48 @@ Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 is 
 - **Native identity still pending:** real Google identity/sign-in still requires a compatible WAVEN native/development build and physical acceptance. Expo Go cannot establish this evidence tier.
 - **Scope protection:** P5.2 identity presentation reuses the existing native Google identity architecture and does not authorize Drive music work, Orion Cloud music reads/writes, a second live no-op write, token exposure to JavaScript, a second authentication architecture, or WAVEN music synchronization.
 - **Phase accounting:** P5.2 remains **IN PROGRESS**; Phase 5 remains **IN PROGRESS** with no Completion ACK; authoritative WAVEN v1 completion stays **38%**; Phase 6 remains **NOT AUTHORIZED**.
+
+#### Phase 5.2 Published Completion Checkpoint — entry/sign-in stabilization
+
+- **Checkpoint:** `1dab4ec40e1e93f4d411fcb9ab809b1c78599c3c` (`fix(waven): stabilize phase 5.2 entry handoff`), published after the Rev4H intermediate visual record.
+- **Native identity evidence:** on the physical Samsung Galaxy S24 Ultra, a WAVEN native/development candidate completed the real Google account chooser and returned directly into Home through the existing Google identity plumbing.
+- **Boundary:** identity presentation stores only WAVEN local entry/display session state. No Google Drive profile read/write, no Orion Cloud music namespace, no second authentication architecture, and no JavaScript OAuth-token exposure were introduced.
+- **Evidence classification:** native/development identity acceptance is complete for Phase 5. Permanently signed distributed identity acceptance is **not** claimed here and remains a later release-path gate.
+- **Historical-note rule:** the preceding Rev4H section is retained as the accurate state of that earlier intermediate checkpoint; its “native identity pending” statement is superseded by this completion record.
+
+#### Phase 5.3 Published Checkpoint — persistent Mini Player shell
+
+- **Checkpoint:** `3f3cf303375acd11f65169efe839d9247a040b4d` (`feat(waven): add persistent mini player shell`).
+- **Accepted behavior:** one compact persistent player observes and controls the existing Phase 4 Media3 owner, presents native metadata, Play/Pause, continuous progress, buffering/error presentation, fallback artwork, and Reduced Motion-safe state transitions.
+- **Ownership:** no second audio engine, queue owner, provider layer, Library persistence, offline architecture, or Cloud synchronization was introduced.
+- **Physical evidence:** development/native physical validation accepted progress synchronization, Play/Pause, route persistence, and the compact-player presentation. Production-signed acceptance is not claimed.
+
+#### Phase 5.4 Published Checkpoint — accessibility and responsive hardening
+
+- **Checkpoint:** `353301c45acd30aed9f25533724e16ccdb5245a8` (`feat(waven): complete phase 5.4 accessibility hardening`).
+- **Automated gate:** TypeScript PASS and WAVEN suite PASS `109/109` at the final P5.4H boundary.
+- **Physical lock:** Samsung Galaxy S24 Ultra validation accepted large-text recovery, TalkBack semantics/focus/interactions, true 48dp targets for the audited controls, Android Back history, gesture and 3-button navigation safe areas, continuous title marquee, Reduced Motion behavior, Search placeholder contrast, and the current large-phone geometry.
+- **Responsive evidence:** deterministic viewport coverage spans compact through tablet-like widths without claiming fake physical devices.
+- **Rotation clarification:** deterministic direct WAVEN launch preserved the user's rotation lock. A prior global Auto Rotate change was traced to the ADB `monkey` launch mechanism, which is no longer used for WAVEN physical acceptance.
+
+#### Phase 5.5A Published Checkpoint — product language and interaction continuity
+
+- **Checkpoint:** `0d949a8aad1863f3dd8bfbc5e0d132f526714079` (`feat(waven): polish phase 5.5 entry and interaction surfaces`).
+- **Automated gate:** TypeScript PASS and full WAVEN suite PASS `112/112`.
+- **Physical lock:** Samsung Galaxy S24 Ultra accepted product-facing language cleanup, removal of redundant Entry guidance, the atmospheric Entry → Home handoff, WAVEN-black selected/interactive surfaces with blue retained as accent/edge/icon/identity, and the updated Bottom Navigation/Mini Player interaction treatment.
+- **Candidate evidence:** physical debug/native candidate SHA-256 `F088E186B12B43B08D6F130AD0ADCC769474B40B8E2C57BB4245DE9B0BE08834`; Auto Rotate remained `0 → 0`; ADB `monkey` was not used.
+- **Boundary:** this remains Phase 5 presentation/motion work only. No Phase 6 provider/search implementation, Phase 7 persistence, Phase 8 offline state machine, Phase 9 music sync, or Phase 10 immersive-player scope is authorized.
+
+#### Phase 5.5B Closure Audit — remaining Phase 5 work
+
+The published P5.5A state was audited against the complete Phase 5 UI/source surface and the canonical design/master-plan documents. The audit found no need for another broad visual redesign. Remaining closure work is deliberately narrow:
+
+1. Keep the current Search shell truthful before Phase 6 by avoiding language that implies a provider request is already running when the shell only reflects typed input.
+2. Bring the Search clear control to the same real 48dp touch-target rule already established elsewhere in P5.4.
+3. Reconcile the canonical master plan and UI/UX design contract with the published P5.2–P5.5A evidence and the accepted black-surface/blue-accent interaction rule.
+4. Run the resulting automated gate, perform only the bounded physical check needed for the changed Search interaction/presentation, then package Phase 5 Completion ACK evidence.
+
+Phase 5 remains **IN PROGRESS** until those closure items and the Completion ACK are accepted. Overall completion remains **38%** and Phase 6 remains **NOT AUTHORIZED**.
 
 ### Phase 6 — Search, discovery, and detail experiences (not authorized)
 
@@ -896,7 +938,7 @@ If later regression evidence invalidates an accepted phase, its ACK becomes `REO
 | 2 | Shared Orion Cloud Android adapter | 8% | Development-build physical identity/Drive lifecycle; later release regression | Complete; shared adapter and Cloud preservation gate accepted | `ACK-P02-2026-09-14` — ACCEPTED | 8% |
 | 3 | Shared music domain/provider contracts | 8% | Contract parity at accepted scope; native playback integration deferred to Phase 4 | Complete; shared music contracts/provider registry accepted | `ACK-P03-2026-09-14` — ACCEPTED | 8% |
 | 4 | Android playback core | 12% | Development-build physical playback/lifecycle/MediaSession soak; later release reacceptance | Complete; development-device playback matrix accepted | `ACK-P04-2026-09-14` — ACCEPTED | 12% |
-| 5 | Design system and navigation | 7% | Expo Go-compatible physical UI/accessibility matrix or development-build equivalent | AUTHORIZED / IN PROGRESS; P5.1 published/remote-verified at `5db4d4f01b597d746389ed7f8e766a532df411ed`; P5.2 Rev4H visual/material checkpoint physically accepted; native Google identity still pending | PENDING | 0% |
+| 5 | Design system and navigation | 7% | Expo Go-compatible physical UI/accessibility matrix or development-build equivalent | AUTHORIZED / IN PROGRESS; published through P5.5A `0d949a8aad1863f3dd8bfbc5e0d132f526714079`; native Google identity physically accepted on the WAVEN development/native path; P5.5B closure audit/reconciliation remains before Completion ACK; distributed signed acceptance is not claimed | PENDING | 0% |
 | 6 | Search, discovery, and details | 7% | Physical online/degraded/offline provider flow in the correct runtime | Not started / not authorized | PENDING | 0% |
 | 7 | Local Library, favorites, playlists, history | 8% | Development-build physical persistence, restart, account isolation, and migration | Not started / not authorized | PENDING | 0% |
 | 8 | Offline awareness and connectivity resilience | 8% | Development-build physical connectivity matrix in section 13.8 | Not started / not authorized | PENDING | 0% |
