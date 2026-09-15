@@ -2,8 +2,8 @@ import 'react-native-reanimated';
 
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Easing, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { WavenWordmark } from '../src/components/brand/WavenWordmark';
 import { WavenBottomNav } from '../src/components/shell/WavenBottomNav';
@@ -14,7 +14,7 @@ import {
   subscribeWavenEntrySession,
 } from '../src/features/account/wavenEntrySession';
 import { useWavenReducedMotion } from '../src/hooks/useWavenReducedMotion';
-import { wavenColors, wavenSpacing } from '../src/theme/tokens';
+import { wavenColors, wavenMotion, wavenSpacing } from '../src/theme/tokens';
 
 const PRIMARY_PATHS = new Set(['/', '/search', '/library']);
 
@@ -45,6 +45,9 @@ function WavenRootNavigation() {
   const reducedMotion = useWavenReducedMotion();
   const [startupState, setStartupState] = useState<StartupState>('checking');
   const [entryRequired, setEntryRequired] = useState(false);
+  const [entryHandoffPending, setEntryHandoffPending] = useState(false);
+  const entryHandoffOpacity = useRef(new Animated.Value(1)).current;
+  const showPrimaryNavigation = PRIMARY_PATHS.has(pathname);
 
   useEffect(() => {
     let mounted = true;
@@ -58,6 +61,7 @@ function WavenRootNavigation() {
       // bounce a completed user back to Entry.
       sessionChangeSeen = true;
       setEntryRequired(!session);
+      setEntryHandoffPending(Boolean(session));
       setStartupState('ready');
     });
 
@@ -87,6 +91,36 @@ function WavenRootNavigation() {
     router.replace('/entry');
   }, [entryRequired, pathname, router, startupState]);
 
+  useEffect(() => {
+    if (!entryHandoffPending || !showPrimaryNavigation) return;
+
+    entryHandoffOpacity.stopAnimation();
+    entryHandoffOpacity.setValue(1);
+
+    const reveal = Animated.timing(entryHandoffOpacity, {
+      toValue: 0,
+      duration: reducedMotion ? wavenMotion.quickMs : wavenMotion.deliberateMs,
+      easing: reducedMotion ? Easing.linear : Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+
+    reveal.start(({ finished }) => {
+      if (finished) {
+        setEntryHandoffPending(false);
+        entryHandoffOpacity.setValue(1);
+      }
+    });
+
+    return () => {
+      reveal.stop();
+    };
+  }, [
+    entryHandoffOpacity,
+    entryHandoffPending,
+    reducedMotion,
+    showPrimaryNavigation,
+  ]);
+
   const waitingForEntryRedirect =
     startupState === 'checking'
     || (startupState === 'ready' && entryRequired && pathname === '/');
@@ -99,8 +133,6 @@ function WavenRootNavigation() {
       </View>
     );
   }
-
-  const showPrimaryNavigation = PRIMARY_PATHS.has(pathname);
 
   return (
     <View style={styles.root}>
@@ -121,6 +153,21 @@ function WavenRootNavigation() {
       </View>
       {showPrimaryNavigation ? <WavenMiniPlayer /> : null}
       {showPrimaryNavigation ? <WavenBottomNav /> : null}
+      {entryHandoffPending && showPrimaryNavigation ? (
+        <Animated.View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          pointerEvents="none"
+          style={[
+            styles.entryHandoffOverlay,
+            {
+              opacity: entryHandoffOpacity,
+            },
+          ]}
+        >
+          <WavenAtmosphericCanvas variant="entry" />
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -144,6 +191,15 @@ const styles = StyleSheet.create({
   },
   stackFrame: {
     flex: 1,
+  },
+  entryHandoffOverlay: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    backgroundColor: wavenColors.canvas,
+    zIndex: 20,
   },
   startupHandoff: {
     alignItems: 'center',

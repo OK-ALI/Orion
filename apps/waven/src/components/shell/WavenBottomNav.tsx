@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   selectionPill: {
-    backgroundColor: wavenColors.blueWash,
+    backgroundColor: wavenColors.canvas,
     borderColor: wavenColors.blueEdge,
     borderRadius: wavenRadii.pill,
     borderWidth: StyleSheet.hairlineWidth,

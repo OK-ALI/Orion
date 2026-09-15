@@ -136,7 +136,7 @@ export default function WavenHomeScreen() {
             <WavenSurface style={styles.recentState}>
               <View accessible={false} style={styles.glassTopHighlight} />
               <WavenArtworkFallback
-                accessibilityLabel="Recently played placeholder artwork"
+                accessibilityLabel="Recently played artwork"
                 seed="home-recently-played-empty"
                 size={64}
               />
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
   },
   heroAction: {
     alignItems: 'center',
-    backgroundColor: 'rgba(27, 115, 166, 0.24)',
+    backgroundColor: wavenColors.canvas,
     borderColor: 'rgba(93, 187, 237, 0.2)',
     borderRadius: wavenRadii.pill,
     borderWidth: StyleSheet.hairlineWidth,

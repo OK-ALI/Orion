@@ -127,7 +127,7 @@ export function WavenEntrySignal({ width }: WavenEntrySignalProps) {
 
   return (
     <Animated.View
-      accessibilityLabel="WAVEN cinematic living music waveform"
+      accessibilityLabel="WAVEN music waveform"
       accessibilityRole="image"
       style={[
         styles.frame,

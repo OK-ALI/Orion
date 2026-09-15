@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  Easing,
   ScrollView,
   StyleSheet,
   Text,
@@ -41,13 +42,13 @@ function entryErrorMessage(error: unknown): string {
       : '';
 
   if (code === 'GOOGLE_CLIENT_ID_MISSING') {
-    return 'Google Sign-In is not configured for this build.';
+    return 'Google Sign-In isn’t available right now. You can continue without an account.';
   }
   if (code === 'GOOGLE_IDENTITY_UNAVAILABLE') {
-    return 'Google Sign-In needs a WAVEN development build. Continue locally for this Expo Go review.';
+    return 'Google Sign-In isn’t available right now. You can continue without an account.';
   }
 
-  return 'Google Sign-In did not complete. Nothing in Orion Cloud was changed.';
+  return 'Google Sign-In didn’t finish. Please try again, or continue without an account.';
 }
 
 
@@ -61,6 +62,7 @@ export default function WavenEntryScreen() {
   const identityProgress = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
   const contentProgress = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
   const actionsProgress = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
+  const handoffProgress = useRef(new Animated.Value(0)).current;
 
   const busy = phase === 'signing-in' || phase === 'continuing-local';
 
@@ -99,6 +101,27 @@ export default function WavenEntryScreen() {
     inputRange: [0, 1],
     outputRange: [14, 0],
   });
+  const handoffOpacity = handoffProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+  const handoffTranslate = handoffProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: reducedMotion ? [0, 0] : [0, -10],
+  });
+
+  const finishEntryHandoff = async () => {
+    await new Promise<void>((resolve) => {
+      Animated.timing(handoffProgress, {
+        toValue: 1,
+        duration: reducedMotion ? wavenMotion.quickMs : wavenMotion.deliberateMs,
+        easing: reducedMotion ? Easing.linear : Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => resolve());
+    });
+
+    router.replace('/');
+  };
 
   const continueWithGoogle = async () => {
     if (busy) return;
@@ -120,7 +143,7 @@ export default function WavenEntryScreen() {
 
       const profile = await signInToOrionCloud(GOOGLE_WEB_CLIENT_ID);
       await completeWavenEntryWithGoogle(profile);
-      router.replace('/');
+      await finishEntryHandoff();
     } catch (error) {
       setPhase('error');
       setMessage(entryErrorMessage(error));
@@ -135,10 +158,10 @@ export default function WavenEntryScreen() {
 
     try {
       await completeWavenEntryLocally();
-      router.replace('/');
+      await finishEntryHandoff();
     } catch {
       setPhase('error');
-      setMessage('WAVEN could not save the local entry state. Please try again.');
+      setMessage('WAVEN couldn’t continue. Please try again.');
     }
   };
 
@@ -152,89 +175,96 @@ export default function WavenEntryScreen() {
       >
         <Animated.View
           style={[
-            styles.experience,
+            styles.handoffFrame,
             {
-              opacity: contentProgress,
-              transform: [{ translateY: contentTranslate }],
+              opacity: handoffOpacity,
+              transform: [{ translateY: handoffTranslate }],
             },
           ]}
         >
-          <Animated.View style={[styles.identity, { opacity: identityProgress }]}>
-            <WavenWordmark style={styles.wordmark} />
-            <Text style={styles.tagline}>
-              Where <Text style={styles.taglineAccent}>Music</Text> Lives
-            </Text>
+          <Animated.View
+            style={[
+              styles.experience,
+              {
+                opacity: contentProgress,
+                transform: [{ translateY: contentTranslate }],
+              },
+            ]}
+          >
+            <Animated.View style={[styles.identity, { opacity: identityProgress }]}>
+              <WavenWordmark style={styles.wordmark} />
+              <Text style={styles.tagline}>
+                Where <Text style={styles.taglineAccent}>Music</Text> Lives
+              </Text>
+            </Animated.View>
+
+            <WavenEntrySignal />
+
+            <View style={styles.welcome}>
+              <Text accessibilityRole="header" style={styles.title}>
+                <Text style={styles.titleSilver}>Your </Text>
+                <Text style={styles.titleBlue}>Sound</Text>
+                <Text style={styles.titleSilver}>, Your </Text>
+                <Text style={styles.titleBlue}>Way.</Text>
+              </Text>
+            </View>
           </Animated.View>
 
-          <WavenEntrySignal />
-
-          <View style={styles.welcome}>
-            <Text accessibilityRole="header" style={styles.title}>
-              <Text style={styles.titleSilver}>Your </Text>
-              <Text style={styles.titleBlue}>Sound</Text>
-              <Text style={styles.titleSilver}>, Your </Text>
-              <Text style={styles.titleBlue}>Way.</Text>
-            </Text>
-            <Text style={styles.body}>
-              Connect your Orion identity, or start local. You can change this later.
-            </Text>
-          </View>
-        </Animated.View>
-
-        <Animated.View
-          style={[
-            styles.actions,
-            {
-              opacity: actionsProgress,
-              transform: [{ translateY: actionsTranslate }],
-            },
-          ]}
-        >
-          <WavenPressable
-            accessibilityLabel="Continue with Google"
-            accessibilityRole="button"
-            containerStyle={styles.actionContainer}
-            disabled={busy}
-            onPress={continueWithGoogle}
+          <Animated.View
+            style={[
+              styles.actions,
+              {
+                opacity: actionsProgress,
+                transform: [{ translateY: actionsTranslate }],
+              },
+            ]}
           >
-            <View style={[styles.primaryButton, busy ? styles.disabled : null]}>
-              {phase === 'signing-in' ? (
-                <ActivityIndicator color={wavenColors.canvas} size="small" />
-              ) : (
-                <View accessible={false} style={styles.googleBadge}>
-                  <Text style={styles.googleBadgeText}>G</Text>
-                </View>
-              )}
-              <Text style={styles.primaryButtonText}>
-                {phase === 'signing-in' ? 'Connecting…' : 'Continue with Google'}
+            <WavenPressable
+              accessibilityLabel="Continue with Google"
+              accessibilityRole="button"
+              containerStyle={styles.actionContainer}
+              disabled={busy}
+              onPress={continueWithGoogle}
+            >
+              <View style={[styles.primaryButton, busy ? styles.disabled : null]}>
+                {phase === 'signing-in' ? (
+                  <ActivityIndicator color={wavenColors.canvas} size="small" />
+                ) : (
+                  <View accessible={false} style={styles.googleBadge}>
+                    <Text style={styles.googleBadgeText}>G</Text>
+                  </View>
+                )}
+                <Text style={styles.primaryButtonText}>
+                  {phase === 'signing-in' ? 'Connecting…' : 'Continue with Google'}
+                </Text>
+              </View>
+            </WavenPressable>
+
+            <WavenPressable
+              accessibilityLabel="Continue without an account"
+              accessibilityRole="button"
+              containerStyle={styles.actionContainer}
+              disabled={busy}
+              onPress={continueLocally}
+            >
+              <View style={[styles.localButton, busy ? styles.disabled : null]}>
+                {phase === 'continuing-local' ? (
+                  <ActivityIndicator color={wavenColors.interactionBlue} size="small" />
+                ) : null}
+                <Text style={styles.localButtonText}>
+                  {phase === 'continuing-local' ? 'Opening WAVEN…' : 'Continue without an account'}
+                </Text>
+              </View>
+            </WavenPressable>
+
+            {message ? (
+              <Text accessibilityLiveRegion="polite" style={styles.message}>
+                {message}
               </Text>
-            </View>
-          </WavenPressable>
+            ) : null}
 
-          <WavenPressable
-            accessibilityLabel="Continue locally"
-            accessibilityRole="button"
-            containerStyle={styles.actionContainer}
-            disabled={busy}
-            onPress={continueLocally}
-          >
-            <View style={[styles.localButton, busy ? styles.disabled : null]}>
-              {phase === 'continuing-local' ? (
-                <ActivityIndicator color={wavenColors.interactionBlue} size="small" />
-              ) : null}
-              <Text style={styles.localButtonText}>
-                {phase === 'continuing-local' ? 'Opening WAVEN…' : 'Continue locally'}
-              </Text>
-            </View>
-          </WavenPressable>
-
-          {message ? (
-            <Text accessibilityLiveRegion="polite" style={styles.message}>
-              {message}
-            </Text>
-          ) : null}
-
-          <Text style={styles.note}>You can choose or change your sign-in later.</Text>
+            <Text style={styles.note}>Signing in is optional.</Text>
+          </Animated.View>
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
@@ -254,6 +284,9 @@ const styles = StyleSheet.create({
     paddingBottom: wavenSpacing.xl,
     paddingHorizontal: wavenSpacing.lg,
     paddingTop: wavenSpacing.lg,
+  },
+  handoffFrame: {
+    flex: 1,
   },
   identity: {
     alignItems: 'center',
@@ -295,14 +328,6 @@ const styles = StyleSheet.create({
   },
   titleBlue: {
     color: wavenColors.interactionBlue,
-  },
-  body: {
-    color: wavenColors.textMuted,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 8,
-    maxWidth: 330,
-    textAlign: 'center',
   },
   actions: {
     alignItems: 'stretch',

@@ -82,7 +82,7 @@ export default function WavenSearchScreen() {
         {!query ? (
           <View style={styles.emptyStage}>
             <WavenArtworkFallback
-              accessibilityLabel="WAVEN search signal"
+              accessibilityLabel="Search artwork"
               seed={`search-${scope}`}
               size={88}
             />
@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
   },
   scopeChipActive: {
-    backgroundColor: wavenColors.blueWash,
+    backgroundColor: wavenColors.canvas,
     borderColor: wavenColors.blueEdge,
   },
   scopeText: {

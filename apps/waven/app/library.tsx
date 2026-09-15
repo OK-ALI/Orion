@@ -52,7 +52,7 @@ export default function WavenLibraryScreen() {
 
         <View style={styles.emptyStage}>
           <WavenArtworkFallback
-            accessibilityLabel="Empty WAVEN library artwork"
+            accessibilityLabel="Library artwork"
             seed={`library-${filter}`}
             size={artworkSize}
           />
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
   },
   filterChipActive: {
-    backgroundColor: wavenColors.blueWash,
+    backgroundColor: wavenColors.canvas,
     borderColor: wavenColors.blueEdge,
   },
   filterText: {
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
   },
   findMusicAction: {
     alignItems: 'center',
-    backgroundColor: wavenColors.blueWash,
+    backgroundColor: wavenColors.canvas,
     borderColor: wavenColors.blueEdge,
     borderRadius: wavenRadii.pill,
     borderWidth: StyleSheet.hairlineWidth,

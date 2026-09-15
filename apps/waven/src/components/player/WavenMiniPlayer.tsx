@@ -532,7 +532,7 @@ export function WavenMiniPlayer() {
                 />
               ) : (
                 <WavenArtworkFallback
-                  accessibilityLabel={`${title} fallback artwork`}
+                  accessibilityLabel={`${title} artwork`}
                   seed={item.queueId}
                   size={48}
                 />
@@ -899,7 +899,7 @@ const styles = StyleSheet.create({
   },
   control: {
     alignItems: 'center',
-    backgroundColor: wavenColors.blueWash,
+    backgroundColor: wavenColors.canvas,
     borderColor: wavenColors.blueEdge,
     borderRadius: wavenRadii.pill,
     borderWidth: StyleSheet.hairlineWidth,

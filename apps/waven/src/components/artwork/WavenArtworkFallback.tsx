@@ -25,7 +25,7 @@ function signalHeights(seed: string) {
 
 export function WavenArtworkFallback({
   size,
-  accessibilityLabel = 'WAVEN fallback artwork',
+  accessibilityLabel = 'WAVEN artwork',
   seed = 'WAVEN',
 }: WavenArtworkFallbackProps) {
   const heights = signalHeights(seed);

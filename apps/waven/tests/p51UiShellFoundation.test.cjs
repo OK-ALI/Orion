@@ -78,7 +78,7 @@ test('P5.1 Revision 4 uses one rounded animated WAVEN selection pill instead of 
 
 
 test('P5.1 fallback artwork is a deterministic WAVEN signal family rather than fabricated album covers', () => {
-  assert.match(fallback, /WAVEN fallback artwork/);
+  assert.match(fallback, /WAVEN artwork/);
   assert.match(fallback, /signalHeights/);
   assert.match(fallback, /seed/);
   assert.match(fallback, /interactionBlue/);

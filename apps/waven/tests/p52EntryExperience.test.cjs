@@ -51,7 +51,7 @@ test('P5.2 session completion updates the root gate before Entry returns Home', 
     /SecureStore\.deleteItemAsync\(WAVEN_ENTRY_SESSION_KEY\);\s*publishWavenEntrySession\(null\)/,
   );
 
-  assert.doesNotMatch(layout, /entryRedirectIssued|useRef/);
+  assert.doesNotMatch(layout, /entryRedirectIssued/);
   assert.doesNotMatch(
     layout,
     /pathname !== '\/'\) return;[\s\S]*readWavenEntrySession\(\)[\s\S]*router\.replace\('\/entry'\)/,
@@ -62,14 +62,18 @@ test('P5.2 entry inherits Reference 05 with restrained WAVEN identity, Google id
   assert.match(entry, /WavenEntrySignal/);
   assert.match(entry, /Where <Text style=\{styles\.taglineAccent\}>Music<\/Text> Lives/);
   assert.match(entry, /Continue with Google/);
-  assert.match(entry, /Continue locally/);
+  assert.match(entry, /Continue without an account/);
   assert.match(entry, /signInToOrionCloud/);
   assert.match(entry, /completeWavenEntryWithGoogle/);
   assert.match(entry, /completeWavenEntryLocally/);
   assert.match(entry, /useWavenReducedMotion/);
   assert.match(entry, /router\.replace\('\/'\)/);
-  assert.match(entry, /Connect your Orion identity, or start local\. You can change this later\./);
+  assert.doesNotMatch(entry, /Sign in with Google, or continue without an account\./);
   assert.match(entry, /Animated\.stagger/);
+  assert.match(entry, /finishEntryHandoff/);
+  assert.match(entry, /handoffProgress/);
+  assert.match(entry, /duration: reducedMotion \? wavenMotion\.quickMs : wavenMotion\.deliberateMs/);
+  assert.match(entry, /outputRange: reducedMotion \? \[0, 0\] : \[0, -10\]/);
 });
 
 test('P5.2 sign-in presentation does not authorize Drive, read Orion Cloud, or expose the controlled write gate', () => {
@@ -90,7 +94,7 @@ test('P5.2 stores only WAVEN entry/session display state in SecureStore', () => 
 });
 
 test('P5.2 Revision 4C makes the living waveform cinematic, fuller-width, irregular, and deeply edge-vignetted', () => {
-  assert.match(signal, /WAVEN cinematic living music waveform/);
+  assert.match(signal, /WAVEN music waveform/);
   assert.match(signal, /WAVEFORM/);
   assert.match(signal, /SILVER_ACCENTS/);
   assert.match(signal, /useWindowDimensions/);
