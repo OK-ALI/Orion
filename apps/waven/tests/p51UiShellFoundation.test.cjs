@@ -57,10 +57,10 @@ test('P5.1 protects dark route continuity with one persistent primary-navigation
   assert.match(layout, /PRIMARY_PATHS/);
   assert.match(layout, /showPrimaryNavigation/);
   assert.match(layout, /WavenBottomNav/);
-  assert.match(layout, /animation:\s*'fade'/);
+  assert.match(layout, /animation:\s*reducedMotion \? 'none' : 'fade'/);
   assert.doesNotMatch(shell, /WavenBottomNav/);
   assert.match(shell, /pageContent/);
-  assert.match(nav, /router\.replace/);
+  assert.match(nav, /router\.navigate/);
 });
 
 
@@ -112,7 +112,7 @@ test('P5.1 Search and Library make empty product states interactive without clai
   assert.match(library, /FILTERS/);
   assert.match(library, /setFilter/);
   assert.match(library, /Find Music/);
-  assert.match(library, /router\.replace\('\/search'\)/);
+  assert.match(library, /router\.navigate\('\/search'\)/);
   assert.doesNotMatch(search, /fetch\(|axios|providerRegistry|searchProvider/i);
   assert.doesNotMatch(library, /SQLite|MMKV|OrionCloud|persist/i);
 });

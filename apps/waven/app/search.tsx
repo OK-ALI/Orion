@@ -37,7 +37,7 @@ export default function WavenSearchScreen() {
             autoCorrect={false}
             onChangeText={setQuery}
             placeholder={`Search ${scope.toLowerCase()}`}
-            placeholderTextColor={wavenColors.mutedGray}
+            placeholderTextColor={wavenColors.textMuted}
             returnKeyType="search"
             selectionColor={wavenColors.interactionBlue}
             style={styles.input}
@@ -68,6 +68,7 @@ export default function WavenSearchScreen() {
                   accessibilityState={{ selected: active }}
                   key={item}
                   onPress={() => setScope(item)}
+                  style={styles.scopeTouchTarget}
                 >
                   <View style={[styles.scopeChip, active ? styles.scopeChipActive : null]}>
                     <Text style={[styles.scopeText, active ? styles.scopeTextActive : null]}>{item}</Text>
@@ -103,7 +104,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   heading: {
-    marginBottom: wavenSpacing.xl,
+    marginBottom: wavenSpacing.lg,
+    marginTop: wavenSpacing.md,
   },
   searchField: {
     alignItems: 'center',
@@ -173,6 +175,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 12,
+  },
+  scopeTouchTarget: {
+    justifyContent: 'center',
+    minHeight: wavenLayout.minimumTouchTarget,
   },
   scopeChip: {
     backgroundColor: wavenColors.surfaceSoft,

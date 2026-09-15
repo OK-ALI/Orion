@@ -146,8 +146,8 @@ test('P5.3B translates Reference 03 into truthful compact playback presentation'
   assert.match(miniPlayer, /currentItem/);
   assert.match(miniPlayer, /item\.artworkUrl/);
   assert.match(miniPlayer, /WavenArtworkFallback/);
-  assert.match(miniPlayer, /item\.title/);
-  assert.match(miniPlayer, /item\.artistName/);
+  assert.match(miniPlayer, /item\?\.title/);
+  assert.match(miniPlayer, /item\?\.artistName/);
   assert.match(miniPlayer, /PROGRESS_HEIGHTS/);
   assert.match(miniPlayer, /snapshot\.positionMs/);
   assert.match(miniPlayer, /snapshot\.durationMs/);

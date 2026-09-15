@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,6 +34,8 @@ const ITEMS: readonly NavItem[] = [
 
 const TRACK_PADDING = 5;
 const ITEM_GAP = 5;
+const NAV_LABEL_MAX_SCALE = 1.4;
+const NAV_LABEL_COMPACT_MAX_SCALE = 1.2;
 
 const LABEL_WIDTHS: Record<NavItem['label'], number> = {
   Home: 46,
@@ -77,11 +80,13 @@ function NavIcon({
 function WavenNavItem({
   active,
   item,
+  labelScale,
   onPress,
   reducedMotion,
 }: {
   active: boolean;
   item: NavItem;
+  labelScale: number;
   onPress: () => void;
   reducedMotion: boolean;
 }) {
@@ -100,7 +105,7 @@ function WavenNavItem({
     }).start();
   }, [active, activeProgress, reducedMotion]);
 
-  const labelWidth = LABEL_WIDTHS[item.label];
+  const labelWidth = LABEL_WIDTHS[item.label] * labelScale;
 
   return (
     <WavenPressable
@@ -143,7 +148,11 @@ function WavenNavItem({
             },
           ]}
         >
-          <Text numberOfLines={1} style={styles.labelActive}>
+          <Text
+            maxFontSizeMultiplier={labelScale}
+            numberOfLines={1}
+            style={styles.labelActive}
+          >
             {item.label}
           </Text>
         </Animated.View>
@@ -157,7 +166,15 @@ export function WavenBottomNav() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const reducedMotion = useWavenReducedMotion();
+  const { fontScale, width: windowWidth } = useWindowDimensions();
   const [innerWidth, setInnerWidth] = useState(0);
+
+  const labelScale = Math.min(
+    fontScale,
+    windowWidth < wavenLayout.compactWidth
+      ? NAV_LABEL_COMPACT_MAX_SCALE
+      : NAV_LABEL_MAX_SCALE,
+  );
 
   const activeIndex = Math.max(
     0,
@@ -233,8 +250,9 @@ export function WavenBottomNav() {
               active={active}
               item={item}
               key={item.href}
+              labelScale={labelScale}
               onPress={() => {
-                if (!active) router.replace(item.href);
+                if (!active) router.navigate(item.href);
               }}
               reducedMotion={reducedMotion}
             />

@@ -8,6 +8,7 @@ import { WavenAccentTitle } from '../src/components/typography/WavenAccentTitle'
 import { useWavenLayout } from '../src/hooks/useWavenLayout';
 import {
   wavenColors,
+  wavenLayout,
   wavenRadii,
   wavenSpacing,
   wavenTypography,
@@ -39,6 +40,7 @@ export default function WavenLibraryScreen() {
                 accessibilityState={{ selected: active }}
                 key={item}
                 onPress={() => setFilter(item)}
+                style={styles.minimumTouchTarget}
               >
                 <View style={[styles.filterChip, active ? styles.filterChipActive : null]}>
                   <Text style={[styles.filterText, active ? styles.filterTextActive : null]}>{item}</Text>
@@ -65,7 +67,8 @@ export default function WavenLibraryScreen() {
           <WavenPressable
             accessibilityLabel="Find music"
             accessibilityRole="button"
-            onPress={() => router.replace('/search')}
+            onPress={() => router.navigate('/search')}
+            style={styles.minimumTouchTarget}
           >
             <View style={styles.findMusicAction}>
               <Text style={styles.findMusicText}>Find Music</Text>
@@ -82,12 +85,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   heading: {
-    marginBottom: wavenSpacing.xl,
+    marginBottom: wavenSpacing.lg,
+    marginTop: wavenSpacing.md,
   },
   filterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  minimumTouchTarget: {
+    justifyContent: 'center',
+    minHeight: wavenLayout.minimumTouchTarget,
   },
   filterChip: {
     backgroundColor: wavenColors.surfaceSoft,

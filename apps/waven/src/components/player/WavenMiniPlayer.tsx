@@ -31,6 +31,11 @@ const PROGRESS_HEIGHTS = [
 
 const WAVE_BAR_WIDTH = 3;
 
+const TITLE_MARQUEE_OVERFLOW_TOLERANCE = 8;
+const TITLE_MARQUEE_GAP = 28;
+const TITLE_MARQUEE_PIXELS_PER_SECOND = 32;
+const COMPACT_TEXT_MAX_SCALE = 1.4;
+
 const ACTIVE_PULSE_RANGES = [
   [0.94, 1.08, 0.98],
   [1.02, 0.95, 1.06],
@@ -74,6 +79,10 @@ export function WavenMiniPlayer() {
     useState(false);
   const [waveWidth, setWaveWidth] =
     useState(0);
+  const [titleViewportWidth, setTitleViewportWidth] =
+    useState(0);
+  const [titleMarqueeUnitWidth, setTitleMarqueeUnitWidth] =
+    useState(0);
 
   const metadataOpacity =
     useRef(new Animated.Value(1)).current;
@@ -85,6 +94,8 @@ export function WavenMiniPlayer() {
     useRef(new Animated.Value(0)).current;
   const controlMotion =
     useRef(new Animated.Value(1)).current;
+  const titleMarquee =
+    useRef(new Animated.Value(0)).current;
 
   const previousQueueId =
     useRef<string | null>(null);
@@ -155,6 +166,14 @@ export function WavenMiniPlayer() {
   ]);
 
   const item = snapshot?.currentItem ?? null;
+
+  const title =
+    item?.title?.trim() || 'Unknown track';
+
+  const artist =
+    item?.artistName?.trim() ||
+    item?.albumTitle?.trim() ||
+    'WAVEN';
 
   const pauseIntent =
     snapshot?.playing === true ||
@@ -351,6 +370,57 @@ export function WavenMiniPlayer() {
     reducedMotion,
   ]);
 
+
+  const marqueeEnabled =
+    !reducedMotion &&
+    titleViewportWidth > 0 &&
+    titleMarqueeUnitWidth > 0 &&
+    titleMarqueeUnitWidth - TITLE_MARQUEE_GAP >
+      titleViewportWidth + TITLE_MARQUEE_OVERFLOW_TOLERANCE;
+
+  useEffect(() => {
+    titleMarquee.stopAnimation();
+    titleMarquee.setValue(0);
+
+    if (!marqueeEnabled) {
+      return;
+    }
+
+    const travelDuration =
+      Math.max(
+        2600,
+        Math.round(
+          (titleMarqueeUnitWidth / TITLE_MARQUEE_PIXELS_PER_SECOND) * 1000,
+        ),
+      );
+
+    const marqueeCycle = Animated.loop(
+      Animated.timing(titleMarquee, {
+        duration: travelDuration,
+        easing: Easing.linear,
+        toValue: -titleMarqueeUnitWidth,
+        useNativeDriver: true,
+      }),
+      {
+        resetBeforeIteration: true,
+      },
+    );
+
+    marqueeCycle.start();
+
+    return () => {
+      marqueeCycle.stop();
+      titleMarquee.stopAnimation();
+      titleMarquee.setValue(0);
+    };
+  }, [
+    item?.queueId,
+    marqueeEnabled,
+    title,
+    titleMarquee,
+    titleMarqueeUnitWidth,
+  ]);
+
   if (
     snapshot == null ||
     item == null ||
@@ -358,14 +428,6 @@ export function WavenMiniPlayer() {
   ) {
     return null;
   }
-
-  const title =
-    item.title?.trim() || 'Unknown track';
-
-  const artist =
-    item.artistName?.trim() ||
-    item.albumTitle?.trim() ||
-    'WAVEN';
 
   const ratio = progressRatio(snapshot);
 
@@ -478,15 +540,108 @@ export function WavenMiniPlayer() {
             </View>
 
             <View style={styles.copy}>
-              <Text
-                accessibilityRole="text"
-                numberOfLines={1}
-                style={styles.title}
+              <View
+                accessible={false}
+                importantForAccessibility="no-hide-descendants"
+                pointerEvents="none"
+                style={styles.titleMeasurePlane}
               >
-                {title}
-              </Text>
+                <Text
+                  accessible={false}
+                  maxFontSizeMultiplier={COMPACT_TEXT_MAX_SCALE}
+                  numberOfLines={1}
+                  onLayout={(event) => {
+                    setTitleMarqueeUnitWidth(
+                      event.nativeEvent.layout.width + TITLE_MARQUEE_GAP,
+                    );
+                  }}
+                  style={[styles.title, styles.titleMeasureText]}
+                >
+                  {title}
+                </Text>
+              </View>
+
+              <View
+                onLayout={(event) => {
+                  setTitleViewportWidth(event.nativeEvent.layout.width);
+                }}
+                style={styles.titleViewport}
+              >
+                <Animated.View
+                  style={[
+                    styles.titleMarqueeTrack,
+                    {
+                      transform: [{ translateX: titleMarquee }],
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.titleMarqueeUnit,
+                      titleMarqueeUnitWidth > 0
+                        ? { width: titleMarqueeUnitWidth }
+                        : null,
+                    ]}
+                  >
+                    <Text
+                      accessibilityRole="text"
+                      maxFontSizeMultiplier={COMPACT_TEXT_MAX_SCALE}
+                      numberOfLines={1}
+                      style={[
+                        styles.title,
+                        styles.titleMarqueeText,
+                        titleMarqueeUnitWidth > 0
+                          ? {
+                              width:
+                                titleMarqueeUnitWidth -
+                                TITLE_MARQUEE_GAP,
+                            }
+                          : null,
+                      ]}
+                    >
+                      {title}
+                    </Text>
+                    <View
+                      accessible={false}
+                      style={styles.titleMarqueeGap}
+                    />
+                  </View>
+
+                  {marqueeEnabled ? (
+                    <View
+                      accessible={false}
+                      style={[
+                        styles.titleMarqueeUnit,
+                        { width: titleMarqueeUnitWidth },
+                      ]}
+                    >
+                      <Text
+                        accessible={false}
+                        maxFontSizeMultiplier={COMPACT_TEXT_MAX_SCALE}
+                        numberOfLines={1}
+                        style={[
+                          styles.title,
+                          styles.titleMarqueeText,
+                          {
+                            width:
+                              titleMarqueeUnitWidth -
+                              TITLE_MARQUEE_GAP,
+                          },
+                        ]}
+                      >
+                        {title}
+                      </Text>
+                      <View
+                        accessible={false}
+                        style={styles.titleMarqueeGap}
+                      />
+                    </View>
+                  ) : null}
+                </Animated.View>
+              </View>
 
               <Text
+                maxFontSizeMultiplier={COMPACT_TEXT_MAX_SCALE}
                 numberOfLines={1}
                 style={[
                   styles.artist,
@@ -644,7 +799,7 @@ const styles = StyleSheet.create({
     borderColor: wavenColors.borderStrong,
     borderRadius: wavenRadii.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    minHeight: 68,
+    minHeight: 84,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -659,14 +814,16 @@ const styles = StyleSheet.create({
   row: {
     alignItems: 'center',
     flexDirection: 'row',
-    minHeight: 60,
-    paddingHorizontal: 9,
+    minHeight: 66,
+    paddingBottom: 2,
+    paddingHorizontal: 12,
     paddingTop: 8,
   },
   metadataTransition: {
     alignItems: 'center',
     flex: 1,
     flexDirection: 'row',
+    minHeight: 48,
     minWidth: 0,
   },
   artworkFrame: {
@@ -684,9 +841,41 @@ const styles = StyleSheet.create({
   copy: {
     flex: 1,
     justifyContent: 'center',
-    marginLeft: 11,
+    marginLeft: 12,
     minWidth: 0,
-    paddingRight: 8,
+    paddingRight: 4,
+  },
+  titleMeasurePlane: {
+    height: 20,
+    left: 0,
+    opacity: 0,
+    position: 'absolute',
+    top: 0,
+    width: 10000,
+  },
+  titleMeasureText: {
+    alignSelf: 'flex-start',
+    flexShrink: 0,
+  },
+  titleViewport: {
+    overflow: 'hidden',
+    width: '100%',
+  },
+  titleMarqueeTrack: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    flexShrink: 0,
+  },
+  titleMarqueeUnit: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 0,
+  },
+  titleMarqueeGap: {
+    width: TITLE_MARQUEE_GAP,
+  },
+  titleMarqueeText: {
+    flexShrink: 0,
   },
   title: {
     color: wavenColors.textPrimary,
@@ -706,6 +895,7 @@ const styles = StyleSheet.create({
   },
   controlContainer: {
     flexShrink: 0,
+    marginLeft: 8,
   },
   control: {
     alignItems: 'center',
@@ -742,16 +932,16 @@ const styles = StyleSheet.create({
     width: 4,
   },
   waveform: {
-    height: 14,
+    alignItems: 'center',
+    height: 18,
     justifyContent: 'center',
-    paddingBottom: 3,
-    paddingHorizontal: 13,
+    paddingBottom: 4,
   },
   waveViewport: {
     height: 11,
     overflow: 'hidden',
     position: 'relative',
-    width: '100%',
+    width: '84%',
   },
   waveBarsLayer: {
     alignItems: 'center',

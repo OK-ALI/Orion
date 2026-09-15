@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { WavenArtworkFallback } from '../src/components/artwork/WavenArtworkFallback';
 import { WavenPressable } from '../src/components/interaction/WavenPressable';
 import { WavenAppShell } from '../src/components/shell/WavenAppShell';
@@ -33,6 +33,8 @@ const EXPLORE_CARDS = [
 export default function WavenHomeScreen() {
   const router = useRouter();
   const layout = useWavenLayout();
+  const { fontScale } = useWindowDimensions();
+  const stackSectionHeaders = fontScale >= 1.45;
 
   const heroArtworkSize = layout.isCompact
     ? 150
@@ -49,7 +51,7 @@ export default function WavenHomeScreen() {
           <WavenPressable
             accessibilityLabel="Explore music"
             accessibilityRole="button"
-            onPress={() => router.replace('/search')}
+            onPress={() => router.navigate('/search')}
           >
             <WavenSurface
               style={[
@@ -121,7 +123,12 @@ export default function WavenHomeScreen() {
           </WavenPressable>
 
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
+            <View
+              style={[
+                styles.sectionHeader,
+                stackSectionHeaders ? styles.sectionHeaderStacked : null,
+              ]}
+            >
               <Text accessibilityRole="header" style={styles.sectionTitle}>Recently Played</Text>
               <Text style={styles.sectionHint}>Your listening trail</Text>
             </View>
@@ -143,7 +150,12 @@ export default function WavenHomeScreen() {
           </View>
 
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
+            <View
+              style={[
+                styles.sectionHeader,
+                stackSectionHeaders ? styles.sectionHeaderStacked : null,
+              ]}
+            >
               <Text accessibilityRole="header" style={styles.sectionTitle}>Explore</Text>
               <Text style={styles.sectionHint}>Choose a direction</Text>
             </View>
@@ -155,7 +167,7 @@ export default function WavenHomeScreen() {
                   accessibilityRole="button"
                   containerStyle={styles.exploreCardPressable}
                   key={card.label}
-                  onPress={() => router.replace('/search')}
+                  onPress={() => router.navigate('/search')}
                 >
                   <View style={styles.exploreCard}>
                     <WavenArtworkFallback
@@ -176,7 +188,7 @@ export default function WavenHomeScreen() {
             <WavenPressable
               accessibilityLabel="Open Library"
               accessibilityRole="button"
-              onPress={() => router.replace('/library')}
+              onPress={() => router.navigate('/library')}
             >
               <View style={styles.libraryShortcut}>
                 <View accessible={false} style={styles.glassTopHighlight} />
@@ -352,7 +364,13 @@ const styles = StyleSheet.create({
   sectionHeader: {
     alignItems: 'baseline',
     flexDirection: 'row',
+    gap: 8,
     justifyContent: 'space-between',
+  },
+  sectionHeaderStacked: {
+    alignItems: 'flex-start',
+    flexDirection: 'column',
+    gap: 2,
   },
   sectionTitle: {
     color: wavenColors.textPrimary,

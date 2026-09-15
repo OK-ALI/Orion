@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -144,7 +145,11 @@ export default function WavenEntryScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <WavenAtmosphericCanvas variant="entry" />
-      <View style={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        style={styles.scroll}
+      >
         <Animated.View
           style={[
             styles.experience,
@@ -231,7 +236,7 @@ export default function WavenEntryScreen() {
 
           <Text style={styles.note}>You can choose or change your sign-in later.</Text>
         </Animated.View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -241,8 +246,11 @@ const styles = StyleSheet.create({
     backgroundColor: wavenColors.canvas,
     flex: 1,
   },
-  content: {
+  scroll: {
     flex: 1,
+  },
+  content: {
+    flexGrow: 1,
     paddingBottom: wavenSpacing.xl,
     paddingHorizontal: wavenSpacing.lg,
     paddingTop: wavenSpacing.lg,

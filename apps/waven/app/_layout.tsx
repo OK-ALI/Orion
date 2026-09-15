@@ -13,6 +13,7 @@ import {
   readWavenEntrySession,
   subscribeWavenEntrySession,
 } from '../src/features/account/wavenEntrySession';
+import { useWavenReducedMotion } from '../src/hooks/useWavenReducedMotion';
 import { wavenColors, wavenSpacing } from '../src/theme/tokens';
 
 const PRIMARY_PATHS = new Set(['/', '/search', '/library']);
@@ -41,6 +42,7 @@ function WavenStartupHandoff() {
 function WavenRootNavigation() {
   const pathname = usePathname();
   const router = useRouter();
+  const reducedMotion = useWavenReducedMotion();
   const [startupState, setStartupState] = useState<StartupState>('checking');
   const [entryRequired, setEntryRequired] = useState(false);
 
@@ -108,7 +110,7 @@ function WavenRootNavigation() {
         <Stack
           screenOptions={{
             headerShown: false,
-            animation: 'fade',
+            animation: reducedMotion ? 'none' : 'fade',
             contentStyle: {
               backgroundColor: showPrimaryNavigation
                 ? 'transparent'
