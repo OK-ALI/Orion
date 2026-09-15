@@ -8,7 +8,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { WavenWordmark } from '../src/components/brand/WavenWordmark';
 import { WavenBottomNav } from '../src/components/shell/WavenBottomNav';
 import { WavenAtmosphericCanvas } from '../src/components/surfaces/WavenAtmosphericCanvas';
-import { readWavenEntrySession } from '../src/features/account/wavenEntrySession';
+import {
+  readWavenEntrySession,
+  subscribeWavenEntrySession,
+} from '../src/features/account/wavenEntrySession';
 import { wavenColors, wavenSpacing } from '../src/theme/tokens';
 
 const PRIMARY_PATHS = new Set(['/', '/search', '/library']);
@@ -42,15 +45,27 @@ function WavenRootNavigation() {
 
   useEffect(() => {
     let mounted = true;
+    let sessionChangeSeen = false;
+
+    const unsubscribe = subscribeWavenEntrySession((session) => {
+      if (!mounted) return;
+
+      // Entry completion owns this transition. Update the root gate before
+      // Entry replaces its route with Home so stale startup state cannot
+      // bounce a completed user back to Entry.
+      sessionChangeSeen = true;
+      setEntryRequired(!session);
+      setStartupState('ready');
+    });
 
     readWavenEntrySession()
       .then((session) => {
-        if (!mounted) return;
+        if (!mounted || sessionChangeSeen) return;
         setEntryRequired(!session);
         setStartupState('ready');
       })
       .catch(() => {
-        if (!mounted) return;
+        if (!mounted || sessionChangeSeen) return;
 
         // Local session persistence must never make WAVEN unusable.
         // Fail open into the local-first product shell.
@@ -60,6 +75,7 @@ function WavenRootNavigation() {
 
     return () => {
       mounted = false;
+      unsubscribe();
     };
   }, []);
 

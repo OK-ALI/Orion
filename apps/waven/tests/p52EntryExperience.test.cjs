@@ -27,6 +27,36 @@ test('P5.2 routes a first-run WAVEN launch through a local entry-session gate wi
   assert.doesNotMatch(layout, /setTimeout|sleep|delay\(/i);
 });
 
+test('P5.2 session completion updates the root gate before Entry returns Home', () => {
+  assert.match(layout, /subscribeWavenEntrySession/);
+  assert.match(layout, /let sessionChangeSeen = false/);
+  assert.match(
+    layout,
+    /subscribeWavenEntrySession\(\(session\) => \{[\s\S]*sessionChangeSeen = true;[\s\S]*setEntryRequired\(!session\)/,
+  );
+  assert.match(layout, /if \(!mounted \|\| sessionChangeSeen\) return/);
+  assert.match(layout, /unsubscribe\(\)/);
+
+  assert.match(session, /export function subscribeWavenEntrySession/);
+  assert.match(session, /wavenEntrySessionListeners\.add\(listener\)/);
+  assert.match(session, /wavenEntrySessionListeners\.delete\(listener\)/);
+
+  const persistedSessionPublications = session.match(
+    /SecureStore\.setItemAsync\(WAVEN_ENTRY_SESSION_KEY, JSON\.stringify\(session\)\);\s*publishWavenEntrySession\(session\)/g,
+  );
+  assert.equal(persistedSessionPublications?.length, 2);
+
+  assert.match(
+    session,
+    /SecureStore\.deleteItemAsync\(WAVEN_ENTRY_SESSION_KEY\);\s*publishWavenEntrySession\(null\)/,
+  );
+
+  assert.doesNotMatch(layout, /entryRedirectIssued|useRef/);
+  assert.doesNotMatch(
+    layout,
+    /pathname !== '\/'\) return;[\s\S]*readWavenEntrySession\(\)[\s\S]*router\.replace\('\/entry'\)/,
+  );
+});
 test('P5.2 entry inherits Reference 05 with restrained WAVEN identity, Google identity, and local-first continuation', () => {
   assert.match(entry, /WavenWordmark/);
   assert.match(entry, /WavenEntrySignal/);

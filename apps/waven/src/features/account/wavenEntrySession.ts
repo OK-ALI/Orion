@@ -12,6 +12,25 @@ export interface WavenEntrySession {
   profile: WavenGoogleIdentityProfile | null;
 }
 
+type WavenEntrySessionListener = (session: WavenEntrySession | null) => void;
+
+const wavenEntrySessionListeners = new Set<WavenEntrySessionListener>();
+
+function publishWavenEntrySession(session: WavenEntrySession | null): void {
+  for (const listener of wavenEntrySessionListeners) {
+    listener(session);
+  }
+}
+
+export function subscribeWavenEntrySession(
+  listener: WavenEntrySessionListener,
+): () => void {
+  wavenEntrySessionListeners.add(listener);
+
+  return () => {
+    wavenEntrySessionListeners.delete(listener);
+  };
+}
 function isGoogleProfile(value: unknown): value is WavenGoogleIdentityProfile {
   if (!value || typeof value !== 'object') return false;
 
@@ -67,6 +86,7 @@ export async function completeWavenEntryLocally(): Promise<WavenEntrySession> {
   };
 
   await SecureStore.setItemAsync(WAVEN_ENTRY_SESSION_KEY, JSON.stringify(session));
+  publishWavenEntrySession(session);
   return session;
 }
 
@@ -81,9 +101,11 @@ export async function completeWavenEntryWithGoogle(
   };
 
   await SecureStore.setItemAsync(WAVEN_ENTRY_SESSION_KEY, JSON.stringify(session));
+  publishWavenEntrySession(session);
   return session;
 }
 
 export async function clearWavenEntrySession(): Promise<void> {
   await SecureStore.deleteItemAsync(WAVEN_ENTRY_SESSION_KEY);
+  publishWavenEntrySession(null);
 }
