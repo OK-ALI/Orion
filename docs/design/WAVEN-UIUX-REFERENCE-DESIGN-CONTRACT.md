@@ -350,6 +350,279 @@ Artwork colors may extend beyond artwork and tint the surrounding environment.
 - Dark-glass sign-in surface may be used
 - Transition into Home should feel continuous
 
+### P5.2 implementation contract
+
+The first implementation slice of Reference 05 must preserve these product rules:
+
+- First launch may route through a WAVEN-owned entry surface after the fast native splash.
+- The in-app handoff keeps the black canvas, centered **WA[V]EN** identity, blue-V emphasis, and one restrained WAVEN sound-signal visual.
+- The first-run screen stays deliberately small: identity, one musical visual, one short welcome statement, and the two valid continuation choices.
+- **Continue with Google** reuses the already-established Google identity bridge only.
+- **Continue locally** is a first-class path. Local-only use remains supported while signed out or offline.
+- Successful Google identity stores only WAVEN's local display/session snapshot needed for presentation and later account binding.
+- P5.2 does not request Google Drive app-data authorization, read the PortableProfile, perform a controlled no-op write, create WAVEN music namespaces, or begin Cloud music synchronization.
+- WAVEN Orion Cloud music synchronization remains P9.
+- Expo Go may validate the supported JS/UI presentation and local continuation path; real native Google identity acceptance remains a development-build evidence tier.
+- Repeat launches must not be forced through a long cinematic intro. Startup continuity may appear only for the time genuinely needed to resolve the local entry state.
+- Reduced Motion simplifies entry motion to stable presentation rather than removing product identity or interaction feedback.
+- Transition from entry into Home uses the same black navigation substrate so the experience feels continuous rather than like a separate authentication application.
+
+### P5.2 Revision 1 physical review — 2026-09-15
+
+The first physical Expo Go review confirmed that the entry architecture and brand foundation are sound, but the central musical visual and overall composition are not ready to lock.
+
+#### Accepted from Revision 1
+- The **WA[V]EN** + **Where Music Lives** brand treatment remains directionally correct.
+- Black/silver/WAVEN-blue language is coherent.
+- The entry page stays intentionally small rather than becoming a multi-page onboarding flow.
+- Google identity and local-first continuation remain the correct two product choices.
+
+#### Rejected / refine before acceptance
+- The centered equalizer-style tile is too generic for WAVEN and reads like a conventional music-app icon rather than a recognizable WAVEN entry signature.
+- The screen currently reads as four disconnected vertical islands: brand, generic visual, welcome copy, and authentication controls.
+- The visual must connect the composition rather than merely occupy the center.
+- The Google control is allowed to remain clear, but it should not visually own WAVEN's first impression.
+- Architecture-heavy explanatory language should be reduced.
+
+### P5.2 Revision 2 visual target
+
+Revision 2 translates Reference 05 more literally through WAVEN's own grammar:
+
+1. The blue **V** is treated as the conceptual source of the entry signal.
+2. A restrained blue/silver **living sound field** replaces the enclosed equalizer tile.
+3. The field uses V-derived geometry and drifting spectral ribbons rather than a fake album cover, waveform badge, planet, or orbital motif.
+4. The visual remains unboxed so the black canvas becomes part of the composition.
+5. Brand, sound field, welcome copy, and actions should feel like one continuous vertical experience.
+6. Entry moments remain short and deliberate: identity settles, the sound field emerges, then welcome/actions arrive.
+7. Reduced Motion collapses this to a stable presentation without losing hierarchy.
+8. Product copy stays human and brief. The screen may state that Orion identity is optional and local use is available, but must not explain Cloud architecture.
+9. Revision 2 remains an iterative physical-review target, not an accepted final entry design until viewed on the S24 Ultra.
+
+### P5.2 Revision 2 physical review — 2026-09-15
+
+Revision 2 improved motion quality materially, but the settled composition still does not communicate music clearly enough to lock.
+
+#### Accepted from Revision 2
+- The staged motion feels premium and should be preserved as the motion-quality baseline.
+- The overall entry hierarchy and vertical balance improved over Revision 1.
+- WA[V]EN, tagline, welcome copy, and the two continuation actions remain the correct structural ingredients.
+
+#### Rejected / refine before acceptance
+- The central blue dot, vertical stem, and angled arms read as a transmitter, antenna, or radar metaphor rather than a musical one.
+- The faint charcoal oval around the lower ribbons is visible on the black canvas and reads as an unfinished container.
+- The center visual still behaves like a separate object instead of atmosphere flowing through the whole entry composition.
+
+### P5.2 Revision 3 visual target
+
+Revision 3 keeps the premium motion timing while removing the wrong metaphor.
+
+1. Remove the dot, vertical stem, V-arm/antenna geometry, and every visible enclosing oval or charcoal field edge.
+2. Use only a small family of **free-flowing spectral ribbons** with no enclosing box, circle, badge, or device silhouette.
+3. Ribbons should be asymmetric, blue/silver, softly luminous, and fade completely into the black canvas at both ends.
+4. Movement should be slow drift and breathing, not beacon pulsing, scanning, or network-style signaling.
+5. The strongest ribbon may carry a silver highlight through WAVEN blue so the abstraction still reads as sound energy.
+6. A very faint origin mist may imply that the visual belongs to the WA[V]EN identity without drawing a literal connector line from the logo.
+7. The visual should bridge the empty space between brand and welcome copy, not become another isolated object.
+8. No raw charcoal container should remain visible on the settled screen.
+9. Revision 3 remains a physical-review target and is not accepted until viewed on the S24 Ultra.
+
+### P5.2 Revision 3 physical review — 2026-09-15
+
+Revision 3 removed the radar/antenna metaphor and preserved the successful blue/silver palette, but the settled spectral ribbons still read as decorative geometry rather than music.
+
+#### Accepted from Revision 3
+- The WAVEN blue + silver combination on black is strongly preferred and should carry forward.
+- The premium slow motion quality remains directionally correct.
+- Removing the visible charcoal oval/container was correct.
+
+#### Rejected / refine before acceptance
+- Three detached spectral lines have insufficient musical meaning.
+- The central visual still feels like abstract decoration rather than a recognizable music-state motif.
+- The entry canvas needs more environmental depth without abandoning black as WAVEN's foundation.
+
+### P5.2 Revision 4 visual target — Living Waveform + Atmospheric Black
+
+Revision 4 gives the center visual an explicit musical meaning while preserving the strongest color and motion discoveries from prior revisions.
+
+1. Replace free spectral ribbons with one **premium horizontal living music waveform** built from a dense series of rounded amplitude marks.
+2. The waveform is not a cheap equalizer. It should read like an audio-track waveform: varied peaks and valleys around one center axis, with WAVEN blue flowing toward a restrained silver/white highlight near the musical center.
+3. Animation is silent and long-running. Neighboring waveform regions breathe at different slow phases so the visual feels continuously alive without an obvious restart.
+4. P5.2 must **not autoplay audible music** or seize audio focus on entry. The waveform provides the sensation of music before playback exists.
+5. A future optional sonic logo may be considered separately, but it is not part of this P5.2 implementation.
+6. Keep true black as the dominant canvas, then layer extremely restrained full-screen deep-navy/WAVEN-blue and cool-silver gradients through the musical middle of the screen.
+7. Atmospheric gradients must have no visible circles, cards, boxes, or hard edges. They should read as softly blurred environmental light and collapse naturally back into black.
+8. The brand area remains comparatively clean. Atmosphere becomes slightly richer around the waveform and fades again toward actions.
+9. The current Google/local account behavior remains untouched. This revision is visual/motion refinement only.
+10. Reduced Motion freezes the waveform into a stable premium audio shape while retaining the atmospheric hierarchy.
+11. Revision 4 remains a physical-review target and is not accepted until viewed on the S24 Ultra.
+
+### P5.2 Revision 4A clarification — WAVEN Atmospheric Canvas
+
+A visual-reference clarification established that the intended background language is broader than the restrained Entry-only glow implemented in Revision 4.
+
+The correct interpretation is a **shared WAVEN Atmospheric Canvas**:
+
+- It is a design-system primitive, not an Entry-only decoration.
+- True black remains the structural anchor and contrast foundation.
+- Large, soft environmental sweeps of deep navy and WAVEN blue provide the dominant atmospheric light.
+- A restrained cool-silver/white illumination counterbalances the blue in selected regions.
+- Transitions must be broad and blurred in appearance, with no visible circles, cards, gradient boundaries, or isolated glow blobs.
+- The composition should feel like light existing behind the interface rather than color painted onto a component.
+- Primary WAVEN surfaces that use `WavenAppShell` inherit this atmospheric language automatically.
+- Screen-specific intensity may vary, but Home, Search, Library, Entry, and later UI surfaces must remain recognizably part of the same atmospheric family.
+- Root navigation substrate remains black so route transitions preserve the physically proven no-white-flash behavior.
+- Glass, artwork, text, controls, and future player surfaces sit above the atmospheric canvas rather than replacing it.
+- Entry uses the stronger atmospheric variant because it is an identity moment; denser/productivity-oriented surfaces may use quieter variants.
+- The living waveform remains the P5.2 Entry musical visual target and stays silent.
+
+This clarification expands the visual-system rule inside authorized Phase 5 only. It does not authorize provider, playback, P6, or Orion Cloud music-sync work.
+
+### P5.2 Revision 4A physical review — 2026-09-15
+
+Revision 4A materially improved the Entry experience. The living waveform finally reads as music and the shared WAVEN Atmospheric Canvas establishes the intended black/navy/blue/silver environmental language. The direction is accepted for refinement, not yet locked.
+
+#### Keep
+- Blue + silver living-waveform palette.
+- Calm, long-running waveform motion.
+- Shared Atmospheric Canvas as a global WAVEN primitive.
+- Black as the structural anchor.
+- Entry composition, Google/local hierarchy, and local-first behavior.
+
+#### Revision 4B refinements
+1. Remove the visible rectangular/raw strip behind the waveform. Waveform glow must belong to individual waveform marks and dissolve naturally with no container geometry.
+2. Darken the Atmospheric Canvas substantially. Black should dominate while navy, WAVEN blue, and cool silver remain low-brightness environmental light.
+3. Entry headline becomes **Your Sound, Your Way.** with **Your** in WAVEN silver and **Sound / Way** in WAVEN blue.
+4. Expand the Entry waveform toward roughly the usable screen width rather than keeping a small centered object.
+5. Replace the near-diamond waveform silhouette with a more irregular musical passage: clustered peaks, quiet valleys, asymmetric energy, and selective silver accents.
+6. Strongly vignette the left and right waveform edges through per-mark opacity/taper so the waveform appears to continue into darkness rather than clip or overflow.
+7. Preserve slow independent regional breathing so the waveform feels alive without an obvious animation restart.
+8. On the Entry page only, move the centered **WA[V]EN / Where Music Lives** lockup down into the main experience and position it directly above the waveform. The top becomes intentional atmospheric breathing room.
+9. Keep the current action hierarchy and account behavior unchanged.
+10. Keep Entry silent. No autoplay audio or audio-focus acquisition is introduced.
+
+Revision 4B remains a physical-review target. No P5.2 visual acceptance is claimed until the revised Entry and shared shell atmosphere are inspected on the physical Android device.
+
+### P5.2 Revision 4B physical review — 2026-09-15
+
+Revision 4B is the first Entry revision that reads as a coherent WAVEN identity moment rather than a collection of separate premium elements.
+
+#### Physically accepted direction
+- The darker Atmospheric Canvas now feels appropriately premium.
+- The moved-down WA[V]EN lockup creates intentional top breathing room and visually belongs with the waveform.
+- The raw waveform strip is gone.
+- The blue/silver headline treatment is successful.
+- The wider waveform, edge dissolution, and slower motion direction are successful.
+- No account, Cloud, playback, or navigation behavior was changed by this visual refinement.
+
+#### Revision 4C waveform-only refinement
+1. Keep all Entry layout, typography, atmosphere, actions, and brand positioning from Revision 4B unchanged.
+2. Expand the waveform to effectively the full usable width of the device while retaining a tiny safety inset.
+3. Increase waveform height modestly so it becomes the hero visual without crowding the brand lockup or headline.
+4. Use a denser, less symmetric musical passage with multiple energy clusters, quieter valleys, and taller peaks at different horizontal positions.
+5. Distribute a small number of silver accents across the passage rather than centering them all around one focal point.
+6. Add a third slow regional animation phase so adjacent areas breathe independently and the waveform feels like music evolving rather than one equalizer pulse.
+7. Strengthen the per-mark edge vignette so the far-left and far-right waveform marks dissolve into darkness before any clipping can be perceived.
+8. Keep waveform glow local to each mark and low-opacity. No shared glow rectangle or visible container may return.
+9. Preserve Reduced Motion behavior.
+10. Revision 4C is waveform-only. No Entry copy, Atmospheric Canvas, account behavior, playback, Cloud, provider, or navigation changes are authorized by this refinement.
+
+If Revision 4C passes physical review, the Entry visual direction may be treated as ready for P5.2 interaction validation rather than further concept exploration.
+
+### P5.2 Revision 4D physical-shell continuity — 2026-09-15
+
+Physical local-continuation validation exposed one shell-level atmosphere seam: the shared Atmospheric Canvas ended at the primary route content boundary, while the persistent bottom-navigation region inherited only the black root substrate. This made the gradient appear to stop immediately above the floating navigation pill.
+
+Revision 4D corrects the ownership boundary rather than painting a second gradient behind navigation:
+
+1. The default `WavenAtmosphericCanvas` is owned once by primary root navigation so the same canvas sits behind both the route stack and persistent bottom navigation.
+2. `WavenAppShell` becomes transparent and no longer creates its own duplicate atmospheric canvas.
+3. Primary Stack content is transparent so Home, Search, and Library reveal the persistent root canvas.
+4. Non-primary routes retain the black Stack substrate. Entry continues to own its stronger `entry` atmospheric variant, preventing double-stacking.
+5. The root itself remains WAVEN black. Therefore the physically proven no-white-flash protection is preserved even if an atmospheric layer is absent during a route boundary.
+6. The floating bottom-navigation pill remains transparent at its outer wrapper and visually floats over the same uninterrupted atmosphere as the page above it.
+7. This is a visual shell-continuity repair only. It does not change navigation destinations, account/session behavior, playback, providers, or Orion Cloud behavior.
+
+### P5.2 Revision 4E primary-page brand hierarchy — 2026-09-15
+
+Physical validation confirmed that the local-first Entry session survives a real app relaunch: after choosing **Continue locally**, a subsequent fresh launch skips Entry and returns directly to Home without repeating sign-in or first-run presentation.
+
+A final primary-page hierarchy refinement is also adopted:
+
+1. **Home** keeps the centered **WA[V]EN / Where Music Lives** lockup because Home is the product's identity and re-entry surface.
+2. **Search** does not repeat the WAVEN wordmark or tagline. Its own page title and search controls become the immediate hierarchy.
+3. **Library** does not repeat the WAVEN wordmark or tagline. Its own page title, filters, and collection state become the immediate hierarchy.
+4. The shared shell exposes brand visibility explicitly, while the existing Home `brandTagline` request continues to imply the full brand lockup.
+5. Removing repeated branding from Search and Library is a density/hierarchy refinement only. Atmospheric Canvas, persistent bottom navigation, route behavior, session behavior, playback, providers, and Orion Cloud behavior remain unchanged.
+6. Future primary pages should not automatically repeat the Home brand lockup. Brand repetition must be justified by the page's role rather than inherited by default.
+
+### P5.2 Revision 4F Home translation of Reference 02 — 2026-09-15
+
+Physical review identified that the P5.1 Home shell remained structurally clean but visually too utility-led compared with the accepted intent of **Reference 02 — Content Hierarchy + Library Density**.
+
+Revision 4F therefore strengthens the Home translation without copying the white reference skin, its exact cards, or fabricated music:
+
+1. Home keeps the centered **WA[V]EN / Where Music Lives** lockup as its identity header.
+2. The first body surface becomes one dominant artwork-led music hero rather than a small utility row.
+3. The hero uses WAVEN's deterministic fallback-art family and stacked/depth treatment. It does not invent album names, artists, listening history, recommendations, or provider data.
+4. The hero remains an honest first-run invitation to explore music until later phases can supply real Continue Listening / Made For You / active-session data.
+5. Recently Played remains visibly present but truthfully empty until real playback history exists.
+6. An artwork-led **Explore** row exposes Songs, Artists, and Albums as category directions without pretending those category tiles are real releases.
+7. **Your Music** remains a direct Library shortcut.
+8. Once later phases provide real content, real artwork/history/discovery should replace first-run placeholders while preserving this hierarchy: dominant music surface → recent activity → discovery → library.
+9. Home should feel curated, visual, music-first, and spacious without large dead zones or walls of identical glass cards.
+10. This is a P5 presentation refinement only. It does not implement P6 discovery/provider behavior, P7 history/library persistence, fake recommendations, or Orion Cloud music synchronization.
+
+If the physical Rev4F Home does not improve the product hierarchy, the accepted P5.1/Rev4E Home structure remains recoverable from the previous checkpoint boundary.
+
+### P5.2 Revision 4G Home glass-atmosphere pass — 2026-09-15
+
+Physical Rev4F review accepted the **overall Reference-02 Home hierarchy** but found its material treatment too opaque and slab-like. The hierarchy is therefore retained while its surfaces are translated more strongly through WAVEN Glass.
+
+Revision 4G rules:
+
+1. Keep the Rev4F structure unchanged: Home identity → dominant music hero → Recently Played → Explore → Your Music.
+2. Make the hero a restrained translucent near-black glass surface so the shared WAVEN Atmospheric Canvas remains visually present through the composition.
+3. Use a very low-opacity cool-silver edge/highlight and a restrained WAVEN-blue lower tint. No neon outline and no unrelated accent color.
+4. Slightly reduce hero artwork and vertical density so more of the next section can enter the first viewport without demoting the hero.
+5. Rear artwork-stack layers become lighter and more translucent so they read as floating acrylic/glass depth rather than three opaque cards.
+6. Recently Played and Your Music use lighter translucent glass instead of dense black slabs.
+7. Explore remains comparatively exposed and artwork-led rather than wrapping every tile in another glass container.
+8. Do not add `BlurView`, `expo-blur`, platform backdrop filters, or a new dependency during this P5 refinement. The effect must remain compatible with the pinned Expo/RN baseline and rely on transparency, hierarchy, edge light, and the existing Atmospheric Canvas.
+9. This pass changes material presentation only. It does not add real recommendations, history, provider content, Cloud activity, playback ownership, or P6/P7 behavior.
+10. Physical review decides whether Rev4G becomes the accepted Home material language.
+
+### P5.2 Revision 4H hero-glass polish — 2026-09-15
+
+Physical Rev4G review accepted the Reference-02 hierarchy and the lighter WAVEN Glass direction, but exposed one material artifact: the hero's lower blue tint was visibly readable as a horizontal rectangular band behind the primary action.
+
+Revision 4H makes a deliberately narrow polish:
+
+1. Remove the hero-local rectangular blue tint layer completely.
+2. Let the shared **WAVEN Atmospheric Canvas** provide environmental blue behind and through the hero instead of painting a second local rectangle.
+3. Make the hero base slightly more transparent while retaining the restrained cool-silver top/edge highlight.
+4. Preserve the Rev4G tighter hero geometry, stacked artwork treatment, Recently Played glass, Explore composition, Your Music glass, navigation, typography, and all interaction behavior.
+5. No new blur implementation, dependency, Cloud behavior, provider behavior, playback behavior, or phase scope is introduced.
+6. The intended result is continuous glass with no visible internal rectangular machinery.
+
+### P5.2 Revision 4H physical checkpoint lock — 2026-09-15
+
+The owner physically reviewed the current P5.2 presentation on a Samsung Galaxy S24 Ultra and accepts this visual/material boundary. This checkpoint locks the approved direction without claiming all of P5.2 complete.
+
+#### Physically accepted / validated
+- **Entry Revision 4C** is the accepted Entry visual direction: the near-full-width irregular blue/silver living waveform, moved-down WA[V]EN lockup, atmospheric black presentation, and current action hierarchy are approved.
+- **Revision 4D** root atmosphere continuity is accepted: one shared Atmospheric Canvas continues behind primary content and floating bottom navigation, with the black root substrate retained as transition safety.
+- **Continue locally** is physically validated. The local entry session persists across a full Expo Go/app relaunch, and the next launch skips Entry and returns directly to Home.
+- Expo Go's Google action is physically validated to fail safely with the controlled message **“Google Sign-In is not configured for this build.”** This expected fallback does not crash or imply native identity acceptance.
+- **Revision 4F** is the locked Home hierarchy: Home identity → dominant artwork-led music surface → Recently Played → Explore → Your Music.
+- **Revision 4G** is the locked WAVEN Glass direction: restrained translucent near-black material, cool-silver edge light, selective glass, and the shared Atmospheric Canvas remaining visible through surfaces.
+- **Revision 4H** is the locked hero-material polish: the visible horizontal blue tint band is removed, environmental blue comes from the shared Atmospheric Canvas, and the hero reads as one continuous glass surface.
+- The current Home visual/material language is approved and should not be reopened for arbitrary micro-polish. Later functional integration may still justify a targeted UI repair if it exposes a real product issue.
+
+#### Still pending before P5.2 completion
+- Real Google identity/sign-in has **not** been physically accepted in a compatible native/development build. Expo Go fallback evidence cannot substitute for that native evidence tier.
+- P5.2 therefore remains **IN PROGRESS**. Phase 5 has no Completion ACK, overall WAVEN v1 completion remains **38%**, and Phase 6 remains **NOT AUTHORIZED**.
+- This checkpoint authorizes no Orion Cloud write, no Drive music work, no WAVEN music synchronization, no playback-owner change, and no later-phase implementation.
+
 ### Phase boundary
 - P5 owns presentation and UX.
 - Existing identity plumbing is reused.

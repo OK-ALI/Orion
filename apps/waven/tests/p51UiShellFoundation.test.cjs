@@ -87,7 +87,7 @@ test('P5.1 fallback artwork is a deterministic WAVEN signal family rather than f
 });
 
 
-test('P5.1 Revision 4 keeps first-run Home music-first under the WAVEN brand lockup', () => {
+test('P5.1 Home foundation stays product-safe and music-first as later P5 revisions evolve its hierarchy', () => {
   assert.doesNotMatch(home, /DEVELOPMENT TOOLS/);
   assert.doesNotMatch(home, /playback-debug/);
   assert.doesNotMatch(home, /cloud-debug/);
@@ -96,9 +96,7 @@ test('P5.1 Revision 4 keeps first-run Home music-first under the WAVEN brand loc
   assert.match(home, /homeBody/);
   assert.match(home, /brandTagline/);
   assert.match(shell, /paddingBottom:\s*42/);
-  assert.match(home, /justifyContent:\s*'space-between'/);
-  assert.match(home, /START LISTENING/);
-  assert.match(home, /Songs · Artists · Albums · Playlists/);
+  assert.match(home, /Recently Played/);
   assert.match(home, /Your first plays will collect here/);
   assert.match(home, /Open Your Library/);
   assert.match(cloudDebug, /if \(!__DEV__\) return null/);

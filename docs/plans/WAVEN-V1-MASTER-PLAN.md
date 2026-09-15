@@ -17,7 +17,7 @@ There must be no separate **WAVEN Cloud**. WAVEN will participate in **Orion Clo
 The supplied icon has been copied unchanged into `apps/waven/assets/icon.png`. It is the current reference/application icon, not a redesigned derivative.
 Offline behavior is a first-class product mode and is intentionally separate from downloadable media. Direct-distribution builds are expected to gain a WAVEN in-app updater based on a future read-only audit of Orion Mobile's current updater, with GitHub Preview/Prerelease artifacts and same-signature physical update acceptance.
 
-Current accepted implementation status is **Phases 0–4 complete at their recorded evidence tiers, 38% overall**. Phase 5 is not authorized. Expo Go, WAVEN development-device evidence, and a permanently signed distributed candidate remain distinct evidence tiers; success in one must never be promoted into another.
+Current accepted completion status is **Phases 0–4 complete at their recorded evidence tiers, 38% overall**. Phase 5 is **authorized and in progress** under `AUTH-P05-2026-09-14`; its P5.1 UI shell foundation is published at `5db4d4f01b597d746389ed7f8e766a532df411ed`, and its P5.2 Rev4H visual/material checkpoint is physically accepted while real native Google identity remains pending. P5.2 and Phase 5 are therefore still in progress, Phase 5 has no Completion ACK and earns **0%** so far, and Phase 6 remains unauthorized. Expo Go, WAVEN development-device evidence, and a permanently signed distributed candidate remain distinct evidence tiers; success in one must never be promoted into another.
 
 ## 2. Instruction and evidence boundary
 
@@ -536,7 +536,7 @@ Expo Go may validate visual state transitions only when dependencies permit. It 
 
 ## 14. Phased implementation roadmap
 
-Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 and every later phase remain unauthorized and require their own explicit implementation authorization. This section was reconciled on 2026-09-14 after the local implementation history advanced faster than the master-plan ledger; the reconciliation records already-made owner decisions without altering implementation commit chronology.
+Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 is authorized and currently in progress under `AUTH-P05-2026-09-14`; Phase 6 and every later phase remain unauthorized and require their own explicit implementation authorization. This section was reconciled on 2026-09-15 to include the published P5.1 UI-shell checkpoint and the physically accepted P5.2 Rev4H visual/material checkpoint without changing completion accounting.
 
 ### Phase 0 — Evidence and version baseline (evidence complete; audit ACK accepted)
 
@@ -711,7 +711,7 @@ Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 and
 - **Residual/release boundary:** the Phase 4 harness/URI/raw-state UI is validation scaffolding, not final WAVEN product UI. Permanent signing, GitHub Preview/Prerelease distribution, clean install/in-place update, and distributed playback reacceptance remain Phase 12 release work.
 - **Acceptance conclusion:** the owner accepts the Phase 4 development-device exit boundary. Phase 4 earns its full 12% weight, raising authoritative WAVEN v1 completion from 26% to **38%**. This ACK does not authorize Phase 5.
 
-### Phase 5 — WAVEN design system and navigation (authorized; implementation pending)
+### Phase 5 — WAVEN design system and navigation (authorized; implementation in progress)
 
 1. **Goal:** Deliver Music Planet product intent as a native Android-first WAVEN shell.
 2. **Scope:** typed theme tokens, Expo Router groups/layouts, safe area, reusable surfaces, empty/loading/error states, accessibility and reduced motion.
@@ -746,6 +746,35 @@ Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 and
 - **Dependency and ecosystem boundary:** this authorization does not approve an Expo/React Native/dependency upgrade, Orion Cloud mutation, Desktop Music Planet modification, Orion Mobile modification, or unrelated protected-area change.
 - **Validation approach:** Phase 5 will be intentionally iterative: `implement → run → physically inspect → discuss → refine → lock the slice → continue`. Visual or interaction details may be revised whenever physical use exposes awkward, confusing, static, inaccessible, or insufficiently responsive behavior. Direction is frozen; individual pixels and interaction details are evidence-responsive.
 - **Phase boundary:** this authorization covers Phase 5 only and does not authorize Phase 6 or any later phase.
+
+
+#### Phase 5.1 Published Checkpoint — UI shell foundation
+
+- **Checkpoint:** `5db4d4f01b597d746389ed7f8e766a532df411ed` (`feat(waven): establish phase 5.1 UI shell foundation`).
+- **Parent:** `343a5aef9cc5ae589b344ffac251f40c3c84c681` (Phase 5 authorization checkpoint).
+- **Publication:** local and `origin/waven/v1` SHA equality independently verified on 2026-09-15.
+- **Committed boundary:** exact 19-file P5.1 slice; working tree clean after commit/publication; root `package-lock.json` remained SHA-256 `1BF49DED104A676060C78A3B8803778AFF9FCF47F188D18AED48BC5BCA2B0E04`.
+- **Automated evidence:** TypeScript PASS; WAVEN automated suite PASS `64/64`; cached diff whitespace validation PASS.
+- **Physical UI evidence:** Samsung Galaxy S24 Ultra family device through Expo Go. Persistent black navigation substrate kept route transitions dark; the prior white/washed route flash did not return. The centered WA[V]EN + smaller *Where Music Lives* lockup, animated rounded bottom-navigation selection pill, active icon/label motion, and restrained dark route fade were accepted as the current direction.
+- **Home-state clarification:** the P5.1 Home is a truthful first-run / zero-data shell, not the permanent populated Home. The `Start Listening` surface must retire or transform as real history, discovery, library, and playback state arrive in their owning phases. This rule is recorded in `docs/design/WAVEN-UIUX-REFERENCE-DESIGN-CONTRACT.md`.
+- **Phase accounting:** this checkpoint does **not** complete Phase 5 and earns no partial percentage. Overall WAVEN v1 completion remains **38%** pending a separate Phase 5 Completion ACK.
+- **Next bounded Phase 5 slice:** P5.2 owns WAVEN startup/entry/sign-in presentation using the existing Google identity plumbing. It must not create a second authentication system, perform Orion Cloud music synchronization, authorize a new Orion Cloud write, or enter Phase 6 scope.
+
+#### Phase 5.2 Rev4H Visual/Material Checkpoint — presentation accepted; P5.2 still in progress
+
+- **Checkpoint state:** the current P5.2 working boundary remains uncommitted on top of P5.1 checkpoint `5db4d4f01b597d746389ed7f8e766a532df411ed`; no P5.2 commit or push is claimed by this documentation record.
+- **Physical device:** Samsung Galaxy S24 Ultra family hardware through Expo Go for the JS/UI/local-state evidence tier.
+- **Entry visual acceptance:** Revision 4C is the accepted Entry visual direction. The cinematic near-full-width irregular blue/silver living waveform, moved-down WA[V]EN lockup, atmospheric black treatment, and existing action hierarchy are approved.
+- **Atmosphere acceptance:** Revision 4D is physically accepted. One root-owned WAVEN Atmospheric Canvas continues behind Home/Search/Library content and floating bottom navigation while the black root substrate preserves route-transition safety.
+- **Local continuation evidence:** **Continue locally** works physically. Its SecureStore-backed local entry session survives a full Expo Go/app relaunch, and relaunch skips Entry and lands directly on Home.
+- **Expo Go Google fallback evidence:** the Google action returns the controlled **“Google Sign-In is not configured for this build.”** message without crashing. This is accepted fallback behavior only; it is not native Google identity acceptance.
+- **Home hierarchy lock:** Revision 4F is physically accepted and locked as the current Reference-02 hierarchy: Home identity → dominant artwork-led music surface → Recently Played → Explore → Your Music.
+- **Material lock:** Revision 4G is physically accepted and locked as the current restrained WAVEN Glass direction. Revision 4H is physically accepted and locked as the hero-material polish that removes the visible horizontal blue tint band and lets the shared Atmospheric Canvas provide environmental blue.
+- **Visual checkpoint disposition:** the Rev4H Home presentation is approved. The current Home material language should not receive arbitrary micro-polish; later functional integration may justify only targeted repairs for newly exposed product issues.
+- **Latest technical gate before this documentation reconciliation:** TypeScript PASS; WAVEN automated suite PASS `75/75`; HEAD unchanged at the P5.1 checkpoint; package-lock unchanged at SHA-256 `1BF49DED104A676060C78A3B8803778AFF9FCF47F188D18AED48BC5BCA2B0E04`; exact 11-file dirty boundary preserved; no Cloud activity and no playback change. The earlier `74/75` Rev4H run was traced to the stale Rev4G `glassBottomTint` assertion and repaired as a one-file test-contract reconciliation before the final `75/75` pass.
+- **Native identity still pending:** real Google identity/sign-in still requires a compatible WAVEN native/development build and physical acceptance. Expo Go cannot establish this evidence tier.
+- **Scope protection:** P5.2 identity presentation reuses the existing native Google identity architecture and does not authorize Drive music work, Orion Cloud music reads/writes, a second live no-op write, token exposure to JavaScript, a second authentication architecture, or WAVEN music synchronization.
+- **Phase accounting:** P5.2 remains **IN PROGRESS**; Phase 5 remains **IN PROGRESS** with no Completion ACK; authoritative WAVEN v1 completion stays **38%**; Phase 6 remains **NOT AUTHORIZED**.
 
 ### Phase 6 — Search, discovery, and detail experiences (not authorized)
 
@@ -867,7 +896,7 @@ If later regression evidence invalidates an accepted phase, its ACK becomes `REO
 | 2 | Shared Orion Cloud Android adapter | 8% | Development-build physical identity/Drive lifecycle; later release regression | Complete; shared adapter and Cloud preservation gate accepted | `ACK-P02-2026-09-14` — ACCEPTED | 8% |
 | 3 | Shared music domain/provider contracts | 8% | Contract parity at accepted scope; native playback integration deferred to Phase 4 | Complete; shared music contracts/provider registry accepted | `ACK-P03-2026-09-14` — ACCEPTED | 8% |
 | 4 | Android playback core | 12% | Development-build physical playback/lifecycle/MediaSession soak; later release reacceptance | Complete; development-device playback matrix accepted | `ACK-P04-2026-09-14` — ACCEPTED | 12% |
-| 5 | Design system and navigation | 7% | Expo Go-compatible physical UI/accessibility matrix or development-build equivalent | Not started / not authorized | PENDING | 0% |
+| 5 | Design system and navigation | 7% | Expo Go-compatible physical UI/accessibility matrix or development-build equivalent | AUTHORIZED / IN PROGRESS; P5.1 published/remote-verified at `5db4d4f01b597d746389ed7f8e766a532df411ed`; P5.2 Rev4H visual/material checkpoint physically accepted; native Google identity still pending | PENDING | 0% |
 | 6 | Search, discovery, and details | 7% | Physical online/degraded/offline provider flow in the correct runtime | Not started / not authorized | PENDING | 0% |
 | 7 | Local Library, favorites, playlists, history | 8% | Development-build physical persistence, restart, account isolation, and migration | Not started / not authorized | PENDING | 0% |
 | 8 | Offline awareness and connectivity resilience | 8% | Development-build physical connectivity matrix in section 13.8 | Not started / not authorized | PENDING | 0% |
@@ -877,7 +906,7 @@ If later regression evidence invalidates an accepted phase, its ACK becomes `REO
 | 12 | Release engineering, updater, distributed acceptance | 10% | Permanently signed GitHub Preview/Prerelease; clean install and in-place update on physical matrix | Not started / not authorized | PENDING | 0% |
 | 13 | Future Desktop Music Planet → WAVEN migration | 0% (post-v1) | Dedicated Desktop runtime/update/UX acceptance | Not started / not authorized | PENDING | 0% |
 
-**Current authoritative WAVEN v1 completion: 38%.** Phases 0–4 contribute `4% + 6% + 8% + 8% + 12% = 38%` through accepted Completion ACKs. Phase 5 and every later phase remain unauthorized and earn 0% until separately authorized, implemented, validated, and accepted.
+**Current authoritative WAVEN v1 completion: 38%.** Phases 0–4 contribute `4% + 6% + 8% + 8% + 12% = 38%` through accepted Completion ACKs. Phase 5 is authorized and in progress but still earns 0% because no Phase 5 Completion ACK has been accepted. Phase 6 and every later phase remain unauthorized and earn 0% until separately authorized, implemented, validated, and accepted.
 
 ### 15.3 Completion ACK record required for every phase
 
@@ -1035,7 +1064,9 @@ Validate that updates preserve or intentionally reacquire: Google subject associ
 17. Losing the permanent signing key would break in-place updates; key custody and recovery policy must be approved before the first distributed baseline.
 18. Rollback is constrained by Android versionCode and schema compatibility; it must never be implied without an explicit safe design.
 
-## 20. Current post-Phase-4 checkpoint
+## 20. Historical post-Phase-4 checkpoint (pre-P5 authorization)
+
+> Historical note: this block preserves the state immediately after the Phase 4 ACK, before `AUTH-P05-2026-09-14`. Current Phase 5/P5.2 status is recorded in sections 14 and 15 above.
 
 Phases 0–4 are accepted and the authoritative WAVEN v1 completion is **38%**. The canonical Phase 4 implementation/validation-carrier checkpoint is `9eb6738ed7fbf83f269d7feefabbd4b4ed447515`. The package-lock identity remains `1BF49DED104A676060C78A3B8803778AFF9FCF47F188D18AED48BC5BCA2B0E04`.
 
