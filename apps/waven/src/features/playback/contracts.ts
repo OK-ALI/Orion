@@ -76,14 +76,24 @@ export interface PlaybackError {
   retryAction: PlaybackRetryAction;
 }
 
+export interface PlaybackPresentationItem {
+  queueId: string;
+  title: string | null;
+  artistName: string | null;
+  albumTitle: string | null;
+  artworkUrl: string | null;
+}
+
 export interface PlaybackSnapshot {
   state: PlaybackState;
   queueIds: readonly string[];
   currentQueueId: string | null;
+  currentItem: PlaybackPresentationItem | null;
   currentIndex: number;
   positionMs: number;
   durationMs: number | null;
   playing: boolean;
+  playWhenReady: boolean;
   buffering: boolean;
   repeatMode: "off" | "one" | "all";
   shuffleEnabled: boolean;

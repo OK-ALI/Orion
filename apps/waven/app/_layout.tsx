@@ -7,6 +7,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { WavenWordmark } from '../src/components/brand/WavenWordmark';
 import { WavenBottomNav } from '../src/components/shell/WavenBottomNav';
+import { WavenMiniPlayer } from '../src/components/player/WavenMiniPlayer';
 import { WavenAtmosphericCanvas } from '../src/components/surfaces/WavenAtmosphericCanvas';
 import {
   readWavenEntrySession,
@@ -116,6 +117,7 @@ function WavenRootNavigation() {
           }}
         />
       </View>
+      {showPrimaryNavigation ? <WavenMiniPlayer /> : null}
       {showPrimaryNavigation ? <WavenBottomNav /> : null}
     </View>
   );

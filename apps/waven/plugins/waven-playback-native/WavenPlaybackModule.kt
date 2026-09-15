@@ -268,6 +268,22 @@ class WavenPlaybackModule(
         null
       }
 
+    val currentItem =
+      if (player.currentMediaItemIndex in 0 until player.mediaItemCount) {
+        val mediaItem = player.getMediaItemAt(player.currentMediaItemIndex)
+        val metadata = mediaItem.mediaMetadata
+
+        Arguments.createMap().apply {
+          putString("queueId", mediaItem.mediaId)
+          putString("title", metadata.title?.toString())
+          putString("artistName", metadata.artist?.toString())
+          putString("albumTitle", metadata.albumTitle?.toString())
+          putString("artworkUrl", metadata.artworkUri?.toString())
+        }
+      } else {
+        null
+      }
+
     val currentError = player.playerError
     val errorMap = currentError?.let { playbackError(player, it) }
 
@@ -275,6 +291,11 @@ class WavenPlaybackModule(
       putString("state", playbackState(player, currentError))
       putArray("queueIds", queue)
       putString("currentQueueId", currentQueueId)
+      if (currentItem == null) {
+        putNull("currentItem")
+      } else {
+        putMap("currentItem", currentItem)
+      }
       putInt("currentIndex", player.currentMediaItemIndex.coerceAtLeast(0))
       putDouble("positionMs", player.currentPosition.coerceAtLeast(0L).toDouble())
       val duration = player.duration
@@ -284,6 +305,7 @@ class WavenPlaybackModule(
         putDouble("durationMs", duration.coerceAtLeast(0L).toDouble())
       }
       putBoolean("playing", player.isPlaying)
+      putBoolean("playWhenReady", player.playWhenReady)
       putBoolean("buffering", player.playbackState == Player.STATE_BUFFERING)
       putString("repeatMode", WavenPlaybackService.repeatModeName(player.repeatMode))
       putBoolean("shuffleEnabled", player.shuffleModeEnabled)
