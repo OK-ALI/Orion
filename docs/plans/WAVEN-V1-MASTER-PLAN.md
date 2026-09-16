@@ -868,6 +868,20 @@ P6.1 begins Phase 6 with the smallest runtime slice that can be reused by Search
 - **UI boundary:** P6.1 does not yet replace the truthful Phase 5 Search shell with live results. `P6.2` owns the first product Search wiring, visible loading/result/empty/error states, and bounded physical validation of real metadata requests.
 - **Accounting:** Phase 6 still has no Completion ACK and earns 0%. Current authoritative WAVEN v1 completion remains **45%**.
 
+#### P6.2 Provider-backed Search presentation
+
+P6.2 connects the existing Phase 5 Search surface to the P6.1 discovery runtime without changing playback ownership or pulling later persistence phases forward.
+
+- **Published foundation:** P6.1 is checkpointed and published at `fa2ec829a989b7e0edb93aa61821da49b63d03c0` (`feat(waven): establish phase 6.1 provider runtime`).
+- **Live metadata Search:** queries of at least two characters are debounced before calling the shared-runtime-backed YouTube Music metadata provider. In-flight work is cancelled when the query changes or the screen effect is replaced.
+- **Truthful product states:** Search presents bounded loading, provider-backed result, selected-scope empty, partial-provider, and generic unavailable/retry states. It does not expose raw provider errors, transport URLs, secrets, or implementation diagnostics.
+- **Scope behavior:** Songs, Artists, Albums, and Playlists remain the existing accessible scope controls. A single provider response is projected into the selected scope locally, avoiding a redundant network request when only the scope changes.
+- **Artwork and attribution:** provider artwork is shown when available with the existing deterministic WAVEN artwork fallback on missing/failed images. Provider attribution remains visible and restrained.
+- **Interaction boundary:** P6.2 result rows are deliberately informational. Artist/album detail routing, pagination, suggestions, caching, and the search-to-play handoff remain later Phase 6 slices rather than being simulated here.
+- **Playback/Cloud/persistence boundary:** no second player, no stream resolution, no WAVEN music Cloud write/sync, no search-history persistence, and no Phase 7 Library persistence are introduced.
+- **Validation boundary:** automated TypeScript/full-suite validation is required before checkpointing. Because this slice is fetch/UI-only, its first physical product check is Expo Go suitable; later native playback handoff still requires the development-build tier.
+- **Accounting:** P6.2 implementation does not itself award Phase 6 percentage. Authoritative WAVEN v1 completion remains **45%** pending the eventual Phase 6 Completion ACK.
+
 1. **Goal:** Expose only provider-supported data through mobile-native UX.
 2. **Scope:** Search, Home/Discovery, artist, album, pagination, cancellation, caching, attribution and health states.
 3. **Reuse:** active YouTube Music metadata/dashboard, Spotify Charts metadata-only role, broker timeout/health concepts.
