@@ -17,7 +17,7 @@ There must be no separate **WAVEN Cloud**. WAVEN will participate in **Orion Clo
 The supplied icon has been copied unchanged into `apps/waven/assets/icon.png`. It is the current reference/application icon, not a redesigned derivative.
 Offline behavior is a first-class product mode and is intentionally separate from downloadable media. Direct-distribution builds are expected to gain a WAVEN in-app updater based on a future read-only audit of Orion Mobile's current updater, with GitHub Preview/Prerelease artifacts and same-signature physical update acceptance.
 
-Current accepted completion status is **Phases 0–5 complete at their recorded evidence tiers, 45% overall**. Phase 5 was authorized under `AUTH-P05-2026-09-14` and is now accepted under `ACK-P05-2026-09-16`. Its published implementation chain is P5.1 `5db4d4f01b597d746389ed7f8e766a532df411ed`, P5.2 `1dab4ec40e1e93f4d411fcb9ab809b1c78599c3c`, P5.3 `3f3cf303375acd11f65169efe839d9247a040b4d`, P5.4 `353301c45acd30aed9f25533724e16ccdb5245a8`, P5.5A `0d949a8aad1863f3dd8bfbc5e0d132f526714079`, and final P5.5B closure checkpoint `68d55a57456ace75cd87ab6fdf702aec246409b5`. Native Google identity/sign-in and the Phase 5 UI/accessibility/motion surface were physically accepted on the Samsung Galaxy S24 Ultra through the WAVEN native/development path. This does **not** claim permanently signed distributed acceptance, clean-install/update acceptance, or release signing, which remain later release-engineering gates. Phase 6 remains unauthorized. Expo Go, WAVEN development-device evidence, and a permanently signed distributed candidate remain distinct evidence tiers; success in one must never be promoted into another.
+Current accepted completion status is **Phases 0–5 complete at their recorded evidence tiers, 45% overall**. Phase 5 was authorized under `AUTH-P05-2026-09-14` and is accepted under `ACK-P05-2026-09-16`; its final published closure checkpoint is `68d55a57456ace75cd87ab6fdf702aec246409b5`. Phase 6 is now **AUTHORIZED** under `AUTH-P06-2026-09-16` for Search, Discovery, and Detail implementation, but it has no Completion ACK and therefore earns **0%** so far. Authoritative WAVEN v1 completion remains **45%**. Phase 7 and every later phase remain unauthorized. Expo Go, WAVEN development-device evidence, and a permanently signed distributed candidate remain distinct evidence tiers; success in one must never be promoted into another.
 
 ## 2. Instruction and evidence boundary
 
@@ -839,7 +839,22 @@ Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 is 
 - **Residual/deferred scope:** provider-backed Search/Discovery/Details remain Phase 6; Library persistence/favorites/playlists/history remain Phase 7; offline/connectivity behavior remains Phase 8; WAVEN music domains in Orion Cloud remain Phase 9; immersive Full Player/lyrics/artwork atmosphere remain Phase 10; downloads/reliability remain Phase 11.
 - **Acceptance conclusion:** the owner accepts the complete Phase 5 development-device UI/accessibility/motion boundary. Phase 5 earns its full 7% weight, raising authoritative WAVEN v1 completion from 38% to **45%**. This ACK does **not** authorize Phase 6.
 
-### Phase 6 — Search, discovery, and detail experiences (not authorized)
+### Phase 6 — Search, discovery, and detail experiences (authorized; implementation not started)
+
+#### Phase 6 Authorization — `AUTH-P06-2026-09-16`
+
+- **Decision:** `AUTHORIZED`.
+- **Decision date:** 2026-09-16.
+- **Authorized by:** WAVEN project owner.
+- **Starting ref:** branch `waven/v1`, commit `385172a2791f04474262fd7ce31682bd34e9b665` (`docs(waven): accept phase 5 completion`).
+- **Starting completion:** **45%**. Authorization starts work but earns no Phase 6 percentage before a later Completion ACK.
+- **Authorized scope:** Search, Home/Discovery, artist and album detail experiences, provider-backed pagination/cancellation/caching, attribution, provider health/degraded presentation, and the bounded search-to-play handoff defined below.
+- **Required reuse:** shared Phase 3 music contracts/provider registry and the single Phase 4 Media3 playback owner. Phase 6 must not create a second player, duplicate shared music contracts, or expose raw playback URLs/secrets to product UI.
+- **Provider boundary:** use only provider-supported capabilities. YouTube Music may supply active metadata/discovery where the existing provider contract supports it; Spotify Charts remains metadata/chart context only unless a later explicit capability change is separately approved.
+- **Cloud/persistence boundary:** no WAVEN music namespace writes, no Orion Cloud music synchronization, no Phase 7 Library persistence, no Phase 8 offline state-machine ownership, and no downloadable-media work are authorized by this record.
+- **Dependency/toolchain boundary:** no Expo/React Native/toolchain/dependency upgrade is authorized. The pinned WAVEN baseline and package-lock identity remain unchanged unless a separately inspected blocker proves a change necessary.
+- **Validation boundary:** pure JS/UI slices may use Expo Go-compatible evidence where appropriate; native provider/network/cache or playback-integration acceptance uses a WAVEN development build. Distributed signed acceptance remains Phase 12.
+- **Later phases:** Phase 7 and every later phase remain **NOT AUTHORIZED**.
 
 1. **Goal:** Expose only provider-supported data through mobile-native UX.
 2. **Scope:** Search, Home/Discovery, artist, album, pagination, cancellation, caching, attribution and health states.
@@ -960,7 +975,7 @@ If later regression evidence invalidates an accepted phase, its ACK becomes `REO
 | 3 | Shared music domain/provider contracts | 8% | Contract parity at accepted scope; native playback integration deferred to Phase 4 | Complete; shared music contracts/provider registry accepted | `ACK-P03-2026-09-14` — ACCEPTED | 8% |
 | 4 | Android playback core | 12% | Development-build physical playback/lifecycle/MediaSession soak; later release reacceptance | Complete; development-device playback matrix accepted | `ACK-P04-2026-09-14` — ACCEPTED | 12% |
 | 5 | Design system and navigation | 7% | Expo Go-compatible physical UI/accessibility matrix or development-build equivalent | Complete; final closure checkpoint `68d55a57456ace75cd87ab6fdf702aec246409b5` published/remote-verified; native Google identity and Phase 5 UI/accessibility/motion matrix physically accepted on the WAVEN development/native path; distributed signed acceptance remains Phase 12 | `ACK-P05-2026-09-16` — ACCEPTED | 7% |
-| 6 | Search, discovery, and details | 7% | Physical online/degraded/offline provider flow in the correct runtime | Not started / not authorized | PENDING | 0% |
+| 6 | Search, discovery, and details | 7% | Physical online/degraded/offline provider flow in the correct runtime | AUTHORIZED / NOT STARTED under `AUTH-P06-2026-09-16` | PENDING | 0% |
 | 7 | Local Library, favorites, playlists, history | 8% | Development-build physical persistence, restart, account isolation, and migration | Not started / not authorized | PENDING | 0% |
 | 8 | Offline awareness and connectivity resilience | 8% | Development-build physical connectivity matrix in section 13.8 | Not started / not authorized | PENDING | 0% |
 | 9 | WAVEN domains in Orion Cloud | 9% | Development-build physical two-device/account/offline conflict matrix; later release reacceptance | Not started / not authorized | PENDING | 0% |
@@ -969,7 +984,7 @@ If later regression evidence invalidates an accepted phase, its ACK becomes `REO
 | 12 | Release engineering, updater, distributed acceptance | 10% | Permanently signed GitHub Preview/Prerelease; clean install and in-place update on physical matrix | Not started / not authorized | PENDING | 0% |
 | 13 | Future Desktop Music Planet → WAVEN migration | 0% (post-v1) | Dedicated Desktop runtime/update/UX acceptance | Not started / not authorized | PENDING | 0% |
 
-**Current authoritative WAVEN v1 completion: 45%.** Phases 0–5 contribute `4% + 6% + 8% + 8% + 12% + 7% = 45%` through accepted Completion ACKs. Phase 6 and every later phase remain unauthorized and earn 0% until separately authorized, implemented, validated, and accepted.
+**Current authoritative WAVEN v1 completion: 45%.** Phases 0–5 contribute `4% + 6% + 8% + 8% + 12% + 7% = 45%` through accepted Completion ACKs. Phase 6 is authorized under `AUTH-P06-2026-09-16` but still earns 0% until its implementation, required validation, evidence reconciliation, and Completion ACK are accepted. Phase 7 and every later phase remain unauthorized and earn 0%.
 
 ### 15.3 Completion ACK record required for every phase
 
