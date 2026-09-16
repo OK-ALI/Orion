@@ -11,7 +11,13 @@ const readRepo = (relativePath) =>
   fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 
 const search = readApp('app/search.tsx');
+const metadataAdapter = readApp(
+  'src/infrastructure/music/providers/youtubeMusicMetadata.ts',
+);
 const master = readRepo('docs/plans/WAVEN-V1-MASTER-PLAN.md');
+const design = readRepo(
+  'docs/design/WAVEN-UIUX-REFERENCE-DESIGN-CONTRACT.md',
+);
 
 test('P6.2 wires the product Search surface to the P6.1 discovery runtime with cancellation', () => {
   assert.match(search, /wavenDiscoveryRuntime/);
@@ -33,12 +39,37 @@ test('P6.2 renders truthful loading, result, empty, partial and retry states wit
   assert.doesNotMatch(search, /\{providerErrors\[0\]/);
 });
 
-test('P6.2 keeps Search scope, artwork and provider presentation bounded and non-playback', () => {
+test('P6.2 keeps Search scope, artwork, provider identity, and classification bounded', () => {
   assert.match(search, /const SEARCH_SCOPES = \['Songs', 'Artists', 'Albums', 'Playlists'\]/);
   assert.match(search, /itemsForScope/);
   assert.match(search, /WavenSearchArtwork/);
   assert.match(search, /WavenArtworkFallback/);
-  assert.match(search, /providerName\.toUpperCase\(\)/);
+  assert.doesNotMatch(
+    search,
+    /providerName|providerAttribution|YouTube Music|YOUTUBE MUSIC/,
+  );
+  assert.match(
+    metadataAdapter,
+    /browsePageType === 'MUSIC_PAGE_TYPE_PLAYLIST'/,
+  );
+  assert.match(metadataAdapter, /String\(browseId\)\.startsWith\('VL'\)/);
+  assert.match(
+    metadataAdapter,
+    /browsePageType === 'MUSIC_PAGE_TYPE_ALBUM'/,
+  );
+  assert.match(metadataAdapter, /id\.startsWith\('MPRE'\)/);
+  assert.match(
+    metadataAdapter,
+    /if \(!isAlbumBrowse\(type, browseId\)\) return null;/,
+  );
+  assert.match(
+    metadataAdapter,
+    /if \(browseId && isAlbumBrowse\(browsePageType, browseId\)\)/,
+  );
+  assert.doesNotMatch(
+    metadataAdapter,
+    /if \(browseId\) \{\s*return \{\s*id: `ytmusic-album:/,
+  );
   assert.doesNotMatch(
     search,
     /WavenPlaybackNative|MediaSession|resolveCandidate|resolveTrack|playbackUrl|streamUrl|NativeModules/,
@@ -54,4 +85,12 @@ test('P6.2 records the published P6.1 foundation and leaves completion and later
   assert.match(master, /first physical product check is Expo Go suitable/);
   assert.match(master, /Authoritative WAVEN v1 completion remains \*\*45%\*\*/);
   assert.match(master, /Phase 7 and every later phase remain \*\*NOT AUTHORIZED\*\*/);
+  assert.match(
+    master,
+    /underlying metadata-provider brand stays internal and is not shown on WAVEN product surfaces/,
+  );
+  assert.match(
+    design,
+    /WAVEN product surfaces do not display upstream metadata-provider brand names/,
+  );
 });

@@ -296,6 +296,12 @@ Final immersive surface, primarily P10-owned.
 - Minimal explanatory text
 - Discovery mode transitions into focused result mode
 
+### Provider identity presentation rule
+- WAVEN product surfaces do not display upstream metadata-provider brand names.
+- Internal provider IDs, health, transport, and implementation names remain infrastructure concerns rather than product identity.
+- Search, Home/Discovery, detail surfaces, loading states, errors, result headers, and empty states use WAVEN-neutral language instead of upstream provider branding.
+- A future provider or platform requirement for mandatory visible attribution must receive explicit product and architecture review before changing this rule.
+
 ### Accepted atmosphere idea
 Artwork colors may extend beyond artwork and tint the surrounding environment.
 

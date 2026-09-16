@@ -140,11 +140,6 @@ export default function WavenSearchScreen() {
   const [retryNonce, setRetryNonce] = useState(0);
   const requestSequence = useRef(0);
 
-  const providerName =
-    wavenDiscoveryRuntime
-      .getProviderDescriptors()
-      .find((provider) => provider.kind === 'metadata')?.name || 'Music provider';
-
   useEffect(() => {
     const safeQuery = query.trim().slice(0, 200);
     const sequence = ++requestSequence.current;
@@ -306,7 +301,7 @@ export default function WavenSearchScreen() {
               <View accessibilityLiveRegion="polite" style={styles.stateCard}>
                 <Text style={styles.stateTitle}>Keep typing</Text>
                 <Text style={styles.stateBody}>
-                  Enter at least two characters to search {providerName}.
+                  Enter at least two characters to search.
                 </Text>
               </View>
             ) : null}
@@ -322,7 +317,7 @@ export default function WavenSearchScreen() {
                   size="small"
                 />
                 <Text style={styles.loadingText}>
-                  Searching {providerName}
+                  Searching music
                 </Text>
               </View>
             ) : null}
@@ -331,7 +326,7 @@ export default function WavenSearchScreen() {
               <View accessibilityLiveRegion="polite" style={styles.stateCard}>
                 <Text style={styles.stateTitle}>Search is taking a break</Text>
                 <Text style={styles.stateBody}>
-                  {providerName} could not answer this search right now.
+                  WAVEN could not complete this search right now.
                 </Text>
                 <WavenPressable
                   accessibilityLabel="Retry search"
@@ -362,9 +357,6 @@ export default function WavenSearchScreen() {
               >
                 <View style={styles.resultsHeader}>
                   <Text style={styles.resultsTitle}>{scope}</Text>
-                  <Text style={styles.providerAttribution}>
-                    {providerName.toUpperCase()}
-                  </Text>
                 </View>
 
                 {providerErrors.length > 0 ? (
@@ -609,12 +601,6 @@ const styles = StyleSheet.create({
     fontSize: wavenTypography.section.fontSize,
     fontWeight: wavenTypography.section.fontWeight,
     lineHeight: wavenTypography.section.lineHeight,
-  },
-  providerAttribution: {
-    color: wavenColors.textMuted,
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.2,
   },
   partialNote: {
     color: wavenColors.textMuted,

@@ -245,6 +245,17 @@ function artistFromRuns(runs: readonly any[]): string {
   );
 }
 
+function isAlbumBrowse(
+  browsePageType: string,
+  browseId: unknown,
+): boolean {
+  const id = String(browseId || '');
+  return (
+    browsePageType === 'MUSIC_PAGE_TYPE_ALBUM' ||
+    id.startsWith('MPRE')
+  );
+}
+
 function normalizeEndpointItem(renderer: any): MusicEntity | null {
   const title = titleFor(renderer);
   if (!title) return null;
@@ -306,6 +317,8 @@ function normalizeEndpointItem(renderer: any): MusicEntity | null {
       source,
     } satisfies MusicPlaylist;
   }
+
+  if (!isAlbumBrowse(type, browseId)) return null;
 
   return {
     id: `ytmusic-album:${browseId}`,
@@ -396,7 +409,19 @@ function normalizeListItem(item: any): MusicEntity | null {
     } satisfies MusicArtist;
   }
 
-  if (browseId) {
+  if (
+    browsePageType === 'MUSIC_PAGE_TYPE_PLAYLIST' ||
+    String(browseId).startsWith('VL')
+  ) {
+    return {
+      id: `ytmusic-playlist:${browseId}`,
+      title,
+      artworkUrl: bestThumb(thumbnails),
+      source: { provider: 'ytmusic-metadata', id: String(browseId) },
+    } satisfies MusicPlaylist;
+  }
+
+  if (browseId && isAlbumBrowse(browsePageType, browseId)) {
     return {
       id: `ytmusic-album:${browseId}`,
       title,
