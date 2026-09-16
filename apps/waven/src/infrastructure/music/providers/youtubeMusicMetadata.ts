@@ -591,6 +591,7 @@ function collectCatalogSections(payload: any): MusicDashboardResult['sections'] 
         { type: 'tracks' as const, items: groups.tracks },
         { type: 'albums' as const, items: groups.albums },
         { type: 'artists' as const, items: groups.artists },
+        { type: 'playlists' as const, items: groups.playlists },
       ]
         .filter((group) => group.items.length)
         .sort((left, right) => right.items.length - left.items.length);

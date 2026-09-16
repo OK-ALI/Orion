@@ -45,11 +45,12 @@ test('P6.3 keeps the accepted Home hierarchy and adds truthful discovery states'
   assert.match(home, /minHeight: 48/);
 });
 
-test('P6.3 projects provider dashboard content into neutral Songs Artists and Albums groups', () => {
+test('P6.3 projects provider dashboard content into neutral Songs Artists Albums and Playlists groups', () => {
   assert.match(home, /HOME_DISCOVERY_GROUPS/);
   assert.match(home, /\{ type: 'tracks', label: 'Songs' \}/);
   assert.match(home, /\{ type: 'artists', label: 'Artists' \}/);
   assert.match(home, /\{ type: 'albums', label: 'Albums' \}/);
+  assert.match(home, /\{ type: 'playlists', label: 'Playlists' \}/);
   assert.match(home, /buildDiscoveryGroups/);
   assert.match(home, /item\.source\.provider/);
   assert.match(home, /WavenHomeDiscoveryArtwork/);
@@ -84,6 +85,17 @@ test('P6.3 does not manufacture a Home Artists shelf from the broad Top songs fa
   );
 });
 
+test('P6.3 treats real dashboard playlist shelves as usable discovery instead of falsely falling back', () => {
+  assert.match(
+    provider,
+    /\{ type: 'playlists' as const, items: groups\.playlists \}/,
+  );
+  assert.match(provider, /const shelfSections = collectCatalogSections\(payload\)/);
+  assert.match(provider, /if \(shelfSections\.length\)/);
+  assert.match(home, /type: 'playlists'/);
+  assert.match(home, /label: 'Playlists'/);
+});
+
 test('P6.3 keeps discovery cards informational and does not enter detail playback persistence or Cloud scope', () => {
   assert.match(home, /group\.items\.map/);
   assert.doesNotMatch(
@@ -97,7 +109,7 @@ test('P6.3 keeps discovery cards informational and does not enter detail playbac
 test('P6.3 docs record the bounded Home discovery slice without advancing completion or later phases', () => {
   assert.match(master, /P6\.3 Provider-backed Home \/ Discovery presentation/);
   assert.match(master, /wavenDiscoveryRuntime\.getDashboard\(\)/);
-  assert.match(master, /Songs.*, \*\*Artists\*\*, and \*\*Albums\*\*/s);
+  assert.match(master, /Songs.*, \*\*Artists\*\*, \*\*Albums\*\*, and \*\*Playlists\*\*/s);
   assert.match(master, /Authoritative WAVEN v1 completion remains \*\*45%\*\*/);
   assert.match(master, /Phase 7 and every later phase remain \*\*NOT AUTHORIZED\*\*/);
   assert.match(design, /P6\.3 Home \/ Discovery implementation contract/);

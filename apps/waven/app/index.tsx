@@ -46,11 +46,11 @@ const EXPLORE_CARDS = [
 ] as const;
 
 type HomeDiscoveryStatus = 'loading' | 'ready' | 'empty' | 'error';
-type HomeDiscoverySectionType = 'tracks' | 'artists' | 'albums';
+type HomeDiscoverySectionType = 'tracks' | 'artists' | 'albums' | 'playlists';
 
 interface HomeDiscoveryGroup {
   type: HomeDiscoverySectionType;
-  label: 'Songs' | 'Artists' | 'Albums';
+  label: 'Songs' | 'Artists' | 'Albums' | 'Playlists';
   items: MusicEntity[];
 }
 
@@ -61,6 +61,7 @@ const HOME_DISCOVERY_GROUPS: readonly {
   { type: 'tracks', label: 'Songs' },
   { type: 'artists', label: 'Artists' },
   { type: 'albums', label: 'Albums' },
+  { type: 'playlists', label: 'Playlists' },
 ];
 
 function entityTitle(item: MusicEntity): string {
@@ -73,6 +74,7 @@ function entitySubtitle(
 ): string {
   if (type === 'tracks') return (item as MusicTrack).artistName || 'Song';
   if (type === 'artists') return 'Artist';
+  if (type === 'playlists') return 'Playlist';
   return (item as MusicAlbum).artistName || 'Album';
 }
 
