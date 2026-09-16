@@ -308,6 +308,7 @@ Final immersive surface, primarily P10-owned.
 - Keep Recently Played truthfully empty until playback history ownership exists; P6.3 must not fabricate recent activity or enter Phase 7 persistence.
 - Keep the existing artwork-led Songs / Artists / Albums Explore shortcuts and append real provider-backed discovery beneath them.
 - Project dashboard content into WAVEN-neutral **Songs**, **Artists**, and **Albums** groups. Do not render upstream dashboard titles, attribution, provider names, or provider diagnostics on the product surface.
+- Artist shelves must preserve provider semantics: only entities explicitly marked `MUSIC_PAGE_TYPE_ARTIST` may render as WAVEN Artists. A generic `UC*` channel browse identity by itself is not enough to classify an entity as an artist.
 - Use real remote artwork where available and the deterministic WAVEN fallback when artwork is absent or fails.
 - Loading uses restrained dark skeleton treatment; empty/unavailable states stay concise; retry is a real 48dp action; partial availability is disclosed without exposing raw failure text.
 - Discovery cards remain informational in P6.3. Artist/album detail navigation, pagination, caching, suggestions, and playback handoff remain separate later Phase 6 slices.

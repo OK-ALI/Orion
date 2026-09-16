@@ -12,6 +12,9 @@ const readRepo = (relativePath) =>
 
 const home = readApp('app/index.tsx');
 const runtime = readApp('src/features/discovery/wavenDiscoveryRuntime.ts');
+const provider = readApp(
+  'src/infrastructure/music/providers/youtubeMusicMetadata.ts',
+);
 const master = readRepo('docs/plans/WAVEN-V1-MASTER-PLAN.md');
 const design = readRepo(
   'docs/design/WAVEN-UIUX-REFERENCE-DESIGN-CONTRACT.md',
@@ -52,6 +55,22 @@ test('P6.3 projects provider dashboard content into neutral Songs Artists and Al
   assert.match(home, /WavenHomeDiscoveryArtwork/);
   assert.match(home, /home-discovery-/);
   assert.doesNotMatch(home, /providerName|providerAttribution|YouTube Music|YOUTUBE MUSIC/);
+});
+
+test('P6.3 rejects generic UC channel identities unless the provider explicitly marks an artist page', () => {
+  assert.match(provider, /type === 'MUSIC_PAGE_TYPE_ARTIST'/);
+  assert.match(
+    provider,
+    /browseId && browsePageType === 'MUSIC_PAGE_TYPE_ARTIST'/,
+  );
+  assert.doesNotMatch(
+    provider,
+    /type === 'MUSIC_PAGE_TYPE_ARTIST' \|\|\s*String\(browseId\)\.startsWith\('UC'\)/,
+  );
+  assert.doesNotMatch(
+    provider,
+    /browsePageType === 'MUSIC_PAGE_TYPE_ARTIST' \|\|\s*\(titleEndpoint\.id && String\(browseId\)\.startsWith\('UC'\)\)/,
+  );
 });
 
 test('P6.3 keeps discovery cards informational and does not enter detail playback persistence or Cloud scope', () => {

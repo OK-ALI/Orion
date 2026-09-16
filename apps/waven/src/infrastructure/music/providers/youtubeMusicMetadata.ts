@@ -293,10 +293,7 @@ function normalizeEndpointItem(renderer: any): MusicEntity | null {
   if (!browseId) return null;
   const source = { provider: 'ytmusic-metadata', id: browseId };
 
-  if (
-    type === 'MUSIC_PAGE_TYPE_ARTIST' ||
-    String(browseId).startsWith('UC')
-  ) {
+  if (type === 'MUSIC_PAGE_TYPE_ARTIST') {
     return {
       id: `ytmusic-artist:${browseId}`,
       name: title,
@@ -396,10 +393,7 @@ function normalizeListItem(item: any): MusicEntity | null {
     } satisfies MusicTrack;
   }
 
-  if (
-    browsePageType === 'MUSIC_PAGE_TYPE_ARTIST' ||
-    (titleEndpoint.id && String(browseId).startsWith('UC'))
-  ) {
+  if (browseId && browsePageType === 'MUSIC_PAGE_TYPE_ARTIST') {
     return {
       id: `ytmusic-artist:${browseId}`,
       name: title,
