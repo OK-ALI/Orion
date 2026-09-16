@@ -1,9 +1,24 @@
 import { useRouter } from 'expo-router';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { WavenArtworkFallback } from '../src/components/artwork/WavenArtworkFallback';
 import { WavenPressable } from '../src/components/interaction/WavenPressable';
 import { WavenAppShell } from '../src/components/shell/WavenAppShell';
 import { WavenSurface } from '../src/components/surfaces/WavenSurface';
+import type {
+  MusicAlbum,
+  MusicDashboardSection,
+  MusicEntity,
+  MusicTrack,
+} from '../src/domain/music';
+import { wavenDiscoveryRuntime } from '../src/features/discovery/wavenDiscoveryRuntime';
 import { useWavenLayout } from '../src/hooks/useWavenLayout';
 import {
   wavenColors,
@@ -30,6 +45,102 @@ const EXPLORE_CARDS = [
   },
 ] as const;
 
+type HomeDiscoveryStatus = 'loading' | 'ready' | 'empty' | 'error';
+type HomeDiscoverySectionType = 'tracks' | 'artists' | 'albums';
+
+interface HomeDiscoveryGroup {
+  type: HomeDiscoverySectionType;
+  label: 'Songs' | 'Artists' | 'Albums';
+  items: MusicEntity[];
+}
+
+const HOME_DISCOVERY_GROUPS: readonly {
+  type: HomeDiscoverySectionType;
+  label: HomeDiscoveryGroup['label'];
+}[] = [
+  { type: 'tracks', label: 'Songs' },
+  { type: 'artists', label: 'Artists' },
+  { type: 'albums', label: 'Albums' },
+];
+
+function entityTitle(item: MusicEntity): string {
+  return 'name' in item ? item.name : item.title;
+}
+
+function entitySubtitle(
+  item: MusicEntity,
+  type: HomeDiscoverySectionType,
+): string {
+  if (type === 'tracks') return (item as MusicTrack).artistName || 'Song';
+  if (type === 'artists') return 'Artist';
+  return (item as MusicAlbum).artistName || 'Album';
+}
+
+function buildDiscoveryGroups(
+  sections: readonly MusicDashboardSection[],
+): HomeDiscoveryGroup[] {
+  return HOME_DISCOVERY_GROUPS.map((group) => {
+    const seen = new Set<string>();
+    const items: MusicEntity[] = [];
+
+    for (const section of sections) {
+      if (section.type !== group.type) continue;
+      for (const item of section.items) {
+        const key = `${item.source.provider}\0${item.source.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        items.push(item);
+        if (items.length >= 8) break;
+      }
+      if (items.length >= 8) break;
+    }
+
+    return { ...group, items };
+  }).filter((group) => group.items.length > 0);
+}
+
+function WavenHomeDiscoveryArtwork({
+  item,
+  size,
+}: {
+  item: MusicEntity;
+  size: number;
+}) {
+  const artworkUrl =
+    item.artworkUrl || ('profileImageUrl' in item ? item.profileImageUrl : null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [artworkUrl]);
+
+  if (!artworkUrl || failed) {
+    return (
+      <WavenArtworkFallback
+        accessibilityLabel={`${entityTitle(item)} artwork`}
+        seed={`home-discovery-${item.source.provider}-${item.source.id}`}
+        size={size}
+      />
+    );
+  }
+
+  return (
+    <Image
+      accessibilityLabel={`${entityTitle(item)} artwork`}
+      onError={() => setFailed(true)}
+      resizeMode="cover"
+      source={{ uri: artworkUrl }}
+      style={[
+        styles.discoveryArtwork,
+        {
+          height: size,
+          width: size,
+        },
+      ]}
+    />
+  );
+}
+
 export default function WavenHomeScreen() {
   const router = useRouter();
   const layout = useWavenLayout();
@@ -43,6 +154,70 @@ export default function WavenHomeScreen() {
       : 172;
 
   const exploreArtworkSize = layout.isCompact ? 84 : 96;
+  const discoveryArtworkSize = layout.isCompact
+    ? 88
+    : layout.isTabletLike
+      ? 124
+      : 104;
+  const discoveryCardWidth = discoveryArtworkSize + 24;
+  const [discoveryStatus, setDiscoveryStatus] =
+    useState<HomeDiscoveryStatus>('loading');
+  const [dashboardSections, setDashboardSections] = useState<
+    readonly MusicDashboardSection[]
+  >([]);
+  const [hasDiscoveryDegradation, setHasDiscoveryDegradation] = useState(false);
+  const [discoveryRetryNonce, setDiscoveryRetryNonce] = useState(0);
+  const discoveryRequestSequence = useRef(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const sequence = ++discoveryRequestSequence.current;
+
+    setDiscoveryStatus('loading');
+    setHasDiscoveryDegradation(false);
+
+    wavenDiscoveryRuntime
+      .getDashboard({ signal: controller.signal })
+      .then((response) => {
+        if (
+          controller.signal.aborted ||
+          response.cancelled ||
+          sequence !== discoveryRequestSequence.current
+        ) {
+          return;
+        }
+
+        const nextGroups = buildDiscoveryGroups(response.result.sections);
+        setDashboardSections(response.result.sections);
+        setHasDiscoveryDegradation(response.errors.length > 0);
+        setDiscoveryStatus(
+          nextGroups.length > 0
+            ? 'ready'
+            : response.errors.length > 0
+              ? 'error'
+              : 'empty',
+        );
+      })
+      .catch(() => {
+        if (
+          controller.signal.aborted ||
+          sequence !== discoveryRequestSequence.current
+        ) {
+          return;
+        }
+
+        setDashboardSections([]);
+        setHasDiscoveryDegradation(false);
+        setDiscoveryStatus('error');
+      });
+
+    return () => controller.abort();
+  }, [discoveryRetryNonce]);
+
+  const discoveryGroups = useMemo(
+    () => buildDiscoveryGroups(dashboardSections),
+    [dashboardSections],
+  );
 
   return (
     <WavenAppShell brandTagline>
@@ -180,6 +355,119 @@ export default function WavenHomeScreen() {
                 </WavenPressable>
               ))}
             </View>
+
+
+            {discoveryStatus === 'loading' ? (
+              <WavenSurface style={styles.discoveryState}>
+                <View accessible={false} style={styles.glassTopHighlight} />
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={styles.discoveryStateTitle}
+                >
+                  Loading discovery…
+                </Text>
+                <View accessible={false} style={styles.discoverySkeletonRow}>
+                  <View style={styles.discoverySkeleton} />
+                  <View style={styles.discoverySkeleton} />
+                  <View style={styles.discoverySkeleton} />
+                </View>
+              </WavenSurface>
+            ) : null}
+
+            {discoveryStatus === 'error' ? (
+              <WavenSurface style={styles.discoveryState}>
+                <View accessible={false} style={styles.glassTopHighlight} />
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={styles.discoveryStateTitle}
+                >
+                  Discovery is unavailable right now.
+                </Text>
+                <Text style={styles.discoveryStateBody}>
+                  Try again when you are ready.
+                </Text>
+                <WavenPressable
+                  accessibilityLabel="Retry Home discovery"
+                  accessibilityRole="button"
+                  onPress={() => setDiscoveryRetryNonce((value) => value + 1)}
+                >
+                  <View style={styles.discoveryAction}>
+                    <Text style={styles.discoveryActionText}>Try Again</Text>
+                  </View>
+                </WavenPressable>
+              </WavenSurface>
+            ) : null}
+
+            {discoveryStatus === 'empty' ? (
+              <WavenSurface style={styles.discoveryState}>
+                <View accessible={false} style={styles.glassTopHighlight} />
+                <Text style={styles.discoveryStateTitle}>
+                  Nothing to explore right now.
+                </Text>
+                <Text style={styles.discoveryStateBody}>
+                  Try again to refresh Home discovery.
+                </Text>
+                <WavenPressable
+                  accessibilityLabel="Retry empty Home discovery"
+                  accessibilityRole="button"
+                  onPress={() => setDiscoveryRetryNonce((value) => value + 1)}
+                >
+                  <View style={styles.discoveryAction}>
+                    <Text style={styles.discoveryActionText}>Try Again</Text>
+                  </View>
+                </WavenPressable>
+              </WavenSurface>
+            ) : null}
+
+            {discoveryStatus === 'ready' ? (
+              <View style={styles.discoveryStack}>
+                {hasDiscoveryDegradation ? (
+                  <Text
+                    accessibilityLiveRegion="polite"
+                    style={styles.discoveryNotice}
+                  >
+                    Some discovery shelves are temporarily unavailable.
+                  </Text>
+                ) : null}
+
+                {discoveryGroups.map((group) => (
+                  <View key={group.type} style={styles.discoveryGroup}>
+                    <Text accessibilityRole="header" style={styles.discoveryGroupTitle}>
+                      {group.label}
+                    </Text>
+                    <ScrollView
+                      contentContainerStyle={styles.discoveryRow}
+                      horizontal
+                      nestedScrollEnabled
+                      showsHorizontalScrollIndicator={false}
+                    >
+                      {group.items.map((item) => (
+                        <View
+                          accessibilityLabel={`${entityTitle(item)}, ${entitySubtitle(item, group.type)}`}
+                          accessible
+                          key={`${item.source.provider}:${item.source.id}`}
+                          style={[
+                            styles.discoveryCard,
+                            { width: discoveryCardWidth },
+                          ]}
+                        >
+                          <WavenHomeDiscoveryArtwork
+                            item={item}
+                            size={discoveryArtworkSize}
+                          />
+                          <Text numberOfLines={2} style={styles.discoveryTitle}>
+                            {entityTitle(item)}
+                          </Text>
+                          <Text numberOfLines={1} style={styles.discoverySubtitle}>
+                            {entitySubtitle(item, group.type)}
+                          </Text>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.section}>
@@ -424,6 +712,94 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  discoveryState: {
+    backgroundColor: 'rgba(6, 12, 18, 0.44)',
+    borderColor: 'rgba(214, 224, 232, 0.1)',
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+    overflow: 'hidden',
+    padding: 14,
+    position: 'relative',
+  },
+  discoveryStateTitle: {
+    color: wavenColors.textSecondary,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
+  },
+  discoveryStateBody: {
+    color: wavenColors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  discoverySkeletonRow: {
+    flexDirection: 'row',
+    gap: 9,
+  },
+  discoverySkeleton: {
+    backgroundColor: 'rgba(217, 226, 234, 0.055)',
+    borderColor: 'rgba(217, 226, 234, 0.08)',
+    borderRadius: wavenRadii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 54,
+    flex: 1,
+  },
+  discoveryAction: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: wavenColors.canvas,
+    borderColor: 'rgba(93, 187, 237, 0.2)',
+    borderRadius: wavenRadii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 16,
+  },
+  discoveryActionText: {
+    color: wavenColors.textPrimary,
+    fontSize: wavenTypography.label.fontSize,
+    fontWeight: wavenTypography.label.fontWeight,
+  },
+  discoveryStack: {
+    gap: 16,
+  },
+  discoveryNotice: {
+    color: wavenColors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  discoveryGroup: {
+    gap: 9,
+  },
+  discoveryGroupTitle: {
+    color: wavenColors.textSecondary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  discoveryRow: {
+    gap: 11,
+    paddingRight: 8,
+  },
+  discoveryCard: {
+    gap: 6,
+  },
+  discoveryArtwork: {
+    borderColor: 'rgba(214, 224, 232, 0.12)',
+    borderRadius: wavenRadii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  discoveryTitle: {
+    color: wavenColors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  discoverySubtitle: {
+    color: wavenColors.textMuted,
+    fontSize: 10,
+    lineHeight: 14,
   },
   libraryShortcut: {
     alignItems: 'center',

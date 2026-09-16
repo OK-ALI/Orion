@@ -883,6 +883,19 @@ P6.2 connects the existing Phase 5 Search surface to the P6.1 discovery runtime 
 - **P6.2 physical-review correction:** the first Expo Go review confirmed real provider-backed Songs/Artists/Albums results, scope switching, artwork, and truthful empty-state behavior. It exposed two corrections: upstream provider branding must not appear in WAVEN UI, and list-item playlist page types must remain Playlists rather than falling through to the generic Album normalization path. The first revalidation confirmed both corrections, then exposed one remaining catalog-classification leak: an unknown/profile browse entity could still fall through the generic Album path. P6.2 therefore admits Albums only when the provider explicitly marks an album page or supplies the established `MPRE*` album browse identity; unknown/profile browse entities are discarded instead of mislabeled.
 - **Accounting:** P6.2 implementation does not itself award Phase 6 percentage. Authoritative WAVEN v1 completion remains **45%** pending the eventual Phase 6 Completion ACK.
 
+#### P6.3 Provider-backed Home / Discovery presentation
+
+P6.3 is the smallest coherent next Phase 6 slice supported by the published P6.1 dashboard runtime and the accepted Phase 5 Home hierarchy. It connects real dashboard metadata to Home without entering detail, pagination, caching, persistence, or playback scope.
+
+- **Home hierarchy:** preserve the locked Home identity → dominant hero → Recently Played → Explore → Your Music structure. The first-run hero remains an honest Search invitation, Recently Played remains truthfully empty until its later owner exists, and Your Music remains the existing Library shortcut.
+- **Provider-backed discovery:** Home calls the existing `wavenDiscoveryRuntime.getDashboard()` path with `AbortController` cancellation. Provider-curated dashboard entities are projected into bounded **Songs**, **Artists**, and **Albums** groups inside Explore. Exact provider section titles and attribution are intentionally not rendered on the WAVEN product surface.
+- **Truthful states:** Home exposes restrained loading, ready, empty, partial/degraded, unavailable, and retry presentation. Raw transport/provider errors, provider names, URLs, secrets, and implementation diagnostics remain hidden.
+- **Artwork and identity:** real artwork is used when available with the existing deterministic WAVEN fallback. Duplicate entities are collapsed by stable provider-owned identity before presentation; no fabricated recommendation labels, listening claims, or provider stats are introduced.
+- **Interaction boundary:** P6.3 discovery cards are informational. The existing Explore category shortcuts still route to Search, but artist/album detail routing, search pagination/suggestions, caching, and search-to-play remain later Phase 6 slices.
+- **Playback/Cloud/persistence boundary:** no stream resolution, no Media3 ownership change, no second player, no WAVEN music Cloud write/sync, no search/history persistence, no Phase 7 Library ownership, and no Phase 8 offline state ownership are introduced.
+- **Validation boundary:** this slice is fetch/UI-only and remains Expo Go suitable for its first physical product check. Native playback behavior is not claimed by that evidence tier.
+- **Accounting:** P6.3 implementation does not award Phase 6 percentage by itself. Authoritative WAVEN v1 completion remains **45%** pending the eventual Phase 6 Completion ACK.
+
 1. **Goal:** Expose only provider-supported data through mobile-native UX.
 2. **Scope:** Search, Home/Discovery, artist, album, pagination, cancellation, caching, attribution and health states.
 3. **Reuse:** active YouTube Music metadata/dashboard, Spotify Charts metadata-only role, broker timeout/health concepts.
