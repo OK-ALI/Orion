@@ -778,16 +778,11 @@ export function createYouTubeMusicDashboardProvider(): MusicDashboardProvider<Ab
           attribution: 'YouTube Music',
         });
       }
-      if (fallback.artists.length) {
-        sections.push({
-          id: 'ytmusic-home-artists',
-          title: 'Artists',
-          type: 'artists',
-          items: fallback.artists.slice(0, 18),
-          attribution: 'YouTube Music',
-        });
-      }
-
+      // A broad fallback query such as "Top songs" is suitable for
+      // provider-marked tracks/albums, but it is not strong enough evidence
+      // to promote returned channel/artist pages into WAVEN's Home Artist
+      // shelf. Omit fallback Artists rather than present semantically noisy
+      // channel identities as product artists.
       return { sections };
     },
   };

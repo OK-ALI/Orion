@@ -73,6 +73,17 @@ test('P6.3 rejects generic UC channel identities unless the provider explicitly 
   );
 });
 
+test('P6.3 does not manufacture a Home Artists shelf from the broad Top songs fallback query', () => {
+  assert.match(provider, /\{ query: 'Top songs' \}/);
+  assert.doesNotMatch(provider, /fallback\.artists\.length/);
+  assert.doesNotMatch(provider, /id: 'ytmusic-home-artists'/);
+  assert.doesNotMatch(provider, /items: fallback\.artists\.slice/);
+  assert.match(
+    provider,
+    /Omit fallback Artists rather than present semantically noisy/,
+  );
+});
+
 test('P6.3 keeps discovery cards informational and does not enter detail playback persistence or Cloud scope', () => {
   assert.match(home, /group\.items\.map/);
   assert.doesNotMatch(
