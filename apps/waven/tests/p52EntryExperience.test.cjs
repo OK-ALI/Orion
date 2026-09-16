@@ -145,9 +145,11 @@ test('P5.2 Revision 4F translates Reference 02 into an artwork-led Home without 
   assert.match(home, /heroTitleAccent/);
   assert.match(home, /Recently Played/);
   assert.match(home, /EXPLORE_CARDS/);
-  assert.match(home, /home-explore-songs/);
-  assert.match(home, /home-explore-artists/);
-  assert.match(home, /home-explore-albums/);
+  assert.match(home, /WavenExploreIcon/);
+  assert.match(home, /icon: 'songs'/);
+  assert.match(home, /icon: 'artists'/);
+  assert.match(home, /icon: 'albums'/);
+  assert.doesNotMatch(home, /home-explore-songs|home-explore-artists|home-explore-albums/);
   assert.match(home, /Open Your Library/);
   assert.doesNotMatch(home, /Daily Mix|Top Trending|Midnight Bloom|fake artwork/i);
 });

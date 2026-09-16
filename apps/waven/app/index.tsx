@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { WavenArtworkFallback } from '../src/components/artwork/WavenArtworkFallback';
+import { WavenExploreIcon } from '../src/components/icons/WavenExploreIcon';
 import { WavenPressable } from '../src/components/interaction/WavenPressable';
 import { WavenAppShell } from '../src/components/shell/WavenAppShell';
 import { WavenSurface } from '../src/components/surfaces/WavenSurface';
@@ -30,18 +31,18 @@ import {
 const EXPLORE_CARDS = [
   {
     accessibilityLabel: 'Explore songs',
+    icon: 'songs' as const,
     label: 'Songs',
-    seed: 'home-explore-songs',
   },
   {
     accessibilityLabel: 'Explore artists',
+    icon: 'artists' as const,
     label: 'Artists',
-    seed: 'home-explore-artists',
   },
   {
     accessibilityLabel: 'Explore albums',
+    icon: 'albums' as const,
     label: 'Albums',
-    seed: 'home-explore-albums',
   },
 ] as const;
 
@@ -347,9 +348,8 @@ export default function WavenHomeScreen() {
                   onPress={() => router.navigate('/search')}
                 >
                   <View style={styles.exploreCard}>
-                    <WavenArtworkFallback
-                      accessibilityLabel={`${card.label} artwork`}
-                      seed={card.seed}
+                    <WavenExploreIcon
+                      kind={card.icon}
                       size={exploreArtworkSize}
                     />
                     <Text style={styles.exploreLabel}>{card.label}</Text>

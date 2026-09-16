@@ -18,6 +18,14 @@ type JsonRecord = Record<string, any>;
 
 let visitorId = '';
 
+
+const HOME_DISCOVERY_FILLERS = [
+  { type: 'tracks' as const, query: 'popular songs', limit: 24 },
+  { type: 'artists' as const, query: 'popular artists', limit: 18 },
+  { type: 'albums' as const, query: 'popular albums', limit: 18 },
+  { type: 'playlists' as const, query: 'popular playlists', limit: 18 },
+];
+
 function context() {
   return {
     context: {
@@ -748,42 +756,64 @@ export function createYouTubeMusicDashboardProvider(): MusicDashboardProvider<Ab
         requestContext.signal,
       );
 
-      const shelfSections = collectCatalogSections(payload);
-      if (shelfSections.length) {
-        return { sections: shelfSections };
+      const sections: MusicDashboardResult['sections'] = [
+        ...collectCatalogSections(payload),
+      ];
+      const flatDashboard = splitResults(collectMusicItems(payload));
+
+      for (const target of HOME_DISCOVERY_FILLERS) {
+        if (sections.some((section) => section.type === target.type)) continue;
+        const items = flatDashboard[target.type];
+        if (!items.length) continue;
+        sections.push({
+          id: `ytmusic-home-flat-${target.type}`,
+          title: target.type,
+          type: target.type,
+          items: items.slice(0, target.limit),
+          attribution: 'YouTube Music',
+        });
       }
 
-      const fallbackPayload = await ytmRequest(
-        'search',
-        { query: 'Top songs' },
-        requestContext.signal,
+      const missingTargets = HOME_DISCOVERY_FILLERS.filter(
+        (target) => !sections.some((section) => section.type === target.type),
       );
-      const fallback = splitResults(collectMusicItems(fallbackPayload));
-      const sections: MusicDashboardResult['sections'] = [];
 
-      if (fallback.tracks.length) {
+      const directedResults = await Promise.all(
+        missingTargets.map(async (target) => {
+          try {
+            const directedPayload = await ytmRequest(
+              'search',
+              { query: target.query },
+              requestContext.signal,
+            );
+            return {
+              target,
+              items: splitResults(collectMusicItems(directedPayload))[target.type],
+            };
+          } catch (error) {
+            if (requestContext.signal?.aborted) throw error;
+            return { target, items: [] };
+          }
+        }),
+      );
+
+      for (const { target, items } of directedResults) {
+        if (!items.length) continue;
         sections.push({
-          id: 'ytmusic-home-tracks',
-          title: 'YouTube Music picks',
-          type: 'tracks',
-          items: fallback.tracks.slice(0, 24),
+          id: `ytmusic-home-directed-${target.type}`,
+          title: target.type,
+          type: target.type,
+          items: items.slice(0, target.limit),
           attribution: 'YouTube Music',
         });
       }
-      if (fallback.albums.length) {
-        sections.push({
-          id: 'ytmusic-home-albums',
-          title: 'Albums and releases',
-          type: 'albums',
-          items: fallback.albums.slice(0, 18),
-          attribution: 'YouTube Music',
-        });
-      }
-      // A broad fallback query such as "Top songs" is suitable for
-      // provider-marked tracks/albums, but it is not strong enough evidence
-      // to promote returned channel/artist pages into WAVEN's Home Artist
-      // shelf. Omit fallback Artists rather than present semantically noisy
-      // channel identities as product artists.
+
+      // WAVEN owns the core Home composition. The provider dashboard remains
+      // first choice, but a region/IP-dependent omission must not make a core
+      // Songs/Artists/Albums/Playlists lane appear or disappear. Missing lanes
+      // are filled only by type-directed public discovery and then filtered by
+      // the existing strict entity classifier. Exact catalog items may still
+      // vary with provider availability; the Home structure does not.
       return { sections };
     },
   };

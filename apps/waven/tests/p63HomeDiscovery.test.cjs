@@ -11,6 +11,7 @@ const readRepo = (relativePath) =>
   fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 
 const home = readApp('app/index.tsx');
+const exploreIcon = readApp('src/components/icons/WavenExploreIcon.tsx');
 const runtime = readApp('src/features/discovery/wavenDiscoveryRuntime.ts');
 const provider = readApp(
   'src/infrastructure/music/providers/youtubeMusicMetadata.ts',
@@ -45,6 +46,19 @@ test('P6.3 keeps the accepted Home hierarchy and adds truthful discovery states'
   assert.match(home, /minHeight: 48/);
 });
 
+test('P6.3 Explore destinations use semantic icons instead of fallback media artwork', () => {
+  assert.match(home, /WavenExploreIcon/);
+  assert.match(home, /icon: 'songs'/);
+  assert.match(home, /icon: 'artists'/);
+  assert.match(home, /icon: 'albums'/);
+  assert.match(home, /kind=\{card\.icon\}/);
+  assert.doesNotMatch(home, /home-explore-songs|home-explore-artists|home-explore-albums/);
+  assert.match(exploreIcon, /WavenExploreIconKind = 'songs' \| 'artists' \| 'albums'/);
+  assert.match(exploreIcon, /micCapsule/);
+  assert.match(exploreIcon, /albumDisc/);
+  assert.match(exploreIcon, /noteHeadAccent/);
+});
+
 test('P6.3 projects provider dashboard content into neutral Songs Artists Albums and Playlists groups', () => {
   assert.match(home, /HOME_DISCOVERY_GROUPS/);
   assert.match(home, /\{ type: 'tracks', label: 'Songs' \}/);
@@ -74,15 +88,19 @@ test('P6.3 rejects generic UC channel identities unless the provider explicitly 
   );
 });
 
-test('P6.3 does not manufacture a Home Artists shelf from the broad Top songs fallback query', () => {
-  assert.match(provider, /\{ query: 'Top songs' \}/);
-  assert.doesNotMatch(provider, /fallback\.artists\.length/);
-  assert.doesNotMatch(provider, /id: 'ytmusic-home-artists'/);
-  assert.doesNotMatch(provider, /items: fallback\.artists\.slice/);
+test('P6.3 replaces the broad Top songs fallback with strict category-directed Home fillers', () => {
+  assert.doesNotMatch(provider, /\{ query: 'Top songs' \}/);
+  assert.match(provider, /HOME_DISCOVERY_FILLERS/);
+  assert.match(provider, /query: 'popular songs'/);
+  assert.match(provider, /query: 'popular artists'/);
+  assert.match(provider, /query: 'popular albums'/);
+  assert.match(provider, /query: 'popular playlists'/);
+  assert.match(provider, /flatDashboard\[target\.type\]/);
   assert.match(
     provider,
-    /Omit fallback Artists rather than present semantically noisy/,
+    /splitResults\(collectMusicItems\(directedPayload\)\)\[target\.type\]/,
   );
+  assert.match(provider, /region\/IP-dependent omission must not make a core/);
 });
 
 test('P6.3 treats real dashboard playlist shelves as usable discovery instead of falsely falling back', () => {
@@ -90,10 +108,18 @@ test('P6.3 treats real dashboard playlist shelves as usable discovery instead of
     provider,
     /\{ type: 'playlists' as const, items: groups\.playlists \}/,
   );
-  assert.match(provider, /const shelfSections = collectCatalogSections\(payload\)/);
-  assert.match(provider, /if \(shelfSections\.length\)/);
+  assert.match(provider, /\.\.\.collectCatalogSections\(payload\)/);
+  assert.match(provider, /sections\.some\(\(section\) => section\.type === target\.type\)/);
   assert.match(home, /type: 'playlists'/);
   assert.match(home, /label: 'Playlists'/);
+});
+
+test('P6.3 keeps core Home discovery lanes structurally stable across dashboard variation', () => {
+  assert.match(provider, /missingTargets = HOME_DISCOVERY_FILLERS\.filter/);
+  assert.match(provider, /Promise\.all\(/);
+  assert.match(provider, /ytmusic-home-directed-\$\{target\.type\}/);
+  assert.match(provider, /Songs\/Artists\/Albums\/Playlists lane appear or disappear/);
+  assert.doesNotMatch(provider, /region-aware starter shelves/);
 });
 
 test('P6.3 keeps discovery cards informational and does not enter detail playback persistence or Cloud scope', () => {
@@ -115,4 +141,6 @@ test('P6.3 docs record the bounded Home discovery slice without advancing comple
   assert.match(design, /P6\.3 Home \/ Discovery implementation contract/);
   assert.match(design, /Do not render upstream dashboard titles, attribution, provider names, or provider diagnostics/);
   assert.match(design, /Expo Go is a valid first physical evidence tier/);
+  assert.match(design, /Icons represent destinations and actions; artwork represents music entities/);
+  assert.match(master, /WAVEN-owned stable core Home composition/);
 });
