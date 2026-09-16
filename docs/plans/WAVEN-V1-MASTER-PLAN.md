@@ -839,7 +839,7 @@ Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 is 
 - **Residual/deferred scope:** provider-backed Search/Discovery/Details remain Phase 6; Library persistence/favorites/playlists/history remain Phase 7; offline/connectivity behavior remains Phase 8; WAVEN music domains in Orion Cloud remain Phase 9; immersive Full Player/lyrics/artwork atmosphere remain Phase 10; downloads/reliability remain Phase 11.
 - **Acceptance conclusion:** the owner accepts the complete Phase 5 development-device UI/accessibility/motion boundary. Phase 5 earns its full 7% weight, raising authoritative WAVEN v1 completion from 38% to **45%**. This ACK does **not** authorize Phase 6.
 
-### Phase 6 — Search, discovery, and detail experiences (authorized; implementation not started)
+### Phase 6 — Search, discovery, and detail experiences (authorized; implementation started at P6.1)
 
 #### Phase 6 Authorization — `AUTH-P06-2026-09-16`
 
@@ -855,6 +855,18 @@ Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 is 
 - **Dependency/toolchain boundary:** no Expo/React Native/toolchain/dependency upgrade is authorized. The pinned WAVEN baseline and package-lock identity remain unchanged unless a separately inspected blocker proves a change necessary.
 - **Validation boundary:** pure JS/UI slices may use Expo Go-compatible evidence where appropriate; native provider/network/cache or playback-integration acceptance uses a WAVEN development build. Distributed signed acceptance remains Phase 12.
 - **Later phases:** Phase 7 and every later phase remain **NOT AUTHORIZED**.
+
+#### P6.1 Provider runtime foundation
+
+P6.1 begins Phase 6 with the smallest runtime slice that can be reused by Search and Home/Discovery without pulling later phases forward.
+
+- **YouTube Music metadata/dashboard adapter:** WAVEN receives a React Native-compatible, fetch-based adaptation of the published Desktop YouTube Music metadata and dashboard behavior. The slice supports catalog search, continuation, query suggestions, and provider-curated dashboard sections. It deliberately excludes Desktop yt-dlp/stream-resolution machinery, direct playback URLs, and a second audio engine.
+- **Provider request broker:** WAVEN owns an application-side request broker with bounded timeout, cancellation, sanitized failure text, and provider-health classification. The broker follows the proven Desktop broker/health concepts while remaining independent of Electron, Desktop persistence, and provider-preference storage.
+- **Discovery runtime:** one WAVEN runtime composes the shared Phase 3 `MusicMetadataProvider`, `MusicDashboardProvider`, entity, descriptor, and health contracts instead of duplicating the music domain. It merges exact provider identities without inventing personalized ranking.
+- **Persistence/Cloud boundary:** P6.1 stores no provider preference, search history, Library state, or music Cloud data. Phase 7 persistence, Phase 8 connectivity ownership, and Phase 9 Orion Cloud music synchronization remain outside this slice.
+- **Playback boundary:** P6.1 does not resolve streams and does not change the single Phase 4 Media3 owner.
+- **UI boundary:** P6.1 does not yet replace the truthful Phase 5 Search shell with live results. `P6.2` owns the first product Search wiring, visible loading/result/empty/error states, and bounded physical validation of real metadata requests.
+- **Accounting:** Phase 6 still has no Completion ACK and earns 0%. Current authoritative WAVEN v1 completion remains **45%**.
 
 1. **Goal:** Expose only provider-supported data through mobile-native UX.
 2. **Scope:** Search, Home/Discovery, artist, album, pagination, cancellation, caching, attribution and health states.
