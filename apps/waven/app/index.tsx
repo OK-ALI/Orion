@@ -51,7 +51,7 @@ type HomeDiscoverySectionType = 'tracks' | 'artists' | 'albums' | 'playlists';
 
 interface HomeDiscoveryGroup {
   type: HomeDiscoverySectionType;
-  label: 'Songs' | 'Artists' | 'Albums' | 'Playlists';
+  label: 'Popular Now' | 'Popular Artists' | 'Popular Albums' | 'Popular Playlists';
   items: MusicEntity[];
 }
 
@@ -59,10 +59,10 @@ const HOME_DISCOVERY_GROUPS: readonly {
   type: HomeDiscoverySectionType;
   label: HomeDiscoveryGroup['label'];
 }[] = [
-  { type: 'tracks', label: 'Songs' },
-  { type: 'artists', label: 'Artists' },
-  { type: 'albums', label: 'Albums' },
-  { type: 'playlists', label: 'Playlists' },
+  { type: 'tracks', label: 'Popular Now' },
+  { type: 'artists', label: 'Popular Artists' },
+  { type: 'albums', label: 'Popular Albums' },
+  { type: 'playlists', label: 'Popular Playlists' },
 ];
 
 function entityTitle(item: MusicEntity): string {

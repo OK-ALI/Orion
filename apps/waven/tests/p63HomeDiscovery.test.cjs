@@ -60,12 +60,13 @@ test('P6.3 Explore destinations use semantic icons instead of fallback media art
   assert.doesNotMatch(exploreIcon, /noteHeadAccent/);
 });
 
-test('P6.3 projects provider dashboard content into neutral Songs Artists Albums and Playlists groups', () => {
+test('P6.3 presents stable entity lanes as editorial Home shelves instead of database labels', () => {
   assert.match(home, /HOME_DISCOVERY_GROUPS/);
-  assert.match(home, /\{ type: 'tracks', label: 'Songs' \}/);
-  assert.match(home, /\{ type: 'artists', label: 'Artists' \}/);
-  assert.match(home, /\{ type: 'albums', label: 'Albums' \}/);
-  assert.match(home, /\{ type: 'playlists', label: 'Playlists' \}/);
+  assert.match(home, /\{ type: 'tracks', label: 'Popular Now' \}/);
+  assert.match(home, /\{ type: 'artists', label: 'Popular Artists' \}/);
+  assert.match(home, /\{ type: 'albums', label: 'Popular Albums' \}/);
+  assert.match(home, /\{ type: 'playlists', label: 'Popular Playlists' \}/);
+  assert.doesNotMatch(home, /\{ type: 'tracks', label: 'Songs' \}/);
   assert.match(home, /buildDiscoveryGroups/);
   assert.match(home, /item\.source\.provider/);
   assert.match(home, /WavenHomeDiscoveryArtwork/);
@@ -125,7 +126,7 @@ test('P6.3 treats real dashboard playlist shelves as usable discovery instead of
   assert.match(provider, /\.\.\.collectCatalogSections\(payload\)/);
   assert.match(provider, /sections\.some\(\(section\) => section\.type === target\.type\)/);
   assert.match(home, /type: 'playlists'/);
-  assert.match(home, /label: 'Playlists'/);
+  assert.match(home, /label: 'Popular Playlists'/);
 });
 
 test('P6.3 keeps core Home discovery lanes structurally stable across dashboard variation', () => {
@@ -157,4 +158,10 @@ test('P6.3 docs record the bounded Home discovery slice without advancing comple
   assert.match(design, /Expo Go is a valid first physical evidence tier/);
   assert.match(design, /Icons represent destinations and actions; artwork represents music entities/);
   assert.match(master, /WAVEN-owned stable core Home composition/);
+  assert.match(design, /Popular Now/);
+  assert.match(design, /Popular Artists/);
+  assert.match(design, /Popular Albums/);
+  assert.match(design, /Popular Playlists/);
+  assert.match(design, /internal discovery foundation/i);
+  assert.match(master, /editorial Home labels/i);
 });
