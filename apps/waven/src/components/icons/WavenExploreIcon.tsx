@@ -38,14 +38,14 @@ export function WavenExploreIcon({
       />
 
       {kind === 'songs' ? (
-        <View style={{ height: px(48), width: px(48) }}>
+        <View style={{ height: px(50), width: px(50) }}>
           <View
             style={[
               styles.noteStem,
               {
-                height: px(31),
-                left: px(13),
-                top: px(4),
+                height: px(30),
+                left: px(15),
+                top: px(7),
                 width: px(4),
               },
             ]}
@@ -54,9 +54,9 @@ export function WavenExploreIcon({
             style={[
               styles.noteStem,
               {
-                height: px(27),
-                right: px(7),
-                top: px(8),
+                height: px(32),
+                right: px(5),
+                top: px(4),
                 width: px(4),
               },
             ]}
@@ -65,10 +65,10 @@ export function WavenExploreIcon({
             style={[
               styles.noteBeam,
               {
-                height: px(4),
-                left: px(13),
-                top: px(4),
-                width: px(28),
+                height: px(6),
+                left: px(15),
+                top: px(5),
+                width: px(30),
               },
             ]}
           />
@@ -76,22 +76,32 @@ export function WavenExploreIcon({
             style={[
               styles.noteHead,
               {
-                bottom: px(4),
-                height: px(12),
-                left: px(3),
-                width: px(15),
+                bottom: px(3),
+                height: px(13),
+                left: px(4),
+                width: px(17),
               },
             ]}
           />
           <View
             style={[
               styles.noteHead,
-              styles.noteHeadAccent,
               {
-                bottom: px(4),
-                height: px(12),
+                bottom: px(3),
+                height: px(13),
                 right: 0,
-                width: px(15),
+                width: px(17),
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.noteAccent,
+              {
+                height: px(4),
+                right: px(8),
+                top: px(5),
+                width: px(9),
               },
             ]}
           />
@@ -243,8 +253,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     transform: [{ rotate: '-16deg' }],
   },
-  noteHeadAccent: {
+  noteAccent: {
     backgroundColor: wavenColors.interactionBlue,
+    borderRadius: 999,
+    position: 'absolute',
   },
   micCapsule: {
     alignItems: 'center',

@@ -56,7 +56,8 @@ test('P6.3 Explore destinations use semantic icons instead of fallback media art
   assert.match(exploreIcon, /WavenExploreIconKind = 'songs' \| 'artists' \| 'albums'/);
   assert.match(exploreIcon, /micCapsule/);
   assert.match(exploreIcon, /albumDisc/);
-  assert.match(exploreIcon, /noteHeadAccent/);
+  assert.match(exploreIcon, /noteAccent/);
+  assert.doesNotMatch(exploreIcon, /noteHeadAccent/);
 });
 
 test('P6.3 projects provider dashboard content into neutral Songs Artists Albums and Playlists groups', () => {
@@ -91,16 +92,29 @@ test('P6.3 rejects generic UC channel identities unless the provider explicitly 
 test('P6.3 replaces the broad Top songs fallback with strict category-directed Home fillers', () => {
   assert.doesNotMatch(provider, /\{ query: 'Top songs' \}/);
   assert.match(provider, /HOME_DISCOVERY_FILLERS/);
-  assert.match(provider, /query: 'popular songs'/);
-  assert.match(provider, /query: 'popular artists'/);
-  assert.match(provider, /query: 'popular albums'/);
-  assert.match(provider, /query: 'popular playlists'/);
+  assert.match(provider, /queries: \['popular songs'\]/);
+  assert.match(provider, /queries: \['top music artists', 'top artists'\]/);
+  assert.doesNotMatch(provider, /query: 'popular artists'/);
+  assert.match(provider, /queries: \['popular albums'\]/);
+  assert.match(provider, /queries: \['popular playlists'\]/);
   assert.match(provider, /flatDashboard\[target\.type\]/);
   assert.match(
     provider,
     /splitResults\(collectMusicItems\(directedPayload\)\)\[target\.type\]/,
   );
-  assert.match(provider, /region\/IP-dependent omission must not make a core/);
+  assert.match(provider, /variable provider response must not make a core/);
+});
+
+test('P6.3 rejects explicit non-music episode and podcast rows before videoId can promote them to Songs', () => {
+  assert.match(provider, /function isExplicitNonMusicTrack/);
+  assert.match(provider, /MUSIC_PAGE_TYPE_NON_MUSIC_AUDIO_TRACK_PAGE/);
+  assert.match(provider, /primaryType === 'episode'/);
+  assert.match(provider, /primaryType === 'podcast'/);
+  assert.match(provider, /videoId && isExplicitNonMusicTrack\(metadata, type\)/);
+  assert.match(
+    provider,
+    /videoId && isExplicitNonMusicTrack\(metadata, browsePageType\)/,
+  );
 });
 
 test('P6.3 treats real dashboard playlist shelves as usable discovery instead of falsely falling back', () => {

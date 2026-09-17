@@ -20,10 +20,14 @@ let visitorId = '';
 
 
 const HOME_DISCOVERY_FILLERS = [
-  { type: 'tracks' as const, query: 'popular songs', limit: 24 },
-  { type: 'artists' as const, query: 'popular artists', limit: 18 },
-  { type: 'albums' as const, query: 'popular albums', limit: 18 },
-  { type: 'playlists' as const, query: 'popular playlists', limit: 18 },
+  { type: 'tracks' as const, queries: ['popular songs'], limit: 24 },
+  {
+    type: 'artists' as const,
+    queries: ['top music artists', 'top artists'],
+    limit: 18,
+  },
+  { type: 'albums' as const, queries: ['popular albums'], limit: 18 },
+  { type: 'playlists' as const, queries: ['popular playlists'], limit: 18 },
 ];
 
 function context() {
@@ -264,6 +268,18 @@ function isAlbumBrowse(
   );
 }
 
+function isExplicitNonMusicTrack(
+  metadata: readonly string[],
+  browsePageType: string,
+): boolean {
+  const primaryType = String(metadata[0] || '').trim().toLowerCase();
+  return (
+    browsePageType === 'MUSIC_PAGE_TYPE_NON_MUSIC_AUDIO_TRACK_PAGE' ||
+    primaryType === 'episode' ||
+    primaryType === 'podcast'
+  );
+}
+
 function normalizeEndpointItem(renderer: any): MusicEntity | null {
   const title = titleFor(renderer);
   if (!title) return null;
@@ -282,6 +298,8 @@ function normalizeEndpointItem(renderer: any): MusicEntity | null {
     /^\d{1,2}:\d{2}(?::\d{2})?$/.test(run?.text || ''),
   )?.text;
   const videoId = watch?.videoId || extractVideoId(renderer);
+
+  if (videoId && isExplicitNonMusicTrack(metadata, type)) return null;
 
   if (videoId) {
     return {
@@ -385,6 +403,8 @@ function normalizeListItem(item: any): MusicEntity | null {
     )?.text ||
     metadata[0] ||
     'Unknown artist';
+
+  if (videoId && isExplicitNonMusicTrack(metadata, browsePageType)) return null;
 
   if (videoId) {
     return {
@@ -513,6 +533,16 @@ function splitResults(items: readonly MusicEntity[]): MusicSearchResult {
   }
 
   return { tracks, artists, albums, playlists };
+}
+
+function dedupeMusicEntities<T extends MusicEntity>(items: readonly T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const identity = String(item.id || '');
+    if (!identity || seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
 }
 
 function collectContinuationTokens(payload: any, limit = 2): string[] {
@@ -780,20 +810,26 @@ export function createYouTubeMusicDashboardProvider(): MusicDashboardProvider<Ab
 
       const directedResults = await Promise.all(
         missingTargets.map(async (target) => {
-          try {
-            const directedPayload = await ytmRequest(
-              'search',
-              { query: target.query },
-              requestContext.signal,
-            );
-            return {
-              target,
-              items: splitResults(collectMusicItems(directedPayload))[target.type],
-            };
-          } catch (error) {
-            if (requestContext.signal?.aborted) throw error;
-            return { target, items: [] };
-          }
+          const queryResults = await Promise.all(
+            target.queries.map(async (query) => {
+              try {
+                const directedPayload = await ytmRequest(
+                  'search',
+                  { query },
+                  requestContext.signal,
+                );
+                return splitResults(collectMusicItems(directedPayload))[target.type];
+              } catch (error) {
+                if (requestContext.signal?.aborted) throw error;
+                return [];
+              }
+            }),
+          );
+
+          return {
+            target,
+            items: dedupeMusicEntities(queryResults.flat()),
+          };
         }),
       );
 
@@ -809,7 +845,7 @@ export function createYouTubeMusicDashboardProvider(): MusicDashboardProvider<Ab
       }
 
       // WAVEN owns the core Home composition. The provider dashboard remains
-      // first choice, but a region/IP-dependent omission must not make a core
+      // first choice, but a variable provider response must not make a core
       // Songs/Artists/Albums/Playlists lane appear or disappear. Missing lanes
       // are filled only by type-directed public discovery and then filtered by
       // the existing strict entity classifier. Exact catalog items may still
