@@ -1,5 +1,5 @@
 import { StyleSheet, View } from 'react-native';
-import { wavenColors, wavenRadii } from '../../theme/tokens';
+import { wavenColors } from '../../theme/tokens';
 
 export type WavenExploreIconKind = 'songs' | 'artists' | 'albums';
 
@@ -16,92 +16,42 @@ export function WavenExploreIcon({
   return (
     <View
       accessible={false}
-      style={[
-        styles.tile,
-        {
-          borderRadius: Math.max(wavenRadii.md, size * 0.22),
-          height: size,
-          width: size,
-        },
-      ]}
+      style={[styles.iconField, { height: size, width: size }]}
     >
-      <View style={styles.topSheen} />
       <View
         style={[
           styles.halo,
           {
-            borderRadius: size * 0.34,
-            height: size * 0.68,
-            width: size * 0.68,
+            borderRadius: size * 0.36,
+            height: size * 0.72,
+            width: size * 0.72,
           },
         ]}
       />
 
       {kind === 'songs' ? (
-        <View style={{ height: px(50), width: px(50) }}>
+        <View style={[styles.symbolStage, { height: px(50), width: px(46) }]}>
           <View
             style={[
-              styles.noteStem,
+              styles.songStem,
+              { height: px(30), left: px(25), top: px(6), width: px(4) },
+            ]}
+          />
+          <View
+            style={[
+              styles.songFlag,
+              { height: px(4), left: px(26), top: px(6), width: px(13) },
+            ]}
+          />
+          <View
+            style={[
+              styles.songHead,
               {
-                height: px(30),
+                borderRadius: px(8),
+                bottom: px(6),
+                height: px(12),
                 left: px(15),
-                top: px(7),
-                width: px(4),
-              },
-            ]}
-          />
-          <View
-            style={[
-              styles.noteStem,
-              {
-                height: px(32),
-                right: px(5),
-                top: px(4),
-                width: px(4),
-              },
-            ]}
-          />
-          <View
-            style={[
-              styles.noteBeam,
-              {
-                height: px(6),
-                left: px(15),
-                top: px(5),
-                width: px(30),
-              },
-            ]}
-          />
-          <View
-            style={[
-              styles.noteHead,
-              {
-                bottom: px(3),
-                height: px(13),
-                left: px(4),
-                width: px(17),
-              },
-            ]}
-          />
-          <View
-            style={[
-              styles.noteHead,
-              {
-                bottom: px(3),
-                height: px(13),
-                right: 0,
-                width: px(17),
-              },
-            ]}
-          />
-          <View
-            style={[
-              styles.noteAccent,
-              {
-                height: px(4),
-                right: px(8),
-                top: px(5),
-                width: px(9),
+                width: px(15),
               },
             ]}
           />
@@ -109,52 +59,36 @@ export function WavenExploreIcon({
       ) : null}
 
       {kind === 'artists' ? (
-        <View style={{ alignItems: 'center', height: px(50), width: px(44) }}>
+        <View style={[styles.symbolStage, { height: px(52), width: px(56) }]}>
           <View
             style={[
-              styles.micCapsule,
+              styles.artistHead,
               {
-                borderRadius: px(14),
-                height: px(28),
-                width: px(18),
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.micSignal,
-                {
-                  borderRadius: px(2),
-                  height: px(13),
-                  width: px(3),
-                },
-              ]}
-            />
-          </View>
-          <View
-            style={[
-              styles.micCradle,
-              {
-                borderBottomLeftRadius: px(14),
-                borderBottomRightRadius: px(14),
-                height: px(20),
-                top: px(13),
-                width: px(30),
+                borderRadius: px(10),
+                height: px(19),
+                left: px(12),
+                top: px(5),
+                width: px(19),
               },
             ]}
           />
           <View
             style={[
-              styles.micStand,
-              { height: px(10), top: px(31), width: px(3) },
+              styles.artistBust,
+              {
+                borderBottomLeftRadius: px(7),
+                borderBottomRightRadius: px(7),
+                borderTopLeftRadius: px(18),
+                borderTopRightRadius: px(18),
+                bottom: px(5),
+                height: px(23),
+                left: px(4),
+                width: px(36),
+              },
             ]}
           />
-          <View
-            style={[
-              styles.micBase,
-              { height: px(3), top: px(41), width: px(22) },
-            ]}
-          />
+          <View style={[styles.artistSignalBar, { height: px(10), left: px(43), top: px(24), width: px(3) }]} />
+          <View style={[styles.artistSignalBar, { height: px(18), left: px(49), top: px(20), width: px(3) }]} />
         </View>
       ) : null}
 
@@ -213,77 +147,45 @@ export function WavenExploreIcon({
 }
 
 const styles = StyleSheet.create({
-  tile: {
+  iconField: {
     alignItems: 'center',
-    backgroundColor: 'rgba(5, 11, 17, 0.82)',
-    borderColor: 'rgba(213, 225, 234, 0.14)',
-    borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
-    overflow: 'hidden',
     position: 'relative',
   },
-  topSheen: {
-    backgroundColor: 'rgba(237, 244, 249, 0.06)',
-    height: StyleSheet.hairlineWidth,
-    left: 10,
-    position: 'absolute',
-    right: 10,
-    top: 0,
-  },
   halo: {
-    backgroundColor: 'rgba(40, 157, 224, 0.035)',
-    borderColor: 'rgba(72, 178, 235, 0.15)',
+    backgroundColor: 'rgba(40, 157, 224, 0.04)',
+    borderColor: 'rgba(72, 178, 235, 0.13)',
     borderWidth: StyleSheet.hairlineWidth,
     position: 'absolute',
   },
-  noteStem: {
+  symbolStage: {
+    position: 'relative',
+  },
+  songStem: {
     backgroundColor: wavenColors.textSecondary,
     borderRadius: 999,
     position: 'absolute',
   },
-  noteBeam: {
-    backgroundColor: wavenColors.textSecondary,
-    borderRadius: 999,
-    position: 'absolute',
-    transform: [{ rotate: '-8deg' }],
-  },
-  noteHead: {
-    backgroundColor: wavenColors.textSecondary,
-    borderRadius: 999,
-    position: 'absolute',
-    transform: [{ rotate: '-16deg' }],
-  },
-  noteAccent: {
+  songFlag: {
     backgroundColor: wavenColors.interactionBlue,
     borderRadius: 999,
     position: 'absolute',
+    transform: [{ rotate: '10deg' }],
   },
-  micCapsule: {
-    alignItems: 'center',
-    borderColor: wavenColors.textSecondary,
-    borderWidth: 2,
-    justifyContent: 'center',
-    position: 'absolute',
-    top: 0,
-  },
-  micSignal: {
+  songHead: {
     backgroundColor: wavenColors.interactionBlue,
-  },
-  micCradle: {
-    borderBottomColor: wavenColors.textSecondary,
-    borderBottomWidth: 2,
-    borderLeftColor: wavenColors.textSecondary,
-    borderLeftWidth: 2,
-    borderRightColor: wavenColors.textSecondary,
-    borderRightWidth: 2,
     position: 'absolute',
+    transform: [{ rotate: '-12deg' }],
   },
-  micStand: {
+  artistHead: {
     backgroundColor: wavenColors.textSecondary,
-    borderRadius: 999,
     position: 'absolute',
   },
-  micBase: {
+  artistBust: {
+    backgroundColor: wavenColors.textSecondary,
+    position: 'absolute',
+  },
+  artistSignalBar: {
     backgroundColor: wavenColors.interactionBlue,
     borderRadius: 999,
     position: 'absolute',

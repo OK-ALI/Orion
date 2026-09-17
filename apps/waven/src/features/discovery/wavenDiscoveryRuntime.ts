@@ -6,6 +6,7 @@ import type {
   MusicProviderDescriptor,
   MusicSearchResult,
 } from '../../domain/music';
+import { createSpotifyChartsDashboardProvider } from '../../infrastructure/music/providers/spotifyChartsDashboard';
 import {
   createYouTubeMusicDashboardProvider,
   createYouTubeMusicMetadataProvider,
@@ -71,6 +72,10 @@ export interface WavenDiscoveryDashboardResponse {
   cancelled: boolean;
 }
 
+export interface WavenDashboardQueryOptions extends WavenProviderQueryOptions {
+  refresh?: boolean;
+}
+
 export interface WavenDiscoverySuggestionsResponse {
   suggestions: readonly string[];
   errors: readonly string[];
@@ -79,6 +84,7 @@ export interface WavenDiscoverySuggestionsResponse {
 
 export class WavenDiscoveryRuntime {
   private readonly healthBook = new WavenProviderHealthBook();
+  private dashboardSessionCache: WavenDiscoveryDashboardResponse | null = null;
 
   constructor(
     private readonly metadataProviders: readonly MusicMetadataProvider<AbortSignal>[],
@@ -214,13 +220,19 @@ export class WavenDiscoveryRuntime {
   }
 
   async getDashboard(
-    options: WavenProviderQueryOptions = {},
+    options: WavenDashboardQueryOptions = {},
   ): Promise<WavenDiscoveryDashboardResponse> {
+    const { refresh = false, ...queryOptions } = options;
+
+    if (!refresh && this.dashboardSessionCache) {
+      return this.dashboardSessionCache;
+    }
+
     const response = await queryMusicProviders(
       this.dashboardProviders,
       this.healthBook,
       (provider, signal) => provider.getDashboard({ signal }),
-      { ...options, timeoutMs: options.timeoutMs ?? 12_000 },
+      { ...queryOptions, timeoutMs: queryOptions.timeoutMs ?? 12_000 },
     );
 
     const sections = response.results.flatMap((entry) =>
@@ -230,18 +242,27 @@ export class WavenDiscoveryRuntime {
       })),
     );
 
-    return {
+    const result: WavenDiscoveryDashboardResponse = {
       result: { sections },
       errors: response.errors,
       cancelled: response.cancelled,
     };
+
+    if (!result.cancelled && sections.length > 0) {
+      this.dashboardSessionCache = result;
+    }
+
+    return result;
   }
 }
 
 export function createDefaultWavenDiscoveryRuntime(): WavenDiscoveryRuntime {
   return new WavenDiscoveryRuntime(
     [createYouTubeMusicMetadataProvider()],
-    [createYouTubeMusicDashboardProvider()],
+    [
+      createSpotifyChartsDashboardProvider(),
+      createYouTubeMusicDashboardProvider(),
+    ],
   );
 }
 

@@ -156,9 +156,10 @@ test('P5.2 Revision 4F translates Reference 02 into an artwork-led Home without 
 
 test('P5.2 Revision 4G establishes restrained WAVEN Glass while later polish may refine local hero layers', () => {
   assert.match(home, /glassTopHighlight/);
-  assert.match(home, /backgroundColor: 'rgba\(6, 12, 18, 0\.44\)'/);
-  assert.match(home, /backgroundColor: 'rgba\(8, 15, 21, 0\.46\)'/);
-  assert.match(home, /borderColor: 'rgba\(214, 224, 232, 0\.1/);
+  assert.match(home, /recentState: \{[\s\S]*backgroundColor: 'rgba\(/);
+  assert.match(home, /exploreCard: \{[\s\S]*backgroundColor: 'rgba\(/);
+  assert.match(home, /discoveryState: \{[\s\S]*backgroundColor: 'rgba\(/);
+  assert.match(home, /borderWidth: StyleSheet\.hairlineWidth/);
   assert.match(home, /heroArtworkSize = layout\.isCompact[\s\S]*\? 150[\s\S]*\? 202[\s\S]*: 172/);
   assert.match(home, /Recently Played/);
   assert.match(home, /EXPLORE_CARDS/);

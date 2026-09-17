@@ -51,19 +51,25 @@ type HomeDiscoverySectionType = 'tracks' | 'artists' | 'albums' | 'playlists';
 
 interface HomeDiscoveryGroup {
   type: HomeDiscoverySectionType;
-  label: 'Popular Now' | 'Popular Artists' | 'Popular Albums' | 'Popular Playlists';
+  label:
+    | 'Popular Now'
+    | 'Discover Now'
+    | 'Featured Artists'
+    | 'Featured Albums'
+    | 'Featured Playlists';
   items: MusicEntity[];
 }
 
 const HOME_DISCOVERY_GROUPS: readonly {
-  type: HomeDiscoverySectionType;
+  type: Exclude<HomeDiscoverySectionType, 'tracks'>;
   label: HomeDiscoveryGroup['label'];
 }[] = [
-  { type: 'tracks', label: 'Popular Now' },
-  { type: 'artists', label: 'Popular Artists' },
-  { type: 'albums', label: 'Popular Albums' },
-  { type: 'playlists', label: 'Popular Playlists' },
+  { type: 'artists', label: 'Featured Artists' },
+  { type: 'albums', label: 'Featured Albums' },
+  { type: 'playlists', label: 'Featured Playlists' },
 ];
+
+const GLOBAL_CHART_SECTION_ID = 'waven-global-top-50';
 
 function entityTitle(item: MusicEntity): string {
   return 'name' in item ? item.name : item.title;
@@ -79,27 +85,54 @@ function entitySubtitle(
   return (item as MusicAlbum).artistName || 'Album';
 }
 
+function collectDiscoveryItems(
+  sections: readonly MusicDashboardSection[],
+  type: HomeDiscoverySectionType,
+  sectionFilter?: (section: MusicDashboardSection) => boolean,
+): MusicEntity[] {
+  const seen = new Set<string>();
+  const items: MusicEntity[] = [];
+
+  for (const section of sections) {
+    if (section.type !== type || (sectionFilter && !sectionFilter(section))) continue;
+    for (const item of section.items) {
+      const key = `${item.source.provider}\0${item.source.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push(item);
+      if (items.length >= 8) return items;
+    }
+  }
+
+  return items;
+}
+
 function buildDiscoveryGroups(
   sections: readonly MusicDashboardSection[],
 ): HomeDiscoveryGroup[] {
-  return HOME_DISCOVERY_GROUPS.map((group) => {
-    const seen = new Set<string>();
-    const items: MusicEntity[] = [];
+  const chartTracks = collectDiscoveryItems(
+    sections,
+    'tracks',
+    (section) => section.id === GLOBAL_CHART_SECTION_ID,
+  );
+  const trackItems =
+    chartTracks.length > 0
+      ? chartTracks
+      : collectDiscoveryItems(sections, 'tracks');
 
-    for (const section of sections) {
-      if (section.type !== group.type) continue;
-      for (const item of section.items) {
-        const key = `${item.source.provider}\0${item.source.id}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        items.push(item);
-        if (items.length >= 8) break;
-      }
-      if (items.length >= 8) break;
-    }
+  const groups: HomeDiscoveryGroup[] = [
+    {
+      type: 'tracks',
+      label: chartTracks.length > 0 ? 'Popular Now' : 'Discover Now',
+      items: trackItems,
+    },
+    ...HOME_DISCOVERY_GROUPS.map((group) => ({
+      ...group,
+      items: collectDiscoveryItems(sections, group.type),
+    })),
+  ];
 
-    return { ...group, items };
-  }).filter((group) => group.items.length > 0);
+  return groups.filter((group) => group.items.length > 0);
 }
 
 function WavenHomeDiscoveryArtwork({
@@ -144,6 +177,48 @@ function WavenHomeDiscoveryArtwork({
   );
 }
 
+
+function WavenSectionTitle({
+  leading,
+  accent,
+  single = false,
+  accessibilityLabel,
+}: {
+  leading: string;
+  accent?: string;
+  single?: boolean;
+  accessibilityLabel?: string;
+}) {
+  if (single) {
+    return (
+      <View
+        accessibilityLabel={accessibilityLabel || leading}
+        accessibilityRole="header"
+        style={styles.sectionTitleRow}
+      >
+        <Text style={styles.sectionTitle}>{leading}</Text>
+        <View accessible={false} style={styles.sectionTitleSignal}>
+          <View style={[styles.sectionTitleSignalBar, styles.sectionTitleSignalBarShort]} />
+          <View style={[styles.sectionTitleSignalBar, styles.sectionTitleSignalBarTall]} />
+          <View style={[styles.sectionTitleSignalBar, styles.sectionTitleSignalBarMid]} />
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <Text accessibilityLabel={accessibilityLabel} accessibilityRole="header" style={styles.sectionTitle}>
+      {leading}
+      {accent ? (
+        <>
+          {' '}
+          <Text style={styles.sectionTitleAccent}>{accent}</Text>
+        </>
+      ) : null}
+    </Text>
+  );
+}
+
 export default function WavenHomeScreen() {
   const router = useRouter();
   const layout = useWavenLayout();
@@ -158,11 +233,13 @@ export default function WavenHomeScreen() {
 
   const exploreArtworkSize = layout.isCompact ? 84 : 96;
   const discoveryArtworkSize = layout.isCompact
-    ? 88
+    ? 104
     : layout.isTabletLike
-      ? 124
-      : 104;
-  const discoveryCardWidth = discoveryArtworkSize + 24;
+      ? 136
+      : 116;
+  const recentArtworkSize = layout.isCompact ? 68 : 76;
+  const discoveryCardWidth = discoveryArtworkSize + 32;
+  const discoveryCardMinHeight = discoveryArtworkSize + 70;
   const [discoveryStatus, setDiscoveryStatus] =
     useState<HomeDiscoveryStatus>('loading');
   const [dashboardSections, setDashboardSections] = useState<
@@ -171,16 +248,23 @@ export default function WavenHomeScreen() {
   const [hasDiscoveryDegradation, setHasDiscoveryDegradation] = useState(false);
   const [discoveryRetryNonce, setDiscoveryRetryNonce] = useState(0);
   const discoveryRequestSequence = useRef(0);
+  const lastExplicitRefreshNonce = useRef(0);
 
   useEffect(() => {
     const controller = new AbortController();
     const sequence = ++discoveryRequestSequence.current;
+    const shouldRefresh =
+      discoveryRetryNonce > lastExplicitRefreshNonce.current;
+
+    if (shouldRefresh) {
+      lastExplicitRefreshNonce.current = discoveryRetryNonce;
+    }
 
     setDiscoveryStatus('loading');
     setHasDiscoveryDegradation(false);
 
     wavenDiscoveryRuntime
-      .getDashboard({ signal: controller.signal })
+      .getDashboard({ signal: controller.signal, refresh: shouldRefresh })
       .then((response) => {
         if (
           controller.signal.aborted ||
@@ -307,16 +391,18 @@ export default function WavenHomeScreen() {
                 stackSectionHeaders ? styles.sectionHeaderStacked : null,
               ]}
             >
-              <Text accessibilityRole="header" style={styles.sectionTitle}>Recently Played</Text>
+              <WavenSectionTitle accessibilityLabel="Recently Played" leading="Recently" accent="Played" />
               <Text style={styles.sectionHint}>Your listening trail</Text>
             </View>
 
             <WavenSurface style={styles.recentState}>
+              <View accessible={false} pointerEvents="none" style={styles.shortcutGlassTint} />
+              <View accessible={false} pointerEvents="none" style={styles.shortcutGlassInnerEdge} />
               <View accessible={false} style={styles.glassTopHighlight} />
               <WavenArtworkFallback
                 accessibilityLabel="Recently played artwork"
                 seed="home-recently-played-empty"
-                size={64}
+                size={recentArtworkSize}
               />
               <View style={styles.recentCopy}>
                 <Text style={styles.recentTitle}>Your first plays will collect here.</Text>
@@ -334,7 +420,7 @@ export default function WavenHomeScreen() {
                 stackSectionHeaders ? styles.sectionHeaderStacked : null,
               ]}
             >
-              <Text accessibilityRole="header" style={styles.sectionTitle}>Explore</Text>
+              <WavenSectionTitle leading="Explore" single />
               <Text style={styles.sectionHint}>Choose a direction</Text>
             </View>
 
@@ -348,6 +434,9 @@ export default function WavenHomeScreen() {
                   onPress={() => router.navigate('/search')}
                 >
                   <View style={styles.exploreCard}>
+                    <View accessible={false} pointerEvents="none" style={styles.shortcutGlassTint} />
+                    <View accessible={false} pointerEvents="none" style={styles.shortcutGlassInnerEdge} />
+                    <View accessible={false} style={styles.cardTopHighlight} />
                     <WavenExploreIcon
                       kind={card.icon}
                       size={exploreArtworkSize}
@@ -361,6 +450,8 @@ export default function WavenHomeScreen() {
 
             {discoveryStatus === 'loading' ? (
               <WavenSurface style={styles.discoveryState}>
+                <View accessible={false} pointerEvents="none" style={styles.shortcutGlassTint} />
+                <View accessible={false} pointerEvents="none" style={styles.shortcutGlassInnerEdge} />
                 <View accessible={false} style={styles.glassTopHighlight} />
                 <Text
                   accessibilityLiveRegion="polite"
@@ -378,6 +469,8 @@ export default function WavenHomeScreen() {
 
             {discoveryStatus === 'error' ? (
               <WavenSurface style={styles.discoveryState}>
+                <View accessible={false} pointerEvents="none" style={styles.shortcutGlassTint} />
+                <View accessible={false} pointerEvents="none" style={styles.shortcutGlassInnerEdge} />
                 <View accessible={false} style={styles.glassTopHighlight} />
                 <Text
                   accessibilityLiveRegion="polite"
@@ -402,6 +495,8 @@ export default function WavenHomeScreen() {
 
             {discoveryStatus === 'empty' ? (
               <WavenSurface style={styles.discoveryState}>
+                <View accessible={false} pointerEvents="none" style={styles.shortcutGlassTint} />
+                <View accessible={false} pointerEvents="none" style={styles.shortcutGlassInnerEdge} />
                 <View accessible={false} style={styles.glassTopHighlight} />
                 <Text style={styles.discoveryStateTitle}>
                   Nothing to explore right now.
@@ -424,24 +519,42 @@ export default function WavenHomeScreen() {
             {discoveryStatus === 'ready' ? (
               <View style={styles.discoveryStack}>
                 {hasDiscoveryDegradation ? (
-                  <Text
-                    accessibilityLiveRegion="polite"
-                    style={styles.discoveryNotice}
-                  >
-                    Some discovery shelves are temporarily unavailable.
-                  </Text>
+                  <View style={styles.discoveryNoticeRow}>
+                    <Text
+                      accessibilityLiveRegion="polite"
+                      style={styles.discoveryNotice}
+                    >
+                      Some discovery shelves are temporarily unavailable.
+                    </Text>
+                    <WavenPressable
+                      accessibilityLabel="Refresh Home discovery"
+                      accessibilityRole="button"
+                      onPress={() => setDiscoveryRetryNonce((value) => value + 1)}
+                    >
+                      <View style={styles.discoveryNoticeAction}>
+                        <Text style={styles.discoveryNoticeActionText}>Refresh</Text>
+                      </View>
+                    </WavenPressable>
+                  </View>
                 ) : null}
 
                 {discoveryGroups.map((group) => (
                   <View key={group.type} style={styles.discoveryGroup}>
-                    <Text accessibilityRole="header" style={styles.discoveryGroupTitle}>
-                      {group.label}
-                    </Text>
+                    <WavenSectionTitle
+                      leading={group.label.split(' ')[0]}
+                      accent={group.label.split(' ').slice(1).join(' ')}
+                    />
                     <ScrollView
-                      contentContainerStyle={styles.discoveryRow}
+                      contentContainerStyle={[
+                        styles.discoveryRow,
+                        { paddingRight: Math.round(discoveryCardWidth * 0.5) },
+                      ]}
+                      decelerationRate="fast"
                       horizontal
                       nestedScrollEnabled
                       showsHorizontalScrollIndicator={false}
+                      snapToAlignment="start"
+                      snapToInterval={discoveryCardWidth + 10}
                     >
                       {group.items.map((item) => (
                         <View
@@ -450,19 +563,34 @@ export default function WavenHomeScreen() {
                           key={`${item.source.provider}:${item.source.id}`}
                           style={[
                             styles.discoveryCard,
-                            { width: discoveryCardWidth },
+                            {
+                              minHeight: discoveryCardMinHeight,
+                              width: discoveryCardWidth,
+                            },
                           ]}
                         >
-                          <WavenHomeDiscoveryArtwork
-                            item={item}
-                            size={discoveryArtworkSize}
-                          />
-                          <Text numberOfLines={2} style={styles.discoveryTitle}>
-                            {entityTitle(item)}
-                          </Text>
-                          <Text numberOfLines={1} style={styles.discoverySubtitle}>
-                            {entitySubtitle(item, group.type)}
-                          </Text>
+                          <View accessible={false} pointerEvents="none" style={styles.mediaGlassTint} />
+                          <View accessible={false} pointerEvents="none" style={styles.mediaGlassInnerEdge} />
+                          <View accessible={false} style={styles.cardTopHighlight} />
+                          <View
+                            style={[
+                              styles.discoveryCardContent,
+                              { width: discoveryArtworkSize },
+                            ]}
+                          >
+                            <WavenHomeDiscoveryArtwork
+                              item={item}
+                              size={discoveryArtworkSize}
+                            />
+                            <View style={styles.discoveryMeta}>
+                              <Text numberOfLines={2} style={styles.discoveryTitle}>
+                                {entityTitle(item)}
+                              </Text>
+                              <Text numberOfLines={1} style={styles.discoverySubtitle}>
+                                {entitySubtitle(item, group.type)}
+                              </Text>
+                            </View>
+                          </View>
                         </View>
                       ))}
                     </ScrollView>
@@ -473,7 +601,7 @@ export default function WavenHomeScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text accessibilityRole="header" style={styles.sectionTitle}>Your Music</Text>
+            <WavenSectionTitle leading="Your" accent="Music" />
 
             <WavenPressable
               accessibilityLabel="Open Library"
@@ -481,6 +609,8 @@ export default function WavenHomeScreen() {
               onPress={() => router.navigate('/library')}
             >
               <View style={styles.libraryShortcut}>
+                <View accessible={false} pointerEvents="none" style={styles.shortcutGlassTint} />
+                <View accessible={false} pointerEvents="none" style={styles.shortcutGlassInnerEdge} />
                 <View accessible={false} style={styles.glassTopHighlight} />
                 <View accessible={false} style={styles.libraryIcon}>
                   <View style={[styles.libraryBar, { height: 13 }]} />
@@ -523,7 +653,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   glassTopHighlight: {
-    backgroundColor: 'rgba(235, 242, 247, 0.055)',
+    backgroundColor: 'rgba(235, 242, 247, 0.075)',
     height: StyleSheet.hairlineWidth,
     left: 18,
     position: 'absolute',
@@ -668,6 +798,34 @@ const styles = StyleSheet.create({
     fontWeight: wavenTypography.section.fontWeight,
     lineHeight: wavenTypography.section.lineHeight,
   },
+  sectionTitleAccent: {
+    color: wavenColors.interactionBlue,
+  },
+  sectionTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 7,
+  },
+  sectionTitleSignal: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: 2,
+    height: 13,
+  },
+  sectionTitleSignalBar: {
+    backgroundColor: wavenColors.interactionBlue,
+    borderRadius: 999,
+    width: 2.5,
+  },
+  sectionTitleSignalBarShort: {
+    height: 6,
+  },
+  sectionTitleSignalBarTall: {
+    height: 12,
+  },
+  sectionTitleSignalBarMid: {
+    height: 9,
+  },
   sectionHint: {
     color: wavenColors.textMuted,
     fontSize: 10,
@@ -675,13 +833,13 @@ const styles = StyleSheet.create({
   },
   recentState: {
     alignItems: 'center',
-    backgroundColor: 'rgba(6, 12, 18, 0.44)',
-    borderColor: 'rgba(214, 224, 232, 0.1)',
+    backgroundColor: 'rgba(11, 18, 25, 0.52)',
+    borderColor: 'rgba(214, 224, 232, 0.145)',
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
-    gap: 14,
+    gap: 12,
     overflow: 'hidden',
-    padding: 12,
+    padding: 10,
     position: 'relative',
   },
   recentCopy: {
@@ -707,7 +865,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   exploreCard: {
-    gap: 9,
+    alignItems: 'center',
+    backgroundColor: 'rgba(11, 18, 25, 0.52)',
+    borderColor: 'rgba(214, 224, 232, 0.145)',
+    borderRadius: wavenRadii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+    overflow: 'hidden',
+    paddingHorizontal: 6,
+    paddingVertical: 9,
+    position: 'relative',
   },
   exploreLabel: {
     color: wavenColors.textSecondary,
@@ -716,8 +883,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   discoveryState: {
-    backgroundColor: 'rgba(6, 12, 18, 0.44)',
-    borderColor: 'rgba(214, 224, 232, 0.1)',
+    backgroundColor: 'rgba(10, 17, 24, 0.46)',
+    borderColor: 'rgba(214, 224, 232, 0.125)',
     borderWidth: StyleSheet.hairlineWidth,
     gap: 10,
     overflow: 'hidden',
@@ -764,49 +931,128 @@ const styles = StyleSheet.create({
     fontWeight: wavenTypography.label.fontWeight,
   },
   discoveryStack: {
-    gap: 16,
+    gap: 22,
+  },
+  discoveryNoticeRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
   },
   discoveryNotice: {
     color: wavenColors.textMuted,
+    flex: 1,
     fontSize: 11,
     lineHeight: 16,
   },
-  discoveryGroup: {
-    gap: 9,
+  discoveryNoticeAction: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(8, 15, 21, 0.72)',
+    borderColor: 'rgba(93, 187, 237, 0.22)',
+    borderRadius: wavenRadii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 14,
   },
-  discoveryGroupTitle: {
+  discoveryNoticeActionText: {
     color: wavenColors.textSecondary,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
-  discoveryRow: {
+  discoveryGroup: {
     gap: 11,
-    paddingRight: 8,
+  },
+  discoveryRow: {
+    gap: 10,
   },
   discoveryCard: {
-    gap: 6,
-  },
-  discoveryArtwork: {
-    borderColor: 'rgba(214, 224, 232, 0.12)',
+    alignItems: 'center',
+    backgroundColor: 'rgba(10, 17, 24, 0.43)',
+    borderColor: 'rgba(214, 224, 232, 0.105)',
     borderRadius: wavenRadii.lg,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
+    paddingHorizontal: 0,
+    paddingVertical: 8,
+    position: 'relative',
+  },
+  cardTopHighlight: {
+    backgroundColor: 'rgba(235, 242, 247, 0.075)',
+    height: StyleSheet.hairlineWidth,
+    left: 12,
+    position: 'absolute',
+    right: 12,
+    top: 0,
+  },
+  shortcutGlassTint: {
+    backgroundColor: 'rgba(38, 153, 223, 0.018)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  shortcutGlassInnerEdge: {
+    borderColor: 'rgba(235, 242, 247, 0.045)',
+    borderRadius: wavenRadii.lg - 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    bottom: 1,
+    left: 1,
+    position: 'absolute',
+    right: 1,
+    top: 1,
+  },
+  mediaGlassTint: {
+    backgroundColor: 'rgba(38, 153, 223, 0.012)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  mediaGlassInnerEdge: {
+    borderColor: 'rgba(93, 187, 237, 0.045)',
+    borderRadius: wavenRadii.lg - 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    bottom: 1,
+    left: 1,
+    position: 'absolute',
+    right: 1,
+    top: 1,
+  },
+  discoveryCardContent: {
+    alignSelf: 'center',
+    gap: 7,
+  },
+  discoveryArtwork: {
+    borderColor: 'rgba(214, 224, 232, 0.1)',
+    borderRadius: wavenRadii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  discoveryMeta: {
+    alignSelf: 'stretch',
+    gap: 2,
+    paddingBottom: 1,
   },
   discoveryTitle: {
     color: wavenColors.textSecondary,
     fontSize: 12,
     fontWeight: '700',
     lineHeight: 16,
+    minHeight: 30,
   },
   discoverySubtitle: {
     color: wavenColors.textMuted,
     fontSize: 10,
     lineHeight: 14,
+    minHeight: 14,
   },
   libraryShortcut: {
     alignItems: 'center',
-    backgroundColor: 'rgba(8, 15, 21, 0.46)',
-    borderColor: 'rgba(214, 224, 232, 0.1)',
+    backgroundColor: 'rgba(11, 18, 25, 0.5)',
+    borderColor: 'rgba(214, 224, 232, 0.14)',
     borderRadius: wavenRadii.lg,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
