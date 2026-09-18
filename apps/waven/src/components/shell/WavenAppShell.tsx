@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WavenWordmark } from '../brand/WavenWordmark';
 import { useWavenLayout } from '../../hooks/useWavenLayout';
@@ -7,12 +7,16 @@ import { wavenColors, wavenSpacing } from '../../theme/tokens';
 interface WavenAppShellProps {
   brandTagline?: boolean;
   children: React.ReactNode;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  scrollEventThrottle?: number;
   showBrand?: boolean;
 }
 
 export function WavenAppShell({
   brandTagline = false,
   children,
+  onScroll,
+  scrollEventThrottle,
   showBrand = brandTagline,
 }: WavenAppShellProps) {
   const layout = useWavenLayout();
@@ -20,7 +24,9 @@ export function WavenAppShell({
   return (
     <View style={styles.root}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
-        <ScrollView
+        <Animated.ScrollView
+          onScroll={onScroll}
+          scrollEventThrottle={scrollEventThrottle}
           style={styles.scroll}
           contentContainerStyle={[
             styles.scrollContent,
@@ -52,7 +58,7 @@ export function WavenAppShell({
             ) : null}
             <View style={styles.pageContent}>{children}</View>
           </View>
-        </ScrollView>
+        </Animated.ScrollView>
       </SafeAreaView>
     </View>
   );

@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -10,6 +11,7 @@ import {
 } from 'react-native';
 import { WavenArtworkFallback } from '../src/components/artwork/WavenArtworkFallback';
 import { WavenPressable } from '../src/components/interaction/WavenPressable';
+import { WavenEntityRevealAnchor } from '../src/components/navigation/WavenEntityRevealAnchor';
 import { WavenAppShell } from '../src/components/shell/WavenAppShell';
 import { WavenAccentTitle } from '../src/components/typography/WavenAccentTitle';
 import type {
@@ -19,7 +21,14 @@ import type {
   MusicSearchResult,
   MusicTrack,
 } from '../src/domain/music';
+import {
+  albumDetailRoute,
+  artistDetailRoute,
+} from '../src/features/discovery/detailNavigation';
 import { wavenDiscoveryRuntime } from '../src/features/discovery/wavenDiscoveryRuntime';
+import { primeWavenAlbumDetail, primeWavenArtistDetail } from '../src/features/discovery/wavenDetailPrefetch';
+import { beginWavenEntityReveal, wavenEntityRevealKey } from '../src/features/navigation/wavenEntityReveal';
+import { useWavenReducedMotion } from '../src/hooks/useWavenReducedMotion';
 import {
   wavenColors,
   wavenLayout,
@@ -65,6 +74,10 @@ function itemsForScope(
 
 function entityTitle(item: SearchEntity): string {
   return 'name' in item ? item.name : item.title;
+}
+
+function entityArtworkUrl(item: SearchEntity): string | null {
+  return item.artworkUrl || ('profileImageUrl' in item ? item.profileImageUrl : null) || null;
 }
 
 function entitySubtitle(item: SearchEntity, scope: SearchScope): string {
@@ -130,6 +143,8 @@ function WavenSearchArtwork({
 }
 
 export default function WavenSearchScreen() {
+  const router = useRouter();
+  const reducedMotion = useWavenReducedMotion();
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState<SearchScope>('Songs');
   const [status, setStatus] = useState<SearchStatus>('idle');
@@ -366,24 +381,97 @@ export default function WavenSearchScreen() {
                 ) : null}
 
                 <View style={styles.resultsList}>
-                  {scopedItems.map((item) => (
-                    <View
-                      accessibilityLabel={`${entityTitle(item)}. ${entitySubtitle(item, scope)}`}
-                      accessible
-                      key={`${item.source.provider}:${item.source.id}`}
-                      style={styles.resultRow}
-                    >
-                      <WavenSearchArtwork item={item} size={58} />
-                      <View style={styles.resultCopy}>
-                        <Text numberOfLines={1} style={styles.resultTitle}>
-                          {entityTitle(item)}
-                        </Text>
-                        <Text numberOfLines={1} style={styles.resultSubtitle}>
-                          {entitySubtitle(item, scope)}
-                        </Text>
+                  {scopedItems.map((item) => {
+                    const detailRoute =
+                      scope === 'Artists'
+                        ? artistDetailRoute(item as MusicArtist)
+                        : scope === 'Albums'
+                          ? albumDetailRoute(item as MusicAlbum)
+                          : null;
+                    const row = (
+                      <View style={styles.resultRow}>
+                        {detailRoute ? (
+                          <WavenEntityRevealAnchor
+                            borderRadius={10}
+                            entityKey={wavenEntityRevealKey(
+                              scope === 'Artists' ? 'artist' : 'album',
+                              item.source.provider,
+                              item.source.id,
+                            )}
+                            role="origin"
+                            style={{ height: 58, width: 58 }}
+                          >
+                            <WavenSearchArtwork item={item} size={58} />
+                          </WavenEntityRevealAnchor>
+                        ) : (
+                          <WavenSearchArtwork item={item} size={58} />
+                        )}
+                        <View style={styles.resultCopy}>
+                          <Text numberOfLines={1} style={styles.resultTitle}>
+                            {entityTitle(item)}
+                          </Text>
+                          <Text numberOfLines={1} style={styles.resultSubtitle}>
+                            {entitySubtitle(item, scope)}
+                          </Text>
+                        </View>
+                        {detailRoute ? (
+                          <Text accessible={false} style={styles.resultChevron}>
+                            ›
+                          </Text>
+                        ) : null}
                       </View>
-                    </View>
-                  ))}
+                    );
+
+                    if (!detailRoute) {
+                      return (
+                        <View
+                          accessibilityLabel={`${entityTitle(item)}. ${entitySubtitle(item, scope)}`}
+                          accessible
+                          key={`${item.source.provider}:${item.source.id}`}
+                        >
+                          {row}
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <WavenPressable
+                        accessibilityLabel={`Open ${entityTitle(item)} ${scope === 'Artists' ? 'artist' : 'album'} details`}
+                        accessibilityRole="button"
+                        containerStyle={styles.resultPressable}
+                        key={`${item.source.provider}:${item.source.id}`}
+                        onPress={() => {
+                          const open = async () => {
+                            if (scope === 'Artists') {
+                              void primeWavenArtistDetail(item as MusicArtist);
+                            } else if (scope === 'Albums') {
+                              void primeWavenAlbumDetail(item as MusicAlbum);
+                            }
+                            if (!reducedMotion) {
+                              const started = await beginWavenEntityReveal(
+                                {
+                                  artworkUrl: entityArtworkUrl(item),
+                                  entityKey: wavenEntityRevealKey(
+                                    scope === 'Artists' ? 'artist' : 'album',
+                                    item.source.provider,
+                                    item.source.id,
+                                  ),
+                                  kind: scope === 'Artists' ? 'artist' : 'album',
+                                  title: entityTitle(item),
+                                },
+                                () => router.push(detailRoute),
+                              );
+                              if (started) return;
+                            }
+                            router.push(detailRoute);
+                          };
+                          void open();
+                        }}
+                      >
+                        {row}
+                      </WavenPressable>
+                    );
+                  })}
                 </View>
               </View>
             ) : null}
@@ -626,6 +714,15 @@ const styles = StyleSheet.create({
   resultArtwork: {
     backgroundColor: wavenColors.surfaceRaised,
     borderRadius: wavenRadii.sm,
+  },
+  resultPressable: {
+    width: '100%',
+  },
+  resultChevron: {
+    color: wavenColors.interactionBlue,
+    fontSize: 28,
+    fontWeight: '500',
+    marginLeft: 10,
   },
   resultCopy: {
     flex: 1,

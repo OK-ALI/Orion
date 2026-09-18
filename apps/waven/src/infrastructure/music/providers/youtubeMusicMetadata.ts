@@ -1,6 +1,8 @@
 import type {
   MusicAlbum,
+  MusicAlbumDetail,
   MusicArtist,
+  MusicArtistDetail,
   MusicDashboardProvider,
   MusicDashboardResult,
   MusicEntity,
@@ -65,10 +67,12 @@ function textFromRuns(value: any): string {
   return runs.map((run: any) => run?.text || '').join('').trim();
 }
 
-function bestThumb(thumbnails: any = []): string | null {
+function bestThumb(thumbnails: any = [], preferredSize = 544): string | null {
   const list = Array.isArray(thumbnails) ? thumbnails : [];
   const url = list.at(-1)?.url || list[0]?.url || null;
-  return url ? String(url).replace(/w\d+-h\d+/i, 'w544-h544') : null;
+  return url
+    ? String(url).replace(/w\d+-h\d+/i, `w${preferredSize}-h${preferredSize}`)
+    : null;
 }
 
 function parseDuration(value: unknown): number | null {
@@ -662,6 +666,64 @@ function collectCatalogSections(payload: any): MusicDashboardResult['sections'] 
   return sections;
 }
 
+function detailHeader<T extends MusicArtist | MusicAlbum>(
+  payload: any,
+  kind: 'artist' | 'album',
+  fallback: T,
+): T {
+  const header =
+    payload?.header?.musicImmersiveHeaderRenderer ||
+    payload?.header?.musicDetailHeaderRenderer ||
+    payload?.header?.musicEditablePlaylistDetailHeaderRenderer ||
+    null;
+
+  if (!header) return fallback;
+
+  const title =
+    textFromRuns(header.title) ||
+    ('name' in fallback ? fallback.name : fallback.title);
+  const artworkUrl =
+    bestThumb(thumbnailList(header), 1200) ||
+    fallback.artworkUrl ||
+    ('profileImageUrl' in fallback ? fallback.profileImageUrl : null) ||
+    null;
+
+  if (kind === 'artist' && 'name' in fallback) {
+    return {
+      ...fallback,
+      name: title || fallback.name,
+      profileImageUrl: artworkUrl,
+      artworkUrl,
+    } as T;
+  }
+
+  if ('title' in fallback) {
+    return {
+      ...fallback,
+      title: title || fallback.title,
+      artworkUrl,
+    } as T;
+  }
+
+  return fallback;
+}
+
+function detailBrowseId(
+  item: MusicArtist | MusicAlbum,
+  expectedProvider = 'ytmusic-metadata',
+): string {
+  if (item.source?.provider !== expectedProvider) {
+    throw new Error('This music detail source is unavailable.');
+  }
+
+  const browseId = String(item.source?.id || '').trim();
+  if (!browseId || browseId.length > 256 || !/^[A-Za-z0-9_-]+$/.test(browseId)) {
+    throw new Error('This music detail identity is unavailable.');
+  }
+
+  return browseId;
+}
+
 async function refreshVisitorId(signal?: AbortSignal): Promise<void> {
   const response = await fetch(YTMUSIC_ORIGIN, {
     headers: headers(),
@@ -724,6 +786,8 @@ export function createYouTubeMusicMetadataProvider(): MusicMetadataProvider<Abor
       'playlists',
       'continuation',
       'suggestions',
+      'artistDetail',
+      'albumDetail',
     ],
 
     async search(query, requestContext = {}) {
@@ -755,6 +819,59 @@ export function createYouTubeMusicMetadataProvider(): MusicMetadataProvider<Abor
       return {
         ...splitResults(collectMusicItems(payload)),
         continuation: collectContinuationTokens(payload, 1)[0] || null,
+      };
+    },
+
+    async getArtist(artist, requestContext = {}): Promise<MusicArtistDetail> {
+      const browseId = detailBrowseId(artist);
+      const payload = await ytmRequest(
+        'browse',
+        { browseId },
+        requestContext.signal,
+      );
+      const continuation = collectContinuationTokens(payload, 1)[0] || null;
+      let continuationPayload: JsonRecord | null = null;
+
+      if (continuation && !requestContext.signal?.aborted) {
+        try {
+          continuationPayload = await ytmRequest(
+            'browse',
+            { continuation },
+            requestContext.signal,
+          );
+        } catch (error) {
+          if (requestContext.signal?.aborted) throw error;
+        }
+      }
+
+      const detailItems = [
+        ...collectMusicItems(payload),
+        ...collectMusicItems(continuationPayload),
+      ];
+      const result = splitResults(dedupeMusicEntities(detailItems));
+
+      return {
+        artist: detailHeader(payload, 'artist', artist),
+        biography: '',
+        tracks: result.tracks,
+        albums: result.albums,
+      };
+    },
+
+    async getAlbum(album, requestContext = {}): Promise<MusicAlbumDetail> {
+      const browseId = detailBrowseId(album);
+      const payload = await ytmRequest(
+        'browse',
+        { browseId },
+        requestContext.signal,
+      );
+      const result = splitResults(
+        dedupeMusicEntities(collectMusicItems(payload)),
+      );
+
+      return {
+        album: detailHeader(payload, 'album', album),
+        tracks: result.tracks,
       };
     },
 

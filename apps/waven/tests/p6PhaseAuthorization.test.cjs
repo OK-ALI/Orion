@@ -24,8 +24,11 @@ test('P6 authorization is explicit, bounded, and does not advance completion', (
   assert.match(master, /Current authoritative WAVEN v1 completion: 45%/);
   assert.match(
     master,
-    /\| 6 \| Search, discovery, and details \| 7% \|[\s\S]*?AUTHORIZED \/ NOT STARTED under `AUTH-P06-2026-09-16`/,
+    /\| 6 \| Search, discovery, and details \| 7% \|[\s\S]*?AUTHORIZED \/ IN PROGRESS;[\s\S]*?P6\.1–P6\.4D implemented,[\s\S]*?P6\.4D physically accepted\/locked/,
   );
+  assert.match(master, /P6\.4D Completion ACK — 2026-09-18/);
+  assert.match(master, /8`-item discovery-group cap is \*\*not\*\* accepted as a final product ceiling/);
+  assert.match(master, /remaining Phase 6 scope includes pagination\/discovery depth/);
   assert.match(master, /Phase 7 and every later phase remain \*\*NOT AUTHORIZED\*\*/);
   assert.match(
     master,

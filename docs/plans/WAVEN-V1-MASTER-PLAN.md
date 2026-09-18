@@ -17,7 +17,7 @@ There must be no separate **WAVEN Cloud**. WAVEN will participate in **Orion Clo
 The supplied icon has been copied unchanged into `apps/waven/assets/icon.png`. It is the current reference/application icon, not a redesigned derivative.
 Offline behavior is a first-class product mode and is intentionally separate from downloadable media. Direct-distribution builds are expected to gain a WAVEN in-app updater based on a future read-only audit of Orion Mobile's current updater, with GitHub Preview/Prerelease artifacts and same-signature physical update acceptance.
 
-Current accepted completion status is **Phases 0–5 complete at their recorded evidence tiers, 45% overall**. Phase 5 was authorized under `AUTH-P05-2026-09-14` and is accepted under `ACK-P05-2026-09-16`; its final published closure checkpoint is `68d55a57456ace75cd87ab6fdf702aec246409b5`. Phase 6 is now **AUTHORIZED** under `AUTH-P06-2026-09-16` for Search, Discovery, and Detail implementation, but it has no Completion ACK and therefore earns **0%** so far. Authoritative WAVEN v1 completion remains **45%**. Phase 7 and every later phase remain unauthorized. Expo Go, WAVEN development-device evidence, and a permanently signed distributed candidate remain distinct evidence tiers; success in one must never be promoted into another.
+Current accepted completion status is **Phases 0–5 complete at their recorded evidence tiers, 45% overall**. Phase 5 was authorized under `AUTH-P05-2026-09-14` and is accepted under `ACK-P05-2026-09-16`; its final published closure checkpoint is `68d55a57456ace75cd87ab6fdf702aec246409b5`. Phase 6 is now **AUTHORIZED** under `AUTH-P06-2026-09-16` for Search, Discovery, and Detail implementation. P6.1–P6.4D are implemented at their recorded evidence boundaries, and P6.4D is physically accepted/locked under the 2026-09-18 seal below; Phase 6 itself still has no Completion ACK and therefore earns **0%** so far. Authoritative WAVEN v1 completion remains **45%**. Phase 7 and every later phase remain unauthorized. Expo Go, WAVEN development-device evidence, and a permanently signed distributed candidate remain distinct evidence tiers; success in one must never be promoted into another.
 
 ## 2. Instruction and evidence boundary
 
@@ -907,6 +907,20 @@ P6.3 is the smallest coherent next Phase 6 slice supported by the published P6.1
 - **P6.3 Completion ACK — 2026-09-17:** **ACCEPTED / LOCKED at the current evidence boundary.** Physical Expo Go review on the project test phone accepted the final Home visual system: WAVEN atmospheric background, restrained selective glass, centered Reference-02 media-card family, increased continuation peek, final Songs/Artists/Albums shortcut icon grammar, truthful chart-backed **Popular Now** with **Discover Now** fallback, and the existing **Featured Artists / Featured Albums / Featured Playlists** labels. The earlier physical Home → Search/Library → Back check remains the accepted evidence for one-session Home snapshot continuity; the final atmospheric pass did not alter chart or cache behavior. TypeScript validation and the complete WAVEN automated suite are green at **141/141** for this accepted revision. Expo Go evidence closes this fetch/UI P6.3 slice only; it does not claim native playback, signed-distribution, or release-path acceptance.
 - **Accounting:** P6.3 Completion ACK does not award Phase 6 percentage by itself. Authoritative WAVEN v1 completion remains **45%** pending the eventual Phase 6 Completion ACK. Phase 7 and every later phase remain **NOT AUTHORIZED**.
 
+
+#### P6.4A Artist + Album detail foundation
+
+P6.4A begins the authorized Detail portion of Phase 6 from the published and locked P6.3 checkpoint `0cc112ffa9b39ae23c5fa365b109e34dd5bb83d2`.
+
+- **Provider detail capability:** the WAVEN YouTube Music metadata adapter adds bounded `getArtist()` and `getAlbum()` browse behavior through the already-shared Phase 3 detail contracts. Artist detail may use one bounded continuation to collect additional provider-returned Songs/Releases. The strict WAVEN Artist/Album classifier remains unchanged; permissive Desktop-only identity shortcuts are not imported.
+- **Runtime ownership:** `WavenDiscoveryRuntime` resolves detail through the metadata provider that owns the seed entity source, using the existing provider request broker for timeout, cancellation, sanitized failures, and health recording. No second provider domain or playback owner is created.
+- **Routing:** Search Artist/Album rows and Home Featured Artists/Featured Albums cards may open provider-neutral dynamic detail routes. Songs and Playlists remain informational until their separately authorized interactions exist. Provider IDs remain infrastructure route identity and are not displayed as WAVEN product branding.
+- **Detail-family foundation:** Artist and Album routes inherit the locked WAVEN Atmospheric Canvas while primary bottom navigation stays hidden. They use one shared detail-shell/list grammar, real artwork with deterministic WAVEN fallback, 48dp Back/Retry actions, cancellation on route replacement/unmount, and generic product-safe error text.
+- **Truthful content boundary:** Artist may show real Songs and Albums & Releases returned by the provider. Album may show real ordered Tracks plus artist and loaded track count where available. No fabricated biography, follower/rank/popularity claims, release date, appearances, or related-artist content is introduced.
+- **Historical-test reconciliation:** the P6.3 test that originally prohibited Artist/Album navigation is narrowed to the behavior P6.3 actually owns: Home discovery still must not acquire playback, persistence, Cloud, or later-phase ownership. P6.4A may legitimately add detail routing without reopening P6.3.
+- **Out of scope:** Follow/Favorite/Save/Add to Playlist, downloads, search-to-play handoff, stream resolution, raw playback URLs, Phase 7 Library/history persistence, Phase 8 offline ownership, Phase 9 Orion Cloud music sync, Phase 10 Full Player expansion, dependency upgrades, and release engineering.
+- **Validation/accounting:** TypeScript plus the complete WAVEN automated suite must pass before checkpointing. This foundation does not itself earn Phase 6 percentage. Authoritative WAVEN v1 completion remains **45%** pending the eventual Phase 6 Completion ACK. Phase 7 and every later phase remain **NOT AUTHORIZED**.
+
 1. **Goal:** Expose only provider-supported data through mobile-native UX.
 2. **Scope:** Search, Home/Discovery, artist, album, pagination, cancellation, caching, attribution and health states.
 3. **Reuse:** active YouTube Music metadata/dashboard, Spotify Charts metadata-only role, broker timeout/health concepts.
@@ -1026,7 +1040,7 @@ If later regression evidence invalidates an accepted phase, its ACK becomes `REO
 | 3 | Shared music domain/provider contracts | 8% | Contract parity at accepted scope; native playback integration deferred to Phase 4 | Complete; shared music contracts/provider registry accepted | `ACK-P03-2026-09-14` — ACCEPTED | 8% |
 | 4 | Android playback core | 12% | Development-build physical playback/lifecycle/MediaSession soak; later release reacceptance | Complete; development-device playback matrix accepted | `ACK-P04-2026-09-14` — ACCEPTED | 12% |
 | 5 | Design system and navigation | 7% | Expo Go-compatible physical UI/accessibility matrix or development-build equivalent | Complete; final closure checkpoint `68d55a57456ace75cd87ab6fdf702aec246409b5` published/remote-verified; native Google identity and Phase 5 UI/accessibility/motion matrix physically accepted on the WAVEN development/native path; distributed signed acceptance remains Phase 12 | `ACK-P05-2026-09-16` — ACCEPTED | 7% |
-| 6 | Search, discovery, and details | 7% | Physical online/degraded/offline provider flow in the correct runtime | AUTHORIZED / NOT STARTED under `AUTH-P06-2026-09-16` | PENDING | 0% |
+| 6 | Search, discovery, and details | 7% | Physical online/degraded/offline provider flow in the correct runtime | AUTHORIZED / IN PROGRESS; P6.1–P6.4D implemented, P6.4D physically accepted/locked; remaining Phase 6 scope includes pagination/discovery depth, caching/attribution/health completion, and the bounded search-to-play handoff | PENDING | 0% |
 | 7 | Local Library, favorites, playlists, history | 8% | Development-build physical persistence, restart, account isolation, and migration | Not started / not authorized | PENDING | 0% |
 | 8 | Offline awareness and connectivity resilience | 8% | Development-build physical connectivity matrix in section 13.8 | Not started / not authorized | PENDING | 0% |
 | 9 | WAVEN domains in Orion Cloud | 9% | Development-build physical two-device/account/offline conflict matrix; later release reacceptance | Not started / not authorized | PENDING | 0% |
@@ -1227,3 +1241,73 @@ This remains Phase 6 discovery/caching/presentation work. It adds no Library/his
 - Tighten media-card vertical rhythm slightly while preserving artwork scale, centered artwork-width content columns, equal inner gutters, left-aligned metadata, and the Reference-02 editorial family.
 - Narrow the media-card shell slightly so the horizontal rails reveal more of the third card while preserving deliberate leading alignment and next-card affordance.
 - Freeze chart selection, provider/runtime behavior, Home session caching, Refresh semantics, playback, persistence, Orion Cloud, and Phase 7+ scope.
+
+#### P6.4B/C Immersive Artist + Album detail visual repair
+
+The first physical Expo Go review of the P6.4A detail routes proved that Artist/Album routing and provider-backed Album population work, but the initial shared detail shell was **visually rejected**. The runtime foundation remains valid; the first-pass large outer hero card and large enclosed track-list slab are not accepted product design.
+
+P6.4B/C therefore performs a bounded presentation repair on top of P6.4A:
+
+- Artist and Album remain one WAVEN Music Detail family but receive distinct hero personalities.
+- Real artwork drives a hero-local blurred atmosphere using the existing React Native image/gradient stack. No new blur package or dependency is introduced.
+- Crisp Artist portrait / Album artwork stays above the blurred field; the Back control floats over the hero with a real 48dp target.
+- Artist uses provider-backed song/release counts, artwork-led song rows, and richer release rows when the provider returns that data.
+- Album uses the real album artist + loaded track count and an open ordered track list with repeated placeholder `Unknown artist` metadata suppressed.
+- Large outer hero/list cards are removed in favor of continuous editorial composition and quiet separators.
+- Search/Home routing, provider detail runtime, cancellation, retry, health behavior, strict entity classification, P6.3 Home lock, playback ownership, persistence, Orion Cloud, offline ownership, and Phase 7+ boundaries remain unchanged.
+- Physical Expo Go re-review is required for both one real Artist detail and one real Album detail before visual acceptance.
+
+This repair does not award Phase 6 completion. Authoritative WAVEN v1 completion remains **45%** and Phase 7 and every later phase remain **NOT AUTHORIZED**.
+
+
+#### P6.4D Entity Reveal + full-bleed detail motion
+
+P6.4D is authorized inside the existing Phase 6 Artist/Album detail boundary after physical review identified navigation discontinuity in the P6.4B/C presentation. It does not reopen P6.3 and does not authorize later phases.
+
+Implementation target:
+- measure the tapped Artist/Album artwork at the moment of activation;
+- animate that real artwork through one root-owned overlay into the detail hero;
+- use the same transition owner from Home, Search, and Artist Albums & Releases;
+- reverse the transition on Back when valid origin geometry is recoverable, otherwise fall back to ordinary Back;
+- disable competing Artist/Album stack animation while the entity transition owns the handoff;
+- replace the remaining floating hero-artwork card with a full-bleed artwork environment;
+- retain built-in artwork blur/gradients only, no new blur or animation dependency;
+- stage hero/copy/body reveal and use subtle detail-scroll parallax with Reduced Motion bypass;
+- request a larger provider detail-header artwork variant without widening provider identity or rights assumptions;
+- keep Album ordered tracks and Artist Songs truthful, while presenting Artist Albums & Releases as a horizontal artwork rail that may open the already-authorized Album detail route.
+
+P6.4D remains presentation/routing refinement only. It does not own playback handoff, favorites, follow state, Library persistence, downloads, offline state, Orion Cloud music sync, Full Player, Lyrics, Queue, or any Phase 7+ behavior. Authoritative WAVEN v1 completion remains **45%**. Phase 7 and every later phase remain **NOT AUTHORIZED**.
+
+#### P6.4D Transition Scene motion correction — 2026-09-18
+
+V5 physical review remains **NOT ACCEPTED** for final motion quality. The next bounded repair replaces the mid-flight artwork overlay lifecycle with a root-owned Transition Scene while preserving the already-authorized P6.4D detail scope.
+
+Required invariants:
+- complete the forward source-artwork → full-bleed-hero visual transformation before `router.push()` becomes visible;
+- restore the previous route underneath a fully-owned reverse Transition Scene before contraction begins;
+- interpolate sharp-artwork cover scale/offset explicitly inside a clipping viewport so aspect-ratio changes do not cause repeated `cover` recropping;
+- derive target hero geometry from the same responsive layout/safe-area contract as the real Artist/Album detail route;
+- coordinate artwork atmosphere, gradients, kind/title copy and destination handoff on one master timeline;
+- prefetch existing Phase 6 provider Artist/Album detail at tap time and reuse that in-flight result after route mount when available;
+- preserve seed-artwork continuity through handoff and preload any higher-quality provider artwork before swapping;
+- retain one UI/System Back controller, Reduced Motion, no competing detail Stack animation, no new dependency, and graceful origin fallback;
+- keep content entrances restrained with short bounded stagger rather than serial row-by-row spectacle.
+
+This correction remains Phase 6 presentation/routing work only. It does not authorize playback expansion, Library persistence, favorites, history ownership, offline state, downloads, Orion Cloud music sync, Full Player, Lyrics, Queue, or any Phase 7+ concern. Authoritative WAVEN v1 completion remains **45%** until an explicit Phase Completion ACK.
+
+#### P6.4D Completion ACK — 2026-09-18
+
+**ACCEPTED / LOCKED at the current Expo Go physical evidence boundary.** The final accepted implementation is the V8.1 Artist-mask choreography state layered on the V7/V7.1 Transition Scene and handoff corrections.
+
+Accepted evidence and invariants:
+- Artist and Album detail remain one full-bleed WAVEN detail family; Detail presentation itself is unchanged by the final Home-media refinement.
+- Forward entity reveal completes the source-artwork → hero transformation before route navigation becomes visible; reverse restores the previous route beneath scene ownership, remeasures the returning origin, and crossfades the landing.
+- Sharp-artwork crop interpolation remains explicit and UI-thread driven; seed artwork stays authoritative through handoff and any higher-quality artwork upgrade occurs only afterward.
+- Hero copy, metadata, controls, provider-ready content, and loading presentation remain physically stable with Reduced Motion and Android system Back preserved.
+- Home discovery media is artwork-first rather than card-shell-first. Artist origins are circular portraits with centered identity text; Album/Song/Playlist origins remain square or softly rounded artwork. The Artist mask uses a dedicated non-linear circle → hero → circle choreography so it opens before becoming oversized and restores circular identity progressively on reverse.
+- The current `8`-item discovery-group cap is **not** accepted as a final product ceiling. It remains a bounded current presentation/runtime limit. Phase 6 already owns provider-backed pagination, caching, attribution/health, and deeper Search/Home discovery work; P6.3 explicitly records that its stable discovery lanes are implementation plumbing rather than the final Home information architecture. No cap expansion is required to seal P6.4D.
+- The seal requires TypeScript PASS and the complete WAVEN automated suite at **165/165 PASS** on the real workspace.
+- No dependency or package-lock change is introduced by this acceptance. No Phase 7+ ownership is authorized.
+
+P6.4D is therefore sealed. This sub-slice does **not** create the Phase 6 Completion ACK and does not advance authoritative WAVEN v1 completion beyond **45%**. Remaining Phase 6 work proceeds under the existing `AUTH-P06-2026-09-16` boundary.
+

@@ -57,7 +57,11 @@ test('P5.1 protects dark route continuity with one persistent primary-navigation
   assert.match(layout, /PRIMARY_PATHS/);
   assert.match(layout, /showPrimaryNavigation/);
   assert.match(layout, /WavenBottomNav/);
-  assert.match(layout, /animation:\s*reducedMotion \? 'none' : 'fade'/);
+  // P6.4D extends the same Reduced Motion owner with a route-specific
+  // no-animation exception for entity detail reveals. Preserve the original
+  // Reduced Motion guarantee without freezing the older single-expression form.
+  assert.match(layout, /reducedMotion \|\| ENTITY_DETAIL_ROUTE_NAMES\.has\(route\.name\)/);
+  assert.match(layout, /\? 'none'\s*:\s*'fade'/);
   assert.doesNotMatch(shell, /WavenBottomNav/);
   assert.match(shell, /pageContent/);
   assert.match(nav, /router\.navigate/);

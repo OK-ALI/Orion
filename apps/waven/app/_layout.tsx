@@ -9,6 +9,7 @@ import { WavenWordmark } from '../src/components/brand/WavenWordmark';
 import { WavenBottomNav } from '../src/components/shell/WavenBottomNav';
 import { WavenMiniPlayer } from '../src/components/player/WavenMiniPlayer';
 import { WavenAtmosphericCanvas } from '../src/components/surfaces/WavenAtmosphericCanvas';
+import { WavenEntityRevealOverlay } from '../src/components/navigation/WavenEntityRevealOverlay';
 import {
   readWavenEntrySession,
   subscribeWavenEntrySession,
@@ -17,6 +18,14 @@ import { useWavenReducedMotion } from '../src/hooks/useWavenReducedMotion';
 import { wavenColors, wavenMotion, wavenSpacing } from '../src/theme/tokens';
 
 const PRIMARY_PATHS = new Set(['/', '/search', '/library']);
+const ENTITY_DETAIL_ROUTE_NAMES = new Set([
+  'artist/[provider]/[id]',
+  'album/[provider]/[id]',
+]);
+
+export const unstable_settings = {
+  initialRouteName: 'index',
+};
 
 type StartupState = 'checking' | 'ready';
 
@@ -48,6 +57,10 @@ function WavenRootNavigation() {
   const [entryHandoffPending, setEntryHandoffPending] = useState(false);
   const entryHandoffOpacity = useRef(new Animated.Value(1)).current;
   const showPrimaryNavigation = PRIMARY_PATHS.has(pathname);
+  const showAtmosphericCanvas =
+    showPrimaryNavigation ||
+    pathname.startsWith('/artist/') ||
+    pathname.startsWith('/album/');
 
   useEffect(() => {
     let mounted = true;
@@ -137,22 +150,26 @@ function WavenRootNavigation() {
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
-      {showPrimaryNavigation ? <WavenAtmosphericCanvas /> : null}
+      {showAtmosphericCanvas ? <WavenAtmosphericCanvas /> : null}
       <View style={styles.stackFrame}>
         <Stack
-          screenOptions={{
+          screenOptions={({ route }) => ({
             headerShown: false,
-            animation: reducedMotion ? 'none' : 'fade',
+            animation:
+              reducedMotion || ENTITY_DETAIL_ROUTE_NAMES.has(route.name)
+                ? 'none'
+                : 'fade',
             contentStyle: {
-              backgroundColor: showPrimaryNavigation
+              backgroundColor: showAtmosphericCanvas
                 ? 'transparent'
                 : wavenColors.canvas,
             },
-          }}
+          })}
         />
       </View>
       {showPrimaryNavigation ? <WavenMiniPlayer /> : null}
       {showPrimaryNavigation ? <WavenBottomNav /> : null}
+      <WavenEntityRevealOverlay />
       {entryHandoffPending && showPrimaryNavigation ? (
         <Animated.View
           accessibilityElementsHidden

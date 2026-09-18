@@ -72,7 +72,7 @@ test('P6.3 Explore destinations use WAVEN semantic identity icons instead of fal
   assert.match(exploreIcon, /albumDisc/);
 });
 
-test('P6.3 translates Reference 02 into one WAVEN editorial card family across Home', () => {
+test('P6.3 Home media identity is artwork-first instead of card-shell-first', () => {
   assert.match(home, /WavenSectionTitle/);
   assert.match(home, /leading="Recently" accent="Played"/);
   assert.match(home, /leading="Explore" single/);
@@ -82,12 +82,20 @@ test('P6.3 translates Reference 02 into one WAVEN editorial card family across H
   assert.match(home, /leading=\{group\.label\.split\(' '\)\[0\]\}/);
   assert.match(home, /accent=\{group\.label\.split\(' '\)\.slice\(1\)\.join\(' '\)\}/);
   assert.match(home, /const discoveryArtworkSize = layout\.isCompact/);
-  assert.match(home, /const discoveryCardMinHeight = discoveryArtworkSize \+ 70/);
+  assert.match(home, /const discoveryMediaArtworkSize = discoveryCardWidth/);
+  assert.match(home, /const discoveryCardMinHeight = discoveryMediaArtworkSize \+ 56/);
   assert.match(home, /snapToInterval=\{discoveryCardWidth \+ 10\}/);
   assert.match(home, /styles\.discoveryMeta/);
-  assert.match(home, /styles\.cardTopHighlight/);
   assert.match(home, /paddingRight: Math\.round\(discoveryCardWidth \* 0\.5\)/);
-  assert.match(home, /backgroundColor: 'rgba\(10, 17, 24, 0\.43\)'/);
+  assert.match(home, /discoveryCard: \{[\s\S]*backgroundColor: 'transparent'/);
+  assert.doesNotMatch(home, /styles\.mediaGlassTint|styles\.mediaGlassInnerEdge/);
+  assert.match(home, /const isArtist = group\.type === 'artists'/);
+  assert.match(home, /const sourceBorderRadius = isArtist\s*\? discoveryMediaArtworkSize \/ 2\s*: wavenRadii\.md/s);
+  assert.match(home, /circular=\{isArtist\}/);
+  assert.match(home, /borderRadius=\{sourceBorderRadius\}/);
+  assert.match(home, /styles\.discoveryArtistMeta/);
+  assert.match(home, /styles\.discoveryArtistText/);
+  assert.match(home, /discoveryArtistText: \{[\s\S]*textAlign: 'center'/);
   assert.match(home, /minHeight: 30/);
   assert.doesNotMatch(home, /discoveryGroupTitle/);
 });
@@ -178,17 +186,19 @@ test('P6.3 preserves one Home discovery snapshot for the app session until expli
   assert.match(home, /refresh: shouldRefresh/);
 });
 
-test('P6.3 physical polish keeps explicit refresh one-shot and aligns media/icon geometry', () => {
+test('P6.3 physical polish keeps explicit refresh one-shot and gives artwork the full media-tile width', () => {
   assert.match(home, /const discoveryCardWidth = discoveryArtworkSize \+ 32/);
-  assert.match(home, /const discoveryCardMinHeight = discoveryArtworkSize \+ 70/);
+  assert.match(home, /const discoveryMediaArtworkSize = discoveryCardWidth/);
+  assert.match(home, /const discoveryCardMinHeight = discoveryMediaArtworkSize \+ 56/);
   assert.match(home, /const lastExplicitRefreshNonce = useRef\(0\)/);
   assert.match(home, /const shouldRefresh =\s*discoveryRetryNonce > lastExplicitRefreshNonce\.current/);
   assert.match(home, /lastExplicitRefreshNonce\.current = discoveryRetryNonce/);
   assert.match(home, /refresh: shouldRefresh/);
   assert.match(home, /accessibilityLabel="Refresh Home discovery"/);
   assert.match(home, /styles\.discoveryCardContent/);
-  assert.match(home, /\{ width: discoveryArtworkSize \}/);
-  assert.match(home, /discoveryCardContent: \{[\s\S]*alignSelf: 'center'[\s\S]*gap: 7/);
+  assert.match(home, /\{ width: discoveryCardWidth \}/);
+  assert.match(home, /size=\{discoveryMediaArtworkSize\}/);
+  assert.match(home, /discoveryCardContent: \{[\s\S]*alignSelf: 'center'[\s\S]*gap: 8/);
   assert.match(home, /discoveryCard: \{[\s\S]*alignItems: 'center'[\s\S]*paddingHorizontal: 0/);
   assert.doesNotMatch(home, /discoveryMeta: \{[\s\S]{0,180}paddingHorizontal:/);
   assert.match(exploreIcon, /songStem/);
@@ -197,14 +207,11 @@ test('P6.3 physical polish keeps explicit refresh one-shot and aligns media/icon
   assert.doesNotMatch(exploreIcon, /identityDot|artistBustMask|songGlyph/);
 });
 
-test('P6.3 selective WAVEN Glass keeps artwork crisp and adds depth without a blur dependency', () => {
+test('P6.3 selective WAVEN Glass stays on utility surfaces while real media artwork remains shell-free', () => {
   assert.match(home, /styles\.shortcutGlassTint/);
   assert.match(home, /styles\.shortcutGlassInnerEdge/);
-  assert.match(home, /styles\.mediaGlassTint/);
-  assert.match(home, /styles\.mediaGlassInnerEdge/);
   assert.match(home, /shortcutGlassTint: \{[\s\S]*rgba\(38, 153, 223, 0\.018\)/);
-  assert.match(home, /mediaGlassTint: \{[\s\S]*rgba\(38, 153, 223, 0\.012\)/);
-  assert.match(home, /mediaGlassInnerEdge: \{[\s\S]*rgba\(93, 187, 237, 0\.045\)/);
+  assert.doesNotMatch(home, /mediaGlassTint|mediaGlassInnerEdge/);
   assert.doesNotMatch(home, /BlurView|expo-blur|backdropFilter/);
   assert.match(design, /P6\.3 selective WAVEN Glass refinement/);
   assert.match(master, /P6\.3 selective WAVEN Glass refinement/);
@@ -220,8 +227,9 @@ test('P6.3 final Home micro-polish inherits the reference atmosphere without cha
   assert.match(atmosphericCanvas, /const isEntry = variant === 'entry'/);
   assert.match(atmosphericCanvas, /colors=\{isEntry \? ENTRY_BASE : PRIMARY_BASE\}/);
   assert.match(home, /const discoveryCardWidth = discoveryArtworkSize \+ 32/);
-  assert.match(home, /const discoveryCardMinHeight = discoveryArtworkSize \+ 70/);
-  assert.match(home, /discoveryCardContent: \{[\s\S]*gap: 7/);
+  assert.match(home, /const discoveryMediaArtworkSize = discoveryCardWidth/);
+  assert.match(home, /const discoveryCardMinHeight = discoveryMediaArtworkSize \+ 56/);
+  assert.match(home, /discoveryCardContent: \{[\s\S]*gap: 8/);
   assert.match(home, /discoveryMeta: \{[\s\S]*gap: 2/);
   assert.match(exploreIcon, /songStem/);
   assert.match(exploreIcon, /songFlag/);
@@ -231,14 +239,17 @@ test('P6.3 final Home micro-polish inherits the reference atmosphere without cha
   assert.doesNotMatch(atmosphericCanvas, /#FF|orange|coral|pink/i);
 });
 
-test('P6.3 keeps discovery cards informational and does not enter detail playback persistence or Cloud scope', () => {
+test('P6.3 keeps Home discovery free of playback persistence and Cloud ownership while later Phase 6 may add detail routing', () => {
   assert.match(home, /group\.items\.map/);
   assert.doesNotMatch(
     home,
     /WavenPlaybackNative|MediaSession|resolveCandidate|resolveTrack|playbackUrl|streamUrl|NativeModules/,
   );
   assert.doesNotMatch(home, /AsyncStorage|SecureStore|MMKV|sqlite|Orion Cloud|writePortableProfile/);
-  assert.doesNotMatch(home, /router\.(?:push|navigate)\([^\n]*(?:artist|album)/i);
+  assert.match(
+    design,
+    /Artist\/album detail navigation, pagination, caching, suggestions, and playback handoff remain separate later Phase 6 slices/,
+  );
 });
 
 test('P6.3 docs record the bounded Home discovery slice without advancing completion or later phases', () => {

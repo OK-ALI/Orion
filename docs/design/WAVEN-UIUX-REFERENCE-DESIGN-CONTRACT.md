@@ -1391,3 +1391,79 @@ The physical Reference-02 review established four additional product rules:
 - The accepted automated boundary is TypeScript PASS plus **141/141** WAVEN tests. This record adds no dependency, provider, playback, persistence, Orion Cloud, offline, or Phase 7+ ownership.
 - Expo Go closes only the P6.3 fetch/UI physical-evidence tier. Native playback and signed distribution remain owned by their later validation tiers.
 - Freeze this Home visual language for subsequent Phase 6 work unless a later defect is proven. Do not reopen broad visual exploration while implementing Artist/Album detail, pagination, caching/health, attribution, or search-to-play handoff.
+
+
+### P6.4A Artist + Album detail foundation contract — 2026-09-17
+
+- **P6.3 Home / Discovery remains locked.** P6.4A may make real Artist and Album entities navigable, but it must not redesign the accepted Home hierarchy, atmosphere, glass tiers, card geometry, chart/cache behavior, or Explore icon system.
+- Artist and Album detail use the existing shared Phase 3 `MusicArtistDetail` / `MusicAlbumDetail` contracts and the existing Phase 6 provider broker. The active metadata adapter may add `getArtist()` / `getAlbum()` browse support, but WAVEN's stricter P6.2/P6.3 entity classifier remains authoritative; older Desktop permissive classification shortcuts are not imported.
+- Search Artist/Album rows and Home Featured Artists/Featured Albums cards may enter provider-neutral WAVEN detail routes. Songs and Playlists remain informational in this slice. Internal provider/source identity may travel through route parameters but must never be rendered as product branding.
+- Artist detail may truthfully present the real artist identity plus provider-returned Songs and Albums & Releases. The first implementation must not fabricate biography, follower counts, rankings, appearances, related artists, or popularity semantics that the provider does not return.
+- Album detail may truthfully present release artwork, title, artist where available, a derived loaded track count, and the ordered provider-returned track sequence. A release year/date is shown only when real metadata supplies it.
+- The detail family inherits WAVEN's near-black cyan/blue/navy/cool-silver Atmospheric Canvas, selective dark glass, crisp real artwork, 48dp Back action, Android safe areas, TalkBack, large-text resilience, and Reduced Motion. Primary bottom navigation remains hidden while a detail route is open.
+- This slice does **not** introduce **Follow, Favorite, Save, Add to Playlist, Download**, playback buttons, stream resolution, raw URLs, a second player, Library persistence/history, Orion Cloud music synchronization, Phase 8 offline ownership, or Phase 10 Full Player behavior.
+- P6.4A establishes detail data/routing and a shared truthful foundation shell. Artist and Album visual refinement/physical acceptance remain subsequent P6.4 detail sub-slices rather than being inferred from green code alone.
+
+### P6.4B/C Artist + Album immersive detail visual target — 2026-09-17
+
+The first physical P6.4A Expo Go review accepted the runtime/routing foundation technically but **rejected the initial detail presentation visually**. The first Album screen read as a large hero card followed by a database-like list, which was too simple and too far from the accepted reference vocabulary. P6.4A therefore remains the data/routing foundation only; its first-pass hero/list composition is not a visual acceptance boundary.
+
+The corrective detail-family direction is:
+
+- **The entity becomes the hero environment.** Artist and Album detail must not wrap the entire hero in one large rounded outer card. A crisp music entity sits above a broad atmospheric field and then dissolves naturally into page content.
+- **Artist:** use a taller portrait-led hero with stronger editorial scale, a large left-aligned artist name, and provider-backed song/release counts only when they are real. Songs use artwork-led rows; Albums & Releases use larger release artwork and concise metadata.
+- **Album:** use a substantial crisp square cover with a strong title/artist hierarchy, truthful track count, and an ordered track sequence that flows directly from the hero rather than beginning inside a second giant list card.
+- **Artwork-derived blur is allowed inside the detail hero without adding a blur dependency.** The current React Native `Image` surface may render a heavily blurred, enlarged, darkened copy of the real entity artwork behind the crisp artwork/portrait. WAVEN gradients/scrims keep this atmospheric layer subordinate to black/navy and preserve WAVEN blue as the interaction accent.
+- **Blur hierarchy:** strong atmospheric artwork blur is hero-only; small floating controls may use translucent WAVEN Glass; primary artwork, portraits, text, track rows, and release rows remain crisp. Do not blur content merely to make the screen look premium.
+- The floating Back action may sit over the hero as restrained dark glass. It remains a real 48dp control and must retain readable contrast over bright artwork.
+- Detail sections use open editorial rhythm, quiet separators, and sparse structure rather than wrapping every track/release group inside another bordered slab.
+- Generic metadata such as repeated `Unknown artist` must not be printed when the parent entity already supplies truthful context. Suppress placeholder metadata and use real duration/release information where available.
+- The accepted P6.3 Home visual language remains frozen. Search architecture remains P6.2-owned; this pass changes the destination detail experience rather than reopening the entire Search screen.
+- No Follow, Favorite, Save, Add to Playlist, Download, fake follower count, fake popularity rank, fake Play control, second player, persistence, Cloud write, or later-phase feature is added for visual completeness.
+- This blur/artwork-atmosphere grammar may inform the future Phase 10 Full Player, Lyrics, Queue, and player transitions, but P6.4 does not authorize those surfaces.
+- P6.4B/C remains a physical-review target. Green code alone does not visually accept Artist or Album detail.
+
+
+### P6.4D Entity Reveal + full-bleed detail motion contract — 2026-09-17
+
+The second physical P6.4 review accepted the stronger immersive direction but still found one important discontinuity: a tapped Artist or Album looked like a card that opened another page. P6.4D therefore changes the motion grammar from page navigation to **entity transformation**.
+
+- **The musical object is the transition seed.** When an Artist or Album can open a detail route, the exact visible artwork/portrait is measured at tap time and becomes the reveal overlay. Home, Search, and Artist release rails use the same entity-reveal owner rather than bespoke animations.
+- **The entity becomes the hero environment.** The destination removes the floating rounded artwork card. Real artwork fills the detail hero edge-to-edge inside the WAVEN content viewport, with sharp artwork, an artwork-derived blurred environmental layer, and a dark gradient dissolution into the body.
+- **Back is spatially reversible when the origin still exists.** WAVEN captures destination and origin geometry and contracts the hero back toward the source artwork. If an origin cannot be recovered, normal Back remains the truthful fallback.
+- **No competing route animation.** Artist/Album Stack animation is disabled while Entity Reveal owns the visual handoff. Ordinary navigation remains unchanged.
+- **Staged reveal is restrained.** Hero, identity copy, then body content reveal with short overlapping opacity/translation motion. Detail scrolling applies subtle parallax to the hero. Reduced Motion bypasses the transformation and presents the destination directly.
+- **Artist detail gains rhythm without later-phase ownership.** Songs remain editorial rows; Albums & Releases becomes a horizontal artwork rail and may open the already-authorized Album detail route. No Follow, Favorite, Save, Download, playlist mutation, playback handoff, or history ownership is introduced.
+- **Hero artwork asks the provider for a larger detail image when the provider exposes one.** Search/Home thumbnails remain bounded; detail-header artwork may request a higher-resolution variant for large-screen presentation. WAVEN still falls back to its deterministic artwork grammar when real artwork is unavailable.
+- P6.4D is still a physical-review target. It does not create a Phase 6 Completion ACK and does not advance WAVEN beyond **45%**.
+
+### P6.4D Transition Scene correction — 2026-09-18
+
+Physical V5 review rejected the remaining mid-flight overlay model even after UI-thread geometry and staged detail copy were added. The remaining defect was architectural: route navigation still occurred while the artwork was visually between source and destination, and `resizeMode="cover"` repeatedly recalculated the sharp image crop while its frame changed aspect ratio.
+
+The accepted repair target is therefore a **Transition Scene**, not another timing adjustment:
+
+- The real source composition remains mounted for the entire forward artwork morph. Navigation may commit only after the Transition Scene has already become visually equivalent to the destination hero.
+- The Transition Scene derives the destination full-bleed hero geometry from the same WAVEN responsive layout and safe-area rules as the real detail page, so it does not wait for a destination route mount to know where the artwork is going.
+- The moving sharp artwork uses an animated clipping viewport plus an independently sized image canvas. WAVEN explicitly interpolates source and destination cover scales/offsets instead of asking `resizeMode="cover"` to recrop the image every frame.
+- Destination atmosphere, gradients, entity kind and title become part of the same master transition timeline. The route push occurs only after that visual destination is complete, then the real detail route mounts underneath and the Transition Scene releases ownership through a short invisible handoff.
+- Reverse uses the mirror lifecycle: the Transition Scene first takes complete visual ownership of the full-bleed hero, the previous route is restored underneath while the scene still covers it, then the hero contracts toward the measured origin as the source composition is progressively revealed.
+- Artist/Album detail metadata is prefetched at tap time within the existing Phase 6 provider-detail boundary. The detail route reuses the in-flight result when available; retry remains a fresh provider request. This is read-only presentation latency work, not Library/history/offline/Cloud ownership.
+- Seed artwork remains the initial real destination hero image through the handoff. A provider-quality artwork upgrade still preloads before visible replacement.
+- Detail body entrances remain restrained and overlap the end state rather than behaving like a second presentation. Section/row/release staggering is deliberately short and bounded.
+- Reduced Motion continues to bypass the complex spatial transformation. Android system Back and the visible WAVEN Back control continue to share one exit controller.
+- No new dependency is introduced. P6.4D remains a physical-review target and does not advance WAVEN beyond **45%** or authorize Phase 7+.
+
+### P6.4D Final physical acceptance — V8.1, 2026-09-18
+
+P6.4D is **physically accepted and locked** at the V8.1 evidence boundary.
+
+- **Transition Scene is the accepted motion owner.** Forward transformation reaches the visual hero before navigation becomes visible; reverse restores the previous route underneath scene ownership, remeasures the current source, and performs a pixel-stable landing handoff.
+- **Artist and Album keep distinct source identities.** Album/Song/Playlist media use square or softly rounded artwork-first origins. Artist origins use circular portrait artwork with no surrounding media-card shell.
+- **Artist mask choreography is intentionally non-linear.** Forward holds the circle briefly, opens the mask before the artwork becomes oversized, and reaches the rectangular full-bleed hero without a giant bubble/squircle phase. Reverse remains mostly rectangular early, then becomes visibly circular during the final approach before ownership transfers to the real Home portrait.
+- **Home discovery is artwork-first.** Real media artwork occupies the media-tile width; inter-item spacing remains, but the former glass/card shell and internal side gutters do not. Utility surfaces may continue to use WAVEN Glass.
+- **Detail remains unchanged by the Home identity refinement.** The full-bleed hero/detail composition remains the accepted destination.
+- **The current eight-item shelf cap is temporary implementation plumbing, not a visual/product acceptance rule.** Later authorized Phase 6 pagination/discovery-depth work may expand the available catalog without reopening this P6.4D motion acceptance.
+- **Frozen behaviors:** explicit crop interpolation, stable destination geometry, seed-artwork handoff, later quality-art crossfade, reserved metadata geometry, restrained controls/body choreography, quiet delayed loading presentation, Android Back, Reduced Motion, and no competing detail Stack animation.
+- This acceptance introduces no dependency change, no Library/history persistence, no offline owner, no Orion Cloud music sync, and no Phase 7+ authority. WAVEN remains **45%** pending the eventual Phase 6 Completion ACK.
+

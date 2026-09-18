@@ -11,16 +11,25 @@ import {
 import { WavenArtworkFallback } from '../src/components/artwork/WavenArtworkFallback';
 import { WavenExploreIcon } from '../src/components/icons/WavenExploreIcon';
 import { WavenPressable } from '../src/components/interaction/WavenPressable';
+import { WavenEntityRevealAnchor } from '../src/components/navigation/WavenEntityRevealAnchor';
 import { WavenAppShell } from '../src/components/shell/WavenAppShell';
 import { WavenSurface } from '../src/components/surfaces/WavenSurface';
 import type {
   MusicAlbum,
+  MusicArtist,
   MusicDashboardSection,
   MusicEntity,
   MusicTrack,
 } from '../src/domain/music';
+import {
+  albumDetailRoute,
+  artistDetailRoute,
+} from '../src/features/discovery/detailNavigation';
 import { wavenDiscoveryRuntime } from '../src/features/discovery/wavenDiscoveryRuntime';
+import { primeWavenAlbumDetail, primeWavenArtistDetail } from '../src/features/discovery/wavenDetailPrefetch';
+import { beginWavenEntityReveal, wavenEntityRevealKey } from '../src/features/navigation/wavenEntityReveal';
 import { useWavenLayout } from '../src/hooks/useWavenLayout';
+import { useWavenReducedMotion } from '../src/hooks/useWavenReducedMotion';
 import {
   wavenColors,
   wavenRadii,
@@ -75,6 +84,10 @@ function entityTitle(item: MusicEntity): string {
   return 'name' in item ? item.name : item.title;
 }
 
+function entityArtworkUrl(item: MusicEntity): string | null {
+  return item.artworkUrl || ('profileImageUrl' in item ? item.profileImageUrl : null) || null;
+}
+
 function entitySubtitle(
   item: MusicEntity,
   type: HomeDiscoverySectionType,
@@ -83,6 +96,19 @@ function entitySubtitle(
   if (type === 'artists') return 'Artist';
   if (type === 'playlists') return 'Playlist';
   return (item as MusicAlbum).artistName || 'Album';
+}
+
+function detailRouteForHomeItem(
+  item: MusicEntity,
+  type: HomeDiscoverySectionType,
+) {
+  if (type === 'artists') {
+    return artistDetailRoute(item as MusicArtist);
+  }
+  if (type === 'albums') {
+    return albumDetailRoute(item as MusicAlbum);
+  }
+  return null;
 }
 
 function collectDiscoveryItems(
@@ -136,15 +162,18 @@ function buildDiscoveryGroups(
 }
 
 function WavenHomeDiscoveryArtwork({
+  circular = false,
   item,
   size,
 }: {
+  circular?: boolean;
   item: MusicEntity;
   size: number;
 }) {
   const artworkUrl =
     item.artworkUrl || ('profileImageUrl' in item ? item.profileImageUrl : null);
   const [failed, setFailed] = useState(false);
+  const borderRadius = circular ? size / 2 : wavenRadii.md;
 
   useEffect(() => {
     setFailed(false);
@@ -152,11 +181,22 @@ function WavenHomeDiscoveryArtwork({
 
   if (!artworkUrl || failed) {
     return (
-      <WavenArtworkFallback
-        accessibilityLabel={`${entityTitle(item)} artwork`}
-        seed={`home-discovery-${item.source.provider}-${item.source.id}`}
-        size={size}
-      />
+      <View
+        style={[
+          styles.discoveryArtworkClip,
+          {
+            borderRadius,
+            height: size,
+            width: size,
+          },
+        ]}
+      >
+        <WavenArtworkFallback
+          accessibilityLabel={`${entityTitle(item)} artwork`}
+          seed={`home-discovery-${item.source.provider}-${item.source.id}`}
+          size={size}
+        />
+      </View>
     );
   }
 
@@ -169,6 +209,7 @@ function WavenHomeDiscoveryArtwork({
       style={[
         styles.discoveryArtwork,
         {
+          borderRadius,
           height: size,
           width: size,
         },
@@ -222,6 +263,7 @@ function WavenSectionTitle({
 export default function WavenHomeScreen() {
   const router = useRouter();
   const layout = useWavenLayout();
+  const reducedMotion = useWavenReducedMotion();
   const { fontScale } = useWindowDimensions();
   const stackSectionHeaders = fontScale >= 1.45;
 
@@ -239,7 +281,8 @@ export default function WavenHomeScreen() {
       : 116;
   const recentArtworkSize = layout.isCompact ? 68 : 76;
   const discoveryCardWidth = discoveryArtworkSize + 32;
-  const discoveryCardMinHeight = discoveryArtworkSize + 70;
+  const discoveryMediaArtworkSize = discoveryCardWidth;
+  const discoveryCardMinHeight = discoveryMediaArtworkSize + 56;
   const [discoveryStatus, setDiscoveryStatus] =
     useState<HomeDiscoveryStatus>('loading');
   const [dashboardSections, setDashboardSections] = useState<
@@ -556,43 +599,133 @@ export default function WavenHomeScreen() {
                       snapToAlignment="start"
                       snapToInterval={discoveryCardWidth + 10}
                     >
-                      {group.items.map((item) => (
-                        <View
-                          accessibilityLabel={`${entityTitle(item)}, ${entitySubtitle(item, group.type)}`}
-                          accessible
-                          key={`${item.source.provider}:${item.source.id}`}
-                          style={[
-                            styles.discoveryCard,
-                            {
-                              minHeight: discoveryCardMinHeight,
-                              width: discoveryCardWidth,
-                            },
-                          ]}
-                        >
-                          <View accessible={false} pointerEvents="none" style={styles.mediaGlassTint} />
-                          <View accessible={false} pointerEvents="none" style={styles.mediaGlassInnerEdge} />
-                          <View accessible={false} style={styles.cardTopHighlight} />
+                      {group.items.map((item) => {
+                        const detailRoute = detailRouteForHomeItem(item, group.type);
+                        const isArtist = group.type === 'artists';
+                        const sourceBorderRadius = isArtist
+                          ? discoveryMediaArtworkSize / 2
+                          : wavenRadii.md;
+                        const card = (
                           <View
                             style={[
-                              styles.discoveryCardContent,
-                              { width: discoveryArtworkSize },
+                              styles.discoveryCard,
+                              {
+                                minHeight: discoveryCardMinHeight,
+                                width: discoveryCardWidth,
+                              },
                             ]}
                           >
-                            <WavenHomeDiscoveryArtwork
-                              item={item}
-                              size={discoveryArtworkSize}
-                            />
-                            <View style={styles.discoveryMeta}>
-                              <Text numberOfLines={2} style={styles.discoveryTitle}>
-                                {entityTitle(item)}
-                              </Text>
-                              <Text numberOfLines={1} style={styles.discoverySubtitle}>
-                                {entitySubtitle(item, group.type)}
-                              </Text>
+                            <View
+                              style={[
+                                styles.discoveryCardContent,
+                                { width: discoveryCardWidth },
+                              ]}
+                            >
+                              {detailRoute ? (
+                                <WavenEntityRevealAnchor
+                                  borderRadius={sourceBorderRadius}
+                                  entityKey={wavenEntityRevealKey(
+                                    isArtist ? 'artist' : 'album',
+                                    item.source.provider,
+                                    item.source.id,
+                                  )}
+                                  role="origin"
+                                  style={{
+                                    height: discoveryMediaArtworkSize,
+                                    width: discoveryMediaArtworkSize,
+                                  }}
+                                >
+                                  <WavenHomeDiscoveryArtwork
+                                    circular={isArtist}
+                                    item={item}
+                                    size={discoveryMediaArtworkSize}
+                                  />
+                                </WavenEntityRevealAnchor>
+                              ) : (
+                                <WavenHomeDiscoveryArtwork
+                                  circular={isArtist}
+                                  item={item}
+                                  size={discoveryMediaArtworkSize}
+                                />
+                              )}
+                              <View
+                                style={[
+                                  styles.discoveryMeta,
+                                  isArtist ? styles.discoveryArtistMeta : null,
+                                ]}
+                              >
+                                <Text
+                                  numberOfLines={2}
+                                  style={[
+                                    styles.discoveryTitle,
+                                    isArtist ? styles.discoveryArtistText : null,
+                                  ]}
+                                >
+                                  {entityTitle(item)}
+                                </Text>
+                                <Text
+                                  numberOfLines={1}
+                                  style={[
+                                    styles.discoverySubtitle,
+                                    isArtist ? styles.discoveryArtistText : null,
+                                  ]}
+                                >
+                                  {entitySubtitle(item, group.type)}
+                                </Text>
+                              </View>
                             </View>
                           </View>
-                        </View>
-                      ))}
+                        );
+
+                        if (!detailRoute) {
+                          return (
+                            <View
+                              accessibilityLabel={`${entityTitle(item)}, ${entitySubtitle(item, group.type)}`}
+                              accessible
+                              key={`${item.source.provider}:${item.source.id}`}
+                            >
+                              {card}
+                            </View>
+                          );
+                        }
+
+                        return (
+                          <WavenPressable
+                            accessibilityLabel={`Open ${entityTitle(item)} ${group.type === 'artists' ? 'artist' : 'album'} details`}
+                            accessibilityRole="button"
+                            key={`${item.source.provider}:${item.source.id}`}
+                            onPress={() => {
+                              const open = async () => {
+                                if (group.type === 'artists') {
+                                  void primeWavenArtistDetail(item as MusicArtist);
+                                } else if (group.type === 'albums') {
+                                  void primeWavenAlbumDetail(item as MusicAlbum);
+                                }
+                                if (!reducedMotion) {
+                                  const started = await beginWavenEntityReveal(
+                                    {
+                                      artworkUrl: entityArtworkUrl(item),
+                                      entityKey: wavenEntityRevealKey(
+                                        group.type === 'artists' ? 'artist' : 'album',
+                                        item.source.provider,
+                                        item.source.id,
+                                      ),
+                                      kind: group.type === 'artists' ? 'artist' : 'album',
+                                      title: entityTitle(item),
+                                    },
+                                    () => router.push(detailRoute),
+                                  );
+                                  if (started) return;
+                                }
+                                router.push(detailRoute);
+                              };
+                              void open();
+                            }}
+                          >
+                            {card}
+                          </WavenPressable>
+                        );
+                      })}
                     </ScrollView>
                   </View>
                 ))}
@@ -968,13 +1101,9 @@ const styles = StyleSheet.create({
   },
   discoveryCard: {
     alignItems: 'center',
-    backgroundColor: 'rgba(10, 17, 24, 0.43)',
-    borderColor: 'rgba(214, 224, 232, 0.105)',
-    borderRadius: wavenRadii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
+    backgroundColor: 'transparent',
     paddingHorizontal: 0,
-    paddingVertical: 8,
+    paddingVertical: 0,
     position: 'relative',
   },
   cardTopHighlight: {
@@ -1003,38 +1132,28 @@ const styles = StyleSheet.create({
     right: 1,
     top: 1,
   },
-  mediaGlassTint: {
-    backgroundColor: 'rgba(38, 153, 223, 0.012)',
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-  mediaGlassInnerEdge: {
-    borderColor: 'rgba(93, 187, 237, 0.045)',
-    borderRadius: wavenRadii.lg - 1,
-    borderWidth: StyleSheet.hairlineWidth,
-    bottom: 1,
-    left: 1,
-    position: 'absolute',
-    right: 1,
-    top: 1,
-  },
   discoveryCardContent: {
     alignSelf: 'center',
-    gap: 7,
+    gap: 8,
   },
   discoveryArtwork: {
     borderColor: 'rgba(214, 224, 232, 0.1)',
-    borderRadius: wavenRadii.md,
     borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  discoveryArtworkClip: {
     overflow: 'hidden',
   },
   discoveryMeta: {
     alignSelf: 'stretch',
     gap: 2,
     paddingBottom: 1,
+  },
+  discoveryArtistMeta: {
+    alignItems: 'center',
+  },
+  discoveryArtistText: {
+    textAlign: 'center',
   },
   discoveryTitle: {
     color: wavenColors.textSecondary,

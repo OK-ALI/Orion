@@ -20,10 +20,13 @@ const reducedMotion = read('src/hooks/useWavenReducedMotion.ts');
 test('P5.4A makes Router transitions obey the existing Reduced Motion owner', () => {
   assert.match(layout, /useWavenReducedMotion/);
   assert.match(layout, /const reducedMotion = useWavenReducedMotion\(\)/);
+  // P6.4D keeps Reduced Motion authoritative while adding a route-specific
+  // no-animation exception for the entity reveal destinations.
   assert.match(
     layout,
-    /animation:\s*reducedMotion \? 'none' : 'fade'/,
+    /reducedMotion \|\| ENTITY_DETAIL_ROUTE_NAMES\.has\(route\.name\)/,
   );
+  assert.match(layout, /\? 'none'\s*:\s*'fade'/);
 
   assert.match(
     reducedMotion,

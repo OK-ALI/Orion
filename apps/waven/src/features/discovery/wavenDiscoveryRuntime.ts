@@ -1,4 +1,8 @@
 import type {
+  MusicAlbum,
+  MusicAlbumDetail,
+  MusicArtist,
+  MusicArtistDetail,
   MusicDashboardProvider,
   MusicDashboardResult,
   MusicEntity,
@@ -68,6 +72,18 @@ export interface WavenDiscoverySearchResponse {
 
 export interface WavenDiscoveryDashboardResponse {
   result: MusicDashboardResult;
+  errors: readonly string[];
+  cancelled: boolean;
+}
+
+export interface WavenArtistDetailResponse {
+  detail: MusicArtistDetail | null;
+  errors: readonly string[];
+  cancelled: boolean;
+}
+
+export interface WavenAlbumDetailResponse {
+  detail: MusicAlbumDetail | null;
   errors: readonly string[];
   cancelled: boolean;
 }
@@ -214,6 +230,73 @@ export class WavenDiscoveryRuntime {
       result: mergeSearchResults(
         response.results.map((entry) => entry.value),
       ),
+      errors: response.errors,
+      cancelled: response.cancelled,
+    };
+  }
+
+  private metadataProviderFor(
+    providerId: string,
+  ): MusicMetadataProvider<AbortSignal> | null {
+    return (
+      this.metadataProviders.find((provider) => provider.id === providerId) ??
+      null
+    );
+  }
+
+  async getArtist(
+    artist: MusicArtist,
+    options: WavenProviderQueryOptions = {},
+  ): Promise<WavenArtistDetailResponse> {
+    const provider = this.metadataProviderFor(artist.source.provider);
+
+    if (!provider || typeof provider.getArtist !== 'function') {
+      return {
+        detail: null,
+        errors: ['Artist details are unavailable right now.'],
+        cancelled: false,
+      };
+    }
+
+    const response = await queryMusicProviders(
+      [provider],
+      this.healthBook,
+      (activeProvider, signal) =>
+        activeProvider.getArtist!(artist, { signal }),
+      { ...options, timeoutMs: options.timeoutMs ?? 12_000 },
+    );
+
+    return {
+      detail: response.results[0]?.value ?? null,
+      errors: response.errors,
+      cancelled: response.cancelled,
+    };
+  }
+
+  async getAlbum(
+    album: MusicAlbum,
+    options: WavenProviderQueryOptions = {},
+  ): Promise<WavenAlbumDetailResponse> {
+    const provider = this.metadataProviderFor(album.source.provider);
+
+    if (!provider || typeof provider.getAlbum !== 'function') {
+      return {
+        detail: null,
+        errors: ['Album details are unavailable right now.'],
+        cancelled: false,
+      };
+    }
+
+    const response = await queryMusicProviders(
+      [provider],
+      this.healthBook,
+      (activeProvider, signal) =>
+        activeProvider.getAlbum!(album, { signal }),
+      { ...options, timeoutMs: options.timeoutMs ?? 12_000 },
+    );
+
+    return {
+      detail: response.results[0]?.value ?? null,
       errors: response.errors,
       cancelled: response.cancelled,
     };

@@ -120,9 +120,9 @@ test('P5.2 Revision 4C makes the living waveform cinematic, fuller-width, irregu
   assert.match(entry, /WavenAtmosphericCanvas variant="entry"/);
 });
 
-test('P5.2 Revision 4D keeps one continuous atmospheric canvas behind primary content and bottom navigation', () => {
-  assert.match(layout, /showPrimaryNavigation \? <WavenAtmosphericCanvas \/> : null/);
-  assert.match(layout, /backgroundColor:\s*showPrimaryNavigation[\s\S]*\? 'transparent'[\s\S]*:\s*wavenColors\.canvas/);
+test('P5.2 Revision 4D keeps one continuous atmospheric canvas behind primary content while later detail routes may inherit it', () => {
+  assert.match(layout, /showAtmosphericCanvas \? <WavenAtmosphericCanvas \/> : null/);
+  assert.match(layout, /backgroundColor:\s*showAtmosphericCanvas[\s\S]*\? 'transparent'[\s\S]*:\s*wavenColors\.canvas/);
   assert.match(layout, /showPrimaryNavigation \? <WavenBottomNav \/> : null/);
   assert.doesNotMatch(appShell, /<WavenAtmosphericCanvas \/>/);
   assert.match(appShell, /backgroundColor:\s*'transparent'/);
