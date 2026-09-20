@@ -11,16 +11,21 @@ import { MobilePageHeader } from '../../components/MobilePageHeader';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  DISCOVER_FEEDS,
+  getDiscoverReleaseDateParams,
   getRegionQueryParams,
   MEDIA_FILTERS,
   MOVIE_GENRES,
   RATING_OPTIONS,
   REGION_PRESETS,
+  RELEASE_WINDOW_OPTIONS,
   SORT_OPTIONS,
   SUBFILTER_PRESETS,
+  TRENDING_WINDOW_OPTIONS,
   TV_GENRES,
   TYPE_FILTERS,
   YEAR_OPTIONS,
+  type DiscoverFeedId,
 } from './discoverCatalog';
 import { createDiscoverStyles } from './discoverStyles';
 import { useResponsiveLayout } from '../../services/responsive';
@@ -38,9 +43,11 @@ export default function DiscoverScreen() {
   const [searchFocused, setSearchFocused] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
   const searchArrival = useRef(new Animated.Value(1)).current;
-  const params = useLocalSearchParams<{ focusSearch?: string }>();
+  const params = useLocalSearchParams<{ focusSearch?: string; exploreIntent?: string; feed?: string; mediaType?: string; region?: string; subfilter?: string; sort?: string; label?: string; window?: string; genreId?: string }>();
   const [containerWidth, setContainerWidth] = useState(0);
   const [activeFilter, setActiveFilter] = useState<string>('all');
+  const [activeFeed, setActiveFeed] = useState<DiscoverFeedId>('browse');
+  const [feedWindow, setFeedWindow] = useState('30');
   const router = useRouter();
   const [region, setRegion] = useState<string>('all');
   const [subfilter, setSubfilter] = useState<string>('all');
@@ -51,7 +58,7 @@ export default function DiscoverScreen() {
   const [year, setYear] = useState('');
   const [minRating, setMinRating] = useState('0');
   const [sortBy, setSortBy] = useState('popularity.desc');
-  const [activeModal, setActiveModal] = useState<'type' | 'region' | 'subfilter' | 'sort' | 'rating' | 'year' | null>(null);
+  const [activeModal, setActiveModal] = useState<'type' | 'region' | 'subfilter' | 'sort' | 'rating' | 'year' | 'window' | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -66,7 +73,7 @@ export default function DiscoverScreen() {
   });
   const genreRequestRef = useRef(0);
   const genreRequestPendingRef = useRef(false);
-  const genreViewKey = JSON.stringify([selectedGenre?.id, genreType, region, subfilter, year, minRating, sortBy, refreshKey]);
+  const genreViewKey = JSON.stringify([selectedGenre?.id, activeFeed, feedWindow, genreType, region, subfilter, year, minRating, sortBy, refreshKey]);
   const [genreOutcome, setGenreOutcome] = useState<{ key: string; status: 'success' | 'error' } | null>(null);
   const { isPhone, isTablet, isLandscape } = useResponsiveLayout();
   const COLUMN_COUNT = isPhone
@@ -106,6 +113,20 @@ export default function DiscoverScreen() {
     });
   }, [params.focusSearch, preferences.reducedMotion, router, searchArrival]);
 
+  useEffect(() => {
+    const request = Number(params.exploreIntent || 0);
+    if (!Number.isFinite(request) || request <= 0) return;
+    const feed = DISCOVER_FEEDS.some((item) => item.id === params.feed) ? params.feed as DiscoverFeedId : 'browse';
+    const mediaType = params.mediaType === 'movie' || params.mediaType === 'tv' || params.mediaType === 'all' ? params.mediaType : 'all';
+    const nextRegion = params.region && REGION_PRESETS[params.region as keyof typeof REGION_PRESETS] ? params.region : 'all';
+    setQuery(''); setActiveFeed(feed); setGenreType(mediaType); setRegion(nextRegion); setSubfilter(params.subfilter || 'all');
+    setSortBy(params.sort || 'popularity.desc'); setFeedWindow(params.window || (feed === 'trending' ? 'week' : '30'));
+    const requestedGenre = Number(params.genreId);
+    setSelectedGenre({ id: Number.isFinite(requestedGenre) && requestedGenre > 0 ? requestedGenre : 'all', name: params.label || DISCOVER_FEEDS.find((item) => item.id === feed)?.name || 'Explore' });
+    setGenreResults([]); setPage(1);
+    router.setParams({ exploreIntent: '0', feed: '', mediaType: '', region: '', subfilter: '', sort: '', label: '', window: '', genreId: '' });
+  }, [params.exploreIntent]);
+
   const fetchDiscoverResults = useCallback(async (pageNum: number = 1) => {
     if (!selectedGenre || (pageNum > 1 && genreRequestPendingRef.current)) return;
 
@@ -134,24 +155,34 @@ export default function DiscoverScreen() {
     try {
       const { countryParam, languageParam } = getRegionQueryParams(region, subfilter);
       const requestTypes = genreType === 'all' ? ['movie', 'tv'] : [genreType];
-      const responses = await Promise.all(
-        requestTypes.map((mediaType) => {
-          const yearParam = year ? (mediaType === 'movie' ? `&primary_release_year=${year}` : `&first_air_date_year=${year}`) : '';
-          const ratingParam = minRating !== '0' ? `&vote_average.gte=${minRating}` : '';
-          const genreParam = selectedGenre.id && (selectedGenre.id as any) !== 'all' ? `&with_genres=${selectedGenre.id}` : '';
-          const mediaSort = sortBy === 'primary_release_date.desc' && mediaType === 'tv' ? 'first_air_date.desc' : sortBy;
-          return tmdbFetch<TmdbPaginatedResponse>(
-            `/discover/${mediaType}?sort_by=${mediaSort}${genreParam}${countryParam}${languageParam}${yearParam}${ratingParam}&vote_count.gte=20&page=${pageNum}`
-          );
-        })
-      );
+      const responses = await Promise.all(requestTypes.map((mediaType) => {
+        if (activeFeed === 'trending') return tmdbFetch<TmdbPaginatedResponse>(`/trending/${mediaType}/${feedWindow === 'day' ? 'day' : 'week'}?page=${pageNum}`);
+        if (activeFeed === 'top-rated') return tmdbFetch<TmdbPaginatedResponse>(`/${mediaType}/top_rated?page=${pageNum}`);
+        const yearParam = activeFeed === 'browse' && year ? (mediaType === 'movie' ? `&primary_release_year=${year}` : `&first_air_date_year=${year}`) : '';
+        const ratingParam = minRating !== '0' ? `&vote_average.gte=${minRating}` : '';
+        const genreParam = selectedGenre.id && (selectedGenre.id as any) !== 'all' ? `&with_genres=${selectedGenre.id}` : '';
+        const mediaSort = sortBy === 'primary_release_date.desc' && mediaType === 'tv' ? 'first_air_date.desc' : sortBy;
+        const dateParam = getDiscoverReleaseDateParams(activeFeed, mediaType as 'movie' | 'tv', feedWindow);
+        const voteCountParam = activeFeed === 'upcoming'
+          ? ''
+          : activeFeed === 'new-releases'
+            ? `&vote_count.gte=${mediaType === 'tv' ? 10 : 20}`
+            : '&vote_count.gte=20';
+        return tmdbFetch<TmdbPaginatedResponse>(`/discover/${mediaType}?sort_by=${mediaSort}${genreParam}${countryParam}${languageParam}${yearParam}${ratingParam}${dateParam}${voteCountParam}&page=${pageNum}`);
+      }));
       if (!isCurrent()) return;
 
       const seen = new Set();
-      const merged = responses
-        .flatMap((data, index) => (data.results || []).map((item) => ({ ...item, media_type: requestTypes[index] })))
+      const taggedResponses = responses.map((data, index) =>
+        (data.results || []).map((item) => ({ ...item, media_type: requestTypes[index] })),
+      );
+      const sourceItems = activeFeed === 'top-rated' && taggedResponses.length > 1
+        ? Array.from({ length: Math.max(...taggedResponses.map((items) => items.length)) }, (_, index) =>
+            taggedResponses.flatMap((items) => items[index] ? [items[index]] : []),
+          ).flat()
+        : taggedResponses.flat().sort((a, b) => activeFeed === 'top-rated' ? 0 : (b.popularity || 0) - (a.popularity || 0));
+      const merged = sourceItems
         .filter((item) => item.poster_path)
-        .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
         .filter((item) => {
           const key = `${item.media_type}_${item.id}`;
           if (seen.has(key)) return false;
@@ -190,7 +221,7 @@ export default function DiscoverScreen() {
         setLoadingMore(false);
       }
     }
-  }, [selectedGenre, genreType, region, subfilter, year, minRating, sortBy, genreViewKey, generationRef, remoteReadyRef]);
+  }, [selectedGenre, activeFeed, feedWindow, genreType, region, subfilter, year, minRating, sortBy, genreViewKey, generationRef, remoteReadyRef]);
   useEffect(() => {
     if (selectedGenre) void fetchDiscoverResults(1);
     return () => {
@@ -356,12 +387,12 @@ export default function DiscoverScreen() {
           <View style={styles.genreHeader}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Back to genres"
+              accessibilityLabel={activeFeed === 'browse' ? 'Back to genres' : 'Back to Discover'}
               style={({ pressed }) => [styles.backPill, pressed && { opacity: 0.7 }]}
-              onPress={() => { setSelectedGenre(null); setGenreResults([]); setPage(1); }}
+              onPress={() => { setSelectedGenre(null); setGenreResults([]); setPage(1); if (activeFeed !== 'browse') setActiveFeed('browse'); }}
             >
               <Ionicons name="chevron-back" size={18} color={theme.text} />
-              <Text style={styles.backPillText}>Genres</Text>
+              <Text style={styles.backPillText}>{activeFeed === 'browse' ? 'Genres' : 'Discover'}</Text>
             </Pressable>
             <Text style={styles.genreActiveLabel} numberOfLines={1}>
               {selectedGenre.name}
@@ -380,63 +411,39 @@ export default function DiscoverScreen() {
                 </Text>
                 <Ionicons name="chevron-down" size={14} color={genreType !== 'all' ? theme.onAccent : theme.textSecondary} />
               </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Region filter, ${REGION_PRESETS[region as keyof typeof REGION_PRESETS]?.name}`}
-                style={[styles.dropdownPill, region !== 'all' && styles.dropdownPillActive]}
-                onPress={() => setActiveModal('region')}
-              >
-                <Text style={[styles.dropdownPillText, region !== 'all' && styles.dropdownPillTextActive]}>
-                  Region: {REGION_PRESETS[region as keyof typeof REGION_PRESETS]?.name}
-                </Text>
-                <Ionicons name="chevron-down" size={14} color={region !== 'all' ? theme.onAccent : theme.textSecondary} />
-              </Pressable>
-              {region !== 'all' && SUBFILTER_PRESETS[region as keyof typeof SUBFILTER_PRESETS] && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Sub-region filter"
-                  style={[styles.dropdownPill, subfilter !== 'all' && styles.dropdownPillActive]}
-                  onPress={() => setActiveModal('subfilter')}
-                >
-                  <Text style={[styles.dropdownPillText, subfilter !== 'all' && styles.dropdownPillTextActive]}>
-                    Sub: {SUBFILTER_PRESETS[region as keyof typeof SUBFILTER_PRESETS].find(s => s.id === subfilter)?.name}
-                  </Text>
-                  <Ionicons name="chevron-down" size={14} color={subfilter !== 'all' ? theme.onAccent : theme.textSecondary} />
+              {activeFeed !== 'trending' && activeFeed !== 'top-rated' && (<>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Region filter, ${REGION_PRESETS[region as keyof typeof REGION_PRESETS]?.name}`} style={[styles.dropdownPill, region !== 'all' && styles.dropdownPillActive]} onPress={() => setActiveModal('region')}>
+                  <Text style={[styles.dropdownPillText, region !== 'all' && styles.dropdownPillTextActive]}>Region: {REGION_PRESETS[region as keyof typeof REGION_PRESETS]?.name}</Text>
+                  <Ionicons name="chevron-down" size={14} color={region !== 'all' ? theme.onAccent : theme.textSecondary} />
                 </Pressable>
-              )}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Sort titles by ${SORT_OPTIONS.find(s => s.id === sortBy)?.label}`}
-                style={[styles.dropdownPill, sortBy !== 'popularity.desc' && styles.dropdownPillActive]}
-                onPress={() => setActiveModal('sort')}
-              >
-                <Text style={[styles.dropdownPillText, sortBy !== 'popularity.desc' && styles.dropdownPillTextActive]}>
-                  Sort: {SORT_OPTIONS.find(s => s.id === sortBy)?.label}
-                </Text>
-                <Ionicons name="chevron-down" size={14} color={sortBy !== 'popularity.desc' ? theme.onAccent : theme.textSecondary} />
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={minRating === '0' ? 'Minimum rating, any' : `Minimum rating, ${minRating} and above`}
-                style={[styles.dropdownPill, minRating !== '0' && styles.dropdownPillActive]}
-                onPress={() => setActiveModal('rating')}
-              >
-                <Text style={[styles.dropdownPillText, minRating !== '0' && styles.dropdownPillTextActive]}>
-                  {minRating === '0' ? 'Rating: Any' : `★ ${minRating}.0+`}
-                </Text>
-                <Ionicons name="chevron-down" size={14} color={minRating !== '0' ? theme.onAccent : theme.textSecondary} />
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={year ? `Release year, ${year}` : 'Release year, all'}
-                style={[styles.dropdownPill, year !== '' && styles.dropdownPillActive]}
-                onPress={() => setActiveModal('year')}
-              >
-                <Text style={[styles.dropdownPillText, year !== '' && styles.dropdownPillTextActive]}>
-                  {year ? `Year: ${year}` : 'Year: All'}
-                </Text>
-                <Ionicons name="chevron-down" size={14} color={year !== '' ? theme.onAccent : theme.textSecondary} />
-              </Pressable>
+                {region !== 'all' && SUBFILTER_PRESETS[region as keyof typeof SUBFILTER_PRESETS] && (
+                  <Pressable accessibilityRole="button" accessibilityLabel="Sub-region filter" style={[styles.dropdownPill, subfilter !== 'all' && styles.dropdownPillActive]} onPress={() => setActiveModal('subfilter')}>
+                    <Text style={[styles.dropdownPillText, subfilter !== 'all' && styles.dropdownPillTextActive]}>Sub: {SUBFILTER_PRESETS[region as keyof typeof SUBFILTER_PRESETS].find(s => s.id === subfilter)?.name}</Text>
+                    <Ionicons name="chevron-down" size={14} color={subfilter !== 'all' ? theme.onAccent : theme.textSecondary} />
+                  </Pressable>
+                )}
+                <Pressable accessibilityRole="button" accessibilityLabel={`Sort titles by ${SORT_OPTIONS.find(s => s.id === sortBy)?.label}`} style={[styles.dropdownPill, sortBy !== 'popularity.desc' && styles.dropdownPillActive]} onPress={() => setActiveModal('sort')}>
+                  <Text style={[styles.dropdownPillText, sortBy !== 'popularity.desc' && styles.dropdownPillTextActive]}>Sort: {SORT_OPTIONS.find(s => s.id === sortBy)?.label}</Text>
+                  <Ionicons name="chevron-down" size={14} color={sortBy !== 'popularity.desc' ? theme.onAccent : theme.textSecondary} />
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel={minRating === '0' ? 'Minimum rating, any' : `Minimum rating, ${minRating} and above`} style={[styles.dropdownPill, minRating !== '0' && styles.dropdownPillActive]} onPress={() => setActiveModal('rating')}>
+                  <Text style={[styles.dropdownPillText, minRating !== '0' && styles.dropdownPillTextActive]}>{minRating === '0' ? 'Rating: Any' : `★ ${minRating}.0+`}</Text>
+                  <Ionicons name="chevron-down" size={14} color={minRating !== '0' ? theme.onAccent : theme.textSecondary} />
+                </Pressable>
+              </>)}
+              {activeFeed === 'browse' ? (
+                <Pressable accessibilityRole="button" accessibilityLabel={year ? `Release year, ${year}` : 'Release year, all'} style={[styles.dropdownPill, year !== '' && styles.dropdownPillActive]} onPress={() => setActiveModal('year')}>
+                  <Text style={[styles.dropdownPillText, year !== '' && styles.dropdownPillTextActive]}>{year ? `Year: ${year}` : 'Year: All'}</Text>
+                  <Ionicons name="chevron-down" size={14} color={year !== '' ? theme.onAccent : theme.textSecondary} />
+                </Pressable>
+              ) : activeFeed !== 'top-rated' ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Time window filter" style={[styles.dropdownPill, styles.dropdownPillActive]} onPress={() => setActiveModal('window')}>
+                  <Text style={[styles.dropdownPillText, styles.dropdownPillTextActive]}>
+                    {activeFeed === 'trending' ? TRENDING_WINDOW_OPTIONS.find(item => item.id === feedWindow)?.label : `${RELEASE_WINDOW_OPTIONS.find(item => item.id === feedWindow)?.label || '30 Days'}`}
+                  </Text>
+                  <Ionicons name="chevron-down" size={14} color={theme.onAccent} />
+                </Pressable>
+              ) : null}
             </ScrollView>
           </View>
           {network.remoteReady && (genreLoading || genreOutcome?.key !== genreViewKey) ? (
@@ -501,7 +508,21 @@ export default function DiscoverScreen() {
       ) : (
         /* ── Genre Grid Browse Mode ── */
         <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.typeToggle}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.typeToggleScroller} contentContainerStyle={styles.typeToggleScroll}>
+            {DISCOVER_FEEDS.map((feed) => (
+              <Pressable key={feed.id} accessibilityRole="button" accessibilityState={{ selected: activeFeed === feed.id }}
+                style={[styles.typePill, activeFeed === feed.id && styles.typePillActive]}
+                onPress={() => {
+                  if (feed.id === 'browse') { setActiveFeed('browse'); setSelectedGenre(null); return; }
+                  setActiveFeed(feed.id); setFeedWindow(feed.id === 'trending' ? 'week' : '30'); setGenreType('all'); setRegion('all'); setSubfilter('all'); setSortBy('popularity.desc');
+                  setSelectedGenre({ id: 'all', name: feed.name }); setGenreResults([]); setPage(1);
+                }}
+              >
+                <Text style={[styles.typePillText, activeFeed === feed.id && styles.typePillTextActive]}>{feed.name}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.typeToggleScroller} contentContainerStyle={styles.typeToggleScroll}>
             {TYPE_FILTERS.map((f) => (
               <Pressable
                 key={f.id}
@@ -516,7 +537,7 @@ export default function DiscoverScreen() {
                 </Text>
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
           <View style={styles.regionSelectorContainer}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
               {Object.entries(REGION_PRESETS).map(([id, preset]) => (
@@ -643,6 +664,7 @@ export default function DiscoverScreen() {
                 {activeModal === 'sort' && 'Sort Titles By'}
                 {activeModal === 'rating' && 'Minimum TMDB Rating'}
                 {activeModal === 'year' && 'Release Year'}
+                {activeModal === 'window' && (activeFeed === 'trending' ? 'Trending period' : activeFeed === 'upcoming' ? 'Arriving within' : 'Released within')}
               </Text>
               <Pressable
                 accessibilityRole="button"
@@ -737,6 +759,13 @@ export default function DiscoverScreen() {
                     {y ? y : 'Year: All'}
                   </Text>
                   {year === y && <Ionicons name="checkmark" size={18} color={theme.accent} />}
+                </Pressable>
+              ))}
+              {activeModal === 'window' && (activeFeed === 'trending' ? TRENDING_WINDOW_OPTIONS : RELEASE_WINDOW_OPTIONS).map((item) => (
+                <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ checked: feedWindow === item.id }}
+                  style={[styles.modalOption, feedWindow === item.id && styles.modalOptionActive]} onPress={() => { setFeedWindow(item.id); setActiveModal(null); }}>
+                  <Text style={[styles.modalOptionText, feedWindow === item.id && styles.modalOptionTextActive]}>{item.label}</Text>
+                  {feedWindow === item.id && <Ionicons name="checkmark" size={18} color={theme.accent} />}
                 </Pressable>
               ))}
             </ScrollView>

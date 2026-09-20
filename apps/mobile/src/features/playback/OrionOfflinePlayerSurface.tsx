@@ -9,7 +9,6 @@ import {
   type NativeSyntheticEvent,
   type ViewProps,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import type { SubtitleTrack } from 'expo-video';
 import type { MobilePlayerPresentation, MobilePlayerSurfaceAdapter } from '@orion/shared/types';
 import { PlayerHUD } from '../../components/player/PlayerHUD';
@@ -150,8 +149,8 @@ export function OrionNativeAssetPlayerSurface({
   initialResumeTime = 0,
   onPlaybackSnapshot,
   onVerifiedPlaybackCompletion,
+  onExit,
 }: OrionOfflinePlayerSurfaceProps & { finalized?: boolean }) {
-  const router = useRouter();
   const { recordPlayback } = useLibraryPlaybackActions();
   const controller = useMobilePlayerController();
   const nativeRef = useRef<ComponentRef<typeof NativeOfflinePlayer>>(null);
@@ -329,13 +328,13 @@ export function OrionNativeAssetPlayerSurface({
       <PlayerStateOverlay
         state={controller.state.loadingState}
         detail={failureDetail}
-        onBack={nativeState.state === 'failed' ? () => router.back() : undefined}
+        onBack={nativeState.state === 'failed' ? onExit : undefined}
         onRetry={nativeState.state === 'failed' ? () => facade.retry() : undefined}
       />
       <PlayerHUD
         player={facade}
         title={title || 'Playing Video'}
-        onBack={() => router.back()}
+        onBack={onExit}
         controlsVisible={controlsVisible}
         onReveal={controller.reveal}
         onDismiss={controller.dismiss}

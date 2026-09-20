@@ -466,7 +466,7 @@ export interface TmdbMediaItem {
   original_name?: string;
   original_language?: string;
   origin_country?: string[];
-  media_type?: "movie" | "tv";
+  media_type?: "movie" | "tv" | "person";
   overview?: string;
   poster_path: string | null;
   backdrop_path: string | null;
@@ -477,6 +477,9 @@ export interface TmdbMediaItem {
   release_date?: string;
   first_air_date?: string;
   popularity?: number;
+  profile_path?: string | null;
+  known_for_department?: string;
+  known_for?: TmdbMediaItem[];
 }
 
 export interface TmdbPaginatedResponse<T = TmdbMediaItem> {

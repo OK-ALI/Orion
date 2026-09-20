@@ -79,7 +79,9 @@ test("embedded HUD leaves provider touch ownership uncovered and keeps a safe re
   assert.match(handle, /height: 44/);
   assert.match(surface, /PlayerStateOverlay/);
   assert.match(surface, /controller\.state\.overlay === 'subtitles'/);
-  assert.match(surface, /onNativeSingleTap=\{controller\.toggleChromeFromUserTap\}/);
+  assert.match(surface, /onNativeSingleTap=\{providerControlsMode \? undefined : controller\.toggleChromeFromUserTap\}/);
+  assert.match(surface, /ProviderControlsReturn/);
+  assert.match(hud, /accessibilityLabel="Use provider controls"/);
   assert.match(wrapper, /DeviceEventEmitter\.addListener\(["']OrionPlayerSingleTap["']/);
   assert.match(manager, /onSingleTapConfirmed/);
   assert.match(manager, /View\.OnTouchListener/);

@@ -37,8 +37,11 @@ test('P9.2 native updater verifies GitHub origin, hash, package, version and per
   assert.match(native, /\/ok-ali\/orion\/releases\/download\//);
   assert.match(native, /Downloaded APK SHA-256 verification failed/);
   assert.match(native, /candidate\.packageName != reactContext\.packageName/);
-  assert.match(native, /versionCode\(candidate\) <= versionCode\(installedPackageInfo\(\)\)/);
+  assert.match(native, /targetVersionCode <= versionCode\(installedPackageInfo\(\)\)/);
+  assert.match(native, /versionCode\(candidate\) != targetVersionCode/);
   assert.match(native, /candidateSigner != expectedSigner \|\| candidateSigner != currentSigner/);
+  assert.match(native, /cachedInstallerReady/);
+  assert.match(native, /saveTransaction\("permission-required", targetVersionCode\)/);
   assert.match(native, /modern\.signingInfo\?\.apkContentsSigners\.isNullOrEmpty\(\)/);
   assert.match(native, /getPackageArchiveInfo\(file\.absolutePath, PackageManager\.GET_SIGNATURES\)/);
   assert.match(native, /modernSignature \?: info\.signatures\?\.firstOrNull\(\)/);

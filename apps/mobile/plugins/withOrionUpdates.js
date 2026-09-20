@@ -38,6 +38,17 @@ function withUpdateProvider(config) {
       });
     }
     application.provider = providers;
+    const receivers = application.receiver || [];
+    const receiverName = '.updates.OrionUpdateInstallReceiver';
+    if (!receivers.some((receiver) => receiver?.$?.['android:name'] === receiverName)) {
+      receivers.push({
+        $: {
+          'android:name': receiverName,
+          'android:exported': 'false',
+        },
+      });
+    }
+    application.receiver = receivers;
     return nextConfig;
   });
 }
@@ -77,7 +88,7 @@ function withUpdateSources(config) {
     fs.mkdirSync(packageRoot, { recursive: true });
     fs.mkdirSync(xmlRoot, { recursive: true });
 
-    for (const name of ['OrionUpdateModule.kt', 'OrionUpdatePackage.kt']) {
+    for (const name of ['OrionUpdateModule.kt', 'OrionUpdatePackage.kt', 'OrionUpdateInstallReceiver.kt']) {
       const source = path.join(NATIVE_SOURCE, name);
       const target = path.join(packageRoot, name);
       if (!fs.existsSync(source)) {

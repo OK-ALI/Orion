@@ -32,9 +32,9 @@ test('P9-F9 canonical availability preserves declared-permission, grant, signer,
   assert.match(state, /!environment\.canRequestPackageInstalls/);
   assert.match(state, /return 'permission-required'/);
   assert.match(state, /return 'available'/);
-  assert.match(state, /label: 'Unavailable'/);
+  assert.match(state, /label: 'Temporarily unavailable'/);
   assert.match(state, /label: 'Permission needed'/);
-  assert.match(state, /label: 'Update ready'/);
+  assert.match(state, /label: 'Update available'/);
 });
 
 test('P9-F9 actionable canonical states reveal the correct updater action and announcement', () => {

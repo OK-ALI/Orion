@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { PlayerStateOverlay } from '../../components/player/PlayerStateOverlay';
 import { useLibraryPlaybackActions } from '../../context/LibraryContext';
 import { useOrionTheme } from '../../context/ThemeContext';
@@ -34,8 +33,8 @@ export function OrionFinalizedPlayerActivitySurface({
   initialResumeTime = 0,
   onPlaybackSnapshot,
   onVerifiedPlaybackCompletion,
+  onExit,
 }: OrionFinalizedPlayerActivitySurfaceProps) {
-  const router = useRouter();
   const { theme, preferences } = useOrionTheme();
   const nativePlayerThemeRef = useRef({
     accent: theme.accent,
@@ -146,7 +145,7 @@ export function OrionFinalizedPlayerActivitySurface({
           presentation: result.presentation,
         });
         telemetry.flush();
-        router.back();
+        onExit();
       })
       .catch((launchError: unknown) => {
         if (disposed) return;
@@ -167,7 +166,7 @@ export function OrionFinalizedPlayerActivitySurface({
     episodeTitle,
     initialResumeTime,
     launchAttempt,
-    router,
+    onExit,
     seriesTitle,
     sourceId,
     telemetry.flush,
@@ -182,7 +181,7 @@ export function OrionFinalizedPlayerActivitySurface({
       <PlayerStateOverlay
         state={error ? 'failed' : 'preparing'}
         detail={error || 'Opening the verified download in Orion Player.'}
-        onBack={error ? () => router.back() : undefined}
+        onBack={error ? onExit : undefined}
         onRetry={error ? () => setLaunchAttempt((attempt) => attempt + 1) : undefined}
       />
     </View>

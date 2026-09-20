@@ -193,7 +193,7 @@ test('P10.1 extends Phase 9 Notifications with Downloads alerts and no parallel 
 
   assert.match(service, /\| 'downloads'/);
   assert.match(service, /label: 'Downloads'/);
-  assert.match(service, /description: 'Completion and problem alerts\.'/);
+  assert.match(service, /description: 'When downloads finish or need attention\.'/);
   assert.match(service, /orion-downloads/);
   assert.match(notificationSettings, /'downloads'/);
   assert.match(responseRouter, /target\.target === 'downloads'/);

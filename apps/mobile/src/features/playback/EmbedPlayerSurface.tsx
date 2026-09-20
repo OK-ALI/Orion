@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, useWindowDimensions, View } from 'react-native';
-import { useRouter } from 'expo-router';
-import * as ScreenOrientation from 'expo-screen-orientation';
 import type { WebView as WebViewType } from 'react-native-webview';
 import type {
   EmbeddedSubtitleTrackV1,
@@ -31,6 +29,7 @@ import {
   parseEmbeddedTelemetryMessage,
 } from './embeddedTelemetry';
 import {
+  createCineSrcResumeScript,
   createProviderPresentationScript,
   createVerifiedResumeScript,
   mobileAdBlockerScript,
@@ -63,34 +62,14 @@ import { PlayerStateOverlay } from '../../components/player/PlayerStateOverlay';
 import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import { beginMobileDownloadCaptureSessionV1 } from '../downloads/downloadCandidateCapture';
 import { useDownloadSourceAutoReturnV1 } from '../downloads/useDownloadSourceAutoReturn';
-
+import { createProviderIframeDocument, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
+import { ProviderControlsReturn } from './ProviderControlsReturn';
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
   embedUrl: string;
   onResumeAttempt: (handoffId: string, status: 'applied' | 'unavailable') => void;
 }
 
 const WEBVIEW_AUDIO_RELEASE_MS = Platform.OS === 'android' ? 240 : 80;
-const EMPTY_SHIELD_EVIDENCE: MobileShieldEvidenceV1 = {
-  nativeSessionObserved: false,
-  blockedRequests: 0,
-  blockedPopups: 0,
-  blockedNavigations: 0,
-  blockedAdvertisements: 0,
-  blockedTrackers: 0,
-  allowedPlaybackDependencies: 0,
-  observedMediaRequests: 0,
-  observedSubtitleRequests: 0,
-  lastRuleId: null,
-};
-const QUIET_CURRENT_SURFACE_SCRIPT = `
-  (() => {
-    document.querySelectorAll('video, audio').forEach((media) => {
-      try { media.muted = true; media.pause(); } catch (_) {}
-    });
-    true;
-  })();
-`;
-
 export function EmbedPlayerSurface({
   embedUrl,
   title,
@@ -112,9 +91,11 @@ export function EmbedPlayerSurface({
   onVerifiedPlaybackCompletion,
   activeHandoffId,
   onResumeAttempt,
+  onExit,
+  isLandscape = true,
+  onToggleOrientation,
 }: EmbedPlayerSurfaceProps) {
-  const router = useRouter();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { recordPlayback } = useLibraryPlaybackActions();
   const controller = useMobilePlayerController();
   const [isBuffering, setIsBuffering] = useState(true);
@@ -128,9 +109,9 @@ export function EmbedPlayerSurface({
   const [subtitleTracks, setSubtitleTracks] = useState<EmbeddedSubtitleTrackV1[]>([]);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string | null>(null);
   const [watchdogDismissed, setWatchdogDismissed] = useState(false);
-  const [isLandscape, setIsLandscape] = useState(true);
   const [surfaceReleased, setSurfaceReleased] = useState(false);
   const [surfaceRetryKey, setSurfaceRetryKey] = useState(0);
+  const [providerControlsMode, setProviderControlsMode] = useState(false);
   const [pendingManualSource, setPendingManualSource] = useState<{
     id: string;
     label: string;
@@ -154,9 +135,8 @@ export function EmbedPlayerSurface({
   const sourceLabel = source?.label || 'VidEasy Direct';
   const expectedOrigins = source?.expectedOrigins || [];
   const sourceContinuity = getMobileSourceContinuityCapability(sourceId);
-  const telemetryExpectedOrigins = sourceId === '111movies'
-    ? Array.from(new Set([...expectedOrigins, 'https://player.vidlove.cc']))
-    : expectedOrigins;
+  const telemetryExpectedOrigins = expectedOrigins;
+
   const shieldManifest = source?.requestManifest;
   const selectedSubtitle = selectedSubtitleId ? getInternalSubtitleTrack(selectedSubtitleId) : null;
   const shieldedEmbedUrl = useMemo(() => {
@@ -165,11 +145,29 @@ export function EmbedPlayerSurface({
       const url = new URL(embedUrl);
       url.searchParams.set(source.externalSubtitleParam, selectedSubtitle.url);
       if (source.externalSubtitleLabelParam) url.searchParams.set(source.externalSubtitleLabelParam, selectedSubtitle.label);
+      if (source.externalSubtitleLanguageParam) {
+        url.searchParams.set(source.externalSubtitleLanguageParam, selectedSubtitle.language || 'en');
+      }
       return url.toString();
     } catch {
       return embedUrl;
     }
-  }, [embedUrl, selectedSubtitle?.id, source?.externalSubtitleLabelParam, source?.externalSubtitleParam]);
+  }, [embedUrl, selectedSubtitle?.id, source?.externalSubtitleLabelParam, source?.externalSubtitleLanguageParam, source?.externalSubtitleParam]);
+  const webViewSource = useMemo(() => {
+    if (!source?.requiresIframeWrapper) return { uri: shieldedEmbedUrl };
+    try {
+      const target = new URL(shieldedEmbedUrl);
+      if (target.protocol !== 'https:' || !expectedOrigins.includes(target.origin)) return { uri: 'about:blank' };
+      return {
+        html: createProviderIframeDocument(target.toString()),
+        // Orion-owned secure wrapper isolates provider storage/bootstrap behavior.
+        // The nested player receives no Orion state or secrets.
+        baseUrl: 'https://orion.local/player/',
+      };
+    } catch {
+      return { uri: 'about:blank' };
+    }
+  }, [expectedOrigins, shieldedEmbedUrl, source?.requiresIframeWrapper]);
   const media = useMemo(() => ({
     id,
     mediaType: type,
@@ -265,6 +263,7 @@ export function EmbedPlayerSurface({
     shieldFailureObserved.current = false;
     surfaceLoaded.current = false;
     setWatchdogDismissed(false);
+    setProviderControlsMode(false);
     return () => {
       if (observationTimeout.current) clearTimeout(observationTimeout.current);
       if (releaseTimer.current) clearTimeout(releaseTimer.current);
@@ -299,16 +298,6 @@ export function EmbedPlayerSurface({
 
   usePlayerImmersiveSystemUi(true, controller.state.playback.playing, !showControls);
 
-  const toggleOrientation = async () => {
-    if (Platform.OS === 'web') return;
-    const next = isLandscape
-      ? ScreenOrientation.OrientationLock.PORTRAIT_UP
-      : ScreenOrientation.OrientationLock.LANDSCAPE;
-    try {
-      await ScreenOrientation.lockAsync(next);
-      setIsLandscape(!isLandscape);
-    } catch {}
-  };
 
   const releaseSurfaceThen = (
     switchSource: (snapshot: ReturnType<typeof telemetry.getVerifiedSnapshot>) => boolean,
@@ -362,7 +351,12 @@ export function EmbedPlayerSurface({
     ));
   };
   const handleFailover = () => {
-    releaseSurfaceThen(onAutomaticFailover);
+    releaseSurfaceThen((snapshot) => onSourceChange(
+      sourceId,
+      snapshot,
+      'automatic',
+      snapshot ? undefined : Math.max(0, initialResumeTime),
+    ));
   };
 
   const retryCurrentSource = () => {
@@ -395,8 +389,23 @@ export function EmbedPlayerSurface({
     });
   };
 
-  const handleShouldStartLoad = () => {
-    return true;
+  const handleShouldStartLoad = (request: { url?: string; isTopFrame?: boolean }) => {
+    if (Platform.OS !== 'ios' || request.isTopFrame === false) return true;
+    const value = String(request.url || '');
+    if (value === 'about:blank') return true;
+    try {
+      const requested = new URL(value);
+      const allowed = new Set(shieldManifest?.allowedNavigationOrigins || expectedOrigins);
+      const accepted = requested.protocol === 'https:' && allowed.has(requested.origin);
+      if (!accepted) {
+        nativeBlockObserved.current = true;
+        setBlockedRequests((count) => count + 1);
+        setShieldState('verified');
+      }
+      return accepted;
+    } catch {
+      return false;
+    }
   };
 
   const markSurfaceLoaded = () => {
@@ -602,27 +611,31 @@ export function EmbedPlayerSurface({
       if (snapshot) {
         onPlaybackSnapshot?.(snapshot);
       }
+      const shouldUseCineSrcCommandSeek = sourceId === 'cinesrc' && sourceContinuity.canReceivePosition;
       const shouldUseTopLevelVerifiedSeek = sourceContinuity.canReceivePosition
         && (source?.resumeStrategy === 'verified-seek' || sourceId === 'vidlink' || forceStartFromBeginning);
-      if (shouldUseTopLevelVerifiedSeek
+      if ((shouldUseCineSrcCommandSeek || shouldUseTopLevelVerifiedSeek)
         && (initialResumeTime > 0 || forceStartFromBeginning)
         && !resumeRequested.current) {
         resumeRequested.current = true;
-        webViewRef.current?.injectJavaScript(createVerifiedResumeScript(
-          initialResumeTime,
-          activeHandoffId || `initial-${telemetry.getSession().id}`,
-        ));
+        const handoffId = activeHandoffId || `initial-${telemetry.getSession().id}`;
+        webViewRef.current?.injectJavaScript(
+          shouldUseCineSrcCommandSeek
+            ? createCineSrcResumeScript(initialResumeTime, handoffId)
+            : createVerifiedResumeScript(initialResumeTime, handoffId),
+        );
       }
     }
   };
 
   const compact = windowWidth < 480;
-  const presentationStyle = presentation === 'fit'
-    ? { width: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 }
-    : presentation === 'fill'
-      ? { width: '118%' as const, height: '118%' as const, alignSelf: 'center' as const, flex: 0 }
-      : presentation === 'stretch'
-        ? { width: '100%' as const, height: '100%' as const, flex: 0 }
+  const screenWiderThanVideo = windowWidth / Math.max(1, windowHeight) > 16 / 9;
+  const presentationStyle = presentation === 'provider'
+    ? { width: '100%' as const, height: '100%' as const, flex: 0, alignSelf: 'stretch' as const }
+    : presentation === 'fit'
+      ? (screenWiderThanVideo ? { height: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 } : { width: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 })
+      : presentation === 'fill'
+        ? (screenWiderThanVideo ? { width: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 } : { height: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 })
         : undefined;
   return (
     <View style={styles.container}>
@@ -631,7 +644,7 @@ export function EmbedPlayerSurface({
           <View style={styles.webVideo} accessibilityLabel="Releasing previous playback source" />
         ) : Platform.OS === 'web' ? (
           <iframe
-            src={embedUrl}
+            src={shieldedEmbedUrl}
             style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#000' }}
             allowFullScreen
             allow="autoplay; encrypted-media; picture-in-picture"
@@ -657,14 +670,16 @@ export function EmbedPlayerSurface({
             downloadCaptureEnabled={source?.supportsDownloads === true}
             downloadProviderClass={source?.releaseStatus || null}
             onNativeShieldEvidence={handleNativeShieldEvidence}
-            onNativeSingleTap={controller.toggleChromeFromUserTap}
-            source={{ uri: shieldedEmbedUrl }}
+            onNativeSingleTap={providerControlsMode ? undefined : controller.toggleChromeFromUserTap}
+            source={webViewSource}
             javaScriptEnabled
             domStorageEnabled
             allowsInlineMediaPlayback
             mediaPlaybackRequiresUserAction={false}
+            setSupportMultipleWindows={false} androidLayerType="none" presentationMode={presentation}
             injectedJavaScript={injectedScript}
             onShouldStartLoadWithRequest={handleShouldStartLoad}
+            containerStyle={presentation === 'provider' ? presentationStyle : undefined}
             style={[styles.webVideo, presentationStyle]}
             userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             onLoadStart={() => {
@@ -673,9 +688,9 @@ export function EmbedPlayerSurface({
               controller.setLoading('waiting');
             }}
             onLoadEnd={markSurfaceLoaded}
-            onError={({ nativeEvent }) => markFailed(nativeEvent.description || 'Provider failed to load')}
+            onError={({ nativeEvent }) => markFailed(nativeEvent.description || 'This source failed to load')}
             onHttpError={({ nativeEvent }) => {
-              if (nativeEvent.statusCode >= 400) markFailed(`Provider returned HTTP ${nativeEvent.statusCode}`);
+              if (nativeEvent.statusCode >= 400) markFailed('This source is having trouble');
             }}
             onMessage={(event) => handleMessage(event.nativeEvent.data)}
           />
@@ -688,6 +703,12 @@ export function EmbedPlayerSurface({
         onSwitchSource={() => controller.openOverlay('sources')}
       />
 
+      {providerControlsMode ? (
+        <ProviderControlsReturn onReturn={() => {
+          setProviderControlsMode(false);
+          controller.reveal();
+        }} />
+      ) : (
       <EmbeddedPlayerHud
         visible={showControls}
         compact={compact}
@@ -696,16 +717,22 @@ export function EmbedPlayerSurface({
         shieldState={shieldState}
         blockedRequests={blockedRequests}
         nativeShieldObserved={nativeShieldObserved.current}
-        landscape={isLandscape}
+        landscape={isLandscape} presentation={presentation}
         onReveal={controller.reveal}
         onCollapse={controller.dismiss}
-        onBack={() => router.back()}
+        onBack={onExit}
         onPresentation={() => controller.openOverlay('presentation')}
         onShield={() => controller.openOverlay('shield')}
         onSubtitles={() => controller.openOverlay('subtitles')}
-        onRotate={toggleOrientation}
+        onRotate={() => onToggleOrientation?.()}
+        onProviderControls={() => {
+          controller.closeOverlay();
+          controller.dismiss();
+          setProviderControlsMode(true);
+        }}
         onSources={() => setShowSources(true)}
       />
+      )}
 
       {!watchdogDismissed && (
         <WatchdogWarning
@@ -748,7 +775,7 @@ export function EmbedPlayerSurface({
         value={presentation}
         capability={{
           supported: presentationModes,
-          unsupportedReason: 'This provider only supports its original player layout.',
+          unsupportedReason: 'This picture mode is not available for embedded sources.',
         }}
         onChange={(mode: MobilePlayerPresentation) => {
           if (!presentationModes.includes(mode)) return;
@@ -764,9 +791,7 @@ export function EmbedPlayerSurface({
           targetSourceLabel={pendingManualSource.label}
           continuityMode={pendingManualSource.continuityMode}
           onChoose={completeManualSourceChoice}
-          onCancel={() => {
-            setPendingManualSource(null);
-          }}
+          onCancel={() => { setPendingManualSource(null); }}
         />
       )}
     </View>

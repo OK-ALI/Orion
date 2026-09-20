@@ -21,7 +21,7 @@ function downloaded(type = 'movie', id = 1, season = null, episode = null, asset
 }
 const titleResponse = (id = 1, type = 'movie') => ({ id, title: 'Remote title ' + id, name: 'Remote series ' + id,
   release_date: '2024-01-01', first_air_date: '2024-01-01', number_of_seasons: 3, overview: 'Loaded overview',
-  credits: { cast: [] }, recommendations: { results: [] }, videos: { results: [{ id: 'trailer', key: 'key' }] }, media_type: type });
+  credits: { cast: [] }, recommendations: { results: [] }, videos: { results: [{ id: 'trailer', key: 'key', site: 'YouTube', type: 'Trailer' }] }, original_language: 'en', media_type: type });
 
 // Deterministic hook/effect runner, real screen/hydration/repository selectors, mocked
 // platform services. Deferred promises let tests resolve pre-loss requests last.
@@ -54,7 +54,7 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
     'expo-router': { useRouter: () => router, useLocalSearchParams: () => params, useFocusEffect: (fn) => react.useEffect(fn, [fn]) },
     'expo-linear-gradient': { LinearGradient: 'LinearGradient' }, 'expo-blur': { BlurView: 'BlurView' }, '@expo/vector-icons': { Ionicons: 'Ionicons' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 10, bottom: 10 }) },
-    '@orion/shared/api': { tmdbFetch: (url) => new Promise((resolve, reject) => requests.push({ url, resolve, reject })), imgUrl: (value) => value },
+    '@orion/shared/api': { tmdbFetch: (url, requestOptions = {}) => new Promise((resolve, reject) => requests.push({ url, options: requestOptions, resolve, reject })), imgUrl: (value) => value },
     '../../context/NetworkContext': { useNetworkStatus: () => network }, './NetworkContext': { useNetworkStatus: () => network },
     '../../context/ThemeContext': { useOrionTheme: () => ({ theme }) },
     '../../context/LibraryContext': { useLibraryVisual: () => ({ toggleSave: (record) => saves.push(record), isSaved: () => false }), useLibraryPlaybackActions: () => ({ getPlaybackProgress: () => null }) },
@@ -247,6 +247,7 @@ test('stale title work is fenced across route, type, loss, and unmount; loaded d
 
 test('episodes and season videos are lazy, blocked offline, and fenced across season and recovery', async () => {
   const h = harness({ mode: 'remote', type: 'tv' }); assert.equal(h.requests.length, 1);
+  h.requests[0].resolve(titleResponse(1, 'tv')); await h.settle();
   h.options({ activeTab: 'episodes', showTrailerModal: true }); assert.equal(h.requests.length, 3);
   h.options({ selectedSeason: 2 }); assert.equal(h.requests.length, 5);
   h.connect('offline'); assert.equal(h.result.episodesLoading, false); assert.equal(h.result.episodesLoaded, false);
@@ -257,6 +258,39 @@ test('episodes and season videos are lazy, blocked offline, and fenced across se
   await h.settle(); assert.equal(h.result.episodes[0].id, 22); assert.equal(h.result.seasonVideos[0].id, 'new');
   h.connect('offline'); assert.equal(h.result.episodes[0].id, 22); h.options({ selectedSeason: 3 });
   assert.equal(h.result.episodes.length, 0); assert.equal(h.result.episodesLoaded, false); h.unmount();
+});
+
+
+test('missing localized movie videos retry once in the title original language and hydrate Trailer', async () => {
+  const h = harness({ mode: 'remote', type: 'movie' });
+  h.requests[0].resolve({ ...titleResponse(1, 'movie'), original_language: 'ko', videos: { results: [] } });
+  await h.settle();
+  assert.equal(h.requests.length, 2);
+  assert.equal(h.requests[1].url, '/movie/1/videos');
+  assert.equal(h.requests[1].options.language, 'ko');
+  h.requests[1].resolve({ results: [{ id: 'ko-trailer', key: 'ko-key', site: 'YouTube', type: 'Trailer', iso_639_1: 'ko' }] });
+  await h.settle();
+  assert.equal(h.result.data.videos.results[0].key, 'ko-key');
+  h.unmount();
+});
+
+test('TV trailer discovery probes selected and latest season before the Trailer modal exists', async () => {
+  const h = harness({ mode: 'remote', type: 'tv' });
+  h.requests[0].resolve({ ...titleResponse(1, 'tv'), original_language: 'ko', videos: { results: [] }, number_of_seasons: 3 });
+  await h.settle();
+  const urls = h.requests.slice(1).map((request) => request.url);
+  assert.ok(urls.includes('/tv/1/videos'));
+  assert.ok(urls.includes('/tv/1/season/1/videos'));
+  assert.ok(urls.includes('/tv/1/season/3/videos'));
+  const seasonRequest = h.requests.find((request) => request.url === '/tv/1/season/3/videos');
+  assert.equal(seasonRequest.options.language, 'ko');
+  seasonRequest.resolve({ results: [{ id: 'season-trailer', key: 'season-key', site: 'YouTube', type: 'Trailer' }] });
+  for (const request of h.requests.slice(1)) {
+    if (request !== seasonRequest) request.resolve({ results: [] });
+  }
+  await h.settle();
+  assert.equal(h.result.seasonVideos.some((video) => video.key === 'season-key' && video.seasonNum === 3), true);
+  h.unmount();
 });
 
 test('failed episodes remain unavailable instead of becoming a successful empty season', async () => {

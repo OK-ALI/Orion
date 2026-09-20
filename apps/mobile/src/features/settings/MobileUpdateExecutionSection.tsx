@@ -10,12 +10,15 @@ import {
   refreshMobileApplicationUpdateEnvironmentV1,
   type MobileApplicationUpdateStateV1,
 } from '../../services/mobileApplicationUpdateState';
+import { mmkvStorageAdapter } from '../../services/storageAdapter';
 import {
   installDirectApkV1,
   openDirectInstallPermissionSettingsV1,
   subscribeAndroidUpdateStateV1,
   type OrionNativeUpdateEventV1,
 } from '../../services/nativeUpdateEngine';
+
+const PENDING_UPDATE_KEY = 'orion.mobile.pendingUpdate.v2';
 
 function appUpdateFeedback(
   state: MobileApplicationUpdateStateV1,
@@ -27,6 +30,7 @@ function appUpdateFeedback(
   if (rawMessage === 'direct-build-required') {
     return "This version of Orion can't install updates directly.";
   }
+  if (rawMessage === 'complete') return 'Orion is up to date.';
   if (state.result?.rollout.deferred) {
     const result = state.result;
     return result?.state === 'available' && result.rollout.offeredVersion
@@ -45,6 +49,7 @@ function appUpdateFeedback(
 export function MobileUpdateExecutionSection({ state }: { state: MobileApplicationUpdateStateV1 }) {
   const { theme } = useOrionTheme();
   const [message, setMessage] = React.useState<string | null>(null);
+  const autoResumeRef = React.useRef(false);
   const busy = ['downloading', 'verifying', 'installing'].includes(state.status);
   const presentation = getMobileApplicationUpdatePresentationV1(state);
 
@@ -75,7 +80,16 @@ export function MobileUpdateExecutionSection({ state }: { state: MobileApplicati
     const apk = state.result?.releaseTruth.mobile.apk;
     const integrity = state.result?.integrity.artifact;
     if (!apk || !integrity) return;
+    const expectedVersionCode = 'buildNumber' in integrity ? integrity.buildNumber : null;
+    if (!Number.isSafeInteger(expectedVersionCode) || Number(expectedVersionCode) <= 0) {
+      setMessage('Orion could not finish the app update. Try again.');
+      return;
+    }
     setMessage(null);
+    mmkvStorageAdapter.set(PENDING_UPDATE_KEY, JSON.stringify({
+      version: state.result?.releaseTruth.mobile.release?.version || null,
+      savedAt: Date.now(),
+    }));
     try {
       const response = await installDirectApkV1({
         url: apk.url,
@@ -83,6 +97,7 @@ export function MobileUpdateExecutionSection({ state }: { state: MobileApplicati
         expectedSize: integrity.size,
         expectedSha256: integrity.sha256,
         expectedSignerSha256: integrity.signerSha256 || '',
+        expectedVersionCode: Number(expectedVersionCode),
       });
       if (response.code === 'permission-required') {
         setMessage('permission-required');
@@ -90,6 +105,8 @@ export function MobileUpdateExecutionSection({ state }: { state: MobileApplicati
       } else if (response.code === 'direct-build-required') {
         setMessage('direct-build-required');
         await refreshMobileApplicationUpdateEnvironmentV1();
+      } else if (response.code === 'update-in-progress') {
+        setMessage(null);
       }
     } catch {
       publishMobileApplicationUpdateEngineEventV1({
@@ -98,6 +115,33 @@ export function MobileUpdateExecutionSection({ state }: { state: MobileApplicati
       });
     }
   };
+
+  React.useEffect(() => {
+    const phase = state.environment?.transactionPhase;
+    if (phase === 'complete') {
+      mmkvStorageAdapter.remove(PENDING_UPDATE_KEY);
+      setMessage('complete');
+      autoResumeRef.current = false;
+      return;
+    }
+    const pending = mmkvStorageAdapter.get(PENDING_UPDATE_KEY);
+    if (
+      pending
+      && state.status === 'available'
+      && state.environment?.canRequestPackageInstalls
+      && !autoResumeRef.current
+    ) {
+      autoResumeRef.current = true;
+      void runDirectUpdate().finally(() => {
+        autoResumeRef.current = false;
+      });
+    }
+  }, [
+    state.status,
+    state.environment?.canRequestPackageInstalls,
+    state.environment?.transactionPhase,
+    state.result?.releaseTruth.mobile.release?.version,
+  ]);
 
   const showPermissionAction = state.status === 'permission-required';
   const directReady = isMobileApplicationUpdateInstallReadyV1(state)

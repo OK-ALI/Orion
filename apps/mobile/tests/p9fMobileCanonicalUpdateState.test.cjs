@@ -62,10 +62,10 @@ test('P9-F5 exposes one App Updates surface after Expo runtime retirement', () =
 
   assert.match(settings, /appPresentation/);
   assert.match(execution, /presentation\.description/);
-  assert.match(state, /label: 'Update ready'/);
+  assert.match(state, /label: 'Update available'/);
   assert.match(state, /label: 'Permission needed'/);
-  assert.match(state, /label: 'Unavailable'/);
-  assert.match(state, /label: 'Downloading'/);
+  assert.match(state, /label: 'Temporarily unavailable'/);
+  assert.match(state, /label: 'Downloading…'/);
   assert.match(banner, /announcement\.installState === 'permission-required'/);
   assert.doesNotMatch(settings, /checkExpoRuntimeUpdateV1|RuntimeUpdateExecutionSection|runtimeStatus|Quick update|Recovery/);
 });

@@ -7,6 +7,7 @@ import { useViewingActivitySteadyStateSync } from '../account/ViewingActivitySte
 import { useWatchedSteadyStateSync } from '../account/WatchedSteadyStateSync';
 import { MOBILE_PLAYER_SOURCES } from '../playback/mobileSources';
 import { checkWatchlistAvailabilityV1 } from '../../services/mobileAvailabilityChecks';
+import { checkMobileEntertainmentAlertsV1 } from '../../services/mobileEntertainmentAlerts';
 import {
   deliverMobileNotificationV1,
   getMobileNotificationPreferencesV1,
@@ -42,6 +43,7 @@ export function MobileNotificationCoordinator() {
   const viewingActivity = useViewingActivitySteadyStateSync();
   const [preferenceRevision, setPreferenceRevision] = useState(0);
   const availabilityBusyRef = useRef(false);
+  const entertainmentBusyRef = useRef(false);
   const updateBusyRef = useRef(false);
   const updateSessionCheckCompletedRef = useRef(false);
   const networkInitializedRef = useRef(false);
@@ -74,7 +76,7 @@ export function MobileNotificationCoordinator() {
             category: 'downloads',
             dedupeKey: `download-completed:${job.jobId}`,
             title: 'Download complete',
-            body: `${label} is verified and stored in Orion Library.`,
+            body: `${label} is saved in Orion Library.`,
             target: { target: 'downloads' },
           });
           continue;
@@ -94,7 +96,7 @@ export function MobileNotificationCoordinator() {
             category: 'downloads',
             dedupeKey: `download-action:${job.jobId}:${job.state}:${job.failure?.code || 'attention'}`,
             title: 'Download needs attention',
-            body: `${label} needs an action before it can continue. Open Downloads for details.`,
+            body: `${label} needs your attention. Open Downloads to continue.`,
             target: { target: 'downloads' },
           });
         }
@@ -141,7 +143,7 @@ export function MobileNotificationCoordinator() {
         category: 'offlineRecovery',
         dedupeKey: `offline-recovery:${Math.floor(Date.now() / (60 * 60_000))}`,
         title: 'Orion is back online',
-        body: 'You are connected again. Sync and update checks can continue.',
+        body: 'You are connected again. Orion can keep your library up to date.',
         target: { target: 'home' },
       });
     }
@@ -156,7 +158,7 @@ export function MobileNotificationCoordinator() {
       category: 'providerHealth',
       dedupeKey: `provider-failed:${next.sourceId}:${next.mediaType}:${next.lastFailure || 'unknown'}:${Math.floor(Date.now() / (6 * 60 * 60_000))}`,
       title: 'Playback source unavailable',
-      body: `${label} is having trouble right now. Orion will avoid it temporarily.`,
+      body: `${label} is having trouble. Orion will avoid it for now.`,
       target: { target: 'home' },
     });
   }), []);
@@ -171,6 +173,26 @@ export function MobileNotificationCoordinator() {
       for (const event of result.events) await deliverMobileNotificationV1(event);
     } finally {
       availabilityBusyRef.current = false;
+    }
+  }, [network.internetReachable, network.online, saved, savedOrder]);
+
+  const runEntertainmentCheck = useCallback(async () => {
+    const preferences = getMobileNotificationPreferencesV1();
+    const selection = {
+      newMovies: preferences.categories.newMovies,
+      newSeries: preferences.categories.newSeries,
+      newEpisodes: preferences.categories.newEpisodes,
+      animeReleases: preferences.categories.animeReleases,
+      upcoming: preferences.categories.upcoming,
+    };
+    if (!preferences.enabled || !Object.values(selection).some(Boolean)) return;
+    if (!network.online || network.internetReachable === false || entertainmentBusyRef.current) return;
+    entertainmentBusyRef.current = true;
+    try {
+      const result = await checkMobileEntertainmentAlertsV1(saved, savedOrder, selection);
+      for (const event of result.events) await deliverMobileNotificationV1(event);
+    } finally {
+      entertainmentBusyRef.current = false;
     }
   }, [network.internetReachable, network.online, saved, savedOrder]);
 
@@ -220,7 +242,8 @@ export function MobileNotificationCoordinator() {
     if (AppState.currentState !== 'active') return;
     void runUpdateCheck();
     void runAvailabilityCheck();
-  }, [runAvailabilityCheck, runUpdateCheck]);
+    void runEntertainmentCheck();
+  }, [runAvailabilityCheck, runEntertainmentCheck, runUpdateCheck]);
 
   useEffect(() => {
     runChecks();

@@ -65,7 +65,8 @@ test('framework finalized player reports native launch/playback failure with ret
   assert.match(screen, /<OrionOfflinePlayerSurface/);
   assert.match(player, /setError\(message\)/);
   assert.match(player, /onRetry=\{error \? \(\) => setLaunchAttempt/);
-  assert.match(player, /onBack=\{error \? \(\) => router\.back\(\) : undefined\}/);
+  assert.match(player, /onBack=\{error \? onExit : undefined\}/);
+  assert.match(player, /onExit\(\)/);
   assert.match(player, /result\.message/);
   assert.match(player, /result\.code/);
 });

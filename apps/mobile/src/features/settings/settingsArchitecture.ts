@@ -4,6 +4,7 @@ export type MobileSettingsSectionId =
   | 'account'
   | 'appearance'
   | 'performance'
+  | 'home'
   | 'sync'
   | 'playback'
   | 'accessibility'
@@ -25,6 +26,7 @@ export const MOBILE_SETTINGS_SECTIONS: readonly MobileSettingsSectionDefinition[
   { id: 'account', label: 'Account', status: 'active' },
   { id: 'appearance', label: 'Appearance', status: 'active' },
   { id: 'performance', label: 'Performance', status: 'active' },
+  { id: 'home', label: 'Home', status: 'active' },
   { id: 'sync', label: 'Sync', status: 'reserved' },
   { id: 'playback', label: 'Playback', status: 'reserved' },
   { id: 'accessibility', label: 'Accessibility', status: 'active' },

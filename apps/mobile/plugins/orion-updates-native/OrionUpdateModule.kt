@@ -1,6 +1,7 @@
 package com.okali.orion.updates
 
 import android.Manifest
+import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -20,6 +21,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 class OrionUpdateModule(
   private val reactContext: ReactApplicationContext,
@@ -29,9 +31,16 @@ class OrionUpdateModule(
     private const val EVENT_NAME = "OrionUpdateState"
     private const val MAX_REDIRECTS = 5
     private const val MIME_APK = "application/vnd.android.package-archive"
+    private const val TRANSACTION_PREFS = "orion-update-transaction-v2"
+    private const val INSTALL_ACTION = "com.okali.orion.UPDATE_INSTALL_STATUS"
+    private const val TRANSACTION_MAX_AGE_MS = 7L * 24L * 60L * 60L * 1000L
   }
 
   private val executor = Executors.newSingleThreadExecutor()
+  private val updateRunning = AtomicBoolean(false)
+  private val transaction by lazy {
+    reactContext.getSharedPreferences(TRANSACTION_PREFS, 0)
+  }
 
   override fun getName(): String = "OrionUpdates"
 
@@ -122,7 +131,17 @@ class OrionUpdateModule(
   private fun currentSignerSha256(): String? = signerSha256(installedPackageInfo())
 
   private fun environmentMap() = Arguments.createMap().apply {
+    val updatedAt = transaction.getLong("updatedAt", 0L)
+    if (updatedAt > 0L && System.currentTimeMillis() - updatedAt > TRANSACTION_MAX_AGE_MS) {
+      File(reactContext.cacheDir, "orion-updates").deleteRecursively()
+      transaction.edit().clear().apply()
+    }
     val info = installedPackageInfo()
+    val targetVersionCode = transaction.getLong("targetVersionCode", 0L)
+    if (targetVersionCode > 0L && versionCode(info) >= targetVersionCode) {
+      File(reactContext.cacheDir, "orion-updates").deleteRecursively()
+      transaction.edit().putString("phase", "complete").putLong("updatedAt", System.currentTimeMillis()).apply()
+    }
     val signer = signerSha256(info)
     putString("source", "direct")
     putString("packageName", reactContext.packageName)
@@ -131,6 +150,20 @@ class OrionUpdateModule(
     putBoolean("productionSignerMatched", signer == PRODUCTION_SIGNER_SHA256)
     putBoolean("requestInstallPackagesDeclared", requestInstallPackagesDeclared(info))
     putBoolean("canRequestPackageInstalls", canRequestPackageInstalls())
+    putString("transactionPhase", transaction.getString("phase", null))
+    putDouble("targetVersionCode", targetVersionCode.toDouble())
+  }
+
+  private fun saveTransaction(phase: String, targetVersionCode: Long = 0L, message: String? = null) {
+    transaction.edit()
+      .putString("phase", phase)
+      .putLong("targetVersionCode", targetVersionCode)
+      .putLong("updatedAt", System.currentTimeMillis())
+      .apply {
+        if (phase == "downloading") remove("oemFallbackAttempted")
+        if (message == null) remove("message") else putString("message", message)
+      }
+      .apply()
   }
 
   @ReactMethod
@@ -167,15 +200,25 @@ class OrionUpdateModule(
     expectedSize: Double,
     expectedSha256: String,
     expectedSignerSha256: String,
+    expectedVersionCode: Double,
     promise: Promise,
   ) {
+    if (!updateRunning.compareAndSet(false, true)) {
+      promise.resolve(Arguments.createMap().apply {
+        putBoolean("ok", false)
+        putString("code", "update-in-progress")
+      })
+      return
+    }
     val currentSigner = currentSignerSha256()
     if (currentSigner != PRODUCTION_SIGNER_SHA256) {
+      updateRunning.set(false)
       promise.reject("DIRECT_UPDATE_UNTRUSTED_BUILD", "Direct updates require a production-signed Orion build.")
       return
     }
 
     if (!requestInstallPackagesDeclared()) {
+      updateRunning.set(false)
       promise.resolve(Arguments.createMap().apply {
         putBoolean("ok", false)
         putString("code", "direct-build-required")
@@ -183,26 +226,22 @@ class OrionUpdateModule(
       return
     }
 
-    if (!canRequestPackageInstalls()) {
-      promise.resolve(Arguments.createMap().apply {
-        putBoolean("ok", false)
-        putString("code", "permission-required")
-      })
-      return
-    }
-
     val size = expectedSize.toLong()
     val expectedDigest = normalizeSha256(expectedSha256)
     val expectedSigner = normalizeSha256(expectedSignerSha256)
-    if (size <= 0L || expectedDigest.isEmpty()) {
+    val targetVersionCode = expectedVersionCode.toLong()
+    if (size <= 0L || expectedDigest.isEmpty() || targetVersionCode <= versionCode(installedPackageInfo())) {
+      updateRunning.set(false)
       promise.reject("DIRECT_UPDATE_INTEGRITY_REQUIRED", "Verified APK size and SHA-256 are required.")
       return
     }
     if (expectedSigner != PRODUCTION_SIGNER_SHA256) {
+      updateRunning.set(false)
       promise.reject("DIRECT_UPDATE_SIGNER_REJECTED", "The published APK signer does not match Orion's production identity.")
       return
     }
     if (!assetName.lowercase().endsWith(".apk") || assetName.contains('/') || assetName.contains('\\')) {
+      updateRunning.set(false)
       promise.reject("DIRECT_UPDATE_ASSET_INVALID", "The published Android installer name is invalid.")
       return
     }
@@ -210,12 +249,25 @@ class OrionUpdateModule(
     executor.execute {
       val updateDirectory = File(reactContext.cacheDir, "orion-updates")
       val apkFile = File(updateDirectory, "orion-update.apk")
+      val partialFile = File(updateDirectory, "orion-update.apk.part")
       try {
         updateDirectory.mkdirs()
-        if (apkFile.exists()) apkFile.delete()
-        emitState("downloading", progress = 0.0)
-        downloadTrustedApk(url, apkFile)
+        val cachedInstallerReady = apkFile.isFile
+          && apkFile.length() == size
+          && sha256(apkFile) == expectedDigest
+        if (!cachedInstallerReady) {
+          if (apkFile.exists()) apkFile.delete()
+          if (partialFile.exists() && partialFile.length() >= size) partialFile.delete()
+          saveTransaction("downloading", targetVersionCode)
+          emitState("downloading", progress = 0.0)
+          downloadTrustedApk(url, partialFile, size)
+          if (apkFile.exists()) apkFile.delete()
+          if (!partialFile.renameTo(apkFile)) {
+            throw IllegalStateException("Orion couldn't prepare the update. Try again.")
+          }
+        }
 
+        saveTransaction("verifying", targetVersionCode)
         emitState("verifying", progress = 1.0)
         if (apkFile.length() != size) {
           throw IllegalStateException("Downloaded APK size does not match the published integrity record.")
@@ -229,7 +281,7 @@ class OrionUpdateModule(
         if (candidate.packageName != reactContext.packageName) {
           throw IllegalStateException("Downloaded APK package identity does not match Orion.")
         }
-        if (versionCode(candidate) <= versionCode(installedPackageInfo())) {
+        if (versionCode(candidate) != targetVersionCode) {
           throw IllegalStateException("Downloaded APK is not newer than the installed Orion build.")
         }
 
@@ -239,33 +291,80 @@ class OrionUpdateModule(
           throw IllegalStateException("Downloaded APK signing identity verification failed.")
         }
 
-        val uri = FileProvider.getUriForFile(
-          reactContext,
-          "${reactContext.packageName}.orion-updates",
-          apkFile,
-        )
-        val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-          setDataAndType(uri, MIME_APK)
-          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-          if (reactContext.currentActivity == null) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (!canRequestPackageInstalls()) {
+          saveTransaction("permission-required", targetVersionCode)
+          emitState("ready", progress = 1.0)
+          promise.resolve(Arguments.createMap().apply {
+            putBoolean("ok", false)
+            putString("code", "permission-required")
+          })
+          return@execute
         }
 
+        saveTransaction("installing", targetVersionCode)
         emitState("installing", progress = 1.0)
-        val activity = reactContext.currentActivity
-        if (activity != null) activity.startActivity(intent) else reactContext.startActivity(intent)
+        try {
+          installWithPackageInstaller(apkFile)
+        } catch (_: Throwable) {
+          installWithSystemIntent(apkFile)
+        }
         promise.resolve(Arguments.createMap().apply {
           putBoolean("ok", true)
           putString("state", "installing")
         })
       } catch (error: Throwable) {
+        try { partialFile.delete() } catch (_: Throwable) {}
         try { apkFile.delete() } catch (_: Throwable) {}
+        saveTransaction("failed", message = "Orion couldn't finish the update. Try again.")
         emitState("failed", error = error.message ?: "Direct update failed.")
         promise.reject("DIRECT_UPDATE_FAILED", error.message ?: "Direct update failed.", error)
+      } finally {
+        updateRunning.set(false)
       }
     }
   }
 
-  private fun downloadTrustedApk(initialUrl: String, destination: File) {
+  private fun installWithPackageInstaller(apkFile: File) {
+    val installer = reactContext.packageManager.packageInstaller
+    val params = android.content.pm.PackageInstaller.SessionParams(
+      android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL,
+    ).apply {
+      setAppPackageName(reactContext.packageName)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        setRequireUserAction(android.content.pm.PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+      }
+    }
+    val sessionId = installer.createSession(params)
+    installer.openSession(sessionId).use { session ->
+      session.openWrite("orion-update.apk", 0, apkFile.length()).use { output ->
+        apkFile.inputStream().use { input -> input.copyTo(output, 128 * 1024) }
+        session.fsync(output)
+      }
+      val statusIntent = Intent(reactContext, OrionUpdateInstallReceiver::class.java)
+        .setAction(INSTALL_ACTION)
+      val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+      val pending = PendingIntent.getBroadcast(reactContext, sessionId, statusIntent, flags)
+      session.commit(pending.intentSender)
+    }
+  }
+
+  private fun installWithSystemIntent(apkFile: File) {
+    val uri = FileProvider.getUriForFile(
+      reactContext,
+      "${reactContext.packageName}.orion-updates",
+      apkFile,
+    )
+    val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+      setDataAndType(uri, MIME_APK)
+      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      if (reactContext.currentActivity == null) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    val activity = reactContext.currentActivity
+    if (activity != null) activity.startActivity(intent) else reactContext.startActivity(intent)
+  }
+
+  private fun downloadTrustedApk(initialUrl: String, destination: File, expectedSize: Long) {
     var current = URL(initialUrl)
     repeat(MAX_REDIRECTS + 1) { depth ->
       validateDownloadUrl(current, initial = depth == 0)
@@ -299,6 +398,9 @@ class OrionUpdateModule(
             if (read <= 0) break
             output.write(buffer, 0, read)
             downloaded += read
+            if (downloaded > expectedSize) {
+              throw IllegalStateException("We couldn't verify this update. Nothing was installed.")
+            }
             emitState(
               state = "downloading",
               progress = if (total > 0L) downloaded.toDouble() / total.toDouble() else null,
@@ -327,10 +429,15 @@ class OrionUpdateModule(
     if (host !in allowedHosts) {
       throw IllegalStateException("Orion update redirected to an untrusted host.")
     }
-    if (initial && (
-      host != "github.com" ||
-      !url.path.lowercase().startsWith("/ok-ali/orion/releases/download/")
-    )) {
+    val path = url.path.lowercase()
+    val allowedPath = if (host == "github.com") {
+      path.startsWith("/ok-ali/orion/releases/download/")
+    } else {
+      path.startsWith("/github-production-release-asset/") ||
+        path.startsWith("/github-production-release-asset-") ||
+        path.startsWith("/github-production-repository-file/")
+    }
+    if (!allowedPath || (initial && host != "github.com")) {
       throw IllegalStateException("Orion direct updates must originate from the official GitHub release path.")
     }
   }

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
 import { useEvent, useEventListener } from 'expo';
-import { useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView, type ContentType, type SubtitleTrack, type VideoSource } from 'expo-video';
 import { ALL_CINEMA_SOURCES } from '@orion/shared/sources';
 import { PlayerHUD } from '../../components/player/PlayerHUD';
@@ -56,8 +55,8 @@ export function NativePlayerSurface({
   onAutomaticFailover,
   onPlaybackSnapshot,
   onVerifiedPlaybackCompletion,
+  onExit,
 }: NativePlayerSurfaceProps) {
-  const router = useRouter();
   const { recordPlayback } = useLibraryPlaybackActions();
   const controller = useMobilePlayerController();
   const [watchdogDismissed, setWatchdogDismissed] = useState(false);
@@ -311,7 +310,7 @@ export function NativePlayerSurface({
       <PlayerStateOverlay
         state={controller.state.loadingState}
         detail={localPlaybackError || undefined}
-        onBack={localPlaybackError ? () => router.back() : undefined}
+        onBack={localPlaybackError ? onExit : undefined}
         onRetry={() => {
           if (!localPlaybackError) {
             player.play();
@@ -331,7 +330,7 @@ export function NativePlayerSurface({
       <PlayerHUD
         player={player}
         title={title || 'Playing Video'}
-        onBack={() => router.back()}
+        onBack={onExit}
         controlsVisible={controlsVisible}
         onReveal={controller.reveal}
         onDismiss={controller.dismiss}

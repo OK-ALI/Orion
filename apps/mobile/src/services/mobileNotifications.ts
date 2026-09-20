@@ -7,6 +7,11 @@ export type MobileNotificationCategoryV1 =
   | 'offlineRecovery'
   | 'providerHealth'
   | 'watchlist'
+  | 'newMovies'
+  | 'newSeries'
+  | 'newEpisodes'
+  | 'animeReleases'
+  | 'upcoming'
   | 'downloads';
 
 export type MobileNotificationPermissionV1 = 'unsupported' | 'undetermined' | 'granted' | 'denied';
@@ -15,6 +20,7 @@ export type MobileNotificationTargetV1 =
   | { target: 'home' }
   | { target: 'settings'; section: 'account' | 'updates' | 'notifications' }
   | { target: 'media'; mediaId: string; mediaType: 'movie' | 'tv' }
+  | { target: 'discover'; feed: 'trending' | 'new-releases' | 'upcoming'; mediaType: 'all' | 'movie' | 'tv'; region?: 'all' | 'hollywood' | 'bollywood' | 'asian'; subfilter?: string; genreId?: number; window?: string }
   | { target: 'downloads' };
 
 export interface MobileNotificationPreferencesV1 {
@@ -58,11 +64,31 @@ export const MOBILE_NOTIFICATION_CATEGORY_COPY_V1: Readonly<Record<
   }),
   watchlist: Object.freeze({
     label: 'My List releases',
-    description: 'Saved movies, shows and anime release or become available to watch.',
+    description: 'Saved titles releasing or becoming available.',
+  }),
+  newMovies: Object.freeze({
+    label: 'New movies',
+    description: 'Notable movies arriving now.',
+  }),
+  newSeries: Object.freeze({
+    label: 'New series',
+    description: 'New series premiering now.',
+  }),
+  newEpisodes: Object.freeze({
+    label: 'New episodes',
+    description: 'Fresh episodes from shows in My List.',
+  }),
+  animeReleases: Object.freeze({
+    label: 'Anime releases',
+    description: 'Anime premieres and new episodes.',
+  }),
+  upcoming: Object.freeze({
+    label: 'Upcoming reminders',
+    description: 'Saved titles and episodes coming soon.',
   }),
   downloads: Object.freeze({
     label: 'Downloads',
-    description: 'Completion and problem alerts.',
+    description: 'When downloads finish or need attention.',
   }),
 });
 
@@ -80,6 +106,11 @@ export const DEFAULT_MOBILE_NOTIFICATION_PREFERENCES_V1: MobileNotificationPrefe
     offlineRecovery: true,
     providerHealth: false,
     watchlist: false,
+    newMovies: false,
+    newSeries: false,
+    newEpisodes: false,
+    animeReleases: false,
+    upcoming: false,
     downloads: true,
   }),
   quietHours: Object.freeze({
@@ -118,6 +149,11 @@ function normalizePreferences(value: any): MobileNotificationPreferencesV1 {
       offlineRecovery: value.categories?.offlineRecovery !== false,
       providerHealth: value.categories?.providerHealth === true,
       watchlist: value.categories?.watchlist === true,
+      newMovies: value.categories?.newMovies === true,
+      newSeries: value.categories?.newSeries === true,
+      newEpisodes: value.categories?.newEpisodes === true,
+      animeReleases: value.categories?.animeReleases === true,
+      upcoming: value.categories?.upcoming === true,
       downloads: value.categories?.downloads !== false,
     },
     quietHours: {
@@ -240,11 +276,11 @@ async function ensureAndroidChannelsV1(): Promise<void> {
   const Notifications = await loadNotificationsModule();
   if (!Notifications) return;
   const channels = [
-    ['orion-updates', 'Orion updates', Notifications.AndroidImportance.DEFAULT],
-    ['orion-sync', 'Orion sync', Notifications.AndroidImportance.DEFAULT],
-    ['orion-availability', 'Orion availability', Notifications.AndroidImportance.DEFAULT],
-    ['orion-downloads', 'Orion downloads', Notifications.AndroidImportance.DEFAULT],
-    ['orion-status', 'Orion status', Notifications.AndroidImportance.LOW],
+    ['orion-updates', 'App Updates', Notifications.AndroidImportance.DEFAULT],
+    ['orion-sync', 'Orion Cloud', Notifications.AndroidImportance.DEFAULT],
+    ['orion-availability', 'New & Upcoming', Notifications.AndroidImportance.DEFAULT],
+    ['orion-downloads', 'Downloads', Notifications.AndroidImportance.DEFAULT],
+    ['orion-status', 'Orion Alerts', Notifications.AndroidImportance.LOW],
   ] as const;
   for (const [id, name, importance] of channels) {
     await Notifications.setNotificationChannelAsync(id, { name, importance });
@@ -303,7 +339,7 @@ export async function requestMobileNotificationPermissionV1(): Promise<MobileNot
 function channelForCategory(category: MobileNotificationCategoryV1): string {
   if (category === 'appUpdates') return 'orion-updates';
   if (category === 'syncFailures') return 'orion-sync';
-  if (category === 'watchlist') return 'orion-availability';
+  if (['watchlist', 'newMovies', 'newSeries', 'newEpisodes', 'animeReleases', 'upcoming'].includes(category)) return 'orion-availability';
   if (category === 'downloads') return 'orion-downloads';
   return 'orion-status';
 }
@@ -358,8 +394,8 @@ export async function sendMobileNotificationSelfTestV1(): Promise<boolean> {
     const trigger = Platform.OS === 'android' ? { channelId: 'orion-status' } : null;
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Notifications are working',
-        body: 'Orion alerts are ready on this device. Tap to return to Notifications.',
+        title: 'Orion alerts are ready',
+        body: 'Tap to return to Notifications.',
         data: { target: 'settings', section: 'notifications' },
       },
       trigger,
@@ -380,6 +416,14 @@ export function resolveMobileNotificationTargetV1(data: unknown): MobileNotifica
     && (value.section === 'account' || value.section === 'updates' || value.section === 'notifications')
   ) {
     return { target: 'settings', section: value.section };
+  }
+  if (
+    value.target === 'discover'
+    && (value.feed === 'trending' || value.feed === 'new-releases' || value.feed === 'upcoming')
+    && (value.mediaType === 'all' || value.mediaType === 'movie' || value.mediaType === 'tv')
+  ) {
+    const region = value.region === 'hollywood' || value.region === 'bollywood' || value.region === 'asian' ? value.region : 'all';
+    return { target: 'discover', feed: value.feed, mediaType: value.mediaType, region, subfilter: typeof value.subfilter === 'string' ? value.subfilter.slice(0, 24) : undefined, genreId: typeof value.genreId === 'number' && Number.isFinite(value.genreId) ? value.genreId : undefined, window: typeof value.window === 'string' ? value.window.slice(0, 8) : undefined };
   }
   if (
     value.target === 'media'

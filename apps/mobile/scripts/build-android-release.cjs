@@ -40,6 +40,12 @@ const releaseKeystore = path.join(
   "signing",
   "orion-mobile-release.jks",
 );
+const encryptedCredentialFile = path.join(
+  process.env.USERPROFILE || process.env.HOME || "",
+  ".orion",
+  "signing",
+  "orion-android-release-credentials.dpapi.json",
+);
 const defaultWindowsSdk = process.env.LOCALAPPDATA
   ? path.join(process.env.LOCALAPPDATA, "Android", "Sdk")
   : "";
@@ -50,6 +56,24 @@ const androidSdk =
 
 function patchReleaseGradleText(input) {
   let contents = input;
+
+  if (!contents.includes("// ORION_RELEASE_NATIVE_JOB_POOL")) {
+    const versionNameLine = contents.match(/^\s*versionName\s+[^\r\n]+$/m)?.[0];
+    if (!versionNameLine) {
+      throw new Error("Unable to locate Android versionName for the native build job pool.");
+    }
+    const nativeJobPool = [
+      "        // ORION_RELEASE_NATIVE_JOB_POOL",
+      "        externalNativeBuild {",
+      "            cmake {",
+      "                arguments '-DCMAKE_JOB_POOLS=orion_compile=1;orion_link=1',",
+      "                    '-DCMAKE_JOB_POOL_COMPILE=orion_compile',",
+      "                    '-DCMAKE_JOB_POOL_LINK=orion_link'",
+      "            }",
+      "        }",
+    ].join("\n");
+    contents = contents.replace(versionNameLine, `${versionNameLine}\n${nativeJobPool}`);
+  }
 
   if (!contents.includes("// ORION_RELEASE_SIGNING_FOUNDATION")) {
     const projectRootLine =
@@ -156,6 +180,7 @@ function patchReleaseGradleText(input) {
   contents = `${before}${buildTypes}${after}`;
 
   const required = [
+    "// ORION_RELEASE_NATIVE_JOB_POOL",
     "// ORION_RELEASE_SIGNING_FOUNDATION",
     "// ORION_RELEASE_EMBEDDED_BUNDLE",
     "// ORION_RELEASE_SIGNING_CONFIG",
@@ -200,6 +225,68 @@ function run(command, args, options = {}) {
   if (result.error) throw new Error(`Unable to start ${command}: ${result.error.message}`);
   if (result.status !== 0) throw new Error(`${command} exited with code ${result.status}.`);
   return result;
+}
+
+function loadStoredReleaseCredentials() {
+  if (
+    process.env.ORION_ANDROID_RELEASE_STORE_PASSWORD &&
+    process.env.ORION_ANDROID_RELEASE_KEY_PASSWORD
+  ) {
+    return "environment";
+  }
+  if (process.platform !== "win32" || !fs.existsSync(encryptedCredentialFile)) return "missing";
+
+  const windowsPowerShell = process.env.SystemRoot
+    ? path.join(
+      process.env.SystemRoot,
+      "System32",
+      "WindowsPowerShell",
+      "v1.0",
+      "powershell.exe",
+    )
+    : "powershell.exe";
+  const decryptScript = [
+    "$ErrorActionPreference = 'Stop'",
+    "Add-Type -AssemblyName System.Security",
+    "$payload = Get-Content -Raw -LiteralPath $env:ORION_ANDROID_CREDENTIAL_FILE | ConvertFrom-Json",
+    "if ($payload.protection -ne 'Windows-DPAPI-CurrentUser') { throw 'Unsupported protection' }",
+    "$entropy = [Text.Encoding]::UTF8.GetBytes('Orion Android Release Credentials v1')",
+    "function Read-OrionSecret([string]$value) {",
+    "  $encrypted = [Convert]::FromBase64String($value)",
+    "  $plain = [Security.Cryptography.ProtectedData]::Unprotect($encrypted, $entropy, [Security.Cryptography.DataProtectionScope]::CurrentUser)",
+    "  try { return [Text.Encoding]::UTF8.GetString($plain) } finally { [Array]::Clear($plain, 0, $plain.Length) }",
+    "}",
+    "$result = @{ storePassword = Read-OrionSecret $payload.storePassword; keyPassword = Read-OrionSecret $payload.keyPassword }",
+    "[Console]::Out.Write(($result | ConvertTo-Json -Compress))",
+  ].join("\n");
+  const result = spawnSync(
+    fs.existsSync(windowsPowerShell) ? windowsPowerShell : "powershell.exe",
+    ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", decryptScript],
+    {
+      encoding: "utf8",
+      env: { ...process.env, ORION_ANDROID_CREDENTIAL_FILE: encryptedCredentialFile },
+      windowsHide: true,
+      shell: false,
+    },
+  );
+  if (result.error || result.status !== 0) {
+    throw new Error("Unable to unlock the locally stored Orion Android signing credential.");
+  }
+
+  let credentials;
+  try {
+    credentials = JSON.parse(result.stdout);
+  } catch {
+    throw new Error("The locally stored Orion Android signing credential is invalid.");
+  }
+  if (!credentials.storePassword || !credentials.keyPassword) {
+    throw new Error("The locally stored Orion Android signing credential is incomplete.");
+  }
+  process.env.ORION_ANDROID_RELEASE_STORE_PASSWORD ||= credentials.storePassword;
+  process.env.ORION_ANDROID_RELEASE_KEY_PASSWORD ||= credentials.keyPassword;
+  credentials.storePassword = "";
+  credentials.keyPassword = "";
+  return "windows-dpapi";
 }
 
 function findLatestBuildTools(sdkRoot) {
@@ -341,6 +428,7 @@ function verifySigning(apkPath) {
 }
 
 function main() {
+  const credentialSource = loadStoredReleaseCredentials();
   if (!fs.existsSync(releaseKeystore)) {
     throw new Error(`Permanent Orion release keystore not found: ${releaseKeystore}`);
   }
@@ -350,6 +438,7 @@ function main() {
   if (!process.env.ORION_ANDROID_RELEASE_KEY_PASSWORD) {
     throw new Error("ORION_ANDROID_RELEASE_KEY_PASSWORD is not set for this process.");
   }
+  console.log(`[Android] Release signing credential unlocked from ${credentialSource}.`);
 
   console.log("[Android] Preparing Orion production bundle and native release prerequisites...");
   run(process.execPath, [standaloneScript, "--prepare-only"], {
@@ -412,7 +501,9 @@ if (require.main === module) {
 }
 
 module.exports = {
+  encryptedCredentialFile,
   expectedCertificateSha256,
+  loadStoredReleaseCredentials,
   patchReleaseGradleText,
   verifySigning,
 };

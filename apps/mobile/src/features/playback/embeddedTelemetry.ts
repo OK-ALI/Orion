@@ -128,7 +128,7 @@ export function createEmbeddedTelemetryScript({
           sessionId: config.sessionId,
           sourceId: config.sourceId,
           sequence: ++sequence,
-          origin: window.location.origin,
+          origin: typeof payload.observedOrigin === 'string' ? payload.observedOrigin : window.location.origin,
           evidence: evidence,
           state: state,
           currentTime: numberOrNull(payload.currentTime),
@@ -171,21 +171,30 @@ export function createEmbeddedTelemetryScript({
       }
 
       function normalizeProviderMessage(event) {
-        var hybridFrameMessageSource = config.sourceId === 'vidsrc' || config.sourceId === 'vsembed';
-        if (config.strategy !== 'player-event' && !hybridFrameMessageSource) return;
+        var supportedSources = {
+          videasy: true,
+          vidking: true,
+          vidlink: true,
+          vidnest: true,
+          'vidsrc-ir': true,
+          cinesrc: true,
+          vixsrc: true,
+          vidsrc: true,
+          vsembed: true
+        };
+        if (!supportedSources[config.sourceId]) return;
         var extraOrigins = providerMessageOrigins[config.sourceId];
         if (!allowedOrigins.has(event.origin) && !(extraOrigins && extraOrigins.has(event.origin))) return;
-        var supportedSources = { vidking: true, vidlink: true, vixsrc: true, vidsrc: true, vsembed: true };
-        if (!supportedSources[config.sourceId]) return;
 
         var value = event.data;
         if (typeof value === 'string' && value.length <= 4096) {
           try { value = JSON.parse(value); } catch (_) { return; }
         }
         if (!value || typeof value !== 'object') return;
-        var payload = value.type === 'PLAYER_EVENT' && value.data && typeof value.data === 'object'
-          ? value.data
-          : null;
+        var isCineSrcEvent = typeof value.type === 'string' && value.type.indexOf('cinesrc:') === 0;
+        var payload = value.type === 'PLAYER_EVENT'
+          ? (value.data && typeof value.data === 'object' ? value.data : value)
+          : isCineSrcEvent ? value : null;
         if (!payload) return;
 
         // VidSrc/VsEmbed use provider_progress/provider_duration/provider_status
@@ -215,13 +224,16 @@ export function createEmbeddedTelemetryScript({
             send(providerState, 'provider-message', {
               currentTime: providerProgress,
               duration: providerDuration,
-              bufferedPosition: payload.bufferedPosition
+              bufferedPosition: payload.bufferedPosition,
+              observedOrigin: event.origin
             });
             return;
           }
         }
 
-        var eventName = String(payload.event || payload.action || payload.type || '').toLowerCase();
+        var eventName = String(payload.event || payload.action || payload.type || '')
+          .toLowerCase()
+          .replace(/^cinesrc:/, '');
         if (!['play', 'pause', 'seeked', 'ended', 'timeupdate', 'waiting', 'buffering'].includes(eventName)) return;
         var state = eventName === 'waiting' || eventName === 'buffering'
           ? 'buffering'
@@ -235,7 +247,8 @@ export function createEmbeddedTelemetryScript({
         send(state, 'provider-message', {
           currentTime: payload.currentTime != null ? payload.currentTime : payload.time != null ? payload.time : payload.position,
           duration: payload.duration != null ? payload.duration : payload.totalTime != null ? payload.totalTime : payload.length,
-          bufferedPosition: payload.bufferedPosition
+          bufferedPosition: payload.bufferedPosition,
+          observedOrigin: event.origin
         });
       }
 

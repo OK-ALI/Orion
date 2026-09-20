@@ -148,7 +148,7 @@ test('PlayerScreen finalized-file product route cuts over to OrionPlayerActivity
   assert.match(activitySurface, /evidence: 'native-video-event'/);
   assert.match(activitySurface, /event\.state === 'failed' \? 'error'/);
   assert.match(activitySurface, /telemetry\.flush\(\)/);
-  assert.match(activitySurface, /router\.back\(\)/);
+  assert.match(activitySurface, /onExit\(\)/);
   assert.match(legacySurface, /requireNativeComponent<NativeOfflinePlayerProps>\('OrionOfflinePlayerView'\)/);
 });
 test('framework Activity defers MediaPlayer timeline polling until onPrepared', () => {

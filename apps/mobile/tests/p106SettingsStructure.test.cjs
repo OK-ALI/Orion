@@ -10,7 +10,7 @@ test('P10.6-C1 removes structural Settings cards while preserving the establishe
   const settings = read('app', '(tabs)', 'settings.tsx');
 
   assert.match(settings, /<MobilePageHeader[\s\S]*eyebrow="ORION MOBILE"[\s\S]*title="Settings"[\s\S]*subtitle="Customize Orion Mobile on this device\."/);
-  assert.match(settings, /<SettingsSectionNavigator[\s\S]*sections=\{MOBILE_ACTIVE_SETTINGS_SECTIONS\}/);
+  assert.match(settings, /<SettingsSectionNavigator[\s\S]*sections=\{orderedSections\}/);
 
   assert.match(settings, /style=\{\[styles\.section, \{ borderBottomColor: theme\.border \}\]\}/);
   assert.doesNotMatch(settings, /styles\.section, \{ backgroundColor: theme\.surface, borderColor: theme\.border \}/);
@@ -58,7 +58,7 @@ test('P10.6 Settings hierarchy polish preserves measured Jump to section anchors
   assert.match(settings, /onLayout=\{onLayout\}/);
   assert.match(settings, /sectionOffsets\.current\[sectionId\] = event\.nativeEvent\.layout\.y/);
   assert.match(settings, /scrollRef\.current\?\.scrollTo\(\{ y: Math\.max\(0, y - spacing\[2\]\), animated: !preferences\.reducedMotion \}\)/);
-  assert.match(navigator, /onPress=\{\(\) => \{[\s\S]{0,120}setOpen\(false\);[\s\S]{0,120}onSelect\(section\.id\)/);
+  assert.match(navigator, /onSelect=\{\(\) => \{[\s\S]{0,160}setOpen\(false\);[\s\S]{0,160}onSelect\(section\.id\)/);
 });
 
 test('P10.6-C1 keeps all active Settings owners mounted and defers hierarchy/copy cleanup to later slices', () => {

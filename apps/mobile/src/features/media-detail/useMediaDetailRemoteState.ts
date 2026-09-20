@@ -3,6 +3,32 @@ import { tmdbFetch } from '@orion/shared/api';
 import { useNetworkStatus } from '../../context/NetworkContext';
 import { useRemoteRecoveryEffect } from '../../context/useRemoteRecoveryEffect';
 
+
+function hasPlayableVideo(videos: any[]) {
+  return videos.some((video) => {
+    const site = String(video?.site || '').toLowerCase();
+    return !!String(video?.key || '').trim() && (site === 'youtube' || site === 'vimeo');
+  });
+}
+
+function mergeVideos(primary: any[], fallback: any[]) {
+  const seen = new Set<string>();
+  const merged: any[] = [];
+  for (const video of [...primary, ...fallback]) {
+    const site = String(video?.site || '').toLowerCase();
+    const key = String(video?.key || '').trim();
+    const identity = site && key ? `${site}:${key}` : String(video?.id || `${site}:${key}:${merged.length}`);
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    merged.push(video);
+  }
+  return merged;
+}
+
+function originalVideoLanguage(data: any) {
+  return String(data?.original_language || '').trim().toLowerCase();
+}
+
 export function mediaDetailConnectionCopy(state: string, local = false) {
   if (state === 'degraded') return 'Orion Cinema is temporarily unavailable.';
   if (state === 'reconnecting') return 'Reconnecting to Orion Cinema.';
@@ -60,6 +86,21 @@ export function useMediaDetailRemoteState({ id, type, selectedSeason, activeTab,
         if (!isCurrent()) return;
         setDetail({ key: routeKey, data: res });
         setDetailStatus({ key: detailRequestKey, error: false });
+        const primaryVideos = Array.isArray(res?.videos?.results) ? res.videos.results : [];
+        const fallbackLanguage = originalVideoLanguage(res);
+        if (!hasPlayableVideo(primaryVideos) && fallbackLanguage) {
+          tmdbFetch<any>(`/${type}/${id}/videos`, { language: fallbackLanguage })
+            .then((fallback) => {
+              if (!isCurrent()) return;
+              const fallbackVideos = Array.isArray(fallback?.results) ? fallback.results : [];
+              if (!hasPlayableVideo(fallbackVideos)) return;
+              setDetail({ key: routeKey, data: {
+                ...res,
+                videos: { ...(res.videos || {}), results: mergeVideos(primaryVideos, fallbackVideos) },
+              } });
+            })
+            .catch(() => {});
+        }
       })
       .catch(() => {
         if (isCurrent()) setDetailStatus({ key: detailRequestKey, error: true });
@@ -86,21 +127,33 @@ export function useMediaDetailRemoteState({ id, type, selectedSeason, activeTab,
     return () => { cancelled = true; };
   }, [activeTab, id, isMovie, selectedSeason, routeKey, episodeKey, episodeRequestKey]);
 
+  const currentDetail = detail?.key === routeKey ? detail.data : null;
+  const titleHasPlayableVideo = hasPlayableVideo(currentDetail?.videos?.results || []);
+  const latestSeason = Math.max(1, Number(currentDetail?.number_of_seasons) || 1);
   useEffect(() => {
-    if (type !== 'tv' || !showTrailerModal || !selectedSeason || !remoteReadyRef.current) return;
+    if (type !== 'tv' || !currentDetail || !selectedSeason || !remoteReadyRef.current) return;
+    const shouldProbeFallback = !titleHasPlayableVideo;
+    if (!showTrailerModal && !shouldProbeFallback) return;
     let cancelled = false;
     const generation = generationRef.current;
-    tmdbFetch<any>(`/tv/${id}/season/${selectedSeason}/videos`)
-      .then((result) => {
-        if (cancelled || !remoteReadyRef.current || generation !== generationRef.current || routeRef.current !== routeKey) return;
-        setVideos((current) => ({ key: routeKey, results: [
-          ...(current?.key === routeKey ? current.results.filter((video) => video.seasonNum !== selectedSeason) : []),
-          ...(result.results || []).map((video: any) => ({ ...video, seasonNum: selectedSeason })),
-        ] }));
-      })
-      .catch(() => {});
+    const seasons = [...new Set(showTrailerModal
+      ? [selectedSeason]
+      : [selectedSeason, latestSeason]
+    )].filter((season) => season > 0).slice(0, 2);
+    const fallbackLanguage = originalVideoLanguage(currentDetail);
+    for (const season of seasons) {
+      tmdbFetch<any>(`/tv/${id}/season/${season}/videos`, fallbackLanguage ? { language: fallbackLanguage } : {})
+        .then((result) => {
+          if (cancelled || !remoteReadyRef.current || generation !== generationRef.current || routeRef.current !== routeKey) return;
+          setVideos((current) => ({ key: routeKey, results: [
+            ...(current?.key === routeKey ? current.results.filter((video) => video.seasonNum !== season) : []),
+            ...(result.results || []).map((video: any) => ({ ...video, seasonNum: season })),
+          ] }));
+        })
+        .catch(() => {});
+    }
     return () => { cancelled = true; };
-  }, [id, type, selectedSeason, showTrailerModal, routeKey, refreshKey]);
+  }, [id, type, selectedSeason, showTrailerModal, routeKey, refreshKey, titleHasPlayableVideo, latestSeason, currentDetail?.original_language]);
 
   const data = detail?.key === routeKey ? detail.data : null;
   const episodes = episodeResponse?.key === episodeKey ? episodeResponse.episodes : [];

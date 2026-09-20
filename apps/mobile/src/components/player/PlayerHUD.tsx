@@ -323,8 +323,8 @@ export function PlayerHUD({
             <View style={styles.bottomActions}>
               {onOpenPresentation && (
                 <Pressable style={[styles.sourceButton, { backgroundColor: theme.surface }]} onPress={onOpenPresentation}>
-                  <Ionicons name="scan-outline" size={18} color={theme.textSecondary} />
-                  <Text style={[styles.sourceText, { color: theme.textSecondary }]}>Display</Text>
+                  <Ionicons name="resize-outline" size={18} color={theme.textSecondary} />
+                  <Text style={[styles.sourceText, { color: theme.textSecondary }]}>Resize</Text>
                 </Pressable>
               )}
               {onOpenSubtitles && (

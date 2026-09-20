@@ -15,7 +15,7 @@ test('P9 retirement disables Expo runtime updates and removes remote runtime rou
   assert.equal(config.updates.checkAutomatically, 'NEVER');
   assert.equal(config.updates.fallbackToCacheTimeout, 0);
   assert.equal(config.updates.useEmbeddedUpdate, true);
-  assert.equal(config.runtimeVersion, 'orion-mobile-native-r1');
+  assert.equal(config.runtimeVersion, 'orion-mobile-native-r2');
   assert.equal(config.updates.url, undefined);
   assert.equal(config.updates.requestHeaders, undefined);
 });

@@ -55,7 +55,7 @@ test('P9.3 keeps Notifications active with category, quiet-hour and device-test 
   assert.match(settingsScreen, /useLocalSearchParams/);
   assert.match(settingsContent, />Alerts</);
   assert.match(settingsContent, />Quiet hours</);
-  assert.match(settingsContent, /Send Orion test notification/);
+  assert.match(settingsContent, /Send a sample Orion alert to this device/);
   assert.match(settingsContent, /sendMobileNotificationSelfTestV1/);
   assert.match(settingsContent, /QuietHoursTimePicker/);
   assert.match(settingsContent, /Quiet hours start time/);
@@ -99,9 +99,15 @@ test('P9.3 notification taps use a whitelisted target contract rather than arbit
   assert.match(service, /resolveMobileNotificationTargetV1/);
   assert.match(service, /value\.target === 'media'/);
   assert.match(service, /value\.target === 'settings'/);
+  assert.match(service, /value\.target === 'discover'/);
+  assert.match(service, /feed: 'trending' \| 'new-releases' \| 'upcoming'/);
   assert.match(service, /sendMobileNotificationSelfTestV1/);
-  assert.match(service, /Notifications are working/);
+  assert.match(service, /Orion alerts are ready/);
   assert.doesNotMatch(router, /Linking\.openURL/);
   assert.match(router, /pathname: '\/media\/\[id\]'/);
   assert.match(router, /pathname: '\/\(tabs\)\/settings'/);
+  assert.match(router, /pathname: '\/discover'/);
+  assert.match(router, /addNotificationResponseReceivedListener/);
+  assert.match(router, /getLastNotificationResponseAsync/);
+  assert.doesNotMatch(router, /getLastNotificationResponse\(\)/);
 });

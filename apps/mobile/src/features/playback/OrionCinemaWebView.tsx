@@ -3,6 +3,7 @@ import { DeviceEventEmitter, Platform, requireNativeComponent } from "react-nati
 import { WebView } from "react-native-webview";
 import type { WebView as WebViewType, WebViewProps } from "react-native-webview";
 import type { ProviderRequestManifestV1 } from "@orion/shared/sources";
+import type { MobilePlayerPresentation } from "@orion/shared/types";
 
 const NativeCinemaWebView = Platform.OS === "android"
   ? requireNativeComponent("OrionCinemaWebView")
@@ -13,6 +14,7 @@ export interface OrionCinemaWebViewProps extends WebViewProps {
   shieldSessionId: string;
   downloadCaptureEnabled?: boolean;
   downloadProviderClass?: string | null;
+  presentationMode?: MobilePlayerPresentation;
   onNativeShieldEvidence?(payload: string): void;
   onNativeSingleTap?(): void;
 }
@@ -27,6 +29,7 @@ export const OrionCinemaWebView = forwardRef<WebViewType, OrionCinemaWebViewProp
     shieldSessionId,
     downloadCaptureEnabled = false,
     downloadProviderClass = null,
+    presentationMode = "provider",
     onNativeShieldEvidence,
     onNativeSingleTap,
     ...props
@@ -37,7 +40,8 @@ export const OrionCinemaWebView = forwardRef<WebViewType, OrionCinemaWebViewProp
       sessionId: shieldSessionId,
       downloadCaptureEnabled,
       providerClass: downloadProviderClass,
-    }), [downloadCaptureEnabled, downloadProviderClass, shieldManifest, shieldSessionId]);
+      presentationMode,
+    }), [downloadCaptureEnabled, downloadProviderClass, presentationMode, shieldManifest, shieldSessionId]);
     const nativeConfig = useMemo(() => NativeCinemaWebView
       ? {
         component: NativeCinemaWebView as never,

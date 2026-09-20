@@ -10,5 +10,7 @@ export * from "./portableWatchedSync";
 export * from "./portableViewingActivity";
 
 export * from "./orionReleaseTruth";
+export * from "./orionReleaseSigning";
+export * from "./providerStatus";
 
 export * from "./mobileDownloads";

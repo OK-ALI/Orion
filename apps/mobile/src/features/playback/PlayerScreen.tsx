@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as ScreenOrientation from 'expo-screen-orientation';
 import {
-  DEFAULT_CINEMA_SOURCE_ID,
   getSourceResumeParams,
   getSourceUrl,
   sourceResumeStrategy,
@@ -42,6 +40,7 @@ import {
 import {
   MOBILE_PLAYER_SOURCES,
   getMobileSourceContinuityCapability,
+  MOBILE_DEFAULT_CINEMA_SOURCE_ID,
   getNextMobileContinuitySource,
   getPreferredMobileResumeSource,
   mobileSourceCanReceiveContinuity,
@@ -56,6 +55,7 @@ import {
   type NextEpisodeCandidate,
 } from './playbackCompletion';
 import { resolvePlaybackRouteIdentity } from './routePlaybackIdentity';
+import { usePlayerOrientation } from './usePlayerOrientation';
 
 type PlayerRouteParams = {
   id: string;
@@ -103,6 +103,11 @@ function OfflinePlaybackPreparationSurface({
 
 export default function PlayerScreen() {
   const router = useRouter();
+  const { isLandscape, toggleOrientation, releaseOrientation } = usePlayerOrientation();
+  const exitPlayer = useCallback(async () => {
+    await releaseOrientation();
+    router.back();
+  }, [releaseOrientation, router]);
   const {
     id, type, title, season, episode, year, seriesTitle,
     posterPath, backdropPath, episodeTitle, offlineAssetId, isOffline, nextSourceId,
@@ -122,7 +127,7 @@ export default function PlayerScreen() {
     ? nextSourceId
     : null;
   const [sourceId, setSourceId] = useState(() => routedNextSource || getPreferredMobileResumeSource(
-    existingProgress?.sourceId || DEFAULT_CINEMA_SOURCE_ID,
+    existingProgress?.sourceId || MOBILE_DEFAULT_CINEMA_SOURCE_ID,
     type,
   ));
   const [imdbId, setImdbId] = useState<string | null>(null);
@@ -203,26 +208,7 @@ export default function PlayerScreen() {
       });
     return () => { disposed = true; };
   }, [offlineAssetId, offlineRequested, offlineResolutionAttempt]);
-  useEffect(() => {
-    if (Platform.OS === 'web') return undefined;
-    let disposed = false;
-    let previousLock: ScreenOrientation.OrientationLock | null = null;
-    const lifecycle = ScreenOrientation.getOrientationLockAsync()
-      .then((lock) => {
-        previousLock = lock;
-        if (!disposed) return ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-        return undefined;
-      })
-      .catch(() => {});
-    return () => {
-      disposed = true;
-      // Wait for any in-flight landscape lock before restoring the route's
-      // previous policy. This prevents a late lock from winning after Back.
-      lifecycle.then(() => {
-        if (previousLock != null) ScreenOrientation.lockAsync(previousLock).catch(() => {});
-      }).catch(() => {});
-    };
-  }, []);
+
   useEffect(() => {
     const health = getMobileSourceHealth(sourceId, type);
     updateMobileDiagnostics({
@@ -250,7 +236,7 @@ export default function PlayerScreen() {
   const activeStreamUrl = useMemo(() => {
     if (offlineRequested) return '';
     const resumeParams: Record<string, string | number> = {
-      ...getSourceResumeParams(sourceId, resumeTime),
+      ...getSourceResumeParams(sourceId, resumeTime, type),
     };
     // URL resume params are emitted only when the registered source contract
     // exposes one. Sources that cannot receive continuity are given resumeTime=0.
@@ -522,6 +508,9 @@ export default function PlayerScreen() {
     episode: resolvedEpisode == null ? undefined : String(resolvedEpisode),
     initialResumeTime: resumeTime,
     forceStartFromBeginning,
+    onExit: exitPlayer,
+    isLandscape,
+    onToggleOrientation: toggleOrientation,
   };
 
   const surface = initialChoicePending ? null : offlineRequested ? (
@@ -544,7 +533,7 @@ export default function PlayerScreen() {
     ) : (
       <OfflinePlaybackPreparationSurface
         error={offlineError}
-        onBack={() => router.back()}
+        onBack={exitPlayer}
         onRetry={offlineAssetId ? () => setOfflineResolutionAttempt((attempt) => attempt + 1) : undefined}
       />
     )
@@ -567,7 +556,7 @@ export default function PlayerScreen() {
           savedTime={initialSavedTime}
           continuityMode={getMobileSourceContinuityCapability(sourceId).mode}
           onChoose={chooseInitialPosition}
-          onCancel={() => router.back()}
+          onCancel={exitPlayer}
         />
       )}
       {nextEpisodePrompt && !initialChoicePending && (

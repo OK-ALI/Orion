@@ -3,6 +3,7 @@ import { BackHandler, View, Text, StyleSheet, Pressable, ScrollView, useWindowDi
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { radii, spacing } from '@orion/shared/tokens';
+import { getSource } from '@orion/shared/sources';
 import { getMobileSourceHealthV2 } from '../../services/sourceHealth';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { OrionDialog } from '../OrionDialog';
@@ -33,8 +34,16 @@ interface SourcesSheetProps {
 }
 
 const DISPLAY_NAMES: Record<string, string> = {
-  videasy: 'Videasy', vidsrc: 'VidSrc', vidking: 'VidKing', vidlink: 'VidLink',
-  autoembed: 'AutoEmbed', vsembed: 'VsEmbed', '111movies': '111Movies', vixsrc: 'VixSrc',
+  vidsrc: 'VidSrc', vidlink: 'VidLink',
+  '111movies': '111Movies', vixsrc: 'VixSrc',
+  vidnest: 'VidNest', 'vidsrc-ir': 'VidSrc.ir', cinesrc: 'CineSrc',
+};
+
+const publishedStatus = (source: (typeof MOBILE_PLAYER_SOURCES)[number]) => {
+  if (source.routingMode === 'manual-only' && source.availability !== 'ready') return 'Try anyway';
+  return source.availability === 'ready'
+    ? 'Ready'
+    : source.availability === 'temporarily-unavailable' ? 'Temporarily unavailable' : 'Having trouble';
 };
 
 const protectionLabel = (state: ShieldVerificationState) => ({
@@ -94,11 +103,16 @@ export function SourcesSheet(props: SourcesSheetProps) {
   const sourceList = (
     <ScrollView style={styles.sourceScroll} contentContainerStyle={styles.sourceList} showsVerticalScrollIndicator={false}>
       {MOBILE_PLAYER_SOURCES.map((source) => {
+        source = getSource(source.id);
         const selected = source.id === currentSourceId;
         const runtime = getMobileSourceHealthV2(source.id, mediaType);
         const supported = mediaType === 'movie' ? source.media.movie : source.media.tv;
         const cooling = Boolean(runtime?.cooldownUntil && runtime.cooldownUntil > Date.now());
-        const status = playbackStatusLabel(runtime?.state, cooling);
+        const status = source.routingMode === 'manual-only'
+          && source.availability !== 'ready'
+          && (!runtime || runtime.state === 'unknown')
+          ? publishedStatus(source)
+          : runtime ? playbackStatusLabel(runtime.state, cooling) : publishedStatus(source);
         const continuity = getMobileSourceContinuityCapability(source.id);
         const safety = getMobileSourceSafetyNotice(source.id);
         const continuityTone = continuity.mode === 'seamless'
@@ -240,7 +254,7 @@ export function SourcesSheet(props: SourcesSheetProps) {
         {!wide && <View style={[styles.handle, { backgroundColor: theme.border }]} />}
         <View style={[styles.header, { borderBottomColor: theme.border }]}>
           <View style={styles.headerCopy}>
-            <Text style={[styles.title, { color: theme.text }]}>Streaming Servers</Text>
+            <Text style={[styles.title, { color: theme.text }]}>Sources</Text>
             <Text numberOfLines={1} style={[styles.currentLine, { color: theme.textSecondary }]}>{sourceName} · {protectionLabel(shieldState)} · {healthLabel}</Text>
           </View>
           <Pressable accessibilityLabel="Close streaming servers" onPress={onClose} style={[styles.close, { backgroundColor: theme.surface }]}>

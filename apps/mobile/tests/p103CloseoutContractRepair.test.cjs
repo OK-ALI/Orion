@@ -37,7 +37,7 @@ test('P10.3 bridges optional completion failure and action-needed events into Ph
   assert.match(coordinator, /download-action:/);
   assert.match(coordinator, /target: \{ target: 'downloads' \}/);
   assert.match(notifications, /downloads: Object\.freeze\(/);
-  assert.match(notifications, /description: 'Completion and problem alerts\.'/);
+  assert.match(notifications, /description: 'When downloads finish or need attention\.'/);
   assert.match(notifications, /if \(category === 'downloads'\) return 'orion-downloads'/);
 });
 

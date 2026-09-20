@@ -6,17 +6,19 @@ const path = require('node:path');
 const mobileRoot = path.resolve(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(mobileRoot, ...parts), 'utf8');
 
-test('P10.6-C2 keeps the established Settings shell and section order while refining hierarchy inside sections', () => {
+test('P10.6-C2 keeps the established Settings shell while user ordering stays inside the section registry', () => {
   const settings = read('app', '(tabs)', 'settings.tsx');
 
   assert.match(settings, /<MobilePageHeader[\s\S]*eyebrow="ORION MOBILE"[\s\S]*title="Settings"/);
-  assert.match(settings, /<SettingsSectionNavigator[\s\S]*sections=\{MOBILE_ACTIVE_SETTINGS_SECTIONS\}/);
+  assert.match(settings, /<SettingsSectionNavigator[\s\S]*sections=\{orderedSections\}/);
+  assert.match(settings, /useSettingsSectionOrderPreferences\(\)/);
+  assert.match(settings, /orderedSections\.map\(\(section\) =>/);
 
-  const order = ['account', 'appearance', 'performance', 'accessibility', 'notifications', 'updates', 'downloads'];
+  const sourceOrder = ['account', 'appearance', 'performance', 'home', 'accessibility', 'notifications', 'updates', 'downloads'];
   let cursor = -1;
-  for (const id of order) {
+  for (const id of sourceOrder) {
     const next = settings.indexOf(`sectionId="${id}"`);
-    assert.ok(next > cursor, `${id} should remain in the established Settings order`);
+    assert.ok(next > cursor, `${id} should remain mounted in the established Settings source registry`);
     cursor = next;
   }
 });

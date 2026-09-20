@@ -80,18 +80,20 @@ test('P10.5-C5.1 keeps legacy fragment role streams and subtitles on controller-
 test('P10.5-C5 shares Orion controls, Retry and Back and owns route orientation before preparation', () => {
   const screen = read('src', 'features', 'playback', 'PlayerScreen.tsx');
   const embed = read('src', 'features', 'playback', 'EmbedPlayerSurface.tsx');
+  const orientation = read('src', 'features', 'playback', 'usePlayerOrientation.ts');
   const offline = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
   const overlay = read('src', 'components', 'player', 'PlayerStateOverlay.tsx');
 
-  assert.match(screen, /ScreenOrientation\.getOrientationLockAsync\(\)/);
-  assert.match(screen, /ScreenOrientation\.lockAsync\(ScreenOrientation\.OrientationLock\.LANDSCAPE\)/);
-  assert.match(screen, /const lifecycle = ScreenOrientation\.getOrientationLockAsync\(\)/);
-  assert.match(screen, /lifecycle\.then\(\(\) =>/);
-  assert.ok(screen.indexOf('ScreenOrientation.getOrientationLockAsync()') < screen.indexOf('const surface ='));
-  assert.doesNotMatch(embed, /ScreenOrientation\.getOrientationLockAsync\(\)/);
+  assert.match(screen, /usePlayerOrientation\(\)/);
+  assert.match(screen, /await releaseOrientation\(\);[\s\S]*router\.back\(\)/);
+  assert.match(orientation, /let orientationQueue: Promise<void> = Promise\.resolve\(\)/);
+  assert.match(orientation, /ScreenOrientation\.lockAsync/);
+  assert.match(orientation, /ScreenOrientation\.unlockAsync\(\)/);
+  assert.match(orientation, /AppState\.addEventListener/);
+  assert.doesNotMatch(embed, /ScreenOrientation\./);
   assert.match(offline, /<PlayerHUD/);
   assert.match(offline, /<PlayerStateOverlay/);
-  assert.match(offline, /onBack=\{nativeState\.state === 'failed' \? \(\) => router\.back\(\)/);
+  assert.match(offline, /onBack=\{nativeState\.state === 'failed' \? onExit : undefined\}/);
   assert.match(offline, /onRetry=\{nativeState\.state === 'failed' \? \(\) => facade\.retry\(\)/);
   assert.match(offline, /controller\.setLoading\(next\.state === 'failed' \? 'failed'/);
   assert.match(overlay, /onBack\?: \(\) => void/);

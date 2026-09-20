@@ -33,4 +33,7 @@ export interface PlaybackSurfaceProps {
   onPlaybackSnapshot?: (snapshot: VerifiedPlaybackSnapshot) => void;
   onVerifiedPlaybackCompletion?: (snapshot: VerifiedPlaybackSnapshot) => void;
   activeHandoffId?: string | null;
+  onExit(): void;
+  isLandscape?: boolean;
+  onToggleOrientation?(): void;
 }

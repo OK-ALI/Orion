@@ -13,10 +13,10 @@ test('Phase 9 Notifications is grouped around access, alerts, quiet hours and de
   assert.match(settings, />Notification access</);
   assert.match(settings, />Alerts</);
   assert.match(settings, />Quiet hours</);
-  assert.match(settings, />Test notifications</);
+  assert.match(settings, />Preview an alert</);
   assert.match(service, /label: 'Orion updates'/);
   assert.match(service, /label: 'My List releases'/);
-  assert.match(service, /Saved movies, shows and anime release or become available to watch/);
+  assert.match(service, /Saved titles releasing or becoming available/);
   assert.doesNotMatch(settings, /remote push token|bounded and rotate|treated as a baseline/i);
 });
 
@@ -51,7 +51,7 @@ test('Phase 9 notification payloads use concise Orion product language', () => {
   const coordinator = read('src', 'features', 'notifications', 'MobileNotificationCoordinator.tsx');
   const availability = read('src', 'services', 'mobileAvailabilityChecks.ts');
 
-  assert.match(service, /title: 'Notifications are working'/);
+  assert.match(service, /title: 'Orion alerts are ready'/);
   assert.match(coordinator, /title: 'Orion update available'/);
   assert.match(coordinator, /title: 'Sync needs attention'/);
   assert.match(coordinator, /title: 'Playback source unavailable'/);

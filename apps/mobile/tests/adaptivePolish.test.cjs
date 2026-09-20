@@ -289,7 +289,7 @@ test("Phase 7 global Search shortcut is reachable everywhere except playback and
   assert.match(shortcut, /preferences\.reducedMotion/);
   assert.match(shortcut, /pathname: '\/discover', params: \{ focusSearch: request \}/);
   assert.match(shortcut, /router\.setParams\(\{ focusSearch: request \}\)/);
-  assert.match(discover, /useLocalSearchParams<\{ focusSearch\?: string \}>/);
+  assert.match(discover, /useLocalSearchParams<\{[^}]*focusSearch\?: string/);
   assert.match(discover, /searchInputRef\.current\?\.focus\(\)/);
   assert.match(discover, /router\.setParams\(\{ focusSearch: '0' \}\)/);
   assert.match(discover, /accessibilityLabel="Search Orion"/);
@@ -517,7 +517,7 @@ test("Phase 7.9.1 adds real automatic/manual performance profiles and a registry
   assert.match(profiles, /return 'balanced'/);
 
   assert.match(settings, /SettingsSectionNavigator/);
-  assert.match(settings, /sections=\{MOBILE_ACTIVE_SETTINGS_SECTIONS\}/);
+  assert.match(settings, /sections=\{orderedSections\}/);
   assert.match(settings, /sectionId="performance"/);
   assert.match(settings, /Automatic \(Recommended\)/);
   assert.doesNotMatch(settings, /Active profile/);

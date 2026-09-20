@@ -11,6 +11,7 @@ export {
   fetchTvDetails,
   fetchPersonDetails,
   fetchSearch,
+  fetchPersonSearch,
   fetchEpisodeGroup,
   isAnimeContent,
   ANIME_DEFAULT_SOURCE,

@@ -3,14 +3,24 @@ import { Platform } from 'react-native';
 import {
   ORION_ANDROID_RELEASE_SIGNER_SHA256_V1,
   ORION_RELEASE_INTEGRITY_MANIFEST_NAME_V1,
+  ORION_RELEASE_INTEGRITY_MANIFEST_NAME_V2,
+  ORION_PROVIDER_STATUS_MANIFEST_NAME_V1,
+  canOrionUpdaterInstallV2,
   compareOrionVersionsV1,
   findOrionReleaseIntegrityArtifactV1,
+  findOrionReleaseIntegrityArtifactV2,
   normalizeOrionReleaseChannelV1,
   resolveOrionReleaseIntegrityManifestV1,
+  resolveOrionReleaseIntegrityEnvelopeV2,
+  resolveOrionProviderStatusV1,
   resolveOrionReleaseTruthV1,
+  installOrionProviderStatusV1,
+  verifyOrionReleaseSignatureV1,
   type OrionReleaseChannelV1,
   type OrionReleaseEntryV1,
   type OrionReleaseIntegrityArtifactV1,
+  type OrionReleaseIntegrityArtifactV2,
+  type OrionReleaseIntegrityPayloadV2,
   type OrionReleaseTruthV1,
   type OrionUpdateStateV1,
 } from '@orion/shared/types';
@@ -30,7 +40,8 @@ const LAST_CHECKED_KEY = 'orion.mobile.updateLastChecked.v1';
 export interface MobileReleaseIntegrityV1 {
   status: 'unavailable' | 'missing' | 'invalid' | 'ready';
   reason: string | null;
-  artifact: OrionReleaseIntegrityArtifactV1 | null;
+  artifact: OrionReleaseIntegrityArtifactV1 | OrionReleaseIntegrityArtifactV2 | null;
+  releasePayload: OrionReleaseIntegrityPayloadV2 | null;
 }
 
 export interface MobileReleaseCheckV1 {
@@ -92,44 +103,134 @@ async function fetchGitHubReleases(): Promise<unknown[]> {
   return releases;
 }
 
-async function resolveMobileIntegrity(releaseTruth: OrionReleaseTruthV1): Promise<MobileReleaseIntegrityV1> {
+async function refreshProviderStatus(release: OrionReleaseEntryV1 | null): Promise<void> {
+  const asset = release?.artifacts.find(
+    (candidate) => candidate.name === ORION_PROVIDER_STATUS_MANIFEST_NAME_V1,
+  );
+  if (!asset) return;
+  try {
+    const response = await fetchWithTimeout(asset.url, 'application/json');
+    if (!response.ok) return;
+    const payload = resolveOrionProviderStatusV1(
+      await response.json(),
+      verifyOrionReleaseSignatureV1,
+    );
+    installOrionProviderStatusV1(payload);
+  } catch {
+    // Bundled status remains authoritative when remote status is unavailable.
+  }
+}
+
+async function resolveMobileIntegrity(
+  releaseTruth: OrionReleaseTruthV1,
+  currentVersion: string,
+): Promise<MobileReleaseIntegrityV1> {
   const release = releaseTruth.mobile.release;
   const apk = releaseTruth.mobile.apk;
   if (!release || !apk) {
-    return { status: 'unavailable', reason: 'No Mobile APK is published for this channel.', artifact: null };
+    return { status: 'unavailable', reason: 'No Mobile update is published for this channel.', artifact: null, releasePayload: null };
+  }
+
+  const v2Asset = release.artifacts.find(
+    (artifact) => artifact.name === ORION_RELEASE_INTEGRITY_MANIFEST_NAME_V2,
+  );
+  if (v2Asset) {
+    try {
+      const response = await fetchWithTimeout(v2Asset.url, 'application/json');
+      if (!response.ok) throw new Error('Release verification is unavailable.');
+      const payload = resolveOrionReleaseIntegrityEnvelopeV2(
+        await response.json(),
+        verifyOrionReleaseSignatureV1,
+        release,
+      );
+      const artifact = findOrionReleaseIntegrityArtifactV2(payload, apk.name, 'android');
+      if (
+        !payload
+        || !artifact
+        || artifact.productId !== 'com.okali.orion'
+        || artifact.signerSha256 !== ORION_ANDROID_RELEASE_SIGNER_SHA256_V1
+        || (apk.size !== null && apk.size !== artifact.size)
+      ) throw new Error('Release verification failed.');
+      if (
+        compareOrionVersionsV1(release.version, currentVersion) > 0
+        && !canOrionUpdaterInstallV2(payload, currentVersion)
+      ) {
+        return {
+          status: 'invalid',
+          reason: 'Install an earlier Orion update first.',
+          artifact: null,
+          releasePayload: payload,
+        };
+      }
+      return { status: 'ready', reason: null, artifact, releasePayload: payload };
+    } catch {
+      return {
+        status: 'invalid',
+        reason: "We couldn't verify this update. Nothing was installed.",
+        artifact: null,
+        releasePayload: null,
+      };
+    }
+  }
+
+  if (compareOrionVersionsV1(currentVersion, '3.2.0') >= 0) {
+    return {
+      status: 'missing',
+      reason: "We couldn't verify this update. Nothing was installed.",
+      artifact: null,
+      releasePayload: null,
+    };
   }
 
   const manifestAsset = release.artifacts.find(
     (artifact) => artifact.name === ORION_RELEASE_INTEGRITY_MANIFEST_NAME_V1,
   );
   if (!manifestAsset) {
-    return { status: 'missing', reason: 'This release does not publish Orion integrity metadata.', artifact: null };
+    return { status: 'missing', reason: 'This update is not ready yet.', artifact: null, releasePayload: null };
   }
 
   try {
     const response = await fetchWithTimeout(manifestAsset.url, 'application/json');
     if (!response.ok) {
-      return { status: 'invalid', reason: `Integrity manifest returned HTTP ${response.status}.`, artifact: null };
+      return { status: 'invalid', reason: "We couldn't verify this update. Nothing was installed.", artifact: null, releasePayload: null };
     }
     const manifest = resolveOrionReleaseIntegrityManifestV1(await response.json(), release);
     const artifact = findOrionReleaseIntegrityArtifactV1(manifest, apk.name);
     if (!manifest || !artifact) {
-      return { status: 'invalid', reason: 'The published APK is missing from the release integrity manifest.', artifact: null };
+      return { status: 'invalid', reason: "We couldn't verify this update. Nothing was installed.", artifact: null, releasePayload: null };
     }
     if (apk.size !== null && apk.size !== artifact.size) {
-      return { status: 'invalid', reason: 'The published APK size does not match its integrity record.', artifact: null };
+      return { status: 'invalid', reason: "We couldn't verify this update. Nothing was installed.", artifact: null, releasePayload: null };
     }
     if (artifact.signerSha256 !== ORION_ANDROID_RELEASE_SIGNER_SHA256_V1) {
-      return { status: 'invalid', reason: 'The published APK signer does not match Orion production identity.', artifact: null };
+      return { status: 'invalid', reason: "We couldn't verify this update. Nothing was installed.", artifact: null, releasePayload: null };
     }
-    return { status: 'ready', reason: null, artifact };
+    return { status: 'ready', reason: null, artifact, releasePayload: null };
   } catch (error) {
     return {
       status: 'invalid',
       reason: error instanceof Error ? error.message : 'Unable to load release integrity metadata.',
       artifact: null,
+      releasePayload: null,
     };
   }
+}
+
+async function findCompatibleMobileBridge(
+  releases: unknown[],
+  channel: OrionReleaseChannelV1,
+  currentVersion: string,
+  excludedTag: string | undefined,
+): Promise<{ truth: OrionReleaseTruthV1; integrity: MobileReleaseIntegrityV1 } | null> {
+  for (const rawRelease of releases) {
+    const truth = resolveOrionReleaseTruthV1([rawRelease], channel);
+    const candidate = truth.mobile.release;
+    if (!candidate || candidate.tag === excludedTag) continue;
+    if (compareOrionVersionsV1(candidate.version, currentVersion) <= 0) continue;
+    const integrity = await resolveMobileIntegrity(truth, currentVersion);
+    if (integrity.status === 'ready') return { truth, integrity };
+  }
+  return null;
 }
 
 export async function checkMobileReleaseTruthV1(
@@ -139,15 +240,32 @@ export async function checkMobileReleaseTruthV1(
   const releases = await fetchGitHubReleases();
   const publishedTruth = resolveOrionReleaseTruthV1(releases, channel);
   const publishedRelease = publishedTruth.mobile.release;
+  await refreshProviderStatus(publishedRelease);
+  const currentVersion = getMobileCurrentVersionV1();
+  const publishedIntegrity = await resolveMobileIntegrity(publishedTruth, currentVersion);
   const rolloutBucket = getMobileRolloutBucketV1();
-  const rolloutPercentage = resolveMobileRolloutPercentageV1(publishedRelease?.notes);
+  const rolloutPercentage = publishedIntegrity.releasePayload?.rolloutPercentage
+    ?? resolveMobileRolloutPercentageV1(publishedRelease?.notes);
   const rolloutStaged = !!publishedRelease && rolloutPercentage < 100;
   const rolloutEligible = !rolloutStaged
     || isMobileRolloutEligibleV1(publishedRelease?.notes, rolloutBucket);
   const rolloutReleases = applyMobileStagedRolloutV1(releases, rolloutBucket);
-  const releaseTruth = resolveOrionReleaseTruthV1(rolloutReleases, channel);
-  const integrity = await resolveMobileIntegrity(releaseTruth);
-  const currentVersion = getMobileCurrentVersionV1();
+  let releaseTruth = resolveOrionReleaseTruthV1(rolloutReleases, channel);
+  let integrity = releaseTruth.mobile.release?.tag === publishedRelease?.tag
+    ? publishedIntegrity
+    : await resolveMobileIntegrity(releaseTruth, currentVersion);
+  if (integrity.status === 'invalid' && integrity.reason === 'Install an earlier Orion update first.') {
+    const bridge = await findCompatibleMobileBridge(
+      rolloutReleases,
+      channel,
+      currentVersion,
+      releaseTruth.mobile.release?.tag,
+    );
+    if (bridge) {
+      releaseTruth = bridge.truth;
+      integrity = bridge.integrity;
+    }
+  }
   const offeredRelease = releaseTruth.mobile.release;
   const apiLevel = androidApiLevel();
   const unsupported = apiLevel !== null && apiLevel < releaseTruth.mobile.minimumAndroidApi;

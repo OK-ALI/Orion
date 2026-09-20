@@ -97,11 +97,13 @@ export const createDiscoverStyles = (theme: MobileThemeTokens) => StyleSheet.cre
     fontSize: fontSizes.md,
     fontFamily: fontFamilies.body,
   },
-  typeToggle: {
-    flexDirection: 'row',
+  typeToggleScroller: {
+    marginBottom: spacing[4],
+    flexGrow: 0,
+  },
+  typeToggleScroll: {
     paddingHorizontal: spacing[4],
     gap: spacing[2],
-    marginBottom: spacing[4],
   },
   typePill: {
     minHeight: 44,

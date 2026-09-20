@@ -288,3 +288,67 @@ export function createVerifiedResumeScript(seconds: number, handoffId: string): 
     true;
   `;
 }
+
+export function createCineSrcResumeScript(seconds: number, handoffId: string): string {
+  const safeTime = Math.max(0, Math.floor(Number(seconds) || 0));
+  const safeHandoffId = JSON.stringify(String(handoffId || 'cinesrc-resume'));
+  return `
+    (function() {
+      var handoffId = ${safeHandoffId};
+      var targetTime = ${safeTime};
+      if (window.__orionCineSrcResumeHandoffId === handoffId) return true;
+      window.__orionCineSrcResumeHandoffId = handoffId;
+      var attempts = 0;
+      var done = false;
+      var retryTimer = null;
+      function report(status, actualTime) {
+        if (done) return;
+        done = true;
+        if (retryTimer) clearTimeout(retryTimer);
+        window.removeEventListener('message', onMessage, false);
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'ORION_RESUME_RESULT',
+            handoffId: handoffId,
+            status: status,
+            actualTime: Number.isFinite(actualTime) ? actualTime : null
+          }));
+        }
+      }
+      function sendSeek() {
+        if (done || window.__orionCineSrcResumeHandoffId !== handoffId) return;
+        attempts += 1;
+        try {
+          window.postMessage({
+            type: 'cinesrc:command',
+            command: 'seek',
+            args: [targetTime]
+          }, window.location.origin);
+        } catch (_) {}
+        if (attempts >= 20) report('unavailable', null);
+        else retryTimer = setTimeout(sendSeek, 400);
+      }
+      function onMessage(event) {
+        if (event.origin !== window.location.origin && event.origin !== 'https://cinesrc.st') return;
+        var value = event.data;
+        if (typeof value === 'string' && value.length <= 4096) {
+          try { value = JSON.parse(value); } catch (_) { return; }
+        }
+        if (!value || typeof value !== 'object' || typeof value.type !== 'string') return;
+        if (value.type === 'cinesrc:ready' || value.type === 'cinesrc:loadedmetadata') {
+          sendSeek();
+          return;
+        }
+        if (value.type !== 'cinesrc:seeked' && value.type !== 'cinesrc:timeupdate') return;
+        var currentTime = Number(value.currentTime);
+        if (!Number.isFinite(currentTime)) return;
+        if (Math.abs(currentTime - targetTime) <= 5) report('applied', currentTime);
+      }
+      window.addEventListener('message', onMessage, false);
+      sendSeek();
+      setTimeout(function() { if (!done) report('unavailable', null); }, 9000);
+      return true;
+    })();
+    true;
+  `;
+}

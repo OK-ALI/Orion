@@ -23,6 +23,7 @@ import java.util.Locale
 class OrionCinemaWebViewClient(
   private val reactContext: ReactContext,
   private val nativeViewTag: Int,
+  private val onPageSettled: ((WebView) -> Unit)? = null,
 ) : RNCWebViewClient() {
   private var manifest: ShieldManifest? = null
   private val pendingCounts = mutableMapOf<String, Int>()
@@ -91,6 +92,11 @@ class OrionCinemaWebViewClient(
     resetEvidence()
     emit(view, ShieldDecision("active", "native-session", null))
     super.onPageStarted(view, url, favicon)
+  }
+
+  override fun onPageFinished(view: WebView, url: String) {
+    super.onPageFinished(view, url)
+    onPageSettled?.invoke(view)
   }
 
   override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {

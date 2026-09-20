@@ -45,6 +45,8 @@ export type IdPolicy = (typeof SOURCE_ID_POLICIES)[number];
 export type ProgressStrategy = (typeof SOURCE_PROGRESS_STRATEGIES)[number];
 export type ResumeStrategy = (typeof SOURCE_RESUME_STRATEGIES)[number];
 export type SubtitleStrategy = (typeof SOURCE_SUBTITLE_STRATEGIES)[number];
+export type SourceRoutingMode = "automatic" | "manual-only";
+export type SourceAvailability = "ready" | "having-trouble" | "temporarily-unavailable";
 
 /**
  * A declarative, serializable WebView request policy.  It intentionally
@@ -102,14 +104,22 @@ export interface CinemaSourceDescriptor {
   supportsResume: boolean;
   supportsExternalSubtitles: boolean;
   supportsDownloads: boolean;
+  /** Product availability is independent from registration and release maturity. */
+  routingMode?: SourceRoutingMode;
+  availability?: SourceAvailability;
+  availabilityReason?: string;
   /** Optional params */
   colorParam?: string;
   langParam?: string;
   resumeParam?: string;
+  movieResumeParam?: string;
+  tvResumeParam?: string;
   externalSubtitleParam?: string;
   externalSubtitleLabelParam?: string;
+  externalSubtitleLanguageParam?: string;
   params?: Record<string, string>;
   async?: boolean;
+  requiresIframeWrapper?: boolean;
   animeOnly?: boolean;
   quarantined?: boolean;
   disabledReason?: string;
@@ -185,7 +195,13 @@ export function validateSourceDescriptor(source: CinemaSourceDescriptor): string
   for (const field of ["supportsResume", "supportsExternalSubtitles", "supportsDownloads"] as const) {
     if (typeof source[field] !== "boolean") errors.push(`${field} must be boolean.`);
   }
-  if (source.resumeStrategy === "url-param" && !source.resumeParam) errors.push("url-param resumeStrategy requires resumeParam.");
+  if (source.routingMode && !["automatic", "manual-only"].includes(source.routingMode)) errors.push("routingMode is invalid.");
+  if (source.availability && !["ready", "having-trouble", "temporarily-unavailable"].includes(source.availability)) errors.push("availability is invalid.");
+  if (source.resumeStrategy === "url-param"
+    && !source.resumeParam
+    && !(source.movieResumeParam && source.tvResumeParam)) {
+    errors.push("url-param resumeStrategy requires resumeParam or movie/tv resume params.");
+  }
   if (!source.supportsResume && source.resumeStrategy !== "none") errors.push("non-resumable sources must use resumeStrategy none.");
   return errors;
 }

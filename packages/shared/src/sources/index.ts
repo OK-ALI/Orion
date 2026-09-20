@@ -15,6 +15,8 @@ export {
 export {
   ALL_CINEMA_SOURCES,
   PLAYER_SOURCES,
+  AUTOMATIC_PLAYER_SOURCES,
+  getEffectivePlayerSources,
   DEFAULT_CINEMA_SOURCE_ID,
   NEEDS_INTERCEPT,
   getRegisteredSource,
@@ -32,6 +34,7 @@ export {
   sourceProgressViaFrames,
   sourceIsAsync,
   sourceResumeStrategy,
+  sourceRequiresIframeWrapper,
   updateCinemaSourceHealth,
   getCinemaSourceRuntimeHealth,
 } from "./registry";

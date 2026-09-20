@@ -11,6 +11,8 @@ export interface OrionAndroidUpdateEnvironmentV1 {
   productionSignerMatched: boolean;
   requestInstallPackagesDeclared: boolean;
   canRequestPackageInstalls: boolean;
+  transactionPhase?: 'permission-required' | 'downloading' | 'verifying' | 'installing' | 'awaiting-confirmation' | 'installed' | 'complete' | 'failed' | null;
+  targetVersionCode?: number;
 }
 
 export interface OrionNativeUpdateEventV1 {
@@ -30,7 +32,8 @@ interface OrionUpdatesNativeModule {
     expectedSize: number,
     expectedSha256: string,
     expectedSignerSha256: string,
-  ): Promise<{ ok: boolean; code?: 'permission-required' | 'direct-build-required'; state?: OrionUpdateStateV1 }>;
+    expectedVersionCode: number,
+  ): Promise<{ ok: boolean; code?: 'permission-required' | 'direct-build-required' | 'update-in-progress'; state?: OrionUpdateStateV1 }>;
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 }
@@ -59,7 +62,8 @@ export async function installDirectApkV1(input: {
   expectedSize: number;
   expectedSha256: string;
   expectedSignerSha256: string;
-}): Promise<{ ok: boolean; code?: 'permission-required' | 'direct-build-required'; state?: OrionUpdateStateV1 }> {
+  expectedVersionCode: number;
+}): Promise<{ ok: boolean; code?: 'permission-required' | 'direct-build-required' | 'update-in-progress'; state?: OrionUpdateStateV1 }> {
   if (!nativeAvailable || !nativeModule) return { ok: false, code: 'direct-build-required' };
   return nativeModule.installDirectApk(
     input.url,
@@ -67,6 +71,7 @@ export async function installDirectApkV1(input: {
     input.expectedSize,
     input.expectedSha256,
     input.expectedSignerSha256,
+    input.expectedVersionCode,
   );
 }
 

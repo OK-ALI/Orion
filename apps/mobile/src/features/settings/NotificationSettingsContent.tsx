@@ -19,13 +19,15 @@ import {
   type MobileNotificationPreferencesV1,
 } from '../../services/mobileNotifications';
 
-const CATEGORY_ORDER: readonly MobileNotificationCategoryV1[] = [
-  'appUpdates',
-  'syncFailures',
-  'offlineRecovery',
-  'providerHealth',
-  'watchlist',
-  'downloads',
+const CATEGORY_GROUPS: ReadonlyArray<{ label: string; categories: readonly MobileNotificationCategoryV1[] }> = [
+  {
+    label: 'Entertainment',
+    categories: ['newMovies', 'newSeries', 'newEpisodes', 'animeReleases', 'upcoming', 'watchlist'],
+  },
+  {
+    label: 'Orion',
+    categories: ['appUpdates', 'syncFailures', 'offlineRecovery', 'providerHealth', 'downloads'],
+  },
 ];
 
 type QuietTimeField = 'start' | 'end';
@@ -293,8 +295,8 @@ export function NotificationSettingsContent() {
     try {
       const delivered = await sendMobileNotificationSelfTestV1();
       setTestMessage(delivered
-        ? 'Test notification sent.'
-        : 'Orion could not show the test notification. Check notification access and try again.');
+        ? 'Sample alert sent.'
+        : 'Orion could not show the sample alert. Check notification access and try again.');
     } finally {
       setTestBusy(false);
     }
@@ -348,36 +350,41 @@ export function NotificationSettingsContent() {
       ) : null}
 
       <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Alerts</Text>
-      <View style={styles.group}>
-        {CATEGORY_ORDER.map((category, index) => {
-          const copy = MOBILE_NOTIFICATION_CATEGORY_COPY_V1[category];
-          const enabled = preferences.categories[category];
-          return (
-            <View
-              key={category}
-              style={[
-                styles.row,
-                index > 0 && styles.rowDivider,
-                index > 0 && { borderTopColor: theme.border },
-              ]}
-            >
-              <View style={styles.rowCopy}>
-                <Text style={[styles.rowTitle, { color: theme.text }]}>{copy.label}</Text>
-                <Text style={[styles.description, { color: theme.textSecondary }]}>{copy.description}</Text>
-              </View>
-              <Switch
-                accessibilityRole="switch"
-                accessibilityLabel={`${copy.label} notifications`}
-                accessibilityState={{ checked: enabled }}
-                value={enabled}
-                onValueChange={(value) => setPreferences(setMobileNotificationCategoryV1(category, value))}
-                trackColor={{ false: theme.border, true: theme.accentSoft }}
-                thumbColor={enabled ? theme.accent : theme.textMuted}
-              />
-            </View>
-          );
-        })}
-      </View>
+      {CATEGORY_GROUPS.map((group) => (
+        <View key={group.label} style={styles.categoryGroup}>
+          <Text style={[styles.categoryGroupLabel, { color: theme.textSecondary }]}>{group.label}</Text>
+          <View style={styles.group}>
+            {group.categories.map((category, index) => {
+              const copy = MOBILE_NOTIFICATION_CATEGORY_COPY_V1[category];
+              const enabled = preferences.categories[category];
+              return (
+                <View
+                  key={category}
+                  style={[
+                    styles.row,
+                    index > 0 && styles.rowDivider,
+                    index > 0 && { borderTopColor: theme.border },
+                  ]}
+                >
+                  <View style={styles.rowCopy}>
+                    <Text style={[styles.rowTitle, { color: theme.text }]}>{copy.label}</Text>
+                    <Text style={[styles.description, { color: theme.textSecondary }]}>{copy.description}</Text>
+                  </View>
+                  <Switch
+                    accessibilityRole="switch"
+                    accessibilityLabel={`${copy.label} notifications`}
+                    accessibilityState={{ checked: enabled }}
+                    value={enabled}
+                    onValueChange={(value) => setPreferences(setMobileNotificationCategoryV1(category, value))}
+                    trackColor={{ false: theme.border, true: theme.accentSoft }}
+                    thumbColor={enabled ? theme.accent : theme.textMuted}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      ))}
 
       <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Quiet hours</Text>
       <View style={styles.group}>
@@ -439,15 +446,15 @@ export function NotificationSettingsContent() {
             <Ionicons name="paper-plane-outline" size={18} color={theme.accent} />
           </View>
           <View style={styles.rowCopy}>
-            <Text style={[styles.rowTitle, { color: theme.text }]}>Test notifications</Text>
-            <Text style={[styles.description, { color: theme.textSecondary }]}>Make sure Orion alerts are working on this device.</Text>
+            <Text style={[styles.rowTitle, { color: theme.text }]}>Preview an alert</Text>
+            <Text style={[styles.description, { color: theme.textSecondary }]}>Send a sample Orion alert to this device.</Text>
             {testMessage ? (
               <Text accessibilityLiveRegion="polite" style={[styles.testMessage, { color: theme.textSecondary }]}>{testMessage}</Text>
             ) : null}
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Send Orion test notification"
+            accessibilityLabel="Send sample Orion alert"
             accessibilityState={{ disabled: testBusy }}
             disabled={testBusy}
             onPress={() => void sendTestNotification()}
@@ -456,7 +463,7 @@ export function NotificationSettingsContent() {
               { borderColor: theme.border, backgroundColor: pressed ? theme.surface : theme.elevated },
             ]}
           >
-            <Text style={[styles.smallButtonText, { color: theme.text }]}>{testBusy ? 'Sending…' : 'Send test'}</Text>
+            <Text style={[styles.smallButtonText, { color: theme.text }]}>{testBusy ? 'Sending…' : 'Send alert'}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -496,6 +503,8 @@ const styles = StyleSheet.create({
   smallButton: { minHeight: 38, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: 11, alignItems: 'center', justifyContent: 'center' },
   smallButtonText: { fontSize: fontSizes.xs, fontWeight: '900' },
   groupTitle: { fontSize: fontSizes.sm, fontWeight: '900', marginTop: spacing[1] },
+  categoryGroup: { gap: spacing[2] },
+  categoryGroupLabel: { fontSize: 11, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
   group: { overflow: 'hidden' },
   row: { minHeight: 72, paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: spacing[4] },
   rowDivider: { borderTopWidth: StyleSheet.hairlineWidth },

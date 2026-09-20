@@ -94,11 +94,16 @@ test("all current Mobile Cinema providers carry an enforced shared blocker manif
   assert.match(blockerCatalog, /includeSubdomains/);
   assert.match(mobileSources, /MOBILE_QUARANTINED_SOURCE_IDS/);
   assert.match(mobileSources, /new Set\(\['autoembed'\]\)/);
-  assert.match(mobileSources, /!MOBILE_QUARANTINED_SOURCE_IDS\.has\(source\.id\)/);
-  assert.match(mobileSources, /vidking/);
+  assert.match(mobileSources, /MOBILE_VISIBLE_PLAYER_SOURCES\s*=\s*PLAYER_SOURCES\.filter/);
+  assert.match(mobileSources, /MOBILE_PLAYER_SOURCES\s*=\s*Object\.freeze/);
+  assert.match(mobileSources, /source\.releaseStatus !== 'disabled'/);
+  assert.match(mobileSources, /source\.availability !== 'temporarily-unavailable'/);
+  assert.match(mobileSources, /!MOBILE_RETIRED_SOURCE_IDS\.has\(source\.id\)/);
+  assert.match(mobileSources, /!MOBILE_QUARANTINED_SOURCE_IDS\.has\(candidateId\)/);
+  assert.match(mobileSources, /MOBILE_RETIRED_SOURCE_IDS[\s\S]*?'videasy'[\s\S]*?'vidking'[\s\S]*?'vsembed'/);
 });
 
-test("AutoEmbed stays registered but is quarantined from Mobile selection after failed protection verification", () => {
+test("AutoEmbed remains registered for migration but is hidden from Mobile while quarantined", () => {
   const experimental = read("packages", "shared", "src", "sources", "adapters", "experimental.ts");
   const mobileSources = read("apps", "mobile", "src", "features", "playback", "mobileSources.ts");
 
@@ -106,6 +111,7 @@ test("AutoEmbed stays registered but is quarantined from Mobile selection after 
   assert.match(mobileSources, /MOBILE_QUARANTINED_SOURCE_IDS/);
   assert.match(mobileSources, /new Set\(\['autoembed'\]\)/);
   assert.match(mobileSources, /!MOBILE_QUARANTINED_SOURCE_IDS\.has\(source\.id\)/);
+  assert.match(mobileSources, /!MOBILE_QUARANTINED_SOURCE_IDS\.has\(candidateId\)/);
   assert.match(mobileSources, /autoembed:\s*Object\.freeze/);
 });
 
@@ -154,6 +160,7 @@ test("Streaming Servers keeps source selection primary and details expandable", 
 test("player HUD exposes native shield status and a blocked-request counter", () => {
   const surface = read("apps", "mobile", "src", "features", "playback", "EmbedPlayerSurface.tsx");
   const hud = read("apps", "mobile", "src", "features", "playback", "EmbeddedPlayerHud.tsx");
+  const support = read("apps", "mobile", "src", "features", "playback", "providerEmbedSupport.ts");
   assert.match(surface, /surfaceLoaded\.current/);
   assert.match(surface, /nativeProtectionVerified/);
   assert.match(surface, /nativeShieldObserved/);
@@ -161,7 +168,8 @@ test("player HUD exposes native shield status and a blocked-request counter", ()
   assert.match(hud, /blockedRequests > 0/);
   assert.match(surface, /ORION_COSMETIC_BLOCK/);
   assert.match(surface, /cosmeticTotal/);
-  assert.match(surface, /nativeSessionObserved/);
+  assert.match(surface, /EMPTY_SHIELD_EVIDENCE/);
+  assert.match(support, /nativeSessionObserved/);
   assert.match(surface, /ORION_SUBTITLE_TRACK/);
   assert.match(hud, /styles\.shieldCounter/);
   assert.match(hud, /props\.blockedRequests/);

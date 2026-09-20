@@ -206,18 +206,12 @@ test("remote-only Home rails stay hidden while the product state is not remote-r
 
   assert.match(
     home,
-    /showRemoteCatalog\s*&&\s*spotlightItems\.length/,
+    /const renderHomeRail = \(railId: HomeRailId\) => \{[\s\S]{0,240}if \(!showRemoteCatalog\) return null;/,
   );
 
-  assert.match(
-    home,
-    /showRemoteCatalog\s*&&\s*trendingMovies\.length/,
-  );
-
-  assert.match(
-    home,
-    /showRemoteCatalog\s*&&\s*trendingTV\.length/,
-  );
+  assert.match(home, /railId === 'trending-movies' && trendingMovies\.length > 0/);
+  assert.match(home, /railId === 'trending-tv' && trendingTV\.length > 0/);
+  assert.match(home, /railId === 'k-dramas' && kDramas\.length > 0/);
 });
 
 test("Home connection panel exposes truthful offline, degraded, reconnecting, and checking states", () => {

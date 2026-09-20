@@ -3,7 +3,7 @@
     "name": "Orion",
     "slug": "mobile",
     "scheme": "orion",
-    "version": "3.1.0",
+    "version": "3.2.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.okali.orion",
-      "versionCode": 57
+      "versionCode": 58
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -66,7 +66,7 @@
         "projectId": "db8d113f-2d08-4a1c-b58a-19dceeeca94f"
       }
     },
-    "runtimeVersion": "orion-mobile-native-r1",
+    "runtimeVersion": "orion-mobile-native-r2",
     "updates": {
       "enabled": false,
       "checkAutomatically": "NEVER",

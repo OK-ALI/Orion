@@ -21,6 +21,7 @@ export function WatchdogWarning({ isBuffering, onFailover, onSelectSource, onDis
     if (isBuffering) {
       // 15 seconds watchdog
       timeout = setTimeout(() => {
+        onFailover();
         setShowWarning(true);
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -51,17 +52,17 @@ export function WatchdogWarning({ isBuffering, onFailover, onSelectSource, onDis
         </Pressable>
 
         <Ionicons name="warning" size={32} color="#f14668" style={styles.icon} />
-        <Text style={styles.title}>Buffering Timeout</Text>
+        <Text style={styles.title}>Having trouble</Text>
         <Text style={styles.description}>
-          This source is taking longer than usual to load. Would you like to switch to a different backend?
+          Orion tried another ready source. You can choose a source or try again.
         </Text>
 
         <View style={styles.actions}>
           <Pressable style={styles.secondaryBtn} onPress={onSelectSource}>
-            <Text style={styles.secondaryText}>Switch Manually</Text>
+            <Text style={styles.secondaryText}>Sources</Text>
           </Pressable>
           <Pressable style={styles.primaryBtn} onPress={onFailover}>
-            <Text style={styles.primaryText}>Auto Failover</Text>
+            <Text style={styles.primaryText}>Try again</Text>
           </Pressable>
         </View>
       </BlurView>

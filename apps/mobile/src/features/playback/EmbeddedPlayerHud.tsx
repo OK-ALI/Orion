@@ -2,9 +2,10 @@ import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { ShieldVerificationState } from '@orion/shared/types';
+import type { MobilePlayerPresentation, ShieldVerificationState } from '@orion/shared/types';
 import { playerStyles as styles } from './playerStyles';
 import { PlayerChromeHandle } from '../../components/player/PlayerChromeHandle';
+import { presentationModeLabel } from '../../components/player/PresentationSheet';
 
 interface EmbeddedPlayerHudProps {
   visible: boolean;
@@ -15,6 +16,7 @@ interface EmbeddedPlayerHudProps {
   blockedRequests: number;
   nativeShieldObserved: boolean;
   landscape: boolean;
+  presentation: MobilePlayerPresentation;
   onReveal(): void;
   onCollapse(): void;
   onBack(): void;
@@ -22,6 +24,7 @@ interface EmbeddedPlayerHudProps {
   onShield(): void;
   onSubtitles(): void;
   onRotate(): void;
+  onProviderControls(): void;
   onSources(): void;
 }
 
@@ -53,8 +56,8 @@ export function EmbeddedPlayerHud(props: EmbeddedPlayerHudProps) {
       <Pressable accessibilityLabel="Back" onPress={props.onBack} style={styles.floatingGlassBackBtn}>
         <Ionicons name="arrow-back" size={18} color="#fff" />
       </Pressable>
-      <Pressable accessibilityLabel="Picture mode" onPress={props.onPresentation} style={styles.floatingGlassBackBtn}>
-        <Ionicons name="scan-outline" size={16} color="#fff" />
+      <Pressable accessibilityLabel={`Resize picture. Current mode ${presentationModeLabel(props.presentation)}.`} onPress={props.onPresentation} style={styles.floatingGlassBackBtn}>
+        <Ionicons name="resize-outline" size={16} color="#fff" />
       </Pressable>
       <View style={styles.headerTitleWrapper}>
         <Text style={styles.framelessTitle} numberOfLines={1}>{props.title}</Text>
@@ -87,6 +90,9 @@ export function EmbeddedPlayerHud(props: EmbeddedPlayerHudProps) {
         </Pressable>
         <Pressable accessibilityLabel="Subtitles" onPress={props.onSubtitles} style={styles.floatingGlassBackBtn}>
           <Ionicons name="chatbox-ellipses-outline" size={16} color="#fff" />
+        </Pressable>
+        <Pressable accessibilityLabel="Use provider controls" onPress={props.onProviderControls} style={styles.floatingGlassBackBtn}>
+          <Ionicons name="options-outline" size={16} color="#fff" />
         </Pressable>
         <Pressable accessibilityLabel="Rotate player" onPress={props.onRotate} style={styles.floatingGlassBackBtn}>
           <Ionicons name={props.landscape ? 'refresh-outline' : 'expand-outline'} size={16} color="#fff" />

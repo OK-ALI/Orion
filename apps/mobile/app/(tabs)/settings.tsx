@@ -20,14 +20,15 @@ import { usePerformanceProfile } from "../../src/context/PerformanceContext";
 import { MobilePageHeader } from "../../src/components/MobilePageHeader";
 import { useResponsiveLayout } from "../../src/services/responsive";
 import {
-  MOBILE_ACTIVE_SETTINGS_SECTIONS,
   MOBILE_SETTINGS_SECTION_BY_ID,
   type MobileSettingsSectionId,
 } from "../../src/features/settings/settingsArchitecture";
 import { SettingsSectionNavigator } from "../../src/features/settings/SettingsSectionNavigator";
+import { useSettingsSectionOrderPreferences } from "../../src/features/settings/settingsSectionOrderPreferences";
 import { AccountSettingsContent } from "../../src/features/settings/AccountSettingsContent";
 import { UpdatesSettingsContent } from "../../src/features/settings/UpdatesSettingsContent";
 import { NotificationSettingsContent } from "../../src/features/settings/NotificationSettingsContent";
+import { HomeLayoutSettingsContent } from "../../src/features/settings/HomeLayoutSettingsContent";
 import { DownloadSettingsContent } from "../../src/features/downloads/DownloadSettingsContent";
 import {
   PERFORMANCE_PROFILE_LABELS,
@@ -86,10 +87,18 @@ export default function MobileSettingsScreen() {
   const account = MOBILE_SETTINGS_SECTION_BY_ID.account;
   const appearance = MOBILE_SETTINGS_SECTION_BY_ID.appearance;
   const performance = MOBILE_SETTINGS_SECTION_BY_ID.performance;
+  const home = MOBILE_SETTINGS_SECTION_BY_ID.home;
   const accessibility = MOBILE_SETTINGS_SECTION_BY_ID.accessibility;
   const notifications = MOBILE_SETTINGS_SECTION_BY_ID.notifications;
   const updates = MOBILE_SETTINGS_SECTION_BY_ID.updates;
   const downloads = MOBILE_SETTINGS_SECTION_BY_ID.downloads;
+  const settingsSectionOrder = useSettingsSectionOrderPreferences();
+  const orderedSections = React.useMemo(
+    () => settingsSectionOrder.order
+      .map((id) => MOBILE_SETTINGS_SECTION_BY_ID[id])
+      .filter((section) => section.status === 'active'),
+    [settingsSectionOrder.order],
+  );
   const scrollRef = React.useRef<ScrollView>(null);
   const sectionOffsets = React.useRef<Partial<Record<MobileSettingsSectionId, number>>>({});
   const pendingDeepLinkSectionRef = React.useRef<MobileSettingsSectionId | null>(null);
@@ -111,7 +120,7 @@ export default function MobileSettingsScreen() {
 
   React.useEffect(() => {
     const requested = Array.isArray(requestedSectionParam) ? requestedSectionParam[0] : requestedSectionParam;
-    const section = MOBILE_ACTIVE_SETTINGS_SECTIONS.find((candidate) => candidate.id === requested);
+    const section = orderedSections.find((candidate) => candidate.id === requested);
     if (!section) return;
     const y = sectionOffsets.current[section.id];
     if (typeof y === 'number') {
@@ -119,17 +128,242 @@ export default function MobileSettingsScreen() {
     } else {
       pendingDeepLinkSectionRef.current = section.id;
     }
-  }, [jumpToSection, requestedSectionParam]);
+  }, [jumpToSection, orderedSections, requestedSectionParam]);
 
   const handleScroll = React.useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = event.nativeEvent.contentOffset.y + 28;
-    let nextId = MOBILE_ACTIVE_SETTINGS_SECTIONS[0]?.id || 'appearance';
-    for (const section of MOBILE_ACTIVE_SETTINGS_SECTIONS) {
+    let nextId = orderedSections[0]?.id || 'appearance';
+    for (const section of orderedSections) {
       const offset = sectionOffsets.current[section.id];
       if (typeof offset === 'number' && offset <= y) nextId = section.id;
     }
     setCurrentSectionId((current) => current === nextId ? current : nextId);
-  }, []);
+  }, [orderedSections]);
+
+  const renderSettingsSection = (sectionId: MobileSettingsSectionId) => {
+    switch (sectionId) {
+      case 'account':
+        return (
+          <SettingsSection
+                    sectionId="account"
+                    title={account.label}
+                    description="Your Orion profile and sign-in."
+                    theme={theme}
+                    onLayout={recordSectionLayout('account')}
+                  >
+                    <AccountSettingsContent />
+                  </SettingsSection>
+        );
+      case 'appearance':
+        return (
+          <SettingsSection
+                    sectionId="appearance"
+                    title={appearance.label}
+                    description="Themes and system appearance."
+                    theme={theme}
+                    onLayout={recordSectionLayout('appearance')}
+                  >
+                    <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Theme</Text>
+                    <View style={styles.themeGrid}>
+                      {(Object.keys(ORION_MOBILE_THEMES) as OrionThemeId[]).map((id) => {
+                        const preview = ORION_MOBILE_THEMES[id];
+                        const selected = preferences.theme === id;
+                        const previewAccent = id === "custom" && preferences.customAccent
+                          ? preferences.customAccent
+                          : preview.accent;
+                        return (
+                          <Pressable
+                            accessibilityRole="radio"
+                            accessibilityLabel={`${THEME_LABELS[id]} theme`}
+                            accessibilityHint={THEME_DESCRIPTIONS[id]}
+                            accessibilityState={{ checked: selected }}
+                            key={id}
+                            onPress={() => setTheme(id)}
+                            style={[
+                              styles.themeButton,
+                              { backgroundColor: preview.background, borderColor: selected ? theme.accent : preview.border },
+                            ]}
+                          >
+                            <View style={[styles.themeSwatch, { backgroundColor: previewAccent }]} />
+                            <View style={styles.themeCopy}>
+                              <Text style={[styles.themeLabel, { color: preview.text }]}>{THEME_LABELS[id]}</Text>
+                              <Text numberOfLines={2} style={[styles.themeDescription, { color: preview.textSecondary }]}>
+                                {THEME_DESCRIPTIONS[id]}
+                              </Text>
+                            </View>
+                            {selected && <Ionicons name="checkmark-circle" size={18} color={theme.accent} />}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    {preferences.theme === "custom" && (
+                      <View style={[styles.customAccentRow, { borderTopColor: theme.border }]}>
+                        <View style={styles.settingCopy}>
+                          <Text style={[styles.settingTitle, { color: theme.text }]}>Custom accent</Text>
+                          <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>Enter the color code you want Orion to use.</Text>
+                        </View>
+                        <TextInput
+                          accessibilityLabel="Custom accent hexadecimal color"
+                          accessibilityHint="Enter a six-digit hexadecimal color such as number sign E50914"
+                          autoCapitalize="characters"
+                          maxLength={7}
+                          defaultValue={preferences.customAccent || "#E50914"}
+                          placeholder="#E50914"
+                          placeholderTextColor={theme.textMuted}
+                          onEndEditing={(event) => setCustomAccent(event.nativeEvent.text.trim())}
+                          style={[styles.colorInput, { color: theme.text, backgroundColor: theme.input, borderColor: theme.border }]}
+                        />
+                      </View>
+                    )}
+
+                    <Text accessibilityRole="header" style={[styles.subgroupTitle, { color: theme.text }]}>System appearance</Text>
+                    <View style={styles.settingRow}>
+                      <View style={styles.settingCopy}>
+                        <Text style={[styles.settingTitle, { color: theme.text }]}>Follow system appearance</Text>
+                        <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>Use Projector Silver in light mode and Midnight Premiere in dark mode.</Text>
+                      </View>
+                      <Switch
+                        accessibilityRole="switch"
+                        accessibilityLabel="Follow system appearance"
+                        accessibilityHint="Uses Orion's light or dark theme to match the device appearance"
+                        accessibilityState={{ checked: preferences.followSystem }}
+                        value={preferences.followSystem}
+                        onValueChange={setFollowSystem}
+                        trackColor={{ false: theme.border, true: theme.accentSoft }}
+                        thumbColor={preferences.followSystem ? theme.accent : theme.textMuted}
+                      />
+                    </View>
+                  </SettingsSection>
+        );
+      case 'performance':
+        return (
+          <SettingsSection
+                    sectionId="performance"
+                    title={performance.label}
+                    description="Choose how Orion balances browsing speed and device resources."
+                    theme={theme}
+                    onLayout={recordSectionLayout('performance')}
+                  >
+                    <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Profiles</Text>
+                    <View style={styles.profileGrid}>
+                      {PERFORMANCE_PROFILE_OPTIONS.map((option) => {
+                        const selected = selection === option.id;
+                        const optionLabel = option.id === 'automatic' ? 'Automatic (Recommended)' : option.label;
+                        return (
+                          <Pressable
+                            key={option.id}
+                            accessibilityRole="radio"
+                            accessibilityLabel={`${optionLabel} performance profile`}
+                            accessibilityHint={option.description}
+                            accessibilityState={{ checked: selected }}
+                            onPress={() => setSelection(option.id as PerformanceProfileSelection)}
+                            style={({ pressed }) => [
+                              styles.profileOption,
+                              {
+                                backgroundColor: selected ? theme.accentSoft : theme.elevated,
+                                borderColor: selected ? theme.accent : theme.border,
+                              },
+                              pressed && { backgroundColor: theme.surfaceHover },
+                            ]}
+                          >
+                            <View style={styles.profileOptionHeading}>
+                              <Text style={[styles.profileOptionTitle, { color: theme.text }]}>{optionLabel}</Text>
+                              {selected && <Ionicons name="checkmark-circle" size={20} color={theme.accent} />}
+                            </View>
+                            <Text style={[styles.profileOptionDescription, { color: theme.textSecondary }]}>{option.description}</Text>
+                            {option.id === 'automatic' && (
+                              <Text style={[styles.profileResolvedText, { color: theme.accent }]}>Currently: {PERFORMANCE_PROFILE_LABELS[resolvedProfile]}</Text>
+                            )}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    <Text style={[styles.performanceNote, { color: theme.textMuted }]}>
+                      Profiles adjust how much browsing work Orion keeps ready. Your catalog, artwork and playback stay the same.
+                    </Text>
+                  </SettingsSection>
+        );
+      case 'home':
+        return (
+          <SettingsSection
+                    sectionId="home"
+                    title={home.label}
+                    description="Choose what appears on Home and arrange your sections."
+                    theme={theme}
+                    onLayout={recordSectionLayout('home')}
+                  >
+                    <HomeLayoutSettingsContent />
+                  </SettingsSection>
+        );
+      case 'accessibility':
+        return (
+          <SettingsSection
+                    sectionId="accessibility"
+                    title={accessibility.label}
+                    description="Motion and interaction comfort."
+                    theme={theme}
+                    onLayout={recordSectionLayout('accessibility')}
+                  >
+                    <View style={styles.settingRow}>
+                      <View style={styles.settingCopy}>
+                        <Text style={[styles.settingTitle, { color: theme.text }]}>Reduced motion</Text>
+                        <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>Reduce decorative transitions while retaining clear state changes.</Text>
+                      </View>
+                      <Switch
+                        accessibilityRole="switch"
+                        accessibilityLabel="Reduced motion"
+                        accessibilityHint="Reduces decorative transitions while preserving state changes"
+                        accessibilityState={{ checked: preferences.reducedMotion }}
+                        value={preferences.reducedMotion}
+                        onValueChange={setReducedMotion}
+                        trackColor={{ false: theme.border, true: theme.accentSoft }}
+                        thumbColor={preferences.reducedMotion ? theme.accent : theme.textMuted}
+                      />
+                    </View>
+                  </SettingsSection>
+        );
+      case 'notifications':
+        return (
+          <SettingsSection
+                    sectionId="notifications"
+                    title={notifications.label}
+                    description="Choose your alerts and quiet hours."
+                    theme={theme}
+                    onLayout={recordSectionLayout('notifications')}
+                  >
+                    <NotificationSettingsContent />
+                  </SettingsSection>
+        );
+      case 'updates':
+        return (
+          <SettingsSection
+                    sectionId="updates"
+                    title={updates.label}
+                    description="Choose when you receive updates and see what is available."
+                    theme={theme}
+                    onLayout={recordSectionLayout('updates')}
+                  >
+                    <UpdatesSettingsContent />
+                  </SettingsSection>
+        );
+      case 'downloads':
+        return (
+          <SettingsSection
+                    sectionId="downloads"
+                    title={downloads.label}
+                    description="Offline location, quality and subtitle defaults."
+                    theme={theme}
+                    onLayout={recordSectionLayout('downloads')}
+                  >
+                    <DownloadSettingsContent />
+                  </SettingsSection>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -140,7 +374,7 @@ export default function MobileSettingsScreen() {
       />
 
       <SettingsSectionNavigator
-        sections={MOBILE_ACTIVE_SETTINGS_SECTIONS}
+        sections={orderedSections}
         currentSectionId={currentSectionId}
         onSelect={jumpToSection}
       />
@@ -152,197 +386,11 @@ export default function MobileSettingsScreen() {
         onScroll={handleScroll}
         scrollEventThrottle={32}
       >
-        <SettingsSection
-          sectionId="account"
-          title={account.label}
-          description="Your Orion profile and sign-in."
-          theme={theme}
-          onLayout={recordSectionLayout('account')}
-        >
-          <AccountSettingsContent />
-        </SettingsSection>
-
-        <SettingsSection
-          sectionId="appearance"
-          title={appearance.label}
-          description="Themes and system appearance."
-          theme={theme}
-          onLayout={recordSectionLayout('appearance')}
-        >
-          <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Theme</Text>
-          <View style={styles.themeGrid}>
-            {(Object.keys(ORION_MOBILE_THEMES) as OrionThemeId[]).map((id) => {
-              const preview = ORION_MOBILE_THEMES[id];
-              const selected = preferences.theme === id;
-              const previewAccent = id === "custom" && preferences.customAccent
-                ? preferences.customAccent
-                : preview.accent;
-              return (
-                <Pressable
-                  accessibilityRole="radio"
-                  accessibilityLabel={`${THEME_LABELS[id]} theme`}
-                  accessibilityHint={THEME_DESCRIPTIONS[id]}
-                  accessibilityState={{ checked: selected }}
-                  key={id}
-                  onPress={() => setTheme(id)}
-                  style={[
-                    styles.themeButton,
-                    { backgroundColor: preview.background, borderColor: selected ? theme.accent : preview.border },
-                  ]}
-                >
-                  <View style={[styles.themeSwatch, { backgroundColor: previewAccent }]} />
-                  <View style={styles.themeCopy}>
-                    <Text style={[styles.themeLabel, { color: preview.text }]}>{THEME_LABELS[id]}</Text>
-                    <Text numberOfLines={2} style={[styles.themeDescription, { color: preview.textSecondary }]}>
-                      {THEME_DESCRIPTIONS[id]}
-                    </Text>
-                  </View>
-                  {selected && <Ionicons name="checkmark-circle" size={18} color={theme.accent} />}
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {preferences.theme === "custom" && (
-            <View style={[styles.customAccentRow, { borderTopColor: theme.border }]}>
-              <View style={styles.settingCopy}>
-                <Text style={[styles.settingTitle, { color: theme.text }]}>Custom accent</Text>
-                <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>Enter the color code you want Orion to use.</Text>
-              </View>
-              <TextInput
-                accessibilityLabel="Custom accent hexadecimal color"
-                accessibilityHint="Enter a six-digit hexadecimal color such as number sign E50914"
-                autoCapitalize="characters"
-                maxLength={7}
-                defaultValue={preferences.customAccent || "#E50914"}
-                placeholder="#E50914"
-                placeholderTextColor={theme.textMuted}
-                onEndEditing={(event) => setCustomAccent(event.nativeEvent.text.trim())}
-                style={[styles.colorInput, { color: theme.text, backgroundColor: theme.input, borderColor: theme.border }]}
-              />
-            </View>
-          )}
-
-          <Text accessibilityRole="header" style={[styles.subgroupTitle, { color: theme.text }]}>System appearance</Text>
-          <View style={styles.settingRow}>
-            <View style={styles.settingCopy}>
-              <Text style={[styles.settingTitle, { color: theme.text }]}>Follow system appearance</Text>
-              <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>Use Projector Silver in light mode and Midnight Premiere in dark mode.</Text>
-            </View>
-            <Switch
-              accessibilityRole="switch"
-              accessibilityLabel="Follow system appearance"
-              accessibilityHint="Uses Orion's light or dark theme to match the device appearance"
-              accessibilityState={{ checked: preferences.followSystem }}
-              value={preferences.followSystem}
-              onValueChange={setFollowSystem}
-              trackColor={{ false: theme.border, true: theme.accentSoft }}
-              thumbColor={preferences.followSystem ? theme.accent : theme.textMuted}
-            />
-          </View>
-        </SettingsSection>
-
-        <SettingsSection
-          sectionId="performance"
-          title={performance.label}
-          description="Choose how Orion balances browsing speed and device resources."
-          theme={theme}
-          onLayout={recordSectionLayout('performance')}
-        >
-          <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Profiles</Text>
-          <View style={styles.profileGrid}>
-            {PERFORMANCE_PROFILE_OPTIONS.map((option) => {
-              const selected = selection === option.id;
-              const optionLabel = option.id === 'automatic' ? 'Automatic (Recommended)' : option.label;
-              return (
-                <Pressable
-                  key={option.id}
-                  accessibilityRole="radio"
-                  accessibilityLabel={`${optionLabel} performance profile`}
-                  accessibilityHint={option.description}
-                  accessibilityState={{ checked: selected }}
-                  onPress={() => setSelection(option.id as PerformanceProfileSelection)}
-                  style={({ pressed }) => [
-                    styles.profileOption,
-                    {
-                      backgroundColor: selected ? theme.accentSoft : theme.elevated,
-                      borderColor: selected ? theme.accent : theme.border,
-                    },
-                    pressed && { backgroundColor: theme.surfaceHover },
-                  ]}
-                >
-                  <View style={styles.profileOptionHeading}>
-                    <Text style={[styles.profileOptionTitle, { color: theme.text }]}>{optionLabel}</Text>
-                    {selected && <Ionicons name="checkmark-circle" size={20} color={theme.accent} />}
-                  </View>
-                  <Text style={[styles.profileOptionDescription, { color: theme.textSecondary }]}>{option.description}</Text>
-                  {option.id === 'automatic' && (
-                    <Text style={[styles.profileResolvedText, { color: theme.accent }]}>Currently: {PERFORMANCE_PROFILE_LABELS[resolvedProfile]}</Text>
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <Text style={[styles.performanceNote, { color: theme.textMuted }]}>
-            Profiles adjust how much browsing work Orion keeps ready. Your catalog, artwork and playback stay the same.
-          </Text>
-        </SettingsSection>
-
-        <SettingsSection
-          sectionId="accessibility"
-          title={accessibility.label}
-          description="Motion and interaction comfort."
-          theme={theme}
-          onLayout={recordSectionLayout('accessibility')}
-        >
-          <View style={styles.settingRow}>
-            <View style={styles.settingCopy}>
-              <Text style={[styles.settingTitle, { color: theme.text }]}>Reduced motion</Text>
-              <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>Reduce decorative transitions while retaining clear state changes.</Text>
-            </View>
-            <Switch
-              accessibilityRole="switch"
-              accessibilityLabel="Reduced motion"
-              accessibilityHint="Reduces decorative transitions while preserving state changes"
-              accessibilityState={{ checked: preferences.reducedMotion }}
-              value={preferences.reducedMotion}
-              onValueChange={setReducedMotion}
-              trackColor={{ false: theme.border, true: theme.accentSoft }}
-              thumbColor={preferences.reducedMotion ? theme.accent : theme.textMuted}
-            />
-          </View>
-        </SettingsSection>
-
-        <SettingsSection
-          sectionId="notifications"
-          title={notifications.label}
-          description="Choose your alerts and quiet hours."
-          theme={theme}
-          onLayout={recordSectionLayout('notifications')}
-        >
-          <NotificationSettingsContent />
-        </SettingsSection>
-
-        <SettingsSection
-          sectionId="updates"
-          title={updates.label}
-          description="Choose when you receive updates and see what is available."
-          theme={theme}
-          onLayout={recordSectionLayout('updates')}
-        >
-          <UpdatesSettingsContent />
-        </SettingsSection>
-
-        <SettingsSection
-          sectionId="downloads"
-          title={downloads.label}
-          description="Offline location, quality and subtitle defaults."
-          theme={theme}
-          onLayout={recordSectionLayout('downloads')}
-        >
-          <DownloadSettingsContent />
-        </SettingsSection>
+        {orderedSections.map((section) => (
+          <React.Fragment key={section.id}>
+            {renderSettingsSection(section.id)}
+          </React.Fragment>
+        ))}
 
         <View style={[styles.notice, { borderTopColor: theme.border }]}>
           <Ionicons name="layers-outline" size={20} color={theme.textMuted} />

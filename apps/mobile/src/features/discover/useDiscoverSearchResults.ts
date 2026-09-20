@@ -46,7 +46,7 @@ export function useDiscoverSearchResults({
           setResponse({ key: requestKey, results: [], status: 'error' });
         }
       }
-    }, 600);
+    }, 420);
 
     return () => {
       cancelled = true;
@@ -57,7 +57,7 @@ export function useDiscoverSearchResults({
   const currentResponse = remoteReadyRef.current && trimmedQuery &&
     response?.key === requestKey ? response : null;
   const filteredSearchResults = useMemo(() => (currentResponse?.results || []).filter((result) => {
-    // TMDB multi-search also returns people; the shared catalog type excludes them.
+    // Search intelligence merges movie, TV and dedicated person results into one grid.
     const mediaType = (result as { media_type?: string }).media_type;
     if (mediaType !== 'movie' && mediaType !== 'tv' && mediaType !== 'person' && !!mediaType) return false;
     if (activeFilter === 'all') return true;

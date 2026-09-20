@@ -24,21 +24,24 @@ export function MobileNotificationResponseRouter() {
         router.push({ pathname: '/(tabs)/settings', params: { section: target.section } });
       } else if (target.target === 'downloads') {
         router.push('/(tabs)/downloads');
+      } else if (target.target === 'discover') {
+        router.push({ pathname: '/discover', params: {
+          exploreIntent: String(Date.now()), feed: target.feed, mediaType: target.mediaType, region: target.region || 'all',
+          subfilter: target.subfilter || 'all', genreId: target.genreId ? String(target.genreId) : '', window: target.window || '',
+          label: target.feed === 'new-releases' ? 'New Releases' : target.feed === 'upcoming' ? 'Coming Soon' : 'Trending',
+        } } as any);
       } else {
-        router.push({
-          pathname: '/media/[id]',
-          params: { id: target.mediaId, type: target.mediaType },
-        });
+        router.push({ pathname: '/media/[id]', params: { id: target.mediaId, type: target.mediaType } });
       }
     };
 
-    void import('expo-notifications').then((Notifications) => {
+    void import('expo-notifications').then(async (Notifications) => {
       if (!active) return;
-      const last = Notifications.getLastNotificationResponse();
-      if (last?.notification) handleNotification(last.notification);
-      subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-        handleNotification(response.notification);
-      });
+      subscription = Notifications.addNotificationResponseReceivedListener((response) => handleNotification(response.notification));
+      try {
+        const last = await Notifications.getLastNotificationResponseAsync();
+        if (active && last?.notification) handleNotification(last.notification);
+      } catch {}
     }).catch(() => {});
 
     return () => {

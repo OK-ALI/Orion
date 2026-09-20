@@ -18,6 +18,10 @@ import { candidateSources } from "./adapters/candidates";
 import { experimentalSources, disabledSources } from "./adapters/experimental";
 import { allMangaSource } from "./adapters/allmanga";
 import { CINEMA_BLOCK_RULE_CATALOG_V1 } from "@orion/shared/cinema-block-rules";
+import {
+  applyOrionProviderStatusV1,
+  getActiveOrionProviderStatusV1,
+} from "../types/providerStatus";
 
 // ── Legacy health mapping ───────────────────────────────────────────────────
 const LEGACY_HEALTH: Record<string, string> = Object.freeze({
@@ -51,8 +55,16 @@ function createEnforcedManifest(source: CinemaSourceDescriptor): ProviderRequest
 }
 
 function toLegacyCompatibleSource(source: CinemaSourceDescriptor): LegacyCompatibleSource {
+  const routingMode = source.routingMode ?? (
+    source.releaseStatus === "primary" && !source.quarantined ? "automatic" : "manual-only"
+  );
+  const availability = source.availability ?? (
+    source.releaseStatus === "disabled" ? "temporarily-unavailable" : "ready"
+  );
   return Object.freeze({
     ...source,
+    routingMode,
+    availability,
     requestManifest: source.requestManifest ?? createEnforcedManifest(source),
     tag: source.animeOnly ? "ANIME" : ["candidate", "experimental"].includes(source.releaseStatus) ? "EXP" : null,
     note: source.releaseStatus === "candidate" ? "Candidate" : source.releaseStatus === "experimental" ? "Experimental" : source.releaseStatus === "disabled" ? (source.disabledReason ?? null) : null,
@@ -78,11 +90,32 @@ export const ALL_CINEMA_SOURCES: readonly LegacyCompatibleSource[] = Object.free
 
 assertSourceRegistry(ALL_CINEMA_SOURCES as unknown as CinemaSourceDescriptor[]);
 
-export const PLAYER_SOURCES: readonly LegacyCompatibleSource[] = Object.freeze(
-  ALL_CINEMA_SOURCES.filter((source) => source.releaseStatus !== "disabled" && !source.quarantined)
+/** Every registered source remains visible for an explicit, shielded attempt. */
+export const PLAYER_SOURCES: readonly LegacyCompatibleSource[] = ALL_CINEMA_SOURCES;
+
+/** Automatic routing is intentionally narrower than the visible source list. */
+export const AUTOMATIC_PLAYER_SOURCES: readonly LegacyCompatibleSource[] = Object.freeze(
+  ALL_CINEMA_SOURCES.filter((source) =>
+    source.routingMode === "automatic"
+    && source.releaseStatus !== "disabled"
+    && !source.quarantined
+  )
 );
 
-export const DEFAULT_CINEMA_SOURCE_ID = "videasy";
+/** Current signed availability layered over the immutable bundled registry. */
+export function getEffectivePlayerSources(): readonly LegacyCompatibleSource[] {
+  return applyOrionProviderStatusV1(PLAYER_SOURCES, getActiveOrionProviderStatusV1());
+}
+
+function getEffectiveAutomaticPlayerSources(): readonly LegacyCompatibleSource[] {
+  return getEffectivePlayerSources().filter((source) =>
+    source.routingMode === "automatic"
+    && source.releaseStatus !== "disabled"
+    && !source.quarantined
+  );
+}
+
+export const DEFAULT_CINEMA_SOURCE_ID = AUTOMATIC_PLAYER_SOURCES[0]?.id ?? "vixsrc";
 
 // ── Runtime health tracking ─────────────────────────────────────────────────
 interface HealthRecord {
@@ -119,10 +152,11 @@ export function getRegisteredSource(sourceId: string): LegacyCompatibleSource | 
 }
 
 export function getSource(sourceId: string): LegacyCompatibleSource {
+  const effectiveSources = getEffectivePlayerSources();
   return (
-    PLAYER_SOURCES.find((source) => source.id === sourceId) ??
-    PLAYER_SOURCES.find((source) => source.id === DEFAULT_CINEMA_SOURCE_ID) ??
-    PLAYER_SOURCES[0]
+    effectiveSources.find((source) => source.id === sourceId) ??
+    effectiveSources.find((source) => source.id === DEFAULT_CINEMA_SOURCE_ID) ??
+    effectiveSources[0]
   );
 }
 
@@ -158,14 +192,26 @@ export const sourceIsAsync = (sourceId: string): boolean =>
 export const sourceResumeStrategy = (sourceId: string) =>
   getSource(sourceId)?.resumeStrategy ?? "none";
 
+export const sourceRequiresIframeWrapper = (sourceId: string): boolean =>
+  getSource(sourceId)?.requiresIframeWrapper === true;
+
 // ── Resume params ───────────────────────────────────────────────────────────
 export function getSourceResumeParams(
   sourceId: string,
-  seconds: number
+  seconds: number,
+  mediaType: "movie" | "tv" | null = null
 ): Record<string, number> {
   const source = getSource(sourceId);
   const value = Math.max(0, Math.floor(Number(seconds) || 0));
-  return source.resumeParam && value > 0 ? { [source.resumeParam]: value } : {};
+  let resumeParam = source.resumeParam;
+  if (mediaType === "movie") {
+    resumeParam = source.movieResumeParam ?? source.resumeParam;
+  } else if (mediaType === "tv") {
+    resumeParam = source.tvResumeParam ?? source.resumeParam;
+  } else if (!resumeParam) {
+    resumeParam = source.movieResumeParam ?? source.tvResumeParam;
+  }
+  return resumeParam && value > 0 ? { [resumeParam]: value } : {};
 }
 
 // ── ID resolution ───────────────────────────────────────────────────────────
@@ -222,7 +268,7 @@ export function getSourceUrl(
 
 // ── Source failover ─────────────────────────────────────────────────────────
 export function getNextNonAsyncSource(currentId: string): string | null {
-  const candidates = PLAYER_SOURCES.filter((source) => !source.async && !source.quarantined);
+  const candidates = getEffectiveAutomaticPlayerSources().filter((source) => !source.async);
   if (!candidates.length) return null;
   const index = candidates.findIndex((source) => source.id === currentId);
   return candidates[index < 0 ? 0 : (index + 1) % candidates.length].id;
@@ -238,24 +284,23 @@ export function getNextHealthyNonAsyncSource(
   } = {}
 ): string | null {
   const attemptedIds = new Set([currentId, ...attempted].filter(Boolean));
-  const baseEligible = PLAYER_SOURCES.filter(
+  const effectiveAutomaticSources = getEffectiveAutomaticPlayerSources();
+  const baseEligible = effectiveAutomaticSources.filter(
     (source) =>
       !source.async &&
       !source.quarantined &&
-      !attemptedIds.has(source.id) &&
-      (includeExperimental || source.releaseStatus === "primary")
+      !attemptedIds.has(source.id)
   );
   const notCoolingDown = (source: LegacyCompatibleSource): boolean => {
     const health = getCinemaSourceRuntimeHealth(source.id, mediaType);
     return !health?.cooldownUntil || health.cooldownUntil <= now;
   };
   const healthy = baseEligible.filter(notCoolingDown);
-  const fallbacks = PLAYER_SOURCES.filter(
+  const fallbacks = effectiveAutomaticSources.filter(
     (source) =>
       !source.async &&
       !source.quarantined &&
       !attemptedIds.has(source.id) &&
-      (includeExperimental || ["primary", "candidate"].includes(source.releaseStatus)) &&
       notCoolingDown(source)
   );
   const candidates = healthy.length ? healthy : fallbacks.length ? fallbacks : baseEligible;

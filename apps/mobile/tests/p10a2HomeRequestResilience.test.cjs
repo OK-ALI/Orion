@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '..');
 const homeFile = path.join(root, 'app/(tabs)/index.tsx');
 const homeSource = fs.readFileSync(homeFile, 'utf8');
 const compiledCache = new Map();
-const endpoints = [
+const coreEndpoints = [
   '/trending/movie/week',
   '/trending/tv/week',
   '/discover/tv?with_original_language=ko&with_genres=18&sort_by=popularity.desc&vote_count.gte=80&page=1',
@@ -16,9 +16,11 @@ const endpoints = [
   '/tv/top_rated?page=1',
 ];
 const labels = ['Trending Movies', 'Trending TV Shows', 'K-Dramas Spotlight', 'Top Rated Masterpieces'];
+const timelyLabels = ['New Releases', 'Coming Soon'];
+const REQUESTS_PER_BATCH = 9;
 const failure = () => new Error('HTTP 503: internal provider detail must never reach Home');
 function responses(seed = 0) {
-  return [3, 3, 2, 2, 3].map((count, source) => ({ results: Array.from({ length: count }, (_, index) => ({
+  return [3, 3, 2, 2, 3, 3, 3, 3, 3].map((count, source) => ({ results: Array.from({ length: count }, (_, index) => ({
     id: seed + (source + 1) * 100 + index, title: 'Title ' + index, poster_path: '/poster',
   })) }));
 }
@@ -66,7 +68,7 @@ function harness({ state = 'online', epoch = 0 } = {}) {
       StyleSheet: { create: (styles) => styles, absoluteFill: {} }, useWindowDimensions: () => ({ width: 400 }) },
     'expo-router': { useRouter: () => ({ push: (route) => routes.push(route) }) },
     'expo-linear-gradient': { LinearGradient: 'LinearGradient' }, '@expo/vector-icons': { Ionicons: 'Ionicons' },
-    '@orion/shared/tokens': { spacing: Array.from({ length: 20 }, (_, index) => index * 4), fontFamilies: {} },
+    '@orion/shared/tokens': { spacing: Array.from({ length: 20 }, (_, index) => index * 4), fontFamilies: {}, radii: { md: 12 } },
     '@orion/shared/api': { tmdbFetch: (url) => new Promise((resolve, reject) => requests.push({ url, resolve, reject })) },
     '../../src/context/ThemeContext': themeContext, '../context/ThemeContext': themeContext,
     '../../src/context/NetworkContext': { useNetworkStatus: () => network }, './NetworkContext': { useNetworkStatus: () => network },
@@ -77,6 +79,7 @@ function harness({ state = 'online', epoch = 0 } = {}) {
     './HomeOfflineIntroduction': { HomeOfflineIntroduction: 'HomeOfflineIntroduction' },
     '../../src/components/MediaCard': { MediaCard: 'MediaCard' },
     '../../src/features/library/HomeContinueWatching': { HomeContinueWatching: 'HomeContinueWatching' },
+    '../../src/features/home/homeLayoutPreferences': { useHomeLayoutPreferences: () => ({ order: ['continue-watching', 'trending-movies', 'trending-tv', 'new-releases', 'upcoming', 'k-dramas', 'top-rated'], hidden: [] }) },
   };
   function load(file) {
     if (modules.has(file)) return modules.get(file).exports;
@@ -124,8 +127,13 @@ function harness({ state = 'online', epoch = 0 } = {}) {
       network = { productState: state, remoteReady: state === 'online', recoveryEpoch: epoch }; render();
     },
     finish(batch = 0, failed = [], data = responses()) {
-      const group = requests.slice(batch * 5, batch * 5 + 5);
-      assert.deepEqual(group.map((request) => request.url), endpoints, 'One complete Home fan-out');
+      const group = requests.slice(batch * REQUESTS_PER_BATCH, batch * REQUESTS_PER_BATCH + REQUESTS_PER_BATCH);
+      assert.equal(group.length, REQUESTS_PER_BATCH, 'One complete Home fan-out');
+      assert.deepEqual(group.slice(0, 5).map((request) => request.url), coreEndpoints, 'Existing Home requests stay frozen');
+      assert.match(group[5].url, /^\/discover\/movie\?.*primary_release_date\.gte=.*primary_release_date\.lte=.*page=1$/);
+      assert.match(group[6].url, /^\/discover\/tv\?.*first_air_date\.gte=.*first_air_date\.lte=.*page=1$/);
+      assert.match(group[7].url, /^\/discover\/movie\?.*primary_release_date\.gte=.*primary_release_date\.lte=.*page=1$/);
+      assert.match(group[8].url, /^\/discover\/tv\?.*first_air_date\.gte=.*first_air_date\.lte=.*page=1$/);
       group.forEach((request, index) => failed.includes(index) ? request.reject(failure()) : request.resolve(data[index]));
     },
     async settle() { for (let index = 0; index < 8; index++) await Promise.resolve(); render(); },
@@ -143,11 +151,12 @@ test('Home retains the frozen shared owners and a single bounded fan-out within 
   assert.ok(homeSource.split(/\r?\n/).length <= 800);
 });
 
-// Every subset of the five requests: independent rows, both Top Rated inputs,
-// first-load absence, Hero availability/interleaving, and total-only error UI.
+// Every subset of the original five requests remains independently resilient.
+// The two timely Home rails are additive; only a failure of all nine requests is catalog-wide.
 for (let mask = 0; mask < 32; mask++) {
-  const failed = endpoints.map((_, index) => index).filter((index) => mask & (1 << index));
-  test('initial fan-out failure subset [' + failed.join(',') + '] preserves every successful section', async () => {
+  const coreFailed = coreEndpoints.map((_, index) => index).filter((index) => mask & (1 << index));
+  const failed = mask === 31 ? [...coreFailed, 5, 6, 7, 8] : coreFailed;
+  test('initial fan-out failure subset [' + coreFailed.join(',') + '] preserves every successful section', async () => {
     const h = harness(); assert.equal(h.panel().loading, true);
     h.finish(0, failed); await h.settle();
     const rows = h.rows();
@@ -160,6 +169,13 @@ for (let mask = 0; mask < 32; mask++) {
     const expectedTop = [movie[0], tv[0], movie[1], tv[1], tv[2]].filter((id) => id !== undefined);
     assert.deepEqual(ids(rows[labels[3]] || []), expectedTop);
     for (const item of rows[labels[3]] || []) assert.equal(item.media_type, item.id < 500 ? 'movie' : 'tv');
+    if (mask === 31) {
+      assert.equal(rows[timelyLabels[0]], undefined);
+      assert.equal(rows[timelyLabels[1]], undefined);
+    } else {
+      assert.deepEqual(ids(rows[timelyLabels[0]] || []), [600, 601, 602, 700, 701, 702]);
+      assert.deepEqual(ids(rows[timelyLabels[1]] || []), [800, 801, 802, 900, 901, 902]);
+    }
     const movies = failed.includes(0) ? [] : [100, 101, 102], shows = failed.includes(1) ? [] : [200, 201, 202];
     assert.deepEqual(ids(h.hero()), [movies[0], shows[0], movies[1], shows[1], movies[2], shows[2]].filter((id) => id !== undefined).slice(0, 5));
     assert.equal(h.panel().loading, false);
@@ -186,26 +202,26 @@ for (const [section, failed] of [[0, [0]], [1, [1]], [2, [2]], [3, [3, 4]]]) {
     assert.equal(h.panel().error, null);
     if (section === 0) assert.deepEqual(ids(h.hero()), [100, 1200, 101, 1201, 102]);
     if (section === 1) assert.deepEqual(ids(h.hero()), [1100, 200, 1101, 201, 1102]);
-    assert.equal(h.requests.length, 10);
+    assert.equal(h.requests.length, 18);
   });
 }
 
 test('a later total failure preserves all prior rows and Hero, then panel Retry performs one full fan-out', async () => {
   const h = harness(); h.finish(); await h.settle(); const previous = h.rows(), hero = h.hero();
-  h.retry(); h.finish(1, [0, 1, 2, 3, 4]); await h.settle();
+  h.retry(); h.finish(1, [0, 1, 2, 3, 4, 5, 6, 7, 8]); await h.settle();
   for (const label of labels) assert.strictEqual(h.rows()[label], previous[label]);
   assert.deepEqual(h.hero(), hero); assert.equal(h.panel().error, 'Cinema content could not refresh.');
   const retry = nodes(h.panelUI()).find((node) => node.props.accessibilityLabel === 'Retry Cinema refresh');
   assert.ok(retry); retry.props.onPress(); h.render();
-  assert.equal(h.requests.length, 15); assert.equal(h.panel().loading, true); assert.equal(h.panel().error, null);
+  assert.equal(h.requests.length, 27); assert.equal(h.panel().loading, true); assert.equal(h.panel().error, null);
   h.finish(2, [1], responses(1000)); await h.settle();
-  assert.equal(h.panelUI(), null); assert.equal(h.requests.length, 15);
+  assert.equal(h.panelUI(), null); assert.equal(h.requests.length, 27);
   assert.strictEqual(h.rows()[labels[1]], previous[labels[1]]);
 });
 
 test('successful empty results clear only their own rows and do not count as request failures', async () => {
   const h = harness(); h.finish(); await h.settle(); const previous = h.rows();
-  h.retry(); h.finish(1, [1, 2], endpoints.map(() => ({ results: [] }))); await h.settle();
+  h.retry(); h.finish(1, [1, 2], Array.from({ length: REQUESTS_PER_BATCH }, () => ({ results: [] }))); await h.settle();
   assert.deepEqual(Object.keys(h.rows()), [labels[1], labels[2]]);
   assert.strictEqual(h.rows()[labels[1]], previous[labels[1]]);
   assert.strictEqual(h.rows()[labels[2]], previous[labels[2]]);
@@ -214,7 +230,7 @@ test('successful empty results clear only their own rows and do not count as req
 
 test('existing result limits, K-Drama artwork filtering, and Top Rated interleaving remain intact', async () => {
   const h = harness();
-  const data = endpoints.map((_, source) => ({ results: Array.from({ length: 23 }, (_, index) => ({ id: source * 100 + index, poster_path: '/poster' })) }));
+  const data = Array.from({ length: REQUESTS_PER_BATCH }, (_, source) => ({ results: Array.from({ length: 23 }, (_, index) => ({ id: source * 100 + index, poster_path: '/poster' })) }));
   data[2].results[0].poster_path = null;
   data[2].results[1] = { id: 201, backdrop_path: '/backdrop' };
   h.finish(0, [], data); await h.settle(); const rows = h.rows();
@@ -225,15 +241,15 @@ test('existing result limits, K-Drama artwork filtering, and Top Rated interleav
 
 test('loading stays active until the last current-generation request settles despite an early rejection', async () => {
   const h = harness(); h.requests[0].reject(failure());
-  for (let index = 1; index < 4; index++) h.requests[index].resolve(responses()[index]);
+  for (let index = 1; index < REQUESTS_PER_BATCH - 1; index++) h.requests[index].resolve(responses()[index]);
   await h.settle(); assert.equal(h.panel().loading, true); assert.equal(h.panel().error, null);
-  h.requests[4].resolve(responses()[4]); await h.settle();
+  h.requests[REQUESTS_PER_BATCH - 1].resolve(responses()[REQUESTS_PER_BATCH - 1]); await h.settle();
   assert.equal(h.panel().loading, false); assert.deepEqual(ids(h.rows()[labels[1]]), [200, 201, 202]);
 });
 
-for (const failed of [[], [0, 1, 2, 3, 4]]) {
+for (const failed of [[], [0, 1, 2, 3, 4, 5, 6, 7, 8]]) {
   test('stale ' + (failed.length ? 'failures' : 'successes') + ' cannot clear newer loading, set errors, or commit rows', async () => {
-    const h = harness(); h.retry(); assert.equal(h.requests.length, 10);
+    const h = harness(); h.retry(); assert.equal(h.requests.length, 18);
     h.finish(0, failed); await h.settle();
     assert.equal(h.panel().loading, true); assert.equal(h.panel().error, null); assert.deepEqual(h.rows(), {});
     h.finish(1, [], responses(1000)); await h.settle();
@@ -248,7 +264,7 @@ test('pre-loss responses resolving last cannot overwrite the recovered generatio
   assert.equal(h.rows()[labels[2]], undefined); assert.equal(h.panel().error, null); assert.equal(h.panel().loading, false);
 });
 
-for (const failed of [[], [0, 1, 2, 3, 4]]) {
+for (const failed of [[], [0, 1, 2, 3, 4, 5, 6, 7, 8]]) {
   test('connection loss blocks late ' + (failed.length ? 'errors' : 'results') + ' before any recovery starts', async () => {
     const h = harness(); h.finish(); await h.settle(); const previous = h.rows();
     h.retry(); h.connect('offline'); h.finish(1, failed, responses(1000)); await h.settle();
@@ -272,14 +288,14 @@ for (const state of ['offline', 'degraded', 'checking', 'reconnecting']) {
 test('checking to online and late online mount each start exactly one initial fan-out', async () => {
   for (const setup of [{ state: 'checking', epoch: 0 }, { state: 'online', epoch: 7 }]) {
     const h = harness(setup); h.connect('online', setup.epoch); h.render();
-    assert.equal(h.requests.length, 5); h.finish(); await h.settle(); h.render(); assert.equal(h.requests.length, 5);
+    assert.equal(h.requests.length, 9); h.finish(); await h.settle(); h.render(); assert.equal(h.requests.length, 9);
   }
 });
 
 test('the real shared recovery hook starts one full fan-out per legitimate epoch', async () => {
   const h = harness({ state: 'offline', epoch: 3 }); h.connect('reconnecting', 3); assert.equal(h.requests.length, 0);
-  h.connect('online', 4); h.render(); h.connect('online', 4); assert.equal(h.requests.length, 5);
-  h.finish(0, [2]); await h.settle(); h.render(); assert.equal(h.requests.length, 5);
-  h.connect('degraded', 4); h.connect('reconnecting', 4); assert.equal(h.requests.length, 5);
-  h.connect('online', 5); h.finish(1); await h.settle(); h.connect('online', 5); assert.equal(h.requests.length, 10);
+  h.connect('online', 4); h.render(); h.connect('online', 4); assert.equal(h.requests.length, 9);
+  h.finish(0, [2]); await h.settle(); h.render(); assert.equal(h.requests.length, 9);
+  h.connect('degraded', 4); h.connect('reconnecting', 4); assert.equal(h.requests.length, 9);
+  h.connect('online', 5); h.finish(1); await h.settle(); h.connect('online', 5); assert.equal(h.requests.length, 18);
 });

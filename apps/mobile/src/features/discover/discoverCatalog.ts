@@ -104,3 +104,49 @@ export const RATING_OPTIONS = [
   { id: '5', label: '★ 5.0 & Above' },
 ];
 export const YEAR_OPTIONS = ['', '2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017', '2016', '2015'];
+
+export type DiscoverFeedId = 'browse' | 'trending' | 'new-releases' | 'upcoming' | 'top-rated';
+
+export const DISCOVER_FEEDS: ReadonlyArray<{ id: DiscoverFeedId; name: string; icon: string }> = [
+  { id: 'browse', name: 'Browse', icon: 'grid-outline' },
+  { id: 'trending', name: 'Trending', icon: 'flame-outline' },
+  { id: 'new-releases', name: 'New Releases', icon: 'sparkles-outline' },
+  { id: 'upcoming', name: 'Coming Soon', icon: 'calendar-outline' },
+  { id: 'top-rated', name: 'Top Rated', icon: 'star-outline' },
+];
+
+export const TRENDING_WINDOW_OPTIONS = [
+  { id: 'day', label: 'Today' },
+  { id: 'week', label: 'This Week' },
+] as const;
+
+export const RELEASE_WINDOW_OPTIONS = [
+  { id: '7', label: '7 Days' },
+  { id: '30', label: '30 Days' },
+  { id: '90', label: '90 Days' },
+] as const;
+
+function isoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+export function getDiscoverReleaseDateParams(
+  feed: DiscoverFeedId,
+  mediaType: 'movie' | 'tv',
+  windowDays: string,
+  now = new Date(),
+): string {
+  if (feed !== 'new-releases' && feed !== 'upcoming') return '';
+  const days = Math.max(1, Number(windowDays) || 30);
+  const start = new Date(now);
+  const end = new Date(now);
+  if (feed === 'new-releases') start.setUTCDate(start.getUTCDate() - days);
+  else {
+    start.setUTCDate(start.getUTCDate() + 1);
+    end.setUTCDate(end.getUTCDate() + days);
+  }
+  const from = isoDate(start);
+  const to = isoDate(feed === 'new-releases' ? now : end);
+  const field = mediaType === 'movie' ? 'primary_release_date' : 'first_air_date';
+  return `&${field}.gte=${from}&${field}.lte=${to}`;
+}

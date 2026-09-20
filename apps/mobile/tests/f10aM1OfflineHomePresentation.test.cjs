@@ -67,6 +67,7 @@ function harness({ mode = 'home', state = 'offline', presentation, width = 480, 
     '../../src/components/HomeConnectionPanel': { HomeConnectionPanel: 'HomeConnectionPanel' },
     '../../src/components/MediaCard': { MediaCard: 'MediaCard' },
     '../../src/features/library/HomeContinueWatching': { HomeContinueWatching: 'HomeContinueWatching' },
+    '../../src/features/home/homeLayoutPreferences': { useHomeLayoutPreferences: () => ({ order: ['continue-watching', 'trending-movies', 'trending-tv', 'new-releases', 'upcoming', 'k-dramas', 'top-rated'], hidden: [] }) },
   };
   function load(file) {
     file = path.isAbsolute(file) ? file : path.join(root, file);
@@ -113,8 +114,13 @@ function harness({ mode = 'home', state = 'offline', presentation, width = 480, 
   };
 }
 
+function topLevelChildren(value) {
+  if (Array.isArray(value)) return value.flatMap(topLevelChildren);
+  if (value?.props && value.type == null) return topLevelChildren(value.props.children);
+  return value?.props ? [value] : [];
+}
 function contentOrder(h) {
-  return h.component('ScrollView').props.children.filter((node) => node?.props).map(nameOf);
+  return topLevelChildren(h.component('ScrollView').props.children).map(nameOf);
 }
 
 test('offline Home introduces local actions first, keeps compact Continue Watching, and hides every remote section', () => {
@@ -128,12 +134,12 @@ test('offline Home introduces local actions first, keeps compact Continue Watchi
 });
 
 test('online Home keeps Hero, default Continue Watching, panel and remote rows in the accepted order and geometry', async () => {
-  const h = harness({ state: 'online' }); assert.equal(h.requests.length, 5);
+  const h = harness({ state: 'online' }); assert.equal(h.requests.length, 9);
   assert.equal(h.component('HomeContinueWatching').props.presentation, undefined);
   assert.deepEqual(style(h.component('ScrollView').props.style), { flex: 1 });
   assert.equal(h.component('ScrollView').props.contentContainerStyle, undefined);
   h.requests.forEach((request, index) => request.resolve({ results: [{ id: index + 1, poster_path: '/poster' }] })); await h.settle();
-  assert.deepEqual(contentOrder(h), ['HeroBillboard', 'HomeContinueWatching', 'HomeConnectionPanel', 'View', 'View', 'View', 'View', 'View']);
+  assert.deepEqual(contentOrder(h), ['HeroBillboard', 'HomeContinueWatching', 'HomeConnectionPanel', 'View', 'View', 'View', 'View', 'View', 'View', 'View']);
   assert.equal(h.panelUI(), null); assert.deepEqual(h.component('HeroBillboard').props.items.map((item) => item.id), [1, 2]);
   h.connect('offline'); assert.equal(h.component('HeroBillboard'), undefined); assert.equal(h.component('MediaRow'), undefined);
   assert.deepEqual(contentOrder(h), ['HomeConnectionPanel', 'HomeContinueWatching', 'View']);

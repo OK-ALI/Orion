@@ -56,6 +56,24 @@ test("trailer session bounds same-candidate retries and rotates", () => {
   assert.match(source, /setTransport\('direct'\)/);
 });
 
+
+test("trailer discovery retries original-language title videos and can surface season trailers before modal open", () => {
+  const source = read("src/features/media-detail/useMediaDetailRemoteState.ts");
+  assert.match(source, /hasPlayableVideo/);
+  assert.match(source, /originalVideoLanguage/);
+  assert.match(source, /tmdbFetch<any>\(`\/\$\{type\}\/\$\{id\}\/videos`, \{ language: fallbackLanguage \}\)/);
+  assert.match(source, /!titleHasPlayableVideo/);
+  assert.match(source, /\[selectedSeason, latestSeason\]/);
+  assert.match(source, /seasonNum: season/);
+});
+
+test("shared TMDB client permits a bounded explicit language override without changing normal calls", () => {
+  const source = read("../../packages/shared/src/api/tmdb.ts");
+  assert.match(source, /languageOverride\?: string/);
+  assert.match(source, /options: \{ signal\?: AbortSignal; language\?: string \}/);
+  assert.match(source, /withLanguage\(path, options\.language\)/);
+});
+
 test("modal is theme aware, safe-area aware, and supports both providers", () => {
   const source = read("src/components/TrailerModal.tsx");
   assert.match(source, /useOrionTheme/);

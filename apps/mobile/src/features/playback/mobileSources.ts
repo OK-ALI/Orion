@@ -6,17 +6,40 @@ import {
 import { getMobileSourceHealth, getMobileSourceHealthV2 } from '../../services/sourceHealth';
 
 /**
- * Mobile-only quarantine. AutoEmbed remains in the shared registry for future
- * revalidation, but is not selectable on Mobile after repeated physical tests
- * reproduced an external-browser advertising escape.
+ * Mobile-only provider boundaries. Retired/dead sources stay in the shared
+ * registry only so old saved state can migrate safely; they are not user-facing
+ * choices. Quarantined sources are also hidden until they are explicitly
+ * revalidated because Orion cannot promise its normal in-app protection path.
  */
+export const MOBILE_RETIRED_SOURCE_IDS: ReadonlySet<string> = new Set(['videasy', 'vidking', 'vsembed']);
 export const MOBILE_QUARANTINED_SOURCE_IDS: ReadonlySet<string> = new Set(['autoembed']);
 
-export const MOBILE_PLAYER_SOURCES = PLAYER_SOURCES.filter(
+const MOBILE_VISIBLE_PLAYER_SOURCES = PLAYER_SOURCES.filter(
   (source) => !source.async
     && !source.animeOnly
-    && !MOBILE_QUARANTINED_SOURCE_IDS.has(source.id),
+    && source.releaseStatus !== 'disabled'
+    && source.availability !== 'temporarily-unavailable'
+    && !source.quarantined
+    && !MOBILE_QUARANTINED_SOURCE_IDS.has(source.id)
+    && !MOBILE_RETIRED_SOURCE_IDS.has(source.id),
 );
+
+// Keep the physically verified automatic source at the top of the Sources UI.
+export const MOBILE_PLAYER_SOURCES = Object.freeze([
+  ...MOBILE_VISIBLE_PLAYER_SOURCES.filter((source) => source.id === 'vixsrc'),
+  ...MOBILE_VISIBLE_PLAYER_SOURCES.filter((source) => source.id !== 'vixsrc'),
+]);
+
+/**
+ * Mobile 3.2.0 keeps the physically verified VixSrc path as its automatic
+ * default. The shared registry remains untouched until Desktop gets its own
+ * provider-cleanup pass.
+ */
+export const MOBILE_DEFAULT_CINEMA_SOURCE_ID =
+  MOBILE_PLAYER_SOURCES.find((source) => source.id === 'vixsrc' && source.routingMode === 'automatic')?.id
+  ?? MOBILE_PLAYER_SOURCES.find((source) => source.routingMode === 'automatic')?.id
+  ?? MOBILE_PLAYER_SOURCES[0]?.id
+  ?? DEFAULT_CINEMA_SOURCE_ID;
 
 export type MobileContinuityMode =
   | 'seamless'
@@ -49,8 +72,8 @@ const SAFETY_NOTICES: Readonly<Record<string, MobileSourceSafetyNotice>> = Objec
   vidsrc: Object.freeze({
     label: 'External browser ads observed',
     shortLabel: 'External Ads',
-    description: 'VidSrc currently plays, but an interaction may open advertising in your external browser. Orion Shield cannot fully contain this provider behavior.',
-    selectionMessage: 'VidSrc currently plays, but an interaction may open advertising outside Orion in your external browser. Orion Shield cannot fully contain this provider behavior. Do you want to continue?',
+    description: 'VidSrc currently plays, but an interaction may open advertising in your external browser. Orion Shield cannot fully contain this behavior.',
+    selectionMessage: 'VidSrc currently plays, but an interaction may open advertising outside Orion in your external browser. Orion Shield cannot fully contain this behavior. Do you want to continue?',
     requiresSelectionConfirmation: true,
   }),
 });
@@ -71,14 +94,14 @@ const CAPABILITIES: Readonly<Record<string, MobileSourceContinuityCapability>> =
     automaticTarget: true,
   }),
   vidlink: Object.freeze({
-    mode: 'seamless',
-    label: 'Seamless Resume',
-    shortLabel: 'Seamless Resume',
-    description: 'Your place is saved here, and you can continue smoothly when switching to or from this source.',
+    mode: 'limited-resume',
+    label: 'Limited Resume',
+    shortLabel: 'Limited Resume',
+    description: 'Orion restores your saved place after the player becomes ready. You can try this source manually.',
     canTrackProgress: true,
     canTransferOut: true,
     canReceivePosition: true,
-    automaticTarget: true,
+    automaticTarget: false,
   }),
   vixsrc: Object.freeze({
     mode: 'seamless',
@@ -128,7 +151,37 @@ const CAPABILITIES: Readonly<Record<string, MobileSourceContinuityCapability>> =
     canTrackProgress: true,
     canTransferOut: true,
     canReceivePosition: true,
-    automaticTarget: true,
+    automaticTarget: false,
+  }),
+  vidnest: Object.freeze({
+    mode: 'resume-unverified',
+    label: 'Resume May Vary',
+    shortLabel: 'Resume May Vary',
+    description: 'Resume behavior is still being confirmed. You can try this source manually.',
+    canTrackProgress: true,
+    canTransferOut: true,
+    canReceivePosition: true,
+    automaticTarget: false,
+  }),
+  'vidsrc-ir': Object.freeze({
+    mode: 'resume-unverified',
+    label: 'Resume May Vary',
+    shortLabel: 'Resume May Vary',
+    description: 'Resume behavior is still being confirmed. You can try this source manually.',
+    canTrackProgress: true,
+    canTransferOut: true,
+    canReceivePosition: true,
+    automaticTarget: false,
+  }),
+  cinesrc: Object.freeze({
+    mode: 'limited-resume',
+    label: 'Limited Resume',
+    shortLabel: 'Limited Resume',
+    description: "Orion saves your place and retries CineSrc's own seek control, but some CineSrc streams may still start from the beginning while the provider initializes a server.",
+    canTrackProgress: true,
+    canTransferOut: true,
+    canReceivePosition: true,
+    automaticTarget: false,
   }),
   autoembed: Object.freeze({
     mode: 'unpredictable',
@@ -193,12 +246,12 @@ export function getPreferredMobileResumeSource(
   // Continue Watching must land on a physically verified incoming target. An
   // outgoing-only source can still contribute its verified position, but Orion
   // resumes that position through the default seamless source instead.
-  if (!sourceId || !mobileSourceSupportsContinuity(sourceId)) return DEFAULT_CINEMA_SOURCE_ID;
+  if (!sourceId || !mobileSourceSupportsContinuity(sourceId)) return MOBILE_DEFAULT_CINEMA_SOURCE_ID;
   const source = MOBILE_PLAYER_SOURCES.find((entry) => entry.id === sourceId);
   const supportsMedia = mediaType === 'movie' ? source?.media.movie : source?.media.tv;
-  if (!source || !supportsMedia) return DEFAULT_CINEMA_SOURCE_ID;
+  if (!source || !supportsMedia) return MOBILE_DEFAULT_CINEMA_SOURCE_ID;
   const health = getMobileSourceHealth(sourceId, mediaType);
-  if (health?.state === 'failed' && health.cooldownUntil > Date.now()) return DEFAULT_CINEMA_SOURCE_ID;
+  if (health?.state === 'failed' && health.cooldownUntil > Date.now()) return MOBILE_DEFAULT_CINEMA_SOURCE_ID;
   return sourceId;
 }
 
@@ -219,10 +272,13 @@ export function getNextMobileContinuitySource(
   const releaseScore: Record<string, number> = { primary: 0, candidate: 1, experimental: 2 };
   const eligible = MOBILE_PLAYER_SOURCES.filter((candidate) => {
     const candidateId = candidate.id;
+    const effectiveCandidate = getSource(candidateId);
     const supportsMedia = mediaType === 'movie' ? candidate.media.movie : candidate.media.tv;
     const health = getMobileSourceHealthV2(candidateId, mediaType);
     return supportsMedia
       && mobileSourceSupportsContinuity(candidateId)
+      && effectiveCandidate.routingMode === 'automatic'
+      && !MOBILE_QUARANTINED_SOURCE_IDS.has(candidateId)
       && !attempted.has(candidateId)
       && !(health?.cooldownUntil && health.cooldownUntil > now);
   });

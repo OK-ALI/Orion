@@ -28,6 +28,7 @@ const {
   updateHandoffStatus,
 } = require("../src/features/playback/handoffPolicy.ts");
 const {
+  createCineSrcResumeScript,
   createVerifiedResumeScript,
 } = require("../src/features/playback/mobileAdBlocker.ts");
 const {
@@ -297,6 +298,20 @@ test("bounded verified seek is idempotent and reports its result", () => {
   assert.doesNotMatch(script, /prototype\.|set currentTime/);
 });
 
+test("CineSrc resume retries the documented command channel and reports confirmation", () => {
+  const script = createCineSrcResumeScript(125.7, "cinesrc-handoff-1");
+  assert.match(script, /__orionCineSrcResumeHandoffId/);
+  assert.match(script, /type: 'cinesrc:command'/);
+  assert.match(script, /command: 'seek'/);
+  assert.match(script, /args: \[targetTime\]/);
+  assert.match(script, /cinesrc:ready/);
+  assert.match(script, /cinesrc:loadedmetadata/);
+  assert.match(script, /cinesrc:seeked/);
+  assert.match(script, /Math\.abs\(currentTime - targetTime\) <= 5/);
+  assert.match(script, /ORION_RESUME_RESULT/);
+  assert.match(script, /attempts >= 20/);
+});
+
 test("verified seek treats start over as an explicit zero-position request", () => {
   const script = createVerifiedResumeScript(0, "start-over-1");
   assert.match(script, /video\.currentTime = Math\.min\(video\.duration, 0\)/);
@@ -321,7 +336,14 @@ test("player-event observer is restricted to documented mobile providers and sha
     strategy: "player-event",
     expectedOrigins: ["https://www.vidking.net"],
   });
-  assert.match(script, /vidking: true, vidlink: true, vixsrc: true/);
+  assert.match(script, /videasy: true/);
+  assert.match(script, /vidking: true/);
+  assert.match(script, /vidlink: true/);
+  assert.match(script, /vidnest: true/);
+  assert.match(script, /'vidsrc-ir': true/);
+  assert.match(script, /cinesrc: true/);
+  assert.match(script, /vixsrc: true/);
+  assert.match(script, /observedOrigin: event\.origin/);
   assert.match(script, /value\.type === 'PLAYER_EVENT'/);
   assert.match(script, /allowedOrigins\.has\(event\.origin\)/);
   assert.doesNotMatch(script, /data\.currentTime\s*\|\|/);

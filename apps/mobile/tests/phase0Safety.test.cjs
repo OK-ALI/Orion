@@ -82,14 +82,14 @@ test("embedded page load cannot write playback history or claim source readiness
   assert.match(surface, /decision\.state\.session\.verified/);
 });
 
-test("mobile source selection quarantines unsafe resolvers and Mobile-blocked providers", () => {
+test("mobile source selection keeps unsafe providers visible but excludes them from automatic routing", () => {
   const mobileSources = read("src/features/playback/mobileSources.ts");
   const sourceSheet = read("src/components/player/SourcesSheet.tsx");
 
   assert.match(mobileSources, /!source\.async[\s\S]*?!source\.animeOnly/);
   assert.match(
     mobileSources,
-    /!MOBILE_QUARANTINED_SOURCE_IDS\.has\(source\.id\)/
+    /!MOBILE_QUARANTINED_SOURCE_IDS\.has\(candidateId\)/
   );
 
   assert.match(sourceSheet, /MOBILE_PLAYER_SOURCES\.map/);
@@ -131,9 +131,11 @@ test("source continuity is capability-driven rather than supportsResume alone", 
 
 test("embedded source switches release the previous audio owner before mounting the target", () => {
   const surface = read("src/features/playback/EmbedPlayerSurface.tsx");
+  const support = read("src/features/playback/providerEmbedSupport.ts");
   const playerTypes = read("src/features/playback/playerTypes.ts");
   assert.match(surface, /WEBVIEW_AUDIO_RELEASE_MS/);
-  assert.match(surface, /media\.muted = true; media\.pause\(\)/);
+  assert.match(surface, /QUIET_CURRENT_SURFACE_SCRIPT/);
+  assert.match(support, /media\.muted = true; media\.pause\(\)/);
   assert.match(surface, /setSurfaceReleased\(true\)/);
   assert.match(surface, /surfaceReleased \? \(/);
   assert.match(playerTypes, /\) => boolean;/);

@@ -123,32 +123,32 @@ export function getMobileApplicationUpdatePresentationV1(
 
   switch (state.status) {
     case 'checking':
-      return { label: 'Checking', description: 'Looking for Orion app updates…' };
+      return { label: 'Checking update…', description: 'Checking update…' };
     case 'current':
-      return { label: 'Up to date', description: `You are using the latest app version available on ${channelLabel}.` };
+      return { label: 'Up to date', description: 'Orion is up to date.' };
     case 'rolling-out':
       return { label: 'Rolling out', description: 'A newer Orion version is rolling out and has not reached this device yet.' };
     case 'unsupported':
-      return { label: 'Unavailable', description: 'This device cannot install the latest Orion Mobile release.' };
+      return { label: 'Temporarily unavailable', description: 'This update is not available for this device.' };
     case 'unavailable':
-      return { label: 'Unavailable', description: 'This app build cannot safely install the available Orion update.' };
+      return { label: 'Temporarily unavailable', description: 'This update is not ready yet.' };
     case 'permission-required':
       return { label: 'Permission needed', description: 'Allow Orion to install app updates from this source.' };
     case 'available':
       return {
-        label: 'Update ready',
-        description: version ? `Orion Mobile v${version} is ready to install.` : 'A new Orion Mobile version is ready to install.',
+        label: 'Update available',
+        description: version ? `Orion Mobile v${version} is ready.` : 'An Orion update is ready.',
       };
     case 'downloading':
-      return { label: 'Downloading', description: 'Downloading the Orion app update…' };
+      return { label: 'Downloading…', description: 'Downloading…' };
     case 'verifying':
-      return { label: 'Verifying', description: 'Verifying the Orion app update before installation…' };
+      return { label: 'Verifying…', description: 'Verifying…' };
     case 'installing':
-      return { label: 'Installing', description: 'Opening Android installer to finish the Orion app update…' };
+      return { label: 'Installing…', description: 'Installing…' };
     case 'failed':
-      return { label: 'Needs attention', description: 'Orion could not finish the app update. Try again.' };
+      return { label: 'Try again', description: 'Orion couldn’t finish the update. Try again.' };
     default:
-      return { label: 'Not checked', description: 'Check for Orion app updates when you are ready.' };
+      return { label: 'App updates', description: `Updates are checked on ${channelLabel}.` };
   }
 }
 
