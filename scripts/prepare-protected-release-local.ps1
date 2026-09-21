@@ -87,7 +87,16 @@ if ((Get-CertificateSha256 $certificate) -ne $expectedWindowsSignerSha256) {
 if ((Get-Date) -lt $certificate.NotBefore -or (Get-Date) -gt $certificate.NotAfter) {
   throw "The Windows signing certificate is outside its validity period."
 }
-$eku = @($certificate.EnhancedKeyUsageList | ForEach-Object { $_.ObjectId.Value })
+$ekuExtension = $certificate.Extensions |
+  Where-Object { $_.Oid.Value -eq "2.5.29.37" } |
+  Select-Object -First 1
+$eku = @()
+if ($ekuExtension) {
+  $parsedEku = New-Object `
+    System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension `
+    $ekuExtension, $ekuExtension.Critical
+  $eku = @($parsedEku.EnhancedKeyUsages | ForEach-Object { $_.Value })
+}
 if ($eku.Count -gt 0 -and -not ($eku -contains "1.3.6.1.5.5.7.3.3")) {
   throw "The Windows signing certificate is not valid for code signing."
 }
