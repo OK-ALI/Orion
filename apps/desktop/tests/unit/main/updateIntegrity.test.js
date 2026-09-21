@@ -195,32 +195,53 @@ test("Windows verifier checks real product metadata and rejects a modified signe
   assert.throws(() => verifyWindowsAuthenticodeSigner(data.filePath), /Authenticode validation failed/);
 });
 
-test("pinned self-signed Windows identity survives only the clean-machine NotTrusted condition", () => {
+test("Windows native signer probe records chain disposition for clean-machine classification", () => {
+  const desktopRoot = path.resolve(__dirname, "../../..");
+  const integrity = fs.readFileSync(path.join(desktopRoot, "src/main/updates/integrity.js"), "utf8");
+  assert.match(integrity, /X509Certificates\.X509Chain/);
+  assert.match(integrity, /X509RevocationMode\]::NoCheck/);
+  assert.match(integrity, /chainBuilt/);
+  assert.match(integrity, /chainStatuses/);
+  assert.match(integrity, /UntrustedRoot/);
+});
+
+test("pinned self-signed Windows identity survives only exact clean-machine UntrustedRoot conditions", () => {
   const base = {
-    status: "NotTrusted",
+    status: "UnknownError",
     signerSha256: ORION_WINDOWS_RELEASE_SIGNER_SHA256,
     notBefore: "2026-08-23T00:00:00.000Z",
     notAfter: "2031-08-23T00:00:00.000Z",
     selfSigned: true,
-    enhancedKeyUsage: [],
+    enhancedKeyUsage: ["1.3.6.1.5.5.7.3.3"],
+    chainBuilt: false,
+    chainStatuses: ["UntrustedRoot"],
   };
-  assert.equal(
-    validateWindowsAuthenticodeResult(base, new Date("2026-09-21T00:00:00.000Z")),
-    ORION_WINDOWS_RELEASE_SIGNER_SHA256,
-  );
+  const now = new Date("2026-09-21T00:00:00.000Z");
+
+  for (const status of ["UnknownError", "NotTrusted"]) {
+    assert.equal(
+      validateWindowsAuthenticodeResult({ ...base, status }, now),
+      ORION_WINDOWS_RELEASE_SIGNER_SHA256,
+    );
+  }
+
   for (const changed of [
     { status: "HashMismatch" },
     { status: "NotSigned" },
-    { status: "UnknownError" },
+    { status: "UnknownError", chainBuilt: true },
+    { status: "UnknownError", chainStatuses: [] },
+    { status: "UnknownError", chainStatuses: ["PartialChain"] },
+    { status: "UnknownError", chainStatuses: ["UntrustedRoot", "PartialChain"] },
     { signerSha256: "00".repeat(32) },
     { selfSigned: false },
     { enhancedKeyUsage: ["1.3.6.1.5.5.7.3.1"] },
   ]) {
     assert.throws(
-      () => validateWindowsAuthenticodeResult({ ...base, ...changed }, new Date("2026-09-21T00:00:00.000Z")),
+      () => validateWindowsAuthenticodeResult({ ...base, ...changed }, now),
       /signature|signing|certificate|Authenticode/i,
     );
   }
+
   assert.throws(
     () => validateWindowsAuthenticodeResult(base, new Date("2032-01-01T00:00:00.000Z")),
     /validity period/i,

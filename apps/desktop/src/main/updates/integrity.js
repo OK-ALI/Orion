@@ -43,14 +43,25 @@ function validateWindowsAuthenticodeResult(raw, now = new Date()) {
     throw new Error("Windows installer certificate is not approved for code signing.");
   }
   if (result.status === "Valid") return signerSha256;
-  // Orion's pinned certificate is deliberately self-signed. On a clean machine
-  // Windows can report NotTrusted because that exact publisher is not installed
-  // in the machine trust store. The Ed25519 release envelope has already bound
-  // the exact installer bytes, hash, version, URL, and signer fingerprint before
-  // this check runs. Accept only that specific trust-chain condition for the exact
-  // pinned self-signed certificate. UnknownError, HashMismatch, NotSigned, and all
-  // other statuses remain hard failures.
-  if (result.status === "NotTrusted" && result.selfSigned === true) return signerSha256;
+
+  // Orion's release certificate is deliberately self-signed. Depending on the
+  // Windows trust-provider path, a clean machine can surface the same untrusted
+  // root condition as either NotTrusted or UnknownError. Do not accept either
+  // status by name alone. Independently build the signer chain with revocation
+  // disabled and require the *only* chain failure to be UntrustedRoot, after the
+  // exact pinned signer, certificate dates, code-signing EKU, Ed25519 envelope,
+  // artifact hash/size, URL and product-version checks have already succeeded.
+  const chainStatuses = Array.isArray(result.chainStatuses)
+    ? result.chainStatuses.map((status) => String(status || "").trim()).filter(Boolean)
+    : [];
+  const cleanMachineUntrustedRoot =
+    (result.status === "NotTrusted" || result.status === "UnknownError")
+    && result.selfSigned === true
+    && result.chainBuilt === false
+    && chainStatuses.length === 1
+    && chainStatuses[0] === "UntrustedRoot";
+
+  if (cleanMachineUntrustedRoot) return signerSha256;
   throw new Error(`Authenticode validation failed: ${String(result.status || "Unknown")}`);
 }
 
@@ -70,7 +81,11 @@ function verifyWindowsAuthenticodeSigner(filePath) {
     "$ekuExtension = $sig.SignerCertificate.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.37' } | Select-Object -First 1;",
     "$eku = @();",
     "if ($ekuExtension) { $parsedEku = New-Object System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension $ekuExtension, $ekuExtension.Critical; $eku = @($parsedEku.EnhancedKeyUsages | ForEach-Object { $_.Value }) };",
-    "$record = [ordered]@{ status = $sig.Status.ToString(); signerSha256 = $hash; notBefore = $sig.SignerCertificate.NotBefore.ToUniversalTime().ToString('o'); notAfter = $sig.SignerCertificate.NotAfter.ToUniversalTime().ToString('o'); selfSigned = ($sig.SignerCertificate.Subject -eq $sig.SignerCertificate.Issuer); enhancedKeyUsage = $eku };",
+    "$chain = New-Object System.Security.Cryptography.X509Certificates.X509Chain;",
+    "$chain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck;",
+    "$chainBuilt = $chain.Build($sig.SignerCertificate);",
+    "$chainStatuses = @($chain.ChainStatus | ForEach-Object { $_.Status.ToString() });",
+    "$record = [ordered]@{ status = $sig.Status.ToString(); signerSha256 = $hash; notBefore = $sig.SignerCertificate.NotBefore.ToUniversalTime().ToString('o'); notAfter = $sig.SignerCertificate.NotAfter.ToUniversalTime().ToString('o'); selfSigned = ($sig.SignerCertificate.Subject -eq $sig.SignerCertificate.Issuer); enhancedKeyUsage = $eku; chainBuilt = $chainBuilt; chainStatuses = $chainStatuses };",
     "$record | ConvertTo-Json -Compress;",
   ].join(" ");
 
