@@ -219,7 +219,34 @@ try {
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Force -Path $stage | Out-Null
 
-  Invoke-Checked "npm.cmd" @("run", "dist:win", "--workspace", "@orion/desktop")
+  # SysControl is a privileged native helper copied into the packaged app as an
+  # extra resource. electron-builder signs Orion.exe and installer machinery,
+  # but does not sign this prebuilt helper automatically. Compile + sign it at
+  # the source boundary before packaging, using only the already-validated
+  # pinned Orion release certificate.
+  $previousSyscontrolSign = $env:ORION_WINDOWS_SIGN_SYSCONTROL
+  $previousSyscontrolCertSha1 = $env:ORION_WINDOWS_SIGN_CERT_SHA1
+  $previousSyscontrolCertSha256 = $env:ORION_WINDOWS_SIGN_CERT_SHA256
+  try {
+    $env:ORION_WINDOWS_SIGN_SYSCONTROL = "1"
+    $env:ORION_WINDOWS_SIGN_CERT_SHA1 = $expectedCertificateSha1
+    $env:ORION_WINDOWS_SIGN_CERT_SHA256 = $expectedWindowsSignerSha256
+    Invoke-Checked "npm.cmd" @("run", "dist:win", "--workspace", "@orion/desktop")
+  } finally {
+    $env:ORION_WINDOWS_SIGN_SYSCONTROL = $previousSyscontrolSign
+    $env:ORION_WINDOWS_SIGN_CERT_SHA1 = $previousSyscontrolCertSha1
+    $env:ORION_WINDOWS_SIGN_CERT_SHA256 = $previousSyscontrolCertSha256
+  }
+
+  $syscontrolPath = Join-Path $root "apps/desktop/bin/orion-syscontrol.exe"
+  $syscontrolSignature = Get-AuthenticodeSignature -LiteralPath $syscontrolPath
+  if ($syscontrolSignature.Status -ne "Valid" -or -not $syscontrolSignature.SignerCertificate) {
+    throw "The packaged SysControl helper is not Authenticode signed."
+  }
+  if ((Get-CertificateSha256 $syscontrolSignature.SignerCertificate) -ne $expectedWindowsSignerSha256) {
+    throw "The packaged SysControl helper signer does not match Orion's pinned Windows identity."
+  }
+  Write-Host "Verified signed SysControl helper before release staging."
 
   $installerSource = Join-Path $desktopRelease $map.artifacts.windowsInstaller
   $archiveSource = Join-Path $desktopRelease $map.artifacts.windowsArchive

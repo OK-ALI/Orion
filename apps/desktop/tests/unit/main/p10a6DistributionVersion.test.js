@@ -35,6 +35,7 @@ test("Orion v3.2 production release owns aligned Desktop and Mobile identities",
 test("Orion keeps Windows signing local and exact release assets private until qualification", () => {
   const workflow = fs.readFileSync(path.join(repoRoot, ".github/workflows/release.yml"), "utf8");
   const prepare = fs.readFileSync(path.join(repoRoot, "scripts/prepare-protected-release-local.ps1"), "utf8");
+  const syscontrolBuilder = fs.readFileSync(path.join(desktopRoot, "scripts/build-syscontrol.js"), "utf8");
   const draft = fs.readFileSync(path.join(repoRoot, "scripts/create-private-release-draft-local.ps1"), "utf8");
   const qualification = readJson(path.join(repoRoot, "config/release-qualification-3.2.0.json"));
   const previewJob = workflow.indexOf("\n  publish-preview:");
@@ -47,6 +48,14 @@ test("Orion keeps Windows signing local and exact release assets private until q
   assert.match(prepare, /LOCAL PROTECTED RELEASE PREPARATION/);
   assert.match(prepare, /npm\.cmd["']?\s*,?\s*@\("run", "dist:win"/);
   assert.match(prepare, /verify-release-artifacts\.ps1/);
+  assert.match(prepare, /ORION_WINDOWS_SIGN_SYSCONTROL/);
+  assert.match(prepare, /ORION_WINDOWS_SIGN_CERT_SHA1/);
+  assert.match(prepare, /ORION_WINDOWS_SIGN_CERT_SHA256/);
+  assert.match(prepare, /Verified signed SysControl helper before release staging/);
+  assert.match(syscontrolBuilder, /ORION_WINDOWS_SIGN_SYSCONTROL/);
+  assert.match(syscontrolBuilder, /Set-AuthenticodeSignature/);
+  assert.match(syscontrolBuilder, /Get-AuthenticodeSignature/);
+  assert.match(syscontrolBuilder, /orion-sign-syscontrol-/);
   assert.match(prepare, /orion-local-candidate-evidence\.json/);
   assert.match(draft, /--draft/);
   assert.match(draft, /Refusing to replace or mutate existing release assets/);
