@@ -30,6 +30,7 @@ export function useCinemaPlaybackEvidence({
   viewingKeyRef.current = viewingKey;
 
   const reportSourceHealth = useCallback((state, reasonCode = null, message = "") => {
+    if (!/^[a-z0-9-]+$/.test(String(sourceId || ""))) return;
     window.electron?.recordCinemaSourceHealth?.({
       sourceId,
       mediaType,

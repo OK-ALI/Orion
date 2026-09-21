@@ -72,7 +72,7 @@ import {
 import { ContextMenu, EpisodeDesc, PartialCircleIcon, VoiceBoostIcon } from "./EpisodeUi";
 
 export default function TVDetails({ model }) {
-  const { currentEpDownload, currentSeasonEpisodes, d, displayEpisodeCount, displayGenres, displayOverview, displayScore, displaySeasonCount, isSaved, onBack, onGoToDownloads, onSave, playEpisode, rating, restricted, selectedEp, setShowTrailer, startEpisodeDownload, title, trailerKey } = model;
+  const { currentEpDownload, currentSeasonEpisodes, d, displayEpisodeCount, displayGenres, displayOverview, displayScore, displaySeasonCount, isSaved, onBack, onGoToDownloads, onSave, playEpisode, rating, restricted, selectedEp, setShowTrailer, startEpisodeDownload, title, trailerCandidates } = model;
   const watchNowEpisode = selectedEp || currentSeasonEpisodes?.[0] || null;
 
   return (
@@ -174,7 +174,7 @@ export default function TVDetails({ model }) {
                     {isSaved ? <BookmarkFillIcon /> : <BookmarkIcon />}
                     {isSaved ? "In My List" : "Add to My List"}
                   </button>
-                  {trailerKey &&
+                  {trailerCandidates?.length > 0 &&
                     (restricted ? (
                       <button
                         className="btn btn-secondary btn-restricted"

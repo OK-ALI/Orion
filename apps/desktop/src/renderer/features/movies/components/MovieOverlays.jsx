@@ -64,7 +64,7 @@ import {
 } from "../../../shared/utils/ageRating";
 
 export default function MovieOverlays({ model }) {
-  const { blockedAlltime, blockedSession, closeDownload, collection, d, downloaderFolder, formatResumeTime, getBlockedDomains, handleSetDownloaderFolder, interceptedSubs, isSavedItem, item, m3u8Context, m3u8Url, mediaName, onDownloadStarted, onMarkUnwatched, onMarkWatched, onSelect, onSettings, progress, resumeTime, setShowBlockedModal, setShowResumePrompt, setShowTrailer, showBlockedModal, showDownload, showResumePrompt, showTrailer, startMoviePlayback, title, trailerKey, watched } = model;
+  const { blockedAlltime, blockedSession, closeDownload, collection, d, downloaderFolder, formatResumeTime, getBlockedDomains, handleSetDownloaderFolder, interceptedSubs, isSavedItem, item, m3u8Context, m3u8Url, mediaName, onDownloadStarted, onMarkUnwatched, onMarkWatched, onSelect, onSettings, progress, resumeTime, setShowBlockedModal, setShowResumePrompt, setShowTrailer, showBlockedModal, showDownload, showResumePrompt, showTrailer, startMoviePlayback, title, trailerCandidates, watched } = model;
   return (
 <>
 {collection && onSelect && (
@@ -92,9 +92,10 @@ export default function MovieOverlays({ model }) {
           </div>
         </div>
       )}
-{showTrailer && trailerKey && (
+{showTrailer && trailerCandidates?.length > 0 && (
         <TrailerModal
-          trailerKey={trailerKey}
+          visible={showTrailer}
+          candidates={trailerCandidates}
           title={title}
           onClose={() => setShowTrailer(false)}
         />

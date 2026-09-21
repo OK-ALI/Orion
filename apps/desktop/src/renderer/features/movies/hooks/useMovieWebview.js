@@ -82,6 +82,7 @@ export function useMovieWebview(context) {
     playing, sourceId: playerSource, mediaType: "movie", resetKey: item.id, viewingKey: progressKey, webviewRef,
     lastKnownTimeRef, setWebviewLoading, setShowFailoverPrompt,
   });
+  const automaticFailoverRef = useRef(null);
 
 const applyVoiceBoost = useCallback(() => {
     const wv = webviewRef.current;
@@ -285,10 +286,11 @@ const applyVoiceBoost = useCallback(() => {
 
       if (webviewLoading || (currentTime === lastTime && playing)) {
         if (now - lastChecked >= 15000) {
-          setShowFailoverPrompt(true);
           if (!slowReported) {
             slowReported = true;
             reportSourceHealth("slow", "startup-timeout", "Playback has not advanced after 15 seconds.");
+            const switched = automaticFailoverRef.current?.(true);
+            if (!switched) setShowFailoverPrompt(true);
           }
         }
       } else {
@@ -301,14 +303,19 @@ const applyVoiceBoost = useCallback(() => {
     return () => clearInterval(interval);
   }, [playing, playerSource, item.id, webviewLoading, reportSourceHealth]);
 
-  const handleFailoverNextSource = useCallback(() => {
-    reportSourceHealth("degraded", "playback-stalled", "The user switched after playback stalled.");
+  const handleFailoverNextSource = useCallback((automatic = false) => {
+    reportSourceHealth("degraded", "playback-stalled", automatic
+      ? "Orion switched sources after playback stalled."
+      : "The user switched after playback stalled.");
     attemptedSourcesRef.current = [...new Set([...attemptedSourcesRef.current, playerSource])];
     const next = getNextHealthyNonAsyncSource(playerSource, {
       mediaType: "movie",
       attempted: attemptedSourcesRef.current,
     });
-    if (!next) return;
+    if (!next) return false;
+    const verifiedPosition = Math.max(0, Number(lastKnownTimeRef.current) || 0);
+    playbackIntentRef.current = createStartPlaybackIntent({ time: verifiedPosition });
+    initialSeekDoneRef.current = false;
     clearFailoverSource(`movie_${item.id}_${dubMode}`);
     setPlayerSource(next);
     storage.set(STORAGE_KEYS.PLAYER_SOURCE, next);
@@ -321,7 +328,9 @@ const applyVoiceBoost = useCallback(() => {
     setResolveError(null);
     setShowFailoverPrompt(false);
     setWebviewLoading(true);
+    return true;
   }, [playerSource, item.id, dubMode, reportSourceHealth]);
+  automaticFailoverRef.current = handleFailoverNextSource;
 
   // ── Webview memory cleanup ────────────────────────────────────────────────
   // useLayoutEffect fires synchronously BEFORE React mutates the DOM, so the
@@ -609,11 +618,18 @@ const applyVoiceBoost = useCallback(() => {
   useEffect(() => {
     if (!playing) return;
     if (!NEEDS_INTERCEPT.includes(playerSource)) return;
-    const enterH = window.electron?.onWebviewEnterFullscreen?.(() => {
+    const ownsActivePlayer = (owner) => {
+      if (owner?.partition && owner.partition !== "persist:player") return false;
+      const activeId = getReadyWebContentsId(webviewRef.current);
+      return !owner?.webContentsId || !activeId || owner.webContentsId === activeId;
+    };
+    const enterH = window.electron?.onWebviewEnterFullscreen?.((owner) => {
+      if (!ownsActivePlayer(owner)) return;
       setPlayerFullscreen(true);
       document.documentElement.setAttribute("data-player-fullscreen", "1");
     });
-    const leaveH = window.electron?.onWebviewLeaveFullscreen?.(() => {
+    const leaveH = window.electron?.onWebviewLeaveFullscreen?.((owner) => {
+      if (!ownsActivePlayer(owner)) return;
       setPlayerFullscreen(false);
       document.documentElement.removeAttribute("data-player-fullscreen");
       if (document.fullscreenElement) document.exitFullscreen?.();

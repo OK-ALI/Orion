@@ -94,6 +94,7 @@ export function useTVWebview(context) {
     playing, sourceId: playerSource, mediaType: isAnime ? "anime" : "tv", resetKey: currentProgressKey, viewingKey: currentProgressKey,
     webviewRef, durationRef, lastKnownTimeRef, setWebviewLoading, setShowFailoverPrompt,
   });
+  const automaticFailoverRef = useRef(null);
   // Check if currently-playing episode is already downloaded or downloading
   const currentEpDownload = selectedEp
     ? (downloadsByEpisodeKey.get(
@@ -121,26 +122,35 @@ export function useTVWebview(context) {
     clearTimeout(failoverTimeoutRef.current);
     failoverTimeoutRef.current = setTimeout(() => {
       if (lastKnownTimeRef.current === 0) {
-        setShowFailoverPrompt(true);
         reportSourceHealth("slow", "startup-timeout", "Playback has not advanced after 15 seconds.");
+        const switched = automaticFailoverRef.current?.(true);
+        if (!switched) setShowFailoverPrompt(true);
       }
     }, 15000);
     return () => clearTimeout(failoverTimeoutRef.current);
   }, [playing, playerSource, selectedEp?.episode_number, reportSourceHealth]);
-  const handleFailoverNextSource = useCallback(() => {
-    reportSourceHealth("degraded", "playback-stalled", "The user switched after playback stalled.");
+  const handleFailoverNextSource = useCallback((automatic = false) => {
+    reportSourceHealth("degraded", "playback-stalled", automatic
+      ? "Orion switched sources after playback stalled."
+      : "The user switched after playback stalled.");
     attemptedSourcesRef.current = [...new Set([...attemptedSourcesRef.current, playerSource])];
     const next = getNextHealthyNonAsyncSource(playerSource, {
       mediaType: isAnime ? "anime" : "tv",
       attempted: attemptedSourcesRef.current,
     });
     if (next) {
+      const verifiedPosition = Math.max(0, Number(lastKnownTimeRef.current) || 0);
+      playbackIntentRef.current = createStartPlaybackIntent({ time: verifiedPosition });
+      initialSeekDoneRef.current = false;
       clearFailoverSource(`tv_${item.id}_s${selectedSeason}_e${selectedEp?.episode_number}_${dubMode}`);
       setPlayerSource(next);
       storage.set(STORAGE_KEYS.PLAYER_SOURCE, next);
       setShowFailoverPrompt(false);
+      return true;
     }
+    return false;
   }, [playerSource, item.id, selectedSeason, selectedEp, dubMode, isAnime, reportSourceHealth]);
+  automaticFailoverRef.current = handleFailoverNextSource;
   // Show loader instantly when playback starts
   useEffect(() => {
     if (playing) setWebviewLoading(true);

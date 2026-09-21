@@ -1,302 +1,358 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { CloseIcon, ExternalLinkIcon } from "./common/Icons";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  CloseIcon,
+  ExternalLinkIcon,
+  TrailerIcon,
+  WarningIcon,
+} from "./common/Icons";
 import { storage, STORAGE_KEYS } from "../services/settingsStore";
 import { setupAmbientGlow } from "../shared/utils/playerAmbient";
 
+// Retained as a compatibility export for older settings modules and backup data.
+// Orion Trailer no longer routes playback through Invidious.
 export const DEFAULT_INVIDIOUS_BASE = "https://inv.nadeko.net";
+import { useTrailerSession } from "../features/trailers/hooks/useTrailerSession";
+import {
+  createTrailerEmbedUrl,
+  createTrailerExternalUrl,
+} from "../features/trailers/trailerProviders";
 
-const FALLBACK_INSTANCES = [
-  "https://invidious.privacyredirect.com",
-  "https://inv.tux.pizza",
-  "https://yt.cdaut.de",
-  "https://invidious.lunar.icu",
-  "https://invidious.protokolla.fi",
-  "https://invidious.nerdvpn.de",
-  "https://iv.melmac.space",
-  "https://invidious.perennialte.ch",
-];
-
-export function getInvidiousBase() {
-  return (storage.get("invidiousBase") || DEFAULT_INVIDIOUS_BASE).replace(
-    /\/$/,
-    "",
-  );
+function errorCopy(state, provider) {
+  if (state === "removed" || state === "private") {
+    return [
+      "Trailer is unavailable",
+      "This upload was removed or made private. Orion is trying another trailer.",
+    ];
+  }
+  if (state === "embed-disabled") {
+    return [
+      "Embedding is disabled",
+      `The owner does not allow this ${provider || "provider"} trailer inside apps. Orion is trying another one.`,
+    ];
+  }
+  if (state === "client-identity-error") {
+    return [
+      "Player identification failed",
+      "The provider could not verify Orion on this device. You can retry or continue externally.",
+    ];
+  }
+  if (state === "network-error") {
+    return [
+      "Trailer connection failed",
+      "Check your connection, retry this trailer, or open it with the provider.",
+    ];
+  }
+  if (state === "exhausted") {
+    return [
+      "No in-app trailer is available",
+      "Every available trailer rejected embedded playback or could not be reached.",
+    ];
+  }
+  return [
+    "Trailer could not play",
+    "Orion could not start this candidate. Try it again, choose another trailer, or open it externally.",
+  ];
 }
 
-const DETECT_BOT_JS = `
-(function() {
-  var title = (document.title || '').toLowerCase()
-  var body  = (document.body  && document.body.innerText || '').toLowerCase()
-  var botKeywords = ['verifying', 'antibot', 'challenge', 'ddos', 'please wait', 'checking your browser', 'just a moment']
-  var isBot = botKeywords.some(function(k) { return title.includes(k) || body.includes(k) })
-  isBot
-})()
-`;
-
-// Hide the built-in Invidious button, detect video end
-const SETUP_JS = `
-(function() {
-  if (window.__trailerSetup) return
-  window.__trailerSetup = true
-
-  // Hide the "Watch on Invidious" button inside the player
-  var style = document.createElement('style')
-  style.textContent = '.player-container .invidious-link, a[href*="/watch"], .vjs-invidious-button { display: none !important; }'
-  document.head.appendChild(style)
-
-  // Detect video end and notify host
-  var attachEnded = function() {
-    var video = document.querySelector('video')
-    if (!video) return false
-    video.addEventListener('ended', function() {
-      window.__trailerEnded = true
-    })
-    return true
-  }
-  if (!attachEnded()) {
-    var obs = new MutationObserver(function() { if (attachEnded()) obs.disconnect() })
-    obs.observe(document.body, { childList: true, subtree: true })
-  }
-})()
-`;
-
-export default function TrailerModal({ trailerKey, title, onClose }) {
+export default function TrailerModal({ visible = true, candidates = [], title, onClose }) {
   const webviewRef = useRef(null);
-  const [currentSrc, setCurrentSrc] = useState(null);
-  const [statusMsg, setStatusMsg] = useState("Loading trailer…");
-  const [failed, setFailed] = useState(false);
+  const modalRef = useRef(null);
+  const previousFocusRef = useRef(null);
   const [ambientColor, setAmbientColor] = useState("");
+  const [playerFullscreen, setPlayerFullscreen] = useState(false);
   const [ambientGlowEnabled, setAmbientGlowEnabled] = useState(
     () => storage.get(STORAGE_KEYS.AMBIENT_GLOW) !== false,
   );
-  const instanceIndexRef = useRef(-1);
+  const session = useTrailerSession(visible, candidates);
+  const candidate = session.activeCandidate;
 
-  const tryNextInstance = useCallback(() => {
-    const preferred = getInvidiousBase();
-    const list = [
-      preferred,
-      ...FALLBACK_INSTANCES.filter((i) => i !== preferred),
-    ];
-    instanceIndexRef.current += 1;
-    const idx = instanceIndexRef.current;
-    if (idx >= list.length) {
-      setFailed(true);
-      setStatusMsg(
-        "All Invidious instances failed. Try setting a custom instance in Settings.",
-      );
-      return;
-    }
-    const instance = list[idx];
-    const label = instance.replace(/^https?:\/\//, "");
-    setStatusMsg(idx === 0 ? "Loading trailer…" : `Trying ${label}…`);
-    setCurrentSrc(`${instance}/embed/${trailerKey}?autoplay=1&listen=0`);
-  }, [trailerKey]);
+  const embedUrl = useMemo(
+    () => createTrailerEmbedUrl(candidate, session.transport),
+    [candidate, session.transport],
+  );
+  const externalUrl = useMemo(() => createTrailerExternalUrl(candidate), [candidate]);
+  const activeAttemptKey = `${candidate?.id || "none"}:${session.transport}:${session.attempt}`;
+  const isPreparing = session.state === "preparing" || session.state === "rotating";
+  const showError = [
+    "network-error",
+    "removed",
+    "private",
+    "embed-disabled",
+    "client-identity-error",
+    "playback-error",
+    "exhausted",
+  ].includes(session.state);
+  const [errorTitle, errorText] = errorCopy(session.state, candidate?.site);
 
-  useEffect(() => {
-    instanceIndexRef.current = -1;
-    tryNextInstance();
-  }, [tryNextInstance]);
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  // Open current video on Invidious in system browser
-  const openInBrowser = () => {
-    const preferred = getInvidiousBase();
-    const url = `${preferred}/watch?v=${trailerKey}`;
-    window.electron?.openExternal(url);
-  };
+  const exitPlayerFullscreen = useCallback(() => {
+    setPlayerFullscreen(false);
+    document.documentElement.removeAttribute("data-trailer-fullscreen");
+    webviewRef.current?.executeJavaScript?.(
+      "document.fullscreenElement ? document.exitFullscreen().catch(() => {}) : undefined",
+    ).catch?.(() => {});
+  }, []);
 
   useEffect(() => {
-    const wv = webviewRef.current;
-    if (!wv || !currentSrc) return;
-
-    const onLoad = () => {
-      wv.executeJavaScript(DETECT_BOT_JS)
-        .then((isBot) => {
-          if (isBot) {
-            tryNextInstance();
-          } else {
-            wv.executeJavaScript(SETUP_JS).catch(() => {});
-            setStatusMsg(null);
-          }
-        })
-        .catch(() => tryNextInstance());
-    };
-
-    const onFailLoad = () => {
-      tryNextInstance();
-    };
-
-    const onWillNavigate = (e) => {
-      const instanceBase = currentSrc.split("/embed/")[0];
-      if (!e.url.startsWith(instanceBase)) {
-        e.preventDefault();
-        window.electron?.openExternal(e.url);
+    const handler = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (playerFullscreen) {
+          exitPlayerFullscreen();
+          return;
+        }
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !modalRef.current) return;
+      const focusable = Array.from(modalRef.current.querySelectorAll(
+        'button:not([disabled]), webview, [href], [tabindex]:not([tabindex="-1"])',
+      ));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
-
-    const endedPoll = setInterval(() => {
-      try {
-        wv.executeJavaScript("!!window.__trailerEnded")
-          .then((ended) => {
-            if (ended) {
-              clearInterval(endedPoll);
-              setTimeout(onClose, 1200);
-            }
-          })
-          .catch(() => {});
-      } catch {}
-    }, 800);
-
-    wv.addEventListener("did-finish-load", onLoad);
-    wv.addEventListener("did-fail-load", onFailLoad);
-    wv.addEventListener("will-navigate", onWillNavigate);
+    if (visible) {
+      previousFocusRef.current = document.activeElement;
+      requestAnimationFrame(() => modalRef.current?.querySelector(".trailer-close-btn")?.focus());
+    }
+    window.addEventListener("keydown", handler);
     return () => {
-      clearInterval(endedPoll);
-      wv.removeEventListener("did-finish-load", onLoad);
-      wv.removeEventListener("did-fail-load", onFailLoad);
-      wv.removeEventListener("will-navigate", onWillNavigate);
+      window.removeEventListener("keydown", handler);
+      if (previousFocusRef.current?.focus) previousFocusRef.current.focus();
     };
-  }, [currentSrc, tryNextInstance, onClose]);
+  }, [exitPlayerFullscreen, onClose, playerFullscreen, visible]);
 
-  // Ambient glow settings sync
+  useEffect(() => {
+    if (!visible) return undefined;
+    const ownsActiveTrailer = (owner) => {
+      if (owner?.partition && owner.partition !== "persist:trailer") return false;
+      if (!owner?.webContentsId) return true;
+      try {
+        const activeId = webviewRef.current?.getWebContentsId?.();
+        return !activeId || owner.webContentsId === activeId;
+      } catch {
+        return true;
+      }
+    };
+    const enter = (owner) => {
+      if (!ownsActiveTrailer(owner)) return;
+      setPlayerFullscreen(true);
+      document.documentElement.setAttribute("data-trailer-fullscreen", "1");
+    };
+    const leave = (owner) => {
+      if (!ownsActiveTrailer(owner)) return;
+      setPlayerFullscreen(false);
+      document.documentElement.removeAttribute("data-trailer-fullscreen");
+    };
+    const enterHandler = window.electron?.onWebviewEnterFullscreen?.(enter);
+    const leaveHandler = window.electron?.onWebviewLeaveFullscreen?.(leave);
+    return () => {
+      if (enterHandler) window.electron?.offWebviewEnterFullscreen?.(enterHandler);
+      if (leaveHandler) window.electron?.offWebviewLeaveFullscreen?.(leaveHandler);
+      document.documentElement.removeAttribute("data-trailer-fullscreen");
+    };
+  }, [visible]);
+
   useEffect(() => {
     const handler = () => {
       setAmbientGlowEnabled(storage.get(STORAGE_KEYS.AMBIENT_GLOW) !== false);
     };
     window.addEventListener("orion:player-settings-changed", handler);
-    return () => {
-      window.removeEventListener("orion:player-settings-changed", handler);
-    };
+    return () => window.removeEventListener("orion:player-settings-changed", handler);
   }, []);
 
-  // Ambient glow hook
   useEffect(() => {
-    if (!ambientGlowEnabled) {
+    if (!ambientGlowEnabled || !candidate || showError || isPreparing) {
       setAmbientColor("");
-      return;
+      return undefined;
     }
-    const wv = webviewRef.current;
-    if (!wv || !currentSrc || statusMsg) {
-      setAmbientColor("");
-      return;
-    }
-    const cleanup = setupAmbientGlow(wv, (colorDataUrl) => {
-      setAmbientColor(colorDataUrl);
-    });
-    return () => {
-      cleanup();
+    const webview = webviewRef.current;
+    if (!webview) return undefined;
+    const cleanup = setupAmbientGlow(webview, (colorDataUrl) => setAmbientColor(colorDataUrl));
+    return () => cleanup();
+  }, [activeAttemptKey, ambientGlowEnabled, candidate, isPreparing, showError]);
+
+  useEffect(() => {
+    const webview = webviewRef.current;
+    if (!webview || !candidate || !embedUrl) return undefined;
+
+    let disposed = false;
+
+    const failOnce = (error) => {
+      if (disposed) return;
+      session.fail(error);
     };
-  }, [currentSrc, statusMsg, ambientGlowEnabled]);
+
+    const onDomReady = () => {
+      if (session.transport === "direct") {
+        session.handleMessage({ candidateId: candidate.id, type: "direct-loaded" });
+      }
+    };
+
+    const onIpcMessage = (event) => {
+      if (event?.channel !== "orion-trailer-event") return;
+      session.handleMessage(event.args?.[0]);
+    };
+
+    const onFailLoad = (event) => {
+      if (event?.errorCode === -3) return;
+      failOnce({
+        provider: candidate.site,
+        category: "network",
+        publicCode: event?.errorCode ?? null,
+        retryable: true,
+      });
+    };
+
+    const onWillNavigate = (event) => {
+      if (!event?.url || event.url === embedUrl) return;
+      const allowed = session.transport === "wrapper"
+        ? event.url.startsWith("orion-trailer://player/")
+        : candidate.site === "Vimeo"
+          ? event.url.startsWith("https://player.vimeo.com/")
+          : event.url.startsWith("https://www.youtube.com/")
+            || event.url.startsWith("https://www.youtube-nocookie.com/");
+      if (!allowed) {
+        event.preventDefault?.();
+      }
+    };
+
+    webview.addEventListener("dom-ready", onDomReady);
+    webview.addEventListener("ipc-message", onIpcMessage);
+    webview.addEventListener("did-fail-load", onFailLoad);
+    webview.addEventListener("will-navigate", onWillNavigate);
+
+    return () => {
+      disposed = true;
+      webview.removeEventListener("dom-ready", onDomReady);
+      webview.removeEventListener("ipc-message", onIpcMessage);
+      webview.removeEventListener("did-fail-load", onFailLoad);
+      webview.removeEventListener("will-navigate", onWillNavigate);
+    };
+  }, [activeAttemptKey, candidate, embedUrl, session.fail, session.handleMessage, session.transport]);
+
+  const openProvider = useCallback(() => {
+    if (externalUrl) window.electron?.openExternal?.(externalUrl);
+  }, [externalUrl]);
+
+  if (!visible) return null;
 
   return (
-    <div className="trailer-overlay" onClick={onClose}>
-      <div className="trailer-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="trailer-modal-header">
-          <span className="trailer-modal-title">
-            🎬 {title} — Official Trailer
-          </span>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button
-              onClick={openInBrowser}
-              title="Open in browser"
-              style={{
-                background: "rgba(255,255,255,0.08)",
-                border: "1px solid rgba(255,255,255,0.15)",
-                borderRadius: 6,
-                color: "rgba(255,255,255,0.75)",
-                cursor: "pointer",
-                fontSize: 12,
-                padding: "4px 10px",
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                whiteSpace: "nowrap",
-              }}
-            >
-              <ExternalLinkIcon size={13} />
-              Open in Browser
-            </button>
-            <button
-              className="trailer-close-btn"
-              onClick={onClose}
-              title="Close"
-            >
-              <CloseIcon />
-            </button>
-          </div>
-        </div>
-        <div
-          className="trailer-embed-wrap"
-          style={{ background: "#000", position: "relative" }}
-        >
-          {(statusMsg || failed) && (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                zIndex: 2,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "#000",
-                color: failed ? "#ff3860" : "rgba(255,255,255,0.6)",
-                fontSize: 14,
-                textAlign: "center",
-                padding: "0 32px",
-                gap: 10,
-              }}
-            >
-              {failed ? (
-                <>
-                  <span style={{ fontSize: 28 }}>⚠</span>
-                  <span>{statusMsg}</span>
-                </>
-              ) : (
-                <>
-                  <span style={{ opacity: 0.5 }}>⏳</span>
-                  <span>{statusMsg}</span>
-                </>
-              )}
+    <div className={`trailer-overlay${playerFullscreen ? " is-fullscreen" : ""}`} onClick={playerFullscreen ? undefined : onClose} role="presentation">
+      <section
+        ref={modalRef}
+        className={`trailer-modal${playerFullscreen ? " is-fullscreen" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${title} trailer`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="trailer-modal-header">
+          <div className="trailer-header-identity">
+            <span className="trailer-header-icon"><TrailerIcon size={20} /></span>
+            <div className="trailer-header-copy">
+              <span className="trailer-eyebrow">TRAILER</span>
+              <h2 className="trailer-modal-title">{title}</h2>
             </div>
+          </div>
+          <button className="trailer-close-btn" onClick={onClose} title="Close trailer" aria-label="Close trailer">
+            <CloseIcon size={18} />
+          </button>
+        </header>
+
+        <div className={`trailer-modal-body${candidates.length > 1 ? "" : " no-candidate-rail"}`}>
+          {candidates.length > 1 && (
+            <aside className="trailer-candidate-rail" aria-label="Available trailers">
+              {candidates.map((item, index) => {
+                const active = index === session.activeIndex;
+                return (
+                  <button
+                    key={item.id}
+                    className={`trailer-candidate${active ? " is-active" : ""}`}
+                    onClick={() => session.select(index)}
+                    aria-pressed={active}
+                    title={item.name}
+                  >
+                    <span className="trailer-provider-mark">{item.site === "Vimeo" ? "V" : "YT"}</span>
+                    <span className="trailer-candidate-copy">
+                      <span className="trailer-candidate-name">{item.name}</span>
+                      <span className="trailer-candidate-meta">
+                        {item.official ? "OFFICIAL" : item.type.toUpperCase()}
+                        {item.season ? ` · S${item.season}` : ""}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </aside>
           )}
 
-          {ambientColor && (
-            <div
-              className="player-ambient-glow"
-              style={{
-                backgroundImage: `url(${ambientColor})`,
-              }}
-            />
-          )}
-          {currentSrc && (
-            <webview
-              ref={webviewRef}
-              src={currentSrc}
-              partition="persist:trailer"
-              allowpopups="false"
-              webpreferences="backgroundThrottling=no,contextIsolation=yes"
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                border: "none",
-                opacity: statusMsg ? 0 : 1,
-                transition: "opacity 0.2s",
-                zIndex: 2,
-              }}
-            />
-          )}
+          <div className="trailer-stage-column">
+            <div className="trailer-player-frame">
+              {ambientColor && (
+                <div className="player-ambient-glow" style={{ backgroundImage: `url(${ambientColor})` }} />
+              )}
+
+              {candidate && !showError && embedUrl && (
+                <webview
+                  key={activeAttemptKey}
+                  ref={webviewRef}
+                  src={embedUrl}
+                  partition="persist:trailer"
+                  preload={window.electron?.trailerWebviewPreloadPath || undefined}
+                  webpreferences="backgroundThrottling=no,contextIsolation=yes"
+                  className={`trailer-webview${isPreparing ? " is-preparing" : ""}`}
+                />
+              )}
+
+              {isPreparing && (
+                <div className="trailer-player-overlay" aria-live="polite">
+                  <span className="trailer-loading-ring" aria-hidden="true" />
+                  <strong>{session.state === "rotating" ? "Trying another trailer…" : "Preparing trailer…"}</strong>
+                  <span>{candidate ? `${candidate.site} · ${candidate.name}` : "Finding a playable trailer"}</span>
+                </div>
+              )}
+
+              {showError && (
+                <div className="trailer-player-overlay trailer-player-error" aria-live="polite">
+                  <WarningIcon size={34} color="var(--warning)" />
+                  <strong>{errorTitle}</strong>
+                  <span>{errorText}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="trailer-now-playing" aria-live="polite">
+              <div>
+                <strong>{candidate?.name || "No trailer selected"}</strong>
+                <span>{candidate ? `${candidate.site}${candidate.official ? " · Official" : ""}` : "Orion Trailer"}</span>
+              </div>
+              {candidate?.language && <span className="trailer-language-chip">{candidate.language.toUpperCase()}</span>}
+            </div>
+          </div>
+
+          <aside className="trailer-action-rail" aria-label="Trailer actions">
+            <button className="trailer-action trailer-action-primary" onClick={session.retry} disabled={!candidate}>
+              Retry
+            </button>
+            {candidates.length > 1 && (
+              <button className="trailer-action" onClick={session.next}>Try next</button>
+            )}
+            <button className="trailer-action" onClick={openProvider} disabled={!candidate}>
+              <ExternalLinkIcon size={14} />
+              Open {candidate?.site || "provider"}
+            </button>
+            <span className="trailer-action-hint">Opens in your default browser</span>
+          </aside>
         </div>
-      </div>
+      </section>
     </div>
   );
 }

@@ -329,14 +329,33 @@ export default function App() {
 
   useDesktopUpdateAnnouncement({ setUpdateBanner, setShowUpdateModal });
 
-  // ── Startup update check ─────────────────────────────────────────────────
+  // ── Startup update check and durable transaction reconciliation ──────────
   useEffect(() => {
     const autoCheck = storage.get("autoCheckUpdates");
-    if (autoCheck === false || autoCheck === 0) return;
     const updateChannel = storage.get(STORAGE_KEYS.UPDATE_CHANNEL) === "preview" ? "preview" : "stable";
-    checkForUpdates(updateChannel)
-      .catch(() => {}); // silently ignore network errors on startup
-  }, []);
+    let disposed = false;
+    let acknowledgementTimer = null;
+    const start = async () => {
+      const transaction = await window.electron?.getUpdateTransaction?.().catch(() => null);
+      if (disposed) return;
+      if (transaction?.phase === "complete") {
+        setToast("Orion is up to date.");
+        acknowledgementTimer = setTimeout(() => {
+          window.electron?.acknowledgeUpdateTransaction?.().catch(() => {});
+          setToast(null);
+        }, 3500);
+      }
+      const unfinished = transaction && transaction.phase !== "complete";
+      if (unfinished || (autoCheck !== false && autoCheck !== 0)) {
+        checkForUpdates(updateChannel).catch(() => {});
+      }
+    };
+    start();
+    return () => {
+      disposed = true;
+      if (acknowledgementTimer) clearTimeout(acknowledgementTimer);
+    };
+  }, [setToast]);
 
   const {
     episodeCheckStatus,

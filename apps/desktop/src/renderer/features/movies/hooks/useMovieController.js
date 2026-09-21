@@ -10,8 +10,7 @@ import {
 import {
   tmdbFetch,
   imgUrl,
-  PLAYER_SOURCES,
-  getSourceUrl,
+  getDesktopSourceUrl,
   sourceSupportsProgress,
   sourceProgressViaFrames,
   sourceIsAsync,
@@ -20,7 +19,6 @@ import {
   fetchAnilistData,
   cleanAnilistDescription,
   isAnimeContent,
-  ANIME_DEFAULT_SOURCE,
   NON_ANIME_DEFAULT_SOURCE,
   NEEDS_INTERCEPT,
   getNextNonAsyncSource,
@@ -65,7 +63,9 @@ import {
 } from "../../../shared/utils/ageRating";
 import { useMovieWebview } from "./useMovieWebview";
 import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
+import { createStartPlaybackIntent } from "../../player/services/playbackIntent";
 import { useTitleCredits } from "../../../shared/hooks/useTitleCredits";
+import { useDesktopTrailerDiscovery } from "../../trailers/hooks/useDesktopTrailerDiscovery";
 
 export function useMovieController({
   item,
@@ -98,7 +98,6 @@ const [details, setDetails] = useState(null);
   const [downloadTarget, setDownloadTarget] = useState(null);
   const [downloadResolutionActive, setDownloadResolutionActive] = useState(false);
   const downloadResolutionPreflightRef = useRef(new Set());
-  const [trailerKey, setTrailerKey] = useState(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const [m3u8Url, setM3u8Url] = useState(null);
   const [m3u8Context, setM3u8Context] = useState(null);
@@ -234,6 +233,13 @@ const [details, setDetails] = useState(null);
   // ── Derived display values (must be declared before any callbacks that use them) ──
   const d = details || item;
   const title = d.title || d.name;
+  const { candidates: trailerCandidates, loading: trailerLoading } = useDesktopTrailerDiscovery({
+    mediaId: item.id,
+    mediaType: "movie",
+    apiKey,
+    details: d,
+    visible: showTrailer,
+  });
   const year = (d.release_date || "").slice(0, 4);
   const mediaName = `${title}${year ? " (" + year + ")" : ""}`;
   const handleLibrarySave = useCallback(() => {
@@ -244,7 +250,7 @@ const [details, setDetails] = useState(null);
     if (!playing || pipOpen) return;
     const url = sourceIsAsync(playerSource)
       ? resolvedPlayerUrl
-      : getSourceUrl(playerSource, "movie", { tmdbId: item.id, imdbId: d.imdb_id }, null, null, getSourceResumeParams(playerSource, storage.get("dlTime_" + progressKey)), playerAccentColor, playerSubLang);
+      : getDesktopSourceUrl(playerSource, "movie", { tmdbId: item.id, imdbId: d.imdb_id }, null, null, getSourceResumeParams(playerSource, storage.get("dlTime_" + progressKey), "movie"), playerAccentColor, playerSubLang);
     if (!url) return;
     const playerRect = playerWrapRef.current?.getBoundingClientRect?.();
     onPlaybackSession?.({
@@ -375,23 +381,6 @@ const [details, setDetails] = useState(null);
     };
   }, [playing, resolvedPlayerUrl, playerSource, ambientGlowEnabled, playerFullscreen]);
 
-  useEffect(() => {
-    let mounted = true;
-    tmdbFetch(`/movie/${item.id}/videos`, apiKey)
-      .then((data) => {
-        if (!mounted) return;
-        const videos = data.results || [];
-        const trailer =
-          videos.find((v) => v.type === "Trailer" && v.site === "YouTube") ||
-          videos.find((v) => v.site === "YouTube");
-        if (trailer) setTrailerKey(trailer.key);
-      })
-      .catch(() => {});
-    return () => {
-      mounted = false;
-    };
-  }, [item.id, apiKey]);
-
   // Fetch movie collection (sequels/prequels)
   useEffect(() => {
     setCollection(null);
@@ -430,7 +419,8 @@ const [details, setDetails] = useState(null);
     setWebviewLoading(true); // instantly blank the player on every source/item switch
   }, [item.id, playerSource, dubMode]);
 
-  // Fetch AniList data + auto-set source for anime/non-anime
+  // Fetch AniList data. Desktop uses the qualified source policy for every title;
+  // an informational display tag must never be treated as an anime-only flag.
   useEffect(() => {
     let mounted = true;
     if (isAnime) {
@@ -439,26 +429,35 @@ const [details, setDetails] = useState(null);
           if (mounted && data) setAnilistData(data);
         },
       );
-      // Switch to anime source if current source is not an anime source
-      const currentSrc = PLAYER_SOURCES.find((s) => s.id === playerSource);
-      if (!currentSrc?.tag) {
-        const saved = storage.get("playerSource");
-        const savedSrc = PLAYER_SOURCES.find((s) => s.id === saved);
-        setPlayerSource(savedSrc?.tag ? saved : ANIME_DEFAULT_SOURCE);
-      }
-    } else {
-      // Switch back to non-anime source if current source is anime-only
-      const currentSrc = PLAYER_SOURCES.find((s) => s.id === playerSource);
-      if (currentSrc?.tag) {
-        const saved = storage.get("playerSource");
-        const savedSrc = PLAYER_SOURCES.find((s) => s.id === saved);
-        setPlayerSource(!savedSrc?.tag ? saved : NON_ANIME_DEFAULT_SOURCE);
-      }
     }
     return () => {
       mounted = false;
     };
   }, [item.id, isAnime]);
+
+  useEffect(() => {
+    const normalized = normalizeSelectableSourceId(playerSource, { mediaType: "movie" });
+    if (normalized !== playerSource) setPlayerSource(normalized);
+    if (storage.get(STORAGE_KEYS.PLAYER_SOURCE) !== normalized) {
+      storage.set(STORAGE_KEYS.PLAYER_SOURCE, normalized);
+    }
+  }, [playerSource]);
+
+  const selectPlayerSource = useCallback((sourceId) => {
+    const next = normalizeSelectableSourceId(sourceId, { mediaType: "movie" });
+    if (next === playerSource) return false;
+    const verifiedPosition = Math.max(
+      0,
+      Number(lastKnownTimeRef.current)
+        || Number(storage.get("dlTime_" + progressKey))
+        || 0,
+    );
+    playbackIntentRef.current = createStartPlaybackIntent({ time: verifiedPosition });
+    initialSeekDoneRef.current = false;
+    setPlayerSource(next);
+    storage.set(STORAGE_KEYS.PLAYER_SOURCE, next);
+    return true;
+  }, [playerSource, progressKey]);
 
   // Resolve AllManga movie URL via main-process IPC
   useEffect(() => {
@@ -757,7 +756,7 @@ const [details, setDetails] = useState(null);
       : `${m}:${String(s).padStart(2, "0")}`;
   };
 
-    const viewModel = { ambientColor, blockedAlltime, blockedSession, closeDownload, collection, d, displayGenres, downloadResolutionActive, downloadTarget, displayOverview, displayPct, displayScore, downloaderFolder, dubMode, formatResumeTime, getBlockedDomains, handleFailoverNextSource, handlePlay, handleSetDownloaderFolder, hasProgress, interceptedSubs, isSaved, isSavedItem, isUnreleased, isWatched, item, m3u8Context, m3u8Url, mediaName, menuPos, movieDownload, onBack, onDownloadStarted, openDownload, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave: handleLibrarySave, onSelect, onSettings, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progress, progressKey, progressLabel, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, sourceRef, startMoviePlayback, switchingToMiniPlayerRef, title, trailerKey, voiceBoost, watched, webviewLoading, webviewRef };
+    const viewModel = { ambientColor, blockedAlltime, blockedSession, closeDownload, collection, d, displayGenres, downloadResolutionActive, downloadTarget, displayOverview, displayPct, displayScore, downloaderFolder, dubMode, formatResumeTime, getBlockedDomains, handleFailoverNextSource, handlePlay, handleSetDownloaderFolder, hasProgress, interceptedSubs, isSaved, isSavedItem, isUnreleased, isWatched, item, m3u8Context, m3u8Url, mediaName, menuPos, movieDownload, onBack, onDownloadStarted, openDownload, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave: handleLibrarySave, onSelect, onSettings, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progress, progressKey, progressLabel, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, selectPlayerSource, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, sourceRef, startMoviePlayback, switchingToMiniPlayerRef, title, trailerCandidates, trailerLoading, voiceBoost, watched, webviewLoading, webviewRef };
     viewModel.cast = cast;
     viewModel.keyCrew = keyCrew;
     viewModel.creditsLoading = creditsLoading;

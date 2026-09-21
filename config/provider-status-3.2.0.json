@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "sequence": 3,
+  "publishedAt": "2026-09-14T00:00:00.000Z",
+  "expiresAt": "2027-03-31T23:59:59.000Z",
+  "statuses": [
+    { "sourceId": "videasy", "action": "restore", "availability": "ready", "message": "Ready." },
+    { "sourceId": "vidlink", "action": "demote", "availability": "having-trouble", "message": "This source is having trouble." },
+    { "sourceId": "vidsrc", "action": "demote", "availability": "having-trouble", "message": "This source is having trouble." },
+    { "sourceId": "vidking", "action": "demote", "availability": "having-trouble", "message": "Playback still needs confirmation." },
+    { "sourceId": "autoembed", "action": "demote", "availability": "temporarily-unavailable", "message": "This source is temporarily unavailable." },
+    { "sourceId": "vsembed", "action": "demote", "availability": "having-trouble", "message": "This source is having trouble." },
+    { "sourceId": "111movies", "action": "demote", "availability": "having-trouble", "message": "Playback still needs confirmation." },
+    { "sourceId": "allmanga", "action": "demote", "availability": "having-trouble", "message": "This source currently needs a browser check." },
+    { "sourceId": "vixsrc", "action": "restore", "availability": "ready", "message": "Ready." },
+    { "sourceId": "vidnest", "action": "demote", "availability": "having-trouble", "message": "Playback qualification is in progress." },
+    { "sourceId": "vidsrc-ir", "action": "demote", "availability": "having-trouble", "message": "This source is having trouble." },
+    { "sourceId": "cinesrc", "action": "demote", "availability": "having-trouble", "message": "Playback qualification is in progress." }
+  ]
+}

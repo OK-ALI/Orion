@@ -14,20 +14,24 @@ const sanitizePlayerEvent = (value) => {
     try { value = JSON.parse(value); } catch { return null; }
   }
   if (!value || typeof value !== "object") return null;
+  const isCineSrcEvent = typeof value.type === "string" && value.type.startsWith("cinesrc:");
   const payload = value.type === "PLAYER_EVENT"
     ? (value.data && typeof value.data === "object" ? value.data : value)
-    : null;
+    : isCineSrcEvent ? value : null;
   if (!payload) return null;
 
-  const event = String(payload.event || payload.action || payload.type || "").slice(0, 48);
-  const currentTime = finiteNumber(payload.currentTime ?? payload.time ?? payload.position);
-  const duration = finiteNumber(payload.duration ?? payload.totalTime ?? payload.length);
+  const providerStatus = String(payload.player_status || "").toLowerCase();
+  const event = String(payload.event || payload.action || payload.type || providerStatus || "")
+    .replace(/^cinesrc:/, "")
+    .slice(0, 48);
+  const currentTime = finiteNumber(payload.currentTime ?? payload.time ?? payload.position ?? payload.player_progress);
+  const duration = finiteNumber(payload.duration ?? payload.totalTime ?? payload.length ?? payload.player_duration);
   const volume = finiteNumber(payload.volume);
   const paused = typeof payload.paused === "boolean"
     ? payload.paused
-    : event === "pause"
+    : event === "pause" || providerStatus.includes("pause")
       ? true
-      : event === "play" || event === "playing" || event === "timeupdate"
+      : event === "play" || event === "playing" || event === "timeupdate" || providerStatus.includes("play")
         ? false
         : null;
 
@@ -44,9 +48,14 @@ const sanitizePlayerEvent = (value) => {
 };
 
 const PLAYER_EVENT_ORIGINS = new Set([
+  "https://player.videasy.net",
+  "https://player.videasy.to",
   "https://www.vidking.net",
   "https://vidlink.pro",
+  "https://vidnest.fun",
   "https://vidsrc.cc",
+  "https://vidsrc.ir",
+  "https://cinesrc.st",
   "https://vixsrc.to",
   "https://vsembed.su",
 ]);

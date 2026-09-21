@@ -10,7 +10,10 @@ import {
   initAnilistClient,
   tmdbFetch as sharedTmdbFetch,
   fetchEpisodeGroup as sharedFetchEpisodeGroup,
+  getSourceUrl as sharedGetSourceUrl,
+  sourceRequiresIframeWrapper,
 } from "@orion/shared";
+import { DESKTOP_DEFAULT_CINEMA_SOURCE_ID } from "../features/player/sources/registry";
 
 // ── Platform Storage Adapter ──────────────────────────────────────────────────
 const localStorageAdapter = {
@@ -61,7 +64,18 @@ export const fetchEpisodeGroup = async (groupId, apiKey) => {
 // Export everything else directly from the shared package so existing desktop
 // imports (like `imgUrl`, `fetchAnilistData`, source registry constants) keep working.
 export * from "@orion/shared/api";
-export * from "@orion/shared/sources";
+export * from "../features/player/sources/registry";
+
+// Keep the legacy import name used by the Desktop controllers while preventing
+// the retired shared VidKing default from becoming a new playback selection.
+export const NON_ANIME_DEFAULT_SOURCE = DESKTOP_DEFAULT_CINEMA_SOURCE_ID;
+export const ANIME_DEFAULT_SOURCE = DESKTOP_DEFAULT_CINEMA_SOURCE_ID;
+
+export function getDesktopSourceUrl(sourceId, ...args) {
+  const target = sharedGetSourceUrl(sourceId, ...args);
+  if (!target || !sourceRequiresIframeWrapper(sourceId)) return target;
+  return `orion-media://player/videasy?src=${encodeURIComponent(target)}`;
+}
 
 // Reachability must never be satisfied by the shared content response cache.
 // The connection owner supplies cancellation and the bounded validation deadline.

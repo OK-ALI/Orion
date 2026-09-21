@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, memo } from "react";
 import { EPISODE_GROUP_IDS, applyEpisodeMapping, buildEpisodeGroupMap } from "../../../shared/utils/episodeMappings";
 import {
-  tmdbFetch, imgUrl, PLAYER_SOURCES, getSourceUrl, sourceSupportsProgress,
+  tmdbFetch, imgUrl, PLAYER_SOURCES, getSource, getDesktopSourceUrl, sourceSupportsProgress,
   sourceProgressViaFrames, sourceIsAsync, fetchAnilistData, fetchEpisodeGroup,
   buildAnilistSeasons, cleanAnilistDescription, isAnimeContent, ANIME_DEFAULT_SOURCE,
   NON_ANIME_DEFAULT_SOURCE, NEEDS_INTERCEPT, getNextNonAsyncSource,
@@ -27,7 +27,7 @@ import { fetchTVRating, isRestricted, getAgeLimitSetting, getRatingCountry } fro
 import { ContextMenu, EpisodeDesc, PartialCircleIcon, VoiceBoostIcon } from "./EpisodeUi";
 
 export default function TVPlayerCore({ model }) {
-  const { autoplayCountdown, autoplayNextLayout, blockedSession, cancelAutoplay, currentEpDownload, currentEpWatched, currentProgressKey, dubMode, handleFailoverNextSource, handleManualSkip, isAnime, isAsync, item, m3u8Url, menuPos, nextEp, onBack, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, prevEp, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, revealPlayerControls, selectedEp, selectedSeason, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, skipPrompt, sourceHealth, sourceRef, supportsProgress, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
+  const { autoplayCountdown, autoplayNextLayout, blockedSession, cancelAutoplay, currentEpDownload, currentEpWatched, currentProgressKey, dubMode, handleFailoverNextSource, handleManualSkip, isAnime, isAsync, item, m3u8Url, menuPos, nextEp, onBack, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, prevEp, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, revealPlayerControls, selectPlayerSource, selectedEp, selectedSeason, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, skipPrompt, sourceHealth, sourceRef, supportsProgress, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
   const sourceHealthRecords = useCinemaSourceHealth("tv", showSourceMenu || Boolean(selectedEp));
   useEffect(() => {
     if (!playerEp || pipOpen) return undefined;
@@ -410,7 +410,7 @@ export default function TVPlayerCore({ model }) {
                       ? "about:blank"
                       : isAsync
                         ? resolvedPlayerUrl || "about:blank"
-                        : getSourceUrl(
+                        : getDesktopSourceUrl(
                             playerSource,
                             "tv",
                             { tmdbId: item.id, imdbId: item.external_ids?.imdb_id || item.imdb_id },
@@ -532,7 +532,7 @@ export default function TVPlayerCore({ model }) {
                       onClick={() => {
                         const url = isAsync
                           ? resolvedPlayerUrl
-                          : getSourceUrl(
+                          : getDesktopSourceUrl(
                               playerSource,
                               "tv",
                               { tmdbId: item.id, imdbId: item.external_ids?.imdb_id || item.imdb_id },
@@ -570,7 +570,7 @@ export default function TVPlayerCore({ model }) {
                         }
                         const url = isAsync
                           ? resolvedPlayerUrl
-                          : getSourceUrl(
+                          : getDesktopSourceUrl(
                               playerSource,
                               "tv",
                               { tmdbId: item.id, imdbId: item.external_ids?.imdb_id || item.imdb_id },
@@ -659,6 +659,7 @@ export default function TVPlayerCore({ model }) {
                     onClick={(e) => e.stopPropagation()}
                   >
                     {PLAYER_SOURCES.filter((src) => src.media?.tv && (!src.animeOnly || isAnime)).map((src) => {
+                      src = getSource(src.id);
                       const runtime = describeCinemaSourceHealth(sourceHealthRecords.get(src.id));
                       return (
                       <button
@@ -679,8 +680,7 @@ export default function TVPlayerCore({ model }) {
                               `tv_${item.id}_s${selectedSeason}_e${selectedEp.episode_number}_${dubMode}`,
                             );
                           }
-                          setPlayerSource(src.id);
-                          storage.set(STORAGE_KEYS.PLAYER_SOURCE, src.id);
+                          selectPlayerSource(src.id);
                           setM3u8Url(null);
                           setInterceptedSubs([]);
                           resolvedPlayerUrlRef.current = null;
@@ -692,7 +692,7 @@ export default function TVPlayerCore({ model }) {
                       >
                         <span className="source-dropdown__identity">
                           <strong>{src.label}</strong>
-                          <small>{src.releaseStatus === "primary" ? "Standard" : src.releaseStatus === "candidate" ? "Candidate" : src.releaseStatus}</small>
+                          <small>{src.routingMode === "manual-only" && src.availability !== "ready" ? "Try anyway" : src.availability === "ready" ? "Ready" : src.availability === "temporarily-unavailable" ? "Temporarily unavailable" : "Having trouble"}</small>
                         </span>
                         <span className={`source-dropdown__health source-dropdown__health--${runtime.tone}`}>{runtime.label}</span>
                       </button>

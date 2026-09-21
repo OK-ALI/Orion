@@ -41,6 +41,26 @@ const EPISODE_GQL = `query($showId:String! $translationType:VaildTranslationType
 const EPISODE_GQL_HASH =
   "d405d0edd690624b66baba3068e0edc3ac90f1597d898a1ec8db4e5c43c00fec";
 
+function assertAllMangaResponseAvailable(body) {
+  if (!body) return;
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return;
+  }
+  const errors = Array.isArray(parsed?.errors) ? parsed.errors : [];
+  const needsCheck = errors.some((entry) =>
+    /NEED_CAPTCHA|captcha|challenge/i.test(
+      [entry?.message, entry?.extensions?.code].filter(Boolean).join(" "),
+    ),
+  );
+  if (!needsCheck) return;
+  const error = new Error("This source currently needs a browser check.");
+  error.code = "SOURCE_CHECK_REQUIRED";
+  throw error;
+}
+
 async function allanimeGQLEpisode(variables) {
   try {
     const encodedVars = encodeURIComponent(JSON.stringify(variables));
@@ -98,6 +118,7 @@ async function resolveEpisodeFromId(showId, epStr, dubSub) {
       episodeString: attempt,
     });
     if (!epRes.body) continue;
+    assertAllMangaResponseAvailable(epRes.body);
     const urls = parseEpisodeSourceUrls(epRes.body);
     if (urls?.length) {
       sourceUrls = urls;
@@ -354,6 +375,7 @@ function register() {
             episodeString: attempt,
           });
           if (!epRes.body) continue;
+          assertAllMangaResponseAvailable(epRes.body);
           const urls = parseEpisodeSourceUrls(epRes.body);
           if (urls?.length) {
             sourceUrls = urls;
@@ -368,7 +390,11 @@ function register() {
 
         return { ok: false, error: "No playable link found" };
       } catch (e) {
-        return { ok: false, error: e.message };
+        return {
+          ok: false,
+          code: e?.code || "SOURCE_UNAVAILABLE",
+          error: e?.message || "This source is temporarily unavailable.",
+        };
       }
     },
   );

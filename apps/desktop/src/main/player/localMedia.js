@@ -42,9 +42,45 @@ function errorResponse(status, message) {
   return new Response(message, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
 }
 
+const VIDEASY_PLAYER_ORIGINS = new Set([
+  "https://player.videasy.net",
+  "https://player.videasy.to",
+]);
+
+function escapeHtmlAttribute(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function providerWrapperResponse(requestUrl) {
+  if (requestUrl.hostname !== "player" || requestUrl.pathname !== "/videasy") return null;
+  const rawTarget = requestUrl.searchParams.get("src") || "";
+  if (!rawTarget || rawTarget.length > 4_096) return errorResponse(400, "Invalid player target");
+  let target;
+  try { target = new URL(rawTarget); } catch { return errorResponse(400, "Invalid player target"); }
+  if (target.protocol !== "https:"
+    || target.username
+    || target.password
+    || !VIDEASY_PLAYER_ORIGINS.has(target.origin)
+    || !/^\/(?:movie|tv)\//.test(target.pathname)) {
+    return errorResponse(403, "Player target is not allowed");
+  }
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; frame-src https://player.videasy.net https://player.videasy.to"><style>html,body,iframe{width:100%;height:100%;margin:0;border:0;background:#000;overflow:hidden}</style></head><body><iframe src="${escapeHtmlAttribute(target.toString())}" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="origin"></iframe></body></html>`;
+  return new Response(html, {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+  });
+}
+
 async function serve(request) {
-  let token = "";
-  try { token = new URL(request.url).pathname.split("/").filter(Boolean)[0] || ""; } catch {}
+  let requestUrl;
+  try { requestUrl = new URL(request.url); } catch { return errorResponse(400, "Invalid media request"); }
+  const wrapper = providerWrapperResponse(requestUrl);
+  if (wrapper) return wrapper;
+  const token = requestUrl.pathname.split("/").filter(Boolean)[0] || "";
   const item = grants.get(token);
   if (!item || item.expiresAt < Date.now()) {
     grants.delete(token);

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "productVersion": "3.2.0",
+  "gitTag": "v3.2.0",
+  "desktopVersion": "3.2.0",
+  "mobileVersion": "3.2.0",
+  "androidVersionCode": 58,
+  "mobileRuntimeVersion": "orion-mobile-native-r2",
+  "minimumDirectUpgradeVersion": "3.1.0",
+  "integritySchemas": [1, 2],
+  "artifacts": {
+    "windowsInstaller": "Orion.Setup.3.2.0.exe",
+    "windowsArchive": "Orion-3.2.0-win.zip",
+    "androidInstaller": "orion-mobile-v3.2.0.apk",
+    "integrityV1": "orion-release-integrity-v1.json",
+    "integrityV2": "orion-release-integrity-v2.json",
+    "providerStatusV1": "orion-provider-status-v1.json"
+  }
+}

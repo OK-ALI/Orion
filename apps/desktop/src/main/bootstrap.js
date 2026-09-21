@@ -54,6 +54,7 @@ const downloadsIpc = require("./downloader/ipc");
 const subtitlesIpc = require("./subtitles/ipc");
 const allmangaIpc = require("./player/allmanga/ipc");
 const playerIpc = require("./player/ipc");
+const updatesIpc = require("./updates/ipc");
 const diagnosticsIpc = require("./ipc/diagnosticsIpc");
 const googleAuthIpc = require("./ipc/googleAuthIpc");
 const portableProfileIpc = require("./ipc/portableProfileIpc");
@@ -61,6 +62,7 @@ const { createTrayController } = require("./app/tray");
 const { registerNotifications } = require("./app/notifications");
 const { createPopoutWindowController } = require("./player/popoutWindow");
 const localMedia = require("./player/localMedia");
+const trailerProtocol = require("./player/trailerProtocol");
 const ambientSampler = require("./player/ambientSampler");
 const cinemaSourceHealthIpc = require("./player/sources/ipc");
 const { createBatteryService } = require("./battery/service");
@@ -69,6 +71,7 @@ const { createMediaControls } = require("./player/mediaControls");
 const music = require("./music");
 const smartConnectIpc = require("./ipc/smartConnectIpc");
 localMedia.registerScheme();
+trailerProtocol.registerScheme();
 music.registerScheme();
 
 // ── Session Manager ──────────────────────────────────────────────────────────
@@ -217,13 +220,13 @@ function createWindow() {
 
   // Block popups from webviews, intercept fullscreen, lazy-init sessions
   mainWindow.webContents.on("did-attach-webview", (_, wc) => {
-
-
     ensurePlayerSessions();
+    let attachedPartition = "unknown";
 
     try {
       wc.setBackgroundThrottling(false);
       if (wc.session === session.fromPartition("persist:player")) {
+        attachedPartition = "persist:player";
         bindWebContentsToActive(wc.id);
         playerWcIds.add(wc.id);
         wc.once("destroyed", () => {
@@ -328,16 +331,25 @@ function createWindow() {
             }
           }
         });
+      } else if (wc.session === session.fromPartition("persist:trailer")) {
+        attachedPartition = "persist:trailer";
       }
     } catch {}
 
     wc.setWindowOpenHandler(() => ({ action: "deny" }));
-    wc.on("enter-html-full-screen", () =>
-      mainWindow.webContents.send("webview-enter-fullscreen"),
-    );
-    wc.on("leave-html-full-screen", () =>
-      mainWindow.webContents.send("webview-leave-fullscreen"),
-    );
+    const sendFullscreenState = (channel) => {
+      if (!mainWindow || mainWindow.isDestroyed() || wc.isDestroyed()) return;
+      try {
+        mainWindow.webContents.send(channel, {
+          webContentsId: wc.id,
+          partition: attachedPartition,
+        });
+      } catch (error) {
+        console.warn("[fullscreen] Could not update Orion player layout:", error?.message || error);
+      }
+    };
+    wc.on("enter-html-full-screen", () => sendFullscreenState("webview-enter-fullscreen"));
+    wc.on("leave-html-full-screen", () => sendFullscreenState("webview-leave-fullscreen"));
   });
 
   // Load the Vite build output
@@ -458,8 +470,10 @@ subtitlesIpc.register({
 });
 allmangaIpc.register();
 playerIpc.register(getMainWindow, {
-  writeSecretMigration: storageIpc.writeSecretMigration,
   getPopoutController: () => popoutController,
+});
+updatesIpc.register(getMainWindow, {
+  writeSecretMigration: storageIpc.writeSecretMigration,
 });
 ambientSampler.register(
   getMainWindow,
@@ -551,6 +565,7 @@ if (!gotTheLock) {
     performanceCoordinator.register();
     mediaControls.register();
     localMedia.register({ getDownloads: downloadsIpc.getDownloads, saveDownloads: downloadsIpc.saveDownloads });
+    trailerProtocol.register();
     music.register().catch((error) => console.error("[music] startup failed", error));
     smartConnectIpc.startSmartConnectServer(getMainWindow).catch((error) => {
       console.error("[SmartConnect] Secure server failed to start:", error?.message || error);

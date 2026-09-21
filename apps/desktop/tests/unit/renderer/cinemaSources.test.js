@@ -1,16 +1,32 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   ALL_CINEMA_SOURCES,
+  AUTOMATIC_PLAYER_SOURCES,
   PLAYER_SOURCES,
   getRegisteredSource,
+  getSource,
   getNextHealthyNonAsyncSource,
   getSourceResumeParams,
   getSourceUrl,
   normalizeSelectableSourceId,
   resolveSourceMediaId,
+  sourceResumeStrategy,
+  sourceSupportsProgress,
   updateCinemaSourceHealth,
 } from "../../../src/renderer/features/player/sources/registry";
 import { validateSourceDescriptor } from "../../../src/renderer/features/player/sources/contracts";
+import { ANIME_DEFAULT_SOURCE, NON_ANIME_DEFAULT_SOURCE } from "../../../src/renderer/services/tmdb";
+import {
+  installOrionProviderStatusV1,
+  resolveOrionProviderStatusV1,
+} from "@orion/shared/types";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const desktopRoot = path.resolve(here, "../../..");
+const read = (relative) => fs.readFileSync(path.join(desktopRoot, relative), "utf8");
 
 describe("Cinema source registry", () => {
   it("contains unique, valid descriptors", () => {
@@ -18,18 +34,34 @@ describe("Cinema source registry", () => {
     for (const source of ALL_CINEMA_SOURCES) expect(validateSourceDescriptor(source)).toEqual([]);
   });
 
-  it("keeps disabled and quarantined providers out of normal choices", () => {
-    expect(PLAYER_SOURCES.map((source) => source.id)).not.toContain("vidfast");
-    expect(PLAYER_SOURCES.map((source) => source.id)).not.toContain("vidify");
-    expect(PLAYER_SOURCES.map((source) => source.id)).not.toContain("2embed");
-    expect(PLAYER_SOURCES.map((source) => source.id)).not.toContain("superembed");
+  it("keeps compatibility adapters registered while exposing only qualified Desktop sources", () => {
+    expect(PLAYER_SOURCES.map((source) => source.id)).toEqual([
+      "vixsrc", "vidsrc", "vidlink", "111movies", "vidnest", "vidsrc-ir", "cinesrc",
+    ]);
     expect(getRegisteredSource("2embed")?.releaseStatus).toBe("disabled");
+    expect(getRegisteredSource("videasy")?.id).toBe("videasy");
+    expect(PLAYER_SOURCES.map((source) => source.id)).not.toContain("allmanga");
+    expect(AUTOMATIC_PLAYER_SOURCES.map((source) => source.id)).toEqual(["vixsrc"]);
   });
 
-  it("migrates obsolete saved sources to a selectable default", () => {
-    expect(normalizeSelectableSourceId("vidfast")).toBe("videasy");
-    expect(normalizeSelectableSourceId("allmanga", { anime: true })).toBe("allmanga");
-    expect(normalizeSelectableSourceId("videasy", { anime: true })).toBe("allmanga");
+  it("migrates retired, disabled, and anime-only saved sources to VixSrc", () => {
+    expect(normalizeSelectableSourceId("vidfast")).toBe("vixsrc");
+    expect(normalizeSelectableSourceId("allmanga", { anime: true })).toBe("vixsrc");
+    expect(normalizeSelectableSourceId("videasy", { anime: true })).toBe("vixsrc");
+    expect(normalizeSelectableSourceId("vidlink")).toBe("vidlink");
+    expect(ANIME_DEFAULT_SOURCE).toBe("vixsrc");
+    expect(NON_ANIME_DEFAULT_SOURCE).toBe("vixsrc");
+  });
+
+  it("does not confuse provider display tags with anime-only eligibility", () => {
+    for (const controller of [
+      read("src/renderer/features/movies/hooks/useMovieController.js"),
+      read("src/renderer/features/tv/hooks/useTVController.js"),
+    ]) {
+      expect(controller).not.toMatch(/currentSrc\?\.tag|savedSrc\?\.tag/);
+      expect(controller).toMatch(/normalizeSelectableSourceId\(playerSource/);
+      expect(controller).toMatch(/STORAGE_KEYS\.PLAYER_SOURCE/);
+    }
   });
 
   it("routes provider IDs according to their declared policy", () => {
@@ -79,9 +111,9 @@ describe("Cinema source registry", () => {
     const now = 10_000;
     updateCinemaSourceHealth([
       { sourceId: "vidsrc", mediaType: "movie", state: "failed", cooldownUntil: now + 5_000, updatedAt: now },
-      { sourceId: "vidking", mediaType: "movie", state: "ready", startupMs: 900, updatedAt: now },
+      { sourceId: "vixsrc", mediaType: "movie", state: "ready", startupMs: 900, updatedAt: now },
     ]);
-    expect(getNextHealthyNonAsyncSource("videasy", { mediaType: "movie", now })).toBe("vidking");
+    expect(getNextHealthyNonAsyncSource("videasy", { mediaType: "movie", now, includeExperimental: true })).toBe("vixsrc");
     updateCinemaSourceHealth([]);
   });
 
@@ -90,25 +122,90 @@ describe("Cinema source registry", () => {
     expect(getNextHealthyNonAsyncSource("videasy", {
       mediaType: "tv",
       attempted: ["vidsrc"],
-    })).toBe("vidking");
+      includeExperimental: true,
+    })).toBe("vixsrc");
+    expect(getNextHealthyNonAsyncSource("videasy", {
+      mediaType: "tv",
+      attempted: ["vixsrc"],
+      includeExperimental: true,
+    })).toBeNull();
   });
 
-  it("keeps unvalidated experimental sources out of automatic failover", () => {
+  it("uses only the physically qualified automatic pool", () => {
     updateCinemaSourceHealth([]);
     expect(getNextHealthyNonAsyncSource("videasy", {
       mediaType: "movie",
       attempted: ["vidsrc", "vidking", "vidsrccc", "vidlink"],
-    })).toBeNull();
+    })).toBe("vixsrc");
     expect(getNextHealthyNonAsyncSource("videasy", {
       mediaType: "movie",
       attempted: ["vidsrc", "vidking", "vidsrccc", "vidlink"],
       includeExperimental: true,
-    })).toBe("autoembed");
+    })).toBe("vixsrc");
+    expect(getNextHealthyNonAsyncSource("videasy", {
+      mediaType: "movie",
+      attempted: ["vixsrc"],
+      includeExperimental: true,
+    })).toBeNull();
   });
 
   it("uses only a provider's declared resume parameter", () => {
     expect(getSourceResumeParams("vidking", 92.8)).toEqual({ progress: 92 });
-    expect(getSourceResumeParams("vidlink", 92.8)).toEqual({ startAt: 92 });
-    expect(getSourceResumeParams("videasy", 92.8)).toEqual({});
+    expect(getSourceResumeParams("vidlink", 92.8)).toEqual({});
+    expect(getSourceResumeParams("videasy", 92.8)).toEqual({ progress: 92 });
+    expect(getSourceResumeParams("vidnest", 92.8, "movie")).toEqual({ startAt: 92 });
+    expect(getSourceResumeParams("vidnest", 92.8, "tv")).toEqual({ progress: 92 });
+  });
+
+  it.each([
+    ["vixsrc", "url-param", { startAt: 92 }, { startAt: 92 }],
+    ["vidsrc", "verified-seek", {}, {}],
+    ["vidlink", "verified-seek", {}, {}],
+    ["111movies", "verified-seek", {}, {}],
+    ["vidnest", "url-param", { startAt: 92 }, { progress: 92 }],
+    ["vidsrc-ir", "url-param", { startAt: 92 }, { startAt: 92 }],
+    ["cinesrc", "url-param", { t: 92 }, { t: 92 }],
+  ])("keeps %s eligible for Orion resume handoff", (sourceId, strategy, movieParams, tvParams) => {
+    expect(sourceSupportsProgress(sourceId)).toBe(true);
+    expect(sourceResumeStrategy(sourceId)).toBe(strategy);
+    expect(getSourceResumeParams(sourceId, 92.8, "movie")).toEqual(movieParams);
+    expect(getSourceResumeParams(sourceId, 92.8, "tv")).toEqual(tvParams);
+  });
+
+  it("accepts only verified, newer provider status and never promotes a bundled policy", () => {
+    const encoded = (payload) => Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+    const demotion = {
+      schemaVersion: 1,
+      sequence: 100,
+      publishedAt: new Date(Date.now() - 1_000).toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      statuses: [
+        { sourceId: "vixsrc", action: "demote", availability: "having-trouble", message: "This source is having trouble." },
+        { sourceId: "vidlink", action: "restore", availability: "ready", message: "Ready." },
+      ],
+    };
+    const envelope = {
+      schemaVersion: 1,
+      algorithm: "Ed25519",
+      keyId: "test-key",
+      payload: encoded(demotion),
+      signature: Buffer.alloc(64, 1).toString("base64url"),
+    };
+    expect(resolveOrionProviderStatusV1(envelope, () => false)).toBeNull();
+    const verified = resolveOrionProviderStatusV1(envelope, () => true);
+    expect(installOrionProviderStatusV1(verified)).toBe(true);
+    expect(installOrionProviderStatusV1(verified)).toBe(false);
+    expect(getSource("vixsrc").routingMode).toBe("manual-only");
+    expect(getSource("vidlink").routingMode).toBe("manual-only");
+    expect(getNextHealthyNonAsyncSource("videasy", { mediaType: "movie" })).toBeNull();
+
+    const restoration = {
+      ...demotion,
+      sequence: 101,
+      statuses: [{ sourceId: "vixsrc", action: "restore", availability: "ready", message: "Ready." }],
+    };
+    const restoredEnvelope = { ...envelope, payload: encoded(restoration) };
+    expect(installOrionProviderStatusV1(resolveOrionProviderStatusV1(restoredEnvelope, () => true))).toBe(true);
+    expect(getSource("vixsrc").routingMode).toBe("automatic");
   });
 });

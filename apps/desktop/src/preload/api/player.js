@@ -5,14 +5,14 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
   setPlayerVideo: (args) => ipcRenderer.invoke("set-player-video", args),
   debugAllManga: (args) => ipcRenderer.invoke("debug-allmanga", args),
   onWebviewEnterFullscreen: (cb) => {
-    const handler = () => cb();
+    const handler = (_, payload) => cb(payload);
     ipcRenderer.on("webview-enter-fullscreen", handler);
     return handler;
   },
   offWebviewEnterFullscreen: (handler) =>
     ipcRenderer.removeListener("webview-enter-fullscreen", handler),
   onWebviewLeaveFullscreen: (cb) => {
-    const handler = () => cb();
+    const handler = (_, payload) => cb(payload);
     ipcRenderer.on("webview-leave-fullscreen", handler);
     return handler;
   },
@@ -97,5 +97,6 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
     return handler;
   },
   offPlayerShortcut: (handler) => ipcRenderer.removeListener("player-shortcut", handler),
-  playerWebviewPreloadPath: path.join(__dirname, "..", "playerWebviewPreload.js")
+  playerWebviewPreloadPath: path.join(__dirname, "..", "playerWebviewPreload.js"),
+  trailerWebviewPreloadPath: path.join(__dirname, "..", "trailerWebviewPreload.js")
 });

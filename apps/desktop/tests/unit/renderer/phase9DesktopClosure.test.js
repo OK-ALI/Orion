@@ -26,11 +26,14 @@ describe("Phase 9 Desktop cross-platform closure", () => {
   });
 
   it("keeps Desktop automatic installation behind trusted-source and integrity verification", () => {
-    const ipc = read("src/main/player/ipc.js");
+    const ipc = read("src/main/updates/ipc.js");
+    const updates = read("src/renderer/shared/utils/updates.js");
 
-    expect(ipc).toMatch(/TRUSTED_PATH\s*=\s*"\/ok-ali\/orion\/releases\/download\/"/);
+    expect(ipc).toMatch(/OFFICIAL_RELEASE_PATH\s*=\s*"\/ok-ali\/orion\/releases\/download\/"/);
     expect(ipc).toMatch(/verifyDownloadedUpdate\(/);
     expect(ipc).toMatch(/expectedSignerSha256/);
+    expect(updates).toMatch(/findCompatibleDesktopBridge/);
+    expect(updates).toMatch(/refreshProviderStatus/);
   });
 
   it("provides product-facing retry UX without exposing raw updater failures", () => {
@@ -38,7 +41,7 @@ describe("Phase 9 Desktop cross-platform closure", () => {
     const settings = read("src/renderer/features/settings/sections/GeneralSettings.jsx");
 
     expect(modal).toMatch(/friendlyUpdateError/);
-    expect(modal).toMatch(/phase === "error" \? "Try Again" : "Install Update"/);
+    expect(modal).toMatch(/phase === "error" \? "Try again" : "Download & install"/);
     expect(settings).toMatch(/Orion could not check for updates\. Check your connection and try again\./);
     expect(settings).toMatch(/result\?\.error \? "Try again" : "Check for updates"/);
   });

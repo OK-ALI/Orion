@@ -21,7 +21,7 @@ function friendlyUpdateError(message) {
   if (/http|network|fetch|socket|timed? ?out|enotfound|econn|offline/i.test(raw)) {
     return "Orion could not download the update. Check your connection and try again.";
   }
-  return "Orion could not finish the update. Try again or download it manually.";
+  return "Orion couldn't finish the update. Try again.";
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -30,13 +30,20 @@ export default function UpdateModal({
   activeDownloads = 0,
   onClose,
 }) {
-  const { latest, current, url, changelog, assets, assetNames, integrity } = updateInfo;
+  const { latest, current, changelog, assets, assetNames, integrity } = updateInfo;
 
-  const [phase, setPhase] = useState("idle"); // idle | downloading | verifying | installing | done | error
+  const recoveredTransaction = updateInfo?.updateTransaction;
+  const [phase, setPhase] = useState(
+    () => recoveredTransaction?.phase === "failed" ? "error" : "idle",
+  ); // idle | downloading | verifying | installing | done | error
   const [format, setFormat] = useState(null); // "appimage" | "deb" | "exe" | "dmg" | null
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState(
+    () => recoveredTransaction?.phase === "failed"
+      ? friendlyUpdateError(recoveredTransaction.message)
+      : "",
+  );
   const cancelRef = useRef(false);
 
   // Detect install format on mount
@@ -77,6 +84,7 @@ export default function UpdateModal({
   const handleInstall = async () => {
     if (!canInstall) return;
     cancelRef.current = false;
+    setErrorMsg("");
     setPhase("downloading");
     setProgress(0);
     setProgressLabel("Preparing…");
@@ -85,14 +93,17 @@ export default function UpdateModal({
       const result = await window.electron.downloadAndInstallUpdate({
         url: assetUrl,
         format,
+        assetName,
+        targetVersion: latest,
         expectedSize: integrityEntry.expectedSize,
         expectedSha256: integrityEntry.expectedSha256,
         expectedSignerSha256: integrityEntry.expectedSignerSha256,
+        releaseEnvelope: integrity.envelope,
       });
       if (cancelRef.current) return;
       if (!result.ok) throw new Error(result.error || "Update failed");
       setPhase("installing");
-      setProgressLabel("Launching installer…");
+      setProgressLabel("Installing…");
     } catch (e) {
       if (cancelRef.current) return;
       setPhase("error");
@@ -204,22 +215,14 @@ export default function UpdateModal({
                     <span style={{ color: "var(--text3)", fontSize: 11 }}>→</span>
                   </>
                 )}
-                <a
-                  href={url}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.electron?.openExternal(url);
-                  }}
+                <span
                   style={{
                     color: "var(--red)",
                     fontWeight: 600,
-                    textDecoration: "none",
-                    cursor: "pointer",
                   }}
-                  title="View on GitHub"
                 >
-                  v{latest} ↗
-                </a>
+                  v{latest}
+                </span>
                 is ready to install
                 {format && (
                   <span
@@ -322,18 +325,7 @@ export default function UpdateModal({
             <div
               style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}
             >
-              Could not detect install format. Use the{" "}
-              <a
-                href={url}
-                onClick={(e) => {
-                  e.preventDefault();
-                  window.electron?.openExternal(url);
-                }}
-                style={{ color: "var(--red)", cursor: "pointer" }}
-              >
-                GitHub releases page
-              </a>{" "}
-              to download manually.
+              This update isn't available for your device.
             </div>
           )}
 
@@ -346,10 +338,7 @@ export default function UpdateModal({
                 lineHeight: 1.5,
               }}
             >
-              Automatic installation is locked because this release does not
-              have complete verified integrity metadata.
-              {integrityEntry?.reason ? ` ${integrityEntry.reason}` : ""}
-              {" "}Use GitHub for the manual installer instead.
+              We couldn't verify this update. Nothing was installed.
             </div>
           )}
 
@@ -372,7 +361,7 @@ export default function UpdateModal({
                     (phase === "downloading"
                       ? "Downloading update…"
                       : phase === "verifying"
-                        ? "Verifying update integrity…"
+                        ? "Verifying…"
                         : "Installing…")}
                 </span>
                 {phase === "downloading" && (
@@ -416,7 +405,7 @@ export default function UpdateModal({
           {/* Done */}
           {phase === "done" && (
             <div style={{ fontSize: 13, color: "#48c774", marginBottom: 12 }}>
-              ✓ Update downloaded, installer is running
+              ✓ Installing…
             </div>
           )}
 
@@ -427,28 +416,6 @@ export default function UpdateModal({
             </button>
             {(phase === "idle" || phase === "error") && (
               <>
-                <a
-                  href={url}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.electron?.openExternal(url);
-                  }}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "9px 18px",
-                    background: "var(--surface2)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 8,
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "var(--text)",
-                    textDecoration: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  GitHub ↗
-                </a>
                 <button
                   className="btn"
                   disabled={!canInstall}
@@ -464,7 +431,7 @@ export default function UpdateModal({
                     cursor: canInstall ? "pointer" : "not-allowed",
                   }}
                 >
-                  {phase === "error" ? "Try Again" : "Install Update"}
+                  {phase === "error" ? "Try again" : "Download & install"}
                 </button>
               </>
             )}

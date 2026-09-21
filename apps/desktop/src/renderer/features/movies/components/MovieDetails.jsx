@@ -64,7 +64,7 @@ import {
 import { resetViewingToNotStarted } from "../../player/services/viewingReset";
 
 export default function MovieDetails({ model }) {
-  const { d, displayGenres, displayOverview, displayPct, displayScore, handlePlay, hasProgress, isSaved, isUnreleased, isWatched, movieDownload, onBack, onGoToDownloads, onMarkUnwatched, onMarkWatched, onSave, playing, progressKey, progressLabel, rating, restricted, saveProgress, openDownload, setShowTrailer, title, trailerKey } = model;
+  const { d, displayGenres, displayOverview, displayPct, displayScore, handlePlay, hasProgress, isSaved, isUnreleased, isWatched, movieDownload, onBack, onGoToDownloads, onMarkUnwatched, onMarkWatched, onSave, playing, progressKey, progressLabel, rating, restricted, saveProgress, openDownload, setShowTrailer, title, trailerCandidates } = model;
   return (
 <div className="detail-hero">
         <div
@@ -173,7 +173,7 @@ export default function MovieDetails({ model }) {
                   <PlayIcon /> {playing ? "Restart" : "Play"}
                 </button>
               )}
-              {trailerKey &&
+              {trailerCandidates?.length > 0 &&
                 (restricted ? (
                   <button
                     className="btn btn-secondary btn-restricted"

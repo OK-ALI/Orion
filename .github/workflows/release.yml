@@ -1,0 +1,94 @@
+name: Orion protected release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Publish the physically tested private draft as Preview, or promote the tested Preview
+        required: true
+        type: choice
+        options: [preview, promote]
+      version:
+        description: Orion product version
+        required: true
+        default: 3.2.0
+
+permissions:
+  contents: write
+
+jobs:
+  publish-preview:
+    if: inputs.mode == 'preview'
+    runs-on: ubuntu-latest
+    environment: orion-release-preview-approval
+    env:
+      ORION_RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require the mapped Orion version
+        run: node -e "const m=require('./config/orion-release-map-v1.json'); if(process.env.ORION_RELEASE_VERSION!==m.productVersion) process.exit(1)"
+      - run: npm run release:check-map
+      - run: node scripts/check-release-qualification.cjs --phase preview
+      - name: Confirm the release is still a private draft
+        run: |
+          test "$(gh release view "v$ORION_RELEASE_VERSION" --json isDraft --jq .isDraft)" = "true"
+          if gh release view "v$ORION_RELEASE_VERSION" --json assets --jq '.assets[].name' | grep -Fx "orion-$ORION_RELEASE_VERSION-qualification.md"; then
+            echo "Qualification asset already exists. Refusing to replace it."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Re-download and verify the exact private-draft assets
+        run: |
+          rm -rf "release/remote-$ORION_RELEASE_VERSION"
+          mkdir -p "release/remote-$ORION_RELEASE_VERSION"
+          gh release download "v$ORION_RELEASE_VERSION" --dir "release/remote-$ORION_RELEASE_VERSION"
+          node scripts/verify-release-bundle.cjs "release/remote-$ORION_RELEASE_VERSION"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: npm run release:qualification-summary -- "orion-$ORION_RELEASE_VERSION-qualification.md"
+      - name: Add the final qualification summary and publish Preview
+        run: |
+          gh release upload "v$ORION_RELEASE_VERSION" "orion-$ORION_RELEASE_VERSION-qualification.md"
+          gh release edit "v$ORION_RELEASE_VERSION" --draft=false --prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  promote:
+    if: inputs.mode == 'promote'
+    runs-on: ubuntu-latest
+    environment: orion-release-stable-approval
+    env:
+      ORION_RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require the mapped Orion version
+        run: node -e "const m=require('./config/orion-release-map-v1.json'); if(process.env.ORION_RELEASE_VERSION!==m.productVersion) process.exit(1)"
+      - run: npm run release:check-map
+      - run: node scripts/check-release-qualification.cjs --phase stable
+      - name: Confirm the exact release is still Preview
+        run: |
+          test "$(gh release view "v$ORION_RELEASE_VERSION" --json isDraft --jq .isDraft)" = "false"
+          test "$(gh release view "v$ORION_RELEASE_VERSION" --json isPrerelease --jq .isPrerelease)" = "true"
+          qualification_count=$(gh release view "v$ORION_RELEASE_VERSION" --json assets --jq '.assets[].name' | awk -v wanted="orion-$ORION_RELEASE_VERSION-qualification.md" '$0 == wanted { count += 1 } END { print count + 0 }')
+          test "$qualification_count" = "1"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Re-download and verify the exact Preview assets
+        run: |
+          rm -rf "release/remote-$ORION_RELEASE_VERSION"
+          mkdir -p "release/remote-$ORION_RELEASE_VERSION"
+          gh release download "v$ORION_RELEASE_VERSION" --dir "release/remote-$ORION_RELEASE_VERSION"
+          node scripts/verify-release-bundle.cjs "release/remote-$ORION_RELEASE_VERSION"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Promote the exact Preview without replacing assets
+        run: gh release edit "v$ORION_RELEASE_VERSION" --prerelease=false
+        env:
+          GH_TOKEN: ${{ github.token }}

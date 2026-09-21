@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { storage, STORAGE_KEYS, isElectron, formatBytes } from "../../../services/settingsStore";
-import { DEFAULT_INVIDIOUS_BASE } from "../../../components/TrailerModal";
 import { RATING_COUNTRIES } from "../../../shared/utils/ageRating";
 import { AGE_LIMIT_OPTIONS } from "../settingsConstants";
 import { CleanRow, SettingsSelect, Toggle } from "../components/SettingsControls";
@@ -19,30 +18,22 @@ export default function PlaybackSettingsGroup({
     autoplayNextDuration,
     autoplayNextEnabled,
     autoplayNextLayout,
-    checkInvidious,
     flash,
     handleSaveThreshold,
     introSkipMode,
     saved,
-    invidiousBase,
-    invidiousChecking,
-    invidiousSaved,
-    invidiousStatus,
-    saveInvidiousBase,
     secPlayback,
     setAutoplayNextDuration,
     setAutoplayNextEnabled,
     setAutoplayNextLayout,
     setIntroSkipMode,
-    setInvidiousBase,
-    setInvidiousStatus,
     setWatchedThreshold,
     watchedThreshold
   } = model;
   return <div ref={secPlayback} style={{
     scrollMarginTop: 80
   }}>
-          <SectionGroupHeader title="Playback" subtitle="Trailer source and auto-watched behavior" />
+          <SectionGroupHeader title="Playback" subtitle="Trailer playback and auto-watched behavior" />
 
           <div style={{ marginBottom: 32 }}>
             <div className="settings-section-title">Playback continuity</div>
@@ -65,89 +56,13 @@ export default function PlaybackSettingsGroup({
 
           <Divider />
 
-          {/* Invidious */}
-          <div style={{
-      marginBottom: 40
-    }}>
-            <div className="settings-section-title">Invidious Instance</div>
-            <div style={{
-        fontSize: 13,
-        color: "var(--text3)",
-        marginBottom: 16,
-        lineHeight: 1.6
-      }}>
-              Trailers are played via{" "}
-              <span style={{
-          color: "var(--text)",
-          fontWeight: 600
-        }}>
-                Invidious
-              </span>
-              , a privacy-friendly YouTube frontend. Your configured instance is
-              tried first; if it fails, the app automatically falls back through
-              a list of known working instances. The default is{" "}
-              <code style={{
-          fontSize: 12
-        }}>{DEFAULT_INVIDIOUS_BASE}</code>.
-              The instance must have its API enabled (
-              <code style={{
-          fontSize: 12
-        }}>/api/v1/stats</code> reachable).
-            </div>
-            <div style={{
-        display: "flex",
-        gap: 12,
-        alignItems: "center",
-        flexWrap: "wrap"
-      }}>
-              <input className="apikey-input" style={{
-          flex: 1,
-          minWidth: 260,
-          marginBottom: 0
-        }} placeholder={DEFAULT_INVIDIOUS_BASE} value={invidiousBase} onChange={e => {
-          setInvidiousBase(e.target.value);
-          setInvidiousStatus(null);
-        }} />
-              <button className="btn btn-ghost" disabled={invidiousChecking} onClick={() => checkInvidious(invidiousBase)} style={{
-          opacity: invidiousChecking ? 0.5 : 1
-        }}>
-                {invidiousChecking ? "Checking…" : "Check"}
-              </button>
-              <button className="btn btn-primary" onClick={saveInvidiousBase}>
-                Save
-              </button>
-            </div>
-
-            {invidiousStatus && <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        marginTop: 12
-      }}>
-                <div style={{
-          width: 10,
-          height: 10,
-          borderRadius: "50%",
-          flexShrink: 0,
-          background: invidiousStatus.ok ? "#48c774" : "#ff3860",
-          boxShadow: invidiousStatus.ok ? "0 0 6px rgba(72,199,116,0.6)" : "0 0 6px rgba(255,56,96,0.6)"
-        }} />
-                <span style={{
-          fontSize: 13,
-          fontWeight: 500,
-          color: invidiousStatus.ok ? "#48c774" : "#ff3860"
-        }}>
-                  {invidiousStatus.msg}
-                </span>
-              </div>}
-
-            {invidiousSaved && <div style={{
-        marginTop: 10,
-        fontSize: 13,
-        color: "#48c774"
-      }}>
-                ✓ Saved
-              </div>}
+          <div style={{ marginBottom: 32 }}>
+            <div className="settings-section-title">Trailers</div>
+            <CleanRow
+              title="Orion Trailer"
+              description="Trailer discovery and playback are managed automatically with provider-aware fallback across supported sources."
+              right={<span style={{ color: "var(--accent)", fontSize: 12, fontWeight: 800 }}>Automatic</span>}
+            />
           </div>
 
           <Divider />

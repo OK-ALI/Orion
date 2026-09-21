@@ -11,7 +11,8 @@ import {
   tmdbFetch,
   imgUrl,
   PLAYER_SOURCES,
-  getSourceUrl,
+  getSource,
+  getDesktopSourceUrl,
   sourceSupportsProgress,
   sourceProgressViaFrames,
   sourceIsAsync,
@@ -66,7 +67,7 @@ import {
 } from "../../../shared/utils/ageRating";
 
 export default function MoviePlayer({ model }) {
-  const { d, ambientColor, blockedSession, displayPct, dubMode, handleFailoverNextSource, isUnreleased, item, m3u8Url, menuPos, movieDownload, onBack, onGoToDownloads, onOpenMiniPlayer, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progressKey, progressLabel, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, revealPlayerControls, saveProgress, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, sourceRef, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
+  const { d, ambientColor, blockedSession, displayPct, dubMode, handleFailoverNextSource, isUnreleased, item, m3u8Url, menuPos, movieDownload, onBack, onGoToDownloads, onOpenMiniPlayer, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progressKey, progressLabel, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, revealPlayerControls, saveProgress, selectPlayerSource, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, sourceRef, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
   const sourceHealthRecords = useCinemaSourceHealth("movie", showSourceMenu || playing);
   useEffect(() => {
     if (!playing || restricted || isUnreleased || pipOpen) return undefined;
@@ -236,7 +237,7 @@ export default function MoviePlayer({ model }) {
                   ? "about:blank"
                   : sourceIsAsync(playerSource)
                     ? resolvedPlayerUrl || "about:blank"
-                    : getSourceUrl(
+                    : getDesktopSourceUrl(
                         playerSource,
                         "movie",
                         { tmdbId: item.id, imdbId: d.imdb_id },
@@ -356,7 +357,7 @@ export default function MoviePlayer({ model }) {
                   onClick={() => {
                     const url = sourceIsAsync(playerSource)
                       ? resolvedPlayerUrl
-                      : getSourceUrl(
+                      : getDesktopSourceUrl(
                           playerSource,
                           "movie",
                           { tmdbId: item.id, imdbId: d.imdb_id },
@@ -394,7 +395,7 @@ export default function MoviePlayer({ model }) {
                     }
                     const url = sourceIsAsync(playerSource)
                       ? resolvedPlayerUrl
-                      : getSourceUrl(
+                      : getDesktopSourceUrl(
                           playerSource,
                           "movie",
                           { tmdbId: item.id, imdbId: d.imdb_id },
@@ -484,6 +485,7 @@ export default function MoviePlayer({ model }) {
                 onClick={(e) => e.stopPropagation()}
               >
                 {PLAYER_SOURCES.filter((src) => src.media?.movie && !src.animeOnly).map((src) => {
+                  src = getSource(src.id);
                   const runtime = describeCinemaSourceHealth(sourceHealthRecords.get(src.id));
                   return (
                   <button
@@ -500,8 +502,7 @@ export default function MoviePlayer({ model }) {
                       if (src.id === playerSource) return;
                       // Manual selection wins over auto-failover
                       clearFailoverSource(`movie_${item.id}_${dubMode}`);
-                      setPlayerSource(src.id);
-                      storage.set(STORAGE_KEYS.PLAYER_SOURCE, src.id);
+                      selectPlayerSource(src.id);
                       setM3u8Url(null);
                       setInterceptedSubs([]);
                       resolvedPlayerUrlRef.current = null;
@@ -513,7 +514,7 @@ export default function MoviePlayer({ model }) {
                   >
                     <span className="source-dropdown__identity">
                       <strong>{src.label}</strong>
-                      <small>{src.releaseStatus === "primary" ? "Standard" : src.releaseStatus === "candidate" ? "Candidate" : src.releaseStatus}</small>
+                      <small>{src.routingMode === "manual-only" && src.availability !== "ready" ? "Try anyway" : src.availability === "ready" ? "Ready" : src.availability === "temporarily-unavailable" ? "Temporarily unavailable" : "Having trouble"}</small>
                     </span>
                     <span className={`source-dropdown__health source-dropdown__health--${runtime.tone}`}>{runtime.label}</span>
                   </button>

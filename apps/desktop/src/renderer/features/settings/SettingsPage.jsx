@@ -16,7 +16,6 @@ import {
   DEFAULT_CUSTOM_VARS,
 } from "../../shared/utils/appearance";
 import { SUBTITLE_LANGUAGES } from "../../shared/utils/subtitles";
-import { DEFAULT_INVIDIOUS_BASE } from "../../components/TrailerModal";
 import { RATING_COUNTRIES } from "../../shared/utils/ageRating";
 import { WarningIcon } from "../../components/common/Icons";
 import { checkForUpdates } from "../../shared/utils/updates";
@@ -218,54 +217,6 @@ export default function SettingsPage({
     setTimeout(() => setAgeSaved(false), 2000);
   };
 
-  // Invidious
-  const [invidiousBase, setInvidiousBase] = useState(
-    () => storage.get(STORAGE_KEYS.INVIDIOUS_BASE) || DEFAULT_INVIDIOUS_BASE,
-  );
-  const [invidiousStatus, setInvidiousStatus] = useState(null); // null | { ok: bool, msg: string }
-  const [invidiousChecking, setInvidiousChecking] = useState(false);
-  const [invidiousSaved, setInvidiousSaved] = useState(false);
-
-  const checkInvidious = async (baseUrl) => {
-    const clean = (baseUrl || "").trim().replace(/\/$/, "");
-    if (!clean) {
-      setInvidiousStatus({ ok: false, msg: "Please enter a URL first." });
-      return;
-    }
-    setInvidiousChecking(true);
-    setInvidiousStatus(null);
-    try {
-      const url = `${clean}/api/v1/stats`;
-      const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
-      if (res.ok) {
-        setInvidiousStatus({
-          ok: true,
-          msg: "Instance reachable and responding.",
-        });
-      } else {
-        setInvidiousStatus({
-          ok: false,
-          msg: `Server responded with status ${res.status}.`,
-        });
-      }
-    } catch (e) {
-      setInvidiousStatus({
-        ok: false,
-        msg: "Could not reach instance. Check the URL or try another.",
-      });
-    } finally {
-      setInvidiousChecking(false);
-    }
-  };
-
-  const saveInvidiousBase = () => {
-    const clean = (invidiousBase || "").trim().replace(/\/$/, "");
-    storage.set(STORAGE_KEYS.INVIDIOUS_BASE, clean || DEFAULT_INVIDIOUS_BASE);
-    setInvidiousBase(clean || DEFAULT_INVIDIOUS_BASE);
-    setInvidiousSaved(true);
-    setTimeout(() => setInvidiousSaved(false), 2000);
-  };
-
   // Storage sizes - null = loading, -1 = unavailable, ≥0 = real value
   const [sizes, setSizes] = useState({ cache: null, downloads: null });
 
@@ -408,14 +359,14 @@ export default function SettingsPage({
 
               <SettingsContent model={{
           ageLimit, ageSaved, apiKey, apiKeySource, autoplayNextDuration,
-          autoplayNextEnabled, autoplayNextLayout, checkInvidious, contentRef, downloadPath,
+          autoplayNextEnabled, autoplayNextLayout, contentRef, downloadPath,
           flash, handleClearCache, handleSavePath, handleSaveThreshold, introSkipMode,
-          invidiousBase, invidiousChecking, invidiousSaved, invidiousStatus, onChangeApiKey,
-          pickFolder, ratingCountry, resetHovered, saveAgeSettings, saveInvidiousBase, saved, secBackup,
+          onChangeApiKey,
+          pickFolder, ratingCountry, resetHovered, saveAgeSettings, saved, secBackup,
           secContent, secPerformance, secDownloads, secInterface, secAppearance, secMusicAppearance, secLibrary, secNotifications,
           secPlayback, secSystemIntegration, secStorage, secSubtitles, secUpdates, secGoogle, setAgeLimit,
           setAutoplayNextDuration, setAutoplayNextEnabled, setAutoplayNextLayout,
-          setDownloadPath, setIntroSkipMode, setInvidiousBase, setInvidiousStatus,
+          setDownloadPath, setIntroSkipMode,
           setRatingCountry, setResetHovered, setShowDeleteDlConfirm, setShowProgressConfirm,
           setShowResetConfirm, setWatchedThreshold, sizes, watchedThreshold,
         }} />

@@ -2,12 +2,21 @@
 
 import {
   ORION_RELEASE_INTEGRITY_MANIFEST_NAME_V1,
+  ORION_RELEASE_INTEGRITY_MANIFEST_NAME_V2,
+  ORION_PROVIDER_STATUS_MANIFEST_NAME_V1,
+  ORION_WINDOWS_RELEASE_SIGNER_SHA256_V1,
+  canOrionUpdaterInstallV2,
   compareOrionVersionsV1,
   findOrionReleaseIntegrityArtifactV1,
+  findOrionReleaseIntegrityArtifactV2,
   normalizeOrionReleaseChannelV1,
   normalizeOrionVersionV1,
   resolveOrionReleaseIntegrityManifestV1,
+  resolveOrionReleaseIntegrityEnvelopeV2,
+  resolveOrionProviderStatusV1,
   resolveOrionReleaseTruthV1,
+  installOrionProviderStatusV1,
+  verifyOrionReleaseSignatureV1,
 } from "@orion/shared/types";
 
 export const GITHUB_REPO = "OK-ALI/Orion";
@@ -99,6 +108,27 @@ async function fetchGithubReleases() {
   return releases;
 }
 
+async function refreshProviderStatus(release) {
+  const asset = release?.artifacts?.find(
+    (candidate) => candidate.name === ORION_PROVIDER_STATUS_MANIFEST_NAME_V1,
+  );
+  if (!asset) return false;
+  try {
+    const response = await fetch(asset.url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return false;
+    const payload = resolveOrionProviderStatusV1(
+      await response.json(),
+      verifyOrionReleaseSignatureV1,
+    );
+    return installOrionProviderStatusV1(payload);
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchOrionReleaseTruth(channel = "stable") {
   const releases = await fetchGithubReleases();
 
@@ -108,7 +138,68 @@ export async function fetchOrionReleaseTruth(channel = "stable") {
   );
 }
 
-async function fetchReleaseIntegrity(release) {
+async function fetchReleaseIntegrity(release, currentVersion = "0.0.0") {
+  const v2Asset = (release?.artifacts || []).find(
+    (artifact) => artifact.name === ORION_RELEASE_INTEGRITY_MANIFEST_NAME_V2,
+  );
+  if (v2Asset) {
+    try {
+      const response = await fetch(v2Asset.url, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) throw new Error("Release verification is unavailable.");
+      const envelope = await response.json();
+      const payload = resolveOrionReleaseIntegrityEnvelopeV2(
+        envelope,
+        verifyOrionReleaseSignatureV1,
+        release,
+      );
+      if (!payload) throw new Error("Release verification failed.");
+      if (
+        compareOrionVersionsV1(release.version, currentVersion) > 0
+        && !canOrionUpdaterInstallV2(payload, currentVersion)
+      ) {
+        return {
+          status: "incompatible",
+          reason: "Install an earlier Orion update first.",
+          manifestUrl: v2Asset.url,
+          manifest: null,
+          payload: null,
+          schemaVersion: 2,
+        };
+      }
+      return {
+        status: "ready",
+        reason: null,
+        manifestUrl: v2Asset.url,
+        manifest: null,
+        payload,
+        envelope,
+        schemaVersion: 2,
+      };
+    } catch {
+      return {
+        status: "invalid",
+        reason: "We couldn't verify this update. Nothing was installed.",
+        manifestUrl: v2Asset.url,
+        manifest: null,
+        payload: null,
+        schemaVersion: 2,
+      };
+    }
+  }
+
+  if (compareOrionVersionsV1(currentVersion, "3.2.0") >= 0) {
+    return {
+      status: "missing",
+      reason: "We couldn't verify this update. Nothing was installed.",
+      manifestUrl: null,
+      manifest: null,
+      payload: null,
+      schemaVersion: null,
+    };
+  }
   const manifestAsset = (release?.artifacts || []).find(
     (artifact) => artifact.name === ORION_RELEASE_INTEGRITY_MANIFEST_NAME_V1,
   );
@@ -119,6 +210,8 @@ async function fetchReleaseIntegrity(release) {
       reason: "This release does not publish Orion integrity metadata.",
       manifestUrl: null,
       manifest: null,
+      payload: null,
+      schemaVersion: 1,
     };
   }
 
@@ -134,6 +227,8 @@ async function fetchReleaseIntegrity(release) {
         reason: `Integrity manifest returned HTTP ${response.status}.`,
         manifestUrl: manifestAsset.url,
         manifest: null,
+        payload: null,
+        schemaVersion: 1,
       };
     }
 
@@ -148,6 +243,8 @@ async function fetchReleaseIntegrity(release) {
         reason: "Release integrity metadata is invalid or belongs to another release.",
         manifestUrl: manifestAsset.url,
         manifest: null,
+        payload: null,
+        schemaVersion: 1,
       };
     }
 
@@ -156,6 +253,8 @@ async function fetchReleaseIntegrity(release) {
       reason: null,
       manifestUrl: manifestAsset.url,
       manifest,
+      payload: null,
+      schemaVersion: 1,
     };
   } catch (error) {
     return {
@@ -163,8 +262,22 @@ async function fetchReleaseIntegrity(release) {
       reason: error?.message || "Unable to load release integrity metadata.",
       manifestUrl: manifestAsset.url,
       manifest: null,
+      payload: null,
+      schemaVersion: 1,
     };
   }
+}
+
+async function findCompatibleDesktopBridge(releases, channel, currentVersion, excludedTag) {
+  for (const rawRelease of releases) {
+    const truth = resolveOrionReleaseTruthV1([rawRelease], channel);
+    const candidate = truth.desktop.release;
+    if (!candidate || candidate.tag === excludedTag) continue;
+    if (compareOrionVersionsV1(candidate.version, currentVersion) <= 0) continue;
+    const integrity = await fetchReleaseIntegrity(candidate, currentVersion);
+    if (integrity.status === "ready") return { truth, release: candidate, integrity };
+  }
+  return null;
 }
 
 
@@ -180,7 +293,7 @@ function buildMobileInstallerIntegrity(release, apk, integrityResult) {
     };
   }
 
-  if (integrityResult.status !== "ready" || !integrityResult.manifest) {
+  if (integrityResult.status !== "ready" || (!integrityResult.manifest && !integrityResult.payload)) {
     return {
       ok: false,
       status: integrityResult.status,
@@ -191,10 +304,9 @@ function buildMobileInstallerIntegrity(release, apk, integrityResult) {
     };
   }
 
-  const entry = findOrionReleaseIntegrityArtifactV1(
-    integrityResult.manifest,
-    apk.name,
-  );
+  const entry = integrityResult.schemaVersion === 2
+    ? findOrionReleaseIntegrityArtifactV2(integrityResult.payload, apk.name, "android")
+    : findOrionReleaseIntegrityArtifactV1(integrityResult.manifest, apk.name);
 
   if (!entry) {
     return {
@@ -259,7 +371,7 @@ export async function fetchOrionMobileDistributionStatus(channel = "stable") {
     };
   }
 
-  const integrityResult = await fetchReleaseIntegrity(release);
+  const integrityResult = await fetchReleaseIntegrity(release, release.version);
   const integrity = buildMobileInstallerIntegrity(release, apk, integrityResult);
 
   return {
@@ -283,10 +395,9 @@ function buildIntegrityByFormat(release, integrityResult) {
     const format = formatForArtifact(artifact);
     if (!format) continue;
 
-    const entry = findOrionReleaseIntegrityArtifactV1(
-      integrityResult.manifest,
-      artifact.name,
-    );
+    const entry = integrityResult.schemaVersion === 2
+      ? findOrionReleaseIntegrityArtifactV2(integrityResult.payload, artifact.name, "windows")
+      : findOrionReleaseIntegrityArtifactV1(integrityResult.manifest, artifact.name);
 
     if (!entry) {
       byFormat[format] = {
@@ -304,10 +415,10 @@ function buildIntegrityByFormat(release, integrityResult) {
       continue;
     }
 
-    if (format === "exe" && !entry.signerSha256) {
+    if (format === "exe" && entry.signerSha256 !== ORION_WINDOWS_RELEASE_SIGNER_SHA256_V1) {
       byFormat[format] = {
         ok: false,
-        reason: "Windows automatic installation requires a published signer fingerprint.",
+        reason: "We couldn't verify this update. Nothing was installed.",
       };
       continue;
     }
@@ -337,11 +448,32 @@ export async function checkForUpdates(channel = "stable") {
 
   try {
     const currentVersion = await getCurrentVersion();
-    const releaseTruth = await fetchOrionReleaseTruth(requestedChannel);
-    const data = releaseTruth.desktop.release;
+    const updateTransaction = typeof window !== "undefined" && window.electron?.getUpdateTransaction
+      ? await window.electron.getUpdateTransaction().catch(() => null)
+      : null;
+    const releases = await fetchGithubReleases();
+    let releaseTruth = resolveOrionReleaseTruthV1(releases, requestedChannel);
+    let data = releaseTruth.desktop.release;
 
     if (!data) {
       throw new Error(`No ${releaseTruth.channel} Desktop release found`);
+    }
+
+    await refreshProviderStatus(data);
+
+    let integrityResult = await fetchReleaseIntegrity(data, currentVersion);
+    if (integrityResult.status === "incompatible") {
+      const bridge = await findCompatibleDesktopBridge(
+        releases,
+        requestedChannel,
+        currentVersion,
+        data.tag,
+      );
+      if (bridge) {
+        releaseTruth = bridge.truth;
+        data = bridge.release;
+        integrityResult = bridge.integrity;
+      }
     }
 
     const assets = {};
@@ -354,10 +486,9 @@ export async function checkForUpdates(channel = "stable") {
       assetNames[format] = artifact.name;
     }
 
-    const integrityResult = await fetchReleaseIntegrity(data);
-
     const integrity = {
       status: integrityResult.status,
+      envelope: integrityResult.envelope || null,
       reason: integrityResult.reason,
       manifestUrl: integrityResult.manifestUrl,
       byFormat: buildIntegrityByFormat(data, integrityResult),
@@ -373,6 +504,7 @@ export async function checkForUpdates(channel = "stable") {
       integrity,
       channel: releaseTruth.channel,
       releaseTruth,
+      updateTransaction,
       hasUpdate: compareOrionVersionsV1(data.version, currentVersion) > 0,
     };
 

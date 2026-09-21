@@ -151,15 +151,41 @@ function setupSession(playerSession, trailerSession, getMainWindow) {
     (details, callback) => stripHeaders(details, callback, false),
   );
 
-  // Trailer: block ads only (no media intercept needed)
-  trailerSession.webRequest.onBeforeRequest({ urls: BLOCKED_HOSTS }, (_, cb) =>
+  // Trailer keeps Orion's ad/tracker protection, but official YouTube/Vimeo
+  // embeds must retain their playback dependencies. Cinema's broader player
+  // partition can continue blocking these hosts independently.
+  const trailerBlockedHosts = BLOCKED_HOSTS.filter((pattern) => ![
+    "googleapis.com",
+    "gstatic.com",
+    "fonts.googleapis.com",
+    "fonts.gstatic.com",
+    "yt3.ggpht.com",
+  ].some((requiredHost) => pattern.includes(requiredHost)));
+  trailerSession.webRequest.onBeforeRequest({ urls: trailerBlockedHosts }, (_, cb) =>
     cb({ cancel: true }),
+  );
+
+  const trailerProviderUrls = [
+    "*://www.youtube.com/*",
+    "*://*.youtube.com/*",
+    "*://www.youtube-nocookie.com/*",
+    "*://*.youtube-nocookie.com/*",
+    "*://player.vimeo.com/*",
+    "*://*.vimeo.com/*",
+  ];
+  trailerSession.webRequest.onBeforeSendHeaders(
+    { urls: trailerProviderUrls },
+    (details, callback) => {
+      const requestHeaders = { ...(details.requestHeaders || {}) };
+      requestHeaders.Referer = "https://com.okali.orion/";
+      callback({ requestHeaders });
+    },
   );
 
   // Capture request origin for CORS spoofing and cache m3u8/vtt details
   const handleBeforeSendHeaders = (details, callback) => {
     const { url, requestHeaders = {} } = details;
-    
+
     let origin = requestHeaders["Origin"] || requestHeaders["origin"];
     if (!origin) {
       const ref = details.referrer || requestHeaders["Referer"] || requestHeaders["referer"];

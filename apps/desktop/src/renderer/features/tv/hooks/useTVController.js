@@ -15,8 +15,7 @@ import {
 import {
   tmdbFetch,
   imgUrl,
-  PLAYER_SOURCES,
-  getSourceUrl,
+  getDesktopSourceUrl,
   sourceSupportsProgress,
   sourceProgressViaFrames,
   sourceIsAsync,
@@ -27,7 +26,6 @@ import {
   buildAnilistSeasons,
   cleanAnilistDescription,
   isAnimeContent,
-  ANIME_DEFAULT_SOURCE,
   NON_ANIME_DEFAULT_SOURCE,
   NEEDS_INTERCEPT,
   getNextNonAsyncSource,
@@ -75,7 +73,9 @@ import { useTVEpisodeCatalog } from "./useTVEpisodeCatalog";
 import { useTVWebview } from "./useTVWebview";
 import { useTVEpisodeActions } from "./useTVEpisodeActions";
 import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
+import { createStartPlaybackIntent } from "../../player/services/playbackIntent";
 import { useTitleCredits } from "../../../shared/hooks/useTitleCredits";
+import { useDesktopTrailerDiscovery } from "../../trailers/hooks/useDesktopTrailerDiscovery";
 
 export function useTVController({
   item,
@@ -128,7 +128,6 @@ const [details, setDetails] = useState(null);
   const [downloadTarget, setDownloadTarget] = useState(null);
   const [downloadResolutionActive, setDownloadResolutionActive] = useState(false);
   const downloadResolutionPreflightRef = useRef(new Set());
-  const [trailerKey, setTrailerKey] = useState(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const [m3u8Url, setM3u8Url] = useState(null);
   const [m3u8Context, setM3u8Context] = useState(null);
@@ -346,23 +345,6 @@ const [details, setDetails] = useState(null);
 
   useEffect(() => {
     let mounted = true;
-    tmdbFetch(`/tv/${item.id}/videos`, apiKey)
-      .then((data) => {
-        if (!mounted) return;
-        const videos = data.results || [];
-        const trailer =
-          videos.find((v) => v.type === "Trailer" && v.site === "YouTube") ||
-          videos.find((v) => v.site === "YouTube");
-        if (trailer) setTrailerKey(trailer.key);
-      })
-      .catch(() => {});
-    return () => {
-      mounted = false;
-    };
-  }, [item.id, apiKey]);
-
-  useEffect(() => {
-    let mounted = true;
     fetchTVRating(item.id, apiKey, ratingCountry).then((r) => {
       if (mounted) setRating(r);
     });
@@ -469,7 +451,8 @@ const [details, setDetails] = useState(null);
     dubMode,
   ]);
 
-  // Fetch AniList metadata + auto-set anime source
+  // Fetch AniList metadata. Desktop source eligibility is handled by the
+  // qualified source policy, not by legacy display tags.
   useEffect(() => {
     let mounted = true;
     setAnilistData(null);
@@ -489,27 +472,40 @@ const [details, setDetails] = useState(null);
         .catch(() => {
           if (mounted) setAnilistLoading(false);
         });
-      // Switch to anime source if current source is not an anime source
-      const currentSrc = PLAYER_SOURCES.find((s) => s.id === playerSource);
-      if (!currentSrc?.tag) {
-        const saved = storage.get("playerSource");
-        const savedSrc = PLAYER_SOURCES.find((s) => s.id === saved);
-        setPlayerSource(savedSrc?.tag ? saved : ANIME_DEFAULT_SOURCE);
-      }
     } else {
       setAnilistLoading(false);
-      // Switch back to non-anime source if current source is anime-only
-      const currentSrc = PLAYER_SOURCES.find((s) => s.id === playerSource);
-      if (currentSrc?.tag) {
-        const saved = storage.get("playerSource");
-        const savedSrc = PLAYER_SOURCES.find((s) => s.id === saved);
-        setPlayerSource(!savedSrc?.tag ? saved : NON_ANIME_DEFAULT_SOURCE);
-      }
     }
     return () => {
       mounted = false;
     };
   }, [item.id, isAnime]);
+
+  useEffect(() => {
+    const normalized = normalizeSelectableSourceId(playerSource, { mediaType: "tv" });
+    if (normalized !== playerSource) setPlayerSource(normalized);
+    if (storage.get(STORAGE_KEYS.PLAYER_SOURCE) !== normalized) {
+      storage.set(STORAGE_KEYS.PLAYER_SOURCE, normalized);
+    }
+  }, [playerSource]);
+
+  const selectPlayerSource = useCallback((sourceId) => {
+    const next = normalizeSelectableSourceId(sourceId, { mediaType: "tv" });
+    if (next === playerSource) return false;
+    const progressKey = selectedEp
+      ? `tv_${item.id}_s${selectedSeason}e${selectedEp.episode_number}`
+      : null;
+    const verifiedPosition = Math.max(
+      0,
+      Number(lastKnownTimeRef.current)
+        || Number(progressKey ? storage.get("dlTime_" + progressKey) : 0)
+        || 0,
+    );
+    playbackIntentRef.current = createStartPlaybackIntent({ time: verifiedPosition });
+    initialSeekDoneRef.current = false;
+    setPlayerSource(next);
+    storage.set(STORAGE_KEYS.PLAYER_SOURCE, next);
+    return true;
+  }, [item.id, playerSource, selectedEp, selectedSeason]);
 
   // Resolve allmanga episode URL via main-process IPC (GraphQL, no CORS)
   useEffect(() => {
@@ -656,6 +652,14 @@ const [details, setDetails] = useState(null);
 
   const d = details || item;
   const title = d.name || d.title;
+  const { candidates: trailerCandidates, loading: trailerLoading } = useDesktopTrailerDiscovery({
+    mediaId: item.id,
+    mediaType: "tv",
+    apiKey,
+    details: d,
+    selectedSeason,
+    visible: showTrailer,
+  });
   const handleLibrarySave = useCallback(() => {
     onSave?.({ ...item, ...d, media_type: "tv" });
   }, [d, item, onSave]);
@@ -810,12 +814,19 @@ const [details, setDetails] = useState(null);
   useEffect(() => {
     if (!playing) return;
     if (!NEEDS_INTERCEPT.includes(playerSource)) return;
-    const enterH = window.electron?.onWebviewEnterFullscreen?.(() => {
+    const ownsActivePlayer = (owner) => {
+      if (owner?.partition && owner.partition !== "persist:player") return false;
+      const activeId = getReadyWebContentsId(webviewRef.current);
+      return !owner?.webContentsId || !activeId || owner.webContentsId === activeId;
+    };
+    const enterH = window.electron?.onWebviewEnterFullscreen?.((owner) => {
+      if (!ownsActivePlayer(owner)) return;
       // requestFullscreen() is rejected when Electron is already in fullscreen -> use css overlay
       setPlayerFullscreen(true);
       document.documentElement.setAttribute("data-player-fullscreen", "1");
     });
-    const leaveH = window.electron?.onWebviewLeaveFullscreen?.(() => {
+    const leaveH = window.electron?.onWebviewLeaveFullscreen?.((owner) => {
+      if (!ownsActivePlayer(owner)) return;
       setPlayerFullscreen(false);
       document.documentElement.removeAttribute("data-player-fullscreen");
       if (document.fullscreenElement) document.exitFullscreen?.();
@@ -861,7 +872,7 @@ const [details, setDetails] = useState(null);
     const episode = selectedEp.episode_number;
     const url = isAsync
       ? resolvedPlayerUrl
-      : getSourceUrl(playerSource, "tv", { tmdbId: item.id, imdbId: d?.external_ids?.imdb_id || d?.imdb_id }, selectedSeason, episode, getSourceResumeParams(playerSource, storage.get(`dlTime_tv_${item.id}_s${selectedSeason}e${episode}`)), playerAccentColor, playerSubLang);
+      : getDesktopSourceUrl(playerSource, "tv", { tmdbId: item.id, imdbId: d?.external_ids?.imdb_id || d?.imdb_id }, selectedSeason, episode, getSourceResumeParams(playerSource, storage.get(`dlTime_tv_${item.id}_s${selectedSeason}e${episode}`), "tv"), playerAccentColor, playerSubLang);
     if (!url) return;
     const progressKey = `tv_${item.id}_s${selectedSeason}e${episode}`;
     const playerRect = playerWrapRef.current?.getBoundingClientRect?.();
@@ -896,7 +907,7 @@ const [details, setDetails] = useState(null);
     ? !!watched?.[currentProgressKey]
     : false;
 
-    const viewModel = { ambientColor, autoplayCountdown, autoplayNextLayout, blockedAlltime, blockedSession, cancelAutoplay, closeDownload, currentEpDownload, currentEpWatched, currentProgressKey, currentSeasonEpisodes, d, displayEpisodeCount, displayGenres, displayOverview, displayScore, displaySeasonCount, downloadResolutionActive, downloadTarget, downloaderFolder, downloadsByEpisodeKey, dubMode, durationRef, epMenu, episodeGroupCurrentEpisodes, getBlockedDomains, handleFailoverNextSource, handleManualSkip, handleSetDownloaderFolder, interceptedSubs, isAnime, isAsync, isSaved, isSeasonWatched, item, loadingSeason, m3u8Context, m3u8Url, markSeasonUnwatched, markSeasonWatched, mediaName, menuPos, nextEp, onBack, onDownloadStarted, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave: handleLibrarySave, onSettings, pendingEpToPlay, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, prevEp, progress, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, seasonData, seasonMenu, seasonWatchedMap, seasons, selectedEp, selectedSeason, setDubMode, setEpMenu, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSeasonMenu, setSelectedSeason, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, skipPrompt, skipTimings, sourceHealth, sourceRef, startEpisodeDownload, startPlayingEp, startSeasonDownload, supportsProgress, switchingToMiniPlayerRef, title, trailerKey, voiceBoost, watched, webviewLoading, webviewRef };
+    const viewModel = { ambientColor, autoplayCountdown, autoplayNextLayout, blockedAlltime, blockedSession, cancelAutoplay, closeDownload, currentEpDownload, currentEpWatched, currentProgressKey, currentSeasonEpisodes, d, displayEpisodeCount, displayGenres, displayOverview, displayScore, displaySeasonCount, downloadResolutionActive, downloadTarget, downloaderFolder, downloadsByEpisodeKey, dubMode, durationRef, epMenu, episodeGroupCurrentEpisodes, getBlockedDomains, handleFailoverNextSource, handleManualSkip, handleSetDownloaderFolder, interceptedSubs, isAnime, isAsync, isSaved, isSeasonWatched, item, loadingSeason, m3u8Context, m3u8Url, markSeasonUnwatched, markSeasonWatched, mediaName, menuPos, nextEp, onBack, onDownloadStarted, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave: handleLibrarySave, onSettings, pendingEpToPlay, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, prevEp, progress, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, seasonData, seasonMenu, seasonWatchedMap, seasons, selectPlayerSource, selectedEp, selectedSeason, setDubMode, setEpMenu, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSeasonMenu, setSelectedSeason, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, skipPrompt, skipTimings, sourceHealth, sourceRef, startEpisodeDownload, startPlayingEp, startSeasonDownload, supportsProgress, switchingToMiniPlayerRef, title, trailerCandidates, trailerLoading, voiceBoost, watched, webviewLoading, webviewRef };
     viewModel.cast = cast;
     viewModel.keyCrew = keyCrew;
     viewModel.creditsLoading = creditsLoading;

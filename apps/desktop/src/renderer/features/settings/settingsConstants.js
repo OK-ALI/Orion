@@ -105,9 +105,10 @@ export const SECTION_NAV = [
     label: "Playback",
     icon: "▶",
     keywords: [
-      "invidious",
       "trailer",
       "youtube",
+      "vimeo",
+      "provider",
       "threshold",
       "watched",
       "playback",

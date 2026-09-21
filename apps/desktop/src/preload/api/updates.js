@@ -12,6 +12,8 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
   downloadAndInstallUpdate: (args) =>
     ipcRenderer.invoke("download-and-install-update", args),
   cancelUpdate: () => ipcRenderer.invoke("cancel-update"),
+  getUpdateTransaction: () => ipcRenderer.invoke("get-update-transaction"),
+  acknowledgeUpdateTransaction: () => ipcRenderer.invoke("acknowledge-update-transaction"),
   onUpdateProgress: (cb) => {
     const handler = (_, data) => cb(data);
     ipcRenderer.on("update-progress", handler);

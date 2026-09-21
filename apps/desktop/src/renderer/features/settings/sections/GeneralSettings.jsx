@@ -87,6 +87,15 @@ export function VersionSection() {
               </span>
             )}
             {result?.error && <span style={{ fontSize: 13, color: "var(--red)" }}>✕ {result.error}</span>}
+            {result?.updateTransaction?.phase === "complete" && (
+              <span style={{ fontSize: 13, color: "#48c774", fontWeight: 600 }}>Orion is up to date</span>
+            )}
+            {result?.updateTransaction?.phase === "failed" && (
+              <span style={{ fontSize: 13, color: "var(--red)", fontWeight: 600 }}>Orion couldn't finish the update. Try again.</span>
+            )}
+            {["downloading", "verifying", "installing"].includes(result?.updateTransaction?.phase) && (
+              <span style={{ fontSize: 13, color: "var(--text2)", fontWeight: 600 }}>An update is ready to continue.</span>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
             <SettingsSelect
@@ -103,7 +112,7 @@ export function VersionSection() {
             </button>
             {result && !result.error && result.hasUpdate && (
               <button className="btn btn-primary" onClick={() => setShowUpdateModal(true)}>
-                View Update
+                {result?.updateTransaction?.phase === "failed" ? "Try again" : "View Update"}
               </button>
             )}
           </div>
@@ -1229,4 +1238,3 @@ export function GoogleAuthSection({ secGoogle }) {
     </div>
   );
 }
-
