@@ -221,15 +221,16 @@ test("Smart Connect reports live transport and applies pointer commands", async 
     // Exercise real remote-hover ownership instead of attaching the focus class
     // to the virtual cursor. Production only assigns spatial-remote-focused to
     // interactive UI elements beneath the remote pointer.
-    await page.evaluate(() => {
+    const hoverPoint = { x: 0.62, y: 0.58 };
+    await page.evaluate(({ x, y }) => {
       const target = document.createElement("button");
       target.id = "e2e-smartconnect-hover-target";
       target.type = "button";
       target.textContent = "Smart Connect E2E hover target";
       Object.assign(target.style, {
         position: "fixed",
-        left: "calc(30vw - 30px)",
-        top: "calc(45vh - 30px)",
+        left: `calc(${x * 100}vw - 30px)`,
+        top: `calc(${y * 100}vh - 30px)`,
         width: "60px",
         height: "60px",
         zIndex: "2147483646",
@@ -237,9 +238,19 @@ test("Smart Connect reports live transport and applies pointer commands", async 
         pointerEvents: "auto",
       });
       document.body.appendChild(target);
-    });
+    }, hoverPoint);
 
     const hoverTarget = page.locator("#e2e-smartconnect-hover-target");
+    await expect.poll(
+      () => page.evaluate(
+        ({ x, y }) => document.elementFromPoint(
+          Math.round(window.innerWidth * x),
+          Math.round(window.innerHeight * y),
+        )?.id || "",
+        hoverPoint,
+      ),
+    ).toBe("e2e-smartconnect-hover-target");
+
     const hoverCommandId = "pointer-hover-test";
     socket.send(JSON.stringify({
       version: 3,
@@ -252,7 +263,7 @@ test("Smart Connect reports live transport and applies pointer commands", async 
         id: hoverCommandId,
         sequence: 4,
         action: "cursor_move",
-        pointer: { x: 0.3, y: 0.45 },
+        pointer: hoverPoint,
         sentAt: Date.now(),
       },
     }));

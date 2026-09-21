@@ -243,7 +243,10 @@ test("offline Home keeps local actions, exact local playback and theme-aware key
     expect(await video.evaluate((element, original) => element === original, activePlayer)).toBe(true);
     expect(await video.getAttribute("src")).toBe(originalGrant);
     expect(await video.evaluate((element) => element.currentTime)).toBeGreaterThanOrEqual(position);
-    expect(await video.evaluate((element) => element.paused)).toBe(false);
+    await expect.poll(
+      () => video.evaluate((element) => element.paused),
+      { timeout: 5_000 },
+    ).toBe(false);
     expect(await page.evaluate(() => window.__homeBootId)).toBe(recoveryBoot);
     expect(await page.evaluate(() => window.__homeRecoveries)).toEqual([1]);
     await expect(page.getByRole("status").filter({ hasText: "Connection restored" })).toBeVisible();

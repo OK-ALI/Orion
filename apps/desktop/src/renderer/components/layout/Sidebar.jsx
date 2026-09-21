@@ -156,6 +156,10 @@ export default function Sidebar({
   }, [world]);
 
   useEffect(() => {
+    if (!pinned) setPeeking(false);
+  }, [currentPage, pinned]);
+
+  useEffect(() => {
     document.documentElement.style.setProperty(
       "--sidebar",
       pinned ? "var(--sidebar-expanded-width)" : "var(--sidebar-rail-width)",

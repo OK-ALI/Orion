@@ -25,6 +25,7 @@ export default function LocalPlayer({
   const videoRef = useRef(null);
   const lastSavedRef = useRef(0);
   const playbackEvidenceRef = useRef({ lastTime: null, advances: 0, ready: false });
+  const networkRecoveryPlaybackRef = useRef({ shouldResume: false, expiresAt: 0 });
   const [media, setMedia] = useState(null);
   const [error, setError] = useState("");
   const [ambientColors, setAmbientColors] = useState(["#6d3bd1", "#168aa4"]);
@@ -43,6 +44,43 @@ export default function LocalPlayer({
   useEffect(() => {
     playbackEvidenceRef.current = { lastTime: null, advances: 0, ready: false };
   }, [key]);
+
+  useEffect(() => {
+    const capturePlaybackBeforeRecovery = () => {
+      const video = videoRef.current;
+      networkRecoveryPlaybackRef.current = {
+        shouldResume: Boolean(video && !video.paused && !video.ended),
+        expiresAt: Date.now() + 15_000,
+      };
+    };
+
+    const restorePlaybackAfterRecovery = () => {
+      const intent = networkRecoveryPlaybackRef.current;
+      networkRecoveryPlaybackRef.current = { shouldResume: false, expiresAt: 0 };
+
+      const video = videoRef.current;
+      if (
+        !intent.shouldResume ||
+        intent.expiresAt < Date.now() ||
+        !video ||
+        !video.isConnected ||
+        video.ended ||
+        !video.paused
+      ) {
+        return;
+      }
+
+      video.play().catch(() => {});
+    };
+
+    window.addEventListener("online", capturePlaybackBeforeRecovery);
+    window.addEventListener("orion:network-restored", restorePlaybackAfterRecovery);
+    return () => {
+      window.removeEventListener("online", capturePlaybackBeforeRecovery);
+      window.removeEventListener("orion:network-restored", restorePlaybackAfterRecovery);
+      networkRecoveryPlaybackRef.current = { shouldResume: false, expiresAt: 0 };
+    };
+  }, [media?.url]);
 
 
   useEffect(() => {

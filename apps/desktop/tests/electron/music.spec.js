@@ -244,6 +244,7 @@ test("Music Planet provider host and C4 UX preserve exact local context", async 
     // exact previous Music viewport rather than resetting the single-surface home.
     await page.getByRole("button", { name: "Open Music settings" }).click();
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Music Planet sidebar" })).not.toHaveClass(/peeking/);
 
     const projectorSilver = page.getByRole("button", { name: "Use Projector Silver theme" });
     await expect(projectorSilver).toBeVisible();
