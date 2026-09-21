@@ -79,29 +79,33 @@ test("v3.2 Desktop release packages Orion's managed Google Desktop OAuth pair", 
 
 test("failed Google refresh converges renderer and persisted account state", () => {
   const auth = read("apps/desktop/src/main/ipc/googleAuthIpc.js");
+  const session = read("apps/desktop/src/main/ipc/googleAuthSession.js");
 
   assert.match(
     auth,
-    /BrowserWindow/,
-  );
-  assert.match(
-    auth,
-    /function clearGoogleSessionAndReload\(\)/,
-  );
-  assert.match(
-    auth,
-    /"google_access_token"[\s\S]*"google_refresh_token"[\s\S]*"google_profile"/,
-  );
-  assert.match(
-    auth,
-    /BrowserWindow\.getAllWindows\(\)/,
-  );
-  assert.match(
-    auth,
-    /window\.webContents\.reload\(\)/,
+    /require\("\.\/googleAuthSession"\)/,
   );
   assert.match(
     auth,
     /catch \(err\) \{\s*clearGoogleSessionAndReload\(\);\s*throw new Error\("Google connection expired\. Please sign in again\."\);/,
+  );
+
+  assert.match(
+    session,
+    /BrowserWindow\.getAllWindows\(\)/,
+  );
+  assert.match(
+    session,
+    /"google_access_token"[\s\S]*"google_refresh_token"[\s\S]*"google_profile"/,
+  );
+  assert.match(
+    session,
+    /window\.webContents\.reload\(\)/,
+  );
+
+  assert.doesNotMatch(
+    auth,
+    /BrowserWindow\.getAllWindows\(\)/,
+    "renderer reload ownership should stay outside the already-large auth IPC module",
   );
 });

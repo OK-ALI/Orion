@@ -1,9 +1,10 @@
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, ipcMain, shell } = require("electron");
 const http = require("http");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 const { secureStoreGet, secureStoreSet } = require("./storageIpc");
+const { clearGoogleSessionAndReload } = require("./googleAuthSession");
 const { prepareLegacySyncUploadPayload } = require("./legacyCloudSyncFence");
 
 // Scopes: profile, email, openid, hidden appData folder for syncing, and drive.file for media locker
@@ -169,9 +170,7 @@ function getEnvValue(name) {
 }
 
 function getGoogleConfig() {
-  // Orion ships one centrally managed Google Desktop OAuth client. The
-  // Google-issued Desktop credential participates in token exchange while PKCE
-  // and state protect the authorization flow.
+  // Orion's managed Desktop OAuth pair uses PKCE + state for authorization.
   const storedId = secureStoreGet("google_client_id");
   const storedSecret = secureStoreGet("google_client_secret");
   const bundledId = getEnvValue("ORION_GOOGLE_CLIENT_ID");
@@ -195,30 +194,6 @@ function createPkcePair() {
 
 function createOauthState() {
   return crypto.randomBytes(24).toString("base64url");
-}
-
-function clearGoogleSessionAndReload() {
-  [
-    "google_access_token",
-    "google_refresh_token",
-    "google_profile",
-  ].forEach((key) => secureStoreSet(key, null));
-
-  // A failed refresh invalidates the account state owned by the main process.
-  // Reload every Orion renderer so the title bar, Settings and startup gate all
-  // re-read the same cleared account state instead of presenting stale profile
-  // data until the next manual restart.
-  setTimeout(() => {
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (
-        !window.isDestroyed() &&
-        window.webContents &&
-        !window.webContents.isDestroyed()
-      ) {
-        window.webContents.reload();
-      }
-    }
-  }, 0);
 }
 
 async function fetchUserProfile(accessToken) {
