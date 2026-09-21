@@ -36,6 +36,8 @@ test("Orion keeps Windows signing local and exact release assets private until q
   const workflow = fs.readFileSync(path.join(repoRoot, ".github/workflows/release.yml"), "utf8");
   const prepare = fs.readFileSync(path.join(repoRoot, "scripts/prepare-protected-release-local.ps1"), "utf8");
   const syscontrolBuilder = fs.readFileSync(path.join(desktopRoot, "scripts/build-syscontrol.js"), "utf8");
+  const verifyArtifacts = fs.readFileSync(path.join(repoRoot, "scripts/verify-release-artifacts.ps1"), "utf8");
+  const releaseManifests = fs.readFileSync(path.join(repoRoot, "scripts/create-release-manifests.cjs"), "utf8");
   const draft = fs.readFileSync(path.join(repoRoot, "scripts/create-private-release-draft-local.ps1"), "utf8");
   const qualification = readJson(path.join(repoRoot, "config/release-qualification-3.2.0.json"));
   const previewJob = workflow.indexOf("\n  publish-preview:");
@@ -56,6 +58,12 @@ test("Orion keeps Windows signing local and exact release assets private until q
   assert.match(syscontrolBuilder, /Set-AuthenticodeSignature/);
   assert.match(syscontrolBuilder, /Get-AuthenticodeSignature/);
   assert.match(syscontrolBuilder, /orion-sign-syscontrol-/);
+  assert.match(verifyArtifacts, /UTF8Encoding -ArgumentList \$false/);
+  assert.match(verifyArtifacts, /Write-Utf8NoBom/);
+  assert.doesNotMatch(verifyArtifacts, /Set-Content[^\n]*orion-artifact-verification\.json/);
+  assert.match(releaseManifests, /function readJson\(filePath\)/);
+  assert.match(releaseManifests, /replace\(\/\^\\uFEFF\/,[ ]*""\)/);
+  assert.match(releaseManifests, /const verification = readJson\(verificationPath\)/);
   assert.match(prepare, /orion-local-candidate-evidence\.json/);
   assert.match(draft, /--draft/);
   assert.match(draft, /Refusing to replace or mutate existing release assets/);

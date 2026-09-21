@@ -24,6 +24,11 @@ function Get-CertificateSha256($Certificate) {
   }
 }
 
+function Write-Utf8NoBom([string]$Path, [string]$Content) {
+  $utf8 = New-Object System.Text.UTF8Encoding -ArgumentList $false
+  [IO.File]::WriteAllText($Path, $Content, $utf8)
+}
+
 function Assert-WindowsSignature([string]$Path) {
   $signature = Get-AuthenticodeSignature -LiteralPath $Path
   if ($signature.Status -ne "Valid" -or -not $signature.SignerCertificate) {
@@ -110,5 +115,5 @@ $report = [ordered]@{
     [ordered]@{ name = $map.artifacts.androidInstaller; size = (Get-Item $apk).Length; sha256 = Get-Sha256 $apk; signerSha256 = $androidSigner; productId = "com.okali.orion"; buildNumber = [int]$map.androidVersionCode }
   )
 }
-$report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stagePath "orion-artifact-verification.json") -Encoding UTF8
+Write-Utf8NoBom (Join-Path $stagePath "orion-artifact-verification.json") (($report | ConvertTo-Json -Depth 5) + "`n")
 Write-Host "Verified Orion $($map.productVersion) immutable release artifacts."

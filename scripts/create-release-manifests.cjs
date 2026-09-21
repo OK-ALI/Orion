@@ -4,7 +4,13 @@ const os = require("node:os");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const map = JSON.parse(fs.readFileSync(path.join(root, "config", "orion-release-map-v1.json"), "utf8"));
+
+function readJson(filePath) {
+  const text = fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, "");
+  return JSON.parse(text);
+}
+
+const map = readJson(path.join(root, "config", "orion-release-map-v1.json"));
 const output = path.resolve(process.argv[2] || path.join(root, "release", `publish-${map.productVersion}`));
 const privateKeyPath = process.env.ORION_RELEASE_ED25519_PRIVATE_KEY
   || path.join(os.homedir(), ".orion", "signing", "orion-release-ed25519-private.pem");
@@ -16,7 +22,7 @@ const verificationPath = path.join(output, "orion-artifact-verification.json");
 if (!fs.existsSync(verificationPath)) {
   throw new Error("Verified artifact report is required before release manifests can be created.");
 }
-const verification = JSON.parse(fs.readFileSync(verificationPath, "utf8"));
+const verification = readJson(verificationPath);
 if (verification.productVersion !== map.productVersion || !Array.isArray(verification.artifacts)) {
   throw new Error("Verified artifact report does not match the release map.");
 }
