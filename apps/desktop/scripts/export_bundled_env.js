@@ -84,6 +84,11 @@ app.whenReady().then(() => {
         sourceEnv.ORION_GOOGLE_CLIENT_ID ||
         decryptStoredValue(store, "google_client_id"),
     );
+    const googleClientSecret = cleanValue(
+      process.env.ORION_GOOGLE_CLIENT_SECRET ||
+        sourceEnv.ORION_GOOGLE_CLIENT_SECRET ||
+        decryptStoredValue(store, "google_client_secret"),
+    );
 
     const wyzieApiKey = cleanValue(decryptStoredValue(store, "wyzieApiKey"));
     const subdlApiKey = cleanValue(decryptStoredValue(store, "subdlApiKey"));
@@ -93,6 +98,11 @@ app.whenReady().then(() => {
     if (!googleClientId.endsWith(".apps.googleusercontent.com")) {
       throw new Error("The managed Google OAuth client ID has an unexpected format");
     }
+    validateSingleLine(
+      "The managed Google Desktop OAuth client secret",
+      googleClientSecret,
+      8,
+    );
 
     if (!releaseMode) {
       if (wyzieApiKey && (wyzieApiKey.length < 12 || /[\r\n]/.test(wyzieApiKey))) {
@@ -109,11 +119,13 @@ app.whenReady().then(() => {
         : "# Orion local development configuration. Keep this file private.",
       `VITE_TMDB_READ_TOKEN=${token}`,
       `ORION_GOOGLE_CLIENT_ID=${googleClientId}`,
+      `ORION_GOOGLE_CLIENT_SECRET=${googleClientSecret}`,
     ];
 
-    // Release mode intentionally emits only public application configuration.
-    // Never copy a Google client secret or private provider keys into a public
-    // Desktop package even if the source .env contains them.
+    // Orion's installed Desktop OAuth client uses PKCE and a Google-issued
+    // Desktop client credential during token exchange. Installed applications
+    // cannot treat that credential as a server-side secret. Private provider
+    // keys remain excluded from public release packages.
     if (!releaseMode && wyzieApiKey) {
       lines.push(`ORION_WYZIE_API_KEY=${wyzieApiKey}`);
     }
@@ -129,7 +141,7 @@ app.whenReady().then(() => {
 
     console.log(
       releaseMode
-        ? "Created sanitized public release .env with Orion-managed TMDB and Google OAuth client configuration."
+        ? "Created sanitized public release .env with Orion-managed TMDB and Google Desktop OAuth configuration."
         : `Created private .env (TMDB: ${token.length} characters; Google OAuth client: configured; Wyzie: ${wyzieApiKey ? `${wyzieApiKey.length} characters` : "not found"}; SubDL: ${subdlApiKey ? `${subdlApiKey.length} characters` : "not found"}).`,
     );
   } catch (error) {

@@ -181,16 +181,19 @@ try {
 
   $tmdbToken = Get-EnvFileValue $desktopEnv "VITE_TMDB_READ_TOKEN"
   $googleClientId = Get-EnvFileValue $desktopEnv "ORION_GOOGLE_CLIENT_ID"
+  $googleClientSecret = Get-EnvFileValue $desktopEnv "ORION_GOOGLE_CLIENT_SECRET"
   if (-not $tmdbToken -or $tmdbToken.Length -lt 20 -or $tmdbToken -match "[\r\n]") {
     throw "The release environment is missing Orion's managed TMDB configuration."
   }
   if (-not $googleClientId -or $googleClientId.Length -lt 20 -or -not $googleClientId.EndsWith(".apps.googleusercontent.com")) {
     throw "The release environment is missing Orion's managed Google Desktop OAuth client ID."
   }
+  if (-not $googleClientSecret -or $googleClientSecret.Length -lt 8 -or $googleClientSecret -match "[\r\n]") {
+    throw "The release environment is missing Orion's managed Google Desktop OAuth client secret."
+  }
 
   $releaseEnvText = Get-Content -LiteralPath $desktopEnv -Raw
   $forbiddenReleaseKeys = @(
-    "ORION_GOOGLE_CLIENT_SECRET",
     "ORION_WYZIE_API_KEY",
     "ORION_SUBDL_API_KEY"
   )
@@ -203,16 +206,17 @@ try {
   Write-Host "Public release configuration verified:"
   Write-Host "  Source: explicit ignored Desktop .env (values not printed)"
   Write-Host "  TMDB: Orion-managed"
-  Write-Host "  Google OAuth client ID: Orion-managed (PKCE)"
-  Write-Host "  Google client secret: NOT BUNDLED"
+  Write-Host "  Google OAuth client ID: Orion-managed"
+  Write-Host "  Google Desktop OAuth credential: BUNDLED WITH PKCE"
   Write-Host "  Private provider API keys: NOT BUNDLED"
 
   Invoke-Checked "npm.cmd" @("run", "release:check-map")
   Invoke-Checked "npm.cmd" @("run", "check", "--workspace", "@orion/desktop")
 
   # The production Vite build created by `check` now contains the bundled TMDB
-  # configuration. The Electron main process reads the managed Google client ID
-  # from this same local .env. Fresh-profile E2E must prove no developer prompts.
+  # configuration. The Electron main process reads the managed Google Desktop
+  # OAuth pair from this same local .env. Fresh-profile E2E must prove no
+  # developer prompts.
   Invoke-Checked "npm.cmd" @("run", "test:electron", "--workspace", "@orion/desktop")
 
   Remove-Item -LiteralPath $desktopRelease -Recurse -Force -ErrorAction SilentlyContinue

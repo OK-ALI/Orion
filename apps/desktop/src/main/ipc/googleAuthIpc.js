@@ -1,4 +1,4 @@
-const { app, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const http = require("http");
 const path = require("path");
 const fs = require("fs");
@@ -169,16 +169,15 @@ function getEnvValue(name) {
 }
 
 function getGoogleConfig() {
-  // Orion ships one Desktop OAuth client. A desktop application is a public
-  // client, so authorization uses PKCE rather than treating a bundled secret
-  // as proof of the application's identity.
+  // Orion ships one centrally managed Google Desktop OAuth client. The
+  // Google-issued Desktop credential participates in token exchange while PKCE
+  // and state protect the authorization flow.
   const storedId = secureStoreGet("google_client_id");
   const storedSecret = secureStoreGet("google_client_secret");
   const bundledId = getEnvValue("ORION_GOOGLE_CLIENT_ID");
+  const bundledSecret = getEnvValue("ORION_GOOGLE_CLIENT_SECRET");
   const clientId = bundledId || storedId;
-  // Desktop OAuth clients authenticate with PKCE. Never bundle a client secret;
-  // retain only a legacy locally-saved secret for older user-created clients.
-  const clientSecret = storedSecret || "";
+  const clientSecret = bundledSecret || storedSecret || "";
 
   return {
     clientId,
@@ -196,6 +195,30 @@ function createPkcePair() {
 
 function createOauthState() {
   return crypto.randomBytes(24).toString("base64url");
+}
+
+function clearGoogleSessionAndReload() {
+  [
+    "google_access_token",
+    "google_refresh_token",
+    "google_profile",
+  ].forEach((key) => secureStoreSet(key, null));
+
+  // A failed refresh invalidates the account state owned by the main process.
+  // Reload every Orion renderer so the title bar, Settings and startup gate all
+  // re-read the same cleared account state instead of presenting stale profile
+  // data until the next manual restart.
+  setTimeout(() => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (
+        !window.isDestroyed() &&
+        window.webContents &&
+        !window.webContents.isDestroyed()
+      ) {
+        window.webContents.reload();
+      }
+    }
+  }, 0);
 }
 
 async function fetchUserProfile(accessToken) {
@@ -255,7 +278,7 @@ async function googleDriveRequest(url, options = {}) {
         reqOptions.headers["Authorization"] = `Bearer ${newAccessToken}`;
         res = await fetch(url, reqOptions);
       } catch (err) {
-        ["google_access_token", "google_refresh_token", "google_profile"].forEach(k => secureStoreSet(k, null));
+        clearGoogleSessionAndReload();
         throw new Error("Google connection expired. Please sign in again.");
       }
     } else {
