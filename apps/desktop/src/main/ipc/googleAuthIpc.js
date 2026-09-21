@@ -175,9 +175,10 @@ function getGoogleConfig() {
   const storedId = secureStoreGet("google_client_id");
   const storedSecret = secureStoreGet("google_client_secret");
   const bundledId = getEnvValue("ORION_GOOGLE_CLIENT_ID");
-  const bundledSecret = getEnvValue("ORION_GOOGLE_CLIENT_SECRET");
   const clientId = bundledId || storedId;
-  const clientSecret = bundledSecret || storedSecret || "";
+  // Desktop OAuth clients authenticate with PKCE. Never bundle a client secret;
+  // retain only a legacy locally-saved secret for older user-created clients.
+  const clientSecret = storedSecret || "";
 
   return {
     clientId,

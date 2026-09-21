@@ -641,6 +641,7 @@ export function BackupRestoreSection({ onRestored }) {
 }
 
 export function GoogleAuthSection({ secGoogle }) {
+  const allowDeveloperConfig = import.meta.env.DEV;
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [configSource, setConfigSource] = useState("missing");
@@ -1120,7 +1121,7 @@ export function GoogleAuthSection({ secGoogle }) {
                 <span className="badge badge-secondary" style={{ textTransform: "capitalize" }}>
                   Google connection ready
                 </span>
-                {configSource === "user" && (
+                {allowDeveloperConfig && configSource === "legacy-user" && (
                   <button className="btn btn-ghost" style={{ padding: "4px 8px", fontSize: 11 }} onClick={handleClearConfig}>
                     Reset setup
                   </button>
@@ -1154,12 +1155,14 @@ export function GoogleAuthSection({ secGoogle }) {
             </div>
           ) : (
             <div style={{ color: "var(--text3)", fontSize: 13, background: "rgba(229,9,20,0.06)", border: "1px solid rgba(229,9,20,0.15)", borderRadius: 8, padding: "12px 16px", marginBottom: 20 }}>
-              Google sign-in needs setup on this Desktop. Enter the Google connection details below.
+              {allowDeveloperConfig
+                ? "Google sign-in needs local development setup on this Desktop."
+                : "Google sign-in is unavailable because this build is missing Orion's managed connection. Public releases should not require developer credentials."}
             </div>
           )}
 
           {/* Configuration Fields */}
-          {configSource !== "env" && (
+          {allowDeveloperConfig && configSource !== "env" && (
             <div
               style={{
                 background: "var(--surface2)",

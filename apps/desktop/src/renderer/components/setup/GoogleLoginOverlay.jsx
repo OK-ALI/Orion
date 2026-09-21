@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 
 export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
+  const allowDeveloperConfig = import.meta.env.DEV;
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [configSource, setConfigSource] = useState("missing");
@@ -200,9 +201,11 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
                 </>
               )}
             </button>
-            <div style={{ marginTop: 12, fontSize: 11, color: "var(--text3)" }}>
-              Configured via {configSource === "env" ? "environment" : "saved keys"}.
-            </div>
+            {allowDeveloperConfig && (
+              <div style={{ marginTop: 12, fontSize: 11, color: "var(--text3)" }}>
+                Configured via {configSource === "env" ? "environment" : "saved keys"}.
+              </div>
+            )}
           </div>
         ) : (
           <div
@@ -218,7 +221,10 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
               textAlign: "left",
             }}
           >
-            <strong>OAuth Configuration Required:</strong> To sign in, please expand the panel below and enter your Google OAuth credentials first.
+            <strong>Google sign-in is unavailable in this build.</strong>{" "}
+            {allowDeveloperConfig
+              ? "Configure the local development OAuth client below."
+              : "Orion's managed Google connection is missing. You can continue offline; public releases should not require developer credentials."}
           </div>
         )}
 
@@ -256,7 +262,7 @@ export default function GoogleLoginOverlay({ onLoginSuccess, onSkip }) {
         </div>
 
         {/* Configuration toggle / drawer */}
-        {configSource !== "env" && (
+        {allowDeveloperConfig && configSource !== "env" && (
           <div style={{ textAlign: "left", marginTop: 8 }}>
             <button
               className="btn btn-ghost"

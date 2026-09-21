@@ -19,8 +19,19 @@ test("Settings, Downloads, Discover, and Library render without page errors", as
   page.on("pageerror", (error) => errors.push(error.message));
 
   await page.waitForTimeout(1500);
+
+  // Public release contract: a fresh machine gets Orion-managed configuration,
+  // never end-user TMDB or Google developer credential prompts.
+  await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+  await expect(page.getByText("Developer OAuth Credentials", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("Google connection setup", { exact: true })).toHaveCount(0);
+
   const skipSignIn = page.getByRole("button", { name: "Skip / Use Offline" });
   if (await skipSignIn.count()) await skipSignIn.click();
+
+  await expect(page.getByText("TMDB API Read Access Token", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("Orion metadata unavailable", { exact: false })).toHaveCount(0);
+
   const skipWhatsNew = page.getByRole("button", { name: "Continue to Cinema" });
   if (await skipWhatsNew.count()) await skipWhatsNew.click();
   await page.evaluate(() => {
@@ -29,6 +40,8 @@ test("Settings, Downloads, Discover, and Library render without page errors", as
       ?.click();
   });
   await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+  await expect(page.getByText("Google connection setup", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Change API Token" })).toHaveCount(0);
 
   await page.evaluate(() => {
     [...document.querySelectorAll(".sidebar-item")]

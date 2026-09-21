@@ -1,10 +1,11 @@
 // ── Orion — Setup Screen ──────────────────────────────────────────────────────
-// Shown on first launch to collect the user's TMDB API key.
+// Development fallback for missing TMDB configuration; public releases use Orion-managed config.
 
 import { useState, useCallback } from "react";
 import { KeyIcon } from "../common/Icons";
 
 export default function SetupScreen({ onComplete, onSave, onSkip }) {
+  const allowManualToken = import.meta.env.DEV;
   const [apiKey, setApiKey] = useState("");
   const [validating, setValidating] = useState(false);
   const [error, setError] = useState(null);
@@ -81,62 +82,83 @@ export default function SetupScreen({ onComplete, onSave, onSkip }) {
         </div>
 
         <h2 className="setup-heading">Welcome to Orion</h2>
-        <p className="setup-desc">
-          To get started, enter your <strong>TMDB API Read Access Token</strong>. 
-          This is used to fetch movie/TV metadata, posters, and search results. 
-          It's completely free — no credit card needed.
-        </p>
+        {allowManualToken ? (
+          <>
+            <p className="setup-desc">
+              Local development needs a <strong>TMDB API Read Access Token</strong>.
+              Public Orion releases include Orion-managed metadata configuration automatically.
+            </p>
 
-        <div className="setup-input-wrap">
-          <input
-            className="setup-input"
-            type="password"
-            placeholder="eyJhbGciOiJIUz..."
-            value={apiKey}
-            onChange={(e) => {
-              setApiKey(e.target.value);
-              setError(null);
-            }}
-            autoFocus
-            spellCheck={false}
-            autoComplete="off"
-          />
-          <button
-            className="btn btn-primary"
-            type="submit"
-            disabled={validating || !apiKey.trim()}
-            style={{ padding: "8px 20px" }}
-          >
-            {validating ? (
-              <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-            ) : (
-              <>
-                <KeyIcon size={14} /> Validate
-              </>
+            <div className="setup-input-wrap">
+              <input
+                className="setup-input"
+                type="password"
+                placeholder="eyJhbGciOiJIUz..."
+                value={apiKey}
+                onChange={(e) => {
+                  setApiKey(e.target.value);
+                  setError(null);
+                }}
+                autoFocus
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <button
+                className="btn btn-primary"
+                type="submit"
+                disabled={validating || !apiKey.trim()}
+                style={{ padding: "8px 20px" }}
+              >
+                {validating ? (
+                  <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                ) : (
+                  <>
+                    <KeyIcon size={14} /> Validate
+                  </>
+                )}
+              </button>
+            </div>
+
+            {error && <div className="setup-error">⚠ {error}</div>}
+
+            <p className="setup-link">
+              <a
+                onClick={() => {
+                  const url = "https://www.themoviedb.org/settings/api";
+                  if (window.electron?.openExternal) window.electron.openExternal(url);
+                  else window.open(url, "_blank");
+                }}
+              >
+                Open TMDB developer settings →
+              </a>
+              {onSkip && (
+                <>
+                  {" · "}
+                  <a onClick={onSkip}>Skip for now</a>
+                </>
+              )}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="setup-desc">
+              This build is missing Orion's managed metadata configuration.
+              Official releases should never ask you for a TMDB key. You can continue
+              offline, but online catalog features will remain unavailable until Orion
+              is installed from a correctly configured release.
+            </p>
+            {onSkip && (
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={onSkip}
+                style={{ padding: "9px 20px" }}
+              >
+                Continue Offline
+              </button>
             )}
-          </button>
-        </div>
-
-        {error && <div className="setup-error">⚠ {error}</div>}
-
-        <p className="setup-link">
-          Don't have a key?{" "}
-          <a
-            onClick={() => {
-              const url = "https://www.themoviedb.org/settings/api";
-              if (window.electron?.openExternal) window.electron.openExternal(url);
-              else window.open(url, "_blank");
-            }}
-          >
-            Get one free at themoviedb.org →
-          </a>
-          {onSkip && (
-            <>
-              {" · "}
-              <a onClick={onSkip}>Skip for now</a>
-            </>
-          )}
-        </p>
+          </>
+        )}
       </form>
     </div>
   );

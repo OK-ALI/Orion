@@ -11,6 +11,7 @@ import { SectionGroupHeader, Divider, SystemCheckSection, DownloaderToolsSection
 export default function GeneralSettingsGroup({
   model
 }) {
+  const allowDeveloperConfig = import.meta.env.DEV;
   const {
     apiKey,
     apiKeySource,
@@ -22,7 +23,7 @@ export default function GeneralSettingsGroup({
   return <div ref={secUpdates} style={{
     scrollMarginTop: 80
   }}>
-          <SectionGroupHeader title="General" subtitle="App version, updates, API credentials and Languages" />
+          <SectionGroupHeader title="General" subtitle="App version, updates, account and languages" />
 
           {/* Version & Updates */}
           <VersionSection />
@@ -38,20 +39,20 @@ export default function GeneralSettingsGroup({
 
           <Divider />
 
-          {/* TMDB API Token */}
+          {/* Metadata service */}
           <div style={{
       marginBottom: 40
     }}>
-            <div className="settings-section-title">TMDB Read Access Token</div>
+            <div className="settings-section-title">Metadata service</div>
             <div style={{
         fontSize: 13,
         color: "var(--text3)",
         marginBottom: 16,
         lineHeight: 1.6
       }}>
-              Used to fetch movie and TV metadata, posters, ratings, and cast
-              info from The Movie Database. Orion uses the bundled token by
-              default when available; a saved token here overrides it.
+              Orion manages the movie and TV metadata connection used for posters,
+              ratings, cast information, discovery, and search. Public releases do
+              not require end users to provide developer credentials.
             </div>
             <div style={{
         display: "flex",
@@ -59,22 +60,26 @@ export default function GeneralSettingsGroup({
         alignItems: "center",
         flexWrap: "wrap"
       }}>
-              <code style={{
-          fontSize: 13,
-          color: "var(--text2)",
-          background: "var(--surface2)",
-          padding: "6px 14px",
-          borderRadius: 6,
-          border: "1px solid var(--border)"
-        }}>
-                {apiKey ? apiKey.slice(0, 8) + "••••••••••••••••" : "(not set)"}
-              </code>
               <span className="badge badge-secondary">
-                {apiKeySource === "user" ? "User configured" : apiKeySource === "bundled" ? "Bundled" : "Missing"}
+                {apiKeySource === "bundled" ? "Managed by Orion" : apiKeySource === "user" ? "Developer override" : "Unavailable"}
               </span>
-              <button className="btn btn-ghost" onClick={onChangeApiKey}>
-                Change API Token
-              </button>
+              {allowDeveloperConfig && (
+                <>
+                  <code style={{
+                    fontSize: 13,
+                    color: "var(--text2)",
+                    background: "var(--surface2)",
+                    padding: "6px 14px",
+                    borderRadius: 6,
+                    border: "1px solid var(--border)"
+                  }}>
+                    {apiKey ? apiKey.slice(0, 8) + "••••••••••••••••" : "(not set)"}
+                  </code>
+                  <button className="btn btn-ghost" onClick={onChangeApiKey}>
+                    Change development token
+                  </button>
+                </>
+              )}
             </div>
           </div>
 

@@ -45,9 +45,9 @@ export function Divider() {
 }
 
 export function tmdbTokenDetail(source) {
-  if (source === "user") return "User configured";
-  if (source === "bundled") return "Bundled";
-  return "Required for metadata, posters, and search";
+  if (source === "user") return "Developer override";
+  if (source === "bundled") return "Managed by Orion";
+  return "Unavailable";
 }
 
 function graphicsDiagnosticDetail(performanceStatus) {
@@ -103,7 +103,7 @@ export function SystemCheckSection({ apiKey, apiKeySource = "missing", downloadP
   const checks = status?.ok
     ? [
         {
-          label: "TMDB token",
+          label: "Metadata service",
           ok: status.configuration.tmdbTokenSet,
           detail: tmdbTokenDetail(status.configuration.tmdbTokenSource),
         },
