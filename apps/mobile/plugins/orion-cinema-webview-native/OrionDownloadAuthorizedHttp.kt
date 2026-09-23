@@ -38,12 +38,7 @@ internal object OrionDownloadAuthorizedHttp {
               return null
             }
 
-          request =
-            authorizedChild(
-              bound,
-              request.url,
-              redirectUrl,
-            ) ?: return null
+          request = authorizedRedirect(bound, request.url, redirectUrl) ?: return null
 
           return@repeat
         }
@@ -142,6 +137,19 @@ internal object OrionDownloadAuthorizedHttp {
     )
   }
 
+  private fun authorizedRedirect(
+    bound: BoundTransferContext,
+    parentUrl: String,
+    redirectUrl: String,
+  ): AuthorizedRequest? {
+    if (!OrionDownloadRequestContextBroker.authorizeRedirectForJob(
+        bound.jobId, bound.requestContextId, bound.candidateId, parentUrl, redirectUrl,
+      )) return null
+    return OrionDownloadRequestContextBroker.resolveForJob(
+      bound.jobId, bound.requestContextId, bound.candidateId, redirectUrl,
+    )
+  }
+
   fun openFollowingRedirects(
     bound: BoundTransferContext,
     parentUrl: String,
@@ -222,12 +230,7 @@ internal object OrionDownloadAuthorizedHttp {
       } catch (_: Throwable) {
       }
 
-      request =
-        authorizedChild(
-          bound,
-          request.url,
-          redirectUrl,
-        ) ?: return null
+      request = authorizedRedirect(bound, request.url, redirectUrl) ?: return null
     }
 
     return null

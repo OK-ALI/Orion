@@ -41,7 +41,7 @@ function buildDownloadHeaders(m3u8Context, userAgent) {
   add("Origin", origin);
   add("Accept", getHeaderValue(requestHeaders, "Accept") || "*/*");
   add("Accept-Language", getHeaderValue(requestHeaders, "Accept-Language"));
-  add("Cookie", getHeaderValue(requestHeaders, "Cookie"));
+  add("Authorization", getHeaderValue(requestHeaders, "Authorization"));
   add("Sec-Fetch-Dest", getHeaderValue(requestHeaders, "Sec-Fetch-Dest"));
   add("Sec-Fetch-Mode", getHeaderValue(requestHeaders, "Sec-Fetch-Mode"));
   add("Sec-Fetch-Site", getHeaderValue(requestHeaders, "Sec-Fetch-Site"));
@@ -50,6 +50,13 @@ function buildDownloadHeaders(m3u8Context, userAgent) {
   add("Sec-CH-UA-Platform", getHeaderValue(requestHeaders, "Sec-CH-UA-Platform"));
 
   return [...headers.entries()];
+}
+
+// yt-dlp applies these options to child/redirect requests as well. Only
+// non-secret, destination-independent headers may be supplied globally.
+function buildSafeTransferHeaders(m3u8Context, userAgent) {
+  return buildDownloadHeaders(m3u8Context, userAgent).filter(([name]) =>
+    ["user-agent", "accept", "accept-language"].includes(name.toLowerCase()));
 }
 
 function headerValue(headers, key) {
@@ -288,4 +295,4 @@ function createHlsProxy(rootUrl, m3u8Context) {
     });
   });
 }
-module.exports = { getPlayerUserAgent, getHeaderValue, buildDownloadHeaders, headerValue, fetchViaPlayerSession, rewritePlaylist, createHlsProxy };
+module.exports = { getPlayerUserAgent, getHeaderValue, buildDownloadHeaders, buildSafeTransferHeaders, headerValue, fetchViaPlayerSession, rewritePlaylist, createHlsProxy };

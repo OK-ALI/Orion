@@ -11,13 +11,14 @@ const crypto = require("crypto");
 const filesystemIpc = require("../ipc/filesystemIpc");
 const { safeFileName, safeSourceLabel, publicDownload, qualityFormat, buildTargetDirectory } = require("./paths");
 const {
-  buildDownloadHeaders,
+  buildSafeTransferHeaders,
   createHlsProxy,
   getPlayerUserAgent,
 } = require("./hlsProxy");
 const downloadStore = require("./store");
 const { cleanupDownloadTask } = require("./taskCleanup");
 const { preflightCandidate } = require("./preflight");
+const { YT_DLP_RETRY_ARGS } = require("./retryPolicy");
 const { exportSessionCookies } = require("./requestContext");
 const { downloadSubtitleFile } = require("./subtitleAsset");
 const {
@@ -253,22 +254,14 @@ function register(getMainWindow, { resetSettingsData } = {}) {
         }
       }
 
-      const downloadHeaders = buildDownloadHeaders(entry.m3u8Context, userAgent);
+      const downloadHeaders = buildSafeTransferHeaders(entry.m3u8Context, userAgent);
       const args = [
         "--newline",
         "--no-playlist",
         "--continue",
-        "--retries",
-        "10",
-        "--fragment-retries",
-        "12",
+        ...YT_DLP_RETRY_ARGS,
         "--concurrent-fragments",
         String(entry.fragmentConcurrency || 6),
-        "--retry-sleep",
-        "fragment:exp=1:15",
-        "--socket-timeout",
-        "30",
-        "--skip-unavailable-fragments",
         "--ffmpeg-location",
         path.dirname(status.ffmpeg.path),
         "--merge-output-format",
@@ -522,7 +515,7 @@ function register(getMainWindow, { resetSettingsData } = {}) {
 
         const outputTemplate = path.join(targetDir, `${entry.outputStem}.%(ext)s`);
         const ffmpegDir = directStatus.ffmpeg?.path ? path.dirname(directStatus.ffmpeg.path) : null;
-        const downloadHeaders = buildDownloadHeaders(resolvedM3u8Context, userAgent);
+        const downloadHeaders = buildSafeTransferHeaders(resolvedM3u8Context, userAgent);
         const args = useHelper
           ? [
               "--cli",
@@ -542,17 +535,9 @@ function register(getMainWindow, { resetSettingsData } = {}) {
               "--newline",
               "--no-playlist",
               "--continue",
-              "--retries",
-              "2",
-              "--fragment-retries",
-              "2",
+              ...YT_DLP_RETRY_ARGS,
               "--concurrent-fragments",
               String(entry.fragmentConcurrency),
-              "--retry-sleep",
-              "fragment:exp=1:15",
-              "--socket-timeout",
-              "30",
-              "--skip-unavailable-fragments",
               "--ffmpeg-location",
               ffmpegDir,
               "--merge-output-format",

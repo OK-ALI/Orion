@@ -20,6 +20,7 @@ import {
 } from './telemetryReducer';
 import { isVerifiedPlaybackCompletion } from './playbackCompletion';
 import type { VerifiedPlaybackSnapshot } from './playerTypes';
+import { runViewingSideEffect, type PlaybackPurpose } from './viewingPersistence';
 
 interface PlaybackRecordWriter {
   (record: {
@@ -43,6 +44,7 @@ interface ControllerOptions {
   surface: MobilePlayerSurface;
   recordPlayback: PlaybackRecordWriter;
   onVerifiedCompletion?: (snapshot: VerifiedPlaybackSnapshot) => void;
+  purpose?: PlaybackPurpose;
 }
 
 export interface PlaybackTelemetryInput {
@@ -86,6 +88,7 @@ export function usePlaybackTelemetryController({
   surface,
   recordPlayback,
   onVerifiedCompletion,
+  purpose = 'viewing',
 }: ControllerOptions) {
   const stateRef = useRef<PlaybackTelemetryState>(
     createPlaybackTelemetryState(createMobilePlaybackSession(media, sourceId, surface)),
@@ -95,11 +98,13 @@ export function usePlaybackTelemetryController({
   const completionReportedRef = useRef(false);
 
   const persistState = useCallback((state = stateRef.current) => {
-    if (!state.session.verified || state.session.lastVerifiedTime == null) return false;
-    recordPlayback({
+    const verifiedTime = state.session.lastVerifiedTime;
+    if (!state.session.verified || verifiedTime == null) return false;
+    return runViewingSideEffect(purpose, () => {
+      recordPlayback({
       item,
       mediaType: media.mediaType,
-      currentTime: state.session.lastVerifiedTime,
+      currentTime: verifiedTime,
       duration: state.duration || 0,
       sourceId,
       season: media.season ?? null,
@@ -112,10 +117,10 @@ export function usePlaybackTelemetryController({
         currentTime: state.session.lastVerifiedTime,
         duration: state.duration,
       }),
+      });
+      lastPersistedAtRef.current = Date.now();
     });
-    lastPersistedAtRef.current = Date.now();
-    return true;
-  }, [item, media, recordPlayback, sourceId]);
+  }, [item, media, purpose, recordPlayback, sourceId]);
 
   const emitTelemetry = useCallback((input: PlaybackTelemetryInput) => {
     const event: MobilePlaybackTelemetryV1 = {
@@ -150,7 +155,7 @@ export function usePlaybackTelemetryController({
       lastTelemetryAt: event.observedAt,
     });
     if (!wasVerified && decision.state.session.verified) {
-      removeRecentOpen(decision.state.session.id);
+      runViewingSideEffect(purpose, () => removeRecentOpen(decision.state.session.id));
       clearMobileDiagnosticError('playback-telemetry');
     }
     const completionVerified = isVerifiedPlaybackCompletion({
@@ -175,15 +180,15 @@ export function usePlaybackTelemetryController({
         evidence: decision.state.evidence,
         observedAt: decision.state.session.updatedAt,
       };
-      onVerifiedCompletion?.(snapshot);
+      runViewingSideEffect(purpose, () => onVerifiedCompletion?.(snapshot));
     }
     return decision;
-  }, [onVerifiedCompletion, persistState, sourceId]);
+  }, [onVerifiedCompletion, persistState, purpose, sourceId]);
 
   const markOpenedOnly = useCallback(() => {
     if (stateRef.current.session.verified) return;
     emitTelemetry({ evidence: 'opened-only', state: 'unobservable' });
-    recordRecentOpen({
+    runViewingSideEffect(purpose, () => recordRecentOpen({
       schemaVersion: 1,
       sessionId: stateRef.current.session.id,
       media,
@@ -191,8 +196,8 @@ export function usePlaybackTelemetryController({
       surface,
       openedAt: Date.now(),
       reason: 'telemetry-unavailable',
-    });
-  }, [emitTelemetry, media, sourceId, surface]);
+    }));
+  }, [emitTelemetry, media, purpose, sourceId, surface]);
 
   const getVerifiedSnapshot = useCallback(() => {
     const state = stateRef.current;

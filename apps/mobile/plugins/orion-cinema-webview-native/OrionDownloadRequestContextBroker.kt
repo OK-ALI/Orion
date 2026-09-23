@@ -40,7 +40,6 @@ internal object OrionDownloadRequestContextBroker {
   private const val MAX_CONTEXTS = 24
   private const val MAX_OPAQUE_PROBES_PER_SESSION = 36
   private const val MAX_OBSERVED_REQUESTS_PER_SESSION = 256
-  private const val MAX_PUBLIC_ORIGIN_CACHE = 128
 
   private val executor = Executors.newFixedThreadPool(2)
   private val contexts = LinkedHashMap<String, CapturedContext>()
@@ -48,7 +47,6 @@ internal object OrionDownloadRequestContextBroker {
   private val physicalTraceKeys = linkedSetOf<String>()
   private val opaqueProbeCounts = mutableMapOf<String, Int>()
   private val observedRequestMaterial = mutableMapOf<String, LinkedHashMap<String, CapturedRequestMaterial>>()
-  private val publicOriginSafetyCache = LinkedHashMap<String, Boolean>()
 
   fun observeRequest(
     reactContext: ReactContext,
@@ -193,6 +191,7 @@ internal object OrionDownloadRequestContextBroker {
       if (context.boundJobId != jobId || context.requestContextId != requestContextId) return null
       if (context.preflightState != "ready" || !context.requestContextReady) return null
       val normalized = normalizeHttpUrl(context.rawUrl) ?: return null
+      if (!isSafePublicHttpUrl(normalized)) return null
       if (!context.authorizedUrls.contains(normalized)) return null
       return AuthorizedTransferSeed(
         sourceId = context.sourceId,
@@ -216,6 +215,7 @@ internal object OrionDownloadRequestContextBroker {
       val context = contexts[candidateId] ?: return null
       if (context.boundJobId != jobId || context.requestContextId != requestContextId) return null
       val normalized = normalizeHttpUrl(rawUrl) ?: return null
+      if (!isSafePublicHttpUrl(normalized)) return null
       if (!context.authorizedUrls.contains(normalized)) return null
       return authorizedRequestFor(context, normalized)
     }
@@ -243,6 +243,27 @@ internal object OrionDownloadRequestContextBroker {
       if (!descendantAllowed(context, child)) return false
       if (context.authorizedUrls.size >= MAX_JOB_AUTHORIZED_URLS) return false
       context.authorizedUrls.add(child)
+      return true
+    }
+  }
+
+  /** Redirects have no manifest-reference proof: require an approved origin or exact observation. */
+  internal fun authorizeRedirectForJob(
+    jobId: String,
+    requestContextId: String,
+    candidateId: String,
+    parentUrl: String,
+    redirectUrl: String,
+  ): Boolean {
+    synchronized(this) {
+      val context = contexts[candidateId] ?: return false
+      if (context.boundJobId != jobId || context.requestContextId != requestContextId) return false
+      val parent = normalizeHttpUrl(parentUrl) ?: return false
+      if (!context.authorizedUrls.contains(parent)) return false
+      val destination = resolveHttpUrl(parent, redirectUrl) ?: return false
+      if (!redirectAllowed(context, destination)) return false
+      if (context.authorizedUrls.size >= MAX_JOB_AUTHORIZED_URLS) return false
+      context.authorizedUrls.add(destination)
       return true
     }
   }
@@ -313,13 +334,16 @@ internal object OrionDownloadRequestContextBroker {
   }
 
   private fun performPreflight(context: CapturedContext): PreflightResult {
+    if (!isSafePublicHttpUrl(context.rawUrl)) {
+      return PreflightResult.actionRequired("media-origin-not-public", "The media destination is outside Orion's public-network boundary.")
+    }
     val connection = openConnection(context, context.rawUrl)
     try {
       val status = connection.responseCode
       if (status in 300..399) {
         val location = connection.getHeaderField("Location")
         val redirect = location?.let { resolveHttpUrl(context.rawUrl, it) }
-        if (redirect == null || !originAllowed(context, redirect)) {
+        if (redirect == null || !originAllowed(context, redirect) || !isSafePublicHttpUrl(redirect)) {
           return PreflightResult.actionRequired("redirect-not-authorized", "The media request redirects outside its approved source boundary.")
         }
         connection.disconnect()
@@ -497,6 +521,9 @@ internal object OrionDownloadRequestContextBroker {
         if (status in 300..399) {
           url = connection.getHeaderField("Location")?.let { resolveHttpUrl(url, it) }
             ?: return ChildProbe(code = "media-redirect-invalid", reason = "The media request redirected to an invalid location.")
+          if (!redirectAllowed(context, url)) {
+            return ChildProbe(code = "descendant-origin-not-approved", reason = "The media redirect left the approved source boundary.")
+          }
           return@repeat
         }
         if (status == 401 || status == 403) {
@@ -529,23 +556,12 @@ internal object OrionDownloadRequestContextBroker {
   }
 
   private fun openConnection(context: CapturedContext, rawUrl: String): HttpURLConnection {
-    val connection = URL(rawUrl).openConnection() as HttpURLConnection
-    connection.instanceFollowRedirects = false
+    val request = authorizedRequestFor(context, rawUrl)
+    val range = if (context.observedManifestKind == "direct") 0L else null
+    val connection = OrionDownloadAuthorizedHttp.openRequest(request, range, range)
     connection.connectTimeout = CONNECT_TIMEOUT_MS
     connection.readTimeout = READ_TIMEOUT_MS
-    connection.useCaches = false
-    connection.requestMethod = "GET"
-    context.requestHeaders.forEach { (name, value) ->
-      if (shouldReplayHeader(name)) connection.setRequestProperty(name, value)
-    }
-    if (!context.cookieHeader.isNullOrBlank()) connection.setRequestProperty("Cookie", context.cookieHeader)
-    if (context.observedManifestKind == "direct") connection.setRequestProperty("Range", "bytes=0-0")
     return connection
-  }
-
-  private fun shouldReplayHeader(name: String): Boolean = when (name.lowercase(Locale.US)) {
-    "host", "content-length", "connection", "range", "cookie", "accept-encoding" -> false
-    else -> true
   }
 
   private fun finishAndEmit(
@@ -810,7 +826,7 @@ internal object OrionDownloadRequestContextBroker {
     val safe = linkedMapOf<String, String>()
     headers.forEach { (name, value) ->
       when (name.lowercase(Locale.US)) {
-        "accept", "accept-language", "user-agent", "origin" -> safe[name] = value
+        "accept", "accept-language", "user-agent" -> safe[name] = value
         "referer" -> sanitizeReferer(value)?.let { safe[name] = it }
       }
     }
@@ -824,11 +840,14 @@ internal object OrionDownloadRequestContextBroker {
   } catch (_: Throwable) { null }
 
   private fun descendantAllowed(context: CapturedContext, rawUrl: String): Boolean =
-    originAllowed(context, rawUrl) || isSafePublicHttpUrl(rawUrl)
+    isSafePublicHttpUrl(rawUrl)
+
+  private fun redirectAllowed(context: CapturedContext, rawUrl: String): Boolean =
+    isSafePublicHttpUrl(rawUrl) &&
+      (originAllowed(context, rawUrl) || observedRequestMaterial[context.sessionId]?.containsKey(rawUrl) == true)
 
   private fun isSafePublicHttpUrl(rawUrl: String): Boolean {
     val origin = originOf(rawUrl) ?: return false
-    synchronized(this) { publicOriginSafetyCache[origin]?.let { return it } }
     val safe = try {
       val url = URL(rawUrl)
       val host = url.host?.trim()?.lowercase(Locale.US).orEmpty()
@@ -838,10 +857,6 @@ internal object OrionDownloadRequestContextBroker {
         addresses.isNotEmpty() && addresses.all { !isPrivateAddress(it) }
       }
     } catch (_: Throwable) { false }
-    synchronized(this) {
-      if (publicOriginSafetyCache.size >= MAX_PUBLIC_ORIGIN_CACHE) publicOriginSafetyCache.clear()
-      publicOriginSafetyCache[origin] = safe
-    }
     return safe
   }
 

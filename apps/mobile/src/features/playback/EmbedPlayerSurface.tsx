@@ -61,16 +61,19 @@ import { PlayerStateOverlay } from '../../components/player/PlayerStateOverlay';
 import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import { beginMobileDownloadCaptureSessionV1 } from '../downloads/downloadCandidateCapture';
 import { useDownloadSourceAutoReturnV1 } from '../downloads/useDownloadSourceAutoReturn';
+import type { PlaybackPurpose } from './viewingPersistence';
 import { createProviderIframeDocument, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
 import { ProviderControlsReturn } from './ProviderControlsReturn';
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
   embedUrl: string;
+  playbackPurpose?: PlaybackPurpose;
   onResumeAttempt: (handoffId: string, status: 'applied' | 'unavailable') => void;
 }
 
 const WEBVIEW_AUDIO_RELEASE_MS = Platform.OS === 'android' ? 240 : 80;
 export function EmbedPlayerSurface({
   embedUrl,
+  playbackPurpose = 'viewing',
   title,
   seriesTitle,
   year,
@@ -196,6 +199,7 @@ export function EmbedPlayerSurface({
     surface: 'embed',
     recordPlayback,
     onVerifiedCompletion: onVerifiedPlaybackCompletion,
+    purpose: playbackPurpose,
   });
   const playbackSessionId = telemetry.getSession().id;
   const downloadTarget = useMemo(() => createMobileDownloadTargetV1({

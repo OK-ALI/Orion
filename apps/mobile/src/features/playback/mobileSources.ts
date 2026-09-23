@@ -49,9 +49,8 @@ export function getNextMobileDownloadSource(
 }
 
 /**
- * Mobile 3.2.0 keeps the physically verified VixSrc path as its automatic
- * default. The shared registry remains untouched until Desktop gets its own
- * provider-cleanup pass.
+ * VixSrc remains the verified automatic Mobile default. The shared source
+ * registry carries the same active default for this release.
  */
 export const MOBILE_DEFAULT_CINEMA_SOURCE_ID =
   MOBILE_PLAYER_SOURCES.find((source) => source.id === 'vixsrc' && source.routingMode === 'automatic')?.id

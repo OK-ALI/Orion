@@ -136,6 +136,8 @@ export default function PlayerScreen() {
     season: resolvedSeason, episode: resolvedEpisode,
   }).itemKey;
   const downloadIntentAtOpen = Boolean(getMobileDownloadSourceResolutionIntentV1(downloadItemKey));
+  const [downloadResolutionLatched, setDownloadResolutionLatched] = useState(downloadIntentAtOpen);
+  const downloadResolutionOnly = downloadIntentAtOpen || downloadResolutionLatched;
   const existingProgress = getPlaybackProgress(type, id, resolvedSeason, resolvedEpisode);
   const routedNextSource = nextSourceId
     && MOBILE_PLAYER_SOURCES.some((source) => source.id === nextSourceId)
@@ -230,6 +232,7 @@ export default function PlayerScreen() {
   useEffect(() => {
     if (playbackIdentityRef.current === playbackIdentity) return;
     playbackIdentityRef.current = playbackIdentity;
+    setDownloadResolutionLatched(downloadIntentAtOpen);
     nextEpisodeRequestRef.current += 1;
     setNextEpisodePrompt(null);
     publishHandoff(null);
@@ -500,7 +503,7 @@ export default function PlayerScreen() {
   }, [initialSavedTime, sourceId]);
 
   const handleVerifiedPlaybackCompletion = useCallback((_snapshot: VerifiedPlaybackSnapshot) => {
-    if (type !== 'tv' || offlineRequested
+    if (type !== 'tv' || offlineRequested || downloadResolutionOnly
       || resolvedSeason == null || resolvedEpisode == null) return;
     const seasonNumber = resolvedSeason;
     const episodeNumber = resolvedEpisode;
@@ -519,7 +522,7 @@ export default function PlayerScreen() {
         if (next) setNextEpisodePrompt(next);
       })
       .catch(() => {});
-  }, [id, offlineRequested, resolvedEpisode, resolvedSeason, type]);
+  }, [downloadResolutionOnly, id, offlineRequested, resolvedEpisode, resolvedSeason, type]);
 
   const playNextEpisode = useCallback(() => {
     const next = nextEpisodePrompt;
@@ -612,6 +615,7 @@ export default function PlayerScreen() {
     <EmbedPlayerSurface
       key={`${sourceId}-${activeStreamUrl}`}
       embedUrl={activeStreamUrl}
+      playbackPurpose={downloadResolutionOnly ? 'download-resolution' : 'viewing'}
       onResumeAttempt={handleResumeAttempt}
       {...commonProps}
     />
@@ -630,7 +634,7 @@ export default function PlayerScreen() {
           onCancel={exitPlayer}
         />
       )}
-      {nextEpisodePrompt && !initialChoicePending && (
+      {nextEpisodePrompt && !initialChoicePending && !downloadResolutionOnly && (
         <NextEpisodePrompt
           episode={nextEpisodePrompt}
           onPlayNow={playNextEpisode}

@@ -224,7 +224,7 @@ export default function TVDetails({ model }) {
                     <p>{model.downloadResolutionError}</p>
                     <label>
                       Try source{" "}
-                      <select value={model.playerSource} onChange={(event) => model.selectPlayerSource(event.target.value)}>
+                      <select value={model.playerSource} onChange={(event) => model.selectDownloadSource(event.target.value)}>
                         {model.downloadSourceChoices.map((source) => <option key={source.id} value={source.id}>{source.label}</option>)}
                       </select>
                     </label>{" "}

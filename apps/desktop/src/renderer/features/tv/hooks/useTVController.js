@@ -79,6 +79,7 @@ import { useTitleCredits } from "../../../shared/hooks/useTitleCredits";
 import { useDesktopTrailerDiscovery } from "../../trailers/hooks/useDesktopTrailerDiscovery";
 import { DOWNLOAD_SOURCE_ATTEMPT_MS, advanceDownloadSourceRecovery } from "../../player/services/downloadSourceRecovery";
 import { useDownloadCandidatePreflight } from "../../player/hooks/useDownloadCandidatePreflight";
+import { beginDownloadSourceScope, restoreDownloadSource, shouldPersistPlayerSource } from "../../player/services/downloadSourceScope";
 
 export function useTVController({
   item,
@@ -489,10 +490,10 @@ const [details, setDetails] = useState(null);
   useEffect(() => {
     const normalized = normalizeSelectableSourceId(playerSource, { mediaType: "tv" });
     if (normalized !== playerSource) setPlayerSource(normalized);
-    if (storage.get(STORAGE_KEYS.PLAYER_SOURCE) !== normalized) {
+    if (shouldPersistPlayerSource(downloadTarget) && storage.get(STORAGE_KEYS.PLAYER_SOURCE) !== normalized) {
       storage.set(STORAGE_KEYS.PLAYER_SOURCE, normalized);
     }
-  }, [playerSource]);
+  }, [downloadTarget, playerSource]);
 
   const selectPlayerSource = useCallback((sourceId) => {
     const next = normalizeSelectableSourceId(sourceId, { mediaType: "tv" });
@@ -510,9 +511,18 @@ const [details, setDetails] = useState(null);
     initialSeekDoneRef.current = false;
     setPlayerSource(next);
     if (downloadResolutionActive) downloadRecoveryRef.current.attempted.add(next);
-    storage.set(STORAGE_KEYS.PLAYER_SOURCE, next);
+    else {
+      setDownloadTarget(null);
+      setDownloadResolutionError("");
+      storage.set(STORAGE_KEYS.PLAYER_SOURCE, next);
+    }
     return true;
   }, [downloadResolutionActive, item.id, playerSource, selectedEp, selectedSeason]);
+
+  const selectDownloadSource = useCallback((sourceId) => {
+    const next = normalizeSelectableSourceId(sourceId, { mediaType: "tv" });
+    setPlayerSource(next);
+  }, []);
 
   // Resolve allmanga episode URL via main-process IPC (GraphQL, no CORS)
   useEffect(() => {
@@ -681,7 +691,7 @@ const [details, setDetails] = useState(null);
 
   const prepareEpisodeDownload = useCallback((ep, season = selectedSeason) => {
     if (!ep) return;
-    downloadRecoveryRef.current = { attempted: new Set([playerSource]), manualApproved: false, refreshed: false, handledSession: null, reload: playing };
+    downloadRecoveryRef.current = beginDownloadSourceScope(playerSource, downloadTarget ? downloadRecoveryRef.current : null, playing);
     setDownloadResolutionError("");
 
     const rawSeason = ep._tmdbSeason ?? season;
@@ -716,20 +726,23 @@ const [details, setDetails] = useState(null);
     });
     setDownloadResolutionActive(true);
     setShowDownload(false);
-  }, [d?.external_ids?.imdb_id, d?.first_air_date, d?.imdb_id, dubMode, episodeGroupMap, item.id, playerSource, playing, selectedEp, selectedSeason, setSelectedEp, title]);
+  }, [d?.external_ids?.imdb_id, d?.first_air_date, d?.imdb_id, downloadTarget, dubMode, episodeGroupMap, item.id, playerSource, playing, selectedEp, selectedSeason, setSelectedEp, title]);
 
   const closeDownload = useCallback(() => {
+    setPlayerSource(restoreDownloadSource(downloadRecoveryRef.current, playerSource));
     setShowDownload(false);
     setDownloadResolutionActive(false);
+    setDownloadResolutionError("");
     setDownloadTarget(null);
-  }, []);
+  }, [playerSource]);
 
   const failDownloadResolution = useCallback((message) => {
+    setPlayerSource(restoreDownloadSource(downloadRecoveryRef.current, playerSource));
     setDownloadResolutionActive(false);
     setPlaying(false);
     setShowDownload(false);
     setDownloadResolutionError(message || "No downloadable episode stream was found. Try another source.");
-  }, []);
+  }, [playerSource]);
 
   const recoverDownloadResolution = useCallback((sessionId, result) => {
     if (!sessionId || sessionId !== captureSessionId || !downloadResolutionActive) return;
@@ -745,7 +758,6 @@ const [details, setDetails] = useState(null);
       setDownloadCaptureNonce((value) => value + 1);
     } else {
       setPlayerSource(next.sourceId);
-      storage.set(STORAGE_KEYS.PLAYER_SOURCE, next.sourceId);
     }
   }, [captureSessionId, downloadResolutionActive, failDownloadResolution, playerSource]);
 
@@ -913,6 +925,7 @@ const [details, setDetails] = useState(null);
     viewModel.captureSessionId = captureSessionId;
     viewModel.downloadResolutionError = downloadResolutionError;
     viewModel.downloadSourceChoices = getEffectivePlayerSources().filter((source) => source.supportsDownloads && source.media?.tv);
+    viewModel.selectDownloadSource = selectDownloadSource;
     viewModel.retryDownload = () => prepareEpisodeDownload(downloadTarget?.episodeRecord, downloadTarget?.season);
     return viewModel;
 }
