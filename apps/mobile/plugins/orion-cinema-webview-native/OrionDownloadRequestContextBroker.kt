@@ -224,8 +224,9 @@ internal object OrionDownloadRequestContextBroker {
   /**
    * Native transfer code may extend the exact allowlist only from an already
    * authorized manifest and only to a destination explicitly discovered by
-   * that manifest. Cross-origin descendants must resolve to a public network
-   * target; credentials are scoped to the exact observed child request.
+   * that manifest. Cross-origin descendants must also belong to a provider-
+   * approved or session-observed origin; public DNS alone grants no trust.
+   * Credentials are scoped to the exact observed child request.
    */
   internal fun authorizeDiscoveredDescendant(
     jobId: String,
@@ -343,7 +344,7 @@ internal object OrionDownloadRequestContextBroker {
       if (status in 300..399) {
         val location = connection.getHeaderField("Location")
         val redirect = location?.let { resolveHttpUrl(context.rawUrl, it) }
-        if (redirect == null || !originAllowed(context, redirect) || !isSafePublicHttpUrl(redirect)) {
+        if (redirect == null || !redirectAllowed(context, redirect)) {
           return PreflightResult.actionRequired("redirect-not-authorized", "The media request redirects outside its approved source boundary.")
         }
         connection.disconnect()
@@ -777,7 +778,7 @@ internal object OrionDownloadRequestContextBroker {
     return DescendantDiscovery(found, denied)
   }
 
-  /** Returns 1 only when a manifest child fails the exact public-network descendant boundary. */
+  /** Returns 1 only when a manifest child fails the trusted public-origin boundary. */
   private fun addDescendant(baseUrl: String, child: String, context: CapturedContext, target: MutableSet<String>): Int {
     val resolved = resolveHttpUrl(baseUrl, child) ?: return 0
     if (!descendantAllowed(context, resolved)) return 1
@@ -822,7 +823,7 @@ internal object OrionDownloadRequestContextBroker {
     }
   }
 
-  private fun safeCrossOriginHeaders(headers: Map<String, String>): Map<String, String> {
+  internal fun safeCrossOriginHeaders(headers: Map<String, String>): Map<String, String> {
     val safe = linkedMapOf<String, String>()
     headers.forEach { (name, value) ->
       when (name.lowercase(Locale.US)) {
@@ -840,11 +841,38 @@ internal object OrionDownloadRequestContextBroker {
   } catch (_: Throwable) { null }
 
   private fun descendantAllowed(context: CapturedContext, rawUrl: String): Boolean =
-    isSafePublicHttpUrl(rawUrl)
+    trustedDescendantDestination(
+      context.allowedOrigins,
+      observedRequestMaterial[context.sessionId]?.keys.orEmpty(),
+      rawUrl,
+    )
 
   private fun redirectAllowed(context: CapturedContext, rawUrl: String): Boolean =
-    isSafePublicHttpUrl(rawUrl) &&
-      (originAllowed(context, rawUrl) || observedRequestMaterial[context.sessionId]?.containsKey(rawUrl) == true)
+    trustedRedirectDestination(
+      context.allowedOrigins,
+      observedRequestMaterial[context.sessionId]?.keys.orEmpty(),
+      rawUrl,
+    )
+
+  internal fun trustedDescendantDestination(
+    allowedOrigins: Set<String>,
+    observedUrls: Set<String>,
+    rawUrl: String,
+  ): Boolean {
+    val origin = originOf(rawUrl) ?: return false
+    return (allowedOrigins.contains(origin) || observedUrls.any { originOf(it) == origin }) &&
+      isSafePublicHttpUrl(rawUrl)
+  }
+
+  internal fun trustedRedirectDestination(
+    allowedOrigins: Set<String>,
+    observedUrls: Set<String>,
+    rawUrl: String,
+  ): Boolean {
+    val origin = originOf(rawUrl) ?: return false
+    return (allowedOrigins.contains(origin) || observedUrls.contains(rawUrl)) &&
+      isSafePublicHttpUrl(rawUrl)
+  }
 
   private fun isSafePublicHttpUrl(rawUrl: String): Boolean {
     val origin = originOf(rawUrl) ?: return false
@@ -874,11 +902,6 @@ internal object OrionDownloadRequestContextBroker {
       if (first == 198 && second in 18..19) return true
     }
     return false
-  }
-
-  private fun originAllowed(context: CapturedContext, rawUrl: String): Boolean {
-    val origin = originOf(rawUrl) ?: return false
-    return context.allowedOrigins.contains(origin)
   }
 
   private fun buildAllowedOrigins(rootUrl: String, allowedMediaOrigins: List<String>): Set<String> {
