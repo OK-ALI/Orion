@@ -23,6 +23,7 @@ import {
   NEEDS_INTERCEPT,
   getNextNonAsyncSource,
   getNextHealthyNonAsyncSource,
+  getEffectivePlayerSources,
 } from "../../../services/tmdb";
 import {
   PlayIcon,
@@ -66,6 +67,8 @@ import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
 import { createStartPlaybackIntent } from "../../player/services/playbackIntent";
 import { useTitleCredits } from "../../../shared/hooks/useTitleCredits";
 import { useDesktopTrailerDiscovery } from "../../trailers/hooks/useDesktopTrailerDiscovery";
+import { DOWNLOAD_SOURCE_ATTEMPT_MS, advanceDownloadSourceRecovery } from "../../player/services/downloadSourceRecovery";
+import { useDownloadCandidatePreflight } from "../../player/hooks/useDownloadCandidatePreflight";
 
 export function useMovieController({
   item,
@@ -97,6 +100,9 @@ const [details, setDetails] = useState(null);
   const [showDownload, setShowDownload] = useState(false);
   const [downloadTarget, setDownloadTarget] = useState(null);
   const [downloadResolutionActive, setDownloadResolutionActive] = useState(false);
+  const [downloadResolutionError, setDownloadResolutionError] = useState("");
+  const [downloadCaptureNonce, setDownloadCaptureNonce] = useState(0);
+  const downloadRecoveryRef = useRef({ attempted: new Set(), manualApproved: false, refreshed: false, handledSession: null, reload: false });
   const downloadResolutionPreflightRef = useRef(new Set());
   const [showTrailer, setShowTrailer] = useState(false);
   const [m3u8Url, setM3u8Url] = useState(null);
@@ -137,7 +143,7 @@ const [details, setDetails] = useState(null);
       disposed = true;
       if (openedSessionId) window.electron?.endStreamCapture?.(openedSessionId);
     };
-  }, [downloadTarget?.key, item.id, playerSource]);
+  }, [downloadTarget?.key, downloadCaptureNonce, item.id, playerSource]);
 
   // Accent colour + subtitle lang come from App-level state (via props),
   // so they are always fresh after Settings save without any extra storage reads.
@@ -455,9 +461,10 @@ const [details, setDetails] = useState(null);
     playbackIntentRef.current = createStartPlaybackIntent({ time: verifiedPosition });
     initialSeekDoneRef.current = false;
     setPlayerSource(next);
+    if (downloadResolutionActive) downloadRecoveryRef.current.attempted.add(next);
     storage.set(STORAGE_KEYS.PLAYER_SOURCE, next);
     return true;
-  }, [playerSource, progressKey]);
+  }, [downloadResolutionActive, playerSource, progressKey]);
 
   // Resolve AllManga movie URL via main-process IPC
   useEffect(() => {
@@ -559,6 +566,7 @@ const [details, setDetails] = useState(null);
   useEffect(() => {
     if (!window.electron) return;
     const handler = window.electron.onM3u8Found((payload) => {
+      if (downloadResolutionActive && (!captureSessionId || payload?.sessionId !== captureSessionId)) return;
       if (captureSessionId && payload?.sessionId && payload.sessionId !== captureSessionId) return;
       const url = typeof payload === "string" ? payload : payload?.url || payload?.displayUrl;
       if (!url) return;
@@ -566,7 +574,7 @@ const [details, setDetails] = useState(null);
       setM3u8Context(typeof payload === "string" ? { url } : payload);
     });
     return () => window.electron.offM3u8Found(handler);
-  }, [captureSessionId]);
+  }, [captureSessionId, downloadResolutionActive]);
 
   // Close source dropdown on scroll or click-outside
   useEffect(() => {
@@ -611,13 +619,8 @@ const [details, setDetails] = useState(null);
   }, []);
 
   const openDownload = useCallback(() => {
-    if (playing) {
-      setDownloadResolutionActive(false);
-      setDownloadTarget(null);
-      setShowDownload(true);
-      return;
-    }
-
+    downloadRecoveryRef.current = { attempted: new Set([playerSource]), manualApproved: false, refreshed: false, handledSession: null, reload: playing };
+    setDownloadResolutionError("");
     downloadResolutionPreflightRef.current = new Set();
     setCaptureSessionId(null);
     setM3u8Url(null);
@@ -646,6 +649,44 @@ const [details, setDetails] = useState(null);
     setDownloadTarget(null);
   }, []);
 
+  const failDownloadResolution = useCallback((message) => {
+    setDownloadResolutionActive(false);
+    setPlaying(false);
+    setShowDownload(false);
+    setDownloadResolutionError(message || "No downloadable stream was found. Try another source.");
+  }, []);
+
+  const recoverDownloadResolution = useCallback((sessionId, result) => {
+    if (!sessionId || sessionId !== captureSessionId || !downloadResolutionActive) return;
+    const recovery = downloadRecoveryRef.current;
+    if (recovery.handledSession === sessionId) return;
+    recovery.handledSession = sessionId;
+    const next = advanceDownloadSourceRecovery("movie", playerSource, result, recovery);
+    if (next.action === "fail") return failDownloadResolution(next.error);
+    setM3u8Context(null);
+    setM3u8Url(null);
+    if (next.action === "refresh") {
+      setCaptureSessionId(null);
+      setDownloadCaptureNonce((value) => value + 1);
+    } else {
+      setPlayerSource(next.sourceId);
+      storage.set(STORAGE_KEYS.PLAYER_SOURCE, next.sourceId);
+    }
+  }, [captureSessionId, downloadResolutionActive, failDownloadResolution, playerSource]);
+
+  useEffect(() => {
+    if (!downloadResolutionActive || !captureSessionId) return undefined;
+    if (downloadRecoveryRef.current.reload && playing) {
+      downloadRecoveryRef.current.reload = false;
+      webviewRef.current?.reload?.();
+    }
+    const timer = window.setTimeout(() => recoverDownloadResolution(captureSessionId, {
+      code: "no_candidate",
+      error: "This source did not provide a downloadable stream in time.",
+    }), DOWNLOAD_SOURCE_ATTEMPT_MS);
+    return () => window.clearTimeout(timer);
+  }, [captureSessionId, downloadResolutionActive, playing, recoverDownloadResolution]);
+
   useEffect(() => {
     if (
       !downloadResolutionActive ||
@@ -666,51 +707,12 @@ const [details, setDetails] = useState(null);
     startMovieDownloadResolution,
   ]);
 
-  useEffect(() => {
-    if (
-      !downloadResolutionActive ||
-      !downloadTarget ||
-      !playing ||
-      !captureSessionId
-    ) {
-      return undefined;
-    }
-    if (
-      m3u8Context?.sessionId &&
-      m3u8Context.sessionId !== captureSessionId
-    ) {
-      return undefined;
-    }
-    const candidateId =
-      m3u8Context?.candidateId || m3u8Context?.id || null;
-    if (
-      !candidateId ||
-      downloadResolutionPreflightRef.current.has(candidateId)
-    ) {
-      return undefined;
-    }
-    downloadResolutionPreflightRef.current.add(candidateId);
-
-    let disposed = false;
-    Promise.resolve(window.electron?.preflightStream?.(candidateId))
-      .then((result) => {
-        if (disposed || !result?.ok) return;
-        setDownloadResolutionActive(false);
-        setPlaying(false);
-        setShowDownload(true);
-      })
-      .catch(() => {});
-
-    return () => {
-      disposed = true;
-    };
-  }, [
-    captureSessionId,
-    downloadResolutionActive,
-    downloadTarget,
-    m3u8Context,
-    playing,
-  ]);
+  useDownloadCandidatePreflight({
+    active: downloadResolutionActive, target: downloadTarget, playing, captureSessionId,
+    candidateContext: m3u8Context, preflightRef: downloadResolutionPreflightRef,
+    recoveryRef: downloadRecoveryRef, onFailure: recoverDownloadResolution,
+    setActive: setDownloadResolutionActive, setPlaying, setShowDownload,
+  });
 
   // Prefer AniList metadata for anime when available
   const displayOverview =
@@ -761,5 +763,7 @@ const [details, setDetails] = useState(null);
     viewModel.keyCrew = keyCrew;
     viewModel.creditsLoading = creditsLoading;
     viewModel.captureSessionId = captureSessionId;
+    viewModel.downloadResolutionError = downloadResolutionError;
+    viewModel.downloadSourceChoices = getEffectivePlayerSources().filter((source) => source.supportsDownloads && source.media?.movie);
     return viewModel;
 }

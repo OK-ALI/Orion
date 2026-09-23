@@ -30,6 +30,24 @@ export const MOBILE_PLAYER_SOURCES = Object.freeze([
   ...MOBILE_VISIBLE_PLAYER_SOURCES.filter((source) => source.id !== 'vixsrc'),
 ]);
 
+export function getNextMobileDownloadSource(
+  mediaType: 'movie' | 'tv',
+  attempted: ReadonlySet<string>,
+): (typeof MOBILE_PLAYER_SOURCES)[number] | null {
+  const now = Date.now();
+  const candidates = MOBILE_PLAYER_SOURCES.filter((source) => {
+    const health = getMobileSourceHealthV2(source.id, mediaType);
+    return source.supportsDownloads === true
+      && (mediaType === 'movie' ? source.media.movie : source.media.tv)
+      && !attempted.has(source.id)
+      && !(health?.cooldownUntil && health.cooldownUntil > now);
+  });
+  return [...candidates].sort((left, right) => {
+    const priority = (source: (typeof MOBILE_PLAYER_SOURCES)[number]) => source.routingMode === 'automatic' ? 0 : source.id === 'vidsrc' ? 2 : 1;
+    return priority(left) - priority(right);
+  })[0] || null;
+}
+
 /**
  * Mobile 3.2.0 keeps the physically verified VixSrc path as its automatic
  * default. The shared registry remains untouched until Desktop gets its own
@@ -131,16 +149,6 @@ const CAPABILITIES: Readonly<Record<string, MobileSourceContinuityCapability>> =
     canTrackProgress: true,
     canTransferOut: true,
     canReceivePosition: false,
-    automaticTarget: false,
-  }),
-  vidking: Object.freeze({
-    mode: 'limited-resume',
-    label: 'Limited Resume',
-    shortLabel: 'Limited Resume',
-    description: 'VidKing can usually continue near your saved place, but it may briefly jump while loading. Starting over may still use VidKing\'s own saved place.',
-    canTrackProgress: true,
-    canTransferOut: true,
-    canReceivePosition: true,
     automaticTarget: false,
   }),
   '111movies': Object.freeze({

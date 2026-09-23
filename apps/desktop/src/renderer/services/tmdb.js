@@ -66,8 +66,8 @@ export const fetchEpisodeGroup = async (groupId, apiKey) => {
 export * from "@orion/shared/api";
 export * from "../features/player/sources/registry";
 
-// Keep the legacy import name used by the Desktop controllers while preventing
-// the retired shared VidKing default from becoming a new playback selection.
+// Keep the legacy import name used by the Desktop controllers while applying
+// the current Desktop source policy.
 export const NON_ANIME_DEFAULT_SOURCE = DESKTOP_DEFAULT_CINEMA_SOURCE_ID;
 export const ANIME_DEFAULT_SOURCE = DESKTOP_DEFAULT_CINEMA_SOURCE_ID;
 

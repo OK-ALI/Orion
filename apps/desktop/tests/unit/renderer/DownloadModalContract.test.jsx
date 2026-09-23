@@ -134,6 +134,7 @@ describe("DownloadModal contract", () => {
     expect(Object.keys(payload).sort()).toEqual(
       [
         "candidateId",
+        "captureSessionId",
         "concurrency",
         "downloadPath",
         "downloadStrategy",
@@ -142,8 +143,6 @@ describe("DownloadModal contract", () => {
         "expectedDurationConfidence",
         "expectedDurationSeconds",
         "fragmentConcurrency",
-        "m3u8Context",
-        "m3u8Url",
         "mediaId",
         "mediaType",
         "name",
@@ -157,8 +156,7 @@ describe("DownloadModal contract", () => {
 
     expect(payload).toEqual({
       candidateId: "hls-1",
-      m3u8Url: undefined,
-      m3u8Context: undefined,
+      captureSessionId: "capture-1",
       name: "Contract Movie",
       downloadPath: "C:\\Orion Downloads",
       mediaId: "movie-321",
@@ -435,7 +433,7 @@ describe("DownloadModal contract", () => {
     ).toEqual([searchedSubtitle]);
   });
 
-  it("preserves the captured URL fallback when no candidate is available", async () => {
+  it("rejects an uncaptured URL when no candidate is available", async () => {
     setOrionStorage("downloadPath", "C:\\Orion Downloads");
 
     const bridge = createElectronBridge();
@@ -457,25 +455,9 @@ describe("DownloadModal contract", () => {
       }),
     );
 
-    await waitFor(() => {
-      expect(bridge.runDownload).toHaveBeenCalledOnce();
-    });
-
+    await screen.findByText(/No video stream has been captured yet/);
+    expect(bridge.runDownload).not.toHaveBeenCalled();
     expect(bridge.preflightStream).not.toHaveBeenCalled();
-
-    const payload = bridge.runDownload.mock.calls[0][0];
-
-    expect(payload.candidateId).toBeUndefined();
-    expect(payload.m3u8Url).toBe(
-      "https://fallback.example/master.m3u8",
-    );
-
-    expect(payload.m3u8Context).toEqual({
-      candidateId: "hls-1",
-      source: "contract-test",
-    });
-
-    expect(payload.downloadStrategy).toBe("auto");
   });
 
   it("cancel closes without starting or preflighting a download", () => {

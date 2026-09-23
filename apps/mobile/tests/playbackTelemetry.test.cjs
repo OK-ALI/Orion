@@ -210,21 +210,21 @@ test("handoff confirms only matching target telemetry within tolerance", () => {
     reason: "manual",
     fromSessionId: "old-session",
     fromSourceId: "videasy",
-    targetSourceId: "vidking",
+    targetSourceId: "vixsrc",
     requestedTime: 60,
     strategy: "url-param",
     now: 10_000,
   });
   const target = {
     sessionId: "new-session",
-    sourceId: "vidking",
+    sourceId: "vixsrc",
     currentTime: 64.9,
     duration: 120,
     evidence: "provider-message",
     observedAt: 10_500,
   };
   assert.equal(confirmPlaybackHandoff(handoff, target, 10_600)?.status, "confirmed");
-  assert.equal(confirmPlaybackHandoff(handoff, { ...target, sourceId: "vixsrc" }), null);
+  assert.equal(confirmPlaybackHandoff(handoff, { ...target, sourceId: "vidlink" }), null);
   assert.equal(confirmPlaybackHandoff(handoff, { ...target, currentTime: 65.1 }), null);
   assert.equal(confirmPlaybackHandoff(handoff, { ...target, observedAt: 9_999 }), null);
 });
@@ -234,14 +234,14 @@ test("handoff identifies an advancing target that missed the carried position af
     reason: "manual",
     fromSessionId: "old-session",
     fromSourceId: "vidsrc",
-    targetSourceId: "vidking",
+    targetSourceId: "vixsrc",
     requestedTime: 120,
     strategy: "url-param",
     now: 10_000,
   });
   const target = {
     sessionId: "new-session",
-    sourceId: "vidking",
+    sourceId: "vixsrc",
     currentTime: 4,
     duration: 3600,
     evidence: "provider-message",
@@ -250,7 +250,7 @@ test("handoff identifies an advancing target that missed the carried position af
   assert.equal(handoffTargetMissedPosition(handoff, target, 13_900), false);
   assert.equal(handoffTargetMissedPosition(handoff, target, 14_100), true);
   assert.equal(handoffTargetMissedPosition(handoff, { ...target, currentTime: 117 }, 14_100), false);
-  assert.equal(handoffTargetMissedPosition(handoff, { ...target, sourceId: "vixsrc" }, 14_100), false);
+  assert.equal(handoffTargetMissedPosition(handoff, { ...target, sourceId: "vidlink" }, 14_100), false);
 });
 
 test("an unconfirmed URL resume can restart the selected target without the resume parameter", () => {
@@ -334,10 +334,10 @@ test("player-event observer is restricted to documented mobile providers and sha
     sessionId: "session-1",
     sourceId: "vidking",
     strategy: "player-event",
-    expectedOrigins: ["https://www.vidking.net"],
+    expectedOrigins: ["https://vixsrc.to"],
   });
   assert.match(script, /videasy: true/);
-  assert.match(script, /vidking: true/);
+  assert.doesNotMatch(script, /vidking: true/);
   assert.match(script, /vidlink: true/);
   assert.match(script, /vidnest: true/);
   assert.match(script, /'vidsrc-ir': true/);

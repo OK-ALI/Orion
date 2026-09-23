@@ -173,7 +173,6 @@ export function createEmbeddedTelemetryScript({
       function normalizeProviderMessage(event) {
         var supportedSources = {
           videasy: true,
-          vidking: true,
           vidlink: true,
           vidnest: true,
           'vidsrc-ir': true,

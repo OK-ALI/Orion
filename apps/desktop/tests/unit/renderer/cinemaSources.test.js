@@ -74,7 +74,6 @@ describe("Cinema source registry", () => {
   it.each([
     ["videasy", "movie", "https://player.videasy.to/movie/533535?overlay=true&color=e50914"],
     ["vidsrc", "movie", "https://vsembed.su/embed/movie/tt6263850?ds_lang=en"],
-    ["vidking", "movie", "https://www.vidking.net/embed/movie/533535?autoPlay=true&color=e50914"],
     ["vidlink", "movie", "https://vidlink.pro/movie/533535?autoplay=true&primaryColor=e50914"],
     ["autoembed", "movie", "https://autoembed.co/movie/imdb/tt6263850"],
     ["vsembed", "movie", "https://vsembed.su/embed/movie/tt6263850?ds_lang=en"],
@@ -87,7 +86,6 @@ describe("Cinema source registry", () => {
   it.each([
     ["videasy", "https://player.videasy.to/tv/1399/1/2?overlay=true&color=e50914"],
     ["vidsrc", "https://vsembed.su/embed/tv/tt0944947/1/2?ds_lang=en"],
-    ["vidking", "https://www.vidking.net/embed/tv/1399/1/2?autoPlay=true&color=e50914"],
     ["vidlink", "https://vidlink.pro/tv/1399/1/2?autoplay=true&primaryColor=e50914"],
     ["autoembed", "https://autoembed.co/tv/imdb/tt0944947-1-2"],
     ["vsembed", "https://vsembed.su/embed/tv/tt0944947/1/2?ds_lang=en"],
@@ -150,7 +148,7 @@ describe("Cinema source registry", () => {
   });
 
   it("uses only a provider's declared resume parameter", () => {
-    expect(getSourceResumeParams("vidking", 92.8)).toEqual({ progress: 92 });
+    expect(normalizeSelectableSourceId("vidking", { mediaType: "movie" })).toBe("vixsrc");
     expect(getSourceResumeParams("vidlink", 92.8)).toEqual({});
     expect(getSourceResumeParams("videasy", 92.8)).toEqual({ progress: 92 });
     expect(getSourceResumeParams("vidnest", 92.8, "movie")).toEqual({ startAt: 92 });

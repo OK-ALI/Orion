@@ -398,7 +398,21 @@ internal object OrionDownloadRequestContextBroker {
         reason = "The manifest references media outside this source's approved request boundary.",
       )
     }
-    val descendants = discovery.allowed
+    val mediaProbe = probeFirstMedia(context, resolvedKind, effectiveUrl, body.orEmpty(), connection)
+    if (mediaProbe.code != null) {
+      return PreflightResult(
+        state = if (mediaProbe.code == "request-context-rejected") "expired" else "unreachable",
+        reachability = "unreachable",
+        resolvedKind = resolvedKind,
+        protection = if (protection == "unknown") "unknown" else "clear",
+        requiredBytes = null,
+        resumable = false,
+        descendants = emptySet(),
+        reasonCode = mediaProbe.code,
+        reason = mediaProbe.reason,
+      )
+    }
+    val descendants = discovery.allowed + mediaProbe.urls
     val requiredBytes = if (resolvedKind == "direct") contentLength(connection) else null
     val resumable = resolvedKind == "hls" || resolvedKind == "dash" ||
       connection.getHeaderField("Accept-Ranges")?.contains("bytes", ignoreCase = true) == true
@@ -414,6 +428,104 @@ internal object OrionDownloadRequestContextBroker {
       reasonCode = null,
       reason = null,
     )
+  }
+
+  private data class MediaProbe(
+    val urls: Set<String> = emptySet(),
+    val code: String? = null,
+    val reason: String? = null,
+  )
+
+  private fun probeFirstMedia(
+    context: CapturedContext,
+    kind: String,
+    rootUrl: String,
+    manifest: String,
+    directConnection: HttpURLConnection,
+  ): MediaProbe {
+    if (kind == "direct") {
+      return if (directConnection.inputStream.use { it.read() } >= 0) MediaProbe()
+      else MediaProbe(code = "empty-media", reason = "The source returned no media bytes.")
+    }
+    val urls = linkedSetOf<String>()
+    val fragment = if (kind == "hls") {
+      val master = OrionDownloadFragmentPlanner.selectHlsMaster(rootUrl, manifest, "best")
+      val mediaUrl = master?.videoPlaylistUrl ?: rootUrl
+      val mediaBody = if (master == null) manifest else {
+        if (!descendantAllowed(context, mediaUrl)) {
+          return MediaProbe(code = "descendant-origin-not-approved", reason = "The media request left the approved source boundary.")
+        }
+        urls.add(mediaUrl)
+        val playlist = probeChild(context, mediaUrl, 256 * 1024, false)
+        if (playlist.code != null) return MediaProbe(code = playlist.code, reason = playlist.reason)
+        playlist.bytes.toString(Charsets.UTF_8)
+      }
+      val plan = OrionDownloadFragmentPlanner.parseHlsMedia(mediaUrl, mediaBody, "video")
+      if (plan.issueCode != null || plan.fragments.isEmpty()) {
+        return MediaProbe(code = plan.issueCode ?: "media-child-missing", reason = "This source did not expose downloadable media fragments.")
+      }
+      plan.fragments.first().url
+    } else {
+      val plan = OrionDownloadFragmentPlanner.parseDash(rootUrl, manifest, "best")
+      if (plan.issueCode != null || plan.fragments.isEmpty()) {
+        return MediaProbe(code = plan.issueCode ?: "media-child-missing", reason = "This source did not expose downloadable media fragments.")
+      }
+      plan.fragments.first().url
+    }
+    if (!descendantAllowed(context, fragment)) {
+      return MediaProbe(code = "descendant-origin-not-approved", reason = "The media request left the approved source boundary.")
+    }
+    urls.add(fragment)
+    val media = probeChild(context, fragment, 4096, true)
+    return if (media.code == null) MediaProbe(urls) else MediaProbe(code = media.code, reason = media.reason)
+  }
+
+  private data class ChildProbe(val bytes: ByteArray = byteArrayOf(), val code: String? = null, val reason: String? = null)
+
+  private fun probeChild(context: CapturedContext, rawUrl: String, maxBytes: Int, ranged: Boolean): ChildProbe {
+    var url = rawUrl
+    repeat(4) {
+      if (!descendantAllowed(context, url)) {
+        return ChildProbe(code = "descendant-origin-not-approved", reason = "The media request left the approved source boundary.")
+      }
+      val request = authorizedRequestFor(context, url)
+      val connection = OrionDownloadAuthorizedHttp.openRequest(request, if (ranged) 0 else null, if (ranged) 4095 else null)
+      connection.connectTimeout = CONNECT_TIMEOUT_MS
+      connection.readTimeout = READ_TIMEOUT_MS
+      try {
+        val status = connection.responseCode
+        if (status in 300..399) {
+          url = connection.getHeaderField("Location")?.let { resolveHttpUrl(url, it) }
+            ?: return ChildProbe(code = "media-redirect-invalid", reason = "The media request redirected to an invalid location.")
+          return@repeat
+        }
+        if (status == 401 || status == 403) {
+          return ChildProbe(code = "request-context-rejected", reason = "The source rejected the media request. Play it again or choose another source.")
+        }
+        if (status !in 200..299) {
+          return ChildProbe(code = "media-child-unavailable", reason = "The source did not return its first media request.")
+        }
+        val bytes = connection.inputStream.use { input ->
+          val output = java.io.ByteArrayOutputStream()
+          val buffer = ByteArray(4096)
+          while (output.size() < maxBytes) {
+            val read = input.read(buffer, 0, min(buffer.size, maxBytes - output.size()))
+            if (read <= 0) break
+            output.write(buffer, 0, read)
+          }
+          output.toByteArray()
+        }
+        if (bytes.isEmpty()) return ChildProbe(code = "empty-media", reason = "The source returned no media bytes.")
+        val type = connection.contentType.orEmpty().lowercase(Locale.US)
+        if (ranged && (type.contains("text/html") || type.contains("application/json") || bytes.toString(Charsets.UTF_8).trimStart().startsWith("<html", true))) {
+          return ChildProbe(code = "invalid-media", reason = "The source returned a page instead of media bytes.")
+        }
+        return ChildProbe(bytes)
+      } finally {
+        connection.disconnect()
+      }
+    }
+    return ChildProbe(code = "media-redirect-limit", reason = "The media request redirected too many times.")
   }
 
   private fun openConnection(context: CapturedContext, rawUrl: String): HttpURLConnection {

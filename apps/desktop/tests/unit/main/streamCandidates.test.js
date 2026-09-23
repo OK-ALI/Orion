@@ -29,12 +29,12 @@ test("classifies DASH, direct video, and extensionless manifests", () => {
   assert.equal(classifyStream("https://video.test/manifest", { "content-type": ["application/octet-stream"] }, "xhr"), "hls");
 });
 
-test("keeps a late modal connected to a compatible restarted capture session", () => {
+test("does not reuse a candidate from a restarted capture session", () => {
   const identity = { mediaType: "tv", mediaId: 7, season: 1, episode: 2 };
   const first = beginCaptureSession({ mediaIdentity: identity, sourceId: "source-a" });
   addCandidate({ url: "https://cdn.test/master.m3u8", sessionId: first.id });
   const restarted = beginCaptureSession({ mediaIdentity: identity, sourceId: "source-a" });
-  assert.equal(listCandidates({ sessionId: restarted.id }).length, 1);
+  assert.equal(listCandidates({ sessionId: restarted.id }).length, 0);
 });
 
 test("reused player webContents moves on from an ended capture session", () => {

@@ -1,6 +1,8 @@
 const { session, net } = require("electron");
 const http = require("http");
 const crypto = require("crypto");
+const { requestContextForUrl } = require("./streamCandidates");
+const { assertPublicMediaUrl } = require("./publicMediaUrl");
 
 function getPlayerUserAgent() {
   try {
@@ -55,16 +57,23 @@ function headerValue(headers, key) {
   return Array.isArray(value) ? value.join(", ") : value;
 }
 
-function fetchViaPlayerSession(url, m3u8Context, options = {}) {
+async function fetchViaPlayerSession(url, m3u8Context, options = {}) {
+  await assertPublicMediaUrl(url);
   return new Promise((resolve, reject) => {
+    let timeout = null;
     try {
       const playerSession = session.fromPartition("persist:player");
       const request = net.request({
         url,
         session: playerSession,
-        redirect: "follow",
+        redirect: "error",
       });
-      const upstreamHeaders = buildDownloadHeaders(m3u8Context, getPlayerUserAgent());
+      timeout = setTimeout(() => {
+        try { request.abort(); } catch {}
+        reject(new Error("Media request timed out"));
+      }, 20000);
+      const requestContext = requestContextForUrl(m3u8Context, url, options.referer);
+      const upstreamHeaders = buildDownloadHeaders(requestContext, getPlayerUserAgent());
       for (const [name, value] of upstreamHeaders) {
         const lower = name.toLowerCase();
         if (
@@ -97,6 +106,7 @@ function fetchViaPlayerSession(url, m3u8Context, options = {}) {
         const finish = (truncated = false) => {
           if (settled) return;
           settled = true;
+          clearTimeout(timeout);
           const body = Buffer.concat(chunks);
           resolve({
             statusCode: response.statusCode || 200,
@@ -117,14 +127,21 @@ function fetchViaPlayerSession(url, m3u8Context, options = {}) {
         });
         response.on("end", () => finish(false));
         response.on("error", (error) => {
-          if (!settled) reject(error);
+          if (!settled) {
+            clearTimeout(timeout);
+            reject(error);
+          }
         });
       });
       request.on("error", (error) => {
-        if (!request.aborted) reject(error);
+        if (!request.aborted) {
+          clearTimeout(timeout);
+          reject(error);
+        }
       });
       request.end();
     } catch (error) {
+      clearTimeout(timeout);
       reject(error);
     }
   });
@@ -191,10 +208,12 @@ function createHlsProxy(rootUrl, m3u8Context) {
           res.end("Upstream url is not part of the captured manifest");
           return;
         }
+        await assertPublicMediaUrl(upstreamUrl);
 
         const playerSession = session.fromPartition("persist:player");
-        const upstreamRequest = net.request({ url: upstreamUrl, session: playerSession, redirect: "follow" });
-        const capturedHeaders = buildDownloadHeaders(m3u8Context, getPlayerUserAgent());
+        const upstreamRequest = net.request({ url: upstreamUrl, session: playerSession, redirect: "error" });
+        const requestContext = requestContextForUrl(m3u8Context, upstreamUrl, parentUrl);
+        const capturedHeaders = buildDownloadHeaders(requestContext, getPlayerUserAgent());
         for (const [name, value] of capturedHeaders) {
           const lower = name.toLowerCase();
           if (["host", "content-length", "accept-encoding", "cookie"].includes(lower)) continue;

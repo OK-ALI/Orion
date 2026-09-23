@@ -7,6 +7,12 @@ const { finalizationWatchdogAction } = require("./finalizationWatchdog");
 const DOWNLOAD_STALL_TIMEOUT_MS = 5 * 60 * 1000;
 const DOWNLOAD_STALL_CHECK_MS = 15 * 1000;
 
+function safeDiagnosticLine(line) {
+  return String(line || "")
+    .replace(/https?:\/\/[^\s"']+/gi, "<media-url-redacted>")
+    .replace(/\b(cookie|authorization|token|signature)\s*[:=]\s*[^\s,;]+/gi, "$1=<redacted>");
+}
+
 function parseClock(value) {
   const parts = String(value || "").split(":").map(Number);
   if (parts.some(Number.isNaN)) return null;
@@ -63,6 +69,19 @@ function trackProcess(context, id, proc, name, downloadPath, logPath, cookiePath
     if (!trimmed) return;
     const idx = context.downloads.findIndex((d) => d.id === id);
     if (idx === -1) return;
+
+    if (/HTTP Error (?:401|403)|\bForbidden\b/i.test(trimmed)
+      && Number(context.downloads[idx].downloadedBytes || 0) === 0) {
+      const entry = context.downloads[idx];
+      entry.status = "failed";
+      entry.failureCode = "request_context_rejected";
+      entry.lastMessage = "The source rejected the first media request. Resolve the download again or choose another source.";
+      entry.completedAt = Date.now();
+      sendProgress({ id, status: "failed", failureCode: entry.failureCode, lastMessage: entry.lastMessage });
+      saveDownloads();
+      killProcessTree(proc);
+      return;
+    }
 
     const update = {};
     const etaMatch = trimmed.match(/\bETA\s+([\d:]+)/i);
@@ -258,7 +277,7 @@ function trackProcess(context, id, proc, name, downloadPath, logPath, cookiePath
 
   const appendLog = (line) => {
     try {
-      fs.appendFileSync(logPath, line + "\n", "utf8");
+      fs.appendFileSync(logPath, safeDiagnosticLine(line) + "\n", "utf8");
     } catch {}
   };
 
@@ -432,8 +451,11 @@ function trackProcess(context, id, proc, name, downloadPath, logPath, cookiePath
         .find((line) => /error|failed|unable|cannot|denied/i.test(line)) || "";
       entry.status = "failed";
       entry.completedAt = Date.now();
-      entry.lastMessage = errorLine
-        ? `${errorLine} (exit ${code})`
+      entry.failureCode = /downloaded file is empty|empty file/i.test(errorLine) ? "empty_media" : "downloader_exit";
+      entry.lastMessage = entry.failureCode === "empty_media"
+        ? "The source returned no downloadable media. Resolve the download again or choose another source."
+        : errorLine
+          ? `${safeDiagnosticLine(errorLine)} (exit ${code})`
         : `Download failed (exit code ${code})`;
       sendProgress({ id, status: "failed", lastMessage: entry.lastMessage, completedAt: entry.completedAt, logPath: entry.logPath });
       saveDownloads();

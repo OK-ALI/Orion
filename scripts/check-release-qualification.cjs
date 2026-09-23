@@ -34,13 +34,13 @@ const previewRequired = [
 
 const stableRequired = [
   ...previewRequired,
-  "windowsUpgradeFrom3_1_0",
+  map.productVersion === "3.2.1" ? "windowsUpgradeFrom3_2_0" : "windowsUpgradeFrom3_1_0",
   "windowsInterruptedDownloadRecovery",
   "windowsUpdateRejectionMatrix",
   "windowsInstallerLaunchAndRestartConfirmation",
   "futureReleaseBridgeSelection",
   "androidCleanInstall",
-  "androidUpgradeFromVersionCode57",
+  map.productVersion === "3.2.1" ? "androidUpgradeFromVersionCode58" : "androidUpgradeFromVersionCode57",
   "androidSignerContinuity",
   "androidInterruptedDownloadAndLifecycleRecovery",
   "androidPermissionReturnWithoutRedownload",

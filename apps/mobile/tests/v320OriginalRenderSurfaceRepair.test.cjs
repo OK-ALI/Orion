@@ -26,7 +26,7 @@ test('v3.2 Original uses the existing Cinema owner for a bounded post-layout com
   const manager = read('plugins', 'orion-cinema-webview-native', 'OrionCinemaWebViewManager.kt');
   const client = read('plugins', 'orion-cinema-webview-native', 'OrionCinemaWebViewClient.kt');
   assert.match(wrapper, /presentationMode,/);
-  assert.match(wrapper, /presentationMode,\n\s*\}\), \[downloadCaptureEnabled, downloadProviderClass, presentationMode,/);
+  assert.match(wrapper, /presentationMode,\r?\n\s*\}\), \[downloadCaptureEnabled, downloadProviderClass, presentationMode,/);
   assert.match(manager, /armOriginalSurfaceRecovery\(viewWrapper, "mode-transition"\)/);
   assert.match(manager, /OnLayoutChangeListener/);
   assert.match(manager, /setLayerType\(View\.LAYER_TYPE_HARDWARE, null\)/);

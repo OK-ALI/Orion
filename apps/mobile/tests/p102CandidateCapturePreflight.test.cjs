@@ -214,6 +214,24 @@ test('P10.2 JavaScript normalization strips malicious native hitchhiker fields a
   assert.equal(capture.normalizeMobileDownloadCandidateEventV1({ ...payload, playbackSessionId: 'stale' }, session), null);
 });
 
+test('source switch releases the prior native capture before arming a new episode session', () => {
+  const released = [];
+  const capture = loadTypeScriptModule(path.join(mobileRoot, 'src/features/downloads/downloadCandidateCapture.ts'), {
+    'react-native': {
+      Platform: { OS: 'android' },
+      NativeModules: { OrionDownloadCapture: { releaseSession: (id) => released.push(id) } },
+      DeviceEventEmitter: { addListener: () => ({ remove() {} }) },
+    },
+  });
+  const media = { id: 1408, mediaType: 'tv', season: 2, episode: 1, libraryKind: 'series', title: 'Dr. House' };
+  const first = capture.beginMobileDownloadCaptureSessionV1({ playbackSessionId: 'first', sourceId: 'vixsrc', providerClass: 'primary', itemKey: 'series:1408:s2:e1', media });
+  const second = capture.beginMobileDownloadCaptureSessionV1({ playbackSessionId: 'second', sourceId: 'vidlink', providerClass: 'primary', itemKey: 'series:1408:s2:e1', media });
+  assert.deepEqual(released, ['first']);
+  first();
+  second();
+  assert.deepEqual(released, ['first', 'second']);
+});
+
 test('P10.2 capture boundary remains separate when later native transfer execution is activated', () => {
   const manager = readMobile('src', 'services', 'downloadManager.ts');
   const capture = readMobile('src', 'features', 'downloads', 'downloadCandidateCapture.ts');
@@ -259,16 +277,17 @@ test('P10.2 physical trace distinguishes manifest observer rejection and classif
   assert.match(broker, /stage=scheme-rejected/);
   assert.match(broker, /stage=method-rejected/);
 
-  const clientTraceStart = client.indexOf('Log.i(\n        "OrionP102Trace"');
-  const clientTraceEnd = client.indexOf('\n      )', clientTraceStart);
+  const normalizedClient = client.replaceAll('\r\n', '\n');
+  const clientTraceStart = normalizedClient.indexOf('Log.i(\n        "OrionP102Trace"');
+  const clientTraceEnd = normalizedClient.indexOf('\n      )', clientTraceStart);
   assert.ok(clientTraceStart >= 0 && clientTraceEnd > clientTraceStart);
 
-  const brokerTraceCalls = [...broker.matchAll(/tracePhysicalOnce\([\s\S]*?\n\s*\)/g)]
+  const brokerTraceCalls = [...broker.matchAll(/tracePhysicalOnce\([\s\S]*?\r?\n\s*\)/g)]
     .map((match) => match[0])
     .filter((block) => block.includes('message ='));
 
   assert.ok(brokerTraceCalls.length >= 5);
-  const traceSource = `${client.slice(clientTraceStart, clientTraceEnd)}\n${brokerTraceCalls.join('\n')}`;
+  const traceSource = `${normalizedClient.slice(clientTraceStart, clientTraceEnd)}\n${brokerTraceCalls.join('\n')}`;
 
   assert.doesNotMatch(traceSource, /rawUrl|requestHeaders|cookieHeader|requestContextId|authorization|signedUrl/i);
   assert.doesNotMatch(traceSource, /https?:\/\/|uri\.toString\(\)|request\.url\.toString\(\)/i);

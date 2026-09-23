@@ -30,7 +30,6 @@ import {
 } from './embeddedTelemetry';
 import {
   createCineSrcResumeScript,
-  createProviderPresentationScript,
   createVerifiedResumeScript,
   mobileAdBlockerScript,
 } from './mobileAdBlocker';
@@ -226,11 +225,7 @@ export function EmbedPlayerSurface({
     strategy: source?.progressStrategy || 'none',
     expectedOrigins: telemetryExpectedOrigins,
   }), [playbackSessionId, sourceId]);
-  const providerPresentationScript = useMemo(
-    () => createProviderPresentationScript(sourceId),
-    [sourceId],
-  );
-  const injectedScript = `${mobileAdBlockerScript}\n${providerPresentationScript}\n${telemetryScript}`;
+  const injectedScript = `${mobileAdBlockerScript}\n${telemetryScript}`;
 
   useEffect(() => {
     if (Platform.OS !== 'android' || source?.supportsDownloads !== true) return undefined;

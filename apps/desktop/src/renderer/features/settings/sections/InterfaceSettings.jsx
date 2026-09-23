@@ -454,8 +454,8 @@ export function AppearanceSection({ sectionRef = null }) {
               Apply accent colour to streaming player
             </div>
             <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>
-              Passes the selected accent colour to the player source (Videasy,
-              Vidking). VidSrc does not support colour theming.
+              Passes the selected accent colour to supported player sources.
+              VidSrc does not support colour theming.
             </div>
           </div>
         </div>

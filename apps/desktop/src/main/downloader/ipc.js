@@ -22,9 +22,11 @@ const { exportSessionCookies } = require("./requestContext");
 const { downloadSubtitleFile } = require("./subtitleAsset");
 const {
   beginCaptureSession,
+  candidateOwnedByTransfer,
   listCandidates,
   clearCandidates,
   endCaptureSession,
+  resolveCaptureSession,
   resolveCandidate,
 } = require("./streamCandidates");
 
@@ -323,6 +325,7 @@ function register(getMainWindow, { resetSettingsData } = {}) {
       _,
       {
         candidateId,
+        captureSessionId,
         m3u8Url,
         m3u8Context,
         name,
@@ -346,14 +349,16 @@ function register(getMainWindow, { resetSettingsData } = {}) {
     ) => {
       try {
         const capturedCandidate = candidateId ? resolveCandidate(candidateId) : null;
-        const resolvedM3u8Url = capturedCandidate?.url || m3u8Url;
-        const resolvedM3u8Context = capturedCandidate || m3u8Context;
-        if (!resolvedM3u8Url) {
-          return { ok: false, error: "No active stream was captured. Start playback and try again." };
+        if (!capturedCandidate) {
+          return { ok: false, code: "candidate_expired", error: "The captured stream is no longer available. Resolve this download again." };
         }
-        const preflight = capturedCandidate
-          ? await preflightCandidate(candidateId)
-          : { ok: true, kind: resolvedM3u8Context?.kind || "hls", strategy: downloadStrategy === "direct" ? "direct" : "hls-proxy" };
+        const capture = captureSessionId ? resolveCaptureSession(captureSessionId) : null;
+        if (!candidateOwnedByTransfer(capturedCandidate, capture, { captureSessionId, mediaId, mediaType, season, episode })) {
+          return { ok: false, code: "capture_mismatch", error: "This stream belongs to another source or title. Resolve the download again." };
+        }
+        const resolvedM3u8Url = capturedCandidate.url;
+        const resolvedM3u8Context = capturedCandidate;
+        const preflight = await preflightCandidate(candidateId);
         if (!preflight?.ok) {
           return { ok: false, code: preflight?.code || "preflight_failed", error: preflight?.error || "The selected stream is not downloadable." };
         }
@@ -449,12 +454,13 @@ function register(getMainWindow, { resetSettingsData } = {}) {
           qualityPreset,
           fragmentConcurrency: Math.max(1, Math.min(12, Number(fragmentConcurrency) || 6)),
           sourceHost: capturedCandidate ? new URL(capturedCandidate.url).host : "",
+          sourceId: capturedCandidate.sourceId || null,
         };
 
         try {
           fs.writeFileSync(
             logPath,
-            `Orion Download Log\nName: ${name}\nSource: ${safeSourceLabel(resolvedM3u8Url)}\nKind: ${sourceKind.toUpperCase()}\nPreflight: ${preflight.verified === false ? "fallback / final verification required" : "passed"}${preflight.warning ? `\nWarning: ${preflight.warning}` : ""}\nStarted: ${new Date().toISOString()}\n${"─".repeat(60)}\n`,
+            `Orion Download Log\nName: ${name}\nProvider: ${capturedCandidate.sourceId || "unknown"}\nSource: ${safeSourceLabel(resolvedM3u8Url)}\nKind: ${sourceKind.toUpperCase()}\nPreflight: first media request verified\nStarted: ${new Date().toISOString()}\n${"─".repeat(60)}\n`,
             "utf8",
           );
         } catch {}
@@ -537,9 +543,9 @@ function register(getMainWindow, { resetSettingsData } = {}) {
               "--no-playlist",
               "--continue",
               "--retries",
-              "10",
+              "2",
               "--fragment-retries",
-              "12",
+              "2",
               "--concurrent-fragments",
               String(entry.fragmentConcurrency),
               "--retry-sleep",

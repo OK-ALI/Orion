@@ -14,7 +14,7 @@ import type {
 
 const EVENT_NAME = 'OrionDownloadCandidate';
 const MAX_REASON_LENGTH = 180;
-const SOURCE_RESOLUTION_RETENTION_MS = 2 * 60_000;
+const SOURCE_RESOLUTION_RETENTION_MS = 4 * 60_000;
 
 const MANIFEST_KINDS = new Set<MobileDownloadManifestKindV1>(['direct', 'hls', 'dash', 'extensionless', 'unknown']);
 const RESOLVED_MANIFEST_KINDS = new Set<MobileDownloadCandidatePreflightV1['resolvedManifestKind']>(['direct', 'hls', 'dash', 'unknown']);
@@ -59,7 +59,7 @@ type Listener = (snapshots: readonly MobileDownloadCandidateSnapshotV1[]) => voi
 let activeSession: ActiveCaptureSessionV1 | null = null;
 let eventSubscription: { remove(): void } | null = null;
 let snapshots: MobileDownloadCandidateSnapshotV1[] = [];
-let pendingSourceResolution: { itemKey: string; method: MobileDownloadTransferMethodV1; expiresAt: number; autoReturnIssued: boolean } | null = null;
+let pendingSourceResolution: { itemKey: string; method: MobileDownloadTransferMethodV1; expiresAt: number; autoReturnIssued: boolean; failure: string | null } | null = null;
 const retainedSourceSessions = new Map<string, Set<string>>();
 const listeners = new Set<Listener>();
 
@@ -222,8 +222,11 @@ export function requestMobileDownloadSourceResolutionV1(itemKey: string, method:
     releaseRetainedSessions(pendingSourceResolution.itemKey);
     snapshots = snapshots.filter((entry) => entry.itemKey !== pendingSourceResolution?.itemKey);
   }
-  pendingSourceResolution = { itemKey: clean, method, expiresAt: Date.now() + SOURCE_RESOLUTION_RETENTION_MS, autoReturnIssued: false };
+  releaseRetainedSessions(clean);
+  snapshots = snapshots.filter((entry) => entry.itemKey !== clean);
+  pendingSourceResolution = { itemKey: clean, method, expiresAt: Date.now() + SOURCE_RESOLUTION_RETENTION_MS, autoReturnIssued: false, failure: null };
   ensureEventSubscription();
+  publish();
 }
 
 
@@ -236,6 +239,17 @@ export function markMobileDownloadSourceAutoReturnIssuedV1(itemKey: string): boo
   if (!pendingSourceResolutionActive(itemKey) || !pendingSourceResolution || pendingSourceResolution.autoReturnIssued) return false;
   pendingSourceResolution.autoReturnIssued = true;
   return true;
+}
+
+export function failMobileDownloadSourceResolutionV1(itemKey: string, message: string): boolean {
+  if (!pendingSourceResolutionActive(itemKey) || !pendingSourceResolution) return false;
+  pendingSourceResolution.failure = text(message, MAX_REASON_LENGTH) || 'No downloadable stream was found. Choose another source.';
+  pendingSourceResolution.autoReturnIssued = true;
+  return true;
+}
+
+export function getMobileDownloadSourceResolutionFailureV1(itemKey: string): string | null {
+  return pendingSourceResolution?.itemKey === itemKey ? pendingSourceResolution.failure : null;
 }
 
 export function completeMobileDownloadSourceResolutionV1(itemKey: string): void {
@@ -264,6 +278,10 @@ function ensureEventSubscription(): void {
 
 export function beginMobileDownloadCaptureSessionV1(input: BeginMobileDownloadCaptureSessionInputV1): () => void {
   pendingSourceResolutionActive();
+  if (activeSession?.itemKey === input.itemKey && activeSession.playbackSessionId !== input.playbackSessionId) {
+    nativeModule()?.releaseSession(activeSession.playbackSessionId);
+  }
+  releaseRetainedSessions(input.itemKey);
   activeSession = {
     playbackSessionId: input.playbackSessionId,
     sourceId: input.sourceId,

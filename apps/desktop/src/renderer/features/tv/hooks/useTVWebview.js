@@ -113,7 +113,7 @@ export function useTVWebview(context) {
   }, [currentProgressKey]);
   // Auto-failover detection effect
   useEffect(() => {
-    if (!playing) {
+    if (!playing || downloadResolutionActive) {
       setShowFailoverPrompt(false);
       clearTimeout(failoverTimeoutRef.current);
       return;
@@ -128,7 +128,7 @@ export function useTVWebview(context) {
       }
     }, 15000);
     return () => clearTimeout(failoverTimeoutRef.current);
-  }, [playing, playerSource, selectedEp?.episode_number, reportSourceHealth]);
+  }, [downloadResolutionActive, playing, playerSource, selectedEp?.episode_number, reportSourceHealth]);
   const handleFailoverNextSource = useCallback((automatic = false) => {
     reportSourceHealth("degraded", "playback-stalled", automatic
       ? "Orion switched sources after playback stalled."

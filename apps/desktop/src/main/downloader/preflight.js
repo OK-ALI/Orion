@@ -1,6 +1,7 @@
 const { fetchViaPlayerSession } = require("./hlsProxy");
 const { listCandidates, resolveCandidate } = require("./streamCandidates");
 const { isObviousMediaSegmentUrl } = require("./mediaSegments");
+const { probeFirstMedia } = require("./mediaDescendant");
 const {
   inspectDashProbe,
   inspectDirectProbe,
@@ -41,26 +42,18 @@ async function preflightCandidate(candidateId) {
       : candidate.kind === "dash"
         ? inspectDashProbe(response)
         : inspectDirectProbe(response, candidate);
+    if (result.ok && candidate.kind !== "direct") {
+      const media = await probeFirstMedia(candidate, response, fetchViaPlayerSession);
+      if (!media.ok) return { ...media, candidate: listCandidates().find((item) => item.id === candidateId) };
+    }
     return {
       ...result,
+      verified: true,
       candidate: listCandidates().find((item) => item.id === candidateId),
     };
   } catch (error) {
-    const message = error.message || "The stream could not be reached.";
-    if (/net::ERR_|ERR_FAILED|ERR_ABORTED/i.test(message)) {
-      return {
-        ok: true,
-        code: "electron_net_fallback",
-        strategy: "direct",
-        kind: candidate.kind,
-        verified: false,
-        warning: `Electron preflight was unavailable (${message}); Orion will use the captured browser context and verify the downloaded artifact before completion.`,
-        candidate: listCandidates().find((item) => item.id === candidateId),
-        variants: [],
-        isMaster: false,
-      };
-    }
-    return { ok: false, code: "network", error: message };
+    const code = /timed?\s*out/i.test(error?.message || "") ? "timeout" : "network";
+    return { ok: false, code, error: "Orion could not verify media bytes from this source. Try another source." };
   }
 }
 

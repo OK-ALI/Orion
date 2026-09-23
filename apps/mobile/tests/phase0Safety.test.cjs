@@ -96,15 +96,13 @@ test("mobile source selection keeps unsafe providers visible but excludes them f
   assert.doesNotMatch(sourceSheet, /\{\s*PLAYER_SOURCES\s*\}\s+from/);
 });
 
-test("VidKing stays playable with limited resume but is excluded from automatic continuity targets", () => {
+test("retired VidKing is migrated and absent from Mobile playback capabilities", () => {
   const mobileSources = read("src/features/playback/mobileSources.ts");
   const prompt = read("src/features/playback/ResumePlaybackPrompt.tsx");
   const player = read("src/features/playback/PlayerScreen.tsx");
 
-  assert.match(
-    mobileSources,
-    /vidking:\s*Object\.freeze\(\{[\s\S]*?mode: 'limited-resume'[\s\S]*?canReceivePosition: true[\s\S]*?automaticTarget: false[\s\S]*?\}\),/
-  );
+  assert.match(mobileSources, /MOBILE_RETIRED_SOURCE_IDS[^\n]*vidking/);
+  assert.doesNotMatch(mobileSources, /vidking:\s*Object\.freeze/);
 
   assert.match(mobileSources, /mobileSourceSupportsContinuity\(candidateId\)/);
 

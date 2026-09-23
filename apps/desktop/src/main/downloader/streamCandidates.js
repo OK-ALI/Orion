@@ -7,6 +7,7 @@ const SESSION_AGE_MS = 30 * 60 * 1000;
 const candidates = new Map();
 const captureSessions = new Map();
 const webContentsSessions = new Map();
+const observedRequests = new Map();
 let activeSessionId = null;
 
 function headerValue(headers, name) {
@@ -132,7 +133,35 @@ function endCaptureSession(sessionId) {
     if (boundSessionId === sessionId) webContentsSessions.delete(webContentsId);
   }
   if (activeSessionId === sessionId) activeSessionId = null;
+  observedRequests.delete(sessionId);
   return true;
+}
+
+function recordObservedRequest({ url, webContentsId, requestHeaders, referrer } = {}) {
+  const sessionId = webContentsSessions.get(webContentsId);
+  if (!sessionId || !captureSessions.has(sessionId) || !url) return;
+  const requests = observedRequests.get(sessionId) || new Map();
+  requests.delete(url);
+  requests.set(url, { requestHeaders: { ...(requestHeaders || {}) }, referrer: referrer || "" });
+  while (requests.size > 256) requests.delete(requests.keys().next().value);
+  observedRequests.set(sessionId, requests);
+}
+
+function requestContextForUrl(candidate, url, parentUrl = candidate?.url) {
+  const observed = observedRequests.get(candidate?.sessionId)?.get(url);
+  if (observed) return observed;
+  try {
+    if (new URL(url).origin === new URL(candidate.url).origin) return candidate;
+    const original = candidate.requestHeaders || {};
+    const safe = {};
+    for (const [name, value] of Object.entries(original)) {
+      if (["user-agent", "accept", "accept-language"].includes(name.toLowerCase())) safe[name] = value;
+    }
+    safe.Referer = new URL(parentUrl).origin + "/";
+    return { requestHeaders: safe, referrer: safe.Referer };
+  } catch {
+    return { requestHeaders: {}, referrer: "" };
+  }
 }
 
 function addCandidate(details = {}) {
@@ -150,6 +179,7 @@ function addCandidate(details = {}) {
     ...(existing || {}),
     id,
     sessionId,
+    sourceId: sessionId ? captureSessions.get(sessionId)?.sourceId || null : null,
     kind,
     status: "ready",
     url: details.url,
@@ -181,6 +211,7 @@ function summary(item) {
     id: item.id,
     candidateId: item.id,
     sessionId: item.sessionId,
+    sourceId: item.sourceId,
     kind: item.kind,
     status: item.status,
     host,
@@ -195,17 +226,8 @@ function summary(item) {
 function listCandidates({ sessionId, webContentsIds } = {}) {
   prune();
   const allowed = Array.isArray(webContentsIds) && webContentsIds.length ? new Set(webContentsIds) : null;
-  const requestedSession = sessionId ? captureSessions.get(sessionId) : null;
-  const sameCaptureScope = (candidate) => {
-    if (!sessionId || candidate.sessionId === sessionId) return true;
-    if (!requestedSession) return false;
-    const candidateSession = captureSessions.get(candidate.sessionId);
-    if (!candidateSession || candidateSession.sourceId !== requestedSession.sourceId) return false;
-    return JSON.stringify(candidateSession.mediaIdentity || null) ===
-      JSON.stringify(requestedSession.mediaIdentity || null);
-  };
   return [...candidates.values()]
-    .filter(sameCaptureScope)
+    .filter((candidate) => !sessionId || candidate.sessionId === sessionId)
     .filter((item) => !allowed || allowed.has(item.webContentsId))
     .sort((a, b) => b.score - a.score || b.capturedAt - a.capturedAt)
     .map(summary);
@@ -214,6 +236,19 @@ function listCandidates({ sessionId, webContentsIds } = {}) {
 function resolveCandidate(id) {
   prune();
   return candidates.get(id) || null;
+}
+
+function resolveCaptureSession(id) {
+  prune();
+  return captureSessions.get(id) || null;
+}
+
+function candidateOwnedByTransfer(candidate, capture, { captureSessionId, mediaId, mediaType, season, episode } = {}) {
+  const identity = capture?.mediaIdentity;
+  return Boolean(candidate && capture && capture.status !== "ended" &&
+    candidate.sessionId === captureSessionId && candidate.sourceId === capture.sourceId &&
+    String(identity?.mediaType) === String(mediaType) && String(identity?.mediaId) === String(mediaId) &&
+    (mediaType !== "tv" || (Number(identity?.season) === Number(season) && Number(identity?.episode) === Number(episode))));
 }
 
 function clearCandidates({ sessionId } = {}) {
@@ -231,10 +266,14 @@ module.exports = {
   beginCaptureSession,
   bindWebContents,
   bindWebContentsToActive,
+  candidateOwnedByTransfer,
   classifyStream,
   clearCandidates,
   endCaptureSession,
   isHls,
   listCandidates,
+  recordObservedRequest,
+  requestContextForUrl,
+  resolveCaptureSession,
   resolveCandidate,
 };

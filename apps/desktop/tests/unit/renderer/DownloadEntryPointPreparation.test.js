@@ -15,6 +15,7 @@ const tvOverlays = read("../../../src/renderer/features/tv/components/TVOverlays
 const tvActions = read("../../../src/renderer/features/tv/hooks/useTVEpisodeActions.js");
 const tvController = read("../../../src/renderer/features/tv/hooks/useTVController.js");
 const tvWebview = read("../../../src/renderer/features/tv/hooks/useTVWebview.js");
+const downloadPreflight = read("../../../src/renderer/features/player/hooks/useDownloadCandidatePreflight.js");
 
 describe("Desktop download entrypoint preparation contract", () => {
   it("routes Movie Details through the real player lifecycle and returns only after preflight succeeds", () => {
@@ -24,11 +25,14 @@ describe("Desktop download entrypoint preparation contract", () => {
     expect(movieController).toContain("setShowDownload(false);");
     expect(movieController).toContain("setCaptureSessionId(null);");
     expect(movieController).toContain("startMovieDownloadResolution();");
-    expect(movieController).toContain("preflightStream?.(candidateId)");
-    expect(movieController).toContain("if (disposed || !result?.ok) return;");
-    expect(movieController).toContain("setDownloadResolutionActive(false);");
+    expect(movieController).toContain("useDownloadCandidatePreflight({");
+    expect(downloadPreflight).toContain("preflightStream?.(candidateId)");
+    expect(downloadPreflight).toContain("onFailure(captureSessionId, result)");
+    expect(movieController).toContain("DOWNLOAD_SOURCE_ATTEMPT_MS");
+    expect(movieController).toContain("setDownloadResolutionError(");
+    expect(downloadPreflight).toContain("setActive(false);");
     expect(movieController).toContain("setPlaying(false);");
-    expect(movieController).toContain("setShowDownload(true);");
+    expect(downloadPreflight).toContain("setShowDownload(true);");
     expect(movieOverlays).not.toContain("DownloadSourceProbe");
 
     const openDownloadBlock = movieController.match(
@@ -62,9 +66,11 @@ describe("Desktop download entrypoint preparation contract", () => {
     expect(tvController).toContain("setDownloadResolutionActive(true);");
     expect(tvController).toContain("setShowDownload(false);");
     expect(tvController).toContain("startEpisodeDownloadResolution(ep);");
-    expect(tvController).toContain("preflightStream?.(candidateId)");
+    expect(tvController).toContain("useDownloadCandidatePreflight({");
+    expect(downloadPreflight).toContain("preflightStream?.(candidateId)");
+    expect(tvController).toContain("DOWNLOAD_SOURCE_ATTEMPT_MS");
     expect(tvController).toContain("setPlaying(false);");
-    expect(tvController).toContain("setShowDownload(true);");
+    expect(downloadPreflight).toContain("setShowDownload(true);");
     expect(tvOverlays).not.toContain("DownloadSourceProbe");
 
     const resolutionBlock = tvWebview.match(

@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
-const { buildTargetDirectory, qualityFormat, safeFileName } = require("../../../src/main/downloader/paths");
+const { buildTargetDirectory, qualityFormat, safeFileName, safeSourceLabel } = require("../../../src/main/downloader/paths");
 
 test("download paths retain the v1.0.7 Movies and Series layout", () => {
   assert.equal(buildTargetDirectory("D:/Media", "movie", "Arrival (2016)"), path.join("D:/Media", "Movies", "Arrival (2016)"));
@@ -11,4 +11,9 @@ test("download paths retain the v1.0.7 Movies and Series layout", () => {
 test("quality and filename compatibility remain stable", () => {
   assert.match(qualityFormat("1080"), /height<=1080/);
   assert.equal(safeFileName('A: Title?'), "A Title");
+});
+
+test("download diagnostics show only the source origin, not signed paths or query strings", () => {
+  assert.equal(safeSourceLabel("https://cdn.example/private-token/master.m3u8?sig=secret"), "https://cdn.example");
+  assert.equal(safeSourceLabel("not a URL"), "Unknown source");
 });

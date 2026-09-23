@@ -90,6 +90,9 @@ function inspectDirectProbe(response, candidate = {}) {
   }
   const failed = httpFailure(response.statusCode || 0);
   if (failed) return failed;
+  if (!Buffer.from(response.body || []).length) {
+    return { ok: false, code: "empty_media", error: "The source returned no media bytes." };
+  }
   const contentType = getHeader(response.headers, "content-type").toLowerCase();
   if (/text\/html|application\/(?:json|xml)|text\/plain/.test(contentType) || looksLikeTextPayload(response.body)) {
     return { ok: false, code: "not_video", error: "The captured DIRECT response is a document/API response, not playable video media." };
@@ -109,11 +112,26 @@ function inspectDirectProbe(response, candidate = {}) {
   };
 }
 
+function inspectMediaProbe(response) {
+  const failed = httpFailure(response.statusCode || 0);
+  if (failed) return failed;
+  const body = Buffer.from(response.body || []);
+  if (!body.length) {
+    return { ok: false, code: "empty_media", error: "The source returned no media bytes." };
+  }
+  const contentType = getHeader(response.headers, "content-type").toLowerCase();
+  if (/text\/html|application\/(?:json|xml)|text\/plain/.test(contentType) || looksLikeTextPayload(body)) {
+    return { ok: false, code: "not_media", error: "The source returned a document instead of media bytes." };
+  }
+  return { ok: true, verified: true, mediaBytes: body.length };
+}
+
 module.exports = {
   getHeader,
   inspectDashProbe,
   inspectDirectProbe,
   inspectHlsProbe,
+  inspectMediaProbe,
   isKnownVideoMagic,
   looksLikeTextPayload,
 };

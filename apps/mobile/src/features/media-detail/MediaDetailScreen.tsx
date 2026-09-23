@@ -126,7 +126,7 @@ export default function MediaDetailScreen() {
     if (downloadTarget) cancelMobileDownloadSourceResolutionV1(downloadTarget.itemKey);
     setDownloadTarget(null);
   }, [downloadTarget]);
-  const resolveDownloadSource = useCallback((target: MobileDownloadTargetV1, method: MobileDownloadTransferMethodV1) => {
+  const resolveDownloadSource = useCallback((target: MobileDownloadTargetV1, method: MobileDownloadTransferMethodV1, sourceId?: string) => {
     if (!remoteReadyRef.current || String(target.media.id) !== String(id) || target.media.mediaType !== type) return;
     requestMobileDownloadSourceResolutionV1(target.itemKey, method);
     pendingDownloadTargetRef.current = target;
@@ -142,6 +142,7 @@ export default function MediaDetailScreen() {
         season: target.media.season ?? undefined,
         episode: target.media.episode ?? undefined,
         episodeTitle: target.media.episodeTitle || undefined,
+        nextSourceId: sourceId || undefined,
         posterPath: target.media.posterPath || undefined,
         backdropPath: target.media.backdropPath || undefined,
       },

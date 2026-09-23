@@ -348,4 +348,4 @@ export function isAnimeContent(
 }
 
 export const ANIME_DEFAULT_SOURCE = "allmanga";
-export const NON_ANIME_DEFAULT_SOURCE = "vidking";
+export const NON_ANIME_DEFAULT_SOURCE = "vixsrc";

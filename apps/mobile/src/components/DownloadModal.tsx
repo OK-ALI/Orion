@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { fontSizes, radii, spacing } from '@orion/shared/tokens';
 import type { MobileDownloadAssetV1, MobileDownloadJobV1, MobileDownloadPreferencesV1 } from '@orion/shared/types';
 import { useOrionTheme } from '../context/ThemeContext';
+import { OrionDialog } from './OrionDialog';
 import { useResponsiveLayout } from '../services/responsive';
 import { getMobileDownloadCapability } from '../services/downloadManager';
 import { mobileDownloadItemKeyFromMediaV1, type MobileDownloadTargetV1 } from '../features/downloads/downloadIdentity';
@@ -12,6 +13,7 @@ import {
   completeMobileDownloadSourceResolutionV1,
   getMobileDownloadCandidateSnapshotsV1,
   getMobileDownloadSourceResolutionIntentV1,
+  getMobileDownloadSourceResolutionFailureV1,
   selectMobileDownloadCandidateForItemV1,
   subscribeMobileDownloadCandidatesV1,
 } from '../features/downloads/downloadCandidateCapture';
@@ -24,6 +26,7 @@ import {
 import { chooseNativeLibraryStorageTargetV1, validateNativeLibraryStorageTargetV1 } from '../features/downloads/nativeDownloadEngine';
 import { startMobileDownloadFromSelectionV1 } from '../features/downloads/downloadStart';
 import { readMobileDownloadRepositoryV1, subscribeMobileDownloadRepositoryV1 } from '../features/downloads/downloadRepository';
+import { getMobileSourceSafetyNotice, MOBILE_PLAYER_SOURCES } from '../features/playback/mobileSources';
 import {
   discoverMobileDownloadSubtitlesV1,
   getPreferredMobileDownloadSubtitleIdsV1,
@@ -34,7 +37,7 @@ interface DownloadModalProps {
   visible: boolean;
   onClose: () => void;
   target: MobileDownloadTargetV1 | null;
-  onResolveSource: (target: MobileDownloadTargetV1, method: MobileDownloadTransferMethodV1) => void;
+  onResolveSource: (target: MobileDownloadTargetV1, method: MobileDownloadTransferMethodV1, sourceId?: string) => void;
 }
 
 const EMPTY_PROVIDER_OUTCOMES: MobileDownloadSubtitleDiscoveryV1['providerOutcomes'] = {
@@ -43,6 +46,7 @@ const EMPTY_PROVIDER_OUTCOMES: MobileDownloadSubtitleDiscoveryV1['providerOutcom
 };
 const EMPTY_SUBTITLES: MobileDownloadSubtitleDiscoveryV1 = { state: 'idle', tracks: [], providers: [], providerOutcomes: EMPTY_PROVIDER_OUTCOMES };
 const DUPLICATE_BLOCKING_STATES = new Set(['queued', 'preflighting', 'downloading', 'paused', 'recovering', 'verifying', 'finalizing', 'storage-blocked', 'action-required', 'expired', 'completed']);
+const sourceLabel = (sourceId: string) => MOBILE_PLAYER_SOURCES.find((source) => source.id === sourceId)?.label || 'Playback source';
 
 function providerOutcomeSummary(discovery: MobileDownloadSubtitleDiscoveryV1): string {
   return (['subdl', 'wyzie'] as const).map((provider) => {
@@ -73,6 +77,7 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
   const [choosingStorage, setChoosingStorage] = useState(false);
   const [validatedStorageTargetId, setValidatedStorageTargetId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
+  const [warningSourceId, setWarningSourceId] = useState<string | null>(null);
 
   useEffect(() => subscribeMobileDownloadPreferencesV1(setPreferences), []);
   useEffect(() => subscribeMobileDownloadCandidatesV1(setCandidateSnapshots), []);
@@ -141,6 +146,9 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     ? selectMobileDownloadCandidateForItemV1(target.itemKey, transferMethod, candidateSnapshots, destination)
     : null;
   const latestCandidate = target ? candidateSnapshots.find((entry) => entry.itemKey === target.itemKey)?.candidate ?? null : null;
+  const sourceResolutionFailure = target ? getMobileDownloadSourceResolutionFailureV1(target.itemKey) : null;
+  const alternateSources = MOBILE_PLAYER_SOURCES.filter((source) => source.supportsDownloads
+    && (target?.media.mediaType === 'movie' ? source.media.movie : source.media.tv));
   const methodOptions: readonly { id: MobileDownloadTransferMethodV1; title: string; description: string }[] = [
     { id: 'auto', title: 'Auto', description: 'Recommended. Choose the best ready HLS or DASH stream.' },
     { id: 'fragments', title: 'Stream fragments', description: 'Use a ready HLS or DASH stream explicitly.' },
@@ -178,13 +186,16 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
   };
 
   const sourceStatus = useMemo(() => {
+    if (sourceResolutionFailure && !selectedCandidate) {
+      return { tone: 'danger' as const, icon: 'alert-circle-outline' as const, title: 'No download-ready source found', detail: sourceResolutionFailure };
+    }
     if (selectedCandidate) {
       const kind = selectedCandidate.candidate.preflight.resolvedManifestKind.toUpperCase();
       return {
         tone: 'success' as const,
         icon: 'checkmark-circle' as const,
         title: 'Ready to download',
-        detail: `${kind} stream ready · ${selectedCandidate.candidate.sourceId} · ${preferences.preferredQuality === 'best' ? 'Best available' : preferences.preferredQuality}`,
+        detail: `${kind} stream ready · ${sourceLabel(selectedCandidate.candidate.sourceId)} · ${preferences.preferredQuality === 'best' ? 'Best available' : preferences.preferredQuality}`,
       };
     }
     if (!latestCandidate) {
@@ -192,11 +203,11 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     }
     const state = latestCandidate.preflight.state;
     const kind = latestCandidate.preflight.resolvedManifestKind;
-    if (state === 'checking') return { tone: 'warning' as const, icon: 'sync-outline' as const, title: 'Resolving stream…', detail: `Checking ${latestCandidate.sourceId} for a downloadable HLS or DASH stream.` };
+    if (state === 'checking') return { tone: 'warning' as const, icon: 'sync-outline' as const, title: 'Resolving stream…', detail: `Checking ${sourceLabel(latestCandidate.sourceId)} for a downloadable HLS or DASH stream.` };
     if (state === 'expired' || state === 'action-required') return { tone: 'warning' as const, icon: 'refresh-circle-outline' as const, title: 'Source needs refresh', detail: latestCandidate.preflight.reason || 'Open the player and choose a source again.' };
     if (state === 'protected' || state === 'unreachable' || state === 'unsupported' || kind === 'direct') return { tone: 'danger' as const, icon: 'alert-circle-outline' as const, title: 'This source is not download-ready', detail: kind === 'direct' ? 'This source exposed only a Direct file. Mobile downloads now require HLS or DASH. Try another source.' : latestCandidate.preflight.reason || 'Try another playback source.' };
     return { tone: 'neutral' as const, icon: 'play-circle-outline' as const, title: 'Playback source required', detail: 'Open the player and choose a source that exposes a ready HLS or DASH stream.' };
-  }, [destination, latestCandidate, preferences.preferredQuality, selectedCandidate]);
+  }, [destination, latestCandidate, preferences.preferredQuality, selectedCandidate, sourceResolutionFailure]);
 
   const statusColor = sourceStatus.tone === 'success' ? theme.success : sourceStatus.tone === 'warning' ? theme.warning : sourceStatus.tone === 'danger' ? theme.danger : theme.textMuted;
 
@@ -227,6 +238,16 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     if (!target || needsEpisode || starting) return;
     setStartError(null);
     onResolveSource(target, transferMethod);
+  };
+
+  const resolveWithSource = (sourceId: string) => {
+    if (!target || needsEpisode || starting || !storageReady) return;
+    const warning = getMobileSourceSafetyNotice(sourceId);
+    if (warning) {
+      setWarningSourceId(sourceId);
+      return;
+    }
+    onResolveSource(target, transferMethod, sourceId);
   };
 
   const handleStart = async () => {
@@ -270,6 +291,7 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
   };
 
   return (
+    <>
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close download options" style={styles.backdrop} onPress={onClose} />
@@ -320,6 +342,20 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
             </View>
 
             <StatusCard icon={sourceStatus.icon} color={statusColor} title={sourceStatus.title} detail={sourceStatus.detail} theme={theme} />
+            {sourceResolutionFailure && !selectedCandidate ? (
+              <View style={styles.optionGrid}>
+                <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Try a specific source</Text>
+                {alternateSources.map((source) => (
+                  <Pressable key={source.id} accessibilityRole="button" accessibilityLabel={`Resolve download with ${source.label}`} disabled={!storageReady} onPress={() => resolveWithSource(source.id)} style={({ pressed }) => [styles.optionCard, { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: theme.border, opacity: storageReady ? 1 : 0.5 }]}>
+                    <Ionicons name="play-circle-outline" size={21} color={theme.accent} />
+                    <View style={styles.optionCopy}>
+                      <Text style={[styles.optionTitle, { color: theme.text }]}>{source.label}</Text>
+                      <Text style={[styles.description, { color: theme.textSecondary }]}>{getMobileSourceSafetyNotice(source.id)?.shortLabel || 'Check this source for a downloadable stream'}</Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
             {duplicateJob ? <StatusCard icon="copy-outline" color={theme.warning} title={duplicateJob.state === 'completed' ? 'Already downloaded here' : 'Download already active'} detail={duplicateJob.state === 'completed' ? `This title already has a verified ${destinationTitle} copy.` : `Wait for, cancel, or resolve the existing ${destinationTitle} download before starting another copy.`} theme={theme} /> : null}
             <StatusCard icon={subtitleStatus.icon} color={subtitleStatus.color} title={subtitleStatus.title} detail={subtitleStatus.detail} theme={theme} />
             {preferences.subtitlePreference === 'preferred' && selectedCandidate && subtitles.state === 'ready' ? (
@@ -383,7 +419,7 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
               </View>
               <View style={styles.preferenceCopy}>
                 <Text style={[styles.preferenceLabel, { color: theme.textMuted }]}>SOURCE</Text>
-                <Text style={[styles.preferenceValue, { color: selectedCandidate ? theme.success : theme.textMuted }]} numberOfLines={1}>{selectedCandidate ? selectedCandidate.candidate.sourceId : 'Not ready'}</Text>
+                <Text style={[styles.preferenceValue, { color: selectedCandidate ? theme.success : theme.textMuted }]} numberOfLines={1}>{selectedCandidate ? sourceLabel(selectedCandidate.candidate.sourceId) : 'Not ready'}</Text>
               </View>
             </View>
 
@@ -402,6 +438,20 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
         </View>
       </View>
     </Modal>
+    <OrionDialog
+      visible={Boolean(warningSourceId)}
+      title={getMobileSourceSafetyNotice(warningSourceId || '')?.label || 'Source safety notice'}
+      message={getMobileSourceSafetyNotice(warningSourceId || '')?.selectionMessage}
+      onDismiss={() => setWarningSourceId(null)}
+      actions={[
+        { label: 'Cancel', role: 'cancel', onPress: () => setWarningSourceId(null) },
+        { label: 'Try source', role: 'primary', onPress: () => {
+          if (target && warningSourceId) onResolveSource(target, transferMethod, warningSourceId);
+          setWarningSourceId(null);
+        } },
+      ]}
+    />
+    </>
   );
 }
 

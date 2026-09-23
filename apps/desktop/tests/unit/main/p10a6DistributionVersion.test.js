@@ -11,24 +11,24 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
-test("Orion v3.2 production release owns aligned Desktop and Mobile identities", () => {
+test("Orion v3.2.1 hotfix owns aligned Desktop and Mobile identities", () => {
   const desktopPackage = readJson(path.join(desktopRoot, "package.json"));
   const rootPackage = readJson(path.join(repoRoot, "package.json"));
   const packageLock = readJson(path.join(repoRoot, "package-lock.json"));
   const mobilePackage = readJson(path.join(repoRoot, "apps/mobile/package.json"));
   const mobileApp = readJson(path.join(repoRoot, "apps/mobile/app.json"));
 
-  assert.equal(desktopPackage.version, "3.2.0");
-  assert.equal(packageLock.packages["apps/desktop"].version, "3.2.0");
+  assert.equal(desktopPackage.version, "3.2.1");
+  assert.equal(packageLock.packages["apps/desktop"].version, "3.2.1");
 
-  assert.equal(rootPackage.version, "3.2.0");
-  assert.equal(packageLock.version, "3.2.0");
-  assert.equal(packageLock.packages[""].version, "3.2.0");
+  assert.equal(rootPackage.version, "3.2.1");
+  assert.equal(packageLock.version, "3.2.1");
+  assert.equal(packageLock.packages[""].version, "3.2.1");
 
-  assert.equal(mobilePackage.version, "3.2.0");
-  assert.equal(packageLock.packages["apps/mobile"].version, "3.2.0");
-  assert.equal(mobileApp.expo.version, "3.2.0");
-  assert.equal(mobileApp.expo.android.versionCode, 58);
+  assert.equal(mobilePackage.version, "3.2.1");
+  assert.equal(packageLock.packages["apps/mobile"].version, "3.2.1");
+  assert.equal(mobileApp.expo.version, "3.2.1");
+  assert.equal(mobileApp.expo.android.versionCode, 59);
   assert.equal(mobileApp.expo.runtimeVersion, "orion-mobile-native-r2");
 });
 
@@ -84,7 +84,7 @@ test("release qualification blocks missing evidence and each required physical g
   const filename = path.join(repoRoot, "scripts/check-release-qualification.cjs");
   const source = fs.readFileSync(filename, "utf8");
   const map = readJson(path.join(repoRoot, "config/orion-release-map-v1.json"));
-  const template = readJson(path.join(repoRoot, "config/release-qualification-3.2.0.json"));
+  const template = readJson(path.join(repoRoot, "config/release-qualification-3.2.1.json"));
   const ready = Object.fromEntries(Object.entries(template).map(([key, value]) => [key, typeof value === "boolean" ? true : value]));
   ready.evidence = Object.fromEntries(Object.keys(template.evidence).map((key) => [key, "test-evidence"]));
   const run = (qualification) => vm.runInNewContext(source, {

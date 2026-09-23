@@ -92,17 +92,11 @@ test("embedded HUD leaves provider touch ownership uncovered and keeps a safe re
   assert.doesNotMatch(blocker, /type:\s*['"]TAP['"]/);
 });
 
-test("VidKing subtitle presentation repair is bounded, scrollable, and provider scoped", () => {
+test("retired VidKing presentation injection is removed", () => {
   const blocker = readMobile("src/features/playback/mobileAdBlocker.ts");
   const surface = readMobile("src/features/playback/EmbedPlayerSurface.tsx");
-  assert.match(blocker, /createProviderPresentationScript/);
-  assert.match(blocker, /sourceId !== 'vidking'/);
-  assert.match(blocker, /data-orion-scroll-fixed/);
-  assert.match(blocker, /overflow-y/);
-  assert.match(blocker, /touch-action/);
-  assert.match(blocker, /stopTimer = setTimeout\(stopObservation, 1600\)/);
-  assert.match(surface, /createProviderPresentationScript\(sourceId\)/);
-  assert.match(surface, /providerPresentationScript/);
+  assert.doesNotMatch(blocker, /createProviderPresentationScript|vidking/);
+  assert.doesNotMatch(surface, /createProviderPresentationScript|providerPresentationScript/);
 });
 
 test("native and embedded taps share one controller toggle without disturbing double tap seek", () => {

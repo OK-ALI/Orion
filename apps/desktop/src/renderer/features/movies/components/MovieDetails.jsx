@@ -251,6 +251,18 @@ export default function MovieDetails({ model }) {
                 <BackIcon /> Back
               </button>
             </div>
+            {model.downloadResolutionError && (
+              <div role="alert" style={{ marginTop: 12, color: "var(--text)" }}>
+                <p>{model.downloadResolutionError}</p>
+                <label>
+                  Try source{" "}
+                  <select value={model.playerSource} onChange={(event) => model.selectPlayerSource(event.target.value)}>
+                    {model.downloadSourceChoices.map((source) => <option key={source.id} value={source.id}>{source.label}</option>)}
+                  </select>
+                </label>{" "}
+                <button className="btn btn-secondary" onClick={openDownload}>Retry Download</button>
+              </div>
+            )}
           </div>
         </div>
       </div>

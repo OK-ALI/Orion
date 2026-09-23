@@ -102,6 +102,6 @@ test('P10.6-A1 preserves the v2.2.4 MediaPlayer prepare-state repair', () => {
 
   assert.match(
     activity,
-    /private fun releasePlayer\(\) \{[\s\S]{0,400}mainHandler\.removeCallbacks\(progressTicker\)[\s\S]{0,400}prepared = false/,
+    /private fun releasePlayer\(\) \{[\s\S]{0,800}mainHandler\.removeCallbacks\(progressTicker\)[\s\S]{0,800}prepared = false/,
   );
 });

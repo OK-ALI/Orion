@@ -3,7 +3,7 @@
 
 const { URL } = require("url");
 const blockStats = require("../ipc/blockStatsIpc");
-const { addCandidate } = require("../downloader/streamCandidates");
+const { addCandidate, recordObservedRequest } = require("../downloader/streamCandidates");
 const { toElectronBlockedPatterns } = require("@orion/shared/cinema-block-rules");
 
 const BLOCKED_HOSTS = [
@@ -185,6 +185,7 @@ function setupSession(playerSession, trailerSession, getMainWindow) {
   // Capture request origin for CORS spoofing and cache m3u8/vtt details
   const handleBeforeSendHeaders = (details, callback) => {
     const { url, requestHeaders = {} } = details;
+    recordObservedRequest(details);
 
     let origin = requestHeaders["Origin"] || requestHeaders["origin"];
     if (!origin) {

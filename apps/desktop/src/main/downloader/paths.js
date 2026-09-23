@@ -11,9 +11,9 @@ function safeFileName(name) {
 function safeSourceLabel(url) {
   try {
     const parsed = new URL(url);
-    return `${parsed.origin}${parsed.pathname}`;
+    return parsed.origin;
   } catch {
-    return String(url || "").split("?")[0];
+    return "Unknown source";
   }
 }
 

@@ -36,7 +36,7 @@ test('P10.3 user start creates only a safe V1 job and starts by opaque candidate
 });
 
 test('P10.3 source resolution retention is explicit, title-scoped and bounded', () => {
-  assert.match(capture, /SOURCE_RESOLUTION_RETENTION_MS = 2 \* 60_000/);
+  assert.match(capture, /SOURCE_RESOLUTION_RETENTION_MS = 4 \* 60_000/);
   assert.match(capture, /pendingSourceResolution\.itemKey === itemKey/);
   assert.match(capture, /retainedSourceSessions/);
   assert.match(capture, /releaseRetainedSessions/);

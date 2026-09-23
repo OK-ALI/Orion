@@ -26,13 +26,14 @@ test('P10.5 Candidate 3 creates a broker-backed fail-closed yt-dlp authority han
   // Candidate 5 may orchestrate a BoundTransferContext above the raw process
   // boundary. Candidate 3's invariant is that the raw execute() boundary
   // itself accepts only OrionYtDlpAuthority.
-  const rawExecuteStart = runtime.indexOf('  fun execute(\n');
-  const rawExecuteEnd = runtime.indexOf('  fun stop(', rawExecuteStart);
+  const normalizedRuntime = runtime.replaceAll('\r\n', '\n');
+  const rawExecuteStart = normalizedRuntime.indexOf('  fun execute(\n');
+  const rawExecuteEnd = normalizedRuntime.indexOf('  fun stop(', rawExecuteStart);
   assert.ok(
     rawExecuteStart >= 0 && rawExecuteEnd > rawExecuteStart,
     'raw yt-dlp execute() boundary must remain identifiable',
   );
-  const rawExecute = runtime.slice(rawExecuteStart, rawExecuteEnd);
+  const rawExecute = normalizedRuntime.slice(rawExecuteStart, rawExecuteEnd);
   assert.match(rawExecute, /authority: OrionYtDlpAuthority/);
   assert.doesNotMatch(rawExecute, /bound: BoundTransferContext/);
 

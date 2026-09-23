@@ -1,5 +1,5 @@
 import type { MobileDownloadJobV1, MobileDownloadPreferencesV1, MobileDownloadStorageTargetV1 } from '@orion/shared/types';
-import type { MobileDownloadTargetV1 } from './downloadIdentity';
+import { mobileDownloadItemKeyFromMediaV1, type MobileDownloadTargetV1 } from './downloadIdentity';
 import type { MobileDownloadCandidateSelectionV1 } from './downloadCandidateCapture';
 import { startNativeDownloadJobV1 } from './nativeDownloadEngine';
 import { resolveMobileDownloadSubtitleSourcesForNativeV1 } from './downloadSubtitles';
@@ -23,6 +23,12 @@ function createJobId(): string {
 export async function startMobileDownloadFromSelectionV1(input: StartMobileDownloadSelectionInputV1): Promise<string> {
   const { target, selection, preferences } = input;
   const candidate = selection.candidate;
+  if (mobileDownloadItemKeyFromMediaV1(candidate.media) !== target.itemKey ||
+      String(candidate.media.id) !== String(target.media.id) ||
+      candidate.media.mediaType !== target.media.mediaType ||
+      candidate.media.season !== target.media.season || candidate.media.episode !== target.media.episode) {
+    throw new Error('This stream belongs to another title or episode. Resolve the download again.');
+  }
   if (candidate.preflight.state !== 'ready' || !candidate.preflight.requestContextReady) {
     throw new Error('The playback source is no longer ready. Open the player and try again.');
   }

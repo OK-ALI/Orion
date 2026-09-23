@@ -3,6 +3,7 @@ import { CloseIcon, DownloadIcon, SettingsIcon, SubtitlesIcon } from "./common/I
 import { storage, STORAGE_KEYS, secureStorage } from "../services/settingsStore";
 import { LANG_LABEL } from "../shared/utils/subtitles";
 import { candidateReadinessTitle, preferredDownloadCandidate } from "../features/downloads/services/downloadCandidatePreference";
+import { getEffectivePlayerSources } from "../features/player/sources/registry";
 
 const QUALITY_OPTIONS = [
   ["best", "Best available"],
@@ -76,6 +77,8 @@ export default function DownloadModal({
     () => candidates.find((item) => item.id === candidateId) || recommendedCandidate || null,
     [candidates, candidateId, recommendedCandidate],
   );
+  const selectedSourceLabel = getEffectivePlayerSources().find((source) => source.id === selectedCandidate?.sourceId)?.label
+    || selectedCandidate?.sourceId || "Unknown source";
 
   const syncCandidateSelection = (next) => {
     setCandidateId((current) => {
@@ -248,7 +251,7 @@ export default function DownloadModal({
       await installTools();
       return;
     }
-    if (!selectedCandidate && !m3u8Url) {
+    if (!selectedCandidate) {
       setError("No video stream has been captured yet. Start playback, wait a moment, then retry.");
       return;
     }
@@ -265,9 +268,8 @@ export default function DownloadModal({
     }
     storage.set(STORAGE_KEYS.DOWNLOAD_QUALITY, quality);
     const result = await window.electron.runDownload({
-      candidateId: selectedCandidate?.id,
-      m3u8Url: selectedCandidate ? undefined : m3u8Url,
-      m3u8Context: selectedCandidate ? undefined : m3u8Context,
+      candidateId: selectedCandidate.id,
+      captureSessionId,
       name: mediaName,
       downloadPath,
       mediaId,
@@ -318,7 +320,7 @@ export default function DownloadModal({
         <div className={`download-readiness ${selectedCandidate ? "ready" : "waiting"}`}>
           <strong>{selectedCandidate ? candidateReadinessTitle(selectedCandidate, recommendedCandidate?.id) : detectingSeconds >= 10 ? "Still detecting playback" : "Detecting a downloadable stream"}</strong>
           <span>{selectedCandidate
-            ? `${selectedCandidate.host} · ${selectedCandidate.rankReason}`
+            ? `${selectedSourceLabel} · ${selectedCandidate.host} · ${selectedCandidate.rankReason}`
             : detectingSeconds >= 30
               ? "No downloadable response was found. This source may be browser-only, DRM protected, or still loading."
               : `Keep the video playing while Orion watches its media requests${detectingSeconds ? ` · ${detectingSeconds}s` : ""}.`}</span>
@@ -337,7 +339,7 @@ export default function DownloadModal({
             {advanced && (
               <select value={selectedCandidate?.id || ""} onChange={(event) => { manualCandidateSelectionRef.current = true; setCandidateId(event.target.value); }}>
                 {candidates.map((candidate, index) => (
-                  <option key={candidate.id} value={candidate.id}>#{index + 1} {candidate.host} — {candidate.rankReason}{candidate.id === recommendedCandidate?.id ? " (Recommended)" : ""}</option>
+                  <option key={candidate.id} value={candidate.id}>#{index + 1} {getEffectivePlayerSources().find((source) => source.id === candidate.sourceId)?.label || candidate.sourceId || "Source"} · {candidate.host} — {candidate.rankReason}{candidate.id === recommendedCandidate?.id ? " (Recommended)" : ""}</option>
                 ))}
               </select>
             )}

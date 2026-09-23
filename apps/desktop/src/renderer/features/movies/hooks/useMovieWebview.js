@@ -269,7 +269,7 @@ const applyVoiceBoost = useCallback(() => {
 
   // Watchdog timer to detect stuck playback at startup or mid-video (15 seconds hang/buffering)
   useEffect(() => {
-    if (!playing) {
+    if (!playing || downloadResolutionActive) {
       setShowFailoverPrompt(false);
       return undefined;
     }
@@ -301,7 +301,7 @@ const applyVoiceBoost = useCallback(() => {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [playing, playerSource, item.id, webviewLoading, reportSourceHealth]);
+  }, [downloadResolutionActive, playing, playerSource, item.id, webviewLoading, reportSourceHealth]);
 
   const handleFailoverNextSource = useCallback((automatic = false) => {
     reportSourceHealth("degraded", "playback-stalled", automatic

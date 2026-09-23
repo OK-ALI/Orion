@@ -50,7 +50,6 @@ const sanitizePlayerEvent = (value) => {
 const PLAYER_EVENT_ORIGINS = new Set([
   "https://player.videasy.net",
   "https://player.videasy.to",
-  "https://www.vidking.net",
   "https://vidlink.pro",
   "https://vidnest.fun",
   "https://vidsrc.cc",
