@@ -3,7 +3,7 @@
 
 const { URL } = require("url");
 const blockStats = require("../ipc/blockStatsIpc");
-const { addCandidate, recordObservedRequest } = require("../downloader/streamCandidates");
+const { addCandidate, captureSessionIdForWebContents, recordObservedRequest } = require("../downloader/streamCandidates");
 const { toElectronBlockedPatterns } = require("@orion/shared/cinema-block-rules");
 
 const BLOCKED_HOSTS = [
@@ -112,11 +112,14 @@ function setupSession(playerSession, trailerSession, getMainWindow) {
     if (captureMedia) {
       const requestContext = requestContextsById.get(details.id) || {};
       const contentType = String(headerValue(details.responseHeaders, "content-type")).toLowerCase();
-      const candidate = addCandidate({
+      const ownerWebContentsId = details.webContentsId || requestContext.webContentsId;
+      const captureSessionId = captureSessionIdForWebContents(ownerWebContentsId);
+      const candidate = captureSessionId && addCandidate({
         ...requestContext,
+        sessionId: captureSessionId,
         url: details.url,
         responseHeaders: details.responseHeaders || {},
-        webContentsId: details.webContentsId || requestContext.webContentsId,
+        webContentsId: ownerWebContentsId,
       });
       const mw = getMainWindow();
       if (candidate && mw && !mw.isDestroyed()) {

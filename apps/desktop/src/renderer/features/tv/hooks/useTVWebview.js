@@ -84,6 +84,7 @@ import {
 } from "../../player/services/playbackIntent";
 import { normalizePlayerEventProgress } from "../../player/services/playerEventProgress";
 import { useCinemaPlaybackEvidence } from "../../player/hooks/useCinemaPlaybackEvidence";
+import { useVoiceBoost } from "../../player/hooks/useVoiceBoost";
 import { persistPlaybackProgressDetails } from "../../../services/viewingStateVerification";
 export function useTVWebview(context) {
   const { anilistData, autoMarkedRef, d, downloadResolutionActive, downloadsByEpisodeKey, dubMode, durationRef, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, introSkipMode, isAnime, isAsync, item, lastKnownTimeRef, localCountdownStartedRef, onHistory, onMarkWatchedRef, onPlay, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressViaFrames, resetAutoplayRef, resolvedPlayerUrlRef, resolvingUrlRef, saveProgressRef, seekBackCooldownRef, selectedEp, selectedSeason, setCountdownStartedRef, setInterceptedSubs, setM3u8Url, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSelectedEp, setShowFailoverPrompt, setShowResumePrompt, setSkipPrompt, setSkipTimings, setWebviewLoading, skipPrompt, skipTimings, switchingToMiniPlayerRef, triggerAutoplayRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef } = context;
@@ -170,111 +171,8 @@ export function useTVWebview(context) {
   }, [playing]);
   // Removing the webview from the DOM disposes its guest WebContents. A global
   // cleanup here can race an automatic handoff and destroy the new mini-player.
-  const applyVoiceBoost = useCallback(() => {
-    const wv = webviewRef.current;
-    if (!wv) return;
-    const js = `
-      (function() {
-        try {
-          const v = document.querySelector('video');
-          if (!v) return;
-          if (!${voiceBoost}) {
-            if (window.__orionAudioNodes) {
-              const { source, highpass, peaking, highshelf, compressor, gain, dest } = window.__orionAudioNodes;
-              source.disconnect();
-              highpass.disconnect();
-              peaking.disconnect();
-              if (highshelf) highshelf.disconnect();
-              compressor.disconnect();
-              if (gain) gain.disconnect();
-              source.connect(dest);
-              window.__orionVoiceBoostActive = false;
-            }
-            return;
-          }
-          
-          if (window.__orionVoiceBoostActive) return;
-          
-          if (!window.__orionAudioCtx) {
-            window.__orionAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          }
-          const ctx = window.__orionAudioCtx;
-          
-          let sourceNode;
-          if (window.__orionAudioNodes) {
-            sourceNode = window.__orionAudioNodes.source;
-          } else {
-            sourceNode = ctx.createMediaElementSource(v);
-          }
-          
-          const highpass = ctx.createBiquadFilter();
-          highpass.type = 'highpass';
-          highpass.frequency.value = 150;
-          
-          const peaking = ctx.createBiquadFilter();
-          peaking.type = 'peaking';
-          peaking.frequency.value = 2500;
-          peaking.Q.value = 0.8;
-          peaking.gain.value = 12;
+  const voiceBoostState = useVoiceBoost({ webviewRef, playing, webviewLoading, enabled: voiceBoost });
 
-          const highshelf = ctx.createBiquadFilter();
-          highshelf.type = 'highshelf';
-          highshelf.frequency.value = 6000;
-          highshelf.gain.value = -6;
-          
-          const compressor = ctx.createDynamicsCompressor();
-          compressor.threshold.value = -24;
-          compressor.knee.value = 30;
-          compressor.ratio.value = 4;
-          compressor.attack.value = 0.003;
-          compressor.release.value = 0.25;
-
-          const gain = ctx.createGain();
-          gain.gain.value = 1.4;
-          
-          sourceNode.disconnect();
-          sourceNode.connect(highpass);
-          highpass.connect(peaking);
-          peaking.connect(highshelf);
-          highshelf.connect(compressor);
-          compressor.connect(gain);
-          gain.connect(ctx.destination);
-          
-          window.__orionAudioNodes = {
-            source: sourceNode,
-            highpass,
-            peaking,
-            highshelf,
-            compressor,
-            gain,
-            dest: ctx.destination
-          };
-          window.__orionVoiceBoostActive = true;
-        } catch (e) {
-          console.error("Voice Boost injection failed:", e);
-        }
-      })()
-    `;
-    try {
-      wv.executeJavaScript(js).catch(() => {});
-    } catch (e) {
-      console.warn("Voice boost injection failed (webview not ready):", e);
-    }
-  }, [voiceBoost]);
-
-  useEffect(() => {
-    if (!playing || webviewLoading) return;
-    applyVoiceBoost();
-    const wv = webviewRef.current;
-    if (!wv) return;
-    const handleDomReady = () => {
-      applyVoiceBoost();
-    };
-    wv.addEventListener("dom-ready", handleDomReady);
-    return () => {
-      wv.removeEventListener("dom-ready", handleDomReady);
-    };
-  }, [playing, webviewLoading, applyVoiceBoost]);
 
   useEffect(() => {
     if (!playing) return;
@@ -829,5 +727,5 @@ export function useTVWebview(context) {
       episodeName: ep.name,
     });
   };
-  return { currentEpDownload, currentProgressKey, handleFailoverNextSource, handleManualSkip, startEpisodeDownloadResolution, startPlayingEp };
+  return { currentEpDownload, currentProgressKey, handleFailoverNextSource, handleManualSkip, startEpisodeDownloadResolution, startPlayingEp, voiceBoostState };
 }

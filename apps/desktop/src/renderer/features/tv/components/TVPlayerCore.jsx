@@ -27,7 +27,7 @@ import { fetchTVRating, isRestricted, getAgeLimitSetting, getRatingCountry } fro
 import { ContextMenu, EpisodeDesc, PartialCircleIcon, VoiceBoostIcon } from "./EpisodeUi";
 
 export default function TVPlayerCore({ model }) {
-  const { autoplayCountdown, autoplayNextLayout, blockedSession, cancelAutoplay, currentEpDownload, currentEpWatched, currentProgressKey, dubMode, handleFailoverNextSource, handleManualSkip, isAnime, isAsync, item, m3u8Url, menuPos, nextEp, onBack, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, prevEp, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, revealPlayerControls, selectPlayerSource, selectedEp, selectedSeason, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, skipPrompt, sourceHealth, sourceRef, supportsProgress, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
+  const { autoplayCountdown, autoplayNextLayout, blockedSession, cancelAutoplay, currentEpDownload, currentEpWatched, currentProgressKey, dubMode, handleFailoverNextSource, handleManualSkip, isAnime, isAsync, item, m3u8Url, menuPos, nextEp, onBack, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, pipOpen, pipUrlRef, playEpisode, playNow, playerAccentColor, playerControlsVisible, playerEp, playerFullscreen, playerSource, playerSubLang, playerWrapRef, prevEp, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, revealPlayerControls, selectPlayerSource, selectedEp, selectedSeason, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, skipPrompt, sourceHealth, sourceRef, startEpisodeDownload, supportsProgress, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
   const sourceHealthRecords = useCinemaSourceHealth("tv", showSourceMenu || Boolean(selectedEp));
   useEffect(() => {
     if (!playerEp || pipOpen) return undefined;
@@ -510,16 +510,21 @@ export default function TVPlayerCore({ model }) {
                     
                     {/* Voice Boost toggle button */}
                     <button
-                      className={`player-overlay-btn${voiceBoost ? " active" : ""}`}
+                      className={`player-overlay-btn${voiceBoost && model.voiceBoostState?.status === "active" ? " active" : ""}`}
                       onClick={() => {
                         const next = !voiceBoost;
                         setVoiceBoost(next);
                         storage.set("voiceBoostEnabled", next ? 1 : 0);
                       }}
-                      title="Voice Boost (Dialogue Enhancer)"
+                      title={voiceBoost && model.voiceBoostState?.message
+                        ? model.voiceBoostState.message
+                        : "Voice Boost (Dialogue Enhancer)"}
+                      aria-label={voiceBoost && model.voiceBoostState?.message
+                        ? model.voiceBoostState.message
+                        : "Toggle Voice Boost"}
                     >
                       <VoiceBoostIcon size={14} />
-                      Voice Boost
+                      {voiceBoost && model.voiceBoostState?.status === "unavailable" ? "Voice Boost unavailable" : "Voice Boost"}
                     </button>
                     
                     {/* Mini-player button */}
@@ -613,7 +618,7 @@ export default function TVPlayerCore({ model }) {
                       onClick={() =>
                         currentEpDownload
                           ? onGoToDownloads?.(currentEpDownload.id)
-                          : (setShowSourceMenu(false), setShowDownload(true))
+                          : (setShowSourceMenu(false), startEpisodeDownload(selectedEp))
                       }
                       title={
                         currentEpDownload

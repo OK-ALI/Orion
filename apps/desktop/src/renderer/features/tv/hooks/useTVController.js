@@ -77,8 +77,9 @@ import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
 import { createStartPlaybackIntent } from "../../player/services/playbackIntent";
 import { useTitleCredits } from "../../../shared/hooks/useTitleCredits";
 import { useDesktopTrailerDiscovery } from "../../trailers/hooks/useDesktopTrailerDiscovery";
-import { DOWNLOAD_SOURCE_ATTEMPT_MS, advanceDownloadSourceRecovery } from "../../player/services/downloadSourceRecovery";
+import { DOWNLOAD_SOURCE_ATTEMPT_MS } from "../../player/services/downloadSourceRecovery";
 import { useDownloadCandidatePreflight } from "../../player/hooks/useDownloadCandidatePreflight";
+import { useDownloadSourceRecovery } from "../../player/hooks/useDownloadSourceRecovery";
 import { beginDownloadSourceScope, restoreDownloadSource, shouldPersistPlayerSource } from "../../player/services/downloadSourceScope";
 
 export function useTVController({
@@ -130,8 +131,11 @@ const [details, setDetails] = useState(null);
   const [loadingSeason, setLoadingSeason] = useState(false);
   const [showDownload, setShowDownload] = useState(false);
   const [downloadTarget, setDownloadTarget] = useState(null);
+  const [failedDownloadTarget, setFailedDownloadTarget] = useState(null);
   const [downloadResolutionActive, setDownloadResolutionActive] = useState(false);
   const [downloadResolutionError, setDownloadResolutionError] = useState("");
+  const [downloadConsent, setDownloadConsent] = useState(null);
+  const [verifiedDownloadCandidateId, setVerifiedDownloadCandidateId] = useState("");
   const [downloadCaptureNonce, setDownloadCaptureNonce] = useState(0);
   const downloadRecoveryRef = useRef({ attempted: new Set(), manualApproved: false, refreshed: false, handledSession: null, reload: false });
   const downloadResolutionPreflightRef = useRef(new Set());
@@ -490,7 +494,7 @@ const [details, setDetails] = useState(null);
   useEffect(() => {
     const normalized = normalizeSelectableSourceId(playerSource, { mediaType: "tv" });
     if (normalized !== playerSource) setPlayerSource(normalized);
-    if (shouldPersistPlayerSource(downloadTarget) && storage.get(STORAGE_KEYS.PLAYER_SOURCE) !== normalized) {
+    if (shouldPersistPlayerSource(downloadTarget || downloadResolutionError) && storage.get(STORAGE_KEYS.PLAYER_SOURCE) !== normalized) {
       storage.set(STORAGE_KEYS.PLAYER_SOURCE, normalized);
     }
   }, [downloadTarget, playerSource]);
@@ -693,6 +697,9 @@ const [details, setDetails] = useState(null);
     if (!ep) return;
     downloadRecoveryRef.current = beginDownloadSourceScope(playerSource, downloadTarget ? downloadRecoveryRef.current : null, playing);
     setDownloadResolutionError("");
+    setFailedDownloadTarget(null);
+    setDownloadConsent(null);
+    setVerifiedDownloadCandidateId("");
 
     const rawSeason = ep._tmdbSeason ?? season;
     const rawEpisode = ep._tmdbAbsolute ?? ep.episode_number;
@@ -733,33 +740,30 @@ const [details, setDetails] = useState(null);
     setShowDownload(false);
     setDownloadResolutionActive(false);
     setDownloadResolutionError("");
+    setDownloadConsent(null);
+    setVerifiedDownloadCandidateId("");
     setDownloadTarget(null);
   }, [playerSource]);
 
   const failDownloadResolution = useCallback((message) => {
+    setFailedDownloadTarget(downloadTarget);
     setPlayerSource(restoreDownloadSource(downloadRecoveryRef.current, playerSource));
     setDownloadResolutionActive(false);
     setPlaying(false);
     setShowDownload(false);
+    setDownloadConsent(null);
+    setVerifiedDownloadCandidateId("");
+    setDownloadTarget(null);
     setDownloadResolutionError(message || "No downloadable episode stream was found. Try another source.");
-  }, [playerSource]);
+  }, [downloadTarget, downloadResolutionError, playerSource]);
 
-  const recoverDownloadResolution = useCallback((sessionId, result) => {
-    if (!sessionId || sessionId !== captureSessionId || !downloadResolutionActive) return;
-    const recovery = downloadRecoveryRef.current;
-    if (recovery.handledSession === sessionId) return;
-    recovery.handledSession = sessionId;
-    const next = advanceDownloadSourceRecovery("tv", playerSource, result, recovery);
-    if (next.action === "fail") return failDownloadResolution(next.error);
-    setM3u8Context(null);
-    setM3u8Url(null);
-    if (next.action === "refresh") {
-      setCaptureSessionId(null);
-      setDownloadCaptureNonce((value) => value + 1);
-    } else {
-      setPlayerSource(next.sourceId);
-    }
-  }, [captureSessionId, downloadResolutionActive, failDownloadResolution, playerSource]);
+  const { recover: recoverDownloadResolution, answerConsent: answerDownloadConsent } = useDownloadSourceRecovery({
+    mediaType: "tv", sourceId: playerSource, captureSessionId, active: downloadResolutionActive,
+    recoveryRef: downloadRecoveryRef, consent: downloadConsent, setConsent: setDownloadConsent,
+    fail: failDownloadResolution, setCandidateContext: setM3u8Context, setCandidateUrl: setM3u8Url,
+    setVerifiedCandidateId: setVerifiedDownloadCandidateId, setCaptureSessionId,
+    setCaptureNonce: setDownloadCaptureNonce, setTarget: setDownloadTarget, setPlayerSource,
+  });
 
   useEffect(() => {
     if (!downloadResolutionActive || !captureSessionId) return undefined;
@@ -767,14 +771,14 @@ const [details, setDetails] = useState(null);
       downloadRecoveryRef.current.reload = false;
       webviewRef.current?.reload?.();
     }
-    const timer = window.setTimeout(() => recoverDownloadResolution(captureSessionId, {
+    const timer = window.setTimeout(() => recoverDownloadResolution(captureSessionId, downloadRecoveryRef.current.lastFailure || {
       code: "no_candidate",
       error: "This source did not provide a downloadable episode stream in time.",
     }), DOWNLOAD_SOURCE_ATTEMPT_MS);
     return () => window.clearTimeout(timer);
   }, [captureSessionId, downloadResolutionActive, playing, recoverDownloadResolution]);
 
-    const { currentEpDownload, currentProgressKey, handleFailoverNextSource, handleManualSkip, startEpisodeDownloadResolution, startPlayingEp } = useTVWebview({
+    const { currentEpDownload, currentProgressKey, handleFailoverNextSource, handleManualSkip, startEpisodeDownloadResolution, startPlayingEp, voiceBoostState } = useTVWebview({
     anilistData, autoMarkedRef, d, downloadResolutionActive, downloadsByEpisodeKey, dubMode, durationRef, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, introSkipMode, isAnime, isAsync, item, lastKnownTimeRef, localCountdownStartedRef, onHistory, onMarkWatchedRef, onPlay, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressViaFrames, resetAutoplayRef, resolvedPlayerUrlRef, resolvingUrlRef, saveProgressRef, seekBackCooldownRef, selectedEp, selectedSeason, setCountdownStartedRef, setInterceptedSubs, setM3u8Url, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setSelectedEp, setShowFailoverPrompt, setShowResumePrompt, setSkipPrompt, setSkipTimings, setWebviewLoading, skipPrompt, skipTimings, switchingToMiniPlayerRef, triggerAutoplayRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef
   });
   useEffect(() => {
@@ -801,8 +805,8 @@ const [details, setDetails] = useState(null);
 
   useDownloadCandidatePreflight({
     active: downloadResolutionActive, target: downloadTarget, playing, captureSessionId,
-    candidateContext: m3u8Context, preflightRef: downloadResolutionPreflightRef,
-    recoveryRef: downloadRecoveryRef, onFailure: recoverDownloadResolution,
+    preflightRef: downloadResolutionPreflightRef,
+    recoveryRef: downloadRecoveryRef, onVerified: setVerifiedDownloadCandidateId,
     setActive: setDownloadResolutionActive, setPlaying, setShowDownload,
   });
 
@@ -924,8 +928,12 @@ const [details, setDetails] = useState(null);
     viewModel.onSelect = onSelect;
     viewModel.captureSessionId = captureSessionId;
     viewModel.downloadResolutionError = downloadResolutionError;
+    viewModel.downloadConsent = downloadConsent;
+    viewModel.answerDownloadConsent = answerDownloadConsent;
+    viewModel.verifiedDownloadCandidateId = verifiedDownloadCandidateId;
+    viewModel.voiceBoostState = voiceBoostState;
     viewModel.downloadSourceChoices = getEffectivePlayerSources().filter((source) => source.supportsDownloads && source.media?.tv);
     viewModel.selectDownloadSource = selectDownloadSource;
-    viewModel.retryDownload = () => prepareEpisodeDownload(downloadTarget?.episodeRecord, downloadTarget?.season);
+    viewModel.retryDownload = () => prepareEpisodeDownload(failedDownloadTarget?.episodeRecord, failedDownloadTarget?.season);
     return viewModel;
 }

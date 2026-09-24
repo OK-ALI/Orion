@@ -353,7 +353,11 @@ function register(getMainWindow, { resetSettingsData } = {}) {
         const resolvedM3u8Context = capturedCandidate;
         const preflight = await preflightCandidate(candidateId);
         if (!preflight?.ok) {
-          return { ok: false, code: preflight?.code || "preflight_failed", error: preflight?.error || "The selected stream is not downloadable." };
+          return {
+            ok: false, code: preflight?.code || "preflight_failed",
+            error: preflight?.error || "The selected stream is not downloadable.",
+            diagnostic: preflight?.diagnostic || null,
+          };
         }
         const sourceKind = capturedCandidate?.kind || preflight.kind || resolvedM3u8Context?.kind || "hls";
         const resolvedStrategy = preflight.strategy || (sourceKind === "hls" ? "hls-proxy" : "direct");

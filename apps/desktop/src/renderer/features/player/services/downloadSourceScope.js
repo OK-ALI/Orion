@@ -3,8 +3,12 @@ export function beginDownloadSourceScope(sourceId, previousScope, playing) {
     attempted: new Set([sourceId]),
     originalSource: previousScope?.originalSource || sourceId,
     manualApproved: false,
+    manualConsentResolved: false,
+    vidsrcApproved: false,
+    vidsrcConsentResolved: false,
     refreshed: false,
     handledSession: null,
+    lastFailure: null,
     reload: playing,
   };
 }

@@ -67,8 +67,9 @@ import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
 import { createStartPlaybackIntent } from "../../player/services/playbackIntent";
 import { useTitleCredits } from "../../../shared/hooks/useTitleCredits";
 import { useDesktopTrailerDiscovery } from "../../trailers/hooks/useDesktopTrailerDiscovery";
-import { DOWNLOAD_SOURCE_ATTEMPT_MS, advanceDownloadSourceRecovery } from "../../player/services/downloadSourceRecovery";
+import { DOWNLOAD_SOURCE_ATTEMPT_MS } from "../../player/services/downloadSourceRecovery";
 import { useDownloadCandidatePreflight } from "../../player/hooks/useDownloadCandidatePreflight";
+import { useDownloadSourceRecovery } from "../../player/hooks/useDownloadSourceRecovery";
 import { beginDownloadSourceScope, restoreDownloadSource, shouldPersistPlayerSource } from "../../player/services/downloadSourceScope";
 
 export function useMovieController({
@@ -102,6 +103,8 @@ const [details, setDetails] = useState(null);
   const [downloadTarget, setDownloadTarget] = useState(null);
   const [downloadResolutionActive, setDownloadResolutionActive] = useState(false);
   const [downloadResolutionError, setDownloadResolutionError] = useState("");
+  const [downloadConsent, setDownloadConsent] = useState(null);
+  const [verifiedDownloadCandidateId, setVerifiedDownloadCandidateId] = useState("");
   const [downloadCaptureNonce, setDownloadCaptureNonce] = useState(0);
   const downloadRecoveryRef = useRef({ attempted: new Set(), manualApproved: false, refreshed: false, handledSession: null, reload: false });
   const downloadResolutionPreflightRef = useRef(new Set());
@@ -445,10 +448,10 @@ const [details, setDetails] = useState(null);
   useEffect(() => {
     const normalized = normalizeSelectableSourceId(playerSource, { mediaType: "movie" });
     if (normalized !== playerSource) setPlayerSource(normalized);
-    if (shouldPersistPlayerSource(downloadTarget) && storage.get(STORAGE_KEYS.PLAYER_SOURCE) !== normalized) {
+    if (shouldPersistPlayerSource(downloadTarget || downloadResolutionError) && storage.get(STORAGE_KEYS.PLAYER_SOURCE) !== normalized) {
       storage.set(STORAGE_KEYS.PLAYER_SOURCE, normalized);
     }
-  }, [downloadTarget, playerSource]);
+  }, [downloadTarget, downloadResolutionError, playerSource]);
 
   const selectPlayerSource = useCallback((sourceId) => {
     const next = normalizeSelectableSourceId(sourceId, { mediaType: "movie" });
@@ -619,7 +622,7 @@ const [details, setDetails] = useState(null);
     return () => window.electron.offSubtitleFound(handler);
   }, []);
 
-    const { handleFailoverNextSource, handlePlay, startMovieDownloadResolution, startMoviePlayback } = useMovieWebview({
+    const { handleFailoverNextSource, handlePlay, startMovieDownloadResolution, startMoviePlayback, voiceBoostState } = useMovieWebview({
     autoMarkedRef, autoplayDoneRef, d, downloadResolutionActive, dubMode, failoverTimeoutRef, initialSeekDoneRef, playbackIntentRef, isWatched, item, lastKnownTimeRef, loading, onHistory, onMarkWatchedRef, onPlay, pipUrlRef, pipWebContentsIdRef, playerSource, playerWrapRef, playing, progressKey, progressViaFrames, resolvedPlayerUrlRef, resolvingUrlRef, saveProgress, saveProgressRef, seekBackCooldownRef, setInterceptedSubs, setM3u8Url, setPipOpen, setPlayerFullscreen, setPlayerSource, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setResumeTime, setShowFailoverPrompt, setShowResumePrompt, setWebviewLoading, switchingToMiniPlayerRef, voiceBoost, watchedThreshold, webviewLoading, webviewRef
   });
 
@@ -631,6 +634,8 @@ const [details, setDetails] = useState(null);
   const openDownload = useCallback(() => {
     downloadRecoveryRef.current = beginDownloadSourceScope(playerSource, downloadTarget ? downloadRecoveryRef.current : null, playing);
     setDownloadResolutionError("");
+    setDownloadConsent(null);
+    setVerifiedDownloadCandidateId("");
     downloadResolutionPreflightRef.current = new Set();
     setCaptureSessionId(null);
     setM3u8Url(null);
@@ -658,6 +663,8 @@ const [details, setDetails] = useState(null);
     setShowDownload(false);
     setDownloadResolutionActive(false);
     setDownloadResolutionError("");
+    setDownloadConsent(null);
+    setVerifiedDownloadCandidateId("");
     setDownloadTarget(null);
   }, [playerSource]);
 
@@ -666,25 +673,19 @@ const [details, setDetails] = useState(null);
     setDownloadResolutionActive(false);
     setPlaying(false);
     setShowDownload(false);
+    setDownloadConsent(null);
+    setVerifiedDownloadCandidateId("");
+    setDownloadTarget(null);
     setDownloadResolutionError(message || "No downloadable stream was found. Try another source.");
   }, [playerSource]);
 
-  const recoverDownloadResolution = useCallback((sessionId, result) => {
-    if (!sessionId || sessionId !== captureSessionId || !downloadResolutionActive) return;
-    const recovery = downloadRecoveryRef.current;
-    if (recovery.handledSession === sessionId) return;
-    recovery.handledSession = sessionId;
-    const next = advanceDownloadSourceRecovery("movie", playerSource, result, recovery);
-    if (next.action === "fail") return failDownloadResolution(next.error);
-    setM3u8Context(null);
-    setM3u8Url(null);
-    if (next.action === "refresh") {
-      setCaptureSessionId(null);
-      setDownloadCaptureNonce((value) => value + 1);
-    } else {
-      setPlayerSource(next.sourceId);
-    }
-  }, [captureSessionId, downloadResolutionActive, failDownloadResolution, playerSource]);
+  const { recover: recoverDownloadResolution, answerConsent: answerDownloadConsent } = useDownloadSourceRecovery({
+    mediaType: "movie", sourceId: playerSource, captureSessionId, active: downloadResolutionActive,
+    recoveryRef: downloadRecoveryRef, consent: downloadConsent, setConsent: setDownloadConsent,
+    fail: failDownloadResolution, setCandidateContext: setM3u8Context, setCandidateUrl: setM3u8Url,
+    setVerifiedCandidateId: setVerifiedDownloadCandidateId, setCaptureSessionId,
+    setCaptureNonce: setDownloadCaptureNonce, setTarget: setDownloadTarget, setPlayerSource,
+  });
 
   useEffect(() => {
     if (!downloadResolutionActive || !captureSessionId) return undefined;
@@ -692,7 +693,7 @@ const [details, setDetails] = useState(null);
       downloadRecoveryRef.current.reload = false;
       webviewRef.current?.reload?.();
     }
-    const timer = window.setTimeout(() => recoverDownloadResolution(captureSessionId, {
+    const timer = window.setTimeout(() => recoverDownloadResolution(captureSessionId, downloadRecoveryRef.current.lastFailure || {
       code: "no_candidate",
       error: "This source did not provide a downloadable stream in time.",
     }), DOWNLOAD_SOURCE_ATTEMPT_MS);
@@ -721,8 +722,8 @@ const [details, setDetails] = useState(null);
 
   useDownloadCandidatePreflight({
     active: downloadResolutionActive, target: downloadTarget, playing, captureSessionId,
-    candidateContext: m3u8Context, preflightRef: downloadResolutionPreflightRef,
-    recoveryRef: downloadRecoveryRef, onFailure: recoverDownloadResolution,
+    preflightRef: downloadResolutionPreflightRef,
+    recoveryRef: downloadRecoveryRef, onVerified: setVerifiedDownloadCandidateId,
     setActive: setDownloadResolutionActive, setPlaying, setShowDownload,
   });
 
@@ -776,6 +777,10 @@ const [details, setDetails] = useState(null);
     viewModel.creditsLoading = creditsLoading;
     viewModel.captureSessionId = captureSessionId;
     viewModel.downloadResolutionError = downloadResolutionError;
+    viewModel.downloadConsent = downloadConsent;
+    viewModel.answerDownloadConsent = answerDownloadConsent;
+    viewModel.verifiedDownloadCandidateId = verifiedDownloadCandidateId;
+    viewModel.voiceBoostState = voiceBoostState;
     viewModel.downloadSourceChoices = getEffectivePlayerSources().filter((source) => source.supportsDownloads && source.media?.movie);
     viewModel.selectDownloadSource = selectDownloadSource;
     return viewModel;

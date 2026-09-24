@@ -399,6 +399,8 @@ html[data-player-fullscreen] .player-ambient-glow,
 .download-readiness.ready { border-color: color-mix(in srgb,var(--success) 35%,transparent); background: var(--success-soft); }
 
 .download-readiness.ready strong { color: var(--success); }
+.download-readiness.failed { border-color: color-mix(in srgb,var(--red) 35%,transparent); }
+.download-readiness.failed strong { color: var(--red); }
 
 .download-form-grid { display: grid; grid-template-columns: 1fr 1.35fr; gap: 14px; }
 

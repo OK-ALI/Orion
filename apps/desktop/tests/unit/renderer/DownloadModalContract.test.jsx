@@ -45,6 +45,7 @@ function createElectronBridge(overrides = {}) {
     }),
     preflightStream: vi.fn().mockResolvedValue({
       ok: true,
+      verified: true,
       strategy: "native-hls",
     }),
     runDownload: vi.fn().mockResolvedValue({
@@ -79,6 +80,12 @@ const baseProps = {
   expectedDurationConfidence: "exact",
 };
 
+async function startEnabledDownload() {
+  const button = await screen.findByRole("button", { name: "Start download" });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+}
+
 describe("DownloadModal contract", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -112,11 +119,7 @@ describe("DownloadModal contract", () => {
       />,
     );
 
-    const startButton = await screen.findByRole("button", {
-      name: "Start download",
-    });
-
-    fireEvent.click(startButton);
+    await startEnabledDownload();
 
     await waitFor(() => {
       expect(bridge.runDownload).toHaveBeenCalledOnce();
@@ -126,7 +129,7 @@ describe("DownloadModal contract", () => {
       sessionId: "capture-1",
     });
 
-    expect(bridge.preflightStream).toHaveBeenCalledOnce();
+    expect(bridge.preflightStream).toHaveBeenCalledTimes(2);
     expect(bridge.preflightStream).toHaveBeenCalledWith("hls-1");
 
     const payload = bridge.runDownload.mock.calls[0][0];
@@ -223,11 +226,7 @@ describe("DownloadModal contract", () => {
       ).toBeInTheDocument();
     });
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Start download",
-      }),
-    );
+    await startEnabledDownload();
 
     await waitFor(() => {
       expect(bridge.runDownload).toHaveBeenCalledOnce();
@@ -299,18 +298,13 @@ describe("DownloadModal contract", () => {
       },
     );
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Start download",
-      }),
-    );
+    await startEnabledDownload();
 
     await waitFor(() => {
       expect(bridge.runDownload).toHaveBeenCalledOnce();
     });
 
-    expect(bridge.preflightStream).toHaveBeenCalledOnce();
-    expect(bridge.preflightStream).toHaveBeenCalledWith("hls-2");
+    expect(bridge.preflightStream).toHaveBeenLastCalledWith("hls-2");
 
     const payload = bridge.runDownload.mock.calls[0][0];
 
@@ -343,17 +337,9 @@ describe("DownloadModal contract", () => {
       />,
     );
 
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Start download",
-      }),
-    );
-
-    const alert = await screen.findByRole("alert");
-
-    expect(alert).toHaveTextContent(
-      "Contract preflight rejection",
-    );
+    await screen.findByText("Captured source could not be verified");
+    expect(screen.getByText("Contract preflight rejection")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start download" })).toBeDisabled();
 
     expect(bridge.preflightStream).toHaveBeenCalledOnce();
     expect(bridge.preflightStream).toHaveBeenCalledWith("hls-1");
@@ -418,11 +404,7 @@ describe("DownloadModal contract", () => {
 
     expect(screen.getByRole("checkbox")).toBeChecked();
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Start download",
-      }),
-    );
+    await startEnabledDownload();
 
     await waitFor(() => {
       expect(bridge.runDownload).toHaveBeenCalledOnce();
@@ -449,13 +431,8 @@ describe("DownloadModal contract", () => {
       />,
     );
 
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Start download",
-      }),
-    );
-
-    await screen.findByText(/No video stream has been captured yet/);
+    await screen.findByText("Detecting a downloadable stream");
+    expect(screen.getByRole("button", { name: "Start download" })).toBeDisabled();
     expect(bridge.runDownload).not.toHaveBeenCalled();
     expect(bridge.preflightStream).not.toHaveBeenCalled();
   });

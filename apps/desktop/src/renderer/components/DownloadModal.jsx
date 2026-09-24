@@ -32,11 +32,26 @@ function subtitleSource(subtitle) {
   return "Stream";
 }
 
+function readinessDetail(diagnostic) {
+  if (!diagnostic) return "";
+  const stage = {
+    root_manifest: "the source playlist",
+    media_playlist: "a video playlist",
+    first_media: "the first video segment",
+    direct_video: "the video file",
+    manifest_child: "a video request",
+  }[diagnostic.stage] || "the video request";
+  const host = diagnostic.host ? ` on ${diagnostic.host}` : "";
+  const status = Number(diagnostic.statusCode) >= 400 ? ` (HTTP ${diagnostic.statusCode})` : "";
+  return `Check stopped at ${stage}${host}${status}.`;
+}
+
 export default function DownloadModal({
   onClose,
   captureSessionId,
   m3u8Url,
   m3u8Context,
+  preferredCandidateId,
   subtitles = [],
   mediaName,
   onOpenSettings,
@@ -51,7 +66,7 @@ export default function DownloadModal({
   expectedDurationConfidence = "exact",
 }) {
   const [candidates, setCandidates] = useState([]);
-  const [candidateId, setCandidateId] = useState(m3u8Context?.candidateId || m3u8Context?.id || "");
+  const [candidateId, setCandidateId] = useState(preferredCandidateId || m3u8Context?.candidateId || m3u8Context?.id || "");
   const [quality, setQuality] = useState(() => storage.get(STORAGE_KEYS.DOWNLOAD_QUALITY) || "best");
   const [downloadPath, setDownloadPath] = useState(() => storage.get(STORAGE_KEYS.DOWNLOAD_PATH) || "");
   const [toolStatus, setToolStatus] = useState(null);
@@ -67,6 +82,8 @@ export default function DownloadModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [detectingSeconds, setDetectingSeconds] = useState(0);
+  const [readiness, setReadiness] = useState({ candidateId: "", sessionId: "", status: "idle", error: "", diagnostic: null });
+  const [readinessRetry, setReadinessRetry] = useState(0);
   const manualCandidateSelectionRef = useRef(false);
 
   const recommendedCandidate = useMemo(
@@ -79,11 +96,42 @@ export default function DownloadModal({
   );
   const selectedSourceLabel = getEffectivePlayerSources().find((source) => source.id === selectedCandidate?.sourceId)?.label
     || selectedCandidate?.sourceId || "Unknown source";
+  const selectedReadiness = readiness.candidateId === selectedCandidate?.id && readiness.sessionId === captureSessionId
+    ? readiness : { status: "checking" };
+
+  useEffect(() => {
+    const id = selectedCandidate?.id;
+    if (!id || !captureSessionId) {
+      setReadiness({ candidateId: "", sessionId: "", status: "idle", error: "", diagnostic: null });
+      return undefined;
+    }
+    let disposed = false;
+    setReadiness({ candidateId: id, sessionId: captureSessionId, status: "checking", error: "", diagnostic: null });
+    Promise.resolve(window.electron?.preflightStream?.(id))
+      .then((result) => {
+        if (disposed) return;
+        setReadiness({
+          candidateId: id,
+          sessionId: captureSessionId,
+          status: result?.ok && result?.verified === true ? "ready" : "failed",
+          error: result?.error || "Orion could not verify media bytes from this source.",
+          diagnostic: result?.diagnostic || null,
+        });
+      })
+      .catch(() => {
+        if (!disposed) setReadiness({
+          candidateId: id, sessionId: captureSessionId, status: "failed",
+          error: "Orion could not verify media bytes from this source.", diagnostic: null,
+        });
+      });
+    return () => { disposed = true; };
+  }, [captureSessionId, selectedCandidate?.id, readinessRetry]);
 
   const syncCandidateSelection = (next) => {
     setCandidateId((current) => {
       const currentStillExists = next.some((item) => item.id === current);
       if (manualCandidateSelectionRef.current && currentStillExists) return current;
+      if (preferredCandidateId && next.some((item) => item.id === preferredCandidateId)) return preferredCandidateId;
       return preferredDownloadCandidate(next)?.id || (currentStillExists ? current : "");
     });
   };
@@ -103,7 +151,7 @@ export default function DownloadModal({
   useEffect(() => {
     manualCandidateSelectionRef.current = false;
     refresh();
-  }, [captureSessionId, m3u8Context?.candidateId, m3u8Context?.id]);
+  }, [captureSessionId, m3u8Context?.candidateId, m3u8Context?.id, preferredCandidateId]);
 
   useEffect(() => {
     const startedAt = Date.now();
@@ -255,14 +303,23 @@ export default function DownloadModal({
       setError("No video stream has been captured yet. Start playback, wait a moment, then retry.");
       return;
     }
+    if (selectedReadiness.status !== "ready") {
+      setError("This source has not passed the media-byte check. Choose another captured source or retry the check.");
+      return;
+    }
     setBusy(true);
     setError("");
     let preflight = null;
     if (selectedCandidate) {
       preflight = await window.electron.preflightStream(selectedCandidate.id);
-      if (!preflight?.ok) {
+      if (!preflight?.ok || preflight?.verified !== true) {
         setBusy(false);
         setError(preflight?.error || "The selected stream is not downloadable.");
+        setReadiness({
+          candidateId: selectedCandidate.id, sessionId: captureSessionId, status: "failed",
+          error: preflight?.error || "The selected stream is not downloadable.",
+          diagnostic: preflight?.diagnostic || null,
+        });
         return;
       }
     }
@@ -290,6 +347,13 @@ export default function DownloadModal({
     setBusy(false);
     if (!result?.ok) {
       setError(result?.error || "The download could not be started.");
+      if (result?.code) {
+        setReadiness({
+          candidateId: selectedCandidate.id, sessionId: captureSessionId, status: "failed",
+          error: result?.error || "The source must be checked again.",
+          diagnostic: result?.diagnostic || null,
+        });
+      }
       return;
     }
     onDownloadStarted?.(result.download || {
@@ -317,16 +381,32 @@ export default function DownloadModal({
           <div><h2 id="download-title">Download</h2><p>{mediaName}</p></div>
         </div>
 
-        <div className={`download-readiness ${selectedCandidate ? "ready" : "waiting"}`}>
-          <strong>{selectedCandidate ? candidateReadinessTitle(selectedCandidate, recommendedCandidate?.id) : detectingSeconds >= 10 ? "Still detecting playback" : "Detecting a downloadable stream"}</strong>
+        <div className={`download-readiness ${selectedCandidate && selectedReadiness.status === "ready" ? "ready" : selectedReadiness.status === "failed" ? "failed" : "waiting"}`} role="status">
+          <strong>{selectedCandidate
+            ? selectedReadiness.status === "ready"
+              ? candidateReadinessTitle(selectedCandidate, recommendedCandidate?.id)
+              : selectedReadiness.status === "failed"
+                ? "Captured source could not be verified"
+                : "Checking captured stream"
+            : detectingSeconds >= 10 ? "Still detecting playback" : "Detecting a downloadable stream"}</strong>
           <span>{selectedCandidate
-            ? `${selectedSourceLabel} · ${selectedCandidate.host} · ${selectedCandidate.rankReason}`
+            ? selectedReadiness.status === "failed"
+              ? selectedReadiness.error
+              : `${selectedSourceLabel} · ${selectedCandidate.host} · ${selectedCandidate.rankReason}`
             : detectingSeconds >= 30
               ? "No downloadable response was found. This source may be browser-only, DRM protected, or still loading."
               : `Keep the video playing while Orion watches its media requests${detectingSeconds ? ` · ${detectingSeconds}s` : ""}.`}</span>
+          {selectedCandidate && selectedReadiness.status === "failed" && selectedReadiness.diagnostic && (
+            <span>{readinessDetail(selectedReadiness.diagnostic)}</span>
+          )}
           {!selectedCandidate && (
             <button type="button" className="download-detect-refresh" onClick={refresh}>
               Refresh detection
+            </button>
+          )}
+          {selectedCandidate && selectedReadiness.status === "failed" && (
+            <button type="button" className="download-detect-refresh" onClick={() => setReadinessRetry((value) => value + 1)}>
+              Retry media check
             </button>
           )}
         </div>
@@ -450,7 +530,7 @@ export default function DownloadModal({
         <div className="download-dialog-actions">
           <button className="btn btn-ghost" onClick={() => onOpenSettings?.("downloads")}>Settings</button>
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={toolStatus?.exists ? start : installTools} disabled={busy || installing}>
+          <button className="btn btn-primary" onClick={toolStatus?.exists ? start : installTools} disabled={busy || installing || (toolStatus?.exists && selectedReadiness.status !== "ready")}>
             {installing ? "Installing…" : busy ? "Checking stream…" : toolStatus?.exists ? "Start download" : "Install downloader"}
           </button>
         </div>

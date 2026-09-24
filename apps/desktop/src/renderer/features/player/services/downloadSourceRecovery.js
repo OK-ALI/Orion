@@ -18,12 +18,14 @@ export function nextDownloadRecoverySource(mediaType, attempted) {
   })[0] || null;
 }
 
-export function confirmDownloadRecoverySource(source, alreadyApproved) {
-  if (source.routingMode === "manual-only" && !alreadyApproved) {
-    if (!window.confirm("This download needs another playback source. Allow Orion to try visible manual-only sources for this download?")) return false;
+export function resolveDownloadRecoveryConsent(recovery, kind, approved) {
+  if (kind === "manual") {
+    recovery.manualConsentResolved = true;
+    recovery.manualApproved = approved;
+  } else if (kind === "vidsrc") {
+    recovery.vidsrcConsentResolved = true;
+    recovery.vidsrcApproved = approved;
   }
-  if (source.id === "vidsrc" && !window.confirm("VidSrc may open advertising outside Orion. Try this source for the download?")) return false;
-  return true;
 }
 
 export function advanceDownloadSourceRecovery(mediaType, sourceId, result, recovery) {
@@ -36,11 +38,20 @@ export function advanceDownloadSourceRecovery(mediaType, sourceId, result, recov
   while (recovery.attempted.size < MAX_DOWNLOAD_SOURCE_ATTEMPTS) {
     const next = nextDownloadRecoverySource(mediaType, recovery.attempted);
     if (!next) break;
-    if (!confirmDownloadRecoverySource(next, recovery.manualApproved)) {
+    if (next.routingMode === "manual-only" && recovery.manualConsentResolved && !recovery.manualApproved) {
       recovery.attempted.add(next.id);
       continue;
     }
-    if (next.routingMode === "manual-only") recovery.manualApproved = true;
+    if (next.routingMode === "manual-only" && !recovery.manualApproved) {
+      return { action: "consent", kind: "manual", sourceId: next.id };
+    }
+    if (next.id === "vidsrc" && recovery.vidsrcConsentResolved && !recovery.vidsrcApproved) {
+      recovery.attempted.add(next.id);
+      continue;
+    }
+    if (next.id === "vidsrc" && !recovery.vidsrcApproved) {
+      return { action: "consent", kind: "vidsrc", sourceId: next.id };
+    }
     recovery.attempted.add(next.id);
     return { action: "switch", sourceId: next.id };
   }

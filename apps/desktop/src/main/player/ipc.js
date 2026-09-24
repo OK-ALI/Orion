@@ -1,6 +1,6 @@
 // ── IPC: Player launch, window controls, auto-updater ─────────────────────────
 
-const { ipcMain, shell, app } = require("electron");
+const { ipcMain, shell, app, session } = require("electron");
 const { spawn, spawnSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -11,6 +11,7 @@ const {
   qualifyUserSeek,
 } = require("./videoTargeting");
 const { createPointerInputRouter } = require("./pointerInput");
+const { setVoiceBoost } = require("./voiceBoost");
 
 function register(getMainWindow, { getPopoutController } = {}) {
   const { webContents } = require("electron");
@@ -33,6 +34,17 @@ function register(getMainWindow, { getPopoutController } = {}) {
     pointerInput.click(event.sender, payload),
   );
   ipcMain.handle("player:renderer-webcontents-id", (event) => event.sender.id);
+  ipcMain.handle("player:voice-boost", async (event, webContentsId, enabled) => {
+    const mainWindow = getMainWindow?.();
+    const target = webContents.fromId(Number(webContentsId));
+    if (!mainWindow || mainWindow.isDestroyed?.() || event.sender !== mainWindow.webContents
+      || !target || target.isDestroyed?.()
+      || target.hostWebContents?.id !== event.sender.id
+      || target.session !== session.fromPartition("persist:player")) {
+      return { ok: false, code: "player_closed" };
+    }
+    return setVoiceBoost(target, enabled === true);
+  });
   ipcMain.handle(
     "open-path-at-time",
     (_, { filePath, seconds, subtitlePaths }) => {

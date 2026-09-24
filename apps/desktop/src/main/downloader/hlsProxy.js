@@ -66,10 +66,21 @@ function headerValue(headers, key) {
 
 async function fetchViaPlayerSession(url, m3u8Context, options = {}) {
   await assertPublicMediaUrl(url);
+  const playerSession = session.fromPartition("persist:player");
+  const requestContext = requestContextForUrl(m3u8Context, url, options.referer);
+  const upstreamHeaders = buildDownloadHeaders(requestContext, getPlayerUserAgent());
+  let cookiePresent = false;
+  try {
+    cookiePresent = Boolean((await playerSession.cookies?.get({ url }))?.length);
+  } catch {}
+  const requestDiagnostic = {
+    headerNames: upstreamHeaders.map(([name]) => name).sort(),
+    authorizationPresent: upstreamHeaders.some(([name]) => name.toLowerCase() === "authorization"),
+    cookiePresent,
+  };
   return new Promise((resolve, reject) => {
     let timeout = null;
     try {
-      const playerSession = session.fromPartition("persist:player");
       const request = net.request({
         url,
         session: playerSession,
@@ -79,8 +90,6 @@ async function fetchViaPlayerSession(url, m3u8Context, options = {}) {
         try { request.abort(); } catch {}
         reject(new Error("Media request timed out"));
       }, 20000);
-      const requestContext = requestContextForUrl(m3u8Context, url, options.referer);
-      const upstreamHeaders = buildDownloadHeaders(requestContext, getPlayerUserAgent());
       for (const [name, value] of upstreamHeaders) {
         const lower = name.toLowerCase();
         if (
@@ -120,6 +129,7 @@ async function fetchViaPlayerSession(url, m3u8Context, options = {}) {
             headers: response.headers || {},
             body: maxBytes ? body.subarray(0, maxBytes) : body,
             truncated,
+            requestDiagnostic,
           });
         };
         response.on("data", (chunk) => {

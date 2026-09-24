@@ -26,8 +26,9 @@ describe("Desktop download entrypoint preparation contract", () => {
     expect(movieController).toContain("setCaptureSessionId(null);");
     expect(movieController).toContain("startMovieDownloadResolution();");
     expect(movieController).toContain("useDownloadCandidatePreflight({");
-    expect(downloadPreflight).toContain("preflightStream?.(candidateId)");
-    expect(downloadPreflight).toContain("onFailure(captureSessionId, result)");
+    expect(downloadPreflight).toContain("preflightStream?.(candidate.id)");
+    expect(downloadPreflight).toContain("result?.ok && result?.verified === true");
+    expect(downloadPreflight).toContain("candidate.sourceId !== target.sourceId");
     expect(movieController).toContain("DOWNLOAD_SOURCE_ATTEMPT_MS");
     expect(movieController).toContain("setDownloadResolutionError(");
     expect(downloadPreflight).toContain("setActive(false);");
@@ -67,7 +68,7 @@ describe("Desktop download entrypoint preparation contract", () => {
     expect(tvController).toContain("setShowDownload(false);");
     expect(tvController).toContain("startEpisodeDownloadResolution(ep);");
     expect(tvController).toContain("useDownloadCandidatePreflight({");
-    expect(downloadPreflight).toContain("preflightStream?.(candidateId)");
+    expect(downloadPreflight).toContain("preflightStream?.(candidate.id)");
     expect(tvController).toContain("DOWNLOAD_SOURCE_ATTEMPT_MS");
     expect(tvController).toContain("setPlaying(false);");
     expect(downloadPreflight).toContain("setShowDownload(true);");

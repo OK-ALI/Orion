@@ -8,6 +8,7 @@ const {
   resolveCandidate,
   classifyStream,
   beginCaptureSession,
+  captureSessionIdForWebContents,
   endCaptureSession,
 } = require("../../../src/main/downloader/streamCandidates");
 
@@ -62,6 +63,17 @@ test("scopes candidates to capture sessions", () => {
   addCandidate({ url: "https://cdn.test/two.m3u8", sessionId: second.id });
   assert.equal(listCandidates({ sessionId: first.id }).length, 1);
   assert.equal(listCandidates({ sessionId: first.id })[0].sessionId, first.id);
+});
+
+test("only bound WebView requests may be promoted by player interception", () => {
+  const capture = beginCaptureSession({
+    mediaIdentity: { mediaType: "movie", mediaId: 1 }, sourceId: "vixsrc", webContentsId: 441,
+  });
+  assert.equal(captureSessionIdForWebContents(441), capture.id);
+  assert.equal(captureSessionIdForWebContents(0), null);
+  assert.equal(captureSessionIdForWebContents(999), null);
+  endCaptureSession(capture.id);
+  assert.equal(captureSessionIdForWebContents(441), null);
 });
 
 test("ranks master playlists and redacts query tokens from summaries", () => {

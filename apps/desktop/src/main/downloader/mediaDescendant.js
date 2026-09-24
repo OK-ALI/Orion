@@ -1,5 +1,6 @@
 // Select one real media request without exposing manifest URLs to the renderer.
 const { inspectHlsProbe, inspectMediaProbe } = require("./candidateValidation");
+const { hasObservedRequestContext } = require("./streamCandidates");
 const MANIFEST_PROBE_BYTES = 1024 * 1024;
 const MEDIA_PROBE_BYTES = 4096;
 function resolveChild(parent, raw) {
@@ -47,6 +48,29 @@ function firstDashChild(parent, body) {
   return url ? { kind: "media", url } : null;
 }
 
+function probeDiagnostic(candidate, child, response) {
+  const destination = new URL(child.url);
+  const root = new URL(candidate.url);
+  const headers = response?.headers || {};
+  const value = (name) => {
+    const key = Object.keys(headers).find((entry) => entry.toLowerCase() === name);
+    return key ? String(headers[key] || "") : "";
+  };
+  return {
+    stage: child.kind === "playlist" ? "media_playlist" : "first_media",
+    host: destination.host,
+    crossOrigin: destination.origin !== root.origin,
+    observedInPlayer: hasObservedRequestContext(candidate, child.url),
+    statusCode: response?.statusCode || null,
+    contentType: value("content-type").split(";")[0],
+    contentLength: Number(value("content-length")) || null,
+    bytesRead: Buffer.from(response?.body || []).length,
+    requestHeaderNames: response?.requestDiagnostic?.headerNames || [],
+    authorizationPresent: response?.requestDiagnostic?.authorizationPresent || false,
+    cookiePresent: response?.requestDiagnostic?.cookiePresent || false,
+  };
+}
+
 async function probeFirstMedia(candidate, response, fetcher) {
   let parent = candidate.url;
   let manifest = Buffer.from(response.body || []).toString("utf8");
@@ -55,14 +79,21 @@ async function probeFirstMedia(candidate, response, fetcher) {
       ? firstHlsChild(parent, manifest)
       : firstDashChild(parent, manifest);
     if (!child) return { ok: false, code: "media_child_missing", error: "This source did not expose a downloadable media request." };
-    const media = await fetcher(child.url, candidate, {
-      referer: parent,
-      range: child.kind === "media" ? `bytes=0-${MEDIA_PROBE_BYTES - 1}` : undefined,
-      maxBytes: child.kind === "media" ? MEDIA_PROBE_BYTES : MANIFEST_PROBE_BYTES,
-    });
-    if (child.kind === "media") return inspectMediaProbe(media);
+    let media;
+    try {
+      media = await fetcher(child.url, candidate, {
+        referer: parent,
+        range: child.kind === "media" ? `bytes=0-${MEDIA_PROBE_BYTES - 1}` : undefined,
+        maxBytes: child.kind === "media" ? MEDIA_PROBE_BYTES : MANIFEST_PROBE_BYTES,
+      });
+    } catch (error) {
+      error.downloadDiagnostic = probeDiagnostic(candidate, child);
+      throw error;
+    }
+    const diagnostic = probeDiagnostic(candidate, child, media);
+    if (child.kind === "media") return { ...inspectMediaProbe(media), diagnostic };
     const checked = inspectHlsProbe(media);
-    if (!checked.ok) return checked;
+    if (!checked.ok) return { ...checked, diagnostic };
     parent = child.url;
     manifest = Buffer.from(media.body || []).toString("utf8");
   }

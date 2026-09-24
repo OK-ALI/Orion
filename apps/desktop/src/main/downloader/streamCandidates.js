@@ -124,6 +124,10 @@ function bindWebContentsToActive(webContentsId) {
   return bindWebContents(activeSessionId, webContentsId);
 }
 
+function captureSessionIdForWebContents(webContentsId) {
+  return webContentsSessions.get(webContentsId) || null;
+}
+
 function endCaptureSession(sessionId) {
   const session = captureSessions.get(sessionId);
   if (!session) return false;
@@ -162,6 +166,10 @@ function requestContextForUrl(candidate, url, parentUrl = candidate?.url) {
   } catch {
     return { requestHeaders: {}, referrer: "" };
   }
+}
+
+function hasObservedRequestContext(candidate, url) {
+  return Boolean(observedRequests.get(candidate?.sessionId)?.has(url));
 }
 
 function addCandidate(details = {}) {
@@ -266,11 +274,13 @@ module.exports = {
   beginCaptureSession,
   bindWebContents,
   bindWebContentsToActive,
+  captureSessionIdForWebContents,
   candidateOwnedByTransfer,
   classifyStream,
   clearCandidates,
   endCaptureSession,
   isHls,
+  hasObservedRequestContext,
   listCandidates,
   recordObservedRequest,
   requestContextForUrl,

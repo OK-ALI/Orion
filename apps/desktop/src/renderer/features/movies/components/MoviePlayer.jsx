@@ -67,7 +67,7 @@ import {
 } from "../../../shared/utils/ageRating";
 
 export default function MoviePlayer({ model }) {
-  const { d, ambientColor, blockedSession, displayPct, dubMode, handleFailoverNextSource, isUnreleased, item, m3u8Url, menuPos, movieDownload, onBack, onGoToDownloads, onOpenMiniPlayer, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progressKey, progressLabel, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, revealPlayerControls, saveProgress, selectPlayerSource, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, sourceRef, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
+  const { d, ambientColor, blockedSession, displayPct, dubMode, handleFailoverNextSource, isUnreleased, item, m3u8Url, menuPos, movieDownload, onBack, onGoToDownloads, onOpenMiniPlayer, openDownload, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progressKey, progressLabel, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, revealPlayerControls, saveProgress, selectPlayerSource, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, sourceRef, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
   const sourceHealthRecords = useCinemaSourceHealth("movie", showSourceMenu || playing);
   useEffect(() => {
     if (!playing || restricted || isUnreleased || pipOpen) return undefined;
@@ -334,16 +334,21 @@ export default function MoviePlayer({ model }) {
                 
                 {/* Voice Boost toggle button */}
                 <button
-                  className={`player-overlay-btn${voiceBoost ? " active" : ""}`}
+                  className={`player-overlay-btn${voiceBoost && model.voiceBoostState?.status === "active" ? " active" : ""}`}
                   onClick={() => {
                     const next = !voiceBoost;
                     setVoiceBoost(next);
                     storage.set("voiceBoostEnabled", next ? 1 : 0);
                   }}
-                  title="Voice Boost (Dialogue Enhancer)"
+                  title={voiceBoost && model.voiceBoostState?.message
+                    ? model.voiceBoostState.message
+                    : "Voice Boost (Dialogue Enhancer)"}
+                  aria-label={voiceBoost && model.voiceBoostState?.message
+                    ? model.voiceBoostState.message
+                    : "Toggle Voice Boost"}
                 >
                   <VoiceBoostIcon size={14} />
-                  Voice Boost
+                  {voiceBoost && model.voiceBoostState?.status === "unavailable" ? "Voice Boost unavailable" : "Voice Boost"}
                 </button>
                 
                 {/* Mini-player button */}
@@ -439,7 +444,7 @@ export default function MoviePlayer({ model }) {
                   onClick={() =>
                     movieDownload
                       ? onGoToDownloads?.(movieDownload.id)
-                      : (setShowSourceMenu(false), setShowDownload(true))
+                      : (setShowSourceMenu(false), openDownload())
                   }
                   title={
                     movieDownload

@@ -19,12 +19,13 @@ describe.each(["movies", "tv"])("%s download source persistence", (kind) => {
     expect(retry.originalSource).toBe("vixsrc");
     expect(restoreDownloadSource(retry, "vidlink")).toBe("vixsrc");
     expect(shouldPersistPlayerSource({ key: "download" })).toBe(false);
+    expect(shouldPersistPlayerSource("failed download awaiting manual source choice")).toBe(false);
     expect(shouldPersistPlayerSource(null)).toBe(true);
 
     const code = controller(kind);
     expect(code).toContain("downloadRecoveryRef.current = beginDownloadSourceScope(");
     expect(code).toContain("setPlayerSource(restoreDownloadSource(downloadRecoveryRef.current, playerSource));");
-    expect(code).toContain("if (shouldPersistPlayerSource(downloadTarget) && storage.get(STORAGE_KEYS.PLAYER_SOURCE) !== normalized)");
+    expect(code).toContain("if (shouldPersistPlayerSource(downloadTarget || downloadResolutionError) && storage.get(STORAGE_KEYS.PLAYER_SOURCE) !== normalized)");
     expect(code).toContain("viewModel.selectDownloadSource = selectDownloadSource");
     expect(code).not.toMatch(/setPlayerSource\(next\.sourceId\);\s*storage\.set\(STORAGE_KEYS\.PLAYER_SOURCE/);
     expect(code).toMatch(/if \(downloadResolutionActive\) downloadRecoveryRef\.current\.attempted\.add\(next\);\s*else \{[\s\S]*storage\.set\(STORAGE_KEYS\.PLAYER_SOURCE, next\)/);

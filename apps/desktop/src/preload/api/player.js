@@ -21,6 +21,8 @@ module.exports = ({ ipcRenderer, webFrame }) => ({
   playerStopped: () => ipcRenderer.send("player-stopped"),
   queryVideoProgress: (webContentsId, options) =>
     ipcRenderer.invoke("query-video-progress", webContentsId, options),
+  setVoiceBoost: (webContentsId, enabled) =>
+    ipcRenderer.invoke("player:voice-boost", webContentsId, enabled),
   controlVideo: (webContentsId, action, operation) =>
     ipcRenderer.invoke("control-video", webContentsId, action, operation),
   setVideoState: (webContentsId, state) =>
