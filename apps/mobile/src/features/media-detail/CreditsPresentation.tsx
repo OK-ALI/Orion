@@ -60,7 +60,7 @@ export function TitleCreditsPreview({ cast, crew, theme, onOpen, budget }: {
   if (!cast.length && !crew.length) return null;
   return (
     <View style={styles.preview}>
-      <Text style={[styles.heading, { color: theme.textMuted }]}>TOP CAST & CREW</Text>
+      {cast.length > 0 && <Text style={[styles.heading, { color: theme.textMuted }]}>TOP CAST</Text>}
       {cast.length > 0 && <FlatList data={cast} horizontal showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.previewRail}
         keyExtractor={(person, index) => person.credit_id || `${person.id}_${index}`}

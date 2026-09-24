@@ -5,6 +5,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.URL
+import java.util.Collections
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -196,7 +197,8 @@ class OrionDownloadYtDlpGatewayTest {
     val providerThread =
       Thread {
         try {
-          provider.accept().use { socket ->
+          repeat(3) {
+            provider.accept().use { socket ->
             val input =
               socket.getInputStream()
                 .bufferedReader()
@@ -254,6 +256,7 @@ class OrionDownloadYtDlpGatewayTest {
             output.write(head)
             output.write(payload)
             output.flush()
+            }
           }
         } catch (_: Throwable) {
         }
@@ -287,10 +290,14 @@ class OrionDownloadYtDlpGatewayTest {
           ),
       )
 
+    val measured = Collections.synchronizedList(mutableListOf<Triple<Long, Int, Int>>())
     val session =
       requireNotNull(
         OrionDownloadYtDlpGatewaySession.start(
           bound.jobId,
+          onMediaProgress = { bytes, completed, total ->
+            measured.add(Triple(bytes, completed, total))
+          },
         ),
       )
 
@@ -318,6 +325,10 @@ class OrionDownloadYtDlpGatewayTest {
             rangeEndInclusive = null,
           ),
         )
+
+      val secondGatewayUrl = requireNotNull(
+        session.registerProvider(bound, providerUrl, providerUrl, null, null),
+      )
 
       assertFalse(
         gatewayUrl.contains(
@@ -378,6 +389,21 @@ class OrionDownloadYtDlpGatewayTest {
       )
 
       connection.disconnect()
+
+      assertEquals(listOf(Triple(payload.size.toLong(), 1, 2)), measured.toList())
+      for (routeUrl in listOf(secondGatewayUrl, gatewayUrl)) {
+        val next = URL(routeUrl).openConnection() as HttpURLConnection
+        next.connectTimeout = 2_000
+        next.readTimeout = 2_000
+        next.useCaches = false
+        assertEquals(HttpURLConnection.HTTP_OK, next.responseCode)
+        assertEquals(payload.toList(), next.inputStream.use { it.readBytes() }.toList())
+        next.disconnect()
+      }
+      assertEquals(
+        listOf(Triple(payload.size.toLong(), 1, 2), Triple(payload.size.toLong() * 2, 2, 2)),
+        measured.toList(),
+      )
     } finally {
       session.close()
 

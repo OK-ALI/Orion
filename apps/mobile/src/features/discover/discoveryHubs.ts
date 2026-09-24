@@ -28,11 +28,13 @@ export const WORLD_HUBS = [
     { id: 'animation', name: 'Animation', movie: 'with_companies=429&with_genres=16', tv: 'with_companies=9993&with_genres=16' },
   ] },
   { id: 'starwars', name: 'Star Wars', colors: ['#05070d', '#2f4968'], filters: [
-    { id: 'movies', name: 'Movies', movie: 'with_companies=1&with_keywords=377919', tv: 'with_keywords=377919' },
-    { id: 'series', name: 'Series', movie: 'with_keywords=377919', tv: 'with_companies=1&with_keywords=377919' },
-    { id: 'animation', name: 'Animation', movie: 'with_keywords=377919&with_genres=16', tv: 'with_keywords=377919&with_genres=16' },
-    { id: 'classic', name: 'Classic era', movie: 'with_keywords=377919&primary_release_date.lte=1999-12-31', tv: 'with_keywords=377919&first_air_date.lte=1999-12-31' },
-    { id: 'modern', name: 'Modern era', movie: 'with_keywords=377919&primary_release_date.gte=2000-01-01', tv: 'with_keywords=377919&first_air_date.gte=2000-01-01' },
+    // TMDB keyword 377919 is invalid. Its literal "star wars" keyword 379196
+    // omits the saga films; Lucasfilm + space opera is verified for both media types.
+    { id: 'movies', name: 'Movies', movie: 'with_companies=1&with_keywords=161176', tv: 'with_companies=1&with_keywords=161176' },
+    { id: 'series', name: 'Series', movie: 'with_companies=1&with_keywords=161176', tv: 'with_companies=1&with_keywords=161176' },
+    { id: 'animation', name: 'Animation', movie: 'with_companies=1&with_keywords=161176&with_genres=16', tv: 'with_companies=1&with_keywords=161176&with_genres=16' },
+    { id: 'classic', name: 'Classic era', movie: 'with_companies=1&with_keywords=161176&primary_release_date.lte=1999-12-31', tv: 'with_companies=1&with_keywords=161176&first_air_date.lte=1999-12-31' },
+    { id: 'modern', name: 'Modern era', movie: 'with_companies=1&with_keywords=161176&primary_release_date.gte=2000-01-01', tv: 'with_companies=1&with_keywords=161176&first_air_date.gte=2000-01-01' },
   ] },
   { id: 'pixar', name: 'Pixar', colors: ['#112a46', '#3ea7dc'], filters: [
     { id: 'movies', name: 'Movies', movie: 'with_companies=3', tv: 'with_companies=3' },

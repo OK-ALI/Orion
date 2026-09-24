@@ -49,6 +49,11 @@ export const createDiscoverStyles = (theme: MobileThemeTokens) => StyleSheet.cre
   filterContainer: {
     marginBottom: spacing[4],
   },
+  worldFacetRail: {
+    height: 44,
+    flexShrink: 0,
+    marginBottom: spacing[3],
+  },
   filterScroll: {
     paddingHorizontal: spacing[4],
     gap: spacing[2],

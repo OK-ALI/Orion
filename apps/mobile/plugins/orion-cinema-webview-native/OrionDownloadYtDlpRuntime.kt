@@ -46,7 +46,7 @@ internal object OrionDownloadYtDlpRuntime {
     jobId: String,
     bound: BoundTransferContext,
     requestedQuality: String,
-    onProgress: (OrionYtDlpProgress) -> Unit = {},
+    onMeasuredMediaProgress: (Long, Int, Int) -> Unit = { _, _, _ -> },
   ): OrionYtDlpOutcome {
     val cleanJobId =
       cleanJobId(jobId)
@@ -87,7 +87,7 @@ internal object OrionDownloadYtDlpRuntime {
 
     val gateway =
       OrionDownloadYtDlpGatewaySession
-        .start(cleanJobId)
+        .start(cleanJobId, onMeasuredMediaProgress)
         ?: return OrionYtDlpOutcome.Failed(
           "yt-dlp-gateway-unavailable",
           true,
@@ -137,8 +137,9 @@ internal object OrionDownloadYtDlpRuntime {
         jobId = cleanJobId,
         authority =
           executionAuthority,
-        onProgress =
-          onProgress,
+        // yt-dlp's percent/total may describe one fragment, not the episode.
+        // Only the gateway's completed media routes drive HLS UI progress.
+        onProgress = {},
       )
     } finally {
       gateway.close()

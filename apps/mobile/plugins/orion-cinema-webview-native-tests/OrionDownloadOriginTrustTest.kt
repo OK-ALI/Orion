@@ -2,6 +2,7 @@ package com.okali.orion.playback
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -60,5 +61,19 @@ class OrionDownloadOriginTrustTest {
       "Accept" to "video/*",
     ))
     assertEquals(mapOf("Referer" to "$root/", "Accept" to "video/*"), headers)
+  }
+
+  @Test fun boundJobRetainsOnlyExactSessionObservationsAfterPlayerCloses() {
+    val exact = "$observedMedia/seen.ts"
+    val active = mapOf(exact to "child-only-request-context")
+    val bound = active.toMap()
+    assertEquals("child-only-request-context", OrionBoundObservationPolicy.selectExact(active, emptyMap(), exact))
+    assertEquals("child-only-request-context", OrionBoundObservationPolicy.selectExact(null, bound, exact))
+    assertNull(OrionBoundObservationPolicy.selectExact(null, bound, "$observedMedia/unseen.ts"))
+    val retainedUrls = OrionBoundObservationPolicy.trustedUrls(null, bound)
+    assertTrue(OrionDownloadRequestContextBroker.trustedDescendantDestination(approved, retainedUrls, "$observedMedia/next.ts"))
+    assertFalse(OrionDownloadRequestContextBroker.trustedRedirectDestination(approved, retainedUrls, "$observedMedia/next.ts"))
+    assertFalse(OrionDownloadRequestContextBroker.trustedDescendantDestination(approved, retainedUrls, "$unknown/next.ts"))
+    assertNull(OrionBoundObservationPolicy.selectExact(null, emptyMap(), exact))
   }
 }

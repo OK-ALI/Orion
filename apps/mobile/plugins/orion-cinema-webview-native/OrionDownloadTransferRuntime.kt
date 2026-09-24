@@ -414,15 +414,12 @@ internal object OrionDownloadTransferEngine {
 
     OrionDownloadJobStore.setProcessProgress(
       jobId,
-      0.0,
+      null,
       0L,
       null,
       null,
       null,
     )
-
-    var lastProgressAt =
-      0L
 
     val outcome =
       OrionDownloadYtDlpRuntime
@@ -431,31 +428,11 @@ internal object OrionDownloadTransferEngine {
           jobId = jobId,
           bound = bound,
           requestedQuality = quality,
-        ) { progress ->
-          val now =
-            System.currentTimeMillis()
-
-          if (
-            now - lastProgressAt >= 500L ||
-            (progress.percent ?: 0.0) >= 99.0
-          ) {
-            OrionDownloadJobStore
-              .setProcessProgress(
-                jobId,
-                progress.percent,
-                progress.bytesDownloaded,
-                progress.totalBytes,
-                progress.bytesPerSecond,
-                progress.etaSeconds,
-              )
-
-            OrionDownloadNotifications
-              .reconcile(context)
-
-            lastProgressAt =
-              now
-          }
-        }
+          onMeasuredMediaProgress = { bytes, completed, total ->
+            OrionDownloadJobStore.setGatewayMediaProgress(jobId, bytes, completed, total)
+            OrionDownloadNotifications.reconcile(context)
+          },
+        )
 
     when (outcome) {
       is OrionYtDlpOutcome.Completed -> {
@@ -518,29 +495,23 @@ internal object OrionDownloadTransferEngine {
         val destination =
           job.optString("destination")
 
-        val verifiedBytes =
-          if (destination == "device-storage") {
-            val mediaVerification =
-              OrionFinalizedMediaVerifier.verify(
-                media,
-                requireAudio = true,
-              )
-
-            if (!mediaVerification.ok) {
-              OrionDownloadJobStore.markFailed(
-                jobId,
-                mediaVerification.code,
-                mediaVerification.message,
-                retryable = false,
-              )
-              return
-            }
-
-            mediaVerification.sizeBytes
-          } else {
-            // Orion Library verification belongs to the durable settled file.
-            media.length()
-          }
+        val mediaVerification =
+          OrionFinalizedMediaVerifier.verify(
+            media,
+            requireAudio = true,
+          )
+        if (!mediaVerification.ok) {
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            mediaVerification.code,
+            mediaVerification.message,
+            retryable = false,
+          )
+          return
+        }
+        // Verify staging media before promoting its size to completed transfer
+        // progress. Orion Library also verifies the durable settled copy below.
+        val verifiedBytes = mediaVerification.sizeBytes
 
         OrionDownloadJobStore.setProgress(
           jobId,
@@ -962,28 +933,21 @@ internal object OrionDownloadTransferEngine {
         val destination =
           job.optString("destination")
 
-        val verifiedBytes =
-          if (destination == "device-storage") {
-            val mediaVerification =
-              OrionFinalizedMediaVerifier.verify(
-                media,
-                requireAudio = true,
-              )
-
-            if (!mediaVerification.ok) {
-              OrionDownloadJobStore.markFailed(
-                jobId,
-                mediaVerification.code,
-                mediaVerification.message,
-                retryable = false,
-              )
-              return
-            }
-
-            mediaVerification.sizeBytes
-          } else {
-            media.length()
-          }
+        val mediaVerification =
+          OrionFinalizedMediaVerifier.verify(
+            media,
+            requireAudio = true,
+          )
+        if (!mediaVerification.ok) {
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            mediaVerification.code,
+            mediaVerification.message,
+            retryable = false,
+          )
+          return
+        }
+        val verifiedBytes = mediaVerification.sizeBytes
 
         OrionDownloadJobStore.setProgress(
           jobId,

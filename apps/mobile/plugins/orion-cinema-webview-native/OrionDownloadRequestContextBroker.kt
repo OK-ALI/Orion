@@ -164,7 +164,18 @@ internal object OrionDownloadRequestContextBroker {
   fun releaseSession(sessionId: String) {
     synchronized(this) {
       opaqueProbeCounts.remove(sessionId)
-      observedRequestMaterial.remove(sessionId)
+      val observed = observedRequestMaterial.remove(sessionId)
+      // The player may close immediately after startJob binds a candidate.
+      // Freeze only this session's bounded, exact observations for bound jobs.
+      // A late WebView callback must not add trust after session release.
+      val snapshot = observed?.mapValues { (_, material) ->
+        CapturedRequestMaterial(material.headers.toMap(), material.cookieHeader)
+      } ?: emptyMap()
+      contexts.values.filter { it.sessionId == sessionId && it.boundJobId != null }
+        .forEach {
+          it.boundObservedRequestMaterial = snapshot
+          it.sessionReleased = true
+        }
       val remove = contexts.values
         .filter { it.sessionId == sessionId && it.boundJobId == null }
         .map { it.candidateId }
@@ -803,7 +814,11 @@ internal object OrionDownloadRequestContextBroker {
   }
 
   private fun authorizedRequestFor(context: CapturedContext, normalized: String): AuthorizedRequest {
-    val observed = observedRequestMaterial[context.sessionId]?.get(normalized)
+    val observed = OrionBoundObservationPolicy.selectExact(
+      activeObservedFor(context),
+      context.boundObservedRequestMaterial,
+      normalized,
+    )
     if (observed != null) {
       return AuthorizedRequest(
         normalized,
@@ -843,16 +858,25 @@ internal object OrionDownloadRequestContextBroker {
   private fun descendantAllowed(context: CapturedContext, rawUrl: String): Boolean =
     trustedDescendantDestination(
       context.allowedOrigins,
-      observedRequestMaterial[context.sessionId]?.keys.orEmpty(),
+      observedUrlsFor(context),
       rawUrl,
     )
 
   private fun redirectAllowed(context: CapturedContext, rawUrl: String): Boolean =
     trustedRedirectDestination(
       context.allowedOrigins,
-      observedRequestMaterial[context.sessionId]?.keys.orEmpty(),
+      observedUrlsFor(context),
       rawUrl,
     )
+
+  private fun observedUrlsFor(context: CapturedContext): Set<String> =
+    OrionBoundObservationPolicy.trustedUrls(
+      activeObservedFor(context),
+      context.boundObservedRequestMaterial,
+    )
+
+  private fun activeObservedFor(context: CapturedContext): Map<String, CapturedRequestMaterial>? =
+    if (context.sessionReleased) null else observedRequestMaterial[context.sessionId]
 
   internal fun trustedDescendantDestination(
     allowedOrigins: Set<String>,
@@ -1019,6 +1043,15 @@ internal data class AuthorizedTransferSeed(
 )
 private data class DescendantDiscovery(val allowed: Set<String>, val deniedCount: Int)
 private data class CapturedRequestMaterial(val headers: Map<String, String>, val cookieHeader: String?)
+/** Exact URL observations stay available only to their owning bound job after Player closes. */
+internal object OrionBoundObservationPolicy {
+  fun <T> selectExact(active: Map<String, T>?, bound: Map<String, T>, url: String): T? =
+    active?.get(url) ?: bound[url]
+
+  fun <T> trustedUrls(active: Map<String, T>?, bound: Map<String, T>): Set<String> =
+    active?.keys ?: bound.keys
+}
+
 private data class ExpiryResult(val kind: String, val expiresAt: Long?)
 private data class CapturedContext(
   val candidateId: String,
@@ -1036,6 +1069,8 @@ private data class CapturedContext(
   val allowedOrigins: Set<String>,
   val opaqueProbe: Boolean = false,
   val authorizedUrls: MutableSet<String> = linkedSetOf(),
+  var boundObservedRequestMaterial: Map<String, CapturedRequestMaterial> = emptyMap(),
+  var sessionReleased: Boolean = false,
   var boundJobId: String? = null,
   var preflightState: String = "checking",
   var resolvedKind: String = "unknown",

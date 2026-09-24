@@ -26,8 +26,8 @@ const desktopCredits = load('../desktop/src/renderer/shared/utils/credits.js');
 test('Cinema Portal definitions preserve the locked Desktop provider and world semantics', () => {
   assert.deepEqual(mobile.PROVIDER_HUBS.map(({ id, name, aliases }) => ({ id, name, aliases })),
     desktop.PROVIDER_HUBS.map(({ id, name, aliases }) => ({ id, name, aliases })));
-  assert.deepEqual(mobile.WORLD_HUBS.map(({ id, name, filters }) => ({ id, name, filters })),
-    desktop.WORLD_HUBS.map(({ id, name, filters }) => ({ id, name, filters })));
+  assert.deepEqual(mobile.WORLD_HUBS.filter((world) => world.id !== 'starwars').map(({ id, name, filters }) => ({ id, name, filters })),
+    desktop.WORLD_HUBS.filter((world) => world.id !== 'starwars').map(({ id, name, filters }) => ({ id, name, filters })));
   assert.deepEqual(mobile.PROVIDER_HUBS.map((item) => item.name),
     ['Netflix', 'Prime Video', 'Disney+', 'Max', 'Apple TV+']);
   assert.deepEqual(mobile.WORLD_HUBS.map((item) => item.name), ['Marvel', 'DC', 'Star Wars', 'Pixar']);
@@ -43,7 +43,7 @@ test('regional catalog resolves provider IDs and unavailable regions cannot issu
   }), '&watch_region=GB&with_watch_providers=337');
   assert.equal(mobile.hubQueryParams(selected, 'all', 'tv', { region: 'GB', movie: [], tv: [] }), null);
   assert.equal(mobile.hubQueryParams({ kind: 'world', id: 'starwars' }, 'classic', 'tv', null),
-    '&with_keywords=377919&first_air_date.lte=1999-12-31');
+    '&with_companies=1&with_keywords=161176&first_air_date.lte=1999-12-31');
   assert.equal(mobile.hubQueryParams({ kind: 'world', id: 'pixar' }, 'shorts', 'movie', null),
     '&with_companies=3&with_runtime.lte=45');
 });
@@ -58,6 +58,8 @@ test('Mobile shows locked product labels without implementation language', () =>
   assert.match(portals, /minHeight: 58/);
   const discover = read('src/features/discover/DiscoverScreen.tsx');
   assert.match(discover, /<CinemaPortals/);
+  assert.match(discover, /<View style={styles.worldFacetRail}>/);
+  assert.match(read('src/features/discover/discoverStyles.ts'), /worldFacetRail:\s*\{\s*height: 44,\s*flexShrink: 0,/);
   assert.match(discover, /hubQueryParams\(selectedHub, hubFilter/);
   assert.match(discover, /existingKeys/);
   assert.match(discover, /router\.push\(`\/media\/\$\{item\.id\}\?type=\$\{type\}`\)/);
@@ -105,6 +107,7 @@ test('key crew is curated, ordered, deduplicated and includes TV creators', () =
 
 test('Media Details keeps the existing title endpoint and real person/router stack with virtualized cast', () => {
   const screen = read('src/features/media-detail/MediaDetailScreen.tsx');
+  const presentation = read('src/features/media-detail/CreditsPresentation.tsx');
   const remote = read('src/features/media-detail/useMediaDetailRemoteState.ts');
   const person = read('app/person/[id].tsx');
   assert.match(remote, /append_to_response=credits,videos,recommendations/);
@@ -118,4 +121,26 @@ test('Media Details keeps the existing title endpoint and real person/router sta
   assert.match(person, /router\.back\(\)/);
   assert.match(person, /Filmography/);
   assert.doesNotMatch(screen, /slice\(0, 25\)/);
+  assert.match(presentation, />TOP CAST<\/Text>/);
+  assert.match(presentation, />KEY CREW<\/Text>/);
+  assert.doesNotMatch(presentation, /TOP CAST & CREW/);
+});
+
+test('Star Wars uses verified Lucasfilm/space-opera Discover facets instead of Desktop’s empty keyword', () => {
+  const hub = { kind: 'world', id: 'starwars' };
+  const expected = {
+    movies: '&with_companies=1&with_keywords=161176',
+    series: '&with_companies=1&with_keywords=161176',
+    animation: '&with_companies=1&with_keywords=161176&with_genres=16',
+    classic: '&with_companies=1&with_keywords=161176&primary_release_date.lte=1999-12-31',
+    modern: '&with_companies=1&with_keywords=161176&primary_release_date.gte=2000-01-01',
+  };
+  for (const [facet, params] of Object.entries(expected)) {
+    assert.equal(mobile.hubQueryParams(hub, facet, 'movie', null), params);
+  }
+  assert.doesNotMatch(JSON.stringify(mobile.WORLD_HUBS.find((world) => world.id === 'starwars').filters), /377919/);
+  const screen = read('src/features/discover/DiscoverScreen.tsx');
+  assert.match(screen, /hub\.id === 'starwars'\) setGenreType\('movie'\)/);
+  assert.match(screen, /facet\.id === 'series'\) setGenreType\('tv'\)/);
+  assert.match(screen, /facet\.id === 'animation'\) setGenreType\('all'\)/);
 });

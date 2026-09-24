@@ -202,6 +202,24 @@ internal object OrionDownloadJobStore {
       job.put("updatedAt", System.currentTimeMillis())
     }
   }
+
+  /** Segmented gateway bytes are measured, but the final episode size is unknown. */
+  @Synchronized
+  fun setGatewayMediaProgress(jobId: String, bytes: Long, completed: Int, total: Int) {
+    mutateJobLocked(jobId, notify = true) { job ->
+      if (job.optString("state") != "downloading") return@mutateJobLocked
+      val progress = JSONObject((job.optJSONObject("progress") ?: emptyProgress()).toString())
+      progress.put("bytesDownloaded", bytes.coerceAtLeast(0L))
+      progress.put("totalBytes", JSONObject.NULL)
+      progress.put("completedFragments", completed.coerceIn(0, total.coerceAtLeast(0)))
+      progress.put("totalFragments", total.coerceAtLeast(0))
+      progress.put("percent", JSONObject.NULL)
+      progress.put("bytesPerSecond", JSONObject.NULL)
+      progress.put("etaSeconds", JSONObject.NULL)
+      job.put("progress", progress)
+      job.put("updatedAt", System.currentTimeMillis())
+    }
+  }
   @Synchronized
   fun setFinalizationStage(jobId: String, stage: String, expectedGeneration: Long? = null) {
     if (stage !in FINALIZATION_STAGES) return

@@ -18,6 +18,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Cold job-scoped loopback transport substrate for yt-dlp.
@@ -31,6 +33,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
   private val ownerJobId: String,
   private val server: ServerSocket,
   private val capability: String,
+  private val onMediaProgress: (Long, Int, Int) -> Unit,
 ) : Closeable {
   private sealed interface Route
 
@@ -56,6 +59,11 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
 
   private val routes =
     ConcurrentHashMap<String, Route>()
+
+  private val providerRouteCount = AtomicInteger(0)
+  private val completedProviderBytes = ConcurrentHashMap<String, Long>()
+  private val completedProviderByteCount = AtomicLong(0L)
+  private val mediaProgressLock = Any()
 
   private val activeSockets =
     ConcurrentHashMap.newKeySet<Socket>()
@@ -225,6 +233,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
           route,
         ) == null
       ) {
+        if (route is ProviderRoute) providerRouteCount.incrementAndGet()
         return buildUrl(path)
       }
     }
@@ -435,6 +444,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
           writeProvider(
             output = output,
             route = route,
+            routeKey = request.target,
             headOnly =
               request.method == "HEAD",
           )
@@ -556,6 +566,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
   private fun writeProvider(
     output: BufferedOutputStream,
     route: ProviderRoute,
+    routeKey: String,
     headOnly: Boolean,
   ) {
     val connection =
@@ -670,6 +681,8 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
         headers = headers,
       )
 
+      var deliveredBytes = 0L
+      var reachedEnd = false
       if (
         !headOnly &&
         status in 200..299
@@ -692,21 +705,34 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
               val read =
                 source.read(buffer)
 
-              if (read <= 0) {
+              if (read < 0) {
+                reachedEnd = true
                 break
               }
+              if (read == 0) continue
 
               output.write(
                 buffer,
                 0,
                 read,
               )
+              deliveredBytes += read
             }
           }
         }
       }
 
       output.flush()
+      if (reachedEnd && deliveredBytes > 0L &&
+        (contentLength < 0L || deliveredBytes == contentLength)
+      ) {
+        synchronized(mediaProgressLock) {
+          if (completedProviderBytes.putIfAbsent(routeKey, deliveredBytes) == null) {
+            val bytes = completedProviderByteCount.addAndGet(deliveredBytes)
+            onMediaProgress(bytes, completedProviderBytes.size, providerRouteCount.get())
+          }
+        }
+      }
     } finally {
       activeProviderConnections.remove(
         connection,
@@ -849,6 +875,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
 
     fun start(
       jobId: String,
+      onMediaProgress: (Long, Int, Int) -> Unit = { _, _, _ -> },
     ): OrionDownloadYtDlpGatewaySession? {
       val cleanJobId =
         cleanJobId(jobId)
@@ -876,6 +903,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
             randomToken(
               CAPABILITY_TOKEN_BYTES,
             ),
+          onMediaProgress = onMediaProgress,
         )
       } catch (_: Throwable) {
         try {

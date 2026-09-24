@@ -307,6 +307,7 @@ export default function DiscoverScreen() {
     setActiveFeed('browse');
     setSelectedHub(hub);
     setHubFilter(item?.filters[0]?.id || 'all');
+    if (hub.kind === 'world' && hub.id === 'starwars') setGenreType('movie');
     setSelectedGenre({ id: 'all', name: item?.name || PROVIDER_HUBS.find((provider) => provider.id === hub.id)?.name || hub.id });
   };
   const modalOptions = activeModal === 'type' ? TYPE_FILTERS.map((item) => ({ id: item.id, label: item.name }))
@@ -487,16 +488,25 @@ export default function DiscoverScreen() {
             </Text>
           </View>
           {activeWorld && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll} style={styles.filterContainer}>
-              {activeWorld.filters.map((facet) => (
-                <Pressable key={facet.id} accessibilityRole="button" accessibilityLabel={`Filter ${facet.name}`}
-                  accessibilityState={{ selected: hubFilter === facet.id }}
-                  onPress={() => setHubFilter(facet.id)}
-                  style={[styles.filterPill, hubFilter === facet.id && styles.filterPillActive]}>
-                  <Text numberOfLines={1} style={[styles.filterPillText, hubFilter === facet.id && styles.filterPillTextActive]}>{facet.name}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+            <View style={styles.worldFacetRail}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+                {activeWorld.filters.map((facet) => (
+                  <Pressable key={facet.id} accessibilityRole="button" accessibilityLabel={`Filter ${facet.name}`}
+                    accessibilityState={{ selected: hubFilter === facet.id }}
+                    onPress={() => {
+                      setHubFilter(facet.id);
+                      if (activeWorld.id === 'starwars') {
+                        if (facet.id === 'movies') setGenreType('movie');
+                        if (facet.id === 'series') setGenreType('tv');
+                        if (facet.id === 'animation') setGenreType('all');
+                      }
+                    }}
+                    style={[styles.filterPill, hubFilter === facet.id && styles.filterPillActive]}>
+                    <Text numberOfLines={1} style={[styles.filterPillText, hubFilter === facet.id && styles.filterPillTextActive]}>{facet.name}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
           )}
           <View style={styles.filterControlsBar}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
