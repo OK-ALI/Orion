@@ -478,10 +478,11 @@ test("Phase 7.8.5 budgets image-heavy browsing lists without changing catalog tr
   assert.match(library, /stackListRenderBudget\.initialNumToRender/);
   assert.match(person, /initialNumToRender=\{filmographyRenderBudget\.initialNumToRender\}/);
 
-  assert.match(detail, /data=\{topCast\}/);
-  assert.match(detail, /data=\{fullCast\}/);
+  assert.match(detail, /cast=\{topCast\}/);
+  assert.match(detail, /data=\{activeTab === 'cast' \? castList : \[\]\}/);
+  assert.match(detail, /initialNumToRender=\{castGridBudget\.initialNumToRender\}/);
   assert.match(detail, /data=\{recommendedItems\}/);
-  assert.doesNotMatch(detail, /castList\.slice\(0, 25\)\.map/);
+  assert.doesNotMatch(detail, /castList\.slice\(0, 25\)/);
 
   // 7.8.5 changes how many image-heavy cells are mounted, not their catalog
   // identity, order, source resolution, or the accepted high-quality hero/detail art.

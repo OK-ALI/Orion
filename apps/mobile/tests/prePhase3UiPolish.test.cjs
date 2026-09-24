@@ -91,6 +91,7 @@ test("Person profile and filmography use one live semantic theme", () => {
   const source = read("app/person/[id].tsx");
   const card = read("src/components/PersonCard.tsx");
   const detail = read("src/features/media-detail/MediaDetailScreen.tsx");
+  const credits = read("src/features/media-detail/CreditsPresentation.tsx");
   assert.match(source, /useOrionTheme/);
   assert.match(source, /useResponsiveLayout/);
   assert.match(source, /headerContainerLandscape/);
@@ -102,7 +103,8 @@ test("Person profile and filmography use one live semantic theme", () => {
   assert.match(source, /color: theme\.accent/);
   assert.match(card, /colors=\{\['transparent', theme\.mediaScrim\]\}/);
   assert.match(card, /color: theme\.onAccent/);
-  assert.match(detail, /styles\.castCard, \{ backgroundColor: theme\.surface, borderColor: theme\.border \}/);
+  assert.match(detail, /<CreditPersonCard person=\{item\} theme=\{theme\}/);
+  assert.match(credits, /backgroundColor: theme\.surface, borderColor: theme\.border/);
   assert.doesNotMatch(source, /backgrounds\.base|accent\.primary|text\.secondary/);
 });
 

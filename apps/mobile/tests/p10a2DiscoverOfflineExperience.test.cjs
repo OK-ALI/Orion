@@ -62,7 +62,8 @@ function createHarness(productState = 'online', recoveryEpoch = 0) {
     },
   };
   const element = (type, props, key) => ({ type, props: props || {}, key });
-  const router = { push() { throw new Error('Unexpected navigation during remote work'); }, setParams() {} };
+  const routes = [];
+  const router = { push(route) { routes.push(route); }, setParams() {} };
   const theme = {};
   function request(kind, input) {
     return new Promise((resolve, reject) => requests.push({ kind, input, resolve, reject }));
@@ -91,6 +92,8 @@ function createHarness(productState = 'online', recoveryEpoch = 0) {
     '../../services/responsive': { useResponsiveLayout: () => ({ isPhone: true, isTablet: false, isLandscape: false }) },
     '../../services/listPerformance': { getGridRenderBudget: () => ({}), getRailRenderBudget: () => ({}) },
     './discoverStyles': { createDiscoverStyles: () => ({}) },
+    './CinemaPortals': { CinemaPortals: 'CinemaPortals' },
+    './DiscoverFilterModal': { DiscoverFilterModal: 'DiscoverFilterModal' },
     '../../components/MediaCard': { MediaCard: 'MediaCard' },
     '../../components/PersonCard': { PersonCard: 'PersonCard' },
     '../../components/MobilePageHeader': { MobilePageHeader: 'MobilePageHeader' },
@@ -152,9 +155,29 @@ function createHarness(productState = 'online', recoveryEpoch = 0) {
   tree.props.onLayout({ nativeEvent: { layout: { width: 400 } } });
   render();
   return {
-    requests, errors, render,
+    requests, errors, routes, render,
     press(label) { find(label).props.onPress(); render(); },
     control: find,
+    hub(kind, id) {
+      const portal = nodes(tree).find((node) => node.type === 'CinemaPortals');
+      assert.ok(portal, 'Cinema Portals should be in Browse');
+      portal.props.onSelect({ kind, id });
+      render();
+    },
+    modalSelect(value) {
+      const modal = nodes(tree).find((node) => node.type === 'DiscoverFilterModal');
+      assert.ok(modal?.props.visible, 'Filter sheet should be open');
+      modal.props.onSelect(value);
+      modal.props.onClose();
+      render();
+    },
+    openFirstResult() {
+      const list = nodes(tree).find((node) => node.type === 'FlatList' && node.props.data?.length);
+      assert.ok(list, 'Results list should contain a title');
+      const card = list.props.renderItem({ item: list.props.data[0] });
+      card.props.onPress();
+      render();
+    },
     query(value) { find('Search Orion').props.onChangeText(value); render(); },
     connect(state, epoch = network.recoveryEpoch) {
       network = { ...network, productState: state, remoteReady: state === 'online', recoveryEpoch: epoch };
@@ -208,7 +231,7 @@ test('the slice stays bounded and does not import protected or unrelated surface
     assert.doesNotMatch(source, /ResumePlaybackPrompt|prePhase3UiPolish|Readiness-Audit|features\/downloads|offlinePlayer|HomeContinueWatching/);
   }
   assert.match(screen, /searchSucceeded \? `No results found for/);
-  assert.match(screen, /genreOutcome\?\.status === 'success' \? 'No titles match/);
+  assert.match(screen, /genreOutcome\?\.status === 'success'[\s\S]*'No titles match the selected filters\.'/);
   assert.match(screen, /regionSucceeded \? 'No trending titles/);
 });
 
@@ -379,5 +402,85 @@ test('Load More deduplicates rapid taps, blocks offline, and fences old pages af
   h.requests[3].resolve(response([3, 4], 2));
   await h.settle();
   assert.deepEqual(h.data().map((result) => result.id), [3, 4]);
+  h.unmount();
+});
+
+test('Story Universe facets use the existing discover query, pagination, dedupe and retained Back state', async () => {
+  const h = createHarness();
+  h.hub('world', 'marvel');
+  assert.match(h.requests[0].input, /\/discover\/movie\?/);
+  assert.match(h.requests[0].input, /with_companies=420\|7505/);
+  h.requests[0].resolve(response([1, 2], 3));
+  await h.settle();
+  h.press('Filter MCU');
+  assert.match(h.requests[1].input, /with_keywords=180547/);
+  h.requests[1].resolve(response([3], 3));
+  await h.settle();
+  h.press('Load more titles');
+  assert.match(h.requests[2].input, /page=2/);
+  h.requests[2].resolve(response([3, 4], 3));
+  await h.settle();
+  assert.deepEqual(h.data().map((item) => item.id), [3, 4]);
+  h.openFirstResult();
+  assert.equal(h.routes.at(-1), '/media/3?type=movie');
+  assert.deepEqual(h.data().map((item) => item.id), [3, 4]);
+  assert.equal(h.control('Filter MCU').props.accessibilityState.selected, true);
+  h.unmount();
+});
+
+test('Streaming Realm resolves region-specific catalog IDs and handles unavailable providers', async () => {
+  const h = createHarness();
+  h.hub('provider', 'netflix');
+  assert.equal(h.requests.length, 2, 'Movie and TV regional catalogs are requested');
+  h.requests[0].resolve({ results: [{ provider_id: 8, provider_name: 'Netflix' }] });
+  h.requests[1].resolve({ results: [{ provider_id: 9, provider_name: 'Netflix' }] });
+  await h.settle();
+  assert.match(h.requests[2].input, /watch_region=[A-Z]{2}&with_watch_providers=8/);
+  h.requests[2].resolve(response([1], 2));
+  await h.settle();
+  h.press('Streaming Realm region, ' + h.requests[2].input.match(/watch_region=([A-Z]{2})/)[1]);
+  h.modalSelect('GB');
+  assert.equal(h.requests.length, 5, 'Changing availability region refreshes both catalogs');
+  h.requests[3].resolve({ results: [{ provider_id: 337, provider_name: 'Netflix' }] });
+  h.requests[4].resolve({ results: [] });
+  await h.settle();
+  assert.match(h.requests[5].input, /watch_region=GB&with_watch_providers=337/);
+  h.requests[5].resolve(response([], 1));
+  await h.settle();
+  assert.match(h.text(), /No titles match the selected filters/);
+  h.unmount();
+});
+
+test('an unavailable Streaming Realm does not issue a malformed discover query and offline gate blocks catalog work', async () => {
+  const offline = createHarness('offline');
+  offline.hub('provider', 'apple');
+  assert.equal(offline.requests.length, 0);
+  offline.unmount();
+  const h = createHarness();
+  h.hub('provider', 'apple');
+  h.requests[0].resolve({ results: [] });
+  h.requests[1].resolve({ results: [] });
+  await h.settle();
+  assert.equal(h.requests.length, 2);
+  assert.match(h.text(), /not listed/);
+  h.unmount();
+});
+
+test('switching Story Universes rejects the previous request and keeps the existing region filter', async () => {
+  const h = createHarness();
+  h.press('Region Bollywood');
+  h.hub('world', 'marvel');
+  const marvel = h.requests.find((request) => request.input.includes('with_companies=420|7505'));
+  assert.ok(marvel);
+  assert.match(marvel.input, /with_origin_country=IN/);
+  h.press('Back to Discover');
+  h.hub('world', 'dc');
+  const dc = h.requests.find((request) => request.input.includes('with_companies=429|9993'));
+  assert.ok(dc);
+  dc.resolve(response([2]));
+  await h.settle();
+  marvel.resolve(response([1]));
+  await h.settle();
+  assert.deepEqual(h.data().map((item) => item.id), [2]);
   h.unmount();
 });

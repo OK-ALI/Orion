@@ -1,4 +1,4 @@
-import { Animated, View, Text, StyleSheet, TextInput, FlatList, ActivityIndicator, ScrollView, Pressable, Modal } from 'react-native';
+import { Animated, View, Text, StyleSheet, TextInput, FlatList, ActivityIndicator, ScrollView, Pressable } from 'react-native';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { spacing } from '@orion/shared/tokens';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -34,6 +34,9 @@ import { usePerformanceProfile } from '../../context/PerformanceContext';
 import { getDiscoverUnavailableCopy, useDiscoverRemoteGate } from './useDiscoverRemoteGate';
 import { useDiscoverSearchResults } from './useDiscoverSearchResults';
 import { useDiscoverRegionResults } from './useDiscoverRegionResults';
+import { CinemaPortals } from './CinemaPortals';
+import { DiscoverFilterModal } from './DiscoverFilterModal';
+import { PROVIDER_HUBS, WORLD_HUBS, hubQueryParams, inferWatchRegion, type ProviderCatalog, type SelectedHub } from './discoveryHubs';
 
 export default function DiscoverScreen() {
   const { theme, preferences } = useOrionTheme();
@@ -53,12 +56,17 @@ export default function DiscoverScreen() {
   const [subfilter, setSubfilter] = useState<string>('all');
   const [genreType, setGenreType] = useState<'all' | 'movie' | 'tv'>('movie');
   const [selectedGenre, setSelectedGenre] = useState<{ id: number | 'all'; name: string } | null>(null);
+  const [selectedHub, setSelectedHub] = useState<SelectedHub>(null);
+  const [hubFilter, setHubFilter] = useState('all');
+  const [watchRegion, setWatchRegion] = useState(inferWatchRegion);
+  const [providerCatalog, setProviderCatalog] = useState<ProviderCatalog | null>(null);
+  const [providerStatus, setProviderStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [genreResults, setGenreResults] = useState<TmdbMediaItem[]>([]);
   const [genreLoading, setGenreLoading] = useState(false);
   const [year, setYear] = useState('');
   const [minRating, setMinRating] = useState('0');
   const [sortBy, setSortBy] = useState('popularity.desc');
-  const [activeModal, setActiveModal] = useState<'type' | 'region' | 'subfilter' | 'sort' | 'rating' | 'year' | 'window' | null>(null);
+  const [activeModal, setActiveModal] = useState<'type' | 'region' | 'subfilter' | 'sort' | 'rating' | 'year' | 'window' | 'watchRegion' | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -73,7 +81,7 @@ export default function DiscoverScreen() {
   });
   const genreRequestRef = useRef(0);
   const genreRequestPendingRef = useRef(false);
-  const genreViewKey = JSON.stringify([selectedGenre?.id, activeFeed, feedWindow, genreType, region, subfilter, year, minRating, sortBy, refreshKey]);
+  const genreViewKey = JSON.stringify([selectedGenre?.id, selectedHub?.kind, selectedHub?.id, hubFilter, watchRegion, providerCatalog?.region, providerStatus, activeFeed, feedWindow, genreType, region, subfilter, year, minRating, sortBy, refreshKey]);
   const [genreOutcome, setGenreOutcome] = useState<{ key: string; status: 'success' | 'error' } | null>(null);
   const { isPhone, isTablet, isLandscape } = useResponsiveLayout();
   const COLUMN_COUNT = isPhone
@@ -92,6 +100,20 @@ export default function DiscoverScreen() {
     () => getRailRenderBudget(containerWidth, 140 + spacing[4] + spacing[3], resolvedProfile),
     [containerWidth, resolvedProfile],
   );
+  useEffect(() => {
+    if (selectedHub?.kind !== 'provider' || !network.remoteReady || providerCatalog?.region === watchRegion) return;
+    let active = true;
+    const generation = generationRef.current;
+    setProviderStatus('loading');
+    Promise.all(['movie', 'tv'].map((kind) => tmdbFetch<{ results: ProviderCatalog['movie'] }>(`/watch/providers/${kind}?watch_region=${watchRegion}`)))
+      .then(([movie, tv]) => {
+        if (!active || generation !== generationRef.current || !remoteReadyRef.current) return;
+        setProviderCatalog({ region: watchRegion, movie: movie.results || [], tv: tv.results || [] });
+        setProviderStatus('ready');
+      })
+      .catch(() => { if (active && generation === generationRef.current) setProviderStatus('error'); });
+    return () => { active = false; };
+  }, [selectedHub?.kind, watchRegion, network.remoteReady, refreshKey, providerCatalog?.region, generationRef, remoteReadyRef]);
 
   const searchArrivalStyle = {
     opacity: searchArrival.interpolate({ inputRange: [0, 1], outputRange: [0.84, 1] }),
@@ -102,6 +124,7 @@ export default function DiscoverScreen() {
     const request = Number(params.focusSearch || 0);
     if (!Number.isFinite(request) || request <= 0) return;
     setSelectedGenre(null);
+    setSelectedHub(null);
     setGenreResults([]);
     searchArrival.setValue(preferences.reducedMotion ? 1 : 0);
     requestAnimationFrame(() => {
@@ -120,6 +143,7 @@ export default function DiscoverScreen() {
     const mediaType = params.mediaType === 'movie' || params.mediaType === 'tv' || params.mediaType === 'all' ? params.mediaType : 'all';
     const nextRegion = params.region && REGION_PRESETS[params.region as keyof typeof REGION_PRESETS] ? params.region : 'all';
     setQuery(''); setActiveFeed(feed); setGenreType(mediaType); setRegion(nextRegion); setSubfilter(params.subfilter || 'all');
+    setSelectedHub(null);
     setSortBy(params.sort || 'popularity.desc'); setFeedWindow(params.window || (feed === 'trending' ? 'week' : '30'));
     const requestedGenre = Number(params.genreId);
     setSelectedGenre({ id: Number.isFinite(requestedGenre) && requestedGenre > 0 ? requestedGenre : 'all', name: params.label || DISCOVER_FEEDS.find((item) => item.id === feed)?.name || 'Explore' });
@@ -134,6 +158,25 @@ export default function DiscoverScreen() {
       if (pageNum === 1) setGenreResults([]);
       setGenreLoading(false);
       setLoadingMore(false);
+      return;
+    }
+    if (selectedHub?.kind === 'provider' && providerStatus === 'error') {
+      genreRequestRef.current += 1;
+      setGenreResults([]);
+      setTotalPages(1);
+      setGenreOutcome({ key: genreViewKey, status: 'error' });
+      setGenreLoading(false);
+      return;
+    }
+    if (selectedHub?.kind === 'provider' && (providerStatus === 'loading' || providerStatus === 'idle' || providerCatalog?.region !== watchRegion)) return;
+    if (selectedHub?.kind === 'provider' && (genreType === 'all' ? ['movie', 'tv'] : [genreType]).every((kind) =>
+      hubQueryParams(selectedHub, hubFilter, kind as 'movie' | 'tv', providerCatalog) === null)) {
+      genreRequestRef.current += 1;
+      setGenreResults([]);
+      setPage(1);
+      setTotalPages(1);
+      setGenreOutcome({ key: genreViewKey, status: 'success' });
+      setGenreLoading(false);
       return;
     }
 
@@ -160,7 +203,9 @@ export default function DiscoverScreen() {
         if (activeFeed === 'top-rated') return tmdbFetch<TmdbPaginatedResponse>(`/${mediaType}/top_rated?page=${pageNum}`);
         const yearParam = activeFeed === 'browse' && year ? (mediaType === 'movie' ? `&primary_release_year=${year}` : `&first_air_date_year=${year}`) : '';
         const ratingParam = minRating !== '0' ? `&vote_average.gte=${minRating}` : '';
-        const genreParam = selectedGenre.id && (selectedGenre.id as any) !== 'all' ? `&with_genres=${selectedGenre.id}` : '';
+        const genreParam = !selectedHub && selectedGenre.id && (selectedGenre.id as any) !== 'all' ? `&with_genres=${selectedGenre.id}` : '';
+        const hubParam = hubQueryParams(selectedHub, hubFilter, mediaType as 'movie' | 'tv', providerCatalog);
+        if (hubParam === null) return Promise.resolve({ page: pageNum, results: [], total_pages: 1, total_results: 0 } as TmdbPaginatedResponse);
         const mediaSort = sortBy === 'primary_release_date.desc' && mediaType === 'tv' ? 'first_air_date.desc' : sortBy;
         const dateParam = getDiscoverReleaseDateParams(activeFeed, mediaType as 'movie' | 'tv', feedWindow);
         const voteCountParam = activeFeed === 'upcoming'
@@ -168,7 +213,7 @@ export default function DiscoverScreen() {
           : activeFeed === 'new-releases'
             ? `&vote_count.gte=${mediaType === 'tv' ? 10 : 20}`
             : '&vote_count.gte=20';
-        return tmdbFetch<TmdbPaginatedResponse>(`/discover/${mediaType}?sort_by=${mediaSort}${genreParam}${countryParam}${languageParam}${yearParam}${ratingParam}${dateParam}${voteCountParam}&page=${pageNum}`);
+        return tmdbFetch<TmdbPaginatedResponse>(`/discover/${mediaType}?sort_by=${mediaSort}${genreParam}${hubParam}${countryParam}${languageParam}${yearParam}${ratingParam}${dateParam}${voteCountParam}&page=${pageNum}`);
       }));
       if (!isCurrent()) return;
 
@@ -221,7 +266,7 @@ export default function DiscoverScreen() {
         setLoadingMore(false);
       }
     }
-  }, [selectedGenre, activeFeed, feedWindow, genreType, region, subfilter, year, minRating, sortBy, genreViewKey, generationRef, remoteReadyRef]);
+  }, [selectedGenre, selectedHub, hubFilter, providerCatalog, providerStatus, watchRegion, activeFeed, feedWindow, genreType, region, subfilter, year, minRating, sortBy, genreViewKey, generationRef, remoteReadyRef]);
   useEffect(() => {
     if (selectedGenre) void fetchDiscoverResults(1);
     return () => {
@@ -252,6 +297,49 @@ export default function DiscoverScreen() {
   };
   const isSearching = query.trim().length > 0;
   const activeRegionName = REGION_PRESETS[region as keyof typeof REGION_PRESETS]?.name;
+  const activeWorld = selectedHub?.kind === 'world' ? WORLD_HUBS.find((world) => world.id === selectedHub.id) : null;
+  const providerUnavailable = selectedHub?.kind === 'provider' && providerCatalog?.region === watchRegion &&
+    (genreType === 'all' ? ['movie', 'tv'] : [genreType]).every((kind) =>
+      hubQueryParams(selectedHub, hubFilter, kind as 'movie' | 'tv', providerCatalog) === null);
+  const selectHub = (hub: NonNullable<SelectedHub>) => {
+    const item = hub.kind === 'world' ? WORLD_HUBS.find((world) => world.id === hub.id) : undefined;
+    setQuery('');
+    setActiveFeed('browse');
+    setSelectedHub(hub);
+    setHubFilter(item?.filters[0]?.id || 'all');
+    setSelectedGenre({ id: 'all', name: item?.name || PROVIDER_HUBS.find((provider) => provider.id === hub.id)?.name || hub.id });
+  };
+  const modalOptions = activeModal === 'type' ? TYPE_FILTERS.map((item) => ({ id: item.id, label: item.name }))
+    : activeModal === 'region' ? Object.entries(REGION_PRESETS).map(([id, item]) => ({ id, label: item.name }))
+    : activeModal === 'subfilter' ? (SUBFILTER_PRESETS[region as keyof typeof SUBFILTER_PRESETS] || []).map((item) => ({ id: item.id, label: item.name }))
+    : activeModal === 'sort' ? SORT_OPTIONS.map((item) => ({ id: item.id, label: item.label }))
+    : activeModal === 'rating' ? RATING_OPTIONS.map((item) => ({ id: item.id, label: item.label }))
+    : activeModal === 'year' ? YEAR_OPTIONS.map((item) => ({ id: item, label: item || 'Year: All' }))
+    : activeModal === 'window' ? (activeFeed === 'trending' ? TRENDING_WINDOW_OPTIONS : RELEASE_WINDOW_OPTIONS).map((item) => ({ id: item.id, label: item.label }))
+    : activeModal === 'watchRegion' ? [...new Set([watchRegion, 'US', 'GB', 'PK', 'IN', 'CA', 'AU', 'DE', 'FR', 'JP', 'KR', 'AE'])].map((id) => ({ id, label: id }))
+    : [];
+  const modalTitle = activeModal === 'type' ? 'Filter Media Type'
+    : activeModal === 'region' ? 'Filter Region'
+    : activeModal === 'subfilter' ? 'Filter Sub-Region'
+    : activeModal === 'sort' ? 'Sort Titles By'
+    : activeModal === 'rating' ? 'Minimum TMDB Rating'
+    : activeModal === 'year' ? 'Release Year'
+    : activeModal === 'window' ? activeFeed === 'trending' ? 'Trending period' : activeFeed === 'upcoming' ? 'Arriving within' : 'Released within'
+    : 'Streaming Realm region';
+  const modalSelected = activeModal === 'type' ? genreType : activeModal === 'region' ? region
+    : activeModal === 'subfilter' ? subfilter : activeModal === 'sort' ? sortBy
+    : activeModal === 'rating' ? minRating : activeModal === 'year' ? year
+    : activeModal === 'window' ? feedWindow : watchRegion;
+  const selectModalOption = (value: string) => {
+    if (activeModal === 'type') setGenreType(value as typeof genreType);
+    else if (activeModal === 'region') { setRegion(value); setSubfilter('all'); }
+    else if (activeModal === 'subfilter') setSubfilter(value);
+    else if (activeModal === 'sort') setSortBy(value);
+    else if (activeModal === 'rating') setMinRating(value);
+    else if (activeModal === 'year') setYear(value);
+    else if (activeModal === 'window') setFeedWindow(value);
+    else if (activeModal === 'watchRegion') setWatchRegion(value);
+  };
   return (
     <View style={styles.container} onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}>
       <LinearGradient
@@ -288,7 +376,7 @@ export default function DiscoverScreen() {
           value={query}
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setSearchFocused(false)}
-          onChangeText={(t) => { setQuery(t); if (t.trim()) setSelectedGenre(null); }}
+          onChangeText={(t) => { setQuery(t); if (t.trim()) { setSelectedGenre(null); setSelectedHub(null); } }}
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
@@ -387,19 +475,38 @@ export default function DiscoverScreen() {
           <View style={styles.genreHeader}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={activeFeed === 'browse' ? 'Back to genres' : 'Back to Discover'}
+              accessibilityLabel={selectedHub ? 'Back to Discover' : activeFeed === 'browse' ? 'Back to genres' : 'Back to Discover'}
               style={({ pressed }) => [styles.backPill, pressed && { opacity: 0.7 }]}
-              onPress={() => { setSelectedGenre(null); setGenreResults([]); setPage(1); if (activeFeed !== 'browse') setActiveFeed('browse'); }}
+              onPress={() => { setSelectedGenre(null); setSelectedHub(null); setGenreResults([]); setPage(1); if (activeFeed !== 'browse') setActiveFeed('browse'); }}
             >
               <Ionicons name="chevron-back" size={18} color={theme.text} />
-              <Text style={styles.backPillText}>{activeFeed === 'browse' ? 'Genres' : 'Discover'}</Text>
+              <Text style={styles.backPillText}>{selectedHub ? 'Discover' : activeFeed === 'browse' ? 'Genres' : 'Discover'}</Text>
             </Pressable>
             <Text style={styles.genreActiveLabel} numberOfLines={1}>
               {selectedGenre.name}
             </Text>
           </View>
+          {activeWorld && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll} style={styles.filterContainer}>
+              {activeWorld.filters.map((facet) => (
+                <Pressable key={facet.id} accessibilityRole="button" accessibilityLabel={`Filter ${facet.name}`}
+                  accessibilityState={{ selected: hubFilter === facet.id }}
+                  onPress={() => setHubFilter(facet.id)}
+                  style={[styles.filterPill, hubFilter === facet.id && styles.filterPillActive]}>
+                  <Text numberOfLines={1} style={[styles.filterPillText, hubFilter === facet.id && styles.filterPillTextActive]}>{facet.name}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
           <View style={styles.filterControlsBar}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+              {selectedHub?.kind === 'provider' && (
+                <Pressable accessibilityRole="button" accessibilityLabel={`Streaming Realm region, ${watchRegion}`}
+                  style={[styles.dropdownPill, styles.dropdownPillActive]} onPress={() => setActiveModal('watchRegion')}>
+                  <Text style={[styles.dropdownPillText, styles.dropdownPillTextActive]}>Availability: {watchRegion}</Text>
+                  <Ionicons name="chevron-down" size={14} color={theme.onAccent} />
+                </Pressable>
+              )}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Media type filter, ${TYPE_FILTERS.find(t => t.id === genreType)?.name}`}
@@ -476,7 +583,9 @@ export default function DiscoverScreen() {
                   <View style={styles.centered}>
                     <Text style={styles.emptyText}>
                       {network.remoteReady
-                        ? (genreOutcome?.status === 'success' ? 'No titles match the selected filters.' : 'Cinema results could not be loaded. Please try again.')
+                        ? (genreOutcome?.status === 'success'
+                          ? providerUnavailable ? `This Streaming Realm is not listed in ${watchRegion} for the selected media type.` : 'No titles match the selected filters.'
+                          : 'Cinema results could not be loaded. Please try again.')
                         : getDiscoverUnavailableCopy(network.productState)}
                     </Text>
                   </View>
@@ -513,8 +622,9 @@ export default function DiscoverScreen() {
               <Pressable key={feed.id} accessibilityRole="button" accessibilityState={{ selected: activeFeed === feed.id }}
                 style={[styles.typePill, activeFeed === feed.id && styles.typePillActive]}
                 onPress={() => {
-                  if (feed.id === 'browse') { setActiveFeed('browse'); setSelectedGenre(null); return; }
+                  if (feed.id === 'browse') { setActiveFeed('browse'); setSelectedGenre(null); setSelectedHub(null); return; }
                   setActiveFeed(feed.id); setFeedWindow(feed.id === 'trending' ? 'week' : '30'); setGenreType('all'); setRegion('all'); setSubfilter('all'); setSortBy('popularity.desc');
+                  setSelectedHub(null);
                   setSelectedGenre({ id: 'all', name: feed.name }); setGenreResults([]); setPage(1);
                 }}
               >
@@ -576,6 +686,7 @@ export default function DiscoverScreen() {
               </ScrollView>
             </View>
           )}
+          <CinemaPortals theme={theme} width={containerWidth} onSelect={selectHub} />
           {region !== 'all' && (
             <View style={styles.regionShelf}>
               <View style={styles.regionShelfHeader}>
@@ -586,7 +697,7 @@ export default function DiscoverScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`Explore all titles in ${activeRegionName}`}
                   style={({ pressed }) => [styles.browseAllBtn, pressed && { opacity: 0.7 }]}
-                  onPress={() => setSelectedGenre({ id: 'all' as any, name: 'All ' + activeRegionName })}
+                  onPress={() => { setSelectedHub(null); setSelectedGenre({ id: 'all' as any, name: 'All ' + activeRegionName }); }}
                 >
                   <Text style={styles.browseAllBtnText}>Explore All</Text>
                   <Ionicons name="chevron-forward" size={14} color={theme.accent} />
@@ -626,7 +737,7 @@ export default function DiscoverScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`Browse ${genre.name}`}
                 style={({ pressed }) => [{ width: genreCardWidth }, pressed && { opacity: 0.8, transform: [{ scale: 0.97 }] }]}
-                onPress={() => setSelectedGenre(genre)}
+                onPress={() => { setSelectedHub(null); setSelectedGenre(genre); }}
               >
                 <LinearGradient
                   colors={genre.colors as [string, string]}
@@ -647,131 +758,9 @@ export default function DiscoverScreen() {
           <View style={{ height: 120 }} />
         </ScrollView>
       )}
-      <Modal
-        visible={!!activeModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setActiveModal(null)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setActiveModal(null)}>
-          <View accessibilityViewIsModal style={styles.modalContent} onStartShouldSetResponder={() => true}>
-            <View style={styles.modalHandle} />
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {activeModal === 'type' && 'Filter Media Type'}
-                {activeModal === 'region' && 'Filter Region'}
-                {activeModal === 'subfilter' && 'Filter Sub-Region'}
-                {activeModal === 'sort' && 'Sort Titles By'}
-                {activeModal === 'rating' && 'Minimum TMDB Rating'}
-                {activeModal === 'year' && 'Release Year'}
-                {activeModal === 'window' && (activeFeed === 'trending' ? 'Trending period' : activeFeed === 'upcoming' ? 'Arriving within' : 'Released within')}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Close filter options"
-                hitSlop={4}
-                onPress={() => setActiveModal(null)}
-                style={styles.modalCloseBtn}
-              >
-                <Ionicons name="close" size={20} color={theme.text} />
-              </Pressable>
-            </View>
-            <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
-              {activeModal === 'type' && TYPE_FILTERS.map((item) => (
-                <Pressable
-                  key={item.id}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: genreType === item.id }}
-                  style={[styles.modalOption, genreType === item.id && styles.modalOptionActive]}
-                  onPress={() => { setGenreType(item.id as any); setActiveModal(null); }}
-                >
-                  <Text style={[styles.modalOptionText, genreType === item.id && styles.modalOptionTextActive]}>
-                    {item.name}
-                  </Text>
-                  {genreType === item.id && <Ionicons name="checkmark" size={18} color={theme.accent} />}
-                </Pressable>
-              ))}
-              {activeModal === 'region' && Object.entries(REGION_PRESETS).map(([id, preset]) => (
-                <Pressable
-                  key={id}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: region === id }}
-                  style={[styles.modalOption, region === id && styles.modalOptionActive]}
-                  onPress={() => { setRegion(id); setSubfilter('all'); setActiveModal(null); }}
-                >
-                  <Text style={[styles.modalOptionText, region === id && styles.modalOptionTextActive]}>
-                    {preset.name}
-                  </Text>
-                  {region === id && <Ionicons name="checkmark" size={18} color={theme.accent} />}
-                </Pressable>
-              ))}
-              {activeModal === 'subfilter' && region !== 'all' && SUBFILTER_PRESETS[region as keyof typeof SUBFILTER_PRESETS]?.map((sf) => (
-                <Pressable
-                  key={sf.id}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: subfilter === sf.id }}
-                  style={[styles.modalOption, subfilter === sf.id && styles.modalOptionActive]}
-                  onPress={() => { setSubfilter(sf.id); setActiveModal(null); }}
-                >
-                  <Text style={[styles.modalOptionText, subfilter === sf.id && styles.modalOptionTextActive]}>
-                    {sf.name}
-                  </Text>
-                  {subfilter === sf.id && <Ionicons name="checkmark" size={18} color={theme.accent} />}
-                </Pressable>
-              ))}
-              {activeModal === 'sort' && SORT_OPTIONS.map((item) => (
-                <Pressable
-                  key={item.id}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: sortBy === item.id }}
-                  style={[styles.modalOption, sortBy === item.id && styles.modalOptionActive]}
-                  onPress={() => { setSortBy(item.id); setActiveModal(null); }}
-                >
-                  <Text style={[styles.modalOptionText, sortBy === item.id && styles.modalOptionTextActive]}>
-                    {item.label}
-                  </Text>
-                  {sortBy === item.id && <Ionicons name="checkmark" size={18} color={theme.accent} />}
-                </Pressable>
-              ))}
-              {activeModal === 'rating' && RATING_OPTIONS.map((item) => (
-                <Pressable
-                  key={item.id}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: minRating === item.id }}
-                  style={[styles.modalOption, minRating === item.id && styles.modalOptionActive]}
-                  onPress={() => { setMinRating(item.id); setActiveModal(null); }}
-                >
-                  <Text style={[styles.modalOptionText, minRating === item.id && styles.modalOptionTextActive]}>
-                    {item.label}
-                  </Text>
-                  {minRating === item.id && <Ionicons name="checkmark" size={18} color={theme.accent} />}
-                </Pressable>
-              ))}
-              {activeModal === 'year' && YEAR_OPTIONS.map((y) => (
-                <Pressable
-                  key={y || 'all_years'}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: year === y }}
-                  style={[styles.modalOption, year === y && styles.modalOptionActive]}
-                  onPress={() => { setYear(y); setActiveModal(null); }}
-                >
-                  <Text style={[styles.modalOptionText, year === y && styles.modalOptionTextActive]}>
-                    {y ? y : 'Year: All'}
-                  </Text>
-                  {year === y && <Ionicons name="checkmark" size={18} color={theme.accent} />}
-                </Pressable>
-              ))}
-              {activeModal === 'window' && (activeFeed === 'trending' ? TRENDING_WINDOW_OPTIONS : RELEASE_WINDOW_OPTIONS).map((item) => (
-                <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ checked: feedWindow === item.id }}
-                  style={[styles.modalOption, feedWindow === item.id && styles.modalOptionActive]} onPress={() => { setFeedWindow(item.id); setActiveModal(null); }}>
-                  <Text style={[styles.modalOptionText, feedWindow === item.id && styles.modalOptionTextActive]}>{item.label}</Text>
-                  {feedWindow === item.id && <Ionicons name="checkmark" size={18} color={theme.accent} />}
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        </Pressable>
-      </Modal>
+      <DiscoverFilterModal theme={theme} visible={!!activeModal} title={modalTitle}
+        options={modalOptions} selected={modalSelected} onSelect={selectModalOption}
+        onClose={() => setActiveModal(null)} />
     </View>
   );
 }

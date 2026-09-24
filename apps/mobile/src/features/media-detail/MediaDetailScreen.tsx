@@ -16,7 +16,7 @@ import { TrailerModal } from '../../components/TrailerModal';
 import { MediaCard } from '../../components/MediaCard';
 import { useLibraryPlaybackActions, useLibraryVisual } from '../../context/LibraryContext';
 import { useResponsiveLayout } from '../../services/responsive';
-import { getRailRenderBudget } from '../../services/listPerformance';
+import { getGridRenderBudget, getRailRenderBudget } from '../../services/listPerformance';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { usePerformanceProfile } from '../../context/PerformanceContext';
 import { styles } from "./mediaDetailStyles";
@@ -28,6 +28,8 @@ import { MovieCollectionTab } from './MovieCollectionTab';
 import { isVerifiedPlaybackEvidence } from '../library/playbackLibrary';
 import { createMobileDownloadTargetV1, type MobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import { cancelMobileDownloadSourceResolutionV1, requestMobileDownloadSourceResolutionV1, type MobileDownloadTransferMethodV1 } from '../downloads/downloadCandidateCapture';
+import { normalizeTitleCast, extractTitleKeyCrew } from './titleCredits';
+import { CreditPersonCard, KeyCrewList, TitleCreditsPreview } from './CreditsPresentation';
 export default function MediaDetailScreen() {
   const { id, type } = useLocalSearchParams<{ id: string; type: 'movie' | 'tv' }>();
   const router = useRouter();
@@ -46,14 +48,15 @@ export default function MediaDetailScreen() {
   const { data, loading, loadError, episodes, episodesLoading, seasonVideos, network, remoteReadyRef } = remote;
   const local = useMediaDetailLocalAvailability(id, type);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const detailScrollRef = useRef<ScrollView>(null);
+  const detailScrollRef = useRef<FlatList>(null);
   const detailContentYRef = useRef(0);
   const localCopiesYRef = useRef(0);
+  const [detailWidth, setDetailWidth] = useState(0);
   const multipleOfflineEpisodes = type === 'tv' && local.copies.length > 1;
   const playOffline = (requested?: MediaDetailLocalCopy, season?: number, episode?: number) => {
     if (!requested && season === undefined && episode === undefined && type === 'tv' && local.getPlayableCopies().length > 1) {
       setActionMessage('Choose a downloaded episode from Offline Episodes.');
-      detailScrollRef.current?.scrollTo({ y: Math.max(0, detailContentYRef.current + localCopiesYRef.current - 16), animated: false });
+      detailScrollRef.current?.scrollToOffset({ offset: Math.max(0, detailContentYRef.current + localCopiesYRef.current - 16), animated: false });
       return;
     }
     const copy = local.findPlayableCopy(requested?.asset.assetId, season, episode);
@@ -91,11 +94,16 @@ export default function MediaDetailScreen() {
     selectedSeason,
     episodes,
   });
-  const castList = useMemo(() => data?.credits?.cast || [], [data?.credits?.cast]);
-  const topCast = useMemo(() => castList.slice(0, 15), [castList]);
-  const fullCast = useMemo(() => castList.slice(0, 25), [castList]);
+  const castList = useMemo(() => normalizeTitleCast(data?.credits?.cast), [data?.credits?.cast]);
+  const topCast = useMemo(() => castList.slice(0, 12), [castList]);
+  const keyCrew = useMemo(() => extractTitleKeyCrew(data?.credits?.crew, type === 'tv' ? data?.created_by : []), [data?.credits?.crew, data?.created_by, type]);
   const recommendedItems = useMemo(() => (data?.recommendations?.results || []).filter((item: any) => item.poster_path).map((item: TmdbMediaItem) => ({ ...item, media_type: type } as TmdbMediaItem)), [data?.recommendations?.results, type]);
   const castRenderBudget = useMemo(() => getRailRenderBudget(width, 106 + spacing[3], resolvedProfile), [resolvedProfile, width]);
+  const availableCastWidth = detailWidth || width;
+  const castColumns = availableCastWidth >= 900 ? 5 : availableCastWidth >= 620 ? 4 : availableCastWidth >= 430 ? 3 : 2;
+  const castCardWidth = Math.max(106, (availableCastWidth - spacing[4] * 2 - spacing[2] * (castColumns - 1)) / castColumns);
+  const castGridBudget = useMemo(() => getGridRenderBudget(castColumns, resolvedProfile), [castColumns, resolvedProfile]);
+  const openPerson = useCallback((personId: number) => router.push(`/person/${personId}` as any), [router]);
   const recommendationRenderBudget = useMemo(() => getRailRenderBudget(width, 140 + spacing[4] + spacing[3], resolvedProfile), [resolvedProfile, width]);
   const collectionRef = useMemo(() => {
     if (!isMovie || !data?.belongs_to_collection?.id) return null;
@@ -240,7 +248,20 @@ export default function MediaDetailScreen() {
         </BlurView>
       </Pressable>
 
-      <Animated.ScrollView ref={detailScrollRef} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+      <FlatList
+        key={`details-${castColumns}`}
+        ref={detailScrollRef}
+        style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
+        data={activeTab === 'cast' ? castList : []}
+        keyExtractor={(person, index) => person.credit_id || `${person.id}_${person.character}_${index}`}
+        numColumns={castColumns}
+        columnWrapperStyle={{ gap: spacing[2], paddingHorizontal: spacing[4], marginBottom: spacing[3] }}
+        initialNumToRender={castGridBudget.initialNumToRender}
+        maxToRenderPerBatch={castGridBudget.maxToRenderPerBatch}
+        windowSize={castGridBudget.windowSize}
+        renderItem={({ item }) => <CreditPersonCard person={item} theme={theme} width={castCardWidth} onOpen={openPerson} />}
+        ListHeaderComponent={<>
         <View style={styles.backdropContainer}>
           {backdrop ? (
             <Image source={{ uri: backdrop }} style={styles.backdropImage} />
@@ -253,7 +274,10 @@ export default function MediaDetailScreen() {
             style={styles.backdropGradient}
           />
         </View>
-        <View style={styles.detailsContent} onLayout={(event) => { detailContentYRef.current = event.nativeEvent.layout.y; }}>
+        <View style={styles.detailsContent} onLayout={(event) => {
+          detailContentYRef.current = event.nativeEvent.layout.y;
+          setDetailWidth(event.nativeEvent.layout.width);
+        }}>
           {isUnreleased && (
             <View style={styles.unreleasedBannerTop}>
               <Ionicons name="lock-closed" size={16} color="#f87171" />
@@ -462,60 +486,17 @@ export default function MediaDetailScreen() {
             {activeTab === 'info' && (
               <View style={{ gap: spacing[5] }}>
                 <Text style={[styles.overviewText, { color: theme.textSecondary }]}>{data.overview}</Text>
-                {castList.length > 0 && (
-                  <View style={styles.castSection}>
-                    <Text style={[styles.subSectionTitle, { color: theme.textMuted }]}>TOP CAST & CREW</Text>
-                    <FlatList
-                      data={topCast}
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.castScroll}
-                      keyExtractor={(actor: any) => String(actor.id)}
-                      initialNumToRender={castRenderBudget.initialNumToRender}
-                      maxToRenderPerBatch={castRenderBudget.maxToRenderPerBatch}
-                      windowSize={castRenderBudget.windowSize}
-                      renderItem={({ item: actor }: { item: any }) => (
-                        <Pressable
-                          style={({ pressed }) => [styles.castCard, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && { opacity: 0.8 }]}
-                          onPress={() => router.push(`/person/${actor.id}` as any)}
-                        >
-                          <Image
-                            source={{ uri: imgUrl(actor.profile_path, 'w200') || undefined }}
-                            style={[styles.castImage, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                          />
-                          <Text style={[styles.castName, { color: theme.text }]} numberOfLines={1}>{actor.name}</Text>
-                          <Text style={[styles.castCharacter, { color: theme.textMuted }]} numberOfLines={1}>{actor.character || 'Actor'}</Text>
-                        </Pressable>
-                      )}
-                    />
-                  </View>
-                )}
+                <TitleCreditsPreview cast={topCast} crew={keyCrew.slice(0, 4)} theme={theme}
+                  budget={castRenderBudget} onOpen={openPerson} />
               </View>
             )}
             {activeTab === 'cast' && (
-              <FlatList
-                data={fullCast}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.castScroll}
-                keyExtractor={(actor: any) => String(actor.id)}
-                initialNumToRender={castRenderBudget.initialNumToRender}
-                maxToRenderPerBatch={castRenderBudget.maxToRenderPerBatch}
-                windowSize={castRenderBudget.windowSize}
-                renderItem={({ item: actor }: { item: any }) => (
-                  <Pressable
-                    style={({ pressed }) => [styles.castCard, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && { opacity: 0.8 }]}
-                    onPress={() => router.push(`/person/${actor.id}` as any)}
-                  >
-                    <Image
-                      source={{ uri: imgUrl(actor.profile_path, 'w200') || undefined }}
-                      style={[styles.castImage, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                    />
-                    <Text style={[styles.castName, { color: theme.text }]} numberOfLines={1}>{actor.name}</Text>
-                    <Text style={[styles.castCharacter, { color: theme.textMuted }]} numberOfLines={1}>{actor.character || 'Actor'}</Text>
-                  </Pressable>
-                )}
-              />
+              <View>
+                <Text style={[styles.subSectionTitle, { color: theme.textMuted }]}>CAST · {castList.length}</Text>
+                {!castList.length && <Text style={[styles.placeholderText, { color: theme.textMuted }]}>
+                  No cast information is available for this title.
+                </Text>}
+              </View>
             )}
             {activeTab === 'recommended' && (
               <FlatList
@@ -706,9 +687,13 @@ export default function MediaDetailScreen() {
               </View>
             )}
           </View>
-          <View style={{ height: 120 }} />
         </View>
-      </Animated.ScrollView>
+        </>}
+        ListFooterComponent={activeTab === 'cast' ? <View>
+          <KeyCrewList people={keyCrew} theme={theme} onOpen={openPerson} />
+          <View style={{ height: 120 }} />
+        </View> : <View style={{ height: 120 }} />}
+      />
       {network.remoteReady && <DownloadModal
         visible={Boolean(downloadTarget)}
         onClose={closeDownloadOptions}

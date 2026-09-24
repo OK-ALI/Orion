@@ -60,7 +60,8 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
     '../../context/LibraryContext': { useLibraryVisual: () => ({ toggleSave: (record) => saves.push(record), isSaved: () => false }), useLibraryPlaybackActions: () => ({ getPlaybackProgress: () => null }) },
     '../../context/PerformanceContext': { usePerformanceProfile: () => ({ resolvedProfile: 'balanced' }) },
     '../../services/responsive': { useResponsiveLayout: () => ({ width, isTablet: Math.min(width, height) >= 600 }) },
-    '../../services/listPerformance': { getRailRenderBudget: () => ({}) },
+    '../../services/listPerformance': { getRailRenderBudget: () => ({}),
+      getGridRenderBudget: () => ({ initialNumToRender: 6, maxToRenderPerBatch: 4, windowSize: 7 }) },
     './useMediaDetailWatched': { useMediaDetailWatched: () => watchedActions },
     '../services/storageAdapter': { mmkvStorageAdapter: {} },
     './EpisodeOverview': { EpisodeOverview: 'EpisodeOverview' },
@@ -105,7 +106,8 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
     } while (dirty);
     return result;
   }
-  function nodes(node) { if (Array.isArray(node)) return node.flatMap(nodes); if (!node?.props) return []; return [node, ...nodes(node.props.children)]; }
+  function nodes(node) { if (Array.isArray(node)) return node.flatMap(nodes); if (!node?.props) return [];
+    return [node, ...nodes(node.props.children), ...nodes(node.props.ListHeaderComponent), ...nodes(node.props.ListFooterComponent)]; }
   function find(label) { const node = nodes(result).find((n) => n.props.accessibilityLabel === label); assert.ok(node, 'Missing ' + label); return node; }
   render();
   return { requests, routes, saves, sourceRequests, selector, render, theme,
@@ -336,7 +338,7 @@ test('multiple TV episodes: show primary focuses Offline Episodes without choosi
   h.press('Watch Remote series 1'); assert.equal(h.routes[0].params.isOffline, undefined); h.routes.length = 0;
   h.connect('offline');
   const scrollCalls = [];
-  h.nodes().find((node) => node.type === 'ScrollView' && node.props.ref).props.ref.current = { scrollTo: (value) => scrollCalls.push(value) };
+  h.nodes().find((node) => node.type === 'FlatList' && node.props.ref).props.ref.current = { scrollToOffset: (value) => scrollCalls.push(value) };
   const layouts = h.nodes().filter((node) => node.props.onLayout);
   assert.equal(layouts.length, 2);
   layouts[0].props.onLayout({ nativeEvent: { layout: { y: 120 } } });
@@ -344,7 +346,7 @@ test('multiple TV episodes: show primary focuses Offline Episodes without choosi
   assert.match(h.find('Offline Episodes').props.accessibilityHint, /Choose an episode/);
   h.press('Offline Episodes');
   assert.equal(h.routes.length, 0);
-  assert.deepEqual(scrollCalls, [{ y: 344, animated: false }]);
+  assert.deepEqual(scrollCalls, [{ offset: 344, animated: false }]);
   const choices = h.localChoiceNodes();
   assert.ok(choices.some((node) => node.props.accessibilityRole === 'header' && node.props.children === 'Offline Episodes'));
   assert.equal(choices.filter((node) => node.type === 'Pressable').length, 3);
@@ -399,9 +401,10 @@ function presentationTree(node) {
   if (!node?.props) return node;
   const type = typeof node.type === 'function' ? node.type.name : node.type;
   if (type === 'MediaDetailLocalCopies') return { type };
-  const props = Object.fromEntries(Object.entries(node.props).filter(([key, value]) => key !== 'children' && key !== 'ref' && (key === 'style' || typeof value !== 'function'))
+  const props = Object.fromEntries(Object.entries(node.props).filter(([key, value]) => !['children', 'ref', 'ListHeaderComponent', 'ListFooterComponent'].includes(key) && (key === 'style' || typeof value !== 'function'))
     .map(([key, value]) => [key, key === 'style' ? style(value) : value]));
-  return { type, props, children: presentationTree(node.props.children) };
+  return { type, props, children: presentationTree(node.props.children),
+    header: presentationTree(node.props.ListHeaderComponent), footer: presentationTree(node.props.ListFooterComponent) };
 }
 
 for (const themeId of ['midnight-premiere', 'amoled', 'mocha', 'slate', 'projector-silver', 'custom']) {
@@ -515,4 +518,47 @@ test('route-only movie exposes watched action while remote detail is loading', (
   assert.equal(tv.component('MediaDetailFallback'), undefined);
   assert.ok(tv.component('ActivityIndicator'));
   tv.unmount();
+});
+
+test('movie Cast tab exposes person 26 and beyond through the virtualized grid and keeps a bounded Info preview', async () => {
+  const h = harness();
+  const title = titleResponse();
+  title.credits.cast = Array.from({ length: 48 }, (_, index) => ({
+    id: index + 1, name: `Person ${index + 1}`, order: index,
+    character: index === 25 ? '' : 'Role', profile_path: index === 25 ? null : '/portrait',
+  }));
+  title.credits.crew = [{ id: 90, name: 'Director', job: 'Director' }];
+  h.requests[0].resolve(title);
+  await h.settle();
+  const preview = h.component('TitleCreditsPreview');
+  assert.equal(preview.props.cast.length, 12);
+  assert.equal(preview.props.crew[0].job, 'Director');
+  h.press('Cast section');
+  const list = h.nodes().find((node) => node.type === 'FlatList' && node.props.data?.length === 48);
+  assert.ok(list, 'Complete cast is the outer virtualized list');
+  assert.equal(list.props.numColumns, 2);
+  assert.ok(list.props.maxToRenderPerBatch !== undefined);
+  const person = list.props.renderItem({ item: list.props.data[25] });
+  assert.equal(person.props.person.id, 26);
+  person.type(person.props).props.onPress();
+  assert.equal(h.routes.at(-1), '/person/26');
+  assert.equal(h.component('KeyCrewList').props.people[0].job, 'Director');
+  assert.equal(h.component('CreditPersonCard'), undefined, 'Offscreen cast cards are not eagerly mounted');
+  h.unmount();
+});
+
+test('TV title uses existing appended credits plus creators without changing episodes or selected season', async () => {
+  const h = harness({ type: 'tv' });
+  const title = titleResponse(1, 'tv');
+  title.credits.cast = Array.from({ length: 35 }, (_, index) => ({ id: index + 1, name: `TV Person ${index + 1}`, order: index }));
+  title.created_by = [{ id: 77, name: 'Creator' }];
+  h.requests[0].resolve(title);
+  await h.settle();
+  h.press('Cast section');
+  const list = h.nodes().find((node) => node.type === 'FlatList' && node.props.data?.length === 35);
+  assert.ok(list);
+  assert.equal(h.component('KeyCrewList').props.people[0].job, 'Creator');
+  h.press('Episodes section');
+  assert.ok(h.nodes().some((node) => node.props.accessibilityLabel === 'Season 1'));
+  h.unmount();
 });
