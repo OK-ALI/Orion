@@ -194,6 +194,7 @@ export default function TVDetails({ model }) {
                   {!restricted && selectedEp && (
                     <button
                       className="btn btn-secondary"
+                      disabled={model.downloadResolutionActive}
                       onClick={() =>
                         currentEpDownload
                           ? onGoToDownloads?.(currentEpDownload.id)
@@ -212,7 +213,7 @@ export default function TVDetails({ model }) {
                         ? currentEpDownload.status === "downloading"
                           ? "Downloading"
                           : "Downloaded"
-                        : "Download Episode"}
+                        : model.downloadResolutionActive ? "Preparing download…" : "Download Episode"}
                     </button>
                   )}
                   <button className="btn btn-ghost" onClick={onBack}>
@@ -222,12 +223,6 @@ export default function TVDetails({ model }) {
                 {model.downloadResolutionError && (
                   <div role="alert" style={{ marginTop: 12, color: "var(--text)" }}>
                     <p>{model.downloadResolutionError}</p>
-                    <label>
-                      Try source{" "}
-                      <select value={model.playerSource} onChange={(event) => model.selectDownloadSource(event.target.value)}>
-                        {model.downloadSourceChoices.map((source) => <option key={source.id} value={source.id}>{source.label}</option>)}
-                      </select>
-                    </label>{" "}
                     <button className="btn btn-secondary" onClick={model.retryDownload}>Retry Episode Download</button>
                   </div>
                 )}

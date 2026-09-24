@@ -61,7 +61,10 @@ test("redirect failure names the first failing child without exposing its signed
     if (url.includes("master.m3u8")) return {
       statusCode: 200, headers: {}, body: Buffer.from("#EXTM3U\n#EXTINF:5,\nhttps://cdn.example/first.ts?secret=private"),
     };
-    throw new Error("redirect rejected: https://cdn.example/first.ts?secret=private");
+    const error = new Error("redirect rejected: https://cdn.example/first.ts?secret=private");
+    error.requestDiagnostic = { headerNames: ["Authorization", "Referer"],
+      authorizationPresent: true, cookiePresent: true };
+    throw error;
   });
   const originalInfo = console.info;
   console.info = () => {};
@@ -69,5 +72,41 @@ test("redirect failure names the first failing child without exposing its signed
   try { result = await preflight(candidate.id); } finally { console.info = originalInfo; }
   assert.equal(result.code, "redirect_denied");
   assert.equal(result.diagnostic.stage, "first_media");
+  assert.deepEqual(result.diagnostic.requestHeaderNames, ["Authorization", "Referer"]);
+  assert.equal(result.diagnostic.cookiePresent, true);
   assert.doesNotMatch(JSON.stringify(result), /secret=private/);
+});
+
+test("preflight chooses the exact observed media playlist and segment from the bound session", async () => {
+  const candidate = captured("https://root.example/master.m3u8");
+  const observedPlaylist = "https://cdn.example/active.m3u8";
+  const observedSegment = "https://cdn.example/active.ts";
+  recordObservedRequest({ url: observedPlaylist, webContentsId: 909,
+    requestHeaders: { Referer: "https://player.example/", Authorization: "playlist-secret" } });
+  recordObservedRequest({ url: observedSegment, webContentsId: 909,
+    requestHeaders: { Referer: "https://cdn.example/active.m3u8", Authorization: "segment-secret" } });
+  const requested = [];
+  const fetch = async (url) => {
+    requested.push(url);
+    if (url.includes("master.m3u8")) return { statusCode: 200,
+      headers: { "content-type": "application/vnd.apple.mpegurl" },
+      body: Buffer.from("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100\nhttps://cdn.example/unplayed.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=200\n" + observedPlaylist) };
+    if (url === observedPlaylist) return { statusCode: 200,
+      headers: { "content-type": "application/vnd.apple.mpegurl" },
+      body: Buffer.from("#EXTM3U\n#EXTINF:5,\nhttps://cdn.example/unplayed.ts\n#EXTINF:5,\n" + observedSegment) };
+    if (url === observedSegment) return { statusCode: 206,
+      headers: { "content-type": "video/mp2t" }, body: Buffer.alloc(4096, 1) };
+    throw new Error("Unobserved child was requested");
+  };
+  const preflight = loadPreflight(fetch);
+  const originalInfo = console.info;
+  console.info = () => {};
+  let result;
+  try { result = await preflight(candidate.id); } finally { console.info = originalInfo; }
+  assert.equal(result.ok, true);
+  assert.equal(result.verified, true);
+  assert.deepEqual(requested.slice(1), [observedPlaylist, observedSegment]);
+  assert.equal(result.diagnostic.stage, "first_media");
+  assert.equal(result.diagnostic.observedInPlayer, true);
+  assert.doesNotMatch(JSON.stringify(result.diagnostic), /playlist-secret|segment-secret/);
 });

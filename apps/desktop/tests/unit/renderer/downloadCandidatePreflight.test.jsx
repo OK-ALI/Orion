@@ -48,4 +48,17 @@ describe("same-session Download candidate preparation", () => {
     expect(state.setShowDownload).not.toHaveBeenCalled();
     expect(state.setPlaying).not.toHaveBeenCalled();
   });
+
+  it("rechecks a failed candidate only when the same session observes new request context", async () => {
+    const candidate = { id: "active-master", sessionId: "bound-session", sourceId: "vixsrc", contextRevision: 1 };
+    const preflightStream = vi.fn()
+      .mockResolvedValueOnce({ ok: false, code: "http_403", error: "Child request rejected" })
+      .mockResolvedValueOnce({ ok: true, verified: true });
+    const state = harness([candidate], preflightStream);
+    await waitFor(() => expect(preflightStream).toHaveBeenCalledTimes(1));
+    candidate.contextRevision = 2;
+    await waitFor(() => expect(state.onVerified).toHaveBeenCalledWith("active-master"), { timeout: 2500 });
+    expect(preflightStream).toHaveBeenCalledTimes(2);
+    expect(state.setShowDownload).toHaveBeenCalledWith(true);
+  });
 });

@@ -50,7 +50,6 @@ import {
 } from "../../../components/common/Icons";
 import { setupAmbientGlow } from "../../../shared/utils/playerAmbient";
 import DownloadModal from "../../../components/DownloadModal";
-import DownloadRecoveryConsent from "../../player/components/DownloadRecoveryConsent";
 import TrailerModal from "../../../components/TrailerModal";
 import BlockedStatsModal from "../../../components/BlockedStatsModal";
 import { formatDate } from "../../../shared/utils/date";
@@ -81,7 +80,6 @@ export default function TVOverlays({ model }) {
   const modalMediaName = downloadTarget?.mediaName || mediaName;
   return (
 <>
-<DownloadRecoveryConsent consent={model.downloadConsent} onAnswer={model.answerDownloadConsent} />
 {showTrailer && trailerCandidates?.length > 0 && (
         <TrailerModal
           visible={showTrailer}

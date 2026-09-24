@@ -680,12 +680,6 @@ export function useTVWebview(context) {
     setResolveError(null);
     setSelectedEp(ep);
     setPlaying(true);
-    setTimeout(() => {
-      playerWrapRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 80);
   };
 
   const startPlayingEp = (ep, time = 0, intentType = null) => {

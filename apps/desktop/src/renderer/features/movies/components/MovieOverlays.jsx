@@ -42,7 +42,6 @@ import {
   MiniPlayerIcon,
 } from "../../../components/common/Icons";
 import DownloadModal from "../../../components/DownloadModal";
-import DownloadRecoveryConsent from "../../player/components/DownloadRecoveryConsent";
 import TrailerModal from "../../../components/TrailerModal";
 import BlockedStatsModal from "../../../components/BlockedStatsModal";
 import { formatDate } from "../../../shared/utils/date";
@@ -68,7 +67,6 @@ export default function MovieOverlays({ model }) {
   const { blockedAlltime, blockedSession, closeDownload, collection, d, downloaderFolder, formatResumeTime, getBlockedDomains, handleSetDownloaderFolder, interceptedSubs, isSavedItem, item, m3u8Context, m3u8Url, mediaName, onDownloadStarted, onMarkUnwatched, onMarkWatched, onSelect, onSettings, progress, resumeTime, setShowBlockedModal, setShowResumePrompt, setShowTrailer, showBlockedModal, showDownload, showResumePrompt, showTrailer, startMoviePlayback, title, trailerCandidates, watched } = model;
   return (
 <>
-<DownloadRecoveryConsent consent={model.downloadConsent} onAnswer={model.answerDownloadConsent} />
 {collection && onSelect && (
         <div className="section">
           <div className="section-title">{collection.name}</div>

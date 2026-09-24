@@ -67,7 +67,7 @@ import {
 } from "../../../shared/utils/ageRating";
 
 export default function MoviePlayer({ model }) {
-  const { d, ambientColor, blockedSession, displayPct, dubMode, handleFailoverNextSource, isUnreleased, item, m3u8Url, menuPos, movieDownload, onBack, onGoToDownloads, onOpenMiniPlayer, openDownload, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progressKey, progressLabel, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, revealPlayerControls, saveProgress, selectPlayerSource, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, sourceRef, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
+  const { d, ambientColor, blockedSession, displayPct, dubMode, handleFailoverNextSource, isUnreleased, item, m3u8Url, menuPos, movieDownload, onBack, onGoToDownloads, onOpenMiniPlayer, openDownloadFromPlayer, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progressKey, progressLabel, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, revealPlayerControls, saveProgress, selectPlayerSource, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowSourceMenu, setVoiceBoost, showFailoverPrompt, showSourceMenu, sourceRef, switchingToMiniPlayerRef, voiceBoost, webviewLoading, webviewRef } = model;
   const sourceHealthRecords = useCinemaSourceHealth("movie", showSourceMenu || playing);
   useEffect(() => {
     if (!playing || restricted || isUnreleased || pipOpen) return undefined;
@@ -444,7 +444,7 @@ export default function MoviePlayer({ model }) {
                   onClick={() =>
                     movieDownload
                       ? onGoToDownloads?.(movieDownload.id)
-                      : (setShowSourceMenu(false), openDownload())
+                      : (setShowSourceMenu(false), openDownloadFromPlayer())
                   }
                   title={
                     movieDownload

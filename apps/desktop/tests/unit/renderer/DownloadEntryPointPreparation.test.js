@@ -7,11 +7,13 @@ function read(relativePath) {
 
 const movieDetails = read("../../../src/renderer/features/movies/components/MovieDetails.jsx");
 const movieOverlays = read("../../../src/renderer/features/movies/components/MovieOverlays.jsx");
+const moviePlayer = read("../../../src/renderer/features/movies/components/MoviePlayer.jsx");
 const movieController = read("../../../src/renderer/features/movies/hooks/useMovieController.js");
 const movieWebview = read("../../../src/renderer/features/movies/hooks/useMovieWebview.js");
 const tvDetails = read("../../../src/renderer/features/tv/components/TVDetails.jsx");
 const tvEpisodes = read("../../../src/renderer/features/tv/components/TVEpisodes.jsx");
 const tvOverlays = read("../../../src/renderer/features/tv/components/TVOverlays.jsx");
+const tvPlayer = read("../../../src/renderer/features/tv/components/TVPlayerCore.jsx");
 const tvActions = read("../../../src/renderer/features/tv/hooks/useTVEpisodeActions.js");
 const tvController = read("../../../src/renderer/features/tv/hooks/useTVController.js");
 const tvWebview = read("../../../src/renderer/features/tv/hooks/useTVWebview.js");
@@ -29,7 +31,8 @@ describe("Desktop download entrypoint preparation contract", () => {
     expect(downloadPreflight).toContain("preflightStream?.(candidate.id)");
     expect(downloadPreflight).toContain("result?.ok && result?.verified === true");
     expect(downloadPreflight).toContain("candidate.sourceId !== target.sourceId");
-    expect(movieController).toContain("DOWNLOAD_SOURCE_ATTEMPT_MS");
+    expect(movieController).toContain("DOWNLOAD_CAPTURE_TIMEOUT_MS");
+    expect(movieController).not.toContain("useDownloadSourceRecovery");
     expect(movieController).toContain("setDownloadResolutionError(");
     expect(downloadPreflight).toContain("setActive(false);");
     expect(movieController).toContain("setPlaying(false);");
@@ -48,7 +51,7 @@ describe("Desktop download entrypoint preparation contract", () => {
     )?.[0];
     expect(resolutionBlock).toBeTruthy();
     expect(resolutionBlock).toContain("setPlaying(true);");
-    expect(resolutionBlock).toContain("scrollIntoView");
+    expect(resolutionBlock).not.toContain("scrollIntoView");
     expect(resolutionBlock).not.toContain("onHistory(");
     expect(resolutionBlock).not.toContain("onPlay(");
     expect(resolutionBlock).not.toContain("saveProgress");
@@ -69,7 +72,8 @@ describe("Desktop download entrypoint preparation contract", () => {
     expect(tvController).toContain("startEpisodeDownloadResolution(ep);");
     expect(tvController).toContain("useDownloadCandidatePreflight({");
     expect(downloadPreflight).toContain("preflightStream?.(candidate.id)");
-    expect(tvController).toContain("DOWNLOAD_SOURCE_ATTEMPT_MS");
+    expect(tvController).toContain("DOWNLOAD_CAPTURE_TIMEOUT_MS");
+    expect(tvController).not.toContain("useDownloadSourceRecovery");
     expect(tvController).toContain("setPlaying(false);");
     expect(downloadPreflight).toContain("setShowDownload(true);");
     expect(tvOverlays).not.toContain("DownloadSourceProbe");
@@ -80,7 +84,7 @@ describe("Desktop download entrypoint preparation contract", () => {
     expect(resolutionBlock).toBeTruthy();
     expect(resolutionBlock).toContain("setSelectedEp(ep);");
     expect(resolutionBlock).toContain("setPlaying(true);");
-    expect(resolutionBlock).toContain("scrollIntoView");
+    expect(resolutionBlock).not.toContain("scrollIntoView");
     expect(resolutionBlock).not.toContain("onHistory(");
     expect(resolutionBlock).not.toContain("onPlay(");
     expect(resolutionBlock).not.toContain("saveProgress");
@@ -122,5 +126,21 @@ describe("Desktop download entrypoint preparation contract", () => {
       expect(block).not.toContain("onMarkWatched");
       expect(block).not.toContain("saveProgress");
     }
+  });
+
+  it("routes active Movie and TV Player downloads directly to the current-session modal", () => {
+    expect(moviePlayer).toContain("openDownloadFromPlayer()");
+    expect(tvPlayer).toContain("openDownloadFromPlayer()");
+    expect(moviePlayer).not.toContain("openDownload()");
+    expect(tvPlayer).not.toContain("startEpisodeDownload(selectedEp)");
+    for (const controller of [movieController, tvController]) {
+      const action = controller.match(/const openDownloadFromPlayer = useCallback\(\(\) => \{[\s\S]*?\n  \}, \[\]\);/)?.[0];
+      expect(action).toBeTruthy();
+      expect(action).toContain("setShowDownload(true)");
+      expect(action).not.toMatch(/setPlaying|setPlayerSource|setCaptureSessionId|setDownloadTarget|setM3u8/);
+      expect(controller).not.toContain("DownloadRecoveryConsent");
+    }
+    expect(movieOverlays).not.toContain("DownloadRecoveryConsent");
+    expect(tvOverlays).not.toContain("DownloadRecoveryConsent");
   });
 });

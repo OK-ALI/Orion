@@ -29,6 +29,7 @@ const {
   endCaptureSession,
   resolveCaptureSession,
   resolveCandidate,
+  snapshotCandidateRequestContext,
 } = require("./streamCandidates");
 
 // ── Download store ────────────────────────────────────────────────────────────
@@ -350,7 +351,6 @@ function register(getMainWindow, { resetSettingsData } = {}) {
           return { ok: false, code: "capture_mismatch", error: "This stream belongs to another source or title. Resolve the download again." };
         }
         const resolvedM3u8Url = capturedCandidate.url;
-        const resolvedM3u8Context = capturedCandidate;
         const preflight = await preflightCandidate(candidateId);
         if (!preflight?.ok) {
           return {
@@ -359,6 +359,10 @@ function register(getMainWindow, { resetSettingsData } = {}) {
             diagnostic: preflight?.diagnostic || null,
           };
         }
+        // The renderer may close its temporary WebView immediately after Start.
+        // Retain only this verified candidate's same-session child requests in
+        // memory for the active proxy; never serialize the snapshot to disk.
+        const resolvedM3u8Context = snapshotCandidateRequestContext(capturedCandidate);
         const sourceKind = capturedCandidate?.kind || preflight.kind || resolvedM3u8Context?.kind || "hls";
         const resolvedStrategy = preflight.strategy || (sourceKind === "hls" ? "hls-proxy" : "direct");
         const helperPath = helperToken ? toolManager.getTrustedBinaryPath(helperToken) : null;

@@ -12,7 +12,7 @@ const controller = (kind) => fs.readFileSync(path.resolve(
 ), "utf8");
 
 describe.each(["movies", "tv"])("%s download source persistence", (kind) => {
-  it("keeps automatic and manual download attempts local while ordinary selection persists", () => {
+  it("keeps temporary preparation local while ordinary source selection persists", () => {
     const original = beginDownloadSourceScope("vixsrc", null, false);
     expect(original.originalSource).toBe("vixsrc");
     const retry = beginDownloadSourceScope("vidlink", original, true);
@@ -23,11 +23,12 @@ describe.each(["movies", "tv"])("%s download source persistence", (kind) => {
     expect(shouldPersistPlayerSource(null)).toBe(true);
 
     const code = controller(kind);
-    expect(code).toContain("downloadRecoveryRef.current = beginDownloadSourceScope(");
-    expect(code).toContain("setPlayerSource(restoreDownloadSource(downloadRecoveryRef.current, playerSource));");
+    expect(code).not.toContain("beginDownloadSourceScope(");
+    expect(code).not.toContain("restoreDownloadSource(");
+    expect(code).not.toContain("useDownloadSourceRecovery");
     expect(code).toContain("if (shouldPersistPlayerSource(downloadTarget || downloadResolutionError) && storage.get(STORAGE_KEYS.PLAYER_SOURCE) !== normalized)");
-    expect(code).toContain("viewModel.selectDownloadSource = selectDownloadSource");
+    expect(code).not.toContain("viewModel.selectDownloadSource = selectDownloadSource");
     expect(code).not.toMatch(/setPlayerSource\(next\.sourceId\);\s*storage\.set\(STORAGE_KEYS\.PLAYER_SOURCE/);
-    expect(code).toMatch(/if \(downloadResolutionActive\) downloadRecoveryRef\.current\.attempted\.add\(next\);\s*else \{[\s\S]*storage\.set\(STORAGE_KEYS\.PLAYER_SOURCE, next\)/);
+    expect(code).toMatch(/if \(downloadResolutionActive\) return false;[\s\S]*storage\.set\(STORAGE_KEYS\.PLAYER_SOURCE, next\)/);
   });
 });

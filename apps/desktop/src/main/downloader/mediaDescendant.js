@@ -12,18 +12,22 @@ function resolveChild(parent, raw) {
   }
 }
 
-function firstHlsChild(parent, body) {
+function firstHlsChild(parent, body, isObserved = () => false) {
   const lines = String(body || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const master = lines.some((line) => line.startsWith("#EXT-X-STREAM-INF:"));
   if (master) {
-    const index = lines.findIndex((line) => line.startsWith("#EXT-X-STREAM-INF:"));
-    const next = lines.slice(index + 1).find((line) => !line.startsWith("#"));
-    const url = next && resolveChild(parent, next);
+    const variants = lines.flatMap((line, index) => {
+      if (!line.startsWith("#EXT-X-STREAM-INF:")) return [];
+      const next = lines.slice(index + 1).find((entry) => !entry.startsWith("#"));
+      return next ? [resolveChild(parent, next)] : [];
+    }).filter(Boolean);
+    const url = variants.find(isObserved) || variants[0];
     return url ? { kind: "playlist", url } : null;
   }
   const initialization = lines.find((line) => line.startsWith("#EXT-X-MAP:"))?.match(/URI="([^"]+)"/i)?.[1];
-  const segment = initialization || lines.find((line) => !line.startsWith("#"));
-  const url = segment && resolveChild(parent, segment);
+  const segments = [initialization, ...lines.filter((line) => !line.startsWith("#"))]
+    .filter(Boolean).map((line) => resolveChild(parent, line)).filter(Boolean);
+  const url = segments.find(isObserved) || segments[0];
   return url ? { kind: "media", url } : null;
 }
 
@@ -76,9 +80,11 @@ async function probeFirstMedia(candidate, response, fetcher) {
   let manifest = Buffer.from(response.body || []).toString("utf8");
   for (let depth = 0; depth < 3; depth += 1) {
     const child = candidate.kind === "hls"
-      ? firstHlsChild(parent, manifest)
+      ? firstHlsChild(parent, manifest, (url) => hasObservedRequestContext(candidate, url))
       : firstDashChild(parent, manifest);
-    if (!child) return { ok: false, code: "media_child_missing", error: "This source did not expose a downloadable media request." };
+    if (!child) return { ok: false, code: "media_child_missing",
+      error: "This source did not expose a downloadable media request.",
+      diagnostic: { stage: "manifest_child", host: new URL(parent).host, bytesRead: 0 } };
     let media;
     try {
       media = await fetcher(child.url, candidate, {
@@ -87,7 +93,9 @@ async function probeFirstMedia(candidate, response, fetcher) {
         maxBytes: child.kind === "media" ? MEDIA_PROBE_BYTES : MANIFEST_PROBE_BYTES,
       });
     } catch (error) {
-      error.downloadDiagnostic = probeDiagnostic(candidate, child);
+      error.downloadDiagnostic = probeDiagnostic(candidate, child, {
+        requestDiagnostic: error.requestDiagnostic,
+      });
       throw error;
     }
     const diagnostic = probeDiagnostic(candidate, child, media);

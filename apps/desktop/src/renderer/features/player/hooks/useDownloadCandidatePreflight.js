@@ -17,8 +17,11 @@ export function useDownloadCandidatePreflight({
         for (const candidate of streams) {
           if (disposed || recoveryRef.current.handledSession === captureSessionId) return;
           if (!candidate?.id || candidate.sessionId !== captureSessionId
-            || candidate.sourceId !== target.sourceId || preflightRef.current.has(candidate.id)) continue;
-          preflightRef.current.add(candidate.id);
+            || candidate.sourceId !== target.sourceId) continue;
+          const attemptKey = `${candidate.id}:${candidate.contextRevision || 0}`;
+          const attempts = [...preflightRef.current].filter((key) => key.startsWith(`${candidate.id}:`)).length;
+          if (preflightRef.current.has(attemptKey) || attempts >= 3) continue;
+          preflightRef.current.add(attemptKey);
           let result;
           try {
             result = await window.electron?.preflightStream?.(candidate.id);

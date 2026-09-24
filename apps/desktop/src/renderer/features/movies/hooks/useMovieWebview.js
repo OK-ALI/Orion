@@ -445,12 +445,6 @@ export function useMovieWebview(context) {
     lastKnownTimeRef.current = 0;
     seekBackCooldownRef.current = 0;
     setPlaying(true);
-    setTimeout(() => {
-      playerWrapRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 80);
   }, [playerWrapRef, setInterceptedSubs, setM3u8Url, setPlaying, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setResumeTime, setShowResumePrompt]);
 
   const startMoviePlayback = useCallback((time = 0, intentType = null) => {

@@ -78,6 +78,10 @@ async function fetchViaPlayerSession(url, m3u8Context, options = {}) {
     authorizationPresent: upstreamHeaders.some(([name]) => name.toLowerCase() === "authorization"),
     cookiePresent,
   };
+  const rejectWithContext = (reject, error) => {
+    error.requestDiagnostic = requestDiagnostic;
+    reject(error);
+  };
   return new Promise((resolve, reject) => {
     let timeout = null;
     try {
@@ -88,7 +92,7 @@ async function fetchViaPlayerSession(url, m3u8Context, options = {}) {
       });
       timeout = setTimeout(() => {
         try { request.abort(); } catch {}
-        reject(new Error("Media request timed out"));
+        rejectWithContext(reject, new Error("Media request timed out"));
       }, 20000);
       for (const [name, value] of upstreamHeaders) {
         const lower = name.toLowerCase();
@@ -146,20 +150,20 @@ async function fetchViaPlayerSession(url, m3u8Context, options = {}) {
         response.on("error", (error) => {
           if (!settled) {
             clearTimeout(timeout);
-            reject(error);
+            rejectWithContext(reject, error);
           }
         });
       });
       request.on("error", (error) => {
         if (!request.aborted) {
           clearTimeout(timeout);
-          reject(error);
+          rejectWithContext(reject, error);
         }
       });
       request.end();
     } catch (error) {
       clearTimeout(timeout);
-      reject(error);
+      rejectWithContext(reject, error);
     }
   });
 }

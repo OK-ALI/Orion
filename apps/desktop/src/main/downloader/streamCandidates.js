@@ -105,6 +105,7 @@ function beginCaptureSession(details = {}) {
     startedAt: now,
     updatedAt: now,
     status: "detecting",
+    contextRevision: 0,
   };
   captureSessions.set(id, session);
   activeSessionId = id;
@@ -149,10 +150,13 @@ function recordObservedRequest({ url, webContentsId, requestHeaders, referrer } 
   requests.set(url, { requestHeaders: { ...(requestHeaders || {}) }, referrer: referrer || "" });
   while (requests.size > 256) requests.delete(requests.keys().next().value);
   observedRequests.set(sessionId, requests);
+  const capture = captureSessions.get(sessionId);
+  capture.contextRevision += 1;
 }
 
 function requestContextForUrl(candidate, url, parentUrl = candidate?.url) {
-  const observed = observedRequests.get(candidate?.sessionId)?.get(url);
+  const observed = candidate?._observedRequestSnapshot?.get(url)
+    || observedRequests.get(candidate?.sessionId)?.get(url);
   if (observed) return observed;
   try {
     if (new URL(url).origin === new URL(candidate.url).origin) return candidate;
@@ -166,6 +170,17 @@ function requestContextForUrl(candidate, url, parentUrl = candidate?.url) {
   } catch {
     return { requestHeaders: {}, referrer: "" };
   }
+}
+
+function snapshotCandidateRequestContext(candidate) {
+  const snapshot = { ...candidate };
+  const observed = observedRequests.get(candidate?.sessionId) || new Map();
+  Object.defineProperty(snapshot, "_observedRequestSnapshot", {
+    value: new Map([...observed].map(([url, context]) => [url, {
+      requestHeaders: { ...context.requestHeaders }, referrer: context.referrer,
+    }])),
+  });
+  return snapshot;
 }
 
 function hasObservedRequestContext(candidate, url) {
@@ -222,6 +237,7 @@ function summary(item) {
     sourceId: item.sourceId,
     kind: item.kind,
     status: item.status,
+    contextRevision: captureSessions.get(item.sessionId)?.contextRevision || 0,
     host,
     contentType: item.contentType,
     capturedAt: item.capturedAt,
@@ -286,4 +302,5 @@ module.exports = {
   requestContextForUrl,
   resolveCaptureSession,
   resolveCandidate,
+  snapshotCandidateRequestContext,
 };

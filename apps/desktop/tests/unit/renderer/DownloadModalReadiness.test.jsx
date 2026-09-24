@@ -28,6 +28,28 @@ function setup(preflightStream) {
 }
 
 describe("Desktop Download readiness", () => {
+  it("opens immediately for a live player while media-byte verification is still pending", async () => {
+    let complete;
+    const pending = new Promise((resolve) => { complete = resolve; });
+    setup(vi.fn(() => pending));
+    await screen.findByText("Checking captured stream");
+    expect(screen.getByRole("button", { name: "Start download" })).toBeDisabled();
+    complete({ ok: true, verified: true, strategy: "hls-proxy" });
+    await screen.findByText(/HLS source ready/);
+  });
+
+  it("never lists global candidates while the current capture session is unavailable", async () => {
+    const listStreamCandidates = vi.fn(async () => [candidate]);
+    window.electron = {
+      listStreamCandidates,
+      getDownloaderStatus: vi.fn(async () => ({ exists: true })),
+      preflightStream: vi.fn(),
+    };
+    render(<DownloadModal onClose={vi.fn()} mediaName="Current movie" mediaId={1} mediaType="movie" />);
+    await screen.findByText(/Detecting a downloadable stream/);
+    expect(listStreamCandidates).not.toHaveBeenCalled();
+  });
+
   it("never paints a captured candidate green or starts a task when the first media byte fails", async () => {
     const runDownload = setup(vi.fn(async () => ({
       ok: false, code: "empty_media", error: "The source returned no media bytes.",

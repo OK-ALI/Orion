@@ -23,7 +23,6 @@ import {
   NEEDS_INTERCEPT,
   getNextNonAsyncSource,
   getNextHealthyNonAsyncSource,
-  getEffectivePlayerSources,
 } from "../../../services/tmdb";
 import {
   PlayIcon,
@@ -67,10 +66,10 @@ import { getReadyWebContentsId } from "../../player/services/webviewLifecycle";
 import { createStartPlaybackIntent } from "../../player/services/playbackIntent";
 import { useTitleCredits } from "../../../shared/hooks/useTitleCredits";
 import { useDesktopTrailerDiscovery } from "../../trailers/hooks/useDesktopTrailerDiscovery";
-import { DOWNLOAD_SOURCE_ATTEMPT_MS } from "../../player/services/downloadSourceRecovery";
 import { useDownloadCandidatePreflight } from "../../player/hooks/useDownloadCandidatePreflight";
-import { useDownloadSourceRecovery } from "../../player/hooks/useDownloadSourceRecovery";
-import { beginDownloadSourceScope, restoreDownloadSource, shouldPersistPlayerSource } from "../../player/services/downloadSourceScope";
+import { shouldPersistPlayerSource } from "../../player/services/downloadSourceScope";
+
+const DOWNLOAD_CAPTURE_TIMEOUT_MS = 30_000;
 
 export function useMovieController({
   item,
@@ -103,10 +102,8 @@ const [details, setDetails] = useState(null);
   const [downloadTarget, setDownloadTarget] = useState(null);
   const [downloadResolutionActive, setDownloadResolutionActive] = useState(false);
   const [downloadResolutionError, setDownloadResolutionError] = useState("");
-  const [downloadConsent, setDownloadConsent] = useState(null);
   const [verifiedDownloadCandidateId, setVerifiedDownloadCandidateId] = useState("");
-  const [downloadCaptureNonce, setDownloadCaptureNonce] = useState(0);
-  const downloadRecoveryRef = useRef({ attempted: new Set(), manualApproved: false, refreshed: false, handledSession: null, reload: false });
+  const downloadRecoveryRef = useRef({ handledSession: null, lastFailure: null });
   const downloadResolutionPreflightRef = useRef(new Set());
   const [showTrailer, setShowTrailer] = useState(false);
   const [m3u8Url, setM3u8Url] = useState(null);
@@ -147,7 +144,7 @@ const [details, setDetails] = useState(null);
       disposed = true;
       if (openedSessionId) window.electron?.endStreamCapture?.(openedSessionId);
     };
-  }, [downloadTarget?.key, downloadCaptureNonce, item.id, playerSource]);
+  }, [downloadTarget?.key, item.id, playerSource]);
 
   // Accent colour + subtitle lang come from App-level state (via props),
   // so they are always fresh after Settings save without any extra storage reads.
@@ -257,7 +254,7 @@ const [details, setDetails] = useState(null);
   }, [d, item, onSave]);
 
   useEffect(() => {
-    if (!playing || pipOpen) return;
+    if (!playing || pipOpen || downloadResolutionActive) return;
     const url = sourceIsAsync(playerSource)
       ? resolvedPlayerUrl
       : getDesktopSourceUrl(playerSource, "movie", { tmdbId: item.id, imdbId: d.imdb_id }, null, null, getSourceResumeParams(playerSource, storage.get("dlTime_" + progressKey), "movie"), playerAccentColor, playerSubLang);
@@ -283,7 +280,7 @@ const [details, setDetails] = useState(null);
       currentTime: Number(storage.get("dlTime_" + progressKey)) || 0,
       updatedAt: Date.now(),
     });
-  }, [playing, pipOpen, resolvedPlayerUrl, playerSource, webviewLoading, item.id, title, onPlaybackSession]);
+  }, [playing, pipOpen, downloadResolutionActive, resolvedPlayerUrl, playerSource, webviewLoading, item.id, title, onPlaybackSession]);
 
   const { watchedSecs, totalSecs, displayPct, progressLabel } = useMemo(() => {
     const watchedSecs = storage.get("dlTime_" + progressKey) || 0;
@@ -454,6 +451,7 @@ const [details, setDetails] = useState(null);
   }, [downloadTarget, downloadResolutionError, playerSource]);
 
   const selectPlayerSource = useCallback((sourceId) => {
+    if (downloadResolutionActive) return false;
     const next = normalizeSelectableSourceId(sourceId, { mediaType: "movie" });
     if (next === playerSource) return false;
     const verifiedPosition = Math.max(
@@ -465,19 +463,11 @@ const [details, setDetails] = useState(null);
     playbackIntentRef.current = createStartPlaybackIntent({ time: verifiedPosition });
     initialSeekDoneRef.current = false;
     setPlayerSource(next);
-    if (downloadResolutionActive) downloadRecoveryRef.current.attempted.add(next);
-    else {
-      setDownloadTarget(null);
-      setDownloadResolutionError("");
-      storage.set(STORAGE_KEYS.PLAYER_SOURCE, next);
-    }
+    setDownloadTarget(null);
+    setDownloadResolutionError("");
+    storage.set(STORAGE_KEYS.PLAYER_SOURCE, next);
     return true;
   }, [downloadResolutionActive, playerSource, progressKey]);
-
-  const selectDownloadSource = useCallback((sourceId) => {
-    const next = normalizeSelectableSourceId(sourceId, { mediaType: "movie" });
-    setPlayerSource(next);
-  }, []);
 
   // Resolve AllManga movie URL via main-process IPC
   useEffect(() => {
@@ -632,9 +622,8 @@ const [details, setDetails] = useState(null);
   }, []);
 
   const openDownload = useCallback(() => {
-    downloadRecoveryRef.current = beginDownloadSourceScope(playerSource, downloadTarget ? downloadRecoveryRef.current : null, playing);
+    downloadRecoveryRef.current = { handledSession: null, lastFailure: null };
     setDownloadResolutionError("");
-    setDownloadConsent(null);
     setVerifiedDownloadCandidateId("");
     downloadResolutionPreflightRef.current = new Set();
     setCaptureSessionId(null);
@@ -656,49 +645,40 @@ const [details, setDetails] = useState(null);
     });
     setDownloadResolutionActive(true);
     setShowDownload(false);
-  }, [d?.imdb_id, downloadTarget, dubMode, item.id, playerSource, playing, title]);
+  }, [d?.imdb_id, dubMode, item.id, playerSource, title]);
+
+  // Keep the live playback and capture session untouched for Player Download.
+  const openDownloadFromPlayer = useCallback(() => {
+    setDownloadResolutionError("");
+    setVerifiedDownloadCandidateId("");
+    setShowDownload(true);
+  }, []);
 
   const closeDownload = useCallback(() => {
-    setPlayerSource(restoreDownloadSource(downloadRecoveryRef.current, playerSource));
     setShowDownload(false);
     setDownloadResolutionActive(false);
     setDownloadResolutionError("");
-    setDownloadConsent(null);
     setVerifiedDownloadCandidateId("");
     setDownloadTarget(null);
-  }, [playerSource]);
+  }, []);
 
   const failDownloadResolution = useCallback((message) => {
-    setPlayerSource(restoreDownloadSource(downloadRecoveryRef.current, playerSource));
     setDownloadResolutionActive(false);
     setPlaying(false);
     setShowDownload(false);
-    setDownloadConsent(null);
     setVerifiedDownloadCandidateId("");
     setDownloadTarget(null);
     setDownloadResolutionError(message || "No downloadable stream was found. Try another source.");
-  }, [playerSource]);
-
-  const { recover: recoverDownloadResolution, answerConsent: answerDownloadConsent } = useDownloadSourceRecovery({
-    mediaType: "movie", sourceId: playerSource, captureSessionId, active: downloadResolutionActive,
-    recoveryRef: downloadRecoveryRef, consent: downloadConsent, setConsent: setDownloadConsent,
-    fail: failDownloadResolution, setCandidateContext: setM3u8Context, setCandidateUrl: setM3u8Url,
-    setVerifiedCandidateId: setVerifiedDownloadCandidateId, setCaptureSessionId,
-    setCaptureNonce: setDownloadCaptureNonce, setTarget: setDownloadTarget, setPlayerSource,
-  });
+  }, []);
 
   useEffect(() => {
     if (!downloadResolutionActive || !captureSessionId) return undefined;
-    if (downloadRecoveryRef.current.reload && playing) {
-      downloadRecoveryRef.current.reload = false;
-      webviewRef.current?.reload?.();
-    }
-    const timer = window.setTimeout(() => recoverDownloadResolution(captureSessionId, downloadRecoveryRef.current.lastFailure || {
-      code: "no_candidate",
-      error: "This source did not provide a downloadable stream in time.",
-    }), DOWNLOAD_SOURCE_ATTEMPT_MS);
+    const timer = window.setTimeout(() => failDownloadResolution(
+      downloadRecoveryRef.current.lastFailure?.error
+        || "This source did not provide verifiable media in time. Retry or choose another source.",
+    ), DOWNLOAD_CAPTURE_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
-  }, [captureSessionId, downloadResolutionActive, playing, recoverDownloadResolution]);
+  }, [captureSessionId, downloadResolutionActive, failDownloadResolution]);
 
   useEffect(() => {
     if (
@@ -771,17 +751,13 @@ const [details, setDetails] = useState(null);
       : `${m}:${String(s).padStart(2, "0")}`;
   };
 
-    const viewModel = { ambientColor, blockedAlltime, blockedSession, closeDownload, collection, d, displayGenres, downloadResolutionActive, downloadTarget, displayOverview, displayPct, displayScore, downloaderFolder, dubMode, formatResumeTime, getBlockedDomains, handleFailoverNextSource, handlePlay, handleSetDownloaderFolder, hasProgress, interceptedSubs, isSaved, isSavedItem, isUnreleased, isWatched, item, m3u8Context, m3u8Url, mediaName, menuPos, movieDownload, onBack, onDownloadStarted, openDownload, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave: handleLibrarySave, onSelect, onSettings, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progress, progressKey, progressLabel, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, selectPlayerSource, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, sourceRef, startMoviePlayback, switchingToMiniPlayerRef, title, trailerCandidates, trailerLoading, voiceBoost, watched, webviewLoading, webviewRef };
+    const viewModel = { ambientColor, blockedAlltime, blockedSession, closeDownload, collection, d, displayGenres, downloadResolutionActive, downloadTarget, displayOverview, displayPct, displayScore, downloaderFolder, dubMode, formatResumeTime, getBlockedDomains, handleFailoverNextSource, handlePlay, handleSetDownloaderFolder, hasProgress, interceptedSubs, isSaved, isSavedItem, isUnreleased, isWatched, item, m3u8Context, m3u8Url, mediaName, menuPos, movieDownload, onBack, onDownloadStarted, openDownload, openDownloadFromPlayer, onGoToDownloads, onMarkUnwatched, onMarkWatched, onOpenMiniPlayer, onSave: handleLibrarySave, onSelect, onSettings, pipOpen, pipUrlRef, playerAccentColor, playerControlsVisible, playerFullscreen, playerSource, playerSubLang, playerWrapRef, playing, progress, progressKey, progressLabel, rating, resolveError, resolvedPlayerUrl, resolvedPlayerUrlRef, resolvingUrl, resolvingUrlRef, restricted, resumeTime, revealPlayerControls, saveProgress, selectPlayerSource, setDubMode, setInterceptedSubs, setM3u8Url, setMenuPos, setPlayerSource, setResolveError, setResolvedPlayerUrl, setResolvingUrl, setShowBlockedModal, setShowDownload, setShowResumePrompt, setShowSourceMenu, setShowTrailer, setVoiceBoost, showBlockedModal, showDownload, showFailoverPrompt, showResumePrompt, showSourceMenu, showTrailer, sourceRef, startMoviePlayback, switchingToMiniPlayerRef, title, trailerCandidates, trailerLoading, voiceBoost, watched, webviewLoading, webviewRef };
     viewModel.cast = cast;
     viewModel.keyCrew = keyCrew;
     viewModel.creditsLoading = creditsLoading;
     viewModel.captureSessionId = captureSessionId;
     viewModel.downloadResolutionError = downloadResolutionError;
-    viewModel.downloadConsent = downloadConsent;
-    viewModel.answerDownloadConsent = answerDownloadConsent;
     viewModel.verifiedDownloadCandidateId = verifiedDownloadCandidateId;
     viewModel.voiceBoostState = voiceBoostState;
-    viewModel.downloadSourceChoices = getEffectivePlayerSources().filter((source) => source.supportsDownloads && source.media?.movie);
-    viewModel.selectDownloadSource = selectDownloadSource;
     return viewModel;
 }

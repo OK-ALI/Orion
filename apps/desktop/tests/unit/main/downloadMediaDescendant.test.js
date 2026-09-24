@@ -14,6 +14,7 @@ const {
   resolveCaptureSession,
   requestContextForUrl,
   resolveCandidate,
+  snapshotCandidateRequestContext,
 } = require("../../../src/main/downloader/streamCandidates");
 
 const response = (statusCode, body, contentType = "video/mp2t") => ({
@@ -90,9 +91,13 @@ test("observed child context stays session-bound and cross-origin credentials ar
   assert.equal(unknown.requestHeaders.Authorization, undefined);
   assert.equal(unknown.requestHeaders.Cookie, undefined);
   assert.equal(unknown.requestHeaders["User-Agent"], "OrionTest");
+  const handoff = snapshotCandidateRequestContext(candidate);
   endCaptureSession(session.id);
   assert.equal(listCandidates({ sessionId: session.id }).length, 1);
   assert.equal(requestContextForUrl(candidate, "https://cdn.example/first.ts").requestHeaders.Authorization, undefined);
+  assert.equal(requestContextForUrl(handoff, "https://cdn.example/first.ts").requestHeaders.Authorization, "child-secret");
+  assert.equal(requestContextForUrl(handoff, "https://other.example/first.ts").requestHeaders.Authorization, undefined);
+  assert.doesNotMatch(JSON.stringify(handoff), /child-secret|first.ts/);
   clearCandidates();
 });
 

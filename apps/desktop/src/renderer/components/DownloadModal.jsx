@@ -139,7 +139,7 @@ export default function DownloadModal({
   const refresh = async () => {
     if (!window.electron) return;
     const [streams, status] = await Promise.all([
-      window.electron.listStreamCandidates?.({ sessionId: captureSessionId }) || [],
+      captureSessionId ? window.electron.listStreamCandidates?.({ sessionId: captureSessionId }) || [] : [],
       window.electron.getDownloaderStatus(),
     ]);
     const next = Array.isArray(streams) ? streams : [];
@@ -156,6 +156,10 @@ export default function DownloadModal({
   useEffect(() => {
     const startedAt = Date.now();
     const refreshCandidates = async () => {
+      if (!captureSessionId) {
+        setCandidates([]);
+        return;
+      }
       const streams = await window.electron?.listStreamCandidates?.({
         sessionId: captureSessionId,
       });
@@ -166,7 +170,7 @@ export default function DownloadModal({
     };
     const timer = window.setInterval(refreshCandidates, 1000);
     const handler = window.electron?.onM3u8Found?.((candidate) => {
-      if (captureSessionId && candidate?.sessionId !== captureSessionId) return;
+      if (!captureSessionId || candidate?.sessionId !== captureSessionId) return;
       refreshCandidates();
     });
     return () => {

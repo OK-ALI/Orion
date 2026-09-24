@@ -2,6 +2,7 @@ const { fetchViaPlayerSession } = require("./hlsProxy");
 const { listCandidates, resolveCandidate } = require("./streamCandidates");
 const { isObviousMediaSegmentUrl } = require("./mediaSegments");
 const { probeFirstMedia } = require("./mediaDescendant");
+const { appendPreflightDiagnostic, safeRecord } = require("./preflightDiagnostics");
 const {
   inspectDashProbe,
   inspectDirectProbe,
@@ -31,13 +32,14 @@ function safeDiagnostic(candidate, response, stage) {
 }
 
 function reportPreflight(candidate, candidateId, result) {
-  console.info("[Orion download preflight]", JSON.stringify({
-    sourceId: candidate.sourceId,
-    candidateId,
-    outcome: result.ok ? "ready" : "failed",
-    code: result.code || null,
-    diagnostic: result.diagnostic || null,
-  }));
+  const record = safeRecord(candidate, candidateId, result);
+  console.info("[Orion download preflight]", JSON.stringify(record));
+  try {
+    const directory = require("electron").app?.getPath("userData");
+    appendPreflightDiagnostic(directory, candidate, candidateId, result);
+  } catch {
+    // Diagnostics must never prevent download verification.
+  }
   return result;
 }
 
@@ -96,14 +98,9 @@ async function preflightCandidate(candidateId) {
   } catch (error) {
     const code = /timed?\s*out/i.test(error?.message || "") ? "timeout"
       : /redirect/i.test(error?.message || "") ? "redirect_denied" : "network";
-    const diagnostic = error?.downloadDiagnostic || {
-      stage: candidate.kind === "direct" ? "direct_video" : "root_manifest",
-      host: new URL(candidate.url).host,
-      crossOrigin: false,
-      observedInPlayer: true,
-      statusCode: null,
-      bytesRead: 0,
-    };
+    const diagnostic = error?.downloadDiagnostic || safeDiagnostic(candidate, {
+      requestDiagnostic: error?.requestDiagnostic,
+    }, candidate.kind === "direct" ? "direct_video" : "root_manifest");
     return reportPreflight(candidate, candidateId, {
       ok: false, code, verified: false, diagnostic,
       error: code === "redirect_denied"
