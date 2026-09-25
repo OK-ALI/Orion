@@ -25,9 +25,10 @@ test('download recovery excludes retired, disabled, incompatible and cooling-dow
     '@orion/shared/sources': {
       DEFAULT_CINEMA_SOURCE_ID: 'vixsrc',
       PLAYER_SOURCES: [
-        source('vixsrc', { routingMode: 'automatic' }), source('videasy'), source('vidking'),
+        source('vixsrc', { routingMode: 'automatic' }), source('videasy'),
         source('disabled', { releaseStatus: 'disabled' }), source('not-downloadable', { supportsDownloads: false }),
-        source('movie-only', { media: { movie: true, tv: false } }), source('cooldown'), source('vidlink'),
+        source('movie-only', { media: { movie: true, tv: false } }), source('cooldown'),
+        source('vidsrc'), source('111movies'), source('vidlink', { supportsDownloads: false }),
       ],
       getSource: () => null,
     },
@@ -36,9 +37,12 @@ test('download recovery excludes retired, disabled, incompatible and cooling-dow
       getMobileSourceHealthV2: (id) => id === 'cooldown' ? { cooldownUntil: Date.now() + 60_000 } : null,
     },
   });
-  assert.deepEqual(registry.MOBILE_PLAYER_SOURCES.map((entry) => entry.id), ['vixsrc', 'not-downloadable', 'movie-only', 'cooldown', 'vidlink']);
-  assert.equal(registry.getNextMobileDownloadSource('tv', new Set(['vixsrc'])).id, 'vidlink');
-  assert.equal(registry.getNextMobileDownloadSource('tv', new Set(['vixsrc', 'vidlink'])), null);
+  assert.deepEqual(registry.MOBILE_PLAYER_SOURCES.map((entry) => entry.id), ['vixsrc', 'not-downloadable', 'movie-only', 'cooldown', 'vidsrc', '111movies', 'vidlink']);
+  assert.deepEqual(registry.MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_IDS, ['vixsrc', 'vidsrc', '111movies']);
+  assert.equal(registry.getNextMobileDownloadSource('tv', new Set(['vixsrc'])).id, 'vidsrc');
+  assert.equal(registry.getNextMobileDownloadSource('tv', new Set(['vixsrc', 'vidsrc'])).id, '111movies');
+  assert.equal(registry.getNextMobileDownloadSource('tv', new Set(['vixsrc', 'vidsrc', '111movies'])), null);
+  assert.deepEqual(registry.getMobileDownloadSourceChoices('tv').map((entry) => entry.id), ['vixsrc', 'vidsrc', '111movies']);
 });
 
 test('Dr. House S2E1 download start rejects a stale episode and accepts its exact candidate', async () => {

@@ -13,7 +13,8 @@ test('Orion 3.2.0 retires dead Mobile providers while preserving live manual can
   const playerScreen = readMobile('src', 'features', 'playback', 'PlayerScreen.tsx');
   const sheet = readMobile('src', 'components', 'player', 'SourcesSheet.tsx');
 
-  assert.match(mobileSources, /MOBILE_RETIRED_SOURCE_IDS[\s\S]*?'videasy'[\s\S]*?'vidking'[\s\S]*?'vsembed'/);
+  assert.match(mobileSources, /MOBILE_RETIRED_SOURCE_IDS[\s\S]*?'videasy'[\s\S]*?'vsembed'/);
+  assert.doesNotMatch(mobileSources, /vidking/);
   assert.match(mobileSources, /source\.releaseStatus !== 'disabled'/);
   assert.match(mobileSources, /source\.availability !== 'temporarily-unavailable'/);
   assert.match(mobileSources, /!MOBILE_QUARANTINED_SOURCE_IDS\.has\(source\.id\)/);
@@ -31,6 +32,8 @@ test('live replacement providers remain manual-first while VixSrc owns automatic
   const experimental = readWorkspace('packages', 'shared', 'src', 'sources', 'adapters', 'experimental.ts');
   const capabilities = readMobile('src', 'features', 'playback', 'mobileSources.ts');
 
+  assert.match(candidates, /id: "vidlink"[\s\S]{0,900}supportsDownloads: false/);
+  assert.match(capabilities, /MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_IDS = Object\.freeze\(\[[\s\S]*?'vixsrc'[\s\S]*?'vidsrc'[\s\S]*?'111movies'/);
   for (const id of ['vidnest', 'vidsrc-ir', 'cinesrc']) {
     assert.match(candidates, new RegExp(`id: \"${id}\"[\\s\\S]{0,900}routingMode: \"manual-only\"`));
   }

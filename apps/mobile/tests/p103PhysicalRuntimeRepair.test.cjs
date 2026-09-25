@@ -123,7 +123,9 @@ test('P10.3 capture parity ranks viable fragment candidates instead of taking th
   assert.match(capture, /scoreMobileDownloadCandidateV1/);
   assert.match(capture, /kind === 'hls' \? 200 : kind === 'dash' \? 150/);
   assert.match(capture, /\.sort\(\(left, right\) => scoreMobileDownloadCandidateV1\(right\) - scoreMobileDownloadCandidateV1\(left\)/);
-  assert.doesNotMatch(capture, /resolvedManifestKind === 'direct'.*scoreMobileDownloadCandidateV1/s);
+  const selection = capture.match(/export function selectMobileDownloadCandidateForItemV1[\s\S]*?^}/m)?.[0] || '';
+  assert.ok(selection, 'candidate selection source missing');
+  assert.doesNotMatch(selection, /resolvedManifestKind === 'direct'/);
 });
 
 test('P10.3 foreground notification uses real media title and native progress truth', () => {

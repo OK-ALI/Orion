@@ -11,7 +11,7 @@ import { getMobileSourceHealth, getMobileSourceHealthV2 } from '../../services/s
  * choices. Quarantined sources are also hidden until they are explicitly
  * revalidated because Orion cannot promise its normal in-app protection path.
  */
-export const MOBILE_RETIRED_SOURCE_IDS: ReadonlySet<string> = new Set(['videasy', 'vidking', 'vsembed']);
+export const MOBILE_RETIRED_SOURCE_IDS: ReadonlySet<string> = new Set(['videasy', 'vsembed']);
 export const MOBILE_QUARANTINED_SOURCE_IDS: ReadonlySet<string> = new Set(['autoembed']);
 
 const MOBILE_VISIBLE_PLAYER_SOURCES = PLAYER_SOURCES.filter(
@@ -30,22 +30,60 @@ export const MOBILE_PLAYER_SOURCES = Object.freeze([
   ...MOBILE_VISIBLE_PLAYER_SOURCES.filter((source) => source.id !== 'vixsrc'),
 ]);
 
+/**
+ * Download-only qualification order. Playback routing and download routing are
+ * intentionally separate: a provider may remain manually playable while being
+ * excluded from automatic download resolution until it is physically requalified.
+ */
+export const MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_IDS = Object.freeze([
+  'vixsrc',
+  'vidsrc',
+  '111movies',
+] as const);
+
+const MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_RANK = new Map<string, number>(
+  MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_IDS.map((id, index) => [id, index]),
+);
+
+export function mobileDownloadSourceRank(sourceId: string): number {
+  return MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_RANK.get(sourceId) ?? Number.MAX_SAFE_INTEGER;
+}
+
 export function getNextMobileDownloadSource(
   mediaType: 'movie' | 'tv',
   attempted: ReadonlySet<string>,
 ): (typeof MOBILE_PLAYER_SOURCES)[number] | null {
   const now = Date.now();
-  const candidates = MOBILE_PLAYER_SOURCES.filter((source) => {
-    const health = getMobileSourceHealthV2(source.id, mediaType);
-    return source.supportsDownloads === true
-      && (mediaType === 'movie' ? source.media.movie : source.media.tv)
-      && !attempted.has(source.id)
-      && !(health?.cooldownUntil && health.cooldownUntil > now);
-  });
-  return [...candidates].sort((left, right) => {
-    const priority = (source: (typeof MOBILE_PLAYER_SOURCES)[number]) => source.routingMode === 'automatic' ? 0 : source.id === 'vidsrc' ? 2 : 1;
-    return priority(left) - priority(right);
-  })[0] || null;
+  return MOBILE_PLAYER_SOURCES
+    .filter((source) => MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_RANK.has(source.id))
+    .filter((source) => {
+      const health = getMobileSourceHealthV2(source.id, mediaType);
+      return source.supportsDownloads === true
+        && source.availability !== 'temporarily-unavailable'
+        && (mediaType === 'movie' ? source.media.movie : source.media.tv)
+        && !attempted.has(source.id)
+        && !(health?.cooldownUntil && health.cooldownUntil > now);
+    })
+    .sort((left, right) => mobileDownloadSourceRank(left.id) - mobileDownloadSourceRank(right.id))[0] || null;
+}
+
+export function getMobileDownloadSourceChoices(
+  mediaType: 'movie' | 'tv',
+): readonly (typeof MOBILE_PLAYER_SOURCES)[number][] {
+  const now = Date.now();
+  return [...MOBILE_PLAYER_SOURCES]
+    .filter((source) => source.supportsDownloads === true)
+    .filter((source) => source.availability !== 'temporarily-unavailable')
+    .filter((source) => mediaType === 'movie' ? source.media.movie : source.media.tv)
+    .filter((source) => {
+      const health = getMobileSourceHealthV2(source.id, mediaType);
+      return !(health?.cooldownUntil && health.cooldownUntil > now);
+    })
+    .sort((left, right) => {
+      const rank = mobileDownloadSourceRank(left.id) - mobileDownloadSourceRank(right.id);
+      if (rank !== 0) return rank;
+      return left.label.localeCompare(right.label);
+    });
 }
 
 /**

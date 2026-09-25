@@ -96,13 +96,12 @@ test("mobile source selection keeps unsafe providers visible but excludes them f
   assert.doesNotMatch(sourceSheet, /\{\s*PLAYER_SOURCES\s*\}\s+from/);
 });
 
-test("retired VidKing is migrated and absent from Mobile playback capabilities", () => {
+test("removed VidKing has no Mobile provider residue", () => {
   const mobileSources = read("src/features/playback/mobileSources.ts");
   const prompt = read("src/features/playback/ResumePlaybackPrompt.tsx");
   const player = read("src/features/playback/PlayerScreen.tsx");
 
-  assert.match(mobileSources, /MOBILE_RETIRED_SOURCE_IDS[^\n]*vidking/);
-  assert.doesNotMatch(mobileSources, /vidking:\s*Object\.freeze/);
+  assert.doesNotMatch(mobileSources, /vidking/);
 
   assert.match(mobileSources, /mobileSourceSupportsContinuity\(candidateId\)/);
 

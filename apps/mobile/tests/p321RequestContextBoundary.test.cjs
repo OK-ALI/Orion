@@ -34,18 +34,24 @@ test('root and child redirects use destination-aware context and a public-networ
   assert.doesNotMatch(broker, /private fun descendantAllowed\(context: CapturedContext, rawUrl: String\): Boolean =\s*isSafePublicHttpUrl\(rawUrl\)/);
 });
 
-test('exact observed cross-origin request wins; unobserved child never inherits root auth, Cookie or Origin', () => {
+test('exact observations win and observed-origin browser identity is inherited without cross-URL credentials', () => {
   const selection = between(broker, 'private fun authorizedRequestFor(', 'private fun sanitizeReferer(');
   assert.match(selection, /val observed = OrionBoundObservationPolicy\.selectExact\(/);
   assert.match(selection, /activeObservedFor\(context\)/);
   assert.match(selection, /context\.boundObservedRequestMaterial/);
   assert.match(selection, /observed\.headers\.toMap\(\)/);
   assert.match(selection, /if \(sameOrigin\)/);
+  assert.match(selection, /OrionBoundObservationPolicy\.selectOrigin\(/);
+  assert.match(selection, /safeObservedOriginHeaders\(observedOrigin\.headers\)/);
   assert.match(selection, /safeCrossOriginHeaders\(context\.requestHeaders\)/);
   assert.match(selection, /captureCookie\(normalized, emptyMap\(\)\)/);
   const fallback = between(broker, 'internal fun safeCrossOriginHeaders(', 'private fun sanitizeReferer(');
   assert.match(fallback, /"accept", "accept-language", "user-agent"/);
   assert.doesNotMatch(fallback, /"origin"|"authorization"|"cookie"/);
+  const observedFallback = between(broker, 'internal fun safeObservedOriginHeaders(', 'internal fun safeCrossOriginHeaders(');
+  assert.match(observedFallback, /"origin"/);
+  assert.match(observedFallback, /"referer"/);
+  assert.doesNotMatch(observedFallback, /"authorization"|"cookie"/);
   assert.match(fallback, /sanitizeReferer\(value\)/);
   assert.match(broker, /if \(!isSafePublicHttpUrl\(normalized\)\) return null/);
   assert.doesNotMatch(broker, /publicOriginSafetyCache/);
@@ -61,6 +67,7 @@ test('closing temporary playback preserves bounded exact observations only for i
   assert.match(release, /it\.sessionReleased = true/);
   assert.match(release, /it\.sessionId == sessionId && it\.boundJobId == null/);
   assert.match(broker, /OrionBoundObservationPolicy\.selectExact\([\s\S]*?context\.boundObservedRequestMaterial/);
+  assert.match(broker, /OrionBoundObservationPolicy\.selectOrigin\([\s\S]*?context\.boundObservedRequestMaterial/);
   assert.match(broker, /OrionBoundObservationPolicy\.trustedUrls\([\s\S]*?context\.boundObservedRequestMaterial/);
   assert.match(broker, /if \(context\.sessionReleased\) null else observedRequestMaterial\[context\.sessionId\]/);
   assert.match(broker, /fun releaseJob\(jobId: String\)[\s\S]*?remove\.forEach\(::removeLocked\)/);

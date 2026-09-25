@@ -26,7 +26,7 @@ import {
 import { chooseNativeLibraryStorageTargetV1, validateNativeLibraryStorageTargetV1 } from '../features/downloads/nativeDownloadEngine';
 import { startMobileDownloadFromSelectionV1 } from '../features/downloads/downloadStart';
 import { readMobileDownloadRepositoryV1, subscribeMobileDownloadRepositoryV1 } from '../features/downloads/downloadRepository';
-import { getMobileSourceSafetyNotice, MOBILE_PLAYER_SOURCES } from '../features/playback/mobileSources';
+import { getMobileDownloadSourceChoices, getMobileSourceSafetyNotice, MOBILE_PLAYER_SOURCES } from '../features/playback/mobileSources';
 import {
   discoverMobileDownloadSubtitlesV1,
   getPreferredMobileDownloadSubtitleIdsV1,
@@ -147,8 +147,9 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     : null;
   const latestCandidate = target ? candidateSnapshots.find((entry) => entry.itemKey === target.itemKey)?.candidate ?? null : null;
   const sourceResolutionFailure = target ? getMobileDownloadSourceResolutionFailureV1(target.itemKey) : null;
-  const alternateSources = MOBILE_PLAYER_SOURCES.filter((source) => source.supportsDownloads
-    && (target?.media.mediaType === 'movie' ? source.media.movie : source.media.tv));
+  const alternateSources = target
+    ? getMobileDownloadSourceChoices(target.media.mediaType)
+    : [];
   const methodOptions: readonly { id: MobileDownloadTransferMethodV1; title: string; description: string }[] = [
     { id: 'auto', title: 'Auto', description: 'Recommended. Choose the best ready HLS or DASH stream.' },
     { id: 'fragments', title: 'Stream fragments', description: 'Use a ready HLS or DASH stream explicitly.' },

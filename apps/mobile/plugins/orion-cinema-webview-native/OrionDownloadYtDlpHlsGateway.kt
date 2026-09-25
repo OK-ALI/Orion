@@ -74,10 +74,7 @@ internal object OrionDownloadYtDlpHlsGateway {
       ) ?: return null
 
     if (
-      !rootBody.contains(
-        "#EXTM3U",
-        ignoreCase = true,
-      )
+      !OrionDownloadFragmentPlanner.isHlsPlaylistBody(rootBody)
     ) {
       return null
     }
@@ -213,10 +210,7 @@ internal object OrionDownloadYtDlpHlsGateway {
       (String) -> String?,
   ): String? {
     if (
-      !body.contains(
-        "#EXTM3U",
-        ignoreCase = true,
-      )
+      !OrionDownloadFragmentPlanner.isHlsPlaylistBody(body)
     ) {
       return null
     }
@@ -226,7 +220,7 @@ internal object OrionDownloadYtDlpHlsGateway {
 
     for (raw in body.lineSequence()) {
       val line =
-        raw.trimEnd('\r')
+        raw.trimEnd('\r').removePrefix("\uFEFF")
 
       val trimmed =
         line.trim()
@@ -349,7 +343,7 @@ internal object OrionDownloadYtDlpHlsGateway {
     val lines =
       body.lineSequence()
         .map {
-          it.trimEnd('\r')
+          it.trimEnd('\r').removePrefix("\uFEFF")
         }
         .toList()
 
@@ -566,8 +560,8 @@ internal object OrionDownloadYtDlpHlsGateway {
 
       val onlyMedia = plan.firstMediaFragment() ?: return null
       val possiblePlaylist = OrionDownloadAuthorizedHttp.fetchText(bound, currentUrl, onlyMedia.url)
-        ?: return ResolvedMediaPlaylist(currentUrl, currentBody, plan)
-      if (!possiblePlaylist.trimStart().startsWith("#EXTM3U", ignoreCase = true)) {
+        ?: return null
+      if (!OrionDownloadFragmentPlanner.isHlsPlaylistBody(possiblePlaylist)) {
         return ResolvedMediaPlaylist(currentUrl, currentBody, plan)
       }
       if (depth == MAX_NESTED_MEDIA_PLAYLISTS - 1) {

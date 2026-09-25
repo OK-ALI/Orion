@@ -44,7 +44,6 @@ import {
   getNextMobileContinuitySource,
   getNextMobileDownloadSource,
   getPreferredMobileResumeSource,
-  getMobileSourceSafetyNotice,
   mobileSourceCanReceiveContinuity,
 } from './mobileSources';
 import { classifyCinemaSourceFailure } from './sourceFailure';
@@ -52,19 +51,23 @@ import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import {
   failMobileDownloadSourceResolutionV1,
   getMobileDownloadSourceResolutionIntentV1,
+  getMobileDownloadSourceResolutionStateV1,
   selectMobileDownloadCandidateForItemV1,
+  subscribeMobileDownloadCandidatesV1,
 } from '../downloads/downloadCandidateCapture';
 import type { VerifiedPlaybackSnapshot } from './playerTypes';
 import { MobilePlayerControllerProvider, useMobilePlayerController } from './MobilePlayerController';
 import { NextEpisodePrompt } from './NextEpisodePrompt';
 import { PlayerStateOverlay } from '../../components/player/PlayerStateOverlay';
-import { OrionDialog } from '../../components/OrionDialog';
 import {
   getNextReleasedEpisode,
   type NextEpisodeCandidate,
 } from './playbackCompletion';
 import { resolvePlaybackRouteIdentity } from './routePlaybackIdentity';
 import { usePlayerOrientation } from './usePlayerOrientation';
+
+const DOWNLOAD_SOURCE_WATCHDOG_MS = 8_000;
+const DOWNLOAD_TERMINAL_GRACE_MS = 1_200;
 
 type PlayerRouteParams = {
   id: string;
@@ -156,19 +159,6 @@ export default function PlayerScreen() {
   const [initialChoicePending, setInitialChoicePending] = useState(initialSavedTime > 30 && !downloadIntentAtOpen);
   const [resumeTime, setResumeTime] = useState(downloadIntentAtOpen || initialSavedTime > 30 ? 0 : initialSavedTime);
   const downloadAttemptedSourcesRef = useRef(new Set<string>());
-  const downloadManualConsentRef = useRef(false);
-  const downloadConsentResolverRef = useRef<((allowed: boolean) => void) | null>(null);
-  const [downloadConsent, setDownloadConsent] = useState<{ heading: string; message: string } | null>(null);
-  const answerDownloadConsent = useCallback((allowed: boolean) => {
-    downloadConsentResolverRef.current?.(allowed);
-    downloadConsentResolverRef.current = null;
-    setDownloadConsent(null);
-  }, []);
-  const askDownloadConsent = useCallback((heading: string, message: string) => new Promise<boolean>((resolve) => {
-    downloadConsentResolverRef.current = resolve;
-    setDownloadConsent({ heading, message });
-  }), []);
-  useEffect(() => () => { downloadConsentResolverRef.current?.(false); downloadConsentResolverRef.current = null; }, []);
   const [forceStartFromBeginning, setForceStartFromBeginning] = useState(false);
   const [nextEpisodePrompt, setNextEpisodePrompt] = useState<NextEpisodeCandidate | null>(null);
   const completionHandledRef = useRef(new Set<string>());
@@ -194,40 +184,59 @@ export default function PlayerScreen() {
     if (!intent || intent.autoReturnIssued) return undefined;
     downloadAttemptedSourcesRef.current.add(sourceId);
     let cancelled = false;
+    let advancing = false;
+    let failoverTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const clearFailoverTimer = () => {
+      if (failoverTimer) clearTimeout(failoverTimer);
+      failoverTimer = null;
+    };
     const finishFailure = () => {
       if (cancelled) return;
-      if (failMobileDownloadSourceResolutionV1(downloadItemKey, 'No downloadable stream was found. Choose another source and retry.')) router.back();
+      clearFailoverTimer();
+      if (failMobileDownloadSourceResolutionV1(downloadItemKey, 'No download-ready HLS or DASH stream was found. Choose another source and retry.')) router.back();
     };
-    const timer = setTimeout(() => {
-      void (async () => {
-        const current = getMobileDownloadSourceResolutionIntentV1(downloadItemKey);
-        if (cancelled || !current || current.autoReturnIssued || selectMobileDownloadCandidateForItemV1(downloadItemKey)) return;
-        const attempted = downloadAttemptedSourcesRef.current;
-        if (attempted.size >= 3) return finishFailure();
-        const next = getNextMobileDownloadSource(type, attempted);
-        if (!next) return finishFailure();
-        if (next.routingMode === 'manual-only' && !downloadManualConsentRef.current) {
-          const allowed = await askDownloadConsent('Try another download source?', 'The current source has no valid download stream. Allow Orion to try a visible manual-only source for this download?');
-          if (cancelled) return;
-          if (!allowed) return finishFailure();
-          downloadManualConsentRef.current = true;
-        }
-        const warning = getMobileSourceSafetyNotice(next.id);
-        if (warning) {
-          const allowed = await askDownloadConsent(warning.label, warning.selectionMessage);
-          if (cancelled) return;
-          if (!allowed) return finishFailure();
-        }
-        attempted.add(next.id);
-        publishHandoff(null);
-        setInitialChoicePending(false);
-        setResumeTime(0);
-        setForceStartFromBeginning(true);
-        setSourceId(next.id);
-      })();
-    }, 30_000);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [askDownloadConsent, downloadItemKey, offlineRequested, publishHandoff, router, sourceId, type]);
+    const advanceSource = () => {
+      if (cancelled || advancing) return;
+      const current = getMobileDownloadSourceResolutionIntentV1(downloadItemKey);
+      if (!current || current.autoReturnIssued || selectMobileDownloadCandidateForItemV1(downloadItemKey)) return;
+      advancing = true;
+      clearFailoverTimer();
+      const attempted = downloadAttemptedSourcesRef.current;
+      const next = getNextMobileDownloadSource(type, attempted);
+      if (!next) {
+        finishFailure();
+        return;
+      }
+      attempted.add(next.id);
+      publishHandoff(null);
+      setInitialChoicePending(false);
+      setResumeTime(0);
+      setForceStartFromBeginning(true);
+      setSourceId(next.id);
+    };
+    const scheduleAdvance = (delayMs: number) => {
+      clearFailoverTimer();
+      failoverTimer = setTimeout(advanceSource, delayMs);
+    };
+    const unsubscribe = subscribeMobileDownloadCandidatesV1((snapshots) => {
+      if (cancelled) return;
+      const current = getMobileDownloadSourceResolutionIntentV1(downloadItemKey);
+      if (!current || current.autoReturnIssued || selectMobileDownloadCandidateForItemV1(downloadItemKey, current.method, snapshots, 'orion-library')) {
+        clearFailoverTimer();
+        return;
+      }
+      const state = getMobileDownloadSourceResolutionStateV1(downloadItemKey, sourceId, snapshots);
+      scheduleAdvance(state === 'terminal' ? DOWNLOAD_TERMINAL_GRACE_MS : DOWNLOAD_SOURCE_WATCHDOG_MS);
+    });
+
+    return () => {
+      cancelled = true;
+      clearFailoverTimer();
+      unsubscribe();
+    };
+  }, [downloadItemKey, offlineRequested, publishHandoff, router, sourceId, type]);
+
 
   useEffect(() => {
     if (playbackIdentityRef.current === playbackIdentity) return;
@@ -641,16 +650,6 @@ export default function PlayerScreen() {
           onCancel={() => setNextEpisodePrompt(null)}
         />
       )}
-      <OrionDialog
-        visible={Boolean(downloadConsent)}
-        title={downloadConsent?.heading || 'Try another source?'}
-        message={downloadConsent?.message}
-        onDismiss={() => answerDownloadConsent(false)}
-        actions={[
-          { label: 'Not now', role: 'cancel', onPress: () => answerDownloadConsent(false) },
-          { label: 'Try source', role: 'primary', onPress: () => answerDownloadConsent(true) },
-        ]}
-      />
     </View>
     </MobilePlayerControllerProvider>
   );

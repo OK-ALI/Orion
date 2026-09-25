@@ -63,6 +63,22 @@ class OrionDownloadOriginTrustTest {
     assertEquals(mapOf("Referer" to "$root/", "Accept" to "video/*"), headers)
   }
 
+  @Test fun observedOriginProfileCarriesBrowserIdentityWithoutCrossUrlCredentials() {
+    val headers = OrionDownloadRequestContextBroker.safeObservedOriginHeaders(mapOf(
+      "Authorization" to "Bearer child-secret",
+      "Cookie" to "child-session=secret",
+      "Origin" to "$observedMedia/private/path",
+      "Referer" to "$root/player/title?episode=1",
+      "User-Agent" to "Orion-WebView",
+      "Accept" to "video/*",
+    ))
+    assertEquals("$observedMedia", headers["Origin"])
+    assertEquals("$root/player/title?episode=1", headers["Referer"])
+    assertEquals("Orion-WebView", headers["User-Agent"])
+    assertEquals("video/*", headers["Accept"])
+    assertFalse(headers.keys.any { it.equals("authorization", true) || it.equals("cookie", true) })
+  }
+
   @Test fun boundJobRetainsOnlyExactSessionObservationsAfterPlayerCloses() {
     val exact = "$observedMedia/seen.ts"
     val active = mapOf(exact to "child-only-request-context")
@@ -70,6 +86,8 @@ class OrionDownloadOriginTrustTest {
     assertEquals("child-only-request-context", OrionBoundObservationPolicy.selectExact(active, emptyMap(), exact))
     assertEquals("child-only-request-context", OrionBoundObservationPolicy.selectExact(null, bound, exact))
     assertNull(OrionBoundObservationPolicy.selectExact(null, bound, "$observedMedia/unseen.ts"))
+    assertEquals("child-only-request-context", OrionBoundObservationPolicy.selectOrigin(null, bound, "$observedMedia/unseen.ts"))
+    assertNull(OrionBoundObservationPolicy.selectOrigin(null, bound, "$unknown/unseen.ts"))
     val retainedUrls = OrionBoundObservationPolicy.trustedUrls(null, bound)
     assertTrue(OrionDownloadRequestContextBroker.trustedDescendantDestination(approved, retainedUrls, "$observedMedia/next.ts"))
     assertFalse(OrionDownloadRequestContextBroker.trustedRedirectDestination(approved, retainedUrls, "$observedMedia/next.ts"))

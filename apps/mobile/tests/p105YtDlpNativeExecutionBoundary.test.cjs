@@ -43,11 +43,23 @@ test('HLS readiness descends wrapper playlists and never treats an init map as e
   assert.match(planner, /val mediaFragmentCount: Int/);
   assert.match(planner, /fun firstMediaFragment\(\)/);
   assert.match(broker, /probeFirstHlsMedia/);
-  assert.match(broker, /startsWith\("#EXTM3U"/);
+  assert.match(planner, /isHlsPlaylistBody/);
+  assert.match(broker, /OrionDownloadFragmentPlanner\.isHlsPlaylistBody/);
+  assert.match(hlsGateway, /OrionDownloadFragmentPlanner\.isHlsPlaylistBody/);
   assert.match(broker, /hls-nested-playlist-limit/);
   assert.match(hlsGateway, /resolveNestedMediaPlaylist/);
   assert.match(hlsGateway, /plan\.mediaFragmentCount > 0/);
   assert.match(hlsGateway, /outcome=descend/);
   assert.match(transfer, /plan\.mediaFragmentCount <= 0/);
   assert.doesNotMatch(hlsGateway, /Log\.[a-z]+\([^\n]*(?:currentUrl|startUrl|onlyMedia\.url|rootUrl)/);
+});
+
+
+test('HLS playlist identity tolerates a UTF-8 BOM without turning the header into a media route', () => {
+  assert.match(planner, /it == '\\uFEFF'/);
+  assert.match(planner, /normalizeHlsLine/);
+  assert.match(planner, /trimStart\('\\uFEFF'\)/);
+  assert.match(hlsGateway, /removePrefix\("\\uFEFF"\)/);
+  assert.doesNotMatch(hlsGateway, /fetchText\(bound, currentUrl, onlyMedia\.url\)[\s\S]{0,120}\?: return ResolvedMediaPlaylist/);
+  assert.match(broker, /OrionDownloadFragmentPlanner\.isHlsPlaylistBody/);
 });

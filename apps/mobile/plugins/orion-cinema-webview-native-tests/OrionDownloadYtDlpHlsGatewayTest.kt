@@ -290,4 +290,35 @@ class OrionDownloadYtDlpHlsGatewayTest {
     assertNull(plan.firstMediaFragment())
   }
 
+
+  @Test
+  fun utf8BomPlaylistHeaderIsNormalizedBeforePlanningAndRewrite() {
+    val base = "https://media.example.test/episode/main.m3u8"
+    val body = "\uFEFF#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nsegment.ts\n#EXT-X-ENDLIST"
+
+    assertTrue(OrionDownloadFragmentPlanner.isHlsPlaylistBody(body))
+
+    val plan = OrionDownloadFragmentPlanner.parseHlsMedia(
+      base,
+      body,
+      "video",
+      allowAes128 = true,
+    )
+
+    assertEquals(null, plan.issueCode)
+    assertEquals(1, plan.mediaFragmentCount)
+    assertEquals("https://media.example.test/episode/segment.ts", plan.firstMediaFragment()?.url)
+
+    val routed = mutableListOf<String>()
+    val rewritten = OrionDownloadYtDlpHlsGateway.rewriteMediaPlaylist(base, body) { providerUrl ->
+      routed.add(providerUrl)
+      "http://127.0.0.1:45678/media.bin"
+    }
+
+    assertNotNull(rewritten)
+    assertTrue(requireNotNull(rewritten).startsWith("#EXTM3U\n"))
+    assertEquals(listOf("https://media.example.test/episode/segment.ts"), routed)
+  }
+
+
 }

@@ -405,7 +405,7 @@ internal object OrionDownloadRequestContextBroker {
     if (resolvedKind == "unknown") {
       return PreflightResult.unsupported("unsupported-media-shape", "This source did not expose a supported direct, HLS, or DASH media shape.")
     }
-    if (resolvedKind == "hls" && body?.contains("#EXTM3U", ignoreCase = true) != true) {
+    if (resolvedKind == "hls" && body?.let(OrionDownloadFragmentPlanner::isHlsPlaylistBody) != true) {
       return PreflightResult.unsupported("invalid-hls-manifest", "The captured HLS response is not a valid playlist.")
     }
     if (resolvedKind == "dash" && body?.contains(Regex("<MPD(?:\\s|>)", RegexOption.IGNORE_CASE)) != true) {
@@ -488,19 +488,25 @@ internal object OrionDownloadRequestContextBroker {
 
     val urls = linkedSetOf<String>()
     val plan = OrionDownloadFragmentPlanner.parseDash(rootUrl, manifest, "best")
-    if (plan.issueCode != null || plan.fragments.isEmpty()) {
+    val mediaFragments = plan.fragments.filterNot { it.role.endsWith("-init") }
+    if (plan.issueCode != null || mediaFragments.isEmpty()) {
       return MediaProbe(code = plan.issueCode ?: "media-child-missing", reason = "This source did not expose downloadable media fragments.")
     }
-    val fragment = plan.fragments.first().url
-    if (!descendantAllowed(context, fragment)) {
-      return MediaProbe(code = "descendant-origin-not-approved", reason = "The media request left the approved source boundary.")
+    val samples = linkedSetOf<OrionFragmentRequest>()
+    samples.add(mediaFragments.first())
+    if (mediaFragments.size > 1) samples.add(mediaFragments[mediaFragments.size / 2])
+    for (sample in samples) {
+      if (!descendantAllowed(context, sample.url)) {
+        return MediaProbe(code = "descendant-origin-not-approved", reason = "The media request left the approved source boundary.")
+      }
+      urls.add(sample.url)
+      // Playback requests HLS/DASH fragments with a normal GET. A synthetic
+      // byte range can be rejected by a healthy media CDN, so bound only the
+      // response body while retaining media-shape validation.
+      val media = probeChild(context, sample.url, 4096, false, mediaBytes = true)
+      if (media.code != null) return MediaProbe(code = media.code, reason = media.reason)
     }
-    urls.add(fragment)
-    // Playback requests HLS/DASH fragments with a normal GET. A synthetic
-    // byte range can be rejected by a healthy media CDN, so bound only the
-    // response body while retaining media-shape validation.
-    val media = probeChild(context, fragment, 4096, false, mediaBytes = true)
-    return if (media.code == null) MediaProbe(urls) else MediaProbe(code = media.code, reason = media.reason)
+    return MediaProbe(urls)
   }
 
   private fun probeFirstHlsMedia(
@@ -523,7 +529,7 @@ internal object OrionDownloadRequestContextBroker {
         val playlist = probeChild(context, mediaUrl, MAX_MANIFEST_BYTES, false)
         if (playlist.code != null) return MediaProbe(code = playlist.code, reason = playlist.reason)
         val body = playlist.bytes.toString(Charsets.UTF_8)
-        if (!body.trimStart().startsWith("#EXTM3U", ignoreCase = true)) {
+        if (!OrionDownloadFragmentPlanner.isHlsPlaylistBody(body)) {
           return MediaProbe(code = "hls-child-not-playlist", reason = "The selected HLS variant did not return a media playlist.")
         }
         playlistUrl = mediaUrl
@@ -556,7 +562,20 @@ internal object OrionDownloadRequestContextBroker {
       val media = probeChild(context, fragment, 4096, false, mediaBytes = true)
       if (media.code != null) return MediaProbe(code = media.code, reason = media.reason)
 
-      if (!media.bytes.toString(Charsets.UTF_8).trimStart().startsWith("#EXTM3U", ignoreCase = true)) {
+      if (!isHlsPlaylistProbe(media)) {
+        val mediaFragments = plan.fragments.filterNot { it.role.endsWith("-init") }
+        if (mediaFragments.size > 1) {
+          val representative = mediaFragments[mediaFragments.size / 2]
+          if (!descendantAllowed(context, representative.url)) {
+            return MediaProbe(code = "descendant-origin-not-approved", reason = "The representative media request left the approved source boundary.")
+          }
+          urls.add(representative.url)
+          val representativeProbe = probeChild(context, representative.url, 4096, false, mediaBytes = true)
+          if (representativeProbe.code != null) return MediaProbe(code = representativeProbe.code, reason = representativeProbe.reason)
+          if (isHlsPlaylistProbe(representativeProbe)) {
+            return MediaProbe(code = "hls-media-shape-unstable", reason = "The HLS stream changed back into a playlist while Orion verified its media segments.")
+          }
+        }
         return MediaProbe(urls)
       }
 
@@ -566,7 +585,7 @@ internal object OrionDownloadRequestContextBroker {
       val nested = probeChild(context, fragment, MAX_MANIFEST_BYTES, false)
       if (nested.code != null) return MediaProbe(code = nested.code, reason = nested.reason)
       val nestedBody = nested.bytes.toString(Charsets.UTF_8)
-      if (!nestedBody.trimStart().startsWith("#EXTM3U", ignoreCase = true)) {
+      if (!OrionDownloadFragmentPlanner.isHlsPlaylistBody(nestedBody)) {
         return MediaProbe(code = "hls-child-not-playlist", reason = "The HLS child changed shape while Orion verified it.")
       }
       playlistUrl = fragment
@@ -576,7 +595,12 @@ internal object OrionDownloadRequestContextBroker {
     return MediaProbe(code = "hls-nested-playlist-limit", reason = "The HLS stream nested too many playlist layers.")
   }
 
-  private data class ChildProbe(val bytes: ByteArray = byteArrayOf(), val code: String? = null, val reason: String? = null)
+  private data class ChildProbe(
+    val bytes: ByteArray = byteArrayOf(),
+    val contentType: String = "",
+    val code: String? = null,
+    val reason: String? = null,
+  )
 
   private fun probeChild(context: CapturedContext, rawUrl: String, maxBytes: Int, ranged: Boolean, mediaBytes: Boolean = false): ChildProbe {
     var url = rawUrl
@@ -619,13 +643,17 @@ internal object OrionDownloadRequestContextBroker {
         if (mediaBytes && (type.contains("text/html") || type.contains("application/json") || bytes.toString(Charsets.UTF_8).trimStart().startsWith("<html", true))) {
           return ChildProbe(code = "invalid-media", reason = "The source returned a page instead of media bytes.")
         }
-        return ChildProbe(bytes)
+        return ChildProbe(bytes = bytes, contentType = type)
       } finally {
         connection.disconnect()
       }
     }
     return ChildProbe(code = "media-redirect-limit", reason = "The media request redirected too many times.")
   }
+
+  private fun isHlsPlaylistProbe(probe: ChildProbe): Boolean =
+    probe.contentType.contains("mpegurl", ignoreCase = true)
+      || OrionDownloadFragmentPlanner.isHlsPlaylistBody(probe.bytes.toString(Charsets.UTF_8))
 
   private fun openConnection(context: CapturedContext, rawUrl: String): HttpURLConnection {
     val request = authorizedRequestFor(context, rawUrl)
@@ -874,8 +902,9 @@ internal object OrionDownloadRequestContextBroker {
   }
 
   private fun authorizedRequestFor(context: CapturedContext, normalized: String): AuthorizedRequest {
+    val activeObserved = activeObservedFor(context)
     val observed = OrionBoundObservationPolicy.selectExact(
-      activeObservedFor(context),
+      activeObserved,
       context.boundObservedRequestMaterial,
       normalized,
     )
@@ -887,15 +916,45 @@ internal object OrionDownloadRequestContextBroker {
       )
     }
     val sameOrigin = originOf(normalized) == originOf(context.rawUrl)
-    return if (sameOrigin) {
-      AuthorizedRequest(normalized, context.requestHeaders.toMap(), context.cookieHeader)
-    } else {
-      AuthorizedRequest(
+    if (sameOrigin) {
+      return AuthorizedRequest(normalized, context.requestHeaders.toMap(), context.cookieHeader)
+    }
+
+    // A discovered CDN child may never have been requested at this exact URL,
+    // but playback can already have proven the request profile for that origin.
+    // Reuse only non-credential browser headers from that exact observed origin;
+    // cookies are resolved again for the destination URL and Authorization is
+    // never inherited across URLs.
+    val observedOrigin = OrionBoundObservationPolicy.selectOrigin(
+      activeObserved,
+      context.boundObservedRequestMaterial,
+      normalized,
+    )
+    if (observedOrigin != null) {
+      return AuthorizedRequest(
         normalized,
-        safeCrossOriginHeaders(context.requestHeaders),
+        safeObservedOriginHeaders(observedOrigin.headers),
         captureCookie(normalized, emptyMap()),
       )
     }
+
+    return AuthorizedRequest(
+      normalized,
+      safeCrossOriginHeaders(context.requestHeaders),
+      captureCookie(normalized, emptyMap()),
+    )
+  }
+
+  internal fun safeObservedOriginHeaders(headers: Map<String, String>): Map<String, String> {
+    val safe = linkedMapOf<String, String>()
+    headers.forEach { (name, value) ->
+      when (name.lowercase(Locale.US)) {
+        "accept", "accept-language", "user-agent" -> cleanHeaderValue(value)?.let { safe[name] = it }
+        "origin" -> sanitizeOrigin(value)?.let { safe[name] = it }
+        "referer" -> sanitizeObservedReferer(value)?.let { safe[name] = it }
+      }
+    }
+    return safe
   }
 
   internal fun safeCrossOriginHeaders(headers: Map<String, String>): Map<String, String> {
@@ -909,11 +968,27 @@ internal object OrionDownloadRequestContextBroker {
     return safe
   }
 
-  private fun sanitizeReferer(raw: String): String? = try {
+  private fun cleanHeaderValue(raw: String): String? =
+    raw.takeIf { it.isNotBlank() && !it.contains('\r') && !it.contains('\n') }?.trim()?.take(4096)
+
+  private fun sanitizeOrigin(raw: String): String? = try {
     val url = URL(raw)
     if (url.protocol != "http" && url.protocol != "https") null
-    else "${url.protocol.lowercase(Locale.US)}://${url.authority.lowercase(Locale.US)}/"
+    else buildString {
+      append(url.protocol.lowercase(Locale.US)).append("://").append(url.host.lowercase(Locale.US))
+      if (url.port > 0 && url.port != url.defaultPort) append(':').append(url.port)
+    }
   } catch (_: Throwable) { null }
+
+  private fun sanitizeObservedReferer(raw: String): String? = try {
+    val url = URL(raw)
+    sanitizeOrigin(raw)?.let { origin ->
+      val file = url.file.takeIf { it.isNotBlank() } ?: "/"
+      cleanHeaderValue("$origin$file")
+    }
+  } catch (_: Throwable) { null }
+
+  private fun sanitizeReferer(raw: String): String? = sanitizeOrigin(raw)?.let { "$it/" }
 
   private fun descendantAllowed(context: CapturedContext, rawUrl: String): Boolean =
     trustedDescendantDestination(
@@ -1108,8 +1183,23 @@ internal object OrionBoundObservationPolicy {
   fun <T> selectExact(active: Map<String, T>?, bound: Map<String, T>, url: String): T? =
     active?.get(url) ?: bound[url]
 
+  fun <T> selectOrigin(active: Map<String, T>?, bound: Map<String, T>, url: String): T? {
+    val targetOrigin = origin(url) ?: return null
+    return active?.entries?.lastOrNull { origin(it.key) == targetOrigin }?.value
+      ?: bound.entries.lastOrNull { origin(it.key) == targetOrigin }?.value
+  }
+
   fun <T> trustedUrls(active: Map<String, T>?, bound: Map<String, T>): Set<String> =
     active?.keys ?: bound.keys
+
+  private fun origin(raw: String): String? = try {
+    val url = URL(raw)
+    if (url.protocol != "http" && url.protocol != "https") null
+    else buildString {
+      append(url.protocol.lowercase(Locale.US)).append("://").append(url.host.lowercase(Locale.US))
+      if (url.port > 0 && url.port != url.defaultPort) append(':').append(url.port)
+    }
+  } catch (_: Throwable) { null }
 }
 
 private data class ExpiryResult(val kind: String, val expiresAt: Long?)

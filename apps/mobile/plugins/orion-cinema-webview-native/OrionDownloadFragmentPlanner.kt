@@ -50,6 +50,13 @@ internal data class OrionDashSelection(
 
 /** Pure native manifest planning. Raw network locations never cross React. */
 internal object OrionDownloadFragmentPlanner {
+  internal fun isHlsPlaylistBody(body: String): Boolean =
+    body.trimStart { it.isWhitespace() || it == '\uFEFF' }
+      .startsWith("#EXTM3U", ignoreCase = true)
+
+  private fun normalizeHlsLine(raw: String): String =
+    raw.trim().trimStart('\uFEFF')
+
   private const val MAX_PLANNED_FRAGMENTS = 20_000
 
   fun selectHlsMaster(
@@ -57,7 +64,7 @@ internal object OrionDownloadFragmentPlanner {
     body: String,
     requestedQuality: String,
   ): OrionHlsMasterSelection? {
-    val lines = body.lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
+    val lines = body.lineSequence().map(::normalizeHlsLine).filter(String::isNotEmpty).toList()
     val audioGroups = linkedMapOf<String, MutableList<Map<String, String>>>()
     lines.filter { it.startsWith("#EXT-X-MEDIA:", ignoreCase = true) }.forEach { line ->
       val attributes = parseAttributeList(line.substringAfter(':'))
@@ -104,7 +111,7 @@ internal object OrionDownloadFragmentPlanner {
       body.lineSequence().any { line -> line.startsWith("#EXT-X-MAP:", true) && line.contains("BYTERANGE=", true) }) {
       return OrionHlsMediaPlan(emptyList(), body.contains("#EXT-X-ENDLIST", true), "hls-byterange-not-active")
     }
-    val keyLines = body.lineSequence().map(String::trim).filter { it.startsWith("#EXT-X-KEY:", true) }.toList()
+    val keyLines = body.lineSequence().map(::normalizeHlsLine).filter { it.startsWith("#EXT-X-KEY:", true) }.toList()
     val keyUrls = linkedSetOf<String>()
     for (line in keyLines) {
       val attrs = parseAttributeList(line.substringAfter(':'))
@@ -125,7 +132,7 @@ internal object OrionDownloadFragmentPlanner {
 
     val fragments = mutableListOf<OrionFragmentRequest>()
     val mapUri = body.lineSequence()
-      .map(String::trim)
+      .map(::normalizeHlsLine)
       .firstOrNull { it.startsWith("#EXT-X-MAP:", true) }
       ?.substringAfter(':')
       ?.let(::parseAttributeList)
@@ -135,7 +142,7 @@ internal object OrionDownloadFragmentPlanner {
 
     body.lineSequence().forEach { raw ->
       if (fragments.size >= MAX_PLANNED_FRAGMENTS) return@forEach
-      val line = raw.trim()
+      val line = normalizeHlsLine(raw)
       if (line.isEmpty() || line.startsWith('#')) return@forEach
       resolve(baseUrl, line)?.let { fragments.add(OrionFragmentRequest(it, role)) }
     }

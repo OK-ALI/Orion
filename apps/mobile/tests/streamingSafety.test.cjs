@@ -100,7 +100,8 @@ test("all current Mobile Cinema providers carry an enforced shared blocker manif
   assert.match(mobileSources, /source\.availability !== 'temporarily-unavailable'/);
   assert.match(mobileSources, /!MOBILE_RETIRED_SOURCE_IDS\.has\(source\.id\)/);
   assert.match(mobileSources, /!MOBILE_QUARANTINED_SOURCE_IDS\.has\(candidateId\)/);
-  assert.match(mobileSources, /MOBILE_RETIRED_SOURCE_IDS[\s\S]*?'videasy'[\s\S]*?'vidking'[\s\S]*?'vsembed'/);
+  assert.match(mobileSources, /MOBILE_RETIRED_SOURCE_IDS[\s\S]*?'videasy'[\s\S]*?'vsembed'/);
+  assert.doesNotMatch(mobileSources, /vidking/);
 });
 
 test("AutoEmbed remains registered for migration but is hidden from Mobile while quarantined", () => {
