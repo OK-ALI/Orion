@@ -43,6 +43,14 @@ function reportPreflight(candidate, candidateId, result) {
   return result;
 }
 
+function safeTransportError(error) {
+  const value = String(error?.code || error?.message || "");
+  if (/Media destination is not public/i.test(value)) return "destination_not_public";
+  if (/Media destination is not authorized/i.test(value)) return "destination_not_authorized";
+  const known = value.match(/\b(?:ERR_[A-Z_]+|ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT)\b/i);
+  return known ? known[0].toLowerCase() : "unknown";
+}
+
 async function preflightCandidate(candidateId) {
   const candidate = resolveCandidate(candidateId);
   if (!candidate) {
@@ -98,9 +106,10 @@ async function preflightCandidate(candidateId) {
   } catch (error) {
     const code = /timed?\s*out/i.test(error?.message || "") ? "timeout"
       : /redirect/i.test(error?.message || "") ? "redirect_denied" : "network";
-    const diagnostic = error?.downloadDiagnostic || safeDiagnostic(candidate, {
+    const diagnostic = { ...(error?.downloadDiagnostic || safeDiagnostic(candidate, {
       requestDiagnostic: error?.requestDiagnostic,
-    }, candidate.kind === "direct" ? "direct_video" : "root_manifest");
+    }, candidate.kind === "direct" ? "direct_video" : "root_manifest")),
+      transportError: safeTransportError(error) };
     return reportPreflight(candidate, candidateId, {
       ok: false, code, verified: false, diagnostic,
       error: code === "redirect_denied"
@@ -110,4 +119,4 @@ async function preflightCandidate(candidateId) {
   }
 }
 
-module.exports = { preflightCandidate };
+module.exports = { preflightCandidate, safeTransportError };

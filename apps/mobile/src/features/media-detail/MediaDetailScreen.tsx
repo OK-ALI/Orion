@@ -28,7 +28,7 @@ import { MovieCollectionTab } from './MovieCollectionTab';
 import { isVerifiedPlaybackEvidence } from '../library/playbackLibrary';
 import { createMobileDownloadTargetV1, type MobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import { cancelMobileDownloadSourceResolutionV1, requestMobileDownloadSourceResolutionV1, type MobileDownloadTransferMethodV1 } from '../downloads/downloadCandidateCapture';
-import { normalizeTitleCast, extractTitleKeyCrew } from './titleCredits';
+import { normalizeTitleCast, extractTitleKeyCrew, type TitleCastPerson, type TitleCrewPerson } from './titleCredits';
 import { CreditPersonCard, KeyCrewList, TitleCreditsPreview } from './CreditsPresentation';
 export default function MediaDetailScreen() {
   const { id, type } = useLocalSearchParams<{ id: string; type: 'movie' | 'tv' }>();
@@ -103,7 +103,16 @@ export default function MediaDetailScreen() {
   const castColumns = availableCastWidth >= 900 ? 5 : availableCastWidth >= 620 ? 4 : availableCastWidth >= 430 ? 3 : 2;
   const castCardWidth = Math.max(106, (availableCastWidth - spacing[4] * 2 - spacing[2] * (castColumns - 1)) / castColumns);
   const castGridBudget = useMemo(() => getGridRenderBudget(castColumns, resolvedProfile), [castColumns, resolvedProfile]);
-  const openPerson = useCallback((personId: number) => router.push(`/person/${personId}` as any), [router]);
+  const openPerson = useCallback((person: TitleCastPerson | TitleCrewPerson) => {
+    const creditKind = 'job' in person ? 'crew' : 'cast';
+    const creditRole = creditKind === 'crew' ? (person as TitleCrewPerson).job : person.character;
+    router.push({ pathname: '/person/[id]', params: {
+      id: String(person.id),
+      originTitle: String(data?.title || data?.name || local.record?.title || '').slice(0, 120),
+      originRole: String(creditRole || '').slice(0, 100),
+      originKind: creditKind,
+    } } as any);
+  }, [router, data?.title, data?.name, local.record?.title]);
   const recommendationRenderBudget = useMemo(() => getRailRenderBudget(width, 140 + spacing[4] + spacing[3], resolvedProfile), [resolvedProfile, width]);
   const collectionRef = useMemo(() => {
     if (!isMovie || !data?.belongs_to_collection?.id) return null;

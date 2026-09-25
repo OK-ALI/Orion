@@ -89,7 +89,8 @@ async function probeFirstMedia(candidate, response, fetcher) {
     try {
       media = await fetcher(child.url, candidate, {
         referer: parent,
-        range: child.kind === "media" ? `bytes=0-${MEDIA_PROBE_BYTES - 1}` : undefined,
+        // A bounded full GET matches HLS/DASH playback. Some media CDNs close
+        // ranged segment requests without returning an HTTP response.
         maxBytes: child.kind === "media" ? MEDIA_PROBE_BYTES : MANIFEST_PROBE_BYTES,
       });
     } catch (error) {

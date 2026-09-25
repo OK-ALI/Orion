@@ -120,6 +120,20 @@ function downloadFailurePresentation(job: MobileDownloadJobV1): DownloadFailureP
     };
   }
 
+  if (code === 'yt-dlp-process-failed' || code === 'yt-dlp-runtime-failed') {
+    return {
+      detail: 'Orion could not finish preparing this stream for offline viewing. Reopen playback and retry this source.',
+      retryLabel: 'Retry this source',
+    };
+  }
+
+  if (code === 'yt-dlp-hls-gateway-prepare-failed' || code === 'hls-key-invalid') {
+    return {
+      detail: 'Orion could not prepare the selected stream. Reopen playback and retry this source.',
+      retryLabel: 'Retry this source',
+    };
+  }
+
   if (
     code === 'storage-destination-unavailable' ||
     code === 'finalized-artifact-document-unavailable' ||
@@ -473,7 +487,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
         const speed = formatBytes(progress.bytesPerSecond);
         const eta = formatDurationSeconds(progress.etaSeconds);
         const elapsed = downloadElapsedTextV1(job, nowMs);
-        const fragmentText = progress.completedFragments !== null && progress.totalFragments !== null
+        const fragmentText = !warning && progress.completedFragments !== null && progress.totalFragments !== null
           ? `${progress.completedFragments}/${progress.totalFragments} fragments`
           : null;
         const metrics = finalizing

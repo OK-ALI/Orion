@@ -34,7 +34,19 @@ test("a reachable HLS root is not ready when its first segment rejects the reque
   assert.equal(result.ok, false);
   assert.equal(result.code, "http_403");
   assert.equal(requested[0].url, "https://cdn.example/first.ts");
-  assert.equal(requested[0].range, "bytes=0-4095");
+  assert.equal(requested[0].range, undefined);
+  assert.equal(requested[0].maxBytes, 4096);
+});
+
+test("a segment that rejects Range remains verifiable through bounded playback-shaped GET", async () => {
+  const candidate = { kind: "hls", url: "https://cdn.example/root.m3u8" };
+  const root = response(200, "#EXTM3U\n#EXTINF:6,\nfirst.ts", "application/vnd.apple.mpegurl");
+  const result = await probeFirstMedia(candidate, root, async (_url, _candidate, options) => {
+    if (options.range) return response(403, "Range denied", "text/plain");
+    assert.equal(options.maxBytes, 4096);
+    return response(200, Buffer.alloc(188, 0x47));
+  });
+  assert.equal(result.ok, true);
 });
 
 test("a master HLS playlist verifies the media child, not merely its variant playlist", async () => {

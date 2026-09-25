@@ -1,6 +1,7 @@
 package com.okali.orion.playback
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -200,7 +201,7 @@ class OrionDownloadYtDlpHlsGatewayTest {
           "https://provider.example.test/media.m3u8",
           """
           #EXTM3U
-          #EXT-X-KEY:METHOD=AES-128,URI="key.bin"
+          #EXT-X-KEY:METHOD=SAMPLE-AES,URI="key.bin"
           #EXTINF:4,
           one.ts
           #EXT-X-ENDLIST
@@ -225,4 +226,68 @@ class OrionDownloadYtDlpHlsGatewayTest {
         },
     )
   }
+
+  @Test
+  fun aes128IdentityKeyUsesAnOpaqueKeyRouteSeparateFromMedia() {
+    val base = "https://media.example.test/episode/main.m3u8"
+    val body = """
+      #EXTM3U
+      #EXT-X-KEY:METHOD=AES-128,URI="key.bin",IV=0x00000000000000000000000000000001
+      #EXTINF:6,
+      segment.ts
+      #EXT-X-ENDLIST
+    """.trimIndent()
+    val plan = OrionDownloadFragmentPlanner.parseHlsMedia(base, body, "video", allowAes128 = true)
+    assertEquals(null, plan.issueCode)
+    assertEquals(listOf("https://media.example.test/episode/key.bin"), plan.keyUrls)
+    assertEquals(1, plan.fragments.size)
+    assertEquals(1, plan.mediaFragmentCount)
+    assertEquals("https://media.example.test/episode/segment.ts", plan.firstMediaFragment()?.url)
+    assertEquals("hls-encryption-not-active",
+      OrionDownloadFragmentPlanner.parseHlsMedia(base, body, "video").issueCode)
+    val media = mutableListOf<String>()
+    val keys = mutableListOf<String>()
+    val rewritten = OrionDownloadYtDlpHlsGateway.rewriteMediaPlaylist(
+      base, body,
+      { media.add(it); "http://127.0.0.1:45678/media.bin" },
+      { keys.add(it); "http://127.0.0.1:45678/key.bin" },
+    )
+    assertNotNull(rewritten)
+    assertTrue(requireNotNull(rewritten).contains("URI=\"http://127.0.0.1:45678/key.bin\""))
+    assertTrue(rewritten.contains("http://127.0.0.1:45678/media.bin"))
+    assertFalse(rewritten.contains("media.example.test"))
+    assertEquals(listOf("https://media.example.test/episode/key.bin"), keys)
+    assertEquals(listOf("https://media.example.test/episode/segment.ts"), media)
+  }
+
+  @Test
+  fun nonIdentityKeysAndMissingKeyUrisRemainUnsupported() {
+    val base = "https://media.example.test/main.m3u8"
+    val nonIdentity = "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,KEYFORMAT=\"com.example.drm\",URI=\"key\"\n#EXTINF:6,\nsegment.ts\n#EXT-X-ENDLIST"
+    val missing = "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128\n#EXTINF:6,\nsegment.ts\n#EXT-X-ENDLIST"
+    assertEquals("hls-encryption-not-active",
+      OrionDownloadFragmentPlanner.parseHlsMedia(base, nonIdentity, "video", allowAes128 = true).issueCode)
+    assertEquals("hls-key-invalid",
+      OrionDownloadFragmentPlanner.parseHlsMedia(base, missing, "video", allowAes128 = true).issueCode)
+    assertNull(OrionDownloadYtDlpHlsGateway.rewriteMediaPlaylist(base, nonIdentity) { "http://127.0.0.1:1/x" })
+    assertNull(OrionDownloadYtDlpHlsGateway.rewriteMediaPlaylist(base, missing) { "http://127.0.0.1:1/x" })
+  }
+  @Test
+  fun initializationMapAloneDoesNotCountAsPlayableMedia() {
+    val plan = OrionDownloadFragmentPlanner.parseHlsMedia(
+      "https://media.example.test/episode/main.m3u8",
+      """
+      #EXTM3U
+      #EXT-X-MAP:URI="init.mp4"
+      #EXT-X-ENDLIST
+      """.trimIndent(),
+      "video",
+      allowAes128 = true,
+    )
+    assertEquals(null, plan.issueCode)
+    assertEquals(1, plan.fragments.size)
+    assertEquals(0, plan.mediaFragmentCount)
+    assertNull(plan.firstMediaFragment())
+  }
+
 }

@@ -12,6 +12,7 @@ import { useResponsiveLayout } from '../../src/services/responsive';
 import { getRailRenderBudget } from '../../src/services/listPerformance';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePerformanceProfile } from '../../src/context/PerformanceContext';
+import { personFilmography } from '../../src/features/media-detail/personProfile';
 
 const BIO_PREVIEW_LINES = 6;
 
@@ -20,7 +21,9 @@ if (Platform.OS === 'android') {
 }
 
 export default function PersonDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, originTitle, originRole, originKind } = useLocalSearchParams<{
+    id: string; originTitle?: string; originRole?: string; originKind?: string;
+  }>();
   const router = useRouter();
   const { theme, preferences } = useOrionTheme();
   const { width, isLandscape, isTablet } = useResponsiveLayout();
@@ -35,21 +38,25 @@ export default function PersonDetailScreen() {
   const scrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    let active = true;
+    setData(null);
+    setLoading(true);
     setBioExpanded(false);
     setBioCanExpand(false);
 
     async function loadDetails() {
       try {
         const result = await fetchPersonDetails(id);
-        setData(result);
+        if (active) setData(result);
       } catch (error) {
         console.error('Failed to load person details', error);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }
 
     loadDetails();
+    return () => { active = false; };
   }, [id]);
 
   const filmographyRenderBudget = useMemo(
@@ -57,19 +64,7 @@ export default function PersonDetailScreen() {
     [resolvedProfile, width],
   );
 
-  // Preserve first occurrence semantics while avoiding repeated scans/allocations.
-  const uniqueCredits = useMemo(() => {
-    const credits = data?.combined_credits?.cast || [];
-    const seenIds = new Set<string>();
-    const unique: any[] = [];
-    for (const credit of credits) {
-      const key = String(credit.id);
-      if (seenIds.has(key)) continue;
-      seenIds.add(key);
-      unique.push(credit);
-    }
-    return unique.sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0));
-  }, [data?.combined_credits?.cast]);
+  const uniqueCredits = useMemo(() => personFilmography(data), [data]);
 
   const measureBiography = useCallback((lineCount: number) => {
     const canExpand = lineCount > BIO_PREVIEW_LINES;
@@ -100,6 +95,12 @@ export default function PersonDetailScreen() {
   }
 
   const profileImage = imgUrl(data.profile_path, 'h632');
+  const fromTitle = String(originTitle || '').trim().slice(0, 120);
+  const fromRole = String(originRole || '').trim().slice(0, 100);
+  const originCredit = fromTitle
+    ? originKind === 'crew' ? `${fromRole || 'Crew'} · ${fromTitle}`
+      : fromRole ? `As ${fromRole} · ${fromTitle}` : `Appears in ${fromTitle}`
+    : '';
 
   const headerTranslateY = scrollY.interpolate({
     inputRange: [-100, 0, 300],
@@ -125,8 +126,9 @@ export default function PersonDetailScreen() {
 
       {/* Floating Back Button */}
       <Pressable style={[styles.backButton, { top: insets.top + 10, left: insets.left + 16 }]} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back">
-        <BlurView intensity={80} tint="dark" style={styles.backButtonInner}>
-          <Ionicons name="chevron-back" size={24} color="#fff" />
+        <BlurView intensity={80} tint={theme.dark ? 'dark' : 'light'}
+          style={[styles.backButtonInner, { backgroundColor: theme.dark ? theme.mediaScrim : theme.surface }]}>
+          <Ionicons name="chevron-back" size={24} color={theme.text} />
         </BlurView>
       </Pressable>
 
@@ -140,13 +142,15 @@ export default function PersonDetailScreen() {
       >
         {/* Parallax Header */}
         <View style={[styles.headerContainer, isLandscape && styles.headerContainerLandscape, isTablet && styles.headerContainerTablet]}>
-          <Animated.Image
+          {profileImage ? <Animated.Image
             source={{ uri: profileImage || undefined }}
             style={[
               styles.backdrop,
               { transform: [{ translateY: headerTranslateY }, { scale: headerScale }] }
             ]}
-          />
+          /> : <View style={[styles.backdrop, styles.portraitFallback, { backgroundColor: theme.surface }]}>
+            <Ionicons name="person-outline" size={88} color={theme.textMuted} />
+          </View>}
           <LinearGradient
             colors={['transparent', theme.background]}
             locations={[0.4, 1]}
@@ -176,7 +180,8 @@ export default function PersonDetailScreen() {
               )}
             </View>
 
-            <Text style={[styles.knownForText, { color: theme.accent }]}>Known for {data.known_for_department}</Text>
+            {!!data.known_for_department && <Text style={[styles.knownForText, { color: theme.accent }]}>Known for {data.known_for_department}</Text>}
+            {!!originCredit && <Text style={[styles.metaText, { color: theme.textSecondary }]}>{originCredit}</Text>}
           </BlurView>
 
           {data.biography ? (
@@ -220,12 +225,17 @@ export default function PersonDetailScreen() {
                 </Pressable>
               ) : null}
             </View>
-          ) : null}
+          ) : (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Biography</Text>
+              <Text style={[styles.bioText, { color: theme.textSecondary }]}>A biography has not been added for this person.</Text>
+            </View>
+          )}
 
           {/* Filmography */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Filmography</Text>
-            <FlatList
+            {uniqueCredits.length ? <FlatList
               data={uniqueCredits}
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -243,7 +253,9 @@ export default function PersonDetailScreen() {
                   }} 
                 />
               )}
-            />
+            /> : <Text style={[styles.bioText, { color: theme.textSecondary }]}>
+              No filmography is listed for this person yet.
+            </Text>}
           </View>
         </View>
       </Animated.ScrollView>
@@ -286,6 +298,7 @@ const styles = StyleSheet.create({
     height: '100%',
     resizeMode: 'cover',
   },
+  portraitFallback: { alignItems: 'center', justifyContent: 'center' },
   contentContainer: {
     paddingHorizontal: spacing[4],
     marginTop: -100,

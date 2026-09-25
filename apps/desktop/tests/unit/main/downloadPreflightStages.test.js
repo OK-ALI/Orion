@@ -77,6 +77,21 @@ test("redirect failure names the first failing child without exposing its signed
   assert.doesNotMatch(JSON.stringify(result), /secret=private/);
 });
 
+test("network failures retain only a sanitized transport reason", async () => {
+  const candidate = captured("https://root.example/master.m3u8");
+  const preflight = loadPreflight(async () => {
+    const error = new Error("net::ERR_CONNECTION_CLOSED at https://root.example/master.m3u8?token=private");
+    throw error;
+  });
+  const originalInfo = console.info;
+  console.info = () => {};
+  let result;
+  try { result = await preflight(candidate.id); } finally { console.info = originalInfo; }
+  assert.equal(result.code, "network");
+  assert.equal(result.diagnostic.transportError, "err_connection_closed");
+  assert.doesNotMatch(JSON.stringify(result), /token=private/);
+});
+
 test("preflight chooses the exact observed media playlist and segment from the bound session", async () => {
   const candidate = captured("https://root.example/master.m3u8");
   const observedPlaylist = "https://cdn.example/active.m3u8";

@@ -36,7 +36,7 @@ import { useDiscoverSearchResults } from './useDiscoverSearchResults';
 import { useDiscoverRegionResults } from './useDiscoverRegionResults';
 import { CinemaPortals } from './CinemaPortals';
 import { DiscoverFilterModal } from './DiscoverFilterModal';
-import { PROVIDER_HUBS, WORLD_HUBS, hubQueryParams, inferWatchRegion, type ProviderCatalog, type SelectedHub } from './discoveryHubs';
+import { PROVIDER_HUBS, WORLD_HUBS, hubQueryParams, hubTitleSearch, hubTitleSearchMatches, inferWatchRegion, type ProviderCatalog, type SelectedHub } from './discoveryHubs';
 
 export default function DiscoverScreen() {
   const { theme, preferences } = useOrionTheme();
@@ -201,6 +201,11 @@ export default function DiscoverScreen() {
       const responses = await Promise.all(requestTypes.map((mediaType) => {
         if (activeFeed === 'trending') return tmdbFetch<TmdbPaginatedResponse>(`/trending/${mediaType}/${feedWindow === 'day' ? 'day' : 'week'}?page=${pageNum}`);
         if (activeFeed === 'top-rated') return tmdbFetch<TmdbPaginatedResponse>(`/${mediaType}/top_rated?page=${pageNum}`);
+        const titleSearch = hubTitleSearch(selectedHub, hubFilter, mediaType as 'movie' | 'tv');
+        if (titleSearch) {
+          const searchYear = year ? mediaType === 'movie' ? `&year=${year}` : `&first_air_date_year=${year}` : '';
+          return tmdbFetch<TmdbPaginatedResponse>(`/search/${mediaType}?query=${encodeURIComponent(titleSearch)}${searchYear}&page=${pageNum}`);
+        }
         const yearParam = activeFeed === 'browse' && year ? (mediaType === 'movie' ? `&primary_release_year=${year}` : `&first_air_date_year=${year}`) : '';
         const ratingParam = minRating !== '0' ? `&vote_average.gte=${minRating}` : '';
         const genreParam = !selectedHub && selectedGenre.id && (selectedGenre.id as any) !== 'all' ? `&with_genres=${selectedGenre.id}` : '';
@@ -219,13 +224,23 @@ export default function DiscoverScreen() {
 
       const seen = new Set();
       const taggedResponses = responses.map((data, index) =>
-        (data.results || []).map((item) => ({ ...item, media_type: requestTypes[index] })),
+        (data.results || [])
+          .filter((item) => !hubTitleSearch(selectedHub, hubFilter, requestTypes[index] as 'movie' | 'tv') ||
+            (hubTitleSearchMatches(selectedHub, hubFilter, requestTypes[index] as 'movie' | 'tv', item) && (item.vote_count || 0) >= 20 && (item.vote_average || 0) >= Number(minRating)))
+          .map((item) => ({ ...item, media_type: requestTypes[index] })),
       );
       const sourceItems = activeFeed === 'top-rated' && taggedResponses.length > 1
         ? Array.from({ length: Math.max(...taggedResponses.map((items) => items.length)) }, (_, index) =>
             taggedResponses.flatMap((items) => items[index] ? [items[index]] : []),
           ).flat()
-        : taggedResponses.flat().sort((a, b) => activeFeed === 'top-rated' ? 0 : (b.popularity || 0) - (a.popularity || 0));
+        : taggedResponses.flat().sort((a, b) => {
+            if (activeFeed === 'top-rated') return 0;
+            if (sortBy === 'vote_average.desc') return (b.vote_average || 0) - (a.vote_average || 0);
+            if (sortBy === 'primary_release_date.desc') {
+              return String(b.release_date || b.first_air_date || '').localeCompare(String(a.release_date || a.first_air_date || ''));
+            }
+            return (b.popularity || 0) - (a.popularity || 0);
+          });
       const merged = sourceItems
         .filter((item) => item.poster_path)
         .filter((item) => {
@@ -251,7 +266,15 @@ export default function DiscoverScreen() {
             existingKeys.add(key);
             return true;
           });
-          return [...prev, ...additions] as any;
+          const combined = [...prev, ...additions] as any[];
+          if (hubTitleSearch(selectedHub, hubFilter, 'movie') || hubTitleSearch(selectedHub, hubFilter, 'tv')) {
+            combined.sort((a, b) => sortBy === 'vote_average.desc'
+              ? (b.vote_average || 0) - (a.vote_average || 0)
+              : sortBy === 'primary_release_date.desc'
+                ? String(b.release_date || b.first_air_date || '').localeCompare(String(a.release_date || a.first_air_date || ''))
+                : (b.popularity || 0) - (a.popularity || 0));
+          }
+          return combined as any;
         });
       }
     } catch (err) {

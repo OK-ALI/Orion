@@ -12,7 +12,8 @@ test("persisted preflight metadata excludes signed URLs and credential values", 
     const result = { ok: false, code: "http_403", diagnostic: {
       stage: "first_media", host: "cdn.example", statusCode: 403, bytesRead: 0,
       requestHeaderNames: ["Authorization", "Cookie"], authorizationPresent: true,
-      cookiePresent: true, signedUrl: candidate.url, credential: "private-value",
+      cookiePresent: true, transportError: "ERR_CONNECTION_CLOSED at https://cdn.example/secret?token=private",
+      signedUrl: candidate.url, credential: "private-value",
     } };
     const target = appendPreflightDiagnostic(directory, candidate, "candidate-1", result);
     const content = fs.readFileSync(target, "utf8");
@@ -20,6 +21,7 @@ test("persisted preflight metadata excludes signed URLs and credential values", 
     assert.equal(JSON.parse(content).stage, "first_media");
     assert.doesNotMatch(content, /secret\/path|token=|private-value|signedUrl|credential/);
     assert.equal(safeRecord(candidate, "candidate-1", result).authorizationPresent, true);
+    assert.equal(JSON.parse(content).transportError, "");
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

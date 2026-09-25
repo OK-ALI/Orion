@@ -12,8 +12,12 @@ export const WORLD_HUBS = [
   { id: 'marvel', name: 'Marvel', colors: ['#25090f', '#d12632'], filters: [
     { id: 'all', name: 'All', movie: 'with_companies=420|7505', tv: 'with_companies=38679|7505' },
     { id: 'mcu', name: 'MCU', movie: 'with_keywords=180547', tv: 'with_keywords=180547' },
-    { id: 'xmen', name: 'X-Men', movie: 'with_keywords=377742', tv: 'with_keywords=377742' },
-    { id: 'spider', name: 'Spider-Man / Sony', movie: 'with_keywords=373794', tv: 'with_keywords=373794' },
+    // TMDB has no X-Men franchise keyword. Its mutant keyword plus verified
+    // Marvel production companies includes the core films and series.
+    { id: 'xmen', name: 'X-Men', movie: 'with_companies=160251|19551|7505|420&with_keywords=1852', tv: 'with_companies=160251|19551|7505|38679|420&with_keywords=1852' },
+    // The old "spider man" keyword is attached to unrelated titles. Sony's
+    // Columbia comic-book superhero output includes its Spider-Man films.
+    { id: 'spider', name: 'Spider-Man / Sony', movie: 'with_companies=5&with_keywords=9715,9717', tv: '' },
     { id: 'legacy', name: 'Legacy', movie: 'with_companies=19551|7505', tv: 'with_companies=38679' },
     { id: 'series', name: 'Series', movie: 'with_companies=420', tv: 'with_companies=38679' },
     { id: 'animation', name: 'Animation', movie: 'with_companies=7505&with_genres=16', tv: 'with_companies=7505&with_genres=16' },
@@ -21,8 +25,8 @@ export const WORLD_HUBS = [
   { id: 'dc', name: 'DC', colors: ['#071a35', '#1877d2'], filters: [
     { id: 'all', name: 'All', movie: 'with_companies=429|9993', tv: 'with_companies=9993' },
     { id: 'dcu', name: 'DCU / DCEU', movie: 'with_keywords=229266', tv: 'with_keywords=229266' },
-    { id: 'batman', name: 'Batman', movie: 'with_keywords=349974', tv: 'with_keywords=349974' },
-    { id: 'superman', name: 'Superman', movie: 'with_keywords=377234', tv: 'with_keywords=377234' },
+    { id: 'batman', name: 'Batman', movie: '', tv: '' },
+    { id: 'superman', name: 'Superman', movie: '', tv: '' },
     { id: 'arrowverse', name: 'Arrowverse', movie: 'with_keywords=375211', tv: 'with_keywords=375211' },
     { id: 'series', name: 'Series', movie: 'with_companies=429', tv: 'with_companies=9993' },
     { id: 'animation', name: 'Animation', movie: 'with_companies=429&with_genres=16', tv: 'with_companies=9993&with_genres=16' },
@@ -46,6 +50,35 @@ export const WORLD_HUBS = [
 
 export type SelectedHub = { kind: 'provider' | 'world'; id: string } | null;
 export type ProviderCatalog = { region: string; movie: Array<{ provider_id: number; provider_name: string }>; tv: Array<{ provider_id: number; provider_name: string }> };
+
+// TMDB does not tag the principal Batman/Superman films with the matching
+// character keywords. These title facets retain Discover's result/grid/page
+// lifecycle, but use TMDB's title-search endpoint instead of empty keywords.
+export function hubTitleSearch(hub: SelectedHub, facetId: string, mediaType: 'movie' | 'tv'): string | null {
+  if (hub?.kind !== 'world') return null;
+  if (hub.id === 'marvel' && facetId === 'spider' && mediaType === 'tv') return 'Spider-Man';
+  if (hub.id === 'dc' && facetId === 'batman') return 'Batman';
+  if (hub.id === 'dc' && facetId === 'superman') return 'Superman';
+  return null;
+}
+
+function normalizeFacetTitle(value: unknown): string {
+  return String(value || '').toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+export function hubTitleSearchMatches(
+  hub: SelectedHub,
+  facetId: string,
+  mediaType: 'movie' | 'tv',
+  item: { title?: string; original_title?: string; name?: string; original_name?: string },
+): boolean {
+  const query = hubTitleSearch(hub, facetId, mediaType);
+  if (!query) return true;
+  const needle = normalizeFacetTitle(query);
+  if (!needle) return false;
+  return [item.title, item.original_title, item.name, item.original_name]
+    .some((value) => normalizeFacetTitle(value).includes(needle));
+}
 
 export function inferWatchRegion(): string {
   try {

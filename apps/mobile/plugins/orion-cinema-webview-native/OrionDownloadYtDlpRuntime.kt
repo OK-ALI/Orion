@@ -1,6 +1,7 @@
 package com.okali.orion.playback
 
 import android.content.Context
+import android.util.Log
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -291,6 +292,7 @@ internal object OrionDownloadYtDlpRuntime {
         }
       }
       if (response.exitCode != 0) {
+        Log.i("OrionDownloadStage", "stage=yt-dlp exit=${response.exitCode}")
         OrionYtDlpOutcome.Failed("yt-dlp-process-failed", true)
       } else {
         val output = OrionFinalizedArtifactOwner.stagingOutput(workDir)
@@ -306,7 +308,8 @@ internal object OrionDownloadYtDlpRuntime {
     } catch (_: InterruptedException) {
       Thread.currentThread().interrupt()
       OrionYtDlpOutcome.Failed("yt-dlp-process-interrupted", true)
-    } catch (_: Throwable) {
+    } catch (error: Throwable) {
+      Log.i("OrionDownloadStage", "stage=yt-dlp exception=${error.javaClass.simpleName.take(48)}")
       OrionYtDlpOutcome.Failed("yt-dlp-runtime-failed", true)
     } finally {
       activeJobs.remove(cleanJobId)

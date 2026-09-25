@@ -36,6 +36,7 @@ internal object OrionDownloadRequestContextBroker {
   private const val READ_TIMEOUT_MS = 6_000
   private const val MAX_MANIFEST_BYTES = 256 * 1024
   private const val MAX_PREFLIGHT_DESCENDANTS = 512
+  private const val MAX_HLS_PLAYLIST_DESCENT = 4
   private const val MAX_JOB_AUTHORIZED_URLS = 20_000
   private const val MAX_CONTEXTS = 24
   private const val MAX_OPAQUE_PROBES_PER_SESSION = 36
@@ -483,42 +484,101 @@ internal object OrionDownloadRequestContextBroker {
       return if (directConnection.inputStream.use { it.read() } >= 0) MediaProbe()
       else MediaProbe(code = "empty-media", reason = "The source returned no media bytes.")
     }
+    if (kind == "hls") return probeFirstHlsMedia(context, rootUrl, manifest)
+
     val urls = linkedSetOf<String>()
-    val fragment = if (kind == "hls") {
-      val master = OrionDownloadFragmentPlanner.selectHlsMaster(rootUrl, manifest, "best")
-      val mediaUrl = master?.videoPlaylistUrl ?: rootUrl
-      val mediaBody = if (master == null) manifest else {
-        if (!descendantAllowed(context, mediaUrl)) {
-          return MediaProbe(code = "descendant-origin-not-approved", reason = "The media request left the approved source boundary.")
-        }
-        urls.add(mediaUrl)
-        val playlist = probeChild(context, mediaUrl, 256 * 1024, false)
-        if (playlist.code != null) return MediaProbe(code = playlist.code, reason = playlist.reason)
-        playlist.bytes.toString(Charsets.UTF_8)
-      }
-      val plan = OrionDownloadFragmentPlanner.parseHlsMedia(mediaUrl, mediaBody, "video")
-      if (plan.issueCode != null || plan.fragments.isEmpty()) {
-        return MediaProbe(code = plan.issueCode ?: "media-child-missing", reason = "This source did not expose downloadable media fragments.")
-      }
-      plan.fragments.first().url
-    } else {
-      val plan = OrionDownloadFragmentPlanner.parseDash(rootUrl, manifest, "best")
-      if (plan.issueCode != null || plan.fragments.isEmpty()) {
-        return MediaProbe(code = plan.issueCode ?: "media-child-missing", reason = "This source did not expose downloadable media fragments.")
-      }
-      plan.fragments.first().url
+    val plan = OrionDownloadFragmentPlanner.parseDash(rootUrl, manifest, "best")
+    if (plan.issueCode != null || plan.fragments.isEmpty()) {
+      return MediaProbe(code = plan.issueCode ?: "media-child-missing", reason = "This source did not expose downloadable media fragments.")
     }
+    val fragment = plan.fragments.first().url
     if (!descendantAllowed(context, fragment)) {
       return MediaProbe(code = "descendant-origin-not-approved", reason = "The media request left the approved source boundary.")
     }
     urls.add(fragment)
-    val media = probeChild(context, fragment, 4096, true)
+    // Playback requests HLS/DASH fragments with a normal GET. A synthetic
+    // byte range can be rejected by a healthy media CDN, so bound only the
+    // response body while retaining media-shape validation.
+    val media = probeChild(context, fragment, 4096, false, mediaBytes = true)
     return if (media.code == null) MediaProbe(urls) else MediaProbe(code = media.code, reason = media.reason)
+  }
+
+  private fun probeFirstHlsMedia(
+    context: CapturedContext,
+    rootUrl: String,
+    manifest: String,
+  ): MediaProbe {
+    val urls = linkedSetOf<String>()
+    var playlistUrl = rootUrl
+    var playlistBody = manifest
+
+    repeat(MAX_HLS_PLAYLIST_DESCENT) { depth ->
+      val master = OrionDownloadFragmentPlanner.selectHlsMaster(playlistUrl, playlistBody, "best")
+      if (master != null) {
+        val mediaUrl = master.videoPlaylistUrl
+        if (!descendantAllowed(context, mediaUrl)) {
+          return MediaProbe(code = "descendant-origin-not-approved", reason = "The media request left the approved source boundary.")
+        }
+        urls.add(mediaUrl)
+        val playlist = probeChild(context, mediaUrl, MAX_MANIFEST_BYTES, false)
+        if (playlist.code != null) return MediaProbe(code = playlist.code, reason = playlist.reason)
+        val body = playlist.bytes.toString(Charsets.UTF_8)
+        if (!body.trimStart().startsWith("#EXTM3U", ignoreCase = true)) {
+          return MediaProbe(code = "hls-child-not-playlist", reason = "The selected HLS variant did not return a media playlist.")
+        }
+        playlistUrl = mediaUrl
+        playlistBody = body
+        return@repeat
+      }
+
+      val plan = OrionDownloadFragmentPlanner.parseHlsMedia(playlistUrl, playlistBody, "video", allowAes128 = true)
+      if (plan.issueCode != null || plan.mediaFragmentCount <= 0) {
+        return MediaProbe(code = plan.issueCode ?: "media-child-missing", reason = "This source did not expose downloadable media fragments.")
+      }
+      for (keyUrl in plan.keyUrls) {
+        if (!descendantAllowed(context, keyUrl)) {
+          return MediaProbe(code = "descendant-origin-not-approved", reason = "The media key left the approved source boundary.")
+        }
+        val key = probeChild(context, keyUrl, 17, false)
+        if (key.code != null) return MediaProbe(code = key.code, reason = key.reason)
+        if (key.bytes.size != 16) {
+          return MediaProbe(code = "hls-key-invalid", reason = "The source did not return a valid media key.")
+        }
+        urls.add(keyUrl)
+      }
+
+      val fragment = plan.firstMediaFragment()?.url
+        ?: return MediaProbe(code = "media-child-missing", reason = "This source did not expose downloadable media fragments.")
+      if (!descendantAllowed(context, fragment)) {
+        return MediaProbe(code = "descendant-origin-not-approved", reason = "The media request left the approved source boundary.")
+      }
+      urls.add(fragment)
+      val media = probeChild(context, fragment, 4096, false, mediaBytes = true)
+      if (media.code != null) return MediaProbe(code = media.code, reason = media.reason)
+
+      if (!media.bytes.toString(Charsets.UTF_8).trimStart().startsWith("#EXTM3U", ignoreCase = true)) {
+        return MediaProbe(urls)
+      }
+
+      if (depth == MAX_HLS_PLAYLIST_DESCENT - 1) {
+        return MediaProbe(code = "hls-nested-playlist-limit", reason = "The HLS stream nested too many playlist layers.")
+      }
+      val nested = probeChild(context, fragment, MAX_MANIFEST_BYTES, false)
+      if (nested.code != null) return MediaProbe(code = nested.code, reason = nested.reason)
+      val nestedBody = nested.bytes.toString(Charsets.UTF_8)
+      if (!nestedBody.trimStart().startsWith("#EXTM3U", ignoreCase = true)) {
+        return MediaProbe(code = "hls-child-not-playlist", reason = "The HLS child changed shape while Orion verified it.")
+      }
+      playlistUrl = fragment
+      playlistBody = nestedBody
+    }
+
+    return MediaProbe(code = "hls-nested-playlist-limit", reason = "The HLS stream nested too many playlist layers.")
   }
 
   private data class ChildProbe(val bytes: ByteArray = byteArrayOf(), val code: String? = null, val reason: String? = null)
 
-  private fun probeChild(context: CapturedContext, rawUrl: String, maxBytes: Int, ranged: Boolean): ChildProbe {
+  private fun probeChild(context: CapturedContext, rawUrl: String, maxBytes: Int, ranged: Boolean, mediaBytes: Boolean = false): ChildProbe {
     var url = rawUrl
     repeat(4) {
       if (!descendantAllowed(context, url)) {
@@ -556,7 +616,7 @@ internal object OrionDownloadRequestContextBroker {
         }
         if (bytes.isEmpty()) return ChildProbe(code = "empty-media", reason = "The source returned no media bytes.")
         val type = connection.contentType.orEmpty().lowercase(Locale.US)
-        if (ranged && (type.contains("text/html") || type.contains("application/json") || bytes.toString(Charsets.UTF_8).trimStart().startsWith("<html", true))) {
+        if (mediaBytes && (type.contains("text/html") || type.contains("application/json") || bytes.toString(Charsets.UTF_8).trimStart().startsWith("<html", true))) {
           return ChildProbe(code = "invalid-media", reason = "The source returned a page instead of media bytes.")
         }
         return ChildProbe(bytes)

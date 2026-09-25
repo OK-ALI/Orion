@@ -1,5 +1,6 @@
 package com.okali.orion.playback
 
+import android.util.Log
 import java.net.URL
 import java.util.Locale
 
@@ -16,6 +17,13 @@ internal data class OrionYtDlpHlsGatewayEntry(
  * opaque job-scoped loopback provider route.
  */
 internal object OrionDownloadYtDlpHlsGateway {
+  private const val MAX_NESTED_MEDIA_PLAYLISTS = 4
+
+  private data class ResolvedMediaPlaylist(
+    val url: String,
+    val body: String,
+    val plan: OrionHlsMediaPlan,
+  )
   private val URI_ATTRIBUTE =
     Regex(
       """URI="([^"]+)"""",
@@ -25,6 +33,11 @@ internal object OrionDownloadYtDlpHlsGateway {
   private val METHOD_ATTRIBUTE =
     Regex(
       """(?:^|,)METHOD=([^,]+)""",
+      RegexOption.IGNORE_CASE,
+    )
+  private val KEYFORMAT_ATTRIBUTE =
+    Regex(
+      """(?:^|,)KEYFORMAT=(?:"([^"]+)"|([^,]+))""",
       RegexOption.IGNORE_CASE,
     )
 
@@ -42,6 +55,16 @@ internal object OrionDownloadYtDlpHlsGateway {
 
     val rootUrl =
       bound.root.url
+
+    fun route(parentUrl: String, childUrl: String, isKey: Boolean = false): String? =
+      session.registerProvider(
+        bound = bound,
+        parentUrl = parentUrl,
+        childUrl = childUrl,
+        rangeStart = null,
+        rangeEndInclusive = null,
+        isKey = isKey,
+      )
 
     val rootBody =
       OrionDownloadAuthorizedHttp.fetchText(
@@ -67,30 +90,21 @@ internal object OrionDownloadYtDlpHlsGateway {
       )
 
     if (selected == null) {
-      val plan =
-        OrionDownloadFragmentPlanner.parseHlsMedia(
-          rootUrl,
-          rootBody,
-          "video",
-        )
-
-      if (!acceptable(plan)) {
-        return null
-      }
+      val resolved =
+        resolveNestedMediaPlaylist(
+          bound = bound,
+          startUrl = rootUrl,
+          startBody = rootBody,
+          role = "video",
+        ) ?: return null
 
       val rewritten =
         rewriteMediaPlaylist(
-          rootUrl,
-          rootBody,
-        ) { childUrl ->
-          session.registerProvider(
-            bound = bound,
-            parentUrl = rootUrl,
-            childUrl = childUrl,
-            rangeStart = null,
-            rangeEndInclusive = null,
-          )
-        } ?: return null
+          resolved.url,
+          resolved.body,
+          { childUrl -> route(resolved.url, childUrl) },
+          { keyUrl -> route(resolved.url, keyUrl, isKey = true) },
+        ) ?: return null
 
       val localRoot =
         session.registerManifest(
@@ -110,31 +124,21 @@ internal object OrionDownloadYtDlpHlsGateway {
         selected.videoPlaylistUrl,
       ) ?: return null
 
-    val videoPlan =
-      OrionDownloadFragmentPlanner.parseHlsMedia(
-        selected.videoPlaylistUrl,
-        videoBody,
-        "video",
-      )
-
-    if (!acceptable(videoPlan)) {
-      return null
-    }
+    val resolvedVideo =
+      resolveNestedMediaPlaylist(
+        bound = bound,
+        startUrl = selected.videoPlaylistUrl,
+        startBody = videoBody,
+        role = "video",
+      ) ?: return null
 
     val rewrittenVideo =
       rewriteMediaPlaylist(
-        selected.videoPlaylistUrl,
-        videoBody,
-      ) { childUrl ->
-        session.registerProvider(
-          bound = bound,
-          parentUrl =
-            selected.videoPlaylistUrl,
-          childUrl = childUrl,
-          rangeStart = null,
-          rangeEndInclusive = null,
-        )
-      } ?: return null
+        resolvedVideo.url,
+        resolvedVideo.body,
+        { childUrl -> route(resolvedVideo.url, childUrl) },
+        { keyUrl -> route(resolvedVideo.url, keyUrl, isKey = true) },
+      ) ?: return null
 
     val localVideo =
       session.registerManifest(
@@ -152,30 +156,21 @@ internal object OrionDownloadYtDlpHlsGateway {
               audioUrl,
             ) ?: return null
 
-          val audioPlan =
-            OrionDownloadFragmentPlanner.parseHlsMedia(
-              audioUrl,
-              audioBody,
-              "audio",
-            )
-
-          if (!acceptable(audioPlan)) {
-            return null
-          }
+          val resolvedAudio =
+            resolveNestedMediaPlaylist(
+              bound = bound,
+              startUrl = audioUrl,
+              startBody = audioBody,
+              role = "audio",
+            ) ?: return null
 
           val rewrittenAudio =
             rewriteMediaPlaylist(
-              audioUrl,
-              audioBody,
-            ) { childUrl ->
-              session.registerProvider(
-                bound = bound,
-                parentUrl = audioUrl,
-                childUrl = childUrl,
-                rangeStart = null,
-                rangeEndInclusive = null,
-              )
-            } ?: return null
+              resolvedAudio.url,
+              resolvedAudio.body,
+              { childUrl -> route(resolvedAudio.url, childUrl) },
+              { keyUrl -> route(resolvedAudio.url, keyUrl, isKey = true) },
+            ) ?: return null
 
           session.registerManifest(
             "hls",
@@ -206,7 +201,15 @@ internal object OrionDownloadYtDlpHlsGateway {
   internal fun rewriteMediaPlaylist(
     baseUrl: String,
     body: String,
+    providerRoute: (String) -> String?,
+  ): String? = rewriteMediaPlaylist(baseUrl, body, providerRoute, providerRoute)
+
+  internal fun rewriteMediaPlaylist(
+    baseUrl: String,
+    body: String,
     providerRoute:
+      (String) -> String?,
+    keyRoute:
       (String) -> String?,
   ): String? {
     if (
@@ -270,14 +273,16 @@ internal object OrionDownloadYtDlpHlsGateway {
             ?.trim()
             ?.uppercase(Locale.US)
 
-        if (
-          method != null &&
-          method != "NONE"
-        ) {
-          return null
+        when (method) {
+          "NONE" -> output.add(line)
+          "AES-128" -> {
+            val keyformat = KEYFORMAT_ATTRIBUTE.find(trimmed.substringAfter(':'))
+              ?.let { it.groupValues[1].ifBlank { it.groupValues[2] }.trim() }
+            if (keyformat != null && !keyformat.equals("identity", ignoreCase = true)) return null
+            output.add(rewriteUriAttribute(baseUrl, line, keyRoute) ?: return null)
+          }
+          else -> return null
         }
-
-        output.add(line)
         continue
       }
 
@@ -521,12 +526,69 @@ internal object OrionDownloadYtDlpHlsGateway {
       )
   }
 
+  private fun resolveNestedMediaPlaylist(
+    bound: BoundTransferContext,
+    startUrl: String,
+    startBody: String,
+    role: String,
+  ): ResolvedMediaPlaylist? {
+    var currentUrl = startUrl
+    var currentBody = startBody
+
+    repeat(MAX_NESTED_MEDIA_PLAYLISTS) { depth ->
+      if (OrionDownloadFragmentPlanner.selectHlsMaster(currentUrl, currentBody, "best") != null) {
+        Log.i("OrionDownloadStage", "stage=hls-gateway outcome=nested-master depth=$depth")
+        return null
+      }
+
+      val plan = OrionDownloadFragmentPlanner.parseHlsMedia(
+        currentUrl,
+        currentBody,
+        role,
+        allowAes128 = true,
+      )
+      if (!acceptable(plan)) {
+        Log.i(
+          "OrionDownloadStage",
+          "stage=hls-gateway outcome=plan-rejected issue=${plan.issueCode ?: "media-fragments-missing"} media=${plan.mediaFragmentCount} end=${plan.endList}",
+        )
+        return null
+      }
+
+      Log.i(
+        "OrionDownloadStage",
+        "stage=hls-gateway outcome=graph depth=$depth media=${plan.mediaFragmentCount} init=${plan.fragments.size - plan.mediaFragmentCount} keys=${plan.keyUrls.size}",
+      )
+
+      if (plan.mediaFragmentCount != 1) {
+        return ResolvedMediaPlaylist(currentUrl, currentBody, plan)
+      }
+
+      val onlyMedia = plan.firstMediaFragment() ?: return null
+      val possiblePlaylist = OrionDownloadAuthorizedHttp.fetchText(bound, currentUrl, onlyMedia.url)
+        ?: return ResolvedMediaPlaylist(currentUrl, currentBody, plan)
+      if (!possiblePlaylist.trimStart().startsWith("#EXTM3U", ignoreCase = true)) {
+        return ResolvedMediaPlaylist(currentUrl, currentBody, plan)
+      }
+      if (depth == MAX_NESTED_MEDIA_PLAYLISTS - 1) {
+        Log.i("OrionDownloadStage", "stage=hls-gateway outcome=nested-limit")
+        return null
+      }
+
+      Log.i("OrionDownloadStage", "stage=hls-gateway outcome=descend depth=${depth + 1}")
+      currentUrl = onlyMedia.url
+      currentBody = possiblePlaylist
+    }
+
+    return null
+  }
+
   private fun acceptable(
     plan: OrionHlsMediaPlan,
   ): Boolean =
     plan.issueCode == null &&
       plan.endList &&
-      plan.fragments.isNotEmpty()
+      plan.mediaFragmentCount > 0
 
   private fun rewriteUriAttribute(
     baseUrl: String,

@@ -21,16 +21,45 @@ function load(relative) {
 const mobile = load('src/features/discover/discoveryHubs.ts');
 const desktop = load('../desktop/src/renderer/features/discover/discoveryHubs.js');
 const credits = load('src/features/media-detail/titleCredits.ts');
+const personProfile = load('src/features/media-detail/personProfile.ts');
 const desktopCredits = load('../desktop/src/renderer/shared/utils/credits.js');
 
-test('Cinema Portal definitions preserve the locked Desktop provider and world semantics', () => {
+test('Cinema Portal definitions preserve Desktop identity while repairing empty Mobile facets', () => {
   assert.deepEqual(mobile.PROVIDER_HUBS.map(({ id, name, aliases }) => ({ id, name, aliases })),
     desktop.PROVIDER_HUBS.map(({ id, name, aliases }) => ({ id, name, aliases })));
-  assert.deepEqual(mobile.WORLD_HUBS.filter((world) => world.id !== 'starwars').map(({ id, name, filters }) => ({ id, name, filters })),
-    desktop.WORLD_HUBS.filter((world) => world.id !== 'starwars').map(({ id, name, filters }) => ({ id, name, filters })));
+  assert.deepEqual(mobile.WORLD_HUBS.map(({ id, name, filters }) => ({ id, name, facets: filters.map(({ id, name }) => ({ id, name })) })),
+    desktop.WORLD_HUBS.map(({ id, name, filters }) => ({ id, name, facets: filters.map(({ id, name }) => ({ id, name })) })));
   assert.deepEqual(mobile.PROVIDER_HUBS.map((item) => item.name),
     ['Netflix', 'Prime Video', 'Disney+', 'Max', 'Apple TV+']);
   assert.deepEqual(mobile.WORLD_HUBS.map((item) => item.name), ['Marvel', 'DC', 'Star Wars', 'Pixar']);
+});
+
+test('empty X-Men, Spider-Man, Batman and Superman facets use verified Mobile queries', () => {
+  const marvel = { kind: 'world', id: 'marvel' };
+  const dc = { kind: 'world', id: 'dc' };
+  assert.equal(mobile.hubQueryParams(marvel, 'xmen', 'movie', null),
+    '&with_companies=160251|19551|7505|420&with_keywords=1852');
+  assert.equal(mobile.hubQueryParams(marvel, 'xmen', 'tv', null),
+    '&with_companies=160251|19551|7505|38679|420&with_keywords=1852');
+  assert.equal(mobile.hubQueryParams(marvel, 'spider', 'movie', null),
+    '&with_companies=5&with_keywords=9715,9717');
+  assert.equal(mobile.hubTitleSearch(marvel, 'spider', 'tv'), 'Spider-Man');
+  assert.equal(mobile.hubTitleSearch(dc, 'batman', 'movie'), 'Batman');
+  assert.equal(mobile.hubTitleSearch(dc, 'batman', 'tv'), 'Batman');
+  assert.equal(mobile.hubTitleSearch(dc, 'superman', 'movie'), 'Superman');
+  assert.equal(mobile.hubTitleSearch(dc, 'superman', 'tv'), 'Superman');
+  assert.equal(mobile.hubTitleSearch(dc, 'arrowverse', 'tv'), null);
+  assert.equal(mobile.hubTitleSearchMatches(dc, 'batman', 'movie', { title: 'The Batman' }), true);
+  assert.equal(mobile.hubTitleSearchMatches(dc, 'batman', 'movie', { title: 'A Gotham Story' }), false);
+  assert.equal(mobile.hubTitleSearchMatches(marvel, 'spider', 'tv', { name: 'Spider-Man: The Animated Series' }), true);
+  assert.equal(mobile.hubTitleSearchMatches(marvel, 'spider', 'tv', { name: 'Spider Riders' }), false);
+  assert.doesNotMatch(JSON.stringify(mobile.WORLD_HUBS), /377742|373794|349974|377234/);
+  const screen = read('src/features/discover/DiscoverScreen.tsx');
+  assert.match(screen, /hubTitleSearch\(selectedHub, hubFilter/);
+  assert.match(screen, /hubTitleSearchMatches\(selectedHub, hubFilter/);
+  assert.match(screen, /\/search\/\$\{mediaType\}/);
+  assert.match(screen, /setGenreResults\(\(prev: any\) =>/);
+  assert.match(screen, /existingKeys/);
 });
 
 test('regional catalog resolves provider IDs and unavailable regions cannot issue a discover query', () => {
@@ -116,14 +145,34 @@ test('Media Details keeps the existing title endpoint and real person/router sta
   assert.match(screen, /numColumns=\{castColumns\}/);
   assert.match(screen, /maxToRenderPerBatch=\{castGridBudget\.maxToRenderPerBatch\}/);
   assert.match(screen, /<KeyCrewList people=\{keyCrew\}/);
-  assert.match(screen, /router\.push\(`\/person\/\$\{personId\}`/);
+  assert.match(screen, /pathname: '\/person\/\[id\]'/);
+  assert.match(screen, /originTitle:|originRole:|originKind:/);
   assert.match(screen, /onPress=\{\(\) => router\.back\(\)\}/);
   assert.match(person, /router\.back\(\)/);
   assert.match(person, /Filmography/);
+  assert.match(person, /personFilmography\(data\)/);
+  assert.match(person, /tint=\{theme\.dark \? 'dark' : 'light'\}/);
   assert.doesNotMatch(screen, /slice\(0, 25\)/);
   assert.match(presentation, />TOP CAST<\/Text>/);
   assert.match(presentation, />KEY CREW<\/Text>/);
   assert.doesNotMatch(presentation, /TOP CAST & CREW/);
+});
+
+test('Person profile includes crew-only work and truthful sparse-profile presentation', () => {
+  const work = personProfile.personFilmography({ combined_credits: {
+    cast: [{ id: 8, media_type: 'movie', title: 'First', popularity: 3 }],
+    crew: [{ id: 9, media_type: 'tv', name: 'Created Show', popularity: 8 },
+      { id: 8, media_type: 'movie', title: 'First', popularity: 3 },
+      { id: 0, media_type: 'movie', title: 'Invalid' }],
+  } });
+  assert.deepEqual(work.map((item) => [item.media_type, item.id]), [['tv', 9], ['movie', 8]]);
+  assert.equal(work[0].poster_path, null);
+  assert.equal(work[0].backdrop_path, null);
+  const person = read('app/person/[id].tsx');
+  assert.match(person, /A biography has not been added for this person/);
+  assert.match(person, /No filmography is listed for this person yet/);
+  assert.match(person, /portraitFallback/);
+  assert.doesNotMatch(person, /tint="dark" style=\{styles\.backButtonInner\}/);
 });
 
 test('Star Wars uses verified Lucasfilm/space-opera Discover facets instead of Desktop’s empty keyword', () => {

@@ -1,6 +1,7 @@
 package com.okali.orion.playback
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
@@ -635,6 +636,7 @@ internal object OrionDownloadJobStore {
 
   @Synchronized
   fun markRecovering(jobId: String, code: String, message: String) {
+    Log.i("OrionDownloadStage", "state=recovering code=${code.filter { it.isLetterOrDigit() || it == '-' }.take(64)}")
     mutateJobLocked(jobId) { job ->
       job.put("state", "recovering")
       job.put("recoveryCount", job.optInt("recoveryCount", 0) + 1)
@@ -655,6 +657,7 @@ internal object OrionDownloadJobStore {
 
   @Synchronized
   fun markFailed(jobId: String, code: String, message: String, retryable: Boolean) {
+    Log.i("OrionDownloadStage", "state=failed code=${code.filter { it.isLetterOrDigit() || it == '-' }.take(64)}")
     setState(jobId, "failed", failure(code, message, retryable = retryable, actionRequired = false))
   }
 

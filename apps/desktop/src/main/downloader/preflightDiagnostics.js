@@ -25,6 +25,8 @@ function safeRecord(candidate, candidateId, result) {
     contentType: limited(diagnostic.contentType, /[^a-z0-9.+_/-]/gi),
     contentLength: Number(diagnostic.contentLength) || null,
     bytesRead: Number(diagnostic.bytesRead) || 0,
+    transportError: /^(?:err_[a-z_]+|enotfound|eai_again|econnreset|econnrefused|etimedout|destination_not_public|destination_not_authorized|unknown)$/i
+      .test(String(diagnostic.transportError || "")) ? String(diagnostic.transportError).toLowerCase() : "",
     requestHeaderNames: (diagnostic.requestHeaderNames || []).slice(0, 32)
       .map((name) => limited(name, /[^a-z0-9-]/gi)).filter(Boolean),
     authorizationPresent: Boolean(diagnostic.authorizationPresent),

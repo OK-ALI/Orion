@@ -89,6 +89,9 @@ async function fetchViaPlayerSession(url, m3u8Context, options = {}) {
         url,
         session: playerSession,
         redirect: "error",
+        // Electron does not send session cookies by default for net.request.
+        // Let Chromium attach only cookies scoped to this validated destination.
+        useSessionCookies: true,
       });
       timeout = setTimeout(() => {
         try { request.abort(); } catch {}
@@ -232,7 +235,7 @@ function createHlsProxy(rootUrl, m3u8Context) {
         await assertPublicMediaUrl(upstreamUrl);
 
         const playerSession = session.fromPartition("persist:player");
-        const upstreamRequest = net.request({ url: upstreamUrl, session: playerSession, redirect: "error" });
+        const upstreamRequest = net.request({ url: upstreamUrl, session: playerSession, redirect: "error", useSessionCookies: true });
         const requestContext = requestContextForUrl(m3u8Context, upstreamUrl, parentUrl);
         const capturedHeaders = buildDownloadHeaders(requestContext, getPlayerUserAgent());
         for (const [name, value] of capturedHeaders) {

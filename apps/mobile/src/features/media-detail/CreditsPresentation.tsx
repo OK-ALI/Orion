@@ -9,13 +9,13 @@ export function CreditPersonCard({ person, theme, width, onOpen }: {
   person: TitleCastPerson;
   theme: MobileThemeTokens;
   width: number;
-  onOpen: (id: number) => void;
+  onOpen: (person: TitleCastPerson) => void;
 }) {
   const portrait = imgUrl(person.profile_path, 'w200');
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`View ${person.name}`}
       style={({ pressed }) => [styles.personCard, { width, backgroundColor: theme.surface, borderColor: theme.border }, pressed && styles.pressed]}
-      onPress={() => onOpen(person.id)}>
+      onPress={() => onOpen(person)}>
       {portrait ? <Image source={{ uri: portrait }} style={[styles.portrait, { borderColor: theme.border }]} />
         : <View style={[styles.portrait, styles.fallback, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
             <Ionicons name="person-outline" size={26} color={theme.textMuted} />
@@ -29,7 +29,7 @@ export function CreditPersonCard({ person, theme, width, onOpen }: {
 export function KeyCrewList({ people, theme, onOpen, compact = false }: {
   people: TitleCrewPerson[];
   theme: MobileThemeTokens;
-  onOpen: (id: number) => void;
+  onOpen: (person: TitleCrewPerson) => void;
   compact?: boolean;
 }) {
   if (!people.length) return null;
@@ -39,7 +39,7 @@ export function KeyCrewList({ people, theme, onOpen, compact = false }: {
       {people.map((person) => (
         <Pressable key={`${person.id}_${person.job}`} accessibilityRole="button"
           accessibilityLabel={`View ${person.name}, ${person.job}`}
-          onPress={() => onOpen(person.id)}
+          onPress={() => onOpen(person)}
           style={({ pressed }) => [styles.crewRow, { borderColor: theme.border }, pressed && styles.pressed]}>
           <Text style={[styles.crewJob, { color: theme.accent }]} numberOfLines={1}>{person.job}</Text>
           <Text style={[styles.crewName, { color: theme.text }]} numberOfLines={1}>{person.name}</Text>
@@ -54,7 +54,7 @@ export function TitleCreditsPreview({ cast, crew, theme, onOpen, budget }: {
   cast: TitleCastPerson[];
   crew: TitleCrewPerson[];
   theme: MobileThemeTokens;
-  onOpen: (id: number) => void;
+  onOpen: (person: TitleCastPerson | TitleCrewPerson) => void;
   budget: { initialNumToRender: number; maxToRenderPerBatch: number; windowSize: number };
 }) {
   if (!cast.length && !crew.length) return null;

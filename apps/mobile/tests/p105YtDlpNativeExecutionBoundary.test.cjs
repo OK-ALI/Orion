@@ -7,6 +7,10 @@ const ROOT = path.resolve(__dirname, '..');
 const plugin = fs.readFileSync(path.join(ROOT, 'plugins', 'withOrionCinemaWebView.js'), 'utf8');
 const runtime = fs.readFileSync(path.join(ROOT, 'plugins', 'orion-cinema-webview-native', 'OrionDownloadYtDlpRuntime.kt'), 'utf8');
 const owner = fs.readFileSync(path.join(ROOT, 'plugins', 'orion-cinema-webview-native', 'OrionFinalizedArtifactOwner.kt'), 'utf8');
+const planner = fs.readFileSync(path.join(ROOT, 'plugins', 'orion-cinema-webview-native', 'OrionDownloadFragmentPlanner.kt'), 'utf8');
+const broker = fs.readFileSync(path.join(ROOT, 'plugins', 'orion-cinema-webview-native', 'OrionDownloadRequestContextBroker.kt'), 'utf8');
+const hlsGateway = fs.readFileSync(path.join(ROOT, 'plugins', 'orion-cinema-webview-native', 'OrionDownloadYtDlpHlsGateway.kt'), 'utf8');
+const transfer = fs.readFileSync(path.join(ROOT, 'plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt'), 'utf8');
 
 test('P10.5 Candidate 2 keeps the native-only fixed yt-dlp process boundary without routing production transfers', () => {
   assert.match(plugin, /'OrionDownloadYtDlpRuntime\.kt'/);
@@ -30,5 +34,20 @@ test('P10.5 Candidate 2 keeps the native-only fixed yt-dlp process boundary with
   assert.doesNotMatch(runtime, /com\.facebook\.react/);
   assert.doesNotMatch(runtime, /NativeModules/);
   assert.doesNotMatch(runtime, /response\.(?:out|err|command)/);
-  assert.doesNotMatch(runtime, /Log\./);
+  assert.match(runtime, /stage=yt-dlp exit=/);
+  assert.doesNotMatch(runtime, /Log\.[a-z]+\([^\n]*(?:response\.(?:out|err)|rootUrl|safeGlobalHeaders)/);
+});
+
+
+test('HLS readiness descends wrapper playlists and never treats an init map as episode media', () => {
+  assert.match(planner, /val mediaFragmentCount: Int/);
+  assert.match(planner, /fun firstMediaFragment\(\)/);
+  assert.match(broker, /probeFirstHlsMedia/);
+  assert.match(broker, /startsWith\("#EXTM3U"/);
+  assert.match(broker, /hls-nested-playlist-limit/);
+  assert.match(hlsGateway, /resolveNestedMediaPlaylist/);
+  assert.match(hlsGateway, /plan\.mediaFragmentCount > 0/);
+  assert.match(hlsGateway, /outcome=descend/);
+  assert.match(transfer, /plan\.mediaFragmentCount <= 0/);
+  assert.doesNotMatch(hlsGateway, /Log\.[a-z]+\([^\n]*(?:currentUrl|startUrl|onlyMedia\.url|rootUrl)/);
 });

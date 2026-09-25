@@ -384,16 +384,17 @@ test("Phase 7.8.2 defers TV episode catalog work until Episodes is actually open
 test("Phase 7.8.3 keeps catalog ordering while removing repeated scans and compacts long person biographies", () => {
   const discover = read("src/features/discover/DiscoverScreen.tsx");
   const person = read("app/person/[id].tsx");
+  const profile = read("src/features/media-detail/personProfile.ts");
 
   assert.match(discover, /const existingKeys = new Set\(/);
   assert.match(discover, /prev\.map\(\(item: any\) => `\$\{item\.media_type\}_\$\{item\.id\}`\)/);
   assert.match(discover, /if \(existingKeys\.has\(key\)\) return false/);
   assert.doesNotMatch(discover, /merged\.filter\(\(item\) => !prev\.some/);
 
-  assert.match(person, /const uniqueCredits = useMemo\(\(\) => \{/);
-  assert.match(person, /const seenIds = new Set<string>\(\)/);
-  assert.match(person, /if \(seenIds\.has\(key\)\) continue/);
-  assert.match(person, /return unique\.sort\(/);
+  assert.match(person, /const uniqueCredits = useMemo\(\(\) => personFilmography\(data\)/);
+  assert.match(profile, /const seen = new Set<string>\(\)/);
+  assert.match(profile, /if \(seen\.has\(key\)\) return false/);
+  assert.match(profile, /\.sort\(\(a, b\) =>/);
   assert.doesNotMatch(person, /acc\.find\(item => item\.id === current\.id\)/);
   assert.ok(person.indexOf("const uniqueCredits = useMemo") < person.indexOf("if (loading)"));
 

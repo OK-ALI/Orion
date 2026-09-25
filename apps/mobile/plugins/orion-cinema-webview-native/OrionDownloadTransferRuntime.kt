@@ -722,6 +722,10 @@ internal object OrionDownloadTransferEngine {
       OrionDownloadJobStore.markActionRequired(jobId, plan.issueCode, message)
       return false
     }
+    if (plan.mediaFragmentCount <= 0) {
+      OrionDownloadJobStore.markFailed(jobId, "hls-fragments-missing", "The selected HLS stream did not expose downloadable media fragments.", retryable = false)
+      return false
+    }
     if (!plan.endList) {
       OrionDownloadJobStore.markActionRequired(jobId, "hls-live-refresh-not-active", "This HLS playlist is still changing. Orion will add bounded playlist refresh before accepting it for offline download.")
       return false

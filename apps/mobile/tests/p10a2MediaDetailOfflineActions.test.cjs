@@ -541,7 +541,10 @@ test('movie Cast tab exposes person 26 and beyond through the virtualized grid a
   const person = list.props.renderItem({ item: list.props.data[25] });
   assert.equal(person.props.person.id, 26);
   person.type(person.props).props.onPress();
-  assert.equal(h.routes.at(-1), '/person/26');
+  assert.deepEqual(h.routes.at(-1), {
+    pathname: '/person/[id]',
+    params: { id: '26', originTitle: title.title, originRole: '', originKind: 'cast' },
+  });
   assert.equal(h.component('KeyCrewList').props.people[0].job, 'Director');
   assert.equal(h.component('CreditPersonCard'), undefined, 'Offscreen cast cards are not eagerly mounted');
   h.unmount();

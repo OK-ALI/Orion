@@ -24,7 +24,14 @@ internal data class OrionHlsMediaPlan(
   val fragments: List<OrionFragmentRequest>,
   val endList: Boolean,
   val issueCode: String? = null,
-)
+  val keyUrls: List<String> = emptyList(),
+) {
+  val mediaFragmentCount: Int
+    get() = fragments.count { !it.role.endsWith("-init") }
+
+  fun firstMediaFragment(): OrionFragmentRequest? =
+    fragments.firstOrNull { !it.role.endsWith("-init") }
+}
 
 internal data class OrionDashPlan(
   val fragments: List<OrionFragmentRequest>,
@@ -92,18 +99,28 @@ internal object OrionDownloadFragmentPlanner {
     return OrionHlsMasterSelection(selected.url, audio)
   }
 
-  fun parseHlsMedia(baseUrl: String, body: String, role: String): OrionHlsMediaPlan {
+  fun parseHlsMedia(baseUrl: String, body: String, role: String, allowAes128: Boolean = false): OrionHlsMediaPlan {
     if (body.contains(Regex("#EXT-X-BYTERANGE", RegexOption.IGNORE_CASE)) ||
       body.lineSequence().any { line -> line.startsWith("#EXT-X-MAP:", true) && line.contains("BYTERANGE=", true) }) {
       return OrionHlsMediaPlan(emptyList(), body.contains("#EXT-X-ENDLIST", true), "hls-byterange-not-active")
     }
     val keyLines = body.lineSequence().map(String::trim).filter { it.startsWith("#EXT-X-KEY:", true) }.toList()
-    if (keyLines.any { line ->
-        val attrs = parseAttributeList(line.substringAfter(':'))
-        val method = attrs["METHOD"]?.uppercase(Locale.US)
-        method != null && method != "NONE"
-      }) {
-      return OrionHlsMediaPlan(emptyList(), body.contains("#EXT-X-ENDLIST", true), "hls-encryption-not-active")
+    val keyUrls = linkedSetOf<String>()
+    for (line in keyLines) {
+      val attrs = parseAttributeList(line.substringAfter(':'))
+      when (attrs["METHOD"]?.uppercase(Locale.US)) {
+        "NONE" -> Unit
+        "AES-128" -> {
+          if (!allowAes128 || !attrs["KEYFORMAT"].isNullOrBlank() &&
+            !attrs["KEYFORMAT"].equals("identity", ignoreCase = true)) {
+            return OrionHlsMediaPlan(emptyList(), body.contains("#EXT-X-ENDLIST", true), "hls-encryption-not-active")
+          }
+          val keyUrl = attrs["URI"]?.let { resolve(baseUrl, it) }
+            ?: return OrionHlsMediaPlan(emptyList(), body.contains("#EXT-X-ENDLIST", true), "hls-key-invalid")
+          keyUrls.add(keyUrl)
+        }
+        else -> return OrionHlsMediaPlan(emptyList(), body.contains("#EXT-X-ENDLIST", true), "hls-encryption-not-active")
+      }
     }
 
     val fragments = mutableListOf<OrionFragmentRequest>()
@@ -122,7 +139,7 @@ internal object OrionDownloadFragmentPlanner {
       if (line.isEmpty() || line.startsWith('#')) return@forEach
       resolve(baseUrl, line)?.let { fragments.add(OrionFragmentRequest(it, role)) }
     }
-    return OrionHlsMediaPlan(fragments, body.contains("#EXT-X-ENDLIST", true))
+    return OrionHlsMediaPlan(fragments, body.contains("#EXT-X-ENDLIST", true), keyUrls = keyUrls.toList())
   }
 
   fun selectDashRepresentations(

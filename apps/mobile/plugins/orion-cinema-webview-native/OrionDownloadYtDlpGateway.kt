@@ -10,6 +10,7 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
+import android.util.Log
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
 import java.util.Locale
@@ -48,6 +49,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     val childUrl: String,
     val rangeStart: Long?,
     val rangeEndInclusive: Long?,
+    val isKey: Boolean,
   ) : Route
 
   private data class Request(
@@ -161,6 +163,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     childUrl: String,
     rangeStart: Long?,
     rangeEndInclusive: Long?,
+    isKey: Boolean = false,
   ): String? {
     if (
       closed.get() ||
@@ -201,6 +204,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
         childUrl = childUrl,
         rangeStart = rangeStart,
         rangeEndInclusive = rangeEndInclusive,
+        isKey = isKey,
       ),
     )
   }
@@ -233,7 +237,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
           route,
         ) == null
       ) {
-        if (route is ProviderRoute) providerRouteCount.incrementAndGet()
+        if (route is ProviderRoute && !route.isKey) providerRouteCount.incrementAndGet()
         return buildUrl(path)
       }
     }
@@ -580,6 +584,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
             route.rangeEndInclusive,
         )
         ?: run {
+          Log.i("OrionDownloadStage", "stage=provider-route outcome=unavailable key=${route.isKey}")
           writeEmpty(
             output,
             502,
@@ -602,12 +607,47 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
         status !=
         HTTP_RANGE_NOT_SATISFIABLE
       ) {
+        Log.i("OrionDownloadStage", "stage=provider-route status=$status key=${route.isKey}")
         writeEmpty(
           output,
           502,
           "Bad Gateway",
         )
 
+        return
+      }
+
+      if (route.isKey) {
+        if (status != HttpURLConnection.HTTP_OK) {
+          writeEmpty(output, 502, "Bad Gateway")
+          return
+        }
+        val key = try {
+          connection.inputStream.use { input ->
+            val bytes = ByteArrayOutputStream()
+            val buffer = ByteArray(17)
+            while (bytes.size() < 17) {
+              val count = input.read(buffer, 0, 17 - bytes.size())
+              if (count < 0) break
+              if (count > 0) bytes.write(buffer, 0, count)
+            }
+            bytes.toByteArray()
+          }
+        } catch (_: Throwable) { null }
+        if (key == null || key.size != 16) {
+          Log.i("OrionDownloadStage", "stage=key-route outcome=invalid size=${key?.size ?: 0}")
+          writeEmpty(output, 502, "Bad Gateway")
+          return
+        }
+        writeHead(output, 200, "OK", linkedMapOf(
+          "Content-Type" to "application/octet-stream",
+          "Content-Length" to "16",
+          "Cache-Control" to "no-store",
+          "X-Content-Type-Options" to "nosniff",
+          "Connection" to "close",
+        ))
+        if (!headOnly) output.write(key)
+        output.flush()
         return
       }
 
