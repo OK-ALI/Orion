@@ -333,21 +333,15 @@ function isReadyDownloadCandidate(
     destinationReady;
 }
 
-export type MobileDownloadSourceResolutionStateV1 = 'empty' | 'checking' | 'ready' | 'terminal';
-
-const TERMINAL_SOURCE_PREFLIGHT_STATES = new Set<MobileDownloadPreflightStateV1>([
-  'unsupported',
-  'protected',
-  'expired',
-  'unreachable',
-  'action-required',
-]);
+export type MobileDownloadSourceResolutionStateV1 = 'empty' | 'checking' | 'ready';
 
 /**
  * Source-level resolution truth for the temporary download-only Player session.
- * One failed opaque request is not enough to reject a provider: Orion waits until
- * every observed candidate for that source is terminal, or until the watchdog in
- * PlayerScreen expires. A genuinely ready HLS, DASH, or Direct media candidate always wins.
+ * Candidate failure is not provider failure: one extensionless request can be a
+ * metadata/control endpoint while the same visibly playing source is still about
+ * to expose the real HLS, DASH, or Direct media request. Orion therefore keeps the
+ * source in checking state until a ready candidate wins or PlayerScreen's bounded
+ * source watchdog expires.
  */
 export function getMobileDownloadSourceResolutionStateV1(
   itemKey: string,
@@ -362,12 +356,7 @@ export function getMobileDownloadSourceResolutionStateV1(
     isReadyDownloadCandidate(candidate, 'orion-library')
     && ['hls', 'dash', 'direct'].includes(candidate.preflight.resolvedManifestKind)
   ))) return 'ready';
-  if (candidates.some((candidate) => candidate.preflight.state === 'checking')) return 'checking';
-  const allTerminal = candidates.every((candidate) => (
-    TERMINAL_SOURCE_PREFLIGHT_STATES.has(candidate.preflight.state)
-    || candidate.preflight.resolvedManifestKind === 'unknown'
-  ));
-  return allTerminal ? 'terminal' : 'checking';
+  return 'checking';
 }
 
 

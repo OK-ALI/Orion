@@ -149,6 +149,18 @@ internal object OrionDownloadRequestContextBroker {
       trimLocked()
     }
 
+    finishAndEmit(
+      reactContext,
+      context,
+      state = "checking",
+      reachability = "unknown",
+      resolvedKind = resolvedKindForObserved(context.observedManifestKind),
+      protection = "unknown",
+      requiredBytes = null,
+      reasonCode = null,
+      reason = null,
+      freeBytes = null,
+    )
     executor.execute { preflightAndEmit(reactContext, context) }
   }
 

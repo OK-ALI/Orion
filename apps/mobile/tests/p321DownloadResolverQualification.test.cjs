@@ -38,7 +38,7 @@ const candidate = (sourceId, state, kind = 'hls', ready = false) => ({
   },
 });
 
-test('download source qualification waits through checking, accepts ready HLS or Direct media, and fails over only when all candidates are terminal', () => {
+test('download source qualification keeps candidate failure separate from provider failure and accepts ready HLS or Direct media', () => {
   const capture = loadTs('src/features/downloads/downloadCandidateCapture.ts', {
     'react-native': {
       DeviceEventEmitter: { addListener: () => ({ remove() {} }) },
@@ -49,7 +49,8 @@ test('download source qualification waits through checking, accepts ready HLS or
   const key = 'series:1408:s1:e1';
   assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', []), 'empty');
   assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', [candidate('vixsrc', 'checking')]), 'checking');
-  assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', [candidate('vixsrc', 'unreachable')]), 'terminal');
+  assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', [candidate('vixsrc', 'unreachable')]), 'checking');
+  assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', [candidate('vixsrc', 'unsupported', 'unknown')]), 'checking');
   assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', [candidate('vixsrc', 'unreachable'), candidate('vixsrc', 'checking')]), 'checking');
   assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', [candidate('vixsrc', 'ready', 'hls', true)]), 'ready');
   assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', [candidate('vixsrc', 'ready', 'direct', true)]), 'ready');
@@ -61,7 +62,16 @@ test('temporary download resolution is event-driven with an eight-second watchdo
   assert.match(player, /DOWNLOAD_TERMINAL_GRACE_MS = 1_200/);
   assert.match(player, /subscribeMobileDownloadCandidatesV1/);
   assert.match(player, /getMobileDownloadSourceResolutionStateV1/);
-  assert.match(player, /state === 'terminal' \? DOWNLOAD_TERMINAL_GRACE_MS : DOWNLOAD_SOURCE_WATCHDOG_MS/);
+  assert.match(player, /health\?\.state === 'failed' && health\.cooldownUntil > Date\.now\(\)/);
+  assert.match(player, /providerTerminal \? DOWNLOAD_TERMINAL_GRACE_MS : DOWNLOAD_SOURCE_WATCHDOG_MS/);
   assert.doesNotMatch(player, /30_000/);
   assert.doesNotMatch(player, /Try another download source\?/);
+});
+
+test('native capture publishes checking before asynchronous preflight so one early rejection cannot hide another in-flight candidate', () => {
+  const broker = fs.readFileSync(path.join(mobileRoot, 'plugins/orion-cinema-webview-native/OrionDownloadRequestContextBroker.kt'), 'utf8');
+  const checking = broker.indexOf('state = "checking"');
+  const preflight = broker.indexOf('executor.execute { preflightAndEmit(reactContext, context) }');
+  assert.ok(checking >= 0, 'expected native checking publication');
+  assert.ok(preflight > checking, 'checking must publish before asynchronous preflight starts');
 });

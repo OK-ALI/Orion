@@ -227,7 +227,13 @@ export default function PlayerScreen() {
         return;
       }
       const state = getMobileDownloadSourceResolutionStateV1(downloadItemKey, sourceId, snapshots);
-      scheduleAdvance(state === 'terminal' ? DOWNLOAD_TERMINAL_GRACE_MS : DOWNLOAD_SOURCE_WATCHDOG_MS);
+      if (state === 'ready') {
+        clearFailoverTimer();
+        return;
+      }
+      const health = getMobileSourceHealth(sourceId, type);
+      const providerTerminal = health?.state === 'failed' && health.cooldownUntil > Date.now();
+      scheduleAdvance(providerTerminal ? DOWNLOAD_TERMINAL_GRACE_MS : DOWNLOAD_SOURCE_WATCHDOG_MS);
     });
 
     return () => {
