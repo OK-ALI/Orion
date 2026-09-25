@@ -1034,7 +1034,7 @@ internal object OrionDownloadRequestContextBroker {
       context.allowedOrigins,
       observedUrlsFor(context),
       rawUrl,
-    )
+    ) || trustedManifestReferencedDestination(rawUrl)
 
   private fun redirectAllowed(context: CapturedContext, rawUrl: String): Boolean =
     trustedRedirectDestination(
@@ -1061,6 +1061,14 @@ internal object OrionDownloadRequestContextBroker {
     return (allowedOrigins.contains(origin) || observedUrls.any { originOf(it) == origin }) &&
       isSafePublicHttpUrl(rawUrl)
   }
+
+  /**
+   * Exact HLS/DASH children are already proven by manifest membership before
+   * they reach descendantAllowed. Restore the historical public-CDN boundary
+   * without weakening the stricter origin/observation helper or redirect gate.
+   */
+  internal fun trustedManifestReferencedDestination(rawUrl: String): Boolean =
+    isSafePublicHttpUrl(rawUrl)
 
   internal fun trustedRedirectDestination(
     allowedOrigins: Set<String>,

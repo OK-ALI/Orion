@@ -26,8 +26,18 @@ class OrionDownloadOriginTrustTest {
     assertTrue(OrionDownloadRequestContextBroker.trustedDescendantDestination(approved, observed, "$observedMedia/other.ts"))
   }
 
-  @Test fun unknownPublicCrossOriginMediaIsRejected() {
+  @Test fun unknownPublicOriginStillNeedsManifestReferenceOrObservation() {
     assertFalse(OrionDownloadRequestContextBroker.trustedDescendantDestination(approved, observed, "$unknown/child.ts"))
+  }
+
+  @Test fun exactManifestReferencedPublicCrossOriginMediaIsTrusted() {
+    assertTrue(OrionDownloadRequestContextBroker.trustedManifestReferencedDestination("$unknown/child.ts"))
+  }
+
+  @Test fun manifestReferencedPrivateAndLocalMediaAreRejected() {
+    for (origin in listOf("http://127.0.0.1", "http://10.0.0.1", "http://localhost")) {
+      assertFalse(OrionDownloadRequestContextBroker.trustedManifestReferencedDestination("$origin/child.ts"))
+    }
   }
 
   @Test fun privateAndLocalMediaAreRejectedEvenWhenDeclaredOrObserved() {
