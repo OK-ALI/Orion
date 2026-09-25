@@ -11,10 +11,14 @@ import android.webkit.WebView
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.reactnativecommunity.webview.RNCWebViewClient
+import androidx.webkit.ServiceWorkerClientCompat
+import androidx.webkit.ServiceWorkerControllerCompat
+import androidx.webkit.WebViewFeature
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.util.Locale
+import java.lang.ref.WeakReference
 
 /**
  * Native, Cinema-only request classifier. It deliberately never exports a
@@ -25,7 +29,7 @@ class OrionCinemaWebViewClient(
   private val nativeViewTag: Int,
   private val onPageSettled: ((WebView) -> Unit)? = null,
 ) : RNCWebViewClient() {
-  private var manifest: ShieldManifest? = null
+  @Volatile private var manifest: ShieldManifest? = null
   private val pendingCounts = mutableMapOf<String, Int>()
   private val pendingClassifications = mutableMapOf<String, Int>()
   private val reportedRoutineEvidence = mutableSetOf<String>()
@@ -34,9 +38,23 @@ class OrionCinemaWebViewClient(
   private var nativeSequence = 0L
   private var lastP102ManifestTraceKey: String? = null
 
+  init {
+    OrionCinemaServiceWorkerDownloadObserver.ensureInstalled()
+  }
+
   fun setShieldManifest(serialized: String?) {
-    manifest = ShieldManifest.parse(serialized)
-    val current = manifest ?: return
+    val previousSessionId = manifest?.sessionId
+    val next = ShieldManifest.parse(serialized)
+    manifest = next
+    if (previousSessionId != null && previousSessionId != next?.sessionId) {
+      OrionCinemaServiceWorkerDownloadObserver.deactivate(previousSessionId)
+    }
+    if (next?.downloadCaptureEnabled == true) {
+      OrionCinemaServiceWorkerDownloadObserver.activate(reactContext, next)
+    } else if (next != null) {
+      OrionCinemaServiceWorkerDownloadObserver.deactivate(next.sessionId)
+    }
+    val current = next ?: return
     val traceKey = "${current.sessionId}:${current.sourceId}:${current.downloadCaptureEnabled}"
     if (lastP102ManifestTraceKey != traceKey) {
       lastP102ManifestTraceKey = traceKey
@@ -45,6 +63,11 @@ class OrionCinemaWebViewClient(
         "stage=manifest source=${current.sourceId.take(40)} capture=${current.downloadCaptureEnabled} mediaOrigins=${current.mediaOrigins.size}",
       )
     }
+  }
+
+  fun dispose() {
+    manifest?.sessionId?.let(OrionCinemaServiceWorkerDownloadObserver::deactivate)
+    manifest = null
   }
 
   fun recordPopupBlocked(view: WebView) {
@@ -76,6 +99,7 @@ class OrionCinemaWebViewClient(
         providerClass = current.providerClass,
         downloadCaptureEnabled = current.downloadCaptureEnabled,
         allowedMediaOrigins = current.mediaOrigins,
+        observationChannel = "webview",
       )
     }
     return if (decision.decision == "blocked") emptyBlockedResponse() else null
@@ -219,6 +243,65 @@ class OrionCinemaWebViewClient(
   private fun isMediaPath(path: String?): Boolean = path?.contains(Regex("\\.(m3u8|mpd|m4s|ts|mp4|webm)(\\?|$)", RegexOption.IGNORE_CASE)) == true
   private fun isSubtitlePath(path: String?): Boolean = path?.contains(Regex("\\.(vtt|srt|ass|ssa)(\\?|$)", RegexOption.IGNORE_CASE)) == true
   private fun isArtworkPath(path: String?): Boolean = path?.contains(Regex("\\.(avif|gif|jpe?g|png|webp)(\\?|$)", RegexOption.IGNORE_CASE)) == true
+}
+
+private object OrionCinemaServiceWorkerDownloadObserver {
+  private data class ActiveCapture(
+    val reactContext: WeakReference<ReactContext>,
+    val manifest: ShieldManifest,
+  )
+
+  @Volatile private var activeCapture: ActiveCapture? = null
+  @Volatile private var installAttempted = false
+
+  fun ensureInstalled() {
+    if (installAttempted) return
+    synchronized(this) {
+      if (installAttempted) return
+      installAttempted = true
+      try {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_BASIC_USAGE) ||
+          !WebViewFeature.isFeatureSupported(WebViewFeature.SERVICE_WORKER_SHOULD_INTERCEPT_REQUEST)
+        ) return
+        val controller = ServiceWorkerControllerCompat.getInstance()
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.COOKIE_INTERCEPT)) {
+          controller.serviceWorkerWebSettings.setIncludeCookiesOnShouldInterceptRequestEnabled(true)
+        }
+        controller.setServiceWorkerClient(object : ServiceWorkerClientCompat() {
+          override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
+            val capture = activeCapture ?: return null
+            val current = capture.manifest
+            val context = capture.reactContext.get() ?: return null
+            OrionDownloadRequestContextBroker.observeRequest(
+              reactContext = context,
+              request = request,
+              sourceId = current.sourceId,
+              sessionId = current.sessionId,
+              providerClass = current.providerClass,
+              downloadCaptureEnabled = current.downloadCaptureEnabled,
+              allowedMediaOrigins = current.mediaOrigins,
+              observationChannel = "service-worker",
+            )
+            // Observation only. Provider/service-worker networking remains authoritative.
+            return null
+          }
+        })
+      } catch (_: Throwable) {
+        // Older/broken WebView providers must keep playback functional.
+      }
+    }
+  }
+
+  fun activate(reactContext: ReactContext, manifest: ShieldManifest) {
+    if (!manifest.downloadCaptureEnabled || manifest.sessionId.isBlank()) return
+    ensureInstalled()
+    activeCapture = ActiveCapture(WeakReference(reactContext), manifest)
+  }
+
+  fun deactivate(sessionId: String) {
+    val current = activeCapture ?: return
+    if (current.manifest.sessionId == sessionId) activeCapture = null
+  }
 }
 
 private data class ShieldRule(

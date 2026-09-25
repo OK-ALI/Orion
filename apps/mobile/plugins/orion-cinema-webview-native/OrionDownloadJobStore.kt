@@ -23,12 +23,7 @@ internal object OrionDownloadJobStore {
     val state = readStateLocked()
     if (state.optInt("schemaVersion", 0) != 1) persistLocked(emptyState())
     else {
-      var changed = migrateOwnedArtifactsLocked(state)
-      val retiredDirectJobs = retireDirectExperimentalArtifactsLocked(state)
-      if (retiredDirectJobs.isNotEmpty()) {
-        changed = true
-        deleteRetiredDirectFilesLocked(context.applicationContext, retiredDirectJobs)
-      }
+      val changed = migrateOwnedArtifactsLocked(state)
       if (changed) persistLocked(state)
     }
   }

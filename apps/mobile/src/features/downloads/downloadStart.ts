@@ -17,7 +17,7 @@ function createJobId(): string {
 }
 
 /**
- * Starts the Android-owned HLS/DASH transfer engine for the logical Orion
+ * Starts the Android-owned direct/HLS/DASH transfer engine for the logical Orion
  * Library. Its physical MP4 owner is the persisted user-selected SAF folder.
  */
 export async function startMobileDownloadFromSelectionV1(input: StartMobileDownloadSelectionInputV1): Promise<string> {
@@ -32,8 +32,12 @@ export async function startMobileDownloadFromSelectionV1(input: StartMobileDownl
   if (candidate.preflight.state !== 'ready' || !candidate.preflight.requestContextReady) {
     throw new Error('The playback source is no longer ready. Open the player and try again.');
   }
-  if (selection.resolvedMethod !== 'fragments' || !['hls', 'dash'].includes(candidate.preflight.resolvedManifestKind)) {
-    throw new Error('Mobile downloads require a ready HLS or DASH stream. Try another source.');
+  const kind = candidate.preflight.resolvedManifestKind;
+  const methodMatchesKind = selection.resolvedMethod === 'direct'
+    ? kind === 'direct'
+    : selection.resolvedMethod === 'fragments' && (kind === 'hls' || kind === 'dash');
+  if (!methodMatchesKind) {
+    throw new Error('Mobile downloads require a ready Direct, HLS, or DASH stream. Resolve the source again.');
   }
   const destination: MobileDownloadJobV1['destination'] = 'orion-library';
   const storageTarget: MobileDownloadStorageTargetV1 | null = preferences.libraryStorageTarget;

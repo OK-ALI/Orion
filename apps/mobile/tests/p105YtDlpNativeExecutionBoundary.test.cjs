@@ -63,3 +63,19 @@ test('HLS playlist identity tolerates a UTF-8 BOM without turning the header int
   assert.doesNotMatch(hlsGateway, /fetchText\(bound, currentUrl, onlyMedia\.url\)[\s\S]{0,120}\?: return ResolvedMediaPlaylist/);
   assert.match(broker, /OrionDownloadFragmentPlanner\.isHlsPlaylistBody/);
 });
+
+
+test('P10.5 capture coverage observes WebView and Service Worker media requests with exact-cookie support', () => {
+  const client = fs.readFileSync(path.join(ROOT, 'plugins', 'orion-cinema-webview-native', 'OrionCinemaWebViewClient.kt'), 'utf8');
+  const manager = fs.readFileSync(path.join(ROOT, 'plugins', 'orion-cinema-webview-native', 'OrionCinemaWebViewManager.kt'), 'utf8');
+  assert.match(plugin, /androidx\.webkit:webkit:1\.15\.0/);
+  assert.match(plugin, /for \(const dependency of CINEMA_ANDROID_DEPENDENCIES\)/);
+  assert.match(client, /ServiceWorkerControllerCompat/);
+  assert.match(client, /ServiceWorkerClientCompat/);
+  assert.match(client, /SERVICE_WORKER_SHOULD_INTERCEPT_REQUEST/);
+  assert.match(client, /setIncludeCookiesOnShouldInterceptRequestEnabled\(true\)/);
+  assert.match(client, /observationChannel = "service-worker"/);
+  assert.match(client, /Observation only[\s\S]*return null/);
+  assert.match(manager, /WebSettingsCompat\.setCookiesIncludedInShouldInterceptRequest\(webView\.settings, true\)/);
+  assert.match(manager, /clients\.remove\(viewWrapper\)\?\.dispose\(\)/);
+});

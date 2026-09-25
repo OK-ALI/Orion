@@ -194,7 +194,7 @@ export default function PlayerScreen() {
     const finishFailure = () => {
       if (cancelled) return;
       clearFailoverTimer();
-      if (failMobileDownloadSourceResolutionV1(downloadItemKey, 'No download-ready HLS or DASH stream was found. Choose another source and retry.')) router.back();
+      if (failMobileDownloadSourceResolutionV1(downloadItemKey, 'No download-ready media stream was found. Choose another source and retry.')) router.back();
     };
     const advanceSource = () => {
       if (cancelled || advancing) return;

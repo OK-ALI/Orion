@@ -105,9 +105,9 @@ class OrionDownloadEngineModule(
         promise.reject("DOWNLOAD_SOURCE_REFRESH_REQUIRED", "The active playback source is no longer available. Open the player and try again.")
         return
       }
-      if (transfer.transferKind != "hls" && transfer.transferKind != "dash") {
+      if (transfer.transferKind !in setOf("direct", "hls", "dash")) {
         OrionDownloadTransferRuntime.release(jobId)
-        promise.reject("DOWNLOAD_FRAGMENT_SOURCE_REQUIRED", "Mobile downloads require a ready HLS or DASH stream. Try another source.")
+        promise.reject("DOWNLOAD_SOURCE_UNSUPPORTED", "Mobile downloads require a ready Direct, HLS, or DASH stream. Try another source.")
         return
       }
       val destination = job.optString("destination")

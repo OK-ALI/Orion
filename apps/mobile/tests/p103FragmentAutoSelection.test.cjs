@@ -6,20 +6,20 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
 
-test('P10.3 Auto is HLS/DASH-only and Direct is retired from Mobile execution', () => {
+test('P10.3 Auto restores verified Direct fallback while explicit fragments remains HLS/DASH-only', () => {
   const capture = read('src', 'features', 'downloads', 'downloadCandidateCapture.ts');
   const modal = read('src', 'components', 'DownloadModal.tsx');
   const start = read('src', 'features', 'downloads', 'downloadStart.ts');
   const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
-  assert.match(capture, /MobileDownloadTransferMethodV1 = 'auto' \| 'fragments'/);
-  assert.doesNotMatch(capture, /MobileDownloadTransferMethodV1 = .*'direct'/);
-  assert.match(capture, /candidate\.capabilities\.deviceStorage === true/);
-  assert.match(capture, /resolvedManifestKind === 'hls' \|\| candidate\.preflight\.resolvedManifestKind === 'dash'/);
-  assert.doesNotMatch(modal, /title: 'Direct file'/);
-  assert.match(modal, /Choose the best ready HLS or DASH stream/);
-  assert.match(start, /selection\.resolvedMethod !== 'fragments'/);
-  assert.match(start, /Mobile downloads require a ready HLS or DASH stream/);
-  assert.match(module, /DOWNLOAD_FRAGMENT_SOURCE_REQUIRED/);
+  const runtime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
+  assert.match(capture, /resolvedMethod: 'fragments' \| 'direct'/);
+  assert.match(capture, /method === 'fragments' \? kind === 'hls' \|\| kind === 'dash' : kind === 'hls' \|\| kind === 'dash' \|\| kind === 'direct'/);
+  assert.match(modal, /best ready HLS, DASH, or Direct media stream/);
+  assert.match(modal, /Stream fragments[\s\S]*ready HLS or DASH stream explicitly/);
+  assert.match(start, /selection\.resolvedMethod === 'direct'/);
+  assert.match(start, /Mobile downloads require a ready Direct, HLS, or DASH stream/);
+  assert.match(module, /transfer\.transferKind !in setOf\("direct", "hls", "dash"\)/);
+  assert.match(runtime, /"direct" -> runDirect\(context, job, bound\)/);
 });
 
 test('P10.3 HLS planner selects quality, audio group, init media and VOD fragments', () => {

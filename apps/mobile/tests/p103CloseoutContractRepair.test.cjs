@@ -49,10 +49,10 @@ test('P10.3 active foreground progress remains native and independent of optiona
   assert.doesNotMatch(nativeNotifications, /getMobileNotificationPreferencesV1|shouldDeliverMobileNotificationV1/);
 });
 
-test('P10.3 keeps the accepted fragment-only production boundary while retaining safe unsupported truth', () => {
+test('P10.3 keeps Direct/HLS/DASH production boundaries while retaining safe unsupported truth', () => {
   const module = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadEngineModule.kt');
   const runtime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
-  assert.match(module, /transfer\.transferKind != "hls" && transfer\.transferKind != "dash"/);
-  assert.match(runtime, /"direct" -> OrionDownloadJobStore\.markActionRequired\(jobId, "direct-retired"/);
+  assert.match(module, /transfer\.transferKind !in setOf\("direct", "hls", "dash"\)/);
+  assert.match(runtime, /"direct" -> runDirect\(context, job, bound\)/);
   assert.match(runtime, /hls-live-refresh-not-active/);
 });

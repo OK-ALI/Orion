@@ -16,6 +16,7 @@ const CINEMA_ANDROID_DEPENDENCY_MARKER = '// ORION_P105_OFFLINE_PLAYER_DEPENDENC
 const CINEMA_ANDROID_DEPENDENCIES = Object.freeze([
   'implementation "androidx.media3:media3-exoplayer:1.9.0"',
   'implementation "androidx.media3:media3-ui:1.9.0"',
+  'implementation "androidx.webkit:webkit:1.15.0"',
 ]);
 const YTDLP_ANDROID_DEPENDENCY_MARKER = '// ORION_P105_DESKTOP_PARITY_DOWNLOAD_ENGINE_DEPENDENCIES';
 const YTDLP_ANDROID_DEPENDENCIES = Object.freeze([
@@ -162,6 +163,15 @@ function withDownloadEngineGradle(config) {
           ...CINEMA_ANDROID_DEPENDENCIES,
         ].map((line) => `    ${line}`).join('\n')}`,
       );
+    } else {
+      for (const dependency of CINEMA_ANDROID_DEPENDENCIES) {
+        if (!nextConfig.modResults.contents.includes(dependency)) {
+          nextConfig.modResults.contents = nextConfig.modResults.contents.replace(
+            CINEMA_ANDROID_DEPENDENCY_MARKER,
+            `${CINEMA_ANDROID_DEPENDENCY_MARKER}\n    ${dependency}`,
+          );
+        }
+      }
     }
     if (!nextConfig.modResults.contents.includes(YTDLP_ANDROID_DEPENDENCY_MARKER)) {
       nextConfig.modResults.contents = nextConfig.modResults.contents.replace(

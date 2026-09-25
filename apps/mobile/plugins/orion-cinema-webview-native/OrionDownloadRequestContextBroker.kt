@@ -57,11 +57,13 @@ internal object OrionDownloadRequestContextBroker {
     providerClass: String?,
     downloadCaptureEnabled: Boolean,
     allowedMediaOrigins: List<String>,
+    observationChannel: String = "webview",
   ) {
     tracePhysicalOnce(
-      key = "$sessionId:${if (request.isForMainFrame) "main" else "subresource"}",
+      key = "$sessionId:$observationChannel:${if (request.isForMainFrame) "main" else "subresource"}",
       message = buildString {
         append("stage=observer")
+        append(" channel=").append(observationChannel.take(24))
         append(" source=").append(sourceId.take(40))
         append(" capture=").append(downloadCaptureEnabled)
         append(" frame=").append(if (request.isForMainFrame) "main" else "subresource")
@@ -397,8 +399,10 @@ internal object OrionDownloadRequestContextBroker {
     val contentType = connection.contentType?.substringBefore(';')?.trim()?.lowercase(Locale.US).orEmpty()
     var resolvedKind = resolveKind(context.observedManifestKind, contentType, null)
     var body: String? = null
+    var sampledBytes: ByteArray? = null
     if (resolvedKind == "hls" || resolvedKind == "dash" || context.observedManifestKind == "extensionless") {
-      body = readBoundedText(connection, MAX_MANIFEST_BYTES)
+      sampledBytes = readBoundedBytes(connection, MAX_MANIFEST_BYTES)
+      body = sampledBytes.toString(Charsets.UTF_8)
       resolvedKind = resolveKind(context.observedManifestKind, contentType, body)
     }
 
@@ -435,8 +439,15 @@ internal object OrionDownloadRequestContextBroker {
         reason = "The manifest references media outside this source's approved request boundary.",
       )
     }
-    val mediaProbe = probeFirstMedia(context, resolvedKind, effectiveUrl, body.orEmpty(), connection)
+    val mediaProbe = if (resolvedKind == "direct" && sampledBytes != null) {
+      probeDirectSample(effectiveUrl, contentType, sampledBytes)
+    } else {
+      probeFirstMedia(context, resolvedKind, effectiveUrl, body.orEmpty(), connection)
+    }
     if (mediaProbe.code != null) {
+      if (mediaProbe.code == "unsupported-direct-container" || mediaProbe.code == "invalid-media") {
+        return PreflightResult.unsupported(mediaProbe.code, mediaProbe.reason ?: "This direct media response is not supported for offline playback.")
+      }
       return PreflightResult(
         state = if (mediaProbe.code == "request-context-rejected") "expired" else "unreachable",
         reachability = "unreachable",
@@ -473,6 +484,21 @@ internal object OrionDownloadRequestContextBroker {
     val reason: String? = null,
   )
 
+  private fun probeDirectSample(rawUrl: String, contentType: String, bytes: ByteArray): MediaProbe {
+    if (bytes.isEmpty()) return MediaProbe(code = "empty-media", reason = "The source returned no media bytes.")
+    val prefix = bytes.copyOfRange(0, min(bytes.size, 256)).toString(Charsets.UTF_8).trimStart()
+    if (contentType.contains("text/html") || contentType.contains("application/json") || prefix.startsWith("<html", true) || prefix.startsWith("{") || prefix.startsWith("[")) {
+      return MediaProbe(code = "invalid-media", reason = "The source returned a page or data response instead of direct video media.")
+    }
+    val path = try { URL(rawUrl).path.lowercase(Locale.US) } catch (_: Throwable) { "" }
+    val declaredMp4 = contentType in setOf("video/mp4", "video/x-m4v") || path.endsWith(".mp4") || path.endsWith(".m4v")
+    val isoBmff = bytes.size >= 12 && bytes[4] == 'f'.code.toByte() && bytes[5] == 't'.code.toByte() && bytes[6] == 'y'.code.toByte() && bytes[7] == 'p'.code.toByte()
+    if (!declaredMp4 && !isoBmff) {
+      return MediaProbe(code = "unsupported-direct-container", reason = "This source exposed direct media, but not an MP4-compatible stream Orion can finalize safely.")
+    }
+    return MediaProbe()
+  }
+
   private fun probeFirstMedia(
     context: CapturedContext,
     kind: String,
@@ -481,8 +507,8 @@ internal object OrionDownloadRequestContextBroker {
     directConnection: HttpURLConnection,
   ): MediaProbe {
     if (kind == "direct") {
-      return if (directConnection.inputStream.use { it.read() } >= 0) MediaProbe()
-      else MediaProbe(code = "empty-media", reason = "The source returned no media bytes.")
+      val type = directConnection.contentType?.substringBefore(';')?.trim()?.lowercase(Locale.US).orEmpty()
+      return probeDirectSample(rootUrl, type, readBoundedBytes(directConnection, 4096))
     }
     if (kind == "hls") return probeFirstHlsMedia(context, rootUrl, manifest)
 
@@ -657,8 +683,9 @@ internal object OrionDownloadRequestContextBroker {
 
   private fun openConnection(context: CapturedContext, rawUrl: String): HttpURLConnection {
     val request = authorizedRequestFor(context, rawUrl)
-    val range = if (context.observedManifestKind == "direct") 0L else null
-    val connection = OrionDownloadAuthorizedHttp.openRequest(request, range, range)
+    // Preflight uses a normal bounded GET so Content-Length remains the full
+    // direct object size instead of becoming a synthetic 1-byte range length.
+    val connection = OrionDownloadAuthorizedHttp.openRequest(request, null, null)
     connection.connectTimeout = CONNECT_TIMEOUT_MS
     connection.readTimeout = READ_TIMEOUT_MS
     return connection
@@ -1122,8 +1149,8 @@ internal object OrionDownloadRequestContextBroker {
     return length.takeIf { it > 0L }
   }
 
-  private fun readBoundedText(connection: HttpURLConnection, maxBytes: Int): String {
-    val stream = try { connection.inputStream } catch (_: Throwable) { connection.errorStream } ?: return ""
+  private fun readBoundedBytes(connection: HttpURLConnection, maxBytes: Int): ByteArray {
+    val stream = try { connection.inputStream } catch (_: Throwable) { connection.errorStream } ?: return byteArrayOf()
     return stream.use { input ->
       val buffer = ByteArray(8192)
       val output = java.io.ByteArrayOutputStream()
@@ -1134,9 +1161,12 @@ internal object OrionDownloadRequestContextBroker {
         output.write(buffer, 0, read)
         remaining -= read
       }
-      output.toString(Charsets.UTF_8.name())
+      output.toByteArray()
     }
   }
+
+  private fun readBoundedText(connection: HttpURLConnection, maxBytes: Int): String =
+    readBoundedBytes(connection, maxBytes).toString(Charsets.UTF_8)
 
   private fun orionLibraryFreeBytes(reactContext: ReactContext): Long? = try {
     StatFs(reactContext.filesDir.absolutePath).availableBytes

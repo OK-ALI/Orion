@@ -6,15 +6,15 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
 
-test('P10.3 physical repair removes Direct and keeps Auto fragment-only', () => {
+test('P10.3 physical repair keeps fragment preference while restoring verified Direct Auto fallback', () => {
   const capture = read('src', 'features', 'downloads', 'downloadCandidateCapture.ts');
   const modal = read('src', 'components', 'DownloadModal.tsx');
   const start = read('src', 'features', 'downloads', 'downloadStart.ts');
-  assert.match(capture, /MobileDownloadTransferMethodV1 = 'auto' \| 'fragments'/);
-  assert.doesNotMatch(modal, /title: 'Direct file'/);
-  assert.doesNotMatch(modal, /Direct is available as the selected fallback/);
-  assert.match(start, /Mobile downloads require a ready HLS or DASH stream/);
-  assert.match(start, /selection\.resolvedMethod !== 'fragments'/);
+  assert.match(capture, /resolvedMethod: 'fragments' \| 'direct'/);
+  assert.match(modal, /HLS, DASH, or Direct media stream/);
+  assert.match(modal, /Stream fragments/);
+  assert.match(start, /Mobile downloads require a ready Direct, HLS, or DASH stream/);
+  assert.match(start, /selection\.resolvedMethod === 'direct'/);
 });
 
 test('P10.3 source intent retains the selected method and auto-returns only on ready fragments', () => {
@@ -71,7 +71,7 @@ test('P10.3 native subtitle packaging is private, bounded and optional during fr
   const store = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadJobStore.kt');
   const runtime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
   const subtitleRuntime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadSubtitleRuntime.kt');
-  assert.match(module, /DOWNLOAD_FRAGMENT_SOURCE_REQUIRED/);
+  assert.match(module, /DOWNLOAD_SOURCE_UNSUPPORTED/);
   assert.match(module, /OrionDownloadSubtitleRuntime\.register/);
   assert.doesNotMatch(store, /_subtitleSources/);
   assert.match(store, /if \(key\.startsWith\("_"\)\) remove\.add\(key\)/);
@@ -85,13 +85,12 @@ test('P10.3 native subtitle packaging is private, bounded and optional during fr
   assert.doesNotMatch(store, /\.put\("url"/);
 });
 
-test('P10.3 retires experimental Direct residue and renders real operational download controls', () => {
+test('P10.3 preserves supported Direct jobs and renders real operational download controls', () => {
   const store = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadJobStore.kt');
   const screen = read('app', '(tabs)', 'downloads.tsx');
   const activity = read('src', 'features', 'downloads', 'DownloadActivityList.tsx');
-  assert.match(store, /retireDirectExperimentalArtifactsLocked/);
-  assert.match(store, /deleteRetiredDirectFilesLocked/);
-  assert.match(store, /job\.optString\("_transferKind"\) == "direct"/);
+  assert.doesNotMatch(store.match(/fun initialize\(context: Context\)[\s\S]*?\n  }/)?.[0] ?? '', /retireDirectExperimentalArtifactsLocked|deleteRetiredDirectFilesLocked|direct-retired/);
+  assert.match(read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt'), /"direct" -> runDirect\(context, job, bound\)/);
   assert.match(screen, /DownloadActivityList/);
   assert.doesNotMatch(screen, /Queue and Offline Library presentation will use/);
   assert.match(activity, /Pause/);
@@ -121,11 +120,12 @@ test('P10.3 runtime repair stays under the Mobile source-size ceiling on touched
 test('P10.3 capture parity ranks viable fragment candidates instead of taking the newest one blindly', () => {
   const capture = read('src', 'features', 'downloads', 'downloadCandidateCapture.ts');
   assert.match(capture, /scoreMobileDownloadCandidateV1/);
-  assert.match(capture, /kind === 'hls' \? 200 : kind === 'dash' \? 150/);
+  assert.match(capture, /kind === 'hls' \? 300 : kind === 'dash' \? 250 : kind === 'direct' \? 200/);
   assert.match(capture, /\.sort\(\(left, right\) => scoreMobileDownloadCandidateV1\(right\) - scoreMobileDownloadCandidateV1\(left\)/);
   const selection = capture.match(/export function selectMobileDownloadCandidateForItemV1[\s\S]*?^}/m)?.[0] || '';
   assert.ok(selection, 'candidate selection source missing');
-  assert.doesNotMatch(selection, /resolvedManifestKind === 'direct'/);
+  assert.match(selection, /kind === 'hls' \|\| kind === 'dash' \|\| kind === 'direct'/);
+  assert.match(selection, /resolvedManifestKind === 'direct' \? 'direct' : 'fragments'/);
 });
 
 test('P10.3 foreground notification uses real media title and native progress truth', () => {
@@ -161,7 +161,7 @@ test('P10.4C Orion Library activation remains persisted-target, SAF-scoped and p
   assert.doesNotMatch(modal, /chooseNativeDeviceStorageTargetV1/);
   assert.match(module, /destination !in setOf\("orion-library", "device-storage"\)/);
   assert.match(module, /OrionDownloadStorageRegistry\.describe/);
-  assert.match(broker, /ready && resolvedKind in setOf\("hls", "dash"\)/);
+  assert.match(broker, /deviceStorageReady = ready && resolvedKind in setOf\("hls", "dash"\)/);
   assert.match(runtime, /finalizeFragmentedToDeviceStorage/);
   assert.match(runtime, /OrionDownloadPortableFinalizer\.finalizeToDeviceStorage/);
   assert.match(runtime, /\.put\("locator", org\.json\.JSONObject\(\)\.put\("kind", "content-uri"\)/);

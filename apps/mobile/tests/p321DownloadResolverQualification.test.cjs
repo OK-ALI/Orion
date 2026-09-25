@@ -38,7 +38,7 @@ const candidate = (sourceId, state, kind = 'hls', ready = false) => ({
   },
 });
 
-test('download source qualification waits through checking, accepts ready HLS, and fails over only when all candidates are terminal', () => {
+test('download source qualification waits through checking, accepts ready HLS or Direct media, and fails over only when all candidates are terminal', () => {
   const capture = loadTs('src/features/downloads/downloadCandidateCapture.ts', {
     'react-native': {
       DeviceEventEmitter: { addListener: () => ({ remove() {} }) },
@@ -52,7 +52,7 @@ test('download source qualification waits through checking, accepts ready HLS, a
   assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', [candidate('vixsrc', 'unreachable')]), 'terminal');
   assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', [candidate('vixsrc', 'unreachable'), candidate('vixsrc', 'checking')]), 'checking');
   assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', [candidate('vixsrc', 'ready', 'hls', true)]), 'ready');
-  assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', [candidate('vixsrc', 'ready', 'direct', true)]), 'terminal');
+  assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', [candidate('vixsrc', 'ready', 'direct', true)]), 'ready');
 });
 
 test('temporary download resolution is event-driven with an eight-second watchdog and no 30-second source stall', () => {

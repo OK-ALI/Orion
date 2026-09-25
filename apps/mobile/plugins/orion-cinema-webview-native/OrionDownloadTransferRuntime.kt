@@ -80,7 +80,7 @@ internal object OrionDownloadTransferEngine {
     }
 
     when (bound.transferKind) {
-      "direct" -> OrionDownloadJobStore.markActionRequired(jobId, "direct-retired", "Mobile downloads now require an HLS or DASH stream. Try another source.")
+      "direct" -> runDirect(context, job, bound)
       "hls" -> runHls(context, job, bound)
       "dash" -> runDash(context, job, bound)
       else -> OrionDownloadJobStore.markActionRequired(

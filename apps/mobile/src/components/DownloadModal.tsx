@@ -151,7 +151,7 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     ? getMobileDownloadSourceChoices(target.media.mediaType)
     : [];
   const methodOptions: readonly { id: MobileDownloadTransferMethodV1; title: string; description: string }[] = [
-    { id: 'auto', title: 'Auto', description: 'Recommended. Choose the best ready HLS or DASH stream.' },
+    { id: 'auto', title: 'Auto', description: 'Recommended. Choose the best ready HLS, DASH, or Direct media stream.' },
     { id: 'fragments', title: 'Stream fragments', description: 'Use a ready HLS or DASH stream explicitly.' },
   ];
 
@@ -200,14 +200,14 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
       };
     }
     if (!latestCandidate) {
-      return { tone: 'neutral' as const, icon: 'play-circle-outline' as const, title: 'Playback source required', detail: 'Open the player. Orion will return here automatically as soon as a ready HLS or DASH stream is resolved.' };
+      return { tone: 'neutral' as const, icon: 'play-circle-outline' as const, title: 'Playback source required', detail: 'Open the player. Orion will return here automatically as soon as a ready HLS, DASH, or Direct media stream is resolved.' };
     }
     const state = latestCandidate.preflight.state;
     const kind = latestCandidate.preflight.resolvedManifestKind;
-    if (state === 'checking') return { tone: 'warning' as const, icon: 'sync-outline' as const, title: 'Resolving stream…', detail: `Checking ${sourceLabel(latestCandidate.sourceId)} for a downloadable HLS or DASH stream.` };
+    if (state === 'checking') return { tone: 'warning' as const, icon: 'sync-outline' as const, title: 'Resolving stream…', detail: `Checking ${sourceLabel(latestCandidate.sourceId)} for a downloadable media stream.` };
     if (state === 'expired' || state === 'action-required') return { tone: 'warning' as const, icon: 'refresh-circle-outline' as const, title: 'Source needs refresh', detail: latestCandidate.preflight.reason || 'Open the player and choose a source again.' };
-    if (state === 'protected' || state === 'unreachable' || state === 'unsupported' || kind === 'direct') return { tone: 'danger' as const, icon: 'alert-circle-outline' as const, title: 'This source is not download-ready', detail: kind === 'direct' ? 'This source exposed only a Direct file. Mobile downloads now require HLS or DASH. Try another source.' : latestCandidate.preflight.reason || 'Try another playback source.' };
-    return { tone: 'neutral' as const, icon: 'play-circle-outline' as const, title: 'Playback source required', detail: 'Open the player and choose a source that exposes a ready HLS or DASH stream.' };
+    if (state === 'protected' || state === 'unreachable' || state === 'unsupported') return { tone: 'danger' as const, icon: 'alert-circle-outline' as const, title: 'This source is not download-ready', detail: latestCandidate.preflight.reason || 'Try another playback source.' };
+    return { tone: 'neutral' as const, icon: 'play-circle-outline' as const, title: 'Playback source required', detail: 'Open the player and choose a source that exposes a ready HLS, DASH, or Direct media stream.' };
   }, [destination, latestCandidate, preferences.preferredQuality, selectedCandidate, sourceResolutionFailure]);
 
   const statusColor = sourceStatus.tone === 'success' ? theme.success : sourceStatus.tone === 'warning' ? theme.warning : sourceStatus.tone === 'danger' ? theme.danger : theme.textMuted;

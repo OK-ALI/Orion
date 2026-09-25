@@ -5,6 +5,8 @@ import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import androidx.annotation.NonNull
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.ViewManagerDelegate
@@ -45,6 +47,13 @@ class OrionCinemaWebViewManager : RNCWebViewManager() {
     val webView = viewWrapper.webView
     webView.settings.setSupportMultipleWindows(false)
     webView.settings.javaScriptCanOpenWindowsAutomatically = false
+    try {
+      if (WebViewFeature.isFeatureSupported(WebViewFeature.COOKIE_INTERCEPT)) {
+        WebSettingsCompat.setCookiesIncludedInShouldInterceptRequest(webView.settings, true)
+      }
+    } catch (_: Throwable) {
+      // Cookie interception is opportunistic and must never break provider playback.
+    }
     webView.setWebViewClient(client)
     webView.setWebChromeClient(OrionCinemaWebChromeClient(webView, client))
     val tapObserver = ConfirmedTapObserver(reactContext, viewWrapper.id) {
@@ -80,7 +89,7 @@ class OrionCinemaWebViewManager : RNCWebViewManager() {
     presentationModes.remove(viewWrapper)
     surfaceRecoveryGeneration.remove(viewWrapper)
     completedSurfaceRecovery.remove(viewWrapper)
-    clients.remove(viewWrapper)
+    clients.remove(viewWrapper)?.dispose()
     viewWrapper.webView.setOnTouchListener(null)
     super.onDropViewInstance(viewWrapper)
   }

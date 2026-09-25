@@ -317,7 +317,7 @@ export type MobileDownloadTransferMethodV1 = 'auto' | 'fragments';
 
 export interface MobileDownloadCandidateSelectionV1 {
   method: MobileDownloadTransferMethodV1;
-  resolvedMethod: 'fragments';
+  resolvedMethod: 'fragments' | 'direct';
   candidate: MobileDownloadCandidateV1;
 }
 
@@ -347,7 +347,7 @@ const TERMINAL_SOURCE_PREFLIGHT_STATES = new Set<MobileDownloadPreflightStateV1>
  * Source-level resolution truth for the temporary download-only Player session.
  * One failed opaque request is not enough to reject a provider: Orion waits until
  * every observed candidate for that source is terminal, or until the watchdog in
- * PlayerScreen expires. A genuinely ready HLS/DASH candidate always wins.
+ * PlayerScreen expires. A genuinely ready HLS, DASH, or Direct media candidate always wins.
  */
 export function getMobileDownloadSourceResolutionStateV1(
   itemKey: string,
@@ -360,12 +360,11 @@ export function getMobileDownloadSourceResolutionStateV1(
   if (!candidates.length) return 'empty';
   if (candidates.some((candidate) => (
     isReadyDownloadCandidate(candidate, 'orion-library')
-    && (candidate.preflight.resolvedManifestKind === 'hls' || candidate.preflight.resolvedManifestKind === 'dash')
+    && ['hls', 'dash', 'direct'].includes(candidate.preflight.resolvedManifestKind)
   ))) return 'ready';
   if (candidates.some((candidate) => candidate.preflight.state === 'checking')) return 'checking';
   const allTerminal = candidates.every((candidate) => (
     TERMINAL_SOURCE_PREFLIGHT_STATES.has(candidate.preflight.state)
-    || candidate.preflight.resolvedManifestKind === 'direct'
     || candidate.preflight.resolvedManifestKind === 'unknown'
   ));
   return allTerminal ? 'terminal' : 'checking';
@@ -374,7 +373,7 @@ export function getMobileDownloadSourceResolutionStateV1(
 
 export function scoreMobileDownloadCandidateV1(candidate: MobileDownloadCandidateV1): number {
   const kind = candidate.preflight.resolvedManifestKind;
-  let score = kind === 'hls' ? 200 : kind === 'dash' ? 150 : 0;
+  let score = kind === 'hls' ? 300 : kind === 'dash' ? 250 : kind === 'direct' ? 200 : 0;
   if (candidate.preflight.protection === 'clear') score += 20;
   if (candidate.capabilities.resumable) score += 10;
   if (candidate.expiry === 'stable') score += 8;
@@ -389,13 +388,21 @@ export function selectMobileDownloadCandidateForItemV1(
   values: readonly MobileDownloadCandidateSnapshotV1[] = snapshots,
   destination: 'orion-library' | 'device-storage' = 'orion-library',
 ): MobileDownloadCandidateSelectionV1 | null {
-  const fragmentCandidate = values
+  const selected = values
     .filter((entry) => entry.itemKey === itemKey)
     .map((entry) => entry.candidate)
     .filter((candidate) => isReadyDownloadCandidate(candidate, destination))
-    .filter((candidate) => candidate.preflight.resolvedManifestKind === 'hls' || candidate.preflight.resolvedManifestKind === 'dash')
+    .filter((candidate) => {
+      const kind = candidate.preflight.resolvedManifestKind;
+      return method === 'fragments' ? kind === 'hls' || kind === 'dash' : kind === 'hls' || kind === 'dash' || kind === 'direct';
+    })
     .sort((left, right) => scoreMobileDownloadCandidateV1(right) - scoreMobileDownloadCandidateV1(left) || right.capturedAt - left.capturedAt)[0];
-  return fragmentCandidate ? { method, resolvedMethod: 'fragments', candidate: fragmentCandidate } : null;
+  if (!selected) return null;
+  return {
+    method,
+    resolvedMethod: selected.preflight.resolvedManifestKind === 'direct' ? 'direct' : 'fragments',
+    candidate: selected,
+  };
 }
 
 export function getLatestMobileDownloadCandidateForItemV1(itemKey: string): MobileDownloadCandidateV1 | null {
