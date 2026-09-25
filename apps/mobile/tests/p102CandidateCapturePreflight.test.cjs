@@ -84,6 +84,9 @@ test('P10.2 preflight verifies reachability shape expiry protection and storage 
   assert.match(broker, /storage-insufficient/);
   assert.match(broker, /candidate-expired/);
   assert.match(broker, /unsupported-media-shape/);
+  assert.match(broker, /context\.observedManifestKind == "extensionless" && sampledBytes != null/);
+  assert.match(broker, /stage=manifest-direct-fallback/);
+  assert.match(broker, /resolvedKind = "direct"/);
 });
 
 test('P10.2 request-context broker is job-scoped and exact-descendant constrained instead of a general proxy', () => {

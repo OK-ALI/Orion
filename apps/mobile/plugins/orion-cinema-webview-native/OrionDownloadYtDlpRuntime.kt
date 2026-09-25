@@ -339,6 +339,14 @@ internal object OrionDownloadYtDlpRuntime {
       .addOption("--restrict-filenames")
       .addOption("--output", File(workDir, "media.%(ext)s").absolutePath)
 
+    // VOD HLS must be written by ffmpeg, not the native HLS concatenator.
+    // Native HLS can leave MPEG-TS bytes under an .mp4 name, which Orion's
+    // strict finalized-media verifier must reject. Keep this protocol-scoped
+    // so DASH retains its existing downloader path.
+    if (authority.transferKind == "hls") {
+      request.addOption("--downloader", "m3u8:ffmpeg")
+    }
+
     authority.safeGlobalHeaders.forEach { (name, value) ->
       val safeName = safeHeaderName(name) ?: return@forEach
       val safeValue = safeHeaderValue(value) ?: return@forEach

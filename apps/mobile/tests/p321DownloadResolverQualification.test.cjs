@@ -63,7 +63,12 @@ test('temporary download resolution is event-driven with an eight-second watchdo
   assert.match(player, /subscribeMobileDownloadCandidatesV1/);
   assert.match(player, /getMobileDownloadSourceResolutionStateV1/);
   assert.match(player, /health\?\.state === 'failed' && health\.cooldownUntil > Date\.now\(\)/);
-  assert.match(player, /providerTerminal \? DOWNLOAD_TERMINAL_GRACE_MS : DOWNLOAD_SOURCE_WATCHDOG_MS/);
+  assert.match(player, /const sourceDeadlineAt = Date\.now\(\) \+ DOWNLOAD_SOURCE_WATCHDOG_MS/);
+  assert.match(player, /terminalDeadlineAt = now \+ DOWNLOAD_TERMINAL_GRACE_MS/);
+  assert.match(player, /Math\.min\(sourceDeadlineAt, terminalDeadlineAt \?\? sourceDeadlineAt\)/);
+  assert.match(player, /setTimeout\(advanceSource, Math\.max\(0, deadlineAt - now\)\)/);
+  assert.match(player, /scheduleAdvance\(providerTerminal\)/);
+  assert.doesNotMatch(player, /scheduleAdvance\(providerTerminal \? DOWNLOAD_TERMINAL_GRACE_MS : DOWNLOAD_SOURCE_WATCHDOG_MS\)/);
   assert.doesNotMatch(player, /30_000/);
   assert.doesNotMatch(player, /Try another download source\?/);
 });

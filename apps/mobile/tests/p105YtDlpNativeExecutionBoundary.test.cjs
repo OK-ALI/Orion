@@ -24,6 +24,9 @@ test('P10.5 Candidate 2 keeps the native-only fixed yt-dlp process boundary with
   assert.match(runtime, /--socket-timeout/);
   assert.match(runtime, /--fragment-retries/);
   assert.match(runtime, /--concurrent-fragments/);
+  assert.match(runtime, /if \(authority\.transferKind == "hls"\)/);
+  assert.match(runtime, /addOption\("--downloader", "m3u8:ffmpeg"\)/);
+  assert.doesNotMatch(runtime, /authority\.transferKind == "dash"[\s\S]{0,160}m3u8:ffmpeg/);
   assert.match(runtime, /--add-header/);
   assert.match(runtime, /authority\.rootUrl/);
   assert.match(runtime, /authority\.safeGlobalHeaders/);

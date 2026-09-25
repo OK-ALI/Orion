@@ -186,6 +186,8 @@ export default function PlayerScreen() {
     let cancelled = false;
     let advancing = false;
     let failoverTimer: ReturnType<typeof setTimeout> | null = null;
+    const sourceDeadlineAt = Date.now() + DOWNLOAD_SOURCE_WATCHDOG_MS;
+    let terminalDeadlineAt: number | null = null;
 
     const clearFailoverTimer = () => {
       if (failoverTimer) clearTimeout(failoverTimer);
@@ -215,9 +217,14 @@ export default function PlayerScreen() {
       setForceStartFromBeginning(true);
       setSourceId(next.id);
     };
-    const scheduleAdvance = (delayMs: number) => {
+    const scheduleAdvance = (providerTerminal: boolean) => {
+      const now = Date.now();
+      if (providerTerminal && terminalDeadlineAt == null) {
+        terminalDeadlineAt = now + DOWNLOAD_TERMINAL_GRACE_MS;
+      }
+      const deadlineAt = Math.min(sourceDeadlineAt, terminalDeadlineAt ?? sourceDeadlineAt);
       clearFailoverTimer();
-      failoverTimer = setTimeout(advanceSource, delayMs);
+      failoverTimer = setTimeout(advanceSource, Math.max(0, deadlineAt - now));
     };
     const unsubscribe = subscribeMobileDownloadCandidatesV1((snapshots) => {
       if (cancelled) return;
@@ -233,7 +240,7 @@ export default function PlayerScreen() {
       }
       const health = getMobileSourceHealth(sourceId, type);
       const providerTerminal = health?.state === 'failed' && health.cooldownUntil > Date.now();
-      scheduleAdvance(providerTerminal ? DOWNLOAD_TERMINAL_GRACE_MS : DOWNLOAD_SOURCE_WATCHDOG_MS);
+      scheduleAdvance(providerTerminal);
     });
 
     return () => {

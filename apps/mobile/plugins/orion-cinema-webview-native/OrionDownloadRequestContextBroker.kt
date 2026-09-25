@@ -422,7 +422,22 @@ internal object OrionDownloadRequestContextBroker {
       return PreflightResult.unsupported("unsupported-media-shape", "This source did not expose a supported direct, HLS, or DASH media shape.")
     }
     if (resolvedKind == "hls" && body?.let(OrionDownloadFragmentPlanner::isHlsPlaylistBody) != true) {
-      return PreflightResult.unsupported("invalid-hls-manifest", "The captured HLS response is not a valid playlist.")
+      val directFallback =
+        if (context.observedManifestKind == "extensionless" && sampledBytes != null) {
+          probeDirectSample(effectiveUrl, contentType, sampledBytes)
+        } else {
+          null
+        }
+      if (directFallback != null && directFallback.code == null) {
+        resolvedKind = "direct"
+        body = null
+        tracePhysicalOnce(
+          key = "${context.sessionId}:manifest-direct-fallback",
+          message = "stage=manifest-direct-fallback source=${context.sourceId.take(40)} resolved=direct",
+        )
+      } else {
+        return PreflightResult.unsupported("invalid-hls-manifest", "The captured HLS response is not a valid playlist.")
+      }
     }
     if (resolvedKind == "dash" && body?.contains(Regex("<MPD(?:\\s|>)", RegexOption.IGNORE_CASE)) != true) {
       return PreflightResult.unsupported("invalid-dash-manifest", "The captured DASH response is not a valid manifest.")
