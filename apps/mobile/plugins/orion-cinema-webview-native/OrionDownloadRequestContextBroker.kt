@@ -663,21 +663,37 @@ internal object OrionDownloadRequestContextBroker {
       }
       urls.add(fragment)
       val media = probeChild(context, fragment, 4096, false, mediaBytes = true)
-      if (media.code != null) return MediaProbe(code = media.code, reason = media.reason)
       val mediaSignature = preflightMediaSignatureClass(media.bytes)
-      val mediaIsPlaylist = isHlsPlaylistProbe(media)
+      val mediaIsPlaylist = media.bytes.isNotEmpty() && isHlsPlaylistProbe(media)
+      val mediaOutcome = when {
+        media.code != null -> media.code
+        mediaIsPlaylist -> "playlist"
+        !isPrimaryHlsMediaSignature(mediaSignature) -> "non-av-media"
+        else -> "ok"
+      }
       tracePhysicalOnce(
         key = "${context.sessionId}:hls-media-child:${context.candidateId}:$depth",
         message = buildString {
           append("stage=hls-media-child")
           append(" depth=").append(depth)
           append(" fragments=").append(plan.mediaFragmentCount)
+          append(" status=").append(if (media.status > 0) statusClass(media.status) else "none")
           append(" length=").append(media.contentLength)
           append(" type=").append(contentClass(media.contentType))
           append(" signature=").append(mediaSignature)
           append(" playlist=").append(mediaIsPlaylist)
+          append(" keyed=").append(plan.keyUrls.isNotEmpty())
+          append(" context=").append(requestContextClass(context, fragment))
+          append(" outcome=").append(mediaOutcome)
         },
       )
+      if (media.code != null) return MediaProbe(code = media.code, reason = media.reason)
+      if (!mediaIsPlaylist && !isPrimaryHlsMediaSignature(mediaSignature)) {
+        return MediaProbe(
+          code = "hls-primary-media-not-av",
+          reason = "The HLS rendition exposed subtitle or non-audio/video media instead of primary movie media.",
+        )
+      }
 
       if (!mediaIsPlaylist) {
         val mediaFragments = plan.fragments.filterNot { it.role.endsWith("-init") }
@@ -688,21 +704,40 @@ internal object OrionDownloadRequestContextBroker {
           }
           urls.add(representative.url)
           val representativeProbe = probeChild(context, representative.url, 4096, false, mediaBytes = true)
-          if (representativeProbe.code != null) return MediaProbe(code = representativeProbe.code, reason = representativeProbe.reason)
-          val representativeIsPlaylist = isHlsPlaylistProbe(representativeProbe)
+          val representativeSignature = preflightMediaSignatureClass(representativeProbe.bytes)
+          val representativeIsPlaylist = representativeProbe.bytes.isNotEmpty() && isHlsPlaylistProbe(representativeProbe)
+          val representativeOutcome = when {
+            representativeProbe.code != null -> representativeProbe.code
+            representativeIsPlaylist -> "playlist"
+            !isPrimaryHlsMediaSignature(representativeSignature) -> "non-av-media"
+            else -> "ok"
+          }
           tracePhysicalOnce(
             key = "${context.sessionId}:hls-media-representative:${context.candidateId}:$depth",
             message = buildString {
               append("stage=hls-media-representative")
               append(" depth=").append(depth)
+              append(" status=").append(if (representativeProbe.status > 0) statusClass(representativeProbe.status) else "none")
               append(" length=").append(representativeProbe.contentLength)
               append(" type=").append(contentClass(representativeProbe.contentType))
-              append(" signature=").append(preflightMediaSignatureClass(representativeProbe.bytes))
+              append(" signature=").append(representativeSignature)
               append(" playlist=").append(representativeIsPlaylist)
+              append(" keyed=").append(plan.keyUrls.isNotEmpty())
+              append(" context=").append(requestContextClass(context, representative.url))
+              append(" outcome=").append(representativeOutcome)
             },
           )
+          if (representativeProbe.code != null) {
+            return MediaProbe(code = representativeProbe.code, reason = representativeProbe.reason)
+          }
           if (representativeIsPlaylist) {
             return MediaProbe(code = "hls-media-shape-unstable", reason = "The HLS stream changed back into a playlist while Orion verified its media segments.")
+          }
+          if (!isPrimaryHlsMediaSignature(representativeSignature)) {
+            return MediaProbe(
+              code = "hls-primary-media-not-av",
+              reason = "The HLS rendition exposed subtitle or non-audio/video media instead of primary movie media.",
+            )
           }
         }
         return MediaProbe(urls)
@@ -728,6 +763,7 @@ internal object OrionDownloadRequestContextBroker {
     val bytes: ByteArray = byteArrayOf(),
     val contentType: String = "",
     val contentLength: Long = -1L,
+    val status: Int = 0,
     val code: String? = null,
     val reason: String? = null,
   )
@@ -753,10 +789,18 @@ internal object OrionDownloadRequestContextBroker {
           return@repeat
         }
         if (status == 401 || status == 403) {
-          return ChildProbe(code = "request-context-rejected", reason = "The source rejected the media request. Play it again or choose another source.")
+          return ChildProbe(
+            status = status,
+            code = "request-context-rejected",
+            reason = "The source rejected the media request. Play it again or choose another source.",
+          )
         }
         if (status !in 200..299) {
-          return ChildProbe(code = "media-child-unavailable", reason = "The source did not return its first media request.")
+          return ChildProbe(
+            status = status,
+            code = "media-child-unavailable",
+            reason = "The source did not return its first media request.",
+          )
         }
         val bytes = connection.inputStream.use { input ->
           val output = java.io.ByteArrayOutputStream()
@@ -768,15 +812,31 @@ internal object OrionDownloadRequestContextBroker {
           }
           output.toByteArray()
         }
-        if (bytes.isEmpty()) return ChildProbe(code = "empty-media", reason = "The source returned no media bytes.")
+        if (bytes.isEmpty()) {
+          return ChildProbe(
+            status = status,
+            contentType = connection.contentType.orEmpty().lowercase(Locale.US),
+            contentLength = connection.contentLengthLong,
+            code = "empty-media",
+            reason = "The source returned no media bytes.",
+          )
+        }
         val type = connection.contentType.orEmpty().lowercase(Locale.US)
         if (mediaBytes && (type.contains("text/html") || type.contains("application/json") || bytes.toString(Charsets.UTF_8).trimStart().startsWith("<html", true))) {
-          return ChildProbe(code = "invalid-media", reason = "The source returned a page instead of media bytes.")
+          return ChildProbe(
+            bytes = bytes,
+            contentType = type,
+            contentLength = connection.contentLengthLong,
+            status = status,
+            code = "invalid-media",
+            reason = "The source returned a page instead of media bytes.",
+          )
         }
         return ChildProbe(
           bytes = bytes,
           contentType = type,
           contentLength = connection.contentLengthLong,
+          status = status,
         )
       } finally {
         connection.disconnect()
@@ -788,6 +848,37 @@ internal object OrionDownloadRequestContextBroker {
   private fun isHlsPlaylistProbe(probe: ChildProbe): Boolean =
     probe.contentType.contains("mpegurl", ignoreCase = true)
       || OrionDownloadFragmentPlanner.isHlsPlaylistBody(probe.bytes.toString(Charsets.UTF_8))
+
+  /**
+   * Primary movie/episode HLS qualification must not succeed on subtitle,
+   * document, image or archive payloads. Unknown binary remains eligible
+   * because AES-128 media is intentionally opaque before decryption.
+   */
+  private fun isPrimaryHlsMediaSignature(signature: String): Boolean = when (signature) {
+    "webvtt",
+    "text-other",
+    "html",
+    "json",
+    "image-png",
+    "image-jpeg",
+    "image-gif",
+    "image-webp",
+    "gzip",
+    "zip" -> false
+    else -> true
+  }
+
+  private fun requestContextClass(context: CapturedContext, normalized: String): String {
+    val activeObserved = activeObservedFor(context)
+    if (OrionBoundObservationPolicy.selectExact(activeObserved, context.boundObservedRequestMaterial, normalized) != null) {
+      return "exact-observed"
+    }
+    if (originOf(normalized) == originOf(context.rawUrl)) return "same-root-origin"
+    if (OrionBoundObservationPolicy.selectOrigin(activeObserved, context.boundObservedRequestMaterial, normalized) != null) {
+      return "observed-origin"
+    }
+    return "cross-origin-fallback"
+  }
 
   private fun openConnection(context: CapturedContext, rawUrl: String): HttpURLConnection {
     val request = authorizedRequestFor(context, rawUrl)
