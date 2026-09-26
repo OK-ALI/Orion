@@ -602,6 +602,26 @@ internal object OrionDownloadRequestContextBroker {
     var playlistBody = manifest
 
     repeat(MAX_HLS_PLAYLIST_DESCENT) { depth ->
+      val shape = inspectHlsShape(playlistBody)
+      tracePhysicalOnce(
+        key = "${context.sessionId}:hls-shape:${context.candidateId}:$depth",
+        message = buildString {
+          append("stage=hls-preflight-shape")
+          append(" depth=").append(depth)
+          append(" kind=").append(shape.kind)
+          append(" variants=").append(shape.variantCount)
+          append(" uris=").append(shape.uriCount)
+          append(" extinf=").append(shape.extinfCount)
+          append(" durationMs=").append(shape.totalDurationMs)
+          append(" targetSec=").append(shape.targetDurationSeconds)
+          append(" end=").append(shape.endList)
+          append(" mediaSeq=").append(shape.mediaSequence)
+          append(" maps=").append(shape.mapCount)
+          append(" keys=").append(shape.keyCount)
+          append(" ranges=").append(shape.byteRangeCount)
+        },
+      )
+
       val master = OrionDownloadFragmentPlanner.selectHlsMaster(playlistUrl, playlistBody, "best")
       if (master != null) {
         val mediaUrl = master.videoPlaylistUrl
@@ -644,8 +664,22 @@ internal object OrionDownloadRequestContextBroker {
       urls.add(fragment)
       val media = probeChild(context, fragment, 4096, false, mediaBytes = true)
       if (media.code != null) return MediaProbe(code = media.code, reason = media.reason)
+      val mediaSignature = preflightMediaSignatureClass(media.bytes)
+      val mediaIsPlaylist = isHlsPlaylistProbe(media)
+      tracePhysicalOnce(
+        key = "${context.sessionId}:hls-media-child:${context.candidateId}:$depth",
+        message = buildString {
+          append("stage=hls-media-child")
+          append(" depth=").append(depth)
+          append(" fragments=").append(plan.mediaFragmentCount)
+          append(" length=").append(media.contentLength)
+          append(" type=").append(contentClass(media.contentType))
+          append(" signature=").append(mediaSignature)
+          append(" playlist=").append(mediaIsPlaylist)
+        },
+      )
 
-      if (!isHlsPlaylistProbe(media)) {
+      if (!mediaIsPlaylist) {
         val mediaFragments = plan.fragments.filterNot { it.role.endsWith("-init") }
         if (mediaFragments.size > 1) {
           val representative = mediaFragments[mediaFragments.size / 2]
@@ -655,7 +689,19 @@ internal object OrionDownloadRequestContextBroker {
           urls.add(representative.url)
           val representativeProbe = probeChild(context, representative.url, 4096, false, mediaBytes = true)
           if (representativeProbe.code != null) return MediaProbe(code = representativeProbe.code, reason = representativeProbe.reason)
-          if (isHlsPlaylistProbe(representativeProbe)) {
+          val representativeIsPlaylist = isHlsPlaylistProbe(representativeProbe)
+          tracePhysicalOnce(
+            key = "${context.sessionId}:hls-media-representative:${context.candidateId}:$depth",
+            message = buildString {
+              append("stage=hls-media-representative")
+              append(" depth=").append(depth)
+              append(" length=").append(representativeProbe.contentLength)
+              append(" type=").append(contentClass(representativeProbe.contentType))
+              append(" signature=").append(preflightMediaSignatureClass(representativeProbe.bytes))
+              append(" playlist=").append(representativeIsPlaylist)
+            },
+          )
+          if (representativeIsPlaylist) {
             return MediaProbe(code = "hls-media-shape-unstable", reason = "The HLS stream changed back into a playlist while Orion verified its media segments.")
           }
         }
@@ -681,6 +727,7 @@ internal object OrionDownloadRequestContextBroker {
   private data class ChildProbe(
     val bytes: ByteArray = byteArrayOf(),
     val contentType: String = "",
+    val contentLength: Long = -1L,
     val code: String? = null,
     val reason: String? = null,
   )
@@ -726,7 +773,11 @@ internal object OrionDownloadRequestContextBroker {
         if (mediaBytes && (type.contains("text/html") || type.contains("application/json") || bytes.toString(Charsets.UTF_8).trimStart().startsWith("<html", true))) {
           return ChildProbe(code = "invalid-media", reason = "The source returned a page instead of media bytes.")
         }
-        return ChildProbe(bytes = bytes, contentType = type)
+        return ChildProbe(
+          bytes = bytes,
+          contentType = type,
+          contentLength = connection.contentLengthLong,
+        )
       } finally {
         connection.disconnect()
       }
@@ -849,6 +900,183 @@ internal object OrionDownloadRequestContextBroker {
         .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
         .emit(EVENT_NAME, payload)
     }
+  }
+
+  private data class HlsPreflightShape(
+    val kind: String,
+    val variantCount: Int,
+    val uriCount: Int,
+    val extinfCount: Int,
+    val totalDurationMs: Long,
+    val targetDurationSeconds: Long,
+    val endList: Boolean,
+    val mediaSequence: Boolean,
+    val mapCount: Int,
+    val keyCount: Int,
+    val byteRangeCount: Int,
+  )
+
+  private fun inspectHlsShape(body: String): HlsPreflightShape {
+    var variantCount = 0
+    var uriCount = 0
+    var extinfCount = 0
+    var totalDurationMs = 0L
+    var targetDurationSeconds = -1L
+    var endList = false
+    var mediaSequence = false
+    var mapCount = 0
+    var keyCount = 0
+    var byteRangeCount = 0
+
+    body.lineSequence().forEach { raw ->
+      val line = raw.trim().trimStart('\uFEFF')
+      if (line.isEmpty()) return@forEach
+      if (!line.startsWith('#')) {
+        uriCount += 1
+        return@forEach
+      }
+      when {
+        line.startsWith("#EXT-X-STREAM-INF:", ignoreCase = true) -> variantCount += 1
+        line.startsWith("#EXTINF:", ignoreCase = true) -> {
+          extinfCount += 1
+          val seconds = line.substringAfter(':').substringBefore(',').trim().toDoubleOrNull()
+          if (seconds != null && seconds >= 0.0 && seconds.isFinite()) {
+            val millis = (seconds * 1000.0).toLong().coerceAtMost(24L * 60L * 60L * 1000L)
+            totalDurationMs = (totalDurationMs + millis).coerceAtMost(24L * 60L * 60L * 1000L)
+          }
+        }
+        line.startsWith("#EXT-X-TARGETDURATION:", ignoreCase = true) -> {
+          targetDurationSeconds = line.substringAfter(':').trim().toLongOrNull() ?: -1L
+        }
+        line.equals("#EXT-X-ENDLIST", ignoreCase = true) -> endList = true
+        line.startsWith("#EXT-X-MEDIA-SEQUENCE:", ignoreCase = true) -> mediaSequence = true
+        line.startsWith("#EXT-X-MAP:", ignoreCase = true) -> mapCount += 1
+        line.startsWith("#EXT-X-KEY:", ignoreCase = true) -> keyCount += 1
+        line.startsWith("#EXT-X-BYTERANGE:", ignoreCase = true) -> byteRangeCount += 1
+      }
+    }
+
+    val kind = when {
+      variantCount > 0 && extinfCount > 0 -> "mixed"
+      variantCount > 0 -> "master"
+      extinfCount > 0 || endList || mediaSequence || mapCount > 0 || keyCount > 0 -> "media"
+      else -> "unknown"
+    }
+
+    return HlsPreflightShape(
+      kind = kind,
+      variantCount = variantCount,
+      uriCount = uriCount,
+      extinfCount = extinfCount,
+      totalDurationMs = totalDurationMs,
+      targetDurationSeconds = targetDurationSeconds,
+      endList = endList,
+      mediaSequence = mediaSequence,
+      mapCount = mapCount,
+      keyCount = keyCount,
+      byteRangeCount = byteRangeCount,
+    )
+  }
+
+  private fun preflightMediaSignatureClass(bytes: ByteArray): String {
+    if (bytes.isEmpty()) return "empty"
+
+    if (bytes.size >= 3 &&
+      bytes[0] == 'I'.code.toByte() &&
+      bytes[1] == 'D'.code.toByte() &&
+      bytes[2] == '3'.code.toByte()
+    ) return "mp3"
+
+    if (bytes.size >= 2) {
+      val first = bytes[0].toInt() and 0xff
+      val second = bytes[1].toInt() and 0xff
+      if (first == 0xff && (second and 0xf6) == 0xf0) return "aac-adts"
+      if (first == 0xff && (second and 0xe0) == 0xe0) return "mp3"
+    }
+
+    fun tsCadence(offset: Int, stride: Int): Boolean {
+      if (offset < 0 || offset >= bytes.size) return false
+      var hits = 0
+      var index = offset
+      while (index < bytes.size && hits < 4) {
+        if ((bytes[index].toInt() and 0xff) != 0x47) return false
+        hits += 1
+        index += stride
+      }
+      return hits >= 2
+    }
+    for (offset in 0 until min(188, bytes.size)) {
+      if (tsCadence(offset, 188) || tsCadence(offset, 192)) {
+        return if (offset == 0 || offset == 4) "mpeg-ts" else "mpeg-ts-offset"
+      }
+    }
+
+    if (bytes.size >= 4 &&
+      (bytes[0].toInt() and 0xff) == 0x00 &&
+      (bytes[1].toInt() and 0xff) == 0x00 &&
+      (bytes[2].toInt() and 0xff) == 0x01 &&
+      (bytes[3].toInt() and 0xff) == 0xba
+    ) return "mpeg-ps"
+
+    val scanLimit = min(bytes.size - 8, 1024)
+    if (scanLimit >= 0) {
+      for (index in 0..scanLimit) {
+        if (index + 8 > bytes.size) break
+        val box = String(bytes, index + 4, 4, Charsets.US_ASCII)
+        if (box in setOf("ftyp", "styp", "moof", "moov")) {
+          return if (index == 0) "iso-bmff" else "iso-bmff-offset"
+        }
+      }
+    }
+
+    if (bytes.size >= 4 &&
+      (bytes[0].toInt() and 0xff) == 0x1a &&
+      (bytes[1].toInt() and 0xff) == 0x45 &&
+      (bytes[2].toInt() and 0xff) == 0xdf &&
+      (bytes[3].toInt() and 0xff) == 0xa3
+    ) return "matroska"
+
+    if (bytes.size >= 4 &&
+      (bytes[0].toInt() and 0xff) == 0x89 &&
+      bytes[1] == 'P'.code.toByte() && bytes[2] == 'N'.code.toByte() && bytes[3] == 'G'.code.toByte()
+    ) return "image-png"
+    if (bytes.size >= 3 &&
+      (bytes[0].toInt() and 0xff) == 0xff &&
+      (bytes[1].toInt() and 0xff) == 0xd8 &&
+      (bytes[2].toInt() and 0xff) == 0xff
+    ) return "image-jpeg"
+    if (bytes.size >= 6) {
+      val six = String(bytes, 0, 6, Charsets.US_ASCII)
+      if (six == "GIF87a" || six == "GIF89a") return "image-gif"
+    }
+    if (bytes.size >= 12 &&
+      String(bytes, 0, 4, Charsets.US_ASCII) == "RIFF" &&
+      String(bytes, 8, 4, Charsets.US_ASCII) == "WEBP"
+    ) return "image-webp"
+    if (bytes.size >= 2 &&
+      (bytes[0].toInt() and 0xff) == 0x1f &&
+      (bytes[1].toInt() and 0xff) == 0x8b
+    ) return "gzip"
+    if (bytes.size >= 4 &&
+      bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte() &&
+      (bytes[2].toInt() and 0xff) == 0x03 && (bytes[3].toInt() and 0xff) == 0x04
+    ) return "zip"
+
+    val text = bytes.copyOfRange(0, min(bytes.size, 96)).toString(Charsets.UTF_8).trimStart()
+    if (text.startsWith("#EXTM3U", ignoreCase = true)) return "hls"
+    if (text.startsWith("WEBVTT", ignoreCase = true)) return "webvtt"
+    if (text.startsWith("<html", ignoreCase = true) || text.startsWith("<!doctype", ignoreCase = true)) return "html"
+    if (text.startsWith("{") || text.startsWith("[")) return "json"
+
+    val sample = min(bytes.size, 1024)
+    var printable = 0
+    for (index in 0 until sample) {
+      val value = bytes[index].toInt() and 0xff
+      if (value == 9 || value == 10 || value == 13 || value in 32..126) printable += 1
+    }
+    if (sample >= 64 && printable * 100 / sample >= 85) return "text-other"
+
+    return "binary-other"
   }
 
   private fun statusClass(status: Int): String = when (status) {
