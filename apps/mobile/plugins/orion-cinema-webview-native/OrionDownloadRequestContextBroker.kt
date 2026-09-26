@@ -662,7 +662,9 @@ internal object OrionDownloadRequestContextBroker {
         return MediaProbe(code = "descendant-origin-not-approved", reason = "The media request left the approved source boundary.")
       }
       urls.add(fragment)
-      val media = probeChild(context, fragment, 4096, false, mediaBytes = true)
+      val media = probeChild(context, fragment, 4096, false, mediaBytes = true).let { probe ->
+        tolerateKeyedOpaqueMimeMismatch(probe, plan.keyUrls.isNotEmpty())
+      }
       val mediaSignature = preflightMediaSignatureClass(media.bytes)
       val mediaIsPlaylist = media.bytes.isNotEmpty() && isHlsPlaylistProbe(media)
       val mediaOutcome = when {
@@ -703,7 +705,9 @@ internal object OrionDownloadRequestContextBroker {
             return MediaProbe(code = "descendant-origin-not-approved", reason = "The representative media request left the approved source boundary.")
           }
           urls.add(representative.url)
-          val representativeProbe = probeChild(context, representative.url, 4096, false, mediaBytes = true)
+          val representativeProbe = probeChild(context, representative.url, 4096, false, mediaBytes = true).let { probe ->
+            tolerateKeyedOpaqueMimeMismatch(probe, plan.keyUrls.isNotEmpty())
+          }
           val representativeSignature = preflightMediaSignatureClass(representativeProbe.bytes)
           val representativeIsPlaylist = representativeProbe.bytes.isNotEmpty() && isHlsPlaylistProbe(representativeProbe)
           val representativeOutcome = when {
@@ -843,6 +847,25 @@ internal object OrionDownloadRequestContextBroker {
       }
     }
     return ChildProbe(code = "media-redirect-limit", reason = "The media request redirected too many times.")
+  }
+
+  private fun tolerateKeyedOpaqueMimeMismatch(probe: ChildProbe, keyed: Boolean): ChildProbe {
+    if (!keyed || probe.code != "invalid-media" || probe.bytes.isEmpty()) return probe
+
+    val signature = preflightMediaSignatureClass(probe.bytes)
+    val declaredDocument =
+      probe.contentType.contains("text/html", ignoreCase = true) ||
+        probe.contentType.contains("application/json", ignoreCase = true)
+
+    // AES-128 segment ciphertext is intentionally opaque before decryption.
+    // Some providers mislabel that binary ciphertext as HTML. Preserve the
+    // existing page/data rejection for actual text, but do not let a MIME-only
+    // mismatch discard a keyed binary segment that playback already exposed.
+    return if (declaredDocument && signature == "binary-other") {
+      probe.copy(code = null, reason = null)
+    } else {
+      probe
+    }
   }
 
   private fun isHlsPlaylistProbe(probe: ChildProbe): Boolean =
