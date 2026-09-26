@@ -55,6 +55,9 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
   private data class Request(
     val method: String,
     val target: String,
+    val rangeStart: Long?,
+    val rangeEndInclusive: Long?,
+    val rangeRequested: Boolean,
   )
 
   private val closed = AtomicBoolean(false)
@@ -65,6 +68,12 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
   private val providerRouteCount = AtomicInteger(0)
   private val completedProviderBytes = ConcurrentHashMap<String, Long>()
   private val completedProviderByteCount = AtomicLong(0L)
+  private val loopbackRequestCount = AtomicInteger(0)
+  private val providerRequestCount = AtomicInteger(0)
+  private val clientRangeRequestCount = AtomicInteger(0)
+  private val provider2xxCount = AtomicInteger(0)
+  private val provider4xxCount = AtomicInteger(0)
+  private val provider5xxCount = AtomicInteger(0)
   private val mediaProgressLock = Any()
 
   private val activeSockets =
@@ -255,6 +264,11 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
       return
     }
 
+    Log.i(
+      "OrionDownloadStage",
+      "stage=yt-dlp-gateway outcome=summary requests=${loopbackRequestCount.get()} provider=${providerRequestCount.get()} ranges=${clientRangeRequestCount.get()} provider2xx=${provider2xxCount.get()} provider4xx=${provider4xxCount.get()} provider5xx=${provider5xxCount.get()} mediaRoutes=${providerRouteCount.get()} completedRoutes=${completedProviderBytes.size} bytes=${completedProviderByteCount.get()}",
+    )
+
     routes.clear()
 
     try {
@@ -435,6 +449,9 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
             return
           }
 
+      loopbackRequestCount.incrementAndGet()
+      if (request.rangeRequested) clientRangeRequestCount.incrementAndGet()
+
       when (route) {
         is StaticRoute ->
           writeStatic(
@@ -451,6 +468,9 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
             routeKey = request.target,
             headOnly =
               request.method == "HEAD",
+            clientRangeStart = request.rangeStart,
+            clientRangeEndInclusive = request.rangeEndInclusive,
+            clientRangeRequested = request.rangeRequested,
           )
       }
     } catch (_: Throwable) {
@@ -506,6 +526,9 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     }
 
     var headerBytes = 0
+    var rangeStart: Long? = null
+    var rangeEndInclusive: Long? = null
+    var rangeRequested = false
 
     while (true) {
       val line =
@@ -527,12 +550,39 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
       if (line.isEmpty()) {
         break
       }
+
+      val separator = line.indexOf(':')
+      if (separator <= 0) return null
+      val name = line.substring(0, separator).trim()
+      if (name.equals("Range", ignoreCase = true)) {
+        if (rangeRequested) return null
+        val parsed = parseClientRange(line.substring(separator + 1)) ?: return null
+        rangeStart = parsed.first
+        rangeEndInclusive = parsed.second
+        rangeRequested = true
+      }
     }
 
     return Request(
       method = method,
       target = target,
+      rangeStart = rangeStart,
+      rangeEndInclusive = rangeEndInclusive,
+      rangeRequested = rangeRequested,
     )
+  }
+
+  private fun parseClientRange(raw: String): Pair<Long, Long?>? {
+    val value = raw.trim()
+    if (!value.startsWith("bytes=", ignoreCase = true)) return null
+    val spec = value.substringAfter('=').trim()
+    if (spec.isEmpty() || spec.contains(',')) return null
+    val parts = spec.split('-', limit = 2)
+    if (parts.size != 2 || parts[0].isBlank()) return null
+    val start = parts[0].trim().toLongOrNull()?.takeIf { it >= 0L } ?: return null
+    val endText = parts[1].trim()
+    val end = if (endText.isEmpty()) null else endText.toLongOrNull()?.takeIf { it >= start } ?: return null
+    return start to end
   }
 
   private fun readAsciiLine(
@@ -572,16 +622,37 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     route: ProviderRoute,
     routeKey: String,
     headOnly: Boolean,
+    clientRangeStart: Long?,
+    clientRangeEndInclusive: Long?,
+    clientRangeRequested: Boolean,
   ) {
+    providerRequestCount.incrementAndGet()
+
+    // FFmpeg may probe or seek a loopback HLS media route with Range.
+    // Preserve that range when this route represents the whole provider object;
+    // otherwise the gateway can advertise byte ranges while silently serving
+    // the whole object, which breaks the local HTTP contract seen by FFmpeg.
+    val effectiveRangeStart =
+      route.rangeStart ?: if (!route.isKey) clientRangeStart else null
+    val effectiveRangeEndInclusive =
+      route.rangeEndInclusive ?: if (!route.isKey && route.rangeStart == null) clientRangeEndInclusive else null
+
+    if (clientRangeRequested && route.rangeStart == null && !route.isKey) {
+      Log.i(
+        "OrionDownloadStage",
+        "stage=provider-route outcome=range-forwarded bounded=${clientRangeEndInclusive != null}",
+      )
+    }
+
     val connection =
       OrionDownloadAuthorizedHttp
         .openFollowingRedirects(
           bound = route.bound,
           parentUrl = route.parentUrl,
           childUrl = route.childUrl,
-          rangeStart = route.rangeStart,
+          rangeStart = effectiveRangeStart,
           rangeEndInclusive =
-            route.rangeEndInclusive,
+            effectiveRangeEndInclusive,
         )
         ?: run {
           Log.i("OrionDownloadStage", "stage=provider-route outcome=unavailable key=${route.isKey}")
@@ -601,6 +672,12 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     try {
       val status =
         connection.responseCode
+
+      when (status) {
+        in 200..299 -> provider2xxCount.incrementAndGet()
+        in 400..499 -> provider4xxCount.incrementAndGet()
+        in 500..599 -> provider5xxCount.incrementAndGet()
+      }
 
       if (
         status !in 200..299 &&
