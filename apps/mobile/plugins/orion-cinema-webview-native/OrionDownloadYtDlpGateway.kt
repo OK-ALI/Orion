@@ -60,6 +60,18 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     val rangeRequested: Boolean,
   )
 
+  private data class ProviderContentRange(
+    val start: Long,
+    val endInclusive: Long,
+    val total: Long?,
+  ) {
+    val length: Long?
+      get() {
+        val delta = endInclusive - start
+        return if (delta == Long.MAX_VALUE) null else delta + 1L
+      }
+  }
+
   private val closed = AtomicBoolean(false)
 
   private val routes =
@@ -755,15 +767,23 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
       val contentLength =
         connection.contentLengthLong
 
+      val providerContentRange =
+        connection.getHeaderField(
+          "Content-Range",
+        )
+
+      val providerRangeMetrics =
+        parseProviderContentRange(
+          providerContentRange,
+        )
+
       if (contentLength >= 0L) {
         headers["Content-Length"] =
           contentLength.toString()
       }
 
       safeProviderHeader(
-        connection.getHeaderField(
-          "Content-Range",
-        ),
+        providerContentRange,
       )?.let { value ->
         headers["Content-Range"] =
           value
@@ -794,7 +814,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
 
       Log.i(
         "OrionDownloadStage",
-        "stage=provider-response attempt=$providerAttempt method=${if (headOnly) "HEAD" else "GET"} status=$status rangeRequested=$clientRangeRequested rangeBounded=${clientRangeEndInclusive != null} length=${contentLengthState(contentLength)} contentRange=${contentRangeState(connection.getHeaderField("Content-Range"), effectiveRangeStart)} contentType=${contentTypeClass(providerContentType)} acceptRanges=${connection.getHeaderField("Accept-Ranges")?.equals("bytes", ignoreCase = true) == true}",
+        "stage=provider-response attempt=$providerAttempt method=${if (headOnly) "HEAD" else "GET"} status=$status rangeRequested=$clientRangeRequested rangeBounded=${clientRangeEndInclusive != null} length=${contentLengthState(contentLength)} responseLength=$contentLength contentRange=${contentRangeState(providerContentRange, effectiveRangeStart)} rangeStart=${providerRangeMetrics?.start ?: -1L} rangeEnd=${providerRangeMetrics?.endInclusive ?: -1L} rangeTotal=${providerRangeMetrics?.total ?: -1L} rangeLength=${providerRangeMetrics?.length ?: -1L} rangeLengthMatch=${rangeLengthMatch(contentLength, providerRangeMetrics)} contentType=${contentTypeClass(providerContentType)} acceptRanges=${connection.getHeaderField("Accept-Ranges")?.equals("bytes", ignoreCase = true) == true}",
       )
 
       writeHead(
@@ -893,7 +913,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
                 providerWriteErrorCount.incrementAndGet()
                 Log.i(
                   "OrionDownloadStage",
-                  "stage=provider-client attempt=$providerAttempt outcome=write-error type=${safeThrowableType(error)} readBytes=$readBytes writtenBytes=$deliveredBytes",
+                  "stage=provider-client attempt=$providerAttempt outcome=write-error type=${safeThrowableType(error)} readBytes=$readBytes writtenBytes=$deliveredBytes pendingWriteBytes=$read readAheadGap=${readBytes - deliveredBytes}",
                 )
                 throw error
               }
@@ -949,6 +969,49 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
       }
     }
   }
+
+  private fun parseProviderContentRange(
+    raw: String?,
+  ): ProviderContentRange? {
+    val clean =
+      raw
+        ?.trim()
+        ?.takeIf { it.length <= MAX_PROVIDER_HEADER_VALUE_CHARS }
+        ?: return null
+
+    val match =
+      Regex(
+        "^bytes\\s+(\\d+)-(\\d+)/(\\d+|\\*)$",
+        RegexOption.IGNORE_CASE,
+      ).matchEntire(clean)
+        ?: return null
+
+    val start = match.groupValues[1].toLongOrNull() ?: return null
+    val end = match.groupValues[2].toLongOrNull() ?: return null
+    if (end < start) return null
+    val total =
+      match.groupValues[3]
+        .takeUnless { it == "*" }
+        ?.toLongOrNull()
+        ?: if (match.groupValues[3] == "*") null else return null
+    if (total != null && (total <= 0L || end >= total)) return null
+
+    return ProviderContentRange(
+      start = start,
+      endInclusive = end,
+      total = total,
+    )
+  }
+
+  private fun rangeLengthMatch(
+    contentLength: Long,
+    range: ProviderContentRange?,
+  ): String =
+    when {
+      contentLength < 0L || range?.length == null -> "unknown"
+      contentLength == range.length -> "true"
+      else -> "false"
+    }
 
   private fun contentLengthState(
     contentLength: Long,
@@ -1037,10 +1100,17 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
       if (first == 0xff && (second and 0xe0) == 0xe0) return "mp3"
     }
 
-    if ((bytes[0].toInt() and 0xff) == 0x47 &&
-      (count <= 188 || (bytes[188].toInt() and 0xff) == 0x47)
-    ) {
+    if (looksLikeMpegTransportStream(bytes, count)) {
       return "mpeg-ts"
+    }
+
+    if (count >= 4 &&
+      (bytes[0].toInt() and 0xff) == 0x00 &&
+      (bytes[1].toInt() and 0xff) == 0x00 &&
+      (bytes[2].toInt() and 0xff) == 0x01 &&
+      (bytes[3].toInt() and 0xff) == 0xba
+    ) {
+      return "mpeg-ps"
     }
 
     if (count >= 8) {
@@ -1088,7 +1158,60 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
       if (text.startsWith("{") || text.startsWith("[")) return "json"
     }
 
-    return "other"
+    return if (looksHighEntropyBinary(bytes, count)) {
+      "binary-high-entropy"
+    } else {
+      "binary-other"
+    }
+  }
+
+  private fun looksLikeMpegTransportStream(
+    bytes: ByteArray,
+    count: Int,
+  ): Boolean {
+    fun cadence(offset: Int, stride: Int): Boolean {
+      if (offset < 0 || offset >= count) return false
+      var hits = 0
+      var index = offset
+      while (index < count && hits < 4) {
+        if ((bytes[index].toInt() and 0xff) != 0x47) return false
+        hits += 1
+        index += stride
+      }
+      return hits >= 2
+    }
+
+    return cadence(0, 188) ||
+      cadence(4, 192)
+  }
+
+  private fun looksHighEntropyBinary(
+    bytes: ByteArray,
+    count: Int,
+  ): Boolean {
+    val sample = kotlin.math.min(count, 4096)
+    if (sample < 256) return false
+
+    val frequencies = IntArray(256)
+    var printable = 0
+    for (index in 0 until sample) {
+      val value = bytes[index].toInt() and 0xff
+      frequencies[value] += 1
+      if (value in 0x20..0x7e || value == 0x09 || value == 0x0a || value == 0x0d) {
+        printable += 1
+      }
+    }
+
+    if (printable.toDouble() / sample.toDouble() > 0.85) return false
+
+    var entropy = 0.0
+    frequencies.forEach { frequency ->
+      if (frequency <= 0) return@forEach
+      val probability = frequency.toDouble() / sample.toDouble()
+      entropy -= probability * (kotlin.math.ln(probability) / kotlin.math.ln(2.0))
+    }
+
+    return entropy >= 7.5
   }
 
   private fun safeThrowableType(

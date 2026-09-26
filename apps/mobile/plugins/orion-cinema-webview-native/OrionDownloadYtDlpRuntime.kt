@@ -281,6 +281,7 @@ internal object OrionDownloadYtDlpRuntime {
     }
 
     val processId = processId(cleanJobId)
+    val emittedExecutionDiagnostics = ConcurrentHashMap.newKeySet<String>()
     var executionPhase = "prepare"
     return try {
       val appContext = context.applicationContext
@@ -307,7 +308,17 @@ internal object OrionDownloadYtDlpRuntime {
       val response = YoutubeDL.getInstance().execute(request, processId, false) { percent, eta, line ->
         when (OrionDownloadJobStore.control(cleanJobId)) {
           "pause", "cancel" -> YoutubeDL.getInstance().destroyProcessById(processId)
-          else -> OrionYtDlpProgressParser.parse(line, percent, eta)?.let(onProgress)
+          else -> {
+            safeExecutionDiagnosticClass(line)?.let { diagnosticClass ->
+              if (emittedExecutionDiagnostics.add(diagnosticClass)) {
+                Log.i(
+                  "OrionDownloadStage",
+                  "stage=yt-dlp-output class=$diagnosticClass",
+                )
+              }
+            }
+            OrionYtDlpProgressParser.parse(line, percent, eta)?.let(onProgress)
+          }
         }
       }
 
@@ -389,6 +400,33 @@ internal object OrionDownloadYtDlpRuntime {
     !file.canExecute() -> "not-executable"
     file.length() <= 0L -> "empty"
     else -> "ready"
+  }
+
+  private fun safeExecutionDiagnosticClass(
+    rawLine: String?,
+  ): String? {
+    val line =
+      rawLine
+        ?.lowercase(Locale.US)
+        ?.takeIf { it.isNotBlank() }
+        ?: return null
+
+    return when {
+      "error when loading first segment" in line -> "hls-first-segment-error"
+      "invalid data found when processing input" in line -> "invalid-media"
+      "could not find codec parameters" in line -> "codec-parameters-missing"
+      "detected only with low score" in line -> "probe-score-low"
+      "moov atom not found" in line -> "moov-missing"
+      "unknown format" in line -> "unknown-format"
+      "error opening input" in line || "error opening input file" in line -> "input-open-error"
+      "input/output error" in line || "i/o error" in line -> "input-output-error"
+      "connection reset" in line -> "connection-reset"
+      "broken pipe" in line -> "broken-pipe"
+      "invalid argument" in line -> "invalid-argument"
+      "decryption" in line || "decrypt" in line || "crypto" in line -> "crypto-error"
+      "failed to open segment" in line || "unable to open segment" in line -> "segment-open-error"
+      else -> null
+    }
   }
 
   private fun diagnosticReason(error: Throwable): String {
