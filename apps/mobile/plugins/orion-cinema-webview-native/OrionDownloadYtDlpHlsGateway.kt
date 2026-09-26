@@ -64,6 +64,11 @@ internal object OrionDownloadYtDlpHlsGateway {
         rangeStart = null,
         rangeEndInclusive = null,
         isKey = isKey,
+        // FFmpeg's HLS demuxer rejects opaque .bin media URLs at its
+        // allowed_segment_extensions gate before it performs any HTTP request.
+        // Keep provider coordinates opaque while giving media routes an HLS-safe
+        // local suffix. The bytes are still content-probed by FFmpeg.
+        routeSuffix = if (isKey) "bin" else "ts",
       )
 
     val rootBody =

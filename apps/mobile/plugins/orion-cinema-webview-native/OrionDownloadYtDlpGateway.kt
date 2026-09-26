@@ -173,6 +173,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     rangeStart: Long?,
     rangeEndInclusive: Long?,
     isKey: Boolean = false,
+    routeSuffix: String = "bin",
   ): String? {
     if (
       closed.get() ||
@@ -206,7 +207,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     }
 
     return registerRoute(
-      "bin",
+      routeSuffix,
       ProviderRoute(
         bound = bound,
         parentUrl = parentUrl,
