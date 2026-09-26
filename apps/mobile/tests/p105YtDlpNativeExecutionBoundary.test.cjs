@@ -27,6 +27,18 @@ test('P10.5 Candidate 2 keeps the native-only fixed yt-dlp process boundary with
   assert.match(runtime, /if \(authority\.transferKind == "hls"\)/);
   assert.match(runtime, /addOption\("--downloader", "m3u8:ffmpeg"\)/);
   assert.doesNotMatch(runtime, /authority\.transferKind == "dash"[\s\S]{0,160}m3u8:ffmpeg/);
+  assert.match(runtime, /var executionPhase = "prepare"/);
+  assert.match(runtime, /executionPhase = "ffmpeg-init"[\s\S]{0,120}FFmpeg\.getInstance\(\)\.init/);
+  assert.match(runtime, /executionPhase = "ytdlp-init"[\s\S]{0,120}YoutubeDL\.getInstance\(\)\.init/);
+  assert.match(runtime, /executionPhase = "execute"/);
+  assert.match(runtime, /runtimeBinaryDiagnostic\(appContext\)/);
+  assert.match(runtime, /libffmpeg\.so/);
+  assert.match(runtime, /libpython\.so/);
+  assert.match(runtime, /cause=\$\{error\.cause\?\.javaClass\?\.simpleName/);
+  assert.match(runtime, /reason=\$\{diagnosticReason\(error\)\}/);
+  assert.match(runtime, /fingerprint=\$\{diagnosticFingerprint\(error\)\}/);
+  assert.match(runtime, /error !is YoutubeDLException/);
+  assert.doesNotMatch(runtime, /Log\.[a-z]+\([^\n]*error\.message/);
   assert.match(runtime, /--add-header/);
   assert.match(runtime, /authority\.rootUrl/);
   assert.match(runtime, /authority\.safeGlobalHeaders/);

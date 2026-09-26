@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLException
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import java.io.File
 import java.net.URL
@@ -280,17 +281,37 @@ internal object OrionDownloadYtDlpRuntime {
     }
 
     val processId = processId(cleanJobId)
+    var executionPhase = "prepare"
     return try {
       val appContext = context.applicationContext
+
+      executionPhase = "ffmpeg-init"
       FFmpeg.getInstance().init(appContext)
+
+      executionPhase = "ytdlp-init"
       YoutubeDL.getInstance().init(appContext)
+
+      Log.i(
+        "OrionDownloadStage",
+        "stage=yt-dlp runtime=${runtimeBinaryDiagnostic(appContext)}",
+      )
+
+      executionPhase = "request-build"
       val request = buildRequest(rootUrl, authority, workDir)
+
+      executionPhase = "execute"
+      Log.i(
+        "OrionDownloadStage",
+        "stage=yt-dlp phase=execute kind=${authority.transferKind} downloader=${if (authority.transferKind == "hls") "ffmpeg" else "default"}",
+      )
       val response = YoutubeDL.getInstance().execute(request, processId, false) { percent, eta, line ->
         when (OrionDownloadJobStore.control(cleanJobId)) {
           "pause", "cancel" -> YoutubeDL.getInstance().destroyProcessById(processId)
           else -> OrionYtDlpProgressParser.parse(line, percent, eta)?.let(onProgress)
         }
       }
+
+      executionPhase = "response"
       if (response.exitCode != 0) {
         Log.i("OrionDownloadStage", "stage=yt-dlp exit=${response.exitCode}")
         OrionYtDlpOutcome.Failed("yt-dlp-process-failed", true)
@@ -309,7 +330,10 @@ internal object OrionDownloadYtDlpRuntime {
       Thread.currentThread().interrupt()
       OrionYtDlpOutcome.Failed("yt-dlp-process-interrupted", true)
     } catch (error: Throwable) {
-      Log.i("OrionDownloadStage", "stage=yt-dlp exception=${error.javaClass.simpleName.take(48)}")
+      Log.i(
+        "OrionDownloadStage",
+        "stage=yt-dlp exception=${error.javaClass.simpleName.take(48)} cause=${error.cause?.javaClass?.simpleName?.take(48) ?: "none"} phase=$executionPhase reason=${diagnosticReason(error)} fingerprint=${diagnosticFingerprint(error)}",
+      )
       OrionYtDlpOutcome.Failed("yt-dlp-runtime-failed", true)
     } finally {
       activeJobs.remove(cleanJobId)
@@ -353,6 +377,45 @@ internal object OrionDownloadYtDlpRuntime {
       request.addOption("--add-header", "$safeName:$safeValue")
     }
     return request
+  }
+
+  private fun runtimeBinaryDiagnostic(context: Context): String {
+    val nativeDir = File(context.applicationInfo.nativeLibraryDir)
+    return "ffmpeg=${binaryState(File(nativeDir, "libffmpeg.so"))} python=${binaryState(File(nativeDir, "libpython.so"))}"
+  }
+
+  private fun binaryState(file: File): String = when {
+    !file.isFile -> "missing"
+    !file.canExecute() -> "not-executable"
+    file.length() <= 0L -> "empty"
+    else -> "ready"
+  }
+
+  private fun diagnosticReason(error: Throwable): String {
+    if (error !is YoutubeDLException) return "runtime-${error.javaClass.simpleName.lowercase(Locale.US).take(32)}"
+    val message = error.message.orEmpty().lowercase(Locale.US)
+    return when {
+      "ffmpeg" in message && ("not found" in message || "no such file" in message || "not installed" in message || "unable to find" in message) -> "ffmpeg-not-found"
+      "ffprobe" in message && ("not found" in message || "no such file" in message) -> "ffprobe-not-found"
+      "permission denied" in message -> "permission-denied"
+      "no such file or directory" in message -> "file-not-found"
+      "http error 403" in message || "403 forbidden" in message -> "http-403"
+      "http error 401" in message || "401 unauthorized" in message -> "http-401"
+      "timed out" in message || "timeout" in message -> "network-timeout"
+      "connection refused" in message -> "connection-refused"
+      "broken pipe" in message -> "broken-pipe"
+      "unsupported url" in message -> "unsupported-url"
+      "requested format is not available" in message -> "format-unavailable"
+      "external downloader" in message && "fail" in message -> "external-downloader-failed"
+      "invalid data found" in message -> "invalid-media"
+      "unable to download" in message -> "download-failed"
+      else -> "ytdlp-unclassified"
+    }
+  }
+
+  private fun diagnosticFingerprint(error: Throwable): String {
+    val message = error.message?.takeIf { it.isNotBlank() } ?: return "none"
+    return sha256(message).take(16)
   }
 
   private fun safeHttpUrl(raw: String): String? = try {
