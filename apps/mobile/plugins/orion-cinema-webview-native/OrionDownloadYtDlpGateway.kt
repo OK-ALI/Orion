@@ -459,6 +459,9 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
             route = route,
             headOnly =
               request.method == "HEAD",
+            clientRangeStart = request.rangeStart,
+            clientRangeEndInclusive = request.rangeEndInclusive,
+            clientRangeRequested = request.rangeRequested,
           )
 
         is ProviderRoute ->
@@ -879,11 +882,88 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     output: BufferedOutputStream,
     route: StaticRoute,
     headOnly: Boolean,
+    clientRangeStart: Long?,
+    clientRangeEndInclusive: Long?,
+    clientRangeRequested: Boolean,
   ) {
+    val bodySize = route.body.size.toLong()
+
+    if (clientRangeRequested) {
+      val start = clientRangeStart ?: run {
+        writeEmpty(
+          output = output,
+          status = HTTP_RANGE_NOT_SATISFIABLE,
+          reason = "Range Not Satisfiable",
+          extraHeaders = mapOf(
+            "Content-Range" to "bytes */$bodySize",
+            "Accept-Ranges" to "bytes",
+          ),
+        )
+        return
+      }
+
+      if (start >= bodySize) {
+        Log.i(
+          "OrionDownloadStage",
+          "stage=static-route outcome=range-unsatisfied",
+        )
+        writeEmpty(
+          output = output,
+          status = HTTP_RANGE_NOT_SATISFIABLE,
+          reason = "Range Not Satisfiable",
+          extraHeaders = mapOf(
+            "Content-Range" to "bytes */$bodySize",
+            "Accept-Ranges" to "bytes",
+          ),
+        )
+        return
+      }
+
+      val end =
+        (clientRangeEndInclusive ?: (bodySize - 1L))
+          .coerceAtMost(bodySize - 1L)
+      val length = end - start + 1L
+
+      val headers =
+        linkedMapOf(
+          "Content-Type" to route.contentType,
+          "Content-Length" to length.toString(),
+          "Content-Range" to "bytes $start-$end/$bodySize",
+          "Accept-Ranges" to "bytes",
+          "Cache-Control" to "no-store",
+          "X-Content-Type-Options" to "nosniff",
+          "Connection" to "close",
+        )
+
+      Log.i(
+        "OrionDownloadStage",
+        "stage=static-route outcome=range-served bounded=${clientRangeEndInclusive != null}",
+      )
+
+      writeHead(
+        output = output,
+        status = HttpURLConnection.HTTP_PARTIAL,
+        reason = "Partial Content",
+        headers = headers,
+      )
+
+      if (!headOnly) {
+        output.write(
+          route.body,
+          start.toInt(),
+          length.toInt(),
+        )
+      }
+
+      output.flush()
+      return
+    }
+
     val headers =
       linkedMapOf(
         "Content-Type" to route.contentType,
         "Content-Length" to route.body.size.toString(),
+        "Accept-Ranges" to "bytes",
         "Cache-Control" to "no-store",
         "X-Content-Type-Options" to "nosniff",
         "Connection" to "close",
