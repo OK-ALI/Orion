@@ -74,6 +74,12 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
   private val provider2xxCount = AtomicInteger(0)
   private val provider4xxCount = AtomicInteger(0)
   private val provider5xxCount = AtomicInteger(0)
+  private val providerAttemptCount = AtomicInteger(0)
+  private val providerReadByteCount = AtomicLong(0L)
+  private val providerWrittenByteCount = AtomicLong(0L)
+  private val providerEofCount = AtomicInteger(0)
+  private val providerReadErrorCount = AtomicInteger(0)
+  private val providerWriteErrorCount = AtomicInteger(0)
   private val mediaProgressLock = Any()
 
   private val activeSockets =
@@ -267,7 +273,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
 
     Log.i(
       "OrionDownloadStage",
-      "stage=yt-dlp-gateway outcome=summary requests=${loopbackRequestCount.get()} provider=${providerRequestCount.get()} ranges=${clientRangeRequestCount.get()} provider2xx=${provider2xxCount.get()} provider4xx=${provider4xxCount.get()} provider5xx=${provider5xxCount.get()} mediaRoutes=${providerRouteCount.get()} completedRoutes=${completedProviderBytes.size} bytes=${completedProviderByteCount.get()}",
+      "stage=yt-dlp-gateway outcome=summary requests=${loopbackRequestCount.get()} provider=${providerRequestCount.get()} ranges=${clientRangeRequestCount.get()} provider2xx=${provider2xxCount.get()} provider4xx=${provider4xxCount.get()} provider5xx=${provider5xxCount.get()} mediaRoutes=${providerRouteCount.get()} completedRoutes=${completedProviderBytes.size} bytes=${completedProviderByteCount.get()} providerReadBytes=${providerReadByteCount.get()} providerWrittenBytes=${providerWrittenByteCount.get()} providerEof=${providerEofCount.get()} providerReadErrors=${providerReadErrorCount.get()} providerWriteErrors=${providerWriteErrorCount.get()}",
     )
 
     routes.clear()
@@ -631,6 +637,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     clientRangeRequested: Boolean,
   ) {
     providerRequestCount.incrementAndGet()
+    val providerAttempt = providerAttemptCount.incrementAndGet()
 
     // FFmpeg may probe or seek a loopback HLS media route with Range.
     // Preserve that range when this route represents the whole provider object;
@@ -735,9 +742,12 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
       val headers =
         linkedMapOf<String, String>()
 
-      safeProviderHeader(
-        connection.contentType,
-      )?.let { value ->
+      val providerContentType =
+        safeProviderHeader(
+          connection.contentType,
+        )
+
+      providerContentType?.let { value ->
         headers["Content-Type"] =
           value
       }
@@ -782,6 +792,11 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
       headers["Connection"] =
         "close"
 
+      Log.i(
+        "OrionDownloadStage",
+        "stage=provider-response attempt=$providerAttempt method=${if (headOnly) "HEAD" else "GET"} status=$status rangeRequested=$clientRangeRequested rangeBounded=${clientRangeEndInclusive != null} length=${contentLengthState(contentLength)} contentRange=${contentRangeState(connection.getHeaderField("Content-Range"), effectiveRangeStart)} contentType=${contentTypeClass(providerContentType)} acceptRanges=${connection.getHeaderField("Accept-Ranges")?.equals("bytes", ignoreCase = true) == true}",
+      )
+
       writeHead(
         output = output,
         status = status,
@@ -803,7 +818,10 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
       )
 
       var deliveredBytes = 0L
+      var readBytes = 0L
       var reachedEnd = false
+      var firstReadObserved = false
+      var firstWriteObserved = false
       if (
         !headOnly &&
         status in 200..299
@@ -815,7 +833,12 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
             connection.errorStream
           }
 
-        if (input != null) {
+        if (input == null) {
+          Log.i(
+            "OrionDownloadStage",
+            "stage=provider-body attempt=$providerAttempt outcome=no-stream",
+          )
+        } else {
           input.use { source ->
             val buffer =
               ByteArray(
@@ -824,26 +847,87 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
 
             while (!closed.get()) {
               val read =
-                source.read(buffer)
+                try {
+                  source.read(buffer)
+                } catch (error: Throwable) {
+                  providerReadErrorCount.incrementAndGet()
+                  Log.i(
+                    "OrionDownloadStage",
+                    "stage=provider-body attempt=$providerAttempt outcome=read-error type=${safeThrowableType(error)} readBytes=$readBytes writtenBytes=$deliveredBytes",
+                  )
+                  throw error
+                }
 
               if (read < 0) {
                 reachedEnd = true
+                providerEofCount.incrementAndGet()
+                if (!firstReadObserved) {
+                  Log.i(
+                    "OrionDownloadStage",
+                    "stage=provider-body attempt=$providerAttempt firstRead=eof",
+                  )
+                  firstReadObserved = true
+                }
                 break
               }
               if (read == 0) continue
 
-              output.write(
-                buffer,
-                0,
-                read,
-              )
+              readBytes += read
+              providerReadByteCount.addAndGet(read.toLong())
+
+              if (!firstReadObserved) {
+                Log.i(
+                  "OrionDownloadStage",
+                  "stage=provider-body attempt=$providerAttempt firstRead=bytes count=$read signature=${mediaSignatureClass(buffer, read)}",
+                )
+                firstReadObserved = true
+              }
+
+              try {
+                output.write(
+                  buffer,
+                  0,
+                  read,
+                )
+              } catch (error: Throwable) {
+                providerWriteErrorCount.incrementAndGet()
+                Log.i(
+                  "OrionDownloadStage",
+                  "stage=provider-client attempt=$providerAttempt outcome=write-error type=${safeThrowableType(error)} readBytes=$readBytes writtenBytes=$deliveredBytes",
+                )
+                throw error
+              }
+
               deliveredBytes += read
+              providerWrittenByteCount.addAndGet(read.toLong())
+
+              if (!firstWriteObserved) {
+                Log.i(
+                  "OrionDownloadStage",
+                  "stage=provider-client attempt=$providerAttempt firstWrite=ok count=$read",
+                )
+                firstWriteObserved = true
+              }
             }
           }
         }
       }
 
-      output.flush()
+      try {
+        output.flush()
+      } catch (error: Throwable) {
+        providerWriteErrorCount.incrementAndGet()
+        Log.i(
+          "OrionDownloadStage",
+          "stage=provider-client attempt=$providerAttempt outcome=flush-error type=${safeThrowableType(error)} readBytes=$readBytes writtenBytes=$deliveredBytes",
+        )
+        throw error
+      }
+
+      Log.i(
+        "OrionDownloadStage",
+        "stage=provider-body attempt=$providerAttempt outcome=${if (reachedEnd) "eof" else if (headOnly) "head" else "stopped"} readBytes=$readBytes writtenBytes=$deliveredBytes lengthMatch=${contentLengthMatch(contentLength, deliveredBytes, reachedEnd)}",
+      )
       if (reachedEnd && deliveredBytes > 0L &&
         (contentLength < 0L || deliveredBytes == contentLength)
       ) {
@@ -865,6 +949,166 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
       }
     }
   }
+
+  private fun contentLengthState(
+    contentLength: Long,
+  ): String =
+    when {
+      contentLength < 0L -> "unknown"
+      contentLength == 0L -> "zero"
+      else -> "positive"
+    }
+
+  private fun contentRangeState(
+    raw: String?,
+    expectedStart: Long?,
+  ): String {
+    val clean =
+      raw
+        ?.trim()
+        ?.takeIf { it.length <= MAX_PROVIDER_HEADER_VALUE_CHARS }
+        ?: return "missing"
+
+    val match =
+      Regex(
+        "^bytes\\s+(\\d+)-(\\d+)/(\\d+|\\*)$",
+        RegexOption.IGNORE_CASE,
+      ).matchEntire(clean)
+        ?: return "invalid"
+
+    val start = match.groupValues[1].toLongOrNull() ?: return "invalid"
+    val end = match.groupValues[2].toLongOrNull() ?: return "invalid"
+    if (end < start) return "invalid"
+
+    val startState =
+      when {
+        expectedStart != null && start == expectedStart -> "start-match"
+        start == 0L -> "start-zero"
+        else -> "start-other"
+      }
+
+    val totalState =
+      if (match.groupValues[3] == "*") "total-unknown" else "total-known"
+
+    return "valid-$startState-$totalState"
+  }
+
+  private fun contentTypeClass(
+    raw: String?,
+  ): String {
+    val type =
+      raw
+        ?.substringBefore(';')
+        ?.trim()
+        ?.lowercase(Locale.US)
+        ?: return "missing"
+
+    return when {
+      "mpegurl" in type -> "hls"
+      type == "video/mp2t" -> "mpeg-ts"
+      type in setOf("video/mp4", "audio/mp4", "application/mp4") -> "iso-bmff"
+      "aac" in type -> "aac"
+      "json" in type -> "json"
+      "html" in type -> "html"
+      type == "application/octet-stream" -> "octet-stream"
+      type.startsWith("text/") -> "text"
+      else -> "other"
+    }
+  }
+
+  private fun mediaSignatureClass(
+    bytes: ByteArray,
+    count: Int,
+  ): String {
+    if (count <= 0) return "empty"
+
+    if (count >= 3 &&
+      bytes[0] == 'I'.code.toByte() &&
+      bytes[1] == 'D'.code.toByte() &&
+      bytes[2] == '3'.code.toByte()
+    ) {
+      return "mp3"
+    }
+
+    if (count >= 2) {
+      val first = bytes[0].toInt() and 0xff
+      val second = bytes[1].toInt() and 0xff
+      if (first == 0xff && (second and 0xf6) == 0xf0) return "aac-adts"
+      if (first == 0xff && (second and 0xe0) == 0xe0) return "mp3"
+    }
+
+    if ((bytes[0].toInt() and 0xff) == 0x47 &&
+      (count <= 188 || (bytes[188].toInt() and 0xff) == 0x47)
+    ) {
+      return "mpeg-ts"
+    }
+
+    if (count >= 8) {
+      val box =
+        String(
+          bytes,
+          4,
+          4,
+          StandardCharsets.US_ASCII,
+        )
+      if (box in setOf("ftyp", "styp", "moof", "moov")) return "iso-bmff"
+    }
+
+    if (count >= 4 &&
+      (bytes[0].toInt() and 0xff) == 0x1a &&
+      (bytes[1].toInt() and 0xff) == 0x45 &&
+      (bytes[2].toInt() and 0xff) == 0xdf &&
+      (bytes[3].toInt() and 0xff) == 0xa3
+    ) {
+      return "matroska"
+    }
+
+    var index = 0
+    if (count >= 3 &&
+      (bytes[0].toInt() and 0xff) == 0xef &&
+      (bytes[1].toInt() and 0xff) == 0xbb &&
+      (bytes[2].toInt() and 0xff) == 0xbf
+    ) {
+      index = 3
+    }
+
+    while (index < count && bytes[index].toInt().toChar().isWhitespace()) index += 1
+    if (index < count) {
+      val remaining = count - index
+      val sampleLength = kotlin.math.min(remaining, 32)
+      val text =
+        String(
+          bytes,
+          index,
+          sampleLength,
+          StandardCharsets.US_ASCII,
+        ).lowercase(Locale.US)
+      if (text.startsWith("#extm3u")) return "hls"
+      if (text.startsWith("<!doctype") || text.startsWith("<html")) return "html"
+      if (text.startsWith("{") || text.startsWith("[")) return "json"
+    }
+
+    return "other"
+  }
+
+  private fun safeThrowableType(
+    error: Throwable,
+  ): String =
+    error.javaClass.simpleName
+      .take(48)
+      .ifBlank { "Throwable" }
+
+  private fun contentLengthMatch(
+    contentLength: Long,
+    deliveredBytes: Long,
+    reachedEnd: Boolean,
+  ): String =
+    when {
+      !reachedEnd -> "unknown"
+      contentLength < 0L -> "unknown"
+      deliveredBytes == contentLength -> "true"
+      else -> "false"
+    }
 
   private fun safeProviderHeader(
     raw: String?,
