@@ -33,7 +33,8 @@ test('live replacement providers remain manual-first while VixSrc owns automatic
   const capabilities = readMobile('src', 'features', 'playback', 'mobileSources.ts');
 
   assert.match(candidates, /id: "vidlink"[\s\S]{0,900}supportsDownloads: false/);
-  assert.match(capabilities, /MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_IDS = Object\.freeze\(\[[\s\S]*?'vixsrc'[\s\S]*?'vidsrc'[\s\S]*?'111movies'/);
+  assert.doesNotMatch(capabilities, /MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_IDS/);
+  assert.doesNotMatch(capabilities, /getNextMobileDownloadSource/);
   for (const id of ['vidnest', 'vidsrc-ir', 'cinesrc']) {
     assert.match(candidates, new RegExp(`id: \"${id}\"[\\s\\S]{0,900}routingMode: \"manual-only\"`));
   }

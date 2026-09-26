@@ -9,8 +9,8 @@ import {
 
 /**
  * Returns from Player only when a pending download intent has a genuinely
- * ready HLS/DASH candidate. There is no timer-based guess and no Direct
- * fallback. The one-shot marker prevents repeated navigation for one intent.
+ * ready supported candidate. There is no timer-based provider guess or
+ * source switching. The one-shot marker prevents repeated navigation for one intent.
  */
 export function useDownloadSourceAutoReturnV1(itemKey: string): void {
   const router = useRouter();

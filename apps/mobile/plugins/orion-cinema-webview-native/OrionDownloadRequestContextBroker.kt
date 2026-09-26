@@ -345,7 +345,11 @@ internal object OrionDownloadRequestContextBroker {
         descendants = result.descendants,
         freeBytes = freeBytes,
       )
-    } catch (_: Throwable) {
+    } catch (error: Throwable) {
+      tracePhysicalOnce(
+        key = "${context.sessionId}:preflight-exception:${context.candidateId}",
+        message = "stage=preflight-exception source=${context.sourceId.take(40)} error=${error.javaClass.simpleName.take(48)}",
+      )
       finishAndEmit(
         reactContext,
         context,
@@ -418,6 +422,21 @@ internal object OrionDownloadRequestContextBroker {
       resolvedKind = resolveKind(context.observedManifestKind, contentType, body)
     }
 
+    tracePhysicalOnce(
+      key = "${context.sessionId}:preflight-response:${context.candidateId}",
+      message = buildString {
+        append("stage=preflight-response")
+        append(" source=").append(context.sourceId.take(40))
+        append(" candidate=").append(context.candidateId.removePrefix("mob-").take(10))
+        append(" status=").append(statusClass(status))
+        append(" observed=").append(context.observedManifestKind)
+        append(" content=").append(contentClass(contentType))
+        append(" sample=").append(sampleClass(sampledBytes))
+        append(" bytes=").append(byteBucket(sampledBytes?.size ?: 0))
+        append(" resolved=").append(resolvedKind)
+      },
+    )
+
     if (resolvedKind == "unknown") {
       return PreflightResult.unsupported("unsupported-media-shape", "This source did not expose a supported direct, HLS, or DASH media shape.")
     }
@@ -471,6 +490,17 @@ internal object OrionDownloadRequestContextBroker {
     } else {
       probeFirstMedia(context, resolvedKind, effectiveUrl, body.orEmpty(), connection)
     }
+    tracePhysicalOnce(
+      key = "${context.sessionId}:media-probe:${context.candidateId}",
+      message = buildString {
+        append("stage=media-probe")
+        append(" source=").append(context.sourceId.take(40))
+        append(" candidate=").append(context.candidateId.removePrefix("mob-").take(10))
+        append(" kind=").append(resolvedKind)
+        append(" outcome=").append(mediaProbe.code?.take(48) ?: "ok")
+        append(" urls=").append(mediaProbe.urls.size)
+      },
+    )
     if (mediaProbe.code != null) {
       if (mediaProbe.code == "unsupported-direct-container" || mediaProbe.code == "invalid-media") {
         return PreflightResult.unsupported(mediaProbe.code, mediaProbe.reason ?: "This direct media response is not supported for offline playback.")
@@ -819,6 +849,45 @@ internal object OrionDownloadRequestContextBroker {
         .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
         .emit(EVENT_NAME, payload)
     }
+  }
+
+  private fun statusClass(status: Int): String = when (status) {
+    in 200..299 -> "2xx"
+    in 300..399 -> "3xx"
+    in 400..499 -> "4xx"
+    in 500..599 -> "5xx"
+    else -> "other"
+  }
+
+  private fun contentClass(contentType: String): String = when {
+    contentType.contains("mpegurl", ignoreCase = true) -> "hls"
+    contentType.contains("dash+xml", ignoreCase = true) -> "dash"
+    contentType.startsWith("video/", ignoreCase = true) -> "video"
+    contentType.contains("application/octet-stream", ignoreCase = true) -> "binary"
+    contentType.contains("text/html", ignoreCase = true) -> "html"
+    contentType.contains("application/json", ignoreCase = true) -> "json"
+    contentType.isBlank() -> "none"
+    else -> "other"
+  }
+
+  private fun sampleClass(bytes: ByteArray?): String {
+    if (bytes == null || bytes.isEmpty()) return "none"
+    val prefix = bytes.copyOfRange(0, min(bytes.size, 256)).toString(Charsets.UTF_8).trimStart()
+    if (OrionDownloadFragmentPlanner.isHlsPlaylistBody(bytes.toString(Charsets.UTF_8))) return "hls"
+    if (prefix.contains(Regex("<MPD(?:\\s|>)", RegexOption.IGNORE_CASE))) return "dash"
+    if (bytes.size >= 12 && bytes[4] == 'f'.code.toByte() && bytes[5] == 't'.code.toByte() && bytes[6] == 'y'.code.toByte() && bytes[7] == 'p'.code.toByte()) return "isobmff"
+    if (prefix.startsWith("<html", ignoreCase = true) || prefix.startsWith("<!doctype", ignoreCase = true)) return "html"
+    if (prefix.startsWith("{") || prefix.startsWith("[")) return "json"
+    return "other"
+  }
+
+  private fun byteBucket(size: Int): String = when {
+    size <= 0 -> "0"
+    size <= 1024 -> "1k"
+    size <= 4096 -> "4k"
+    size <= 16384 -> "16k"
+    size <= 65536 -> "64k"
+    else -> "256k"
   }
 
   private fun tracePhysicalOnce(key: String, message: String) {

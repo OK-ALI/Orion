@@ -42,18 +42,13 @@ import {
   getMobileSourceContinuityCapability,
   MOBILE_DEFAULT_CINEMA_SOURCE_ID,
   getNextMobileContinuitySource,
-  getNextMobileDownloadSource,
   getPreferredMobileResumeSource,
   mobileSourceCanReceiveContinuity,
 } from './mobileSources';
 import { classifyCinemaSourceFailure } from './sourceFailure';
 import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import {
-  failMobileDownloadSourceResolutionV1,
   getMobileDownloadSourceResolutionIntentV1,
-  getMobileDownloadSourceResolutionStateV1,
-  selectMobileDownloadCandidateForItemV1,
-  subscribeMobileDownloadCandidatesV1,
 } from '../downloads/downloadCandidateCapture';
 import type { VerifiedPlaybackSnapshot } from './playerTypes';
 import { MobilePlayerControllerProvider, useMobilePlayerController } from './MobilePlayerController';
@@ -65,9 +60,6 @@ import {
 } from './playbackCompletion';
 import { resolvePlaybackRouteIdentity } from './routePlaybackIdentity';
 import { usePlayerOrientation } from './usePlayerOrientation';
-
-const DOWNLOAD_SOURCE_WATCHDOG_MS = 8_000;
-const DOWNLOAD_TERMINAL_GRACE_MS = 1_200;
 
 type PlayerRouteParams = {
   id: string;
@@ -158,7 +150,6 @@ export default function PlayerScreen() {
     : Math.max(0, Number(existingProgress?.currentTime) || 0);
   const [initialChoicePending, setInitialChoicePending] = useState(initialSavedTime > 30 && !downloadIntentAtOpen);
   const [resumeTime, setResumeTime] = useState(downloadIntentAtOpen || initialSavedTime > 30 ? 0 : initialSavedTime);
-  const downloadAttemptedSourcesRef = useRef(new Set<string>());
   const [forceStartFromBeginning, setForceStartFromBeginning] = useState(false);
   const [nextEpisodePrompt, setNextEpisodePrompt] = useState<NextEpisodeCandidate | null>(null);
   const completionHandledRef = useRef(new Set<string>());
@@ -178,77 +169,11 @@ export default function PlayerScreen() {
     });
   }, []);
 
-  useEffect(() => {
-    if (offlineRequested) return undefined;
-    const intent = getMobileDownloadSourceResolutionIntentV1(downloadItemKey);
-    if (!intent || intent.autoReturnIssued) return undefined;
-    downloadAttemptedSourcesRef.current.add(sourceId);
-    let cancelled = false;
-    let advancing = false;
-    let failoverTimer: ReturnType<typeof setTimeout> | null = null;
-    const sourceDeadlineAt = Date.now() + DOWNLOAD_SOURCE_WATCHDOG_MS;
-    let terminalDeadlineAt: number | null = null;
-
-    const clearFailoverTimer = () => {
-      if (failoverTimer) clearTimeout(failoverTimer);
-      failoverTimer = null;
-    };
-    const finishFailure = () => {
-      if (cancelled) return;
-      clearFailoverTimer();
-      if (failMobileDownloadSourceResolutionV1(downloadItemKey, 'No download-ready media stream was found. Choose another source and retry.')) router.back();
-    };
-    const advanceSource = () => {
-      if (cancelled || advancing) return;
-      const current = getMobileDownloadSourceResolutionIntentV1(downloadItemKey);
-      if (!current || current.autoReturnIssued || selectMobileDownloadCandidateForItemV1(downloadItemKey)) return;
-      advancing = true;
-      clearFailoverTimer();
-      const attempted = downloadAttemptedSourcesRef.current;
-      const next = getNextMobileDownloadSource(type, attempted);
-      if (!next) {
-        finishFailure();
-        return;
-      }
-      attempted.add(next.id);
-      publishHandoff(null);
-      setInitialChoicePending(false);
-      setResumeTime(0);
-      setForceStartFromBeginning(true);
-      setSourceId(next.id);
-    };
-    const scheduleAdvance = (providerTerminal: boolean) => {
-      const now = Date.now();
-      if (providerTerminal && terminalDeadlineAt == null) {
-        terminalDeadlineAt = now + DOWNLOAD_TERMINAL_GRACE_MS;
-      }
-      const deadlineAt = Math.min(sourceDeadlineAt, terminalDeadlineAt ?? sourceDeadlineAt);
-      clearFailoverTimer();
-      failoverTimer = setTimeout(advanceSource, Math.max(0, deadlineAt - now));
-    };
-    const unsubscribe = subscribeMobileDownloadCandidatesV1((snapshots) => {
-      if (cancelled) return;
-      const current = getMobileDownloadSourceResolutionIntentV1(downloadItemKey);
-      if (!current || current.autoReturnIssued || selectMobileDownloadCandidateForItemV1(downloadItemKey, current.method, snapshots, 'orion-library')) {
-        clearFailoverTimer();
-        return;
-      }
-      const state = getMobileDownloadSourceResolutionStateV1(downloadItemKey, sourceId, snapshots);
-      if (state === 'ready') {
-        clearFailoverTimer();
-        return;
-      }
-      const health = getMobileSourceHealth(sourceId, type);
-      const providerTerminal = health?.state === 'failed' && health.cooldownUntil > Date.now();
-      scheduleAdvance(providerTerminal);
-    });
-
-    return () => {
-      cancelled = true;
-      clearFailoverTimer();
-      unsubscribe();
-    };
-  }, [downloadItemKey, offlineRequested, publishHandoff, router, sourceId, type]);
+  // Download source resolution is intentionally current-source only.
+  // A download intent returns automatically only when the active provider
+  // produces a genuinely ready candidate through useDownloadSourceAutoReturnV1.
+  // Orion never changes providers on a timer; source choice remains explicit
+  // user action through the player or Download Options.
 
 
   useEffect(() => {

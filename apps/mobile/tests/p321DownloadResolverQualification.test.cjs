@@ -56,21 +56,19 @@ test('download source qualification keeps candidate failure separate from provid
   assert.equal(capture.getMobileDownloadSourceResolutionStateV1(key, 'vixsrc', [candidate('vixsrc', 'ready', 'direct', true)]), 'ready');
 });
 
-test('temporary download resolution is event-driven with an eight-second watchdog and no 30-second source stall', () => {
+test('temporary download resolution stays on the user-selected provider and returns only on a ready candidate', () => {
   const player = fs.readFileSync(path.join(mobileRoot, 'src/features/playback/PlayerScreen.tsx'), 'utf8');
-  assert.match(player, /DOWNLOAD_SOURCE_WATCHDOG_MS = 8_000/);
-  assert.match(player, /DOWNLOAD_TERMINAL_GRACE_MS = 1_200/);
-  assert.match(player, /subscribeMobileDownloadCandidatesV1/);
-  assert.match(player, /getMobileDownloadSourceResolutionStateV1/);
-  assert.match(player, /health\?\.state === 'failed' && health\.cooldownUntil > Date\.now\(\)/);
-  assert.match(player, /const sourceDeadlineAt = Date\.now\(\) \+ DOWNLOAD_SOURCE_WATCHDOG_MS/);
-  assert.match(player, /terminalDeadlineAt = now \+ DOWNLOAD_TERMINAL_GRACE_MS/);
-  assert.match(player, /Math\.min\(sourceDeadlineAt, terminalDeadlineAt \?\? sourceDeadlineAt\)/);
-  assert.match(player, /setTimeout\(advanceSource, Math\.max\(0, deadlineAt - now\)\)/);
-  assert.match(player, /scheduleAdvance\(providerTerminal\)/);
-  assert.doesNotMatch(player, /scheduleAdvance\(providerTerminal \? DOWNLOAD_TERMINAL_GRACE_MS : DOWNLOAD_SOURCE_WATCHDOG_MS\)/);
-  assert.doesNotMatch(player, /30_000/);
-  assert.doesNotMatch(player, /Try another download source\?/);
+  const autoReturn = fs.readFileSync(path.join(mobileRoot, 'src/features/downloads/useDownloadSourceAutoReturn.ts'), 'utf8');
+  assert.doesNotMatch(player, /DOWNLOAD_SOURCE_WATCHDOG_MS/);
+  assert.doesNotMatch(player, /DOWNLOAD_TERMINAL_GRACE_MS/);
+  assert.doesNotMatch(player, /getNextMobileDownloadSource/);
+  assert.doesNotMatch(player, /failMobileDownloadSourceResolutionV1/);
+  assert.match(player, /getMobileDownloadSourceResolutionIntentV1\(downloadItemKey\)[\s\S]{0,120}\? false : changeSource/);
+  assert.match(autoReturn, /subscribeMobileDownloadCandidatesV1/);
+  assert.match(autoReturn, /selectMobileDownloadCandidateForItemV1/);
+  assert.match(autoReturn, /markMobileDownloadSourceAutoReturnIssuedV1/);
+  assert.match(autoReturn, /router\.back\(\)/);
+  assert.match(autoReturn, /no timer-based provider guess or[\s\S]*source switching/i);
 });
 
 test('native capture publishes checking before asynchronous preflight so one early rejection cannot hide another in-flight candidate', () => {

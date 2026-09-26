@@ -382,3 +382,17 @@ test('P10.3 cross-origin manifest descendants stay exact, public-network-only an
   assert.match(broker, /captureCookie\(normalized, emptyMap\(\)\)/);
   assert.doesNotMatch(broker.slice(broker.indexOf('private fun safeCrossOriginHeaders'), broker.indexOf('private fun sanitizeReferer')), /authorization|cookie/i);
 });
+
+
+test('candidate preflight emits privacy-safe response and media-probe diagnostics without raw request material', () => {
+  const broker = readMobile('plugins', 'orion-cinema-webview-native', 'OrionDownloadRequestContextBroker.kt');
+  assert.match(broker, /stage=preflight-response/);
+  assert.match(broker, /contentClass\(contentType\)/);
+  assert.match(broker, /sampleClass\(sampledBytes\)/);
+  assert.match(broker, /byteBucket\(sampledBytes\?\.size \?: 0\)/);
+  assert.match(broker, /stage=media-probe/);
+  assert.match(broker, /stage=preflight-exception/);
+  assert.doesNotMatch(broker, /stage=preflight-response[^\n]*rawUrl/);
+  assert.doesNotMatch(broker, /stage=preflight-response[^\n]*cookie/i);
+  assert.doesNotMatch(broker, /stage=preflight-response[^\n]*authorization/i);
+});

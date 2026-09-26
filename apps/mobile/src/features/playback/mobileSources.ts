@@ -31,58 +31,21 @@ export const MOBILE_PLAYER_SOURCES = Object.freeze([
 ]);
 
 /**
- * Download-only qualification order. Playback routing and download routing are
- * intentionally separate: a provider may remain manually playable while being
- * excluded from automatic download resolution until it is physically requalified.
+ * Download source choices are presentation-only. Download resolution never
+ * advances through this list automatically; the user explicitly chooses a
+ * provider whenever the current source does not expose a ready candidate.
  */
-export const MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_IDS = Object.freeze([
-  'vixsrc',
-  'vidsrc',
-  '111movies',
-] as const);
-
-const MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_RANK = new Map<string, number>(
-  MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_IDS.map((id, index) => [id, index]),
-);
-
-export function mobileDownloadSourceRank(sourceId: string): number {
-  return MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_RANK.get(sourceId) ?? Number.MAX_SAFE_INTEGER;
-}
-
-export function getNextMobileDownloadSource(
-  mediaType: 'movie' | 'tv',
-  attempted: ReadonlySet<string>,
-): (typeof MOBILE_PLAYER_SOURCES)[number] | null {
-  const now = Date.now();
-  return MOBILE_PLAYER_SOURCES
-    .filter((source) => MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_RANK.has(source.id))
-    .filter((source) => {
-      const health = getMobileSourceHealthV2(source.id, mediaType);
-      return source.supportsDownloads === true
-        && source.availability !== 'temporarily-unavailable'
-        && (mediaType === 'movie' ? source.media.movie : source.media.tv)
-        && !attempted.has(source.id)
-        && !(health?.cooldownUntil && health.cooldownUntil > now);
-    })
-    .sort((left, right) => mobileDownloadSourceRank(left.id) - mobileDownloadSourceRank(right.id))[0] || null;
-}
-
 export function getMobileDownloadSourceChoices(
   mediaType: 'movie' | 'tv',
 ): readonly (typeof MOBILE_PLAYER_SOURCES)[number][] {
   const now = Date.now();
-  return [...MOBILE_PLAYER_SOURCES]
+  return MOBILE_PLAYER_SOURCES
     .filter((source) => source.supportsDownloads === true)
     .filter((source) => source.availability !== 'temporarily-unavailable')
     .filter((source) => mediaType === 'movie' ? source.media.movie : source.media.tv)
     .filter((source) => {
       const health = getMobileSourceHealthV2(source.id, mediaType);
       return !(health?.cooldownUntil && health.cooldownUntil > now);
-    })
-    .sort((left, right) => {
-      const rank = mobileDownloadSourceRank(left.id) - mobileDownloadSourceRank(right.id);
-      if (rank !== 0) return rank;
-      return left.label.localeCompare(right.label);
     });
 }
 

@@ -343,9 +343,9 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
             </View>
 
             <StatusCard icon={sourceStatus.icon} color={statusColor} title={sourceStatus.title} detail={sourceStatus.detail} theme={theme} />
-            {sourceResolutionFailure && !selectedCandidate ? (
+            {!selectedCandidate ? (
               <View style={styles.optionGrid}>
-                <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Try a specific source</Text>
+                <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Choose a source</Text>
                 {alternateSources.map((source) => (
                   <Pressable key={source.id} accessibilityRole="button" accessibilityLabel={`Resolve download with ${source.label}`} disabled={!storageReady} onPress={() => resolveWithSource(source.id)} style={({ pressed }) => [styles.optionCard, { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: theme.border, opacity: storageReady ? 1 : 0.5 }]}>
                     <Ionicons name="play-circle-outline" size={21} color={theme.accent} />

@@ -19,7 +19,7 @@ function loadTs(relative, mocks = {}) {
   return module.exports;
 }
 
-test('download recovery excludes retired, disabled, incompatible and cooling-down sources', () => {
+test('manual download source choices exclude retired, disabled, incompatible and cooling-down sources', () => {
   const source = (id, extra = {}) => ({ id, async: false, animeOnly: false, media: { movie: true, tv: true }, supportsDownloads: true, routingMode: 'manual-only', releaseStatus: 'primary', availability: 'ready', ...extra });
   const registry = loadTs('src/features/playback/mobileSources.ts', {
     '@orion/shared/sources': {
@@ -38,11 +38,12 @@ test('download recovery excludes retired, disabled, incompatible and cooling-dow
     },
   });
   assert.deepEqual(registry.MOBILE_PLAYER_SOURCES.map((entry) => entry.id), ['vixsrc', 'not-downloadable', 'movie-only', 'cooldown', 'vidsrc', '111movies', 'vidlink']);
-  assert.deepEqual(registry.MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_IDS, ['vixsrc', 'vidsrc', '111movies']);
-  assert.equal(registry.getNextMobileDownloadSource('tv', new Set(['vixsrc'])).id, 'vidsrc');
-  assert.equal(registry.getNextMobileDownloadSource('tv', new Set(['vixsrc', 'vidsrc'])).id, '111movies');
-  assert.equal(registry.getNextMobileDownloadSource('tv', new Set(['vixsrc', 'vidsrc', '111movies'])), null);
+  assert.equal(registry.MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_IDS, undefined);
+  assert.equal(registry.getNextMobileDownloadSource, undefined);
   assert.deepEqual(registry.getMobileDownloadSourceChoices('tv').map((entry) => entry.id), ['vixsrc', 'vidsrc', '111movies']);
+  const modal = fs.readFileSync(path.join(mobileRoot, 'src', 'components', 'DownloadModal.tsx'), 'utf8');
+  assert.match(modal, /!selectedCandidate \? \([\s\S]{0,220}Choose a source/);
+  assert.doesNotMatch(modal, /sourceResolutionFailure && !selectedCandidate \? \([\s\S]{0,220}Try a specific source/);
 });
 
 test('Dr. House S2E1 download start rejects a stale episode and accepts its exact candidate', async () => {
