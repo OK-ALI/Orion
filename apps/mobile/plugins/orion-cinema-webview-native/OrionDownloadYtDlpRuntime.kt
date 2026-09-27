@@ -137,20 +137,40 @@ internal object OrionDownloadYtDlpRuntime {
           )
 
       liveHlsJobs.add(cleanJobId)
-      try {
-        execute(
-          context = context,
-          jobId = cleanJobId,
-          authority =
-            executionAuthority,
-          // yt-dlp's percent/total may describe one fragment, not the episode.
-          // Only the gateway's completed media routes drive HLS UI progress.
-          onProgress = {},
-          allowInPlacePause = true,
+      val outcome =
+        try {
+          execute(
+            context = context,
+            jobId = cleanJobId,
+            authority =
+              executionAuthority,
+            // yt-dlp's percent/total may describe one fragment, not the episode.
+            // Only the gateway's completed media routes drive HLS UI progress.
+            onProgress = {},
+            allowInPlacePause = true,
+          )
+        } finally {
+          liveHlsJobs.remove(cleanJobId)
+        }
+
+      if (outcome is OrionYtDlpOutcome.Completed) {
+        val proof =
+          gateway.awaitCompletionProof()
+
+        Log.i(
+          "OrionDownloadStage",
+          "stage=hls-transfer-proof complete=${proof.complete} mediaRoutes=${proof.totalMediaRoutes} completedRoutes=${proof.completedMediaRoutes} bytes=${proof.completedMediaBytes} readErrors=${proof.providerReadErrors} writeErrors=${proof.providerWriteErrors}",
         )
-      } finally {
-        liveHlsJobs.remove(cleanJobId)
+
+        if (!proof.complete) {
+          return OrionYtDlpOutcome.Failed(
+            "yt-dlp-hls-transfer-incomplete",
+            true,
+          )
+        }
       }
+
+      outcome
     } finally {
       gateway.close()
     }

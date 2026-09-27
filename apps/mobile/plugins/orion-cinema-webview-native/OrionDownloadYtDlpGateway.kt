@@ -22,6 +22,20 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
+internal data class OrionYtDlpGatewayCompletionProof(
+  val totalMediaRoutes: Int,
+  val completedMediaRoutes: Int,
+  val completedMediaBytes: Long,
+  val providerReadErrors: Int,
+  val providerWriteErrors: Int,
+) {
+  val complete: Boolean
+    get() =
+      totalMediaRoutes > 0 &&
+        completedMediaRoutes == totalMediaRoutes &&
+        completedMediaBytes > 0L
+}
+
 /**
  * Cold job-scoped loopback transport substrate for yt-dlp.
  *
@@ -145,6 +159,45 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
 
   fun isClosed(): Boolean =
     closed.get()
+
+  fun completionProof(): OrionYtDlpGatewayCompletionProof =
+    OrionYtDlpGatewayCompletionProof(
+      totalMediaRoutes = providerRouteCount.get(),
+      completedMediaRoutes = completedProviderBytes.size,
+      completedMediaBytes = completedProviderByteCount.get(),
+      providerReadErrors = providerReadErrorCount.get(),
+      providerWriteErrors = providerWriteErrorCount.get(),
+    )
+
+  fun awaitCompletionProof(
+    timeoutMs: Long = COMPLETION_PROOF_WAIT_MS,
+  ): OrionYtDlpGatewayCompletionProof {
+    val boundedTimeout =
+      timeoutMs.coerceIn(0L, COMPLETION_PROOF_WAIT_MS)
+
+    val deadline =
+      System.nanoTime() +
+        TimeUnit.MILLISECONDS.toNanos(boundedTimeout)
+
+    var proof = completionProof()
+
+    while (
+      !closed.get() &&
+      !proof.complete &&
+      System.nanoTime() < deadline
+    ) {
+      try {
+        Thread.sleep(COMPLETION_PROOF_POLL_MS)
+      } catch (_: InterruptedException) {
+        Thread.currentThread().interrupt()
+        break
+      }
+
+      proof = completionProof()
+    }
+
+    return proof
+  }
 
   /**
    * Registers only already-prepared local manifest bytes.
@@ -1456,6 +1509,8 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     private const val CLIENT_READ_TIMEOUT_MS = 5_000
     private const val PROVIDER_BUFFER_SIZE = 64 * 1024
     private const val PAUSE_POLL_MS = 75L
+    private const val COMPLETION_PROOF_POLL_MS = 25L
+    private const val COMPLETION_PROOF_WAIT_MS = 1_500L
     private const val HTTP_RANGE_NOT_SATISFIABLE = 416
     private const val MAX_PROVIDER_HEADER_VALUE_CHARS = 512
     private const val THREAD_JOIN_TIMEOUT_MS = 1_000L
