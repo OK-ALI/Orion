@@ -327,6 +327,11 @@ internal object OrionDownloadYtDlpRuntime {
         "stage=yt-dlp runtime=${runtimeBinaryDiagnostic(appContext)}",
       )
 
+      executionPhase = "staging-recovery"
+      if (!prepareHlsExecutionOutput(cleanJobId, authority, workDir)) {
+        return OrionYtDlpOutcome.Failed("yt-dlp-staging-reset-failed", true)
+      }
+
       executionPhase = "request-build"
       val request = buildRequest(rootUrl, authority, workDir)
 
@@ -384,6 +389,60 @@ internal object OrionDownloadYtDlpRuntime {
     } finally {
       activeJobs.remove(cleanJobId)
     }
+  }
+
+  /**
+   * External FFmpeg writes HLS directly to the final staging filename. If that
+   * process dies, yt-dlp can treat the still-present partial media.mp4 as an
+   * already-finished output on the next invocation and exit successfully
+   * without requesting any provider media routes.
+   *
+   * V8.16 owns the only durable proof that an HLS/DASH staging file actually
+   * finished. Without that proof, an HLS media.mp4 is untrusted partial state:
+   * remove it before a fresh process starts so recovery performs real network
+   * work instead of short-circuiting on the old output.
+   *
+   * The V8.13 in-place Pause/Resume path never starts a new execute() call, so
+   * its live FFmpeg output is not touched here.
+   */
+  private fun prepareHlsExecutionOutput(
+    jobId: String,
+    authority: OrionYtDlpAuthority,
+    workDir: File,
+  ): Boolean {
+    if (authority.transferKind != "hls") return true
+
+    if (OrionDownloadJobStore.ytDlpTransferCompletion(jobId) != null) {
+      return true
+    }
+
+    val output =
+      File(
+        workDir,
+        "media.mp4",
+      )
+
+    if (!output.exists()) return true
+
+    val staleBytes =
+      output
+        .length()
+        .coerceAtLeast(0L)
+
+    if (!output.delete()) {
+      Log.i(
+        "OrionDownloadStage",
+        "stage=yt-dlp recovery=staging-reset outcome=failed bytes=$staleBytes",
+      )
+      return false
+    }
+
+    Log.i(
+      "OrionDownloadStage",
+      "stage=yt-dlp recovery=staging-reset outcome=discarded bytes=$staleBytes",
+    )
+
+    return true
   }
 
   fun isLiveHls(jobId: String): Boolean {
@@ -455,6 +514,7 @@ internal object OrionDownloadYtDlpRuntime {
         ?: return null
 
     return when {
+      "has already been downloaded" in line -> "existing-output-short-circuit"
       "error when loading first segment" in line -> "hls-first-segment-error"
       "invalid data found when processing input" in line -> "invalid-media"
       "could not find codec parameters" in line -> "codec-parameters-missing"
