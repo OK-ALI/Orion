@@ -50,18 +50,20 @@ test('V8.12 keeps elapsed time live for running work and preserves the existing 
   assert.match(list, /eta \? `\$\{eta\} left` : null/);
 });
 
-test('V8.12 Pause stops the active yt-dlp or ffmpeg execution and fast Resume is serialized behind shutdown', () => {
-  const pause = between(moduleSource, 'fun pauseJob(jobId: String)', '@ReactMethod\n  fun resumeJob');
+test('V8.13 keeps live HLS paused in place while preserving stop-and-serialize fallback for other execution paths', () => {
+  const pause = between(moduleSource, 'fun pauseJob(jobId: String)', 'private fun hasRetainedPausedHlsProgress');
   assert.match(pause, /requestControl\(clean, "pause"\)/);
   assert.match(pause, /setState\(clean, "paused"\)/);
-  assert.match(pause, /OrionDownloadYtDlpRuntime\.stop\(clean\)/);
+  assert.match(pause, /if \(!OrionDownloadYtDlpRuntime\.isLiveHls\(clean\)\)[\s\S]*?OrionDownloadYtDlpRuntime\.stop\(clean\)/);
 
   const servicePause = between(service, 'ACTION_PAUSE -> {', 'ACTION_CANCEL -> {');
   assert.match(servicePause, /requestControl\(jobId, "pause"\)/);
-  assert.match(servicePause, /OrionDownloadYtDlpRuntime\.stop\(jobId\)/);
+  assert.match(servicePause, /if \(!OrionDownloadYtDlpRuntime\.isLiveHls\(jobId\)\)[\s\S]*?OrionDownloadYtDlpRuntime\.stop\(jobId\)/);
 
   assert.match(service, /queuedExplicitResumes/);
-  assert.match(service, /ACTION_RESUME -> \{[\s\S]*?activeJobs\.contains\(jobId\)[\s\S]*?requestControl\(jobId, "pause"\)[\s\S]*?OrionDownloadYtDlpRuntime\.stop\(jobId\)/);
+  assert.match(service, /val liveHls = activeJobs\.contains\(jobId\) && OrionDownloadYtDlpRuntime\.isLiveHls\(jobId\)/);
+  assert.match(service, /if \(liveHls\)[\s\S]*?prepareLiveHlsResume\(jobId\)[\s\S]*?return START_NOT_STICKY/);
+  assert.match(service, /if \(activeJobs\.contains\(jobId\)\)[\s\S]*?requestControl\(jobId, "pause"\)[\s\S]*?OrionDownloadYtDlpRuntime\.stop\(jobId\)/);
   assert.match(service, /executor\.execute \{[\s\S]*?prepareExplicitResume\(jobId\)[\s\S]*?activeJobs\.add\(jobId\)/);
   assert.match(service, /fun resume\(context: Context, jobId: String\)[\s\S]*?action = ACTION_RESUME/);
 

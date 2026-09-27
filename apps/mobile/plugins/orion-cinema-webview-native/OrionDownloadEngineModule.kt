@@ -174,13 +174,22 @@ class OrionDownloadEngineModule(
     OrionDownloadJobStore.requestControl(clean, "pause")
     OrionDownloadJobStore.setState(clean, "paused")
     OrionDownloadRecoveryScheduler.cancel(reactContext, clean)
-    try { OrionDownloadYtDlpRuntime.stop(clean) } catch (_: Throwable) {}
+    if (!OrionDownloadYtDlpRuntime.isLiveHls(clean)) {
+      try { OrionDownloadYtDlpRuntime.stop(clean) } catch (_: Throwable) {}
+    }
     OrionDownloadNotifications.reconcile(reactContext)
   }
 
   private fun prepareCompleteLocalResume(jobId: String) {
     OrionDownloadJobStore.clearControl(jobId)
     OrionDownloadJobStore.setState(jobId, "recovering")
+  }
+
+  private fun hasRetainedPausedHlsProgress(job: org.json.JSONObject): Boolean {
+    if (job.optString("state") != "paused" || job.optString("_transferKind") != "hls") return false
+    val progress = job.optJSONObject("progress") ?: return false
+    return progress.optLong("bytesDownloaded", 0L) > 0L ||
+      progress.optInt("completedFragments", 0) > 0
   }
 
   @ReactMethod
@@ -194,6 +203,21 @@ class OrionDownloadEngineModule(
     // An explicit user retry owns the next attempt. Remove the scheduled
     // recovery first so WorkManager cannot race the immediate foreground run.
     OrionDownloadRecoveryScheduler.cancel(reactContext, clean)
+    if (
+      hasRetainedPausedHlsProgress(job) &&
+      !OrionDownloadYtDlpRuntime.isLiveHls(clean)
+    ) {
+      OrionDownloadJobStore.markActionRequired(
+        clean,
+        "paused-session-ended",
+        "This paused download can’t continue after Orion was closed. Restart the download to begin again.",
+      )
+      promise.reject(
+        "DOWNLOAD_RESUME_UNAVAILABLE",
+        "This paused download can’t continue after Orion was closed. Restart the download to begin again.",
+      )
+      return
+    }
     if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, clean)) {
       prepareCompleteLocalResume(clean)
       OrionDownloadForegroundService.start(reactContext, clean, recovery = true)

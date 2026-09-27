@@ -33,7 +33,9 @@ class OrionDownloadForegroundService : Service() {
         OrionDownloadJobStore.requestControl(jobId, "pause")
         OrionDownloadJobStore.setState(jobId, "paused")
         OrionDownloadRecoveryScheduler.cancel(applicationContext, jobId)
-        try { OrionDownloadYtDlpRuntime.stop(jobId) } catch (_: Throwable) {}
+        if (!OrionDownloadYtDlpRuntime.isLiveHls(jobId)) {
+          try { OrionDownloadYtDlpRuntime.stop(jobId) } catch (_: Throwable) {}
+        }
         OrionDownloadNotifications.reconcile(applicationContext)
         return START_NOT_STICKY
       }
@@ -42,10 +44,27 @@ class OrionDownloadForegroundService : Service() {
         return START_NOT_STICKY
       }
       ACTION_RESUME -> {
+        val liveHls = activeJobs.contains(jobId) && OrionDownloadYtDlpRuntime.isLiveHls(jobId)
+        if (liveHls) {
+          prepareLiveHlsResume(jobId)
+          OrionDownloadNotifications.reconcile(applicationContext)
+          return START_NOT_STICKY
+        }
+
+        val pausedJob = OrionDownloadJobStore.getJob(jobId)
+        if (hasRetainedPausedHlsProgress(pausedJob)) {
+          OrionDownloadJobStore.markActionRequired(
+            jobId,
+            "paused-session-ended",
+            "This paused download can’t continue after Orion was closed. Restart the download to begin again.",
+          )
+          OrionDownloadNotifications.reconcile(applicationContext)
+          return START_NOT_STICKY
+        }
+
         if (activeJobs.contains(jobId)) {
-          // Keep the pause fence in place until the current execution has
-          // actually unwound. Clearing it early can reclassify the killed
-          // process as a failure and can drop a fast Resume behind activeJobs.
+          // Non-HLS executions still unwind before an explicit Resume is
+          // serialized behind the previous run.
           OrionDownloadJobStore.requestControl(jobId, "pause")
           OrionDownloadJobStore.setState(jobId, "paused")
           OrionDownloadRecoveryScheduler.cancel(applicationContext, jobId)
@@ -82,6 +101,19 @@ class OrionDownloadForegroundService : Service() {
       }
     }
     return START_NOT_STICKY
+  }
+
+  private fun hasRetainedPausedHlsProgress(job: org.json.JSONObject?): Boolean {
+    if (job == null || job.optString("state") != "paused" || job.optString("_transferKind") != "hls") return false
+    val progress = job.optJSONObject("progress") ?: return false
+    return progress.optLong("bytesDownloaded", 0L) > 0L ||
+      progress.optInt("completedFragments", 0) > 0
+  }
+
+  private fun prepareLiveHlsResume(jobId: String) {
+    OrionDownloadRecoveryScheduler.cancel(applicationContext, jobId)
+    OrionDownloadJobStore.clearControl(jobId)
+    OrionDownloadJobStore.setState(jobId, "recovering")
   }
 
   private fun prepareExplicitResume(jobId: String) {

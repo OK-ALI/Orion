@@ -477,11 +477,13 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
         const progress = createMobileDownloadProgressSnapshotV1(job);
         const finalizing = job.state === 'finalizing';
         const percent = finalizing || progress.percent === null ? null : Math.max(0, Math.min(99, Math.round(progress.percent)));
-        const warning = FAILED_STATES.has(job.state) || job.state === 'recovering';
+        const resuming = job.state === 'recovering' && progress.bytesDownloaded > 0 && progress.completedFragments !== null;
+        const warning = FAILED_STATES.has(job.state) || (job.state === 'recovering' && !resuming);
         const tone = warning ? theme.warning : job.state === 'paused' ? theme.textMuted : theme.accent;
         const canPause = job.state === 'downloading';
         const canResume = job.state === 'paused';
         const canRetry = job.state === 'recovering' || (FAILED_STATES.has(job.state) && job.failure?.retryable);
+        const showRetry = canRetry && !resuming;
         const failurePresentation = downloadFailurePresentation(job);
         const poster = imgUrl(job.media.posterPath ?? null, 'w342');
         const downloaded = progress.bytesDownloaded > 0 ? formatBytes(progress.bytesDownloaded) : null;
@@ -504,7 +506,11 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
               elapsed ? `${elapsed} elapsed` : null,
               fragmentText,
             ].filter(Boolean);
-        const statusLabel = finalizing ? finalizationStageLabel(progress.finalizationStage) : progress.statusLabel;
+        const statusLabel = resuming
+          ? 'Resuming…'
+          : finalizing
+            ? finalizationStageLabel(progress.finalizationStage)
+            : progress.statusLabel;
 
         return (
           <View key={job.jobId} style={[styles.downloadItem, { borderBottomColor: theme.border }]}>
@@ -526,7 +532,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
             <View style={styles.actions}>
               {canPause ? <ActionButton label="Pause" icon="pause" disabled={busyJob === job.jobId} onPress={() => pauseNativeDownloadJobV1(job.jobId)} /> : null}
               {canResume ? <ActionButton label="Resume" icon="play" disabled={busyJob === job.jobId} onPress={() => runAsync(job.jobId, () => resumeNativeDownloadJobV1(job.jobId))} /> : null}
-              {canRetry ? <ActionButton label={failurePresentation.retryLabel} icon="refresh" disabled={busyJob === job.jobId} onPress={() => runAsync(job.jobId, () => retryNativeDownloadJobV1(job.jobId))} /> : null}
+              {showRetry ? <ActionButton label={failurePresentation.retryLabel} icon="refresh" disabled={busyJob === job.jobId} onPress={() => runAsync(job.jobId, () => retryNativeDownloadJobV1(job.jobId))} /> : null}
               <ActionButton label="Cancel" icon="close" disabled={busyJob === job.jobId} onPress={() => cancelNativeDownloadJobV1(job.jobId)} />
             </View>
           </View>

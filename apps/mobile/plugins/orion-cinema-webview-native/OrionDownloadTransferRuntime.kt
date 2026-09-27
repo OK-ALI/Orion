@@ -429,6 +429,13 @@ internal object OrionDownloadTransferEngine {
           bound = bound,
           requestedQuality = quality,
           onMeasuredMediaProgress = { bytes, completed, total ->
+            val current = OrionDownloadJobStore.getJob(jobId)
+            if (
+              current?.optString("state") == "recovering" &&
+              OrionDownloadJobStore.control(jobId) != "pause"
+            ) {
+              OrionDownloadJobStore.setState(jobId, "downloading")
+            }
             OrionDownloadJobStore.setGatewayMediaProgress(jobId, bytes, completed, total)
             OrionDownloadNotifications.reconcile(context)
           },

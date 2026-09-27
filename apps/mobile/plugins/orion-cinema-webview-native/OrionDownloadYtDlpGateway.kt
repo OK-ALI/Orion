@@ -122,6 +122,24 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
   fun owns(jobId: String): Boolean =
     cleanJobId(jobId) == ownerJobId
 
+  private fun awaitTransferPermission(): Boolean {
+    while (!closed.get()) {
+      when (OrionDownloadJobStore.control(ownerJobId)) {
+        "cancel" -> return false
+        "pause" -> {
+          try {
+            Thread.sleep(PAUSE_POLL_MS)
+          } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            return false
+          }
+        }
+        else -> return true
+      }
+    }
+    return false
+  }
+
   fun localPort(): Int =
     server.localPort
 
@@ -651,6 +669,11 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     providerRequestCount.incrementAndGet()
     val providerAttempt = providerAttemptCount.incrementAndGet()
 
+    // A live HLS pause keeps FFmpeg and its output state alive. Hold the
+    // loopback request here until Resume clears the durable pause fence rather
+    // than reopening the provider stream from fragment zero.
+    if (!awaitTransferPermission()) return
+
     // FFmpeg may probe or seek a loopback HLS media route with Range.
     // Preserve that range when this route represents the whole provider object;
     // otherwise the gateway can advertise byte ranges while silently serving
@@ -866,6 +889,8 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
               )
 
             while (!closed.get()) {
+              if (!awaitTransferPermission()) break
+
               val read =
                 try {
                   source.read(buffer)
@@ -894,6 +919,11 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
 
               readBytes += read
               providerReadByteCount.addAndGet(read.toLong())
+
+              // Pause may arrive while a provider read is completing. Keep the
+              // bytes buffered inside Orion until Resume instead of advancing
+              // FFmpeg or the visible completed-fragment count.
+              if (!awaitTransferPermission()) break
 
               if (!firstReadObserved) {
                 Log.i(
@@ -1425,6 +1455,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     private const val MAX_HEADER_BYTES = 32 * 1024
     private const val CLIENT_READ_TIMEOUT_MS = 5_000
     private const val PROVIDER_BUFFER_SIZE = 64 * 1024
+    private const val PAUSE_POLL_MS = 75L
     private const val HTTP_RANGE_NOT_SATISFIABLE = 416
     private const val MAX_PROVIDER_HEADER_VALUE_CHARS = 512
     private const val THREAD_JOIN_TIMEOUT_MS = 1_000L

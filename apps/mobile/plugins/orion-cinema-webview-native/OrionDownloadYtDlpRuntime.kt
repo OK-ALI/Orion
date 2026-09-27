@@ -36,12 +36,14 @@ internal sealed class OrionYtDlpOutcome {
  */
 internal object OrionDownloadYtDlpRuntime {
   private const val SOCKET_TIMEOUT_SECONDS = 20
+  private const val HLS_LOOPBACK_SOCKET_TIMEOUT_SECONDS = 24 * 60 * 60
   private const val RETRIES = 3
   private const val FRAGMENT_RETRIES = 3
   private const val CONCURRENT_FRAGMENTS = 4
   private const val MAX_HEADER_NAME_LENGTH = 80
   private const val MAX_HEADER_VALUE_LENGTH = 8 * 1024
   private val activeJobs = ConcurrentHashMap.newKeySet<String>()
+  private val liveHlsJobs = ConcurrentHashMap.newKeySet<String>()
 
   fun executeHlsGateway(
     context: Context,
@@ -134,15 +136,21 @@ internal object OrionDownloadYtDlpRuntime {
             false,
           )
 
-      execute(
-        context = context,
-        jobId = cleanJobId,
-        authority =
-          executionAuthority,
-        // yt-dlp's percent/total may describe one fragment, not the episode.
-        // Only the gateway's completed media routes drive HLS UI progress.
-        onProgress = {},
-      )
+      liveHlsJobs.add(cleanJobId)
+      try {
+        execute(
+          context = context,
+          jobId = cleanJobId,
+          authority =
+            executionAuthority,
+          // yt-dlp's percent/total may describe one fragment, not the episode.
+          // Only the gateway's completed media routes drive HLS UI progress.
+          onProgress = {},
+          allowInPlacePause = true,
+        )
+      } finally {
+        liveHlsJobs.remove(cleanJobId)
+      }
     } finally {
       gateway.close()
     }
@@ -255,6 +263,7 @@ internal object OrionDownloadYtDlpRuntime {
     jobId: String,
     authority: OrionYtDlpAuthority,
     onProgress: (OrionYtDlpProgress) -> Unit = {},
+    allowInPlacePause: Boolean = false,
   ): OrionYtDlpOutcome {
     val cleanJobId = cleanJobId(jobId) ?: return OrionYtDlpOutcome.Failed("yt-dlp-job-invalid", false)
     if (authority.jobId != cleanJobId) return OrionYtDlpOutcome.Failed("yt-dlp-authority-mismatch", false)
@@ -307,7 +316,8 @@ internal object OrionDownloadYtDlpRuntime {
       )
       val response = YoutubeDL.getInstance().execute(request, processId, false) { percent, eta, line ->
         when (OrionDownloadJobStore.control(cleanJobId)) {
-          "pause", "cancel" -> YoutubeDL.getInstance().destroyProcessById(processId)
+          "cancel" -> YoutubeDL.getInstance().destroyProcessById(processId)
+          "pause" -> if (!allowInPlacePause) YoutubeDL.getInstance().destroyProcessById(processId)
           else -> {
             safeExecutionDiagnosticClass(line)?.let { diagnosticClass ->
               if (emittedExecutionDiagnostics.add(diagnosticClass)) {
@@ -325,7 +335,11 @@ internal object OrionDownloadYtDlpRuntime {
       executionPhase = "response"
       if (response.exitCode != 0) {
         Log.i("OrionDownloadStage", "stage=yt-dlp exit=${response.exitCode}")
-        OrionYtDlpOutcome.Failed("yt-dlp-process-failed", true)
+        when (OrionDownloadJobStore.control(cleanJobId)) {
+          "pause" -> OrionYtDlpOutcome.Paused
+          "cancel" -> OrionYtDlpOutcome.Cancelled
+          else -> OrionYtDlpOutcome.Failed("yt-dlp-process-failed", true)
+        }
       } else {
         val output = OrionFinalizedArtifactOwner.stagingOutput(workDir)
         if (output == null) OrionYtDlpOutcome.Failed("yt-dlp-output-contract-invalid", false)
@@ -351,6 +365,11 @@ internal object OrionDownloadYtDlpRuntime {
     }
   }
 
+  fun isLiveHls(jobId: String): Boolean {
+    val clean = cleanJobId(jobId) ?: return false
+    return liveHlsJobs.contains(clean) && activeJobs.contains(clean)
+  }
+
   fun stop(jobId: String): Boolean {
     val clean = cleanJobId(jobId) ?: return false
     return YoutubeDL.getInstance().destroyProcessById(processId(clean))
@@ -367,7 +386,10 @@ internal object OrionDownloadYtDlpRuntime {
       .addOption("--continue")
       .addOption("--merge-output-format", "mp4")
       .addOption("--remux-video", "mp4")
-      .addOption("--socket-timeout", SOCKET_TIMEOUT_SECONDS)
+      .addOption(
+        "--socket-timeout",
+        if (authority.transferKind == "hls") HLS_LOOPBACK_SOCKET_TIMEOUT_SECONDS else SOCKET_TIMEOUT_SECONDS,
+      )
       .addOption("--retries", RETRIES)
       .addOption("--fragment-retries", FRAGMENT_RETRIES)
       .addOption("--concurrent-fragments", CONCURRENT_FRAGMENTS)
