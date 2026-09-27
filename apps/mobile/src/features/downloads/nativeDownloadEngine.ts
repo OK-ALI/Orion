@@ -44,6 +44,7 @@ interface NativeDownloadEngineModule {
   resumeJob(jobId: string): Promise<boolean>;
   retryJob(jobId: string): Promise<boolean>;
   retryAllJobs(): Promise<{ restarted?: number; actionRequired?: number }>;
+  setForegroundNetworkAvailable(available: boolean): void;
   cancelJob(jobId: string): void;
   reconcileDownloads(): Promise<unknown>;
   deleteAssets(assetIdsJson: string): Promise<unknown>;
@@ -166,6 +167,10 @@ export async function retryAllNativeDownloadJobsV1(): Promise<{ restarted: numbe
     restarted: Math.max(0, Math.trunc(Number(result?.restarted) || 0)),
     actionRequired: Math.max(0, Math.trunc(Number(result?.actionRequired) || 0)),
   };
+}
+
+export function setNativeDownloadForegroundNetworkAvailableV1(available: boolean): void {
+  nativeModule()?.setForegroundNetworkAvailable(Boolean(available));
 }
 
 export function cancelNativeDownloadJobV1(jobId: string): void {

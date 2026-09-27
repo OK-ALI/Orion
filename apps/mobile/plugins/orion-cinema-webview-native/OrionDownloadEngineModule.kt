@@ -171,6 +171,7 @@ class OrionDownloadEngineModule(
   fun pauseJob(jobId: String) {
     val clean = jobId.trim()
     if (clean.isBlank()) return
+    OrionDownloadForegroundRecoveryCoordinator.cancel(clean)
     OrionDownloadJobStore.requestControl(clean, "pause")
     OrionDownloadJobStore.setState(clean, "paused")
     OrionDownloadRecoveryScheduler.cancel(reactContext, clean)
@@ -200,8 +201,10 @@ class OrionDownloadEngineModule(
       promise.reject("DOWNLOAD_JOB_NOT_FOUND", "Download job was not found.")
       return
     }
-    // An explicit user retry owns the next attempt. Remove the scheduled
-    // recovery first so WorkManager cannot race the immediate foreground run.
+    // An explicit user retry owns the next attempt. Remove both the short
+    // foreground countdown and the scheduled WorkManager fallback so neither
+    // can race the immediate foreground run.
+    OrionDownloadForegroundRecoveryCoordinator.cancel(clean)
     OrionDownloadRecoveryScheduler.cancel(reactContext, clean)
     if (
       hasRetainedPausedHlsProgress(job) &&
@@ -262,6 +265,7 @@ class OrionDownloadEngineModule(
       val stored = OrionDownloadJobStore.getJob(jobId) ?: continue
       val candidateId = stored.optString("candidateId")
       OrionDownloadJobStore.incrementRetry(jobId)
+      OrionDownloadForegroundRecoveryCoordinator.cancel(jobId)
       OrionDownloadRecoveryScheduler.cancel(reactContext, jobId)
       if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, jobId)) {
         OrionDownloadJobStore.clearControl(jobId)
@@ -295,7 +299,16 @@ class OrionDownloadEngineModule(
   fun cancelJob(jobId: String) {
     val clean = jobId.trim()
     if (clean.isBlank()) return
+    OrionDownloadForegroundRecoveryCoordinator.cancel(clean)
     OrionDownloadTransferEngine.cancelJob(reactContext, clean)
+  }
+
+  @ReactMethod
+  fun setForegroundNetworkAvailable(available: Boolean) {
+    OrionDownloadForegroundRecoveryCoordinator.onNetworkAvailabilityChanged(
+      reactContext,
+      available,
+    )
   }
 
   @ReactMethod

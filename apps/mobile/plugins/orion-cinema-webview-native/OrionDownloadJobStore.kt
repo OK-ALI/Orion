@@ -805,6 +805,78 @@ internal object OrionDownloadJobStore {
   }
 
   @Synchronized
+  fun markForegroundRetryScheduled(jobId: String, attempt: Int, delaySeconds: Int) {
+    val boundedAttempt = attempt.coerceIn(1, 3)
+    val boundedDelay = delaySeconds.coerceAtLeast(1)
+    mutateJobLocked(jobId) { job ->
+      job.put("_foregroundRetryAttempt", boundedAttempt)
+      job.put("_foregroundRetryDelaySeconds", boundedDelay)
+      job.put("state", "recovering")
+      job.put(
+        "failure",
+        failure(
+          "auto-retry-scheduled-${boundedDelay}-attempt-${boundedAttempt}",
+          "Orion will retry this download shortly.",
+          retryable = true,
+          actionRequired = false,
+        ),
+      )
+      val progress = job.optJSONObject("progress") ?: emptyProgress()
+      progress.put("bytesPerSecond", JSONObject.NULL)
+      progress.put("etaSeconds", JSONObject.NULL)
+      job.put("progress", progress)
+      gatewayTelemetrySamples.remove(jobId)
+      job.put("updatedAt", System.currentTimeMillis())
+    }
+  }
+
+  @Synchronized
+  fun foregroundRetryAttempt(jobId: String): Int? =
+    getJob(jobId)
+      ?.optInt("_foregroundRetryAttempt", 0)
+      ?.takeIf { it in 1..3 }
+
+  @Synchronized
+  fun clearForegroundRetry(jobId: String) {
+    val current = getJob(jobId) ?: return
+    if (
+      !current.has("_foregroundRetryAttempt") &&
+      !current.has("_foregroundRetryDelaySeconds")
+    ) {
+      return
+    }
+    mutateJobLocked(jobId) { job ->
+      job.remove("_foregroundRetryAttempt")
+      job.remove("_foregroundRetryDelaySeconds")
+      job.put("updatedAt", System.currentTimeMillis())
+    }
+  }
+
+  @Synchronized
+  fun markForegroundRetryExhausted(jobId: String) {
+    mutateJobLocked(jobId) { job ->
+      job.remove("_foregroundRetryAttempt")
+      job.remove("_foregroundRetryDelaySeconds")
+      job.put("state", "recovering")
+      job.put(
+        "failure",
+        failure(
+          "auto-retry-exhausted",
+          "Automatic retries finished. Retry now when you’re ready.",
+          retryable = true,
+          actionRequired = false,
+        ),
+      )
+      val progress = job.optJSONObject("progress") ?: emptyProgress()
+      progress.put("bytesPerSecond", JSONObject.NULL)
+      progress.put("etaSeconds", JSONObject.NULL)
+      job.put("progress", progress)
+      gatewayTelemetrySamples.remove(jobId)
+      job.put("updatedAt", System.currentTimeMillis())
+    }
+  }
+
+  @Synchronized
   fun markActionRequired(jobId: String, code: String, message: String) {
     setState(jobId, "action-required", failure(code, message, retryable = true, actionRequired = true))
   }

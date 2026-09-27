@@ -30,6 +30,7 @@ class OrionDownloadForegroundService : Service() {
 
     when (intent?.action) {
       ACTION_PAUSE -> {
+        OrionDownloadForegroundRecoveryCoordinator.cancel(jobId)
         OrionDownloadJobStore.requestControl(jobId, "pause")
         OrionDownloadJobStore.setState(jobId, "paused")
         OrionDownloadRecoveryScheduler.cancel(applicationContext, jobId)
@@ -40,6 +41,7 @@ class OrionDownloadForegroundService : Service() {
         return START_NOT_STICKY
       }
       ACTION_CANCEL -> {
+        OrionDownloadForegroundRecoveryCoordinator.cancel(jobId)
         OrionDownloadTransferEngine.cancelJob(applicationContext, jobId)
         return START_NOT_STICKY
       }
@@ -132,6 +134,7 @@ class OrionDownloadForegroundService : Service() {
       OrionDownloadTransferEngine.runJob(applicationContext, jobId)
     } finally {
       activeJobs.remove(jobId)
+      OrionDownloadForegroundRecoveryCoordinator.afterExecution(applicationContext, jobId)
       if (!OrionDownloadNotifications.reconcile(applicationContext)) {
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

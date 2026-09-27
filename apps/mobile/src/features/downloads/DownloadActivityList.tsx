@@ -8,7 +8,6 @@ import { useOrionTheme } from '../../context/ThemeContext';
 import { createMobileDownloadProgressSnapshotV1 } from './contracts';
 import { downloadElapsedSecondsV1 } from './downloadTelemetry';
 import { cancelNativeDownloadJobV1, pauseNativeDownloadJobV1, resumeNativeDownloadJobV1, retryNativeDownloadJobV1 } from './nativeDownloadEngine';
-
 interface DownloadActivityListProps {
   jobs: MobileDownloadJobV1[];
   assets: MobileDownloadAssetV1[];
@@ -18,18 +17,15 @@ interface DownloadActivityListProps {
   onPlayInOrion?: (entry: OfflineMediaEntryV1, assetId: string) => void;
   onPlayLocally?: (assetId: string) => void;
 }
-
 type DownloadTab = 'all' | 'active' | 'completed' | 'attention' | 'failed';
 type DownloadMediaFilter = 'all' | 'movies' | 'series';
 type DownloadSort = 'newest' | 'oldest' | 'name' | 'progress' | 'size';
-
 const ACTIVE_STATES = new Set<MobileDownloadJobV1['state']>([
   'queued', 'preflighting', 'downloading', 'paused', 'recovering', 'verifying', 'finalizing',
 ]);
 const FAILED_STATES = new Set<MobileDownloadJobV1['state']>([
   'failed', 'unsupported', 'protected', 'expired', 'storage-blocked', 'action-required',
 ]);
-
 const TABS: ReadonlyArray<{ id: DownloadTab; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'active', label: 'Active' },
@@ -49,12 +45,10 @@ const SORTS: ReadonlyArray<{ id: DownloadSort; label: string }> = [
   { id: 'progress', label: 'Progress' },
   { id: 'size', label: 'Largest' },
 ];
-
 function sortOptionsForTab(tab: DownloadTab): ReadonlyArray<{ id: DownloadSort; label: string }> {
   if (tab === 'active' || tab === 'failed') return SORTS;
   return SORTS.filter((item) => item.id !== 'progress');
 }
-
 function formatBytes(value: number | null): string | null {
   if (value === null || !Number.isFinite(value) || value < 0) return null;
   if (value < 1024) return `${Math.round(value)} B`;
@@ -65,7 +59,6 @@ function formatBytes(value: number | null): string | null {
   const gib = mib / 1024;
   return `${gib.toFixed(gib >= 10 ? 1 : 2)} GB`;
 }
-
 function formatDurationSeconds(value: number | null): string | null {
   if (value === null || !Number.isFinite(value) || value < 0) return null;
   const seconds = Math.max(0, Math.round(value));
@@ -73,11 +66,24 @@ function formatDurationSeconds(value: number | null): string | null {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
-
 export function downloadElapsedTextV1(job: MobileDownloadJobV1, nowMs: number): string | null {
   return formatDurationSeconds(downloadElapsedSecondsV1(job, nowMs));
 }
-
+export function downloadRecoveryCountdownV1(
+  job: MobileDownloadJobV1,
+  nowMs: number,
+): { remainingSeconds: number; attempt: number } | null {
+  const code = job.failure?.code || '';
+  const match = /^auto-retry-scheduled-(\d+)-attempt-(\d+)$/.exec(code);
+  if (!match) return null;
+  const delaySeconds = Math.max(1, Math.trunc(Number(match[1]) || 0));
+  const attempt = Math.max(1, Math.min(3, Math.trunc(Number(match[2]) || 0)));
+  const elapsedSeconds = Math.max(0, Math.floor((nowMs - job.updatedAt) / 1_000));
+  return {
+    remainingSeconds: Math.max(0, delaySeconds - elapsedSeconds),
+    attempt,
+  };
+}
 function finalizationStageLabel(stage: ReturnType<typeof createMobileDownloadProgressSnapshotV1>['finalizationStage']): string {
   switch (stage) {
     case 'preparing': return 'Preparing offline video';
@@ -89,20 +95,30 @@ function finalizationStageLabel(stage: ReturnType<typeof createMobileDownloadPro
     default: return 'Finishing download';
   }
 }
-
-
 interface DownloadFailurePresentation {
   detail: string | null;
   retryLabel: string;
 }
-
 function downloadFailurePresentation(job: MobileDownloadJobV1): DownloadFailurePresentation {
   const code = job.failure?.code || '';
   const progress = createMobileDownloadProgressSnapshotV1(job);
   const hasPreservedProgress = progress.bytesDownloaded > 0 ||
     (progress.completedFragments !== null && progress.completedFragments > 0);
-
   if (job.state === 'recovering') {
+    const scheduledRetry = /^auto-retry-scheduled-(\d+)-attempt-(\d+)$/.exec(code);
+    if (scheduledRetry) {
+      const attempt = Math.max(1, Math.min(3, Math.trunc(Number(scheduledRetry[2]) || 0)));
+      return {
+        detail: `Automatic retry ${attempt} of 3 is scheduled. You can retry now instead.`,
+        retryLabel: 'Retry now',
+      };
+    }
+    if (code === 'auto-retry-exhausted') {
+      return {
+        detail: 'Automatic retries finished. Retry now when you’re ready.',
+        retryLabel: 'Retry now',
+      };
+    }
     if (code.includes('resuming')) {
       return {
         detail: 'Orion is continuing this download from your saved progress.',
@@ -500,6 +516,8 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
           ? percent
           : finalizing || percentValue === null ? null : Math.max(0, Math.min(99, Math.round(percentValue)));
         const recoveryCode = job.failure?.code || '';
+        const recoveryCountdown = downloadRecoveryCountdownV1(job, nowMs);
+        const retryExhausted = recoveryCode === 'auto-retry-exhausted';
         const resuming = job.state === 'recovering' && progress.bytesDownloaded > 0 && progress.completedFragments !== null;
         const phaseResuming = job.state === 'recovering' && recoveryCode.includes('resuming');
         const waitingForConnection = job.state === 'recovering' &&
@@ -538,13 +556,19 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
             ].filter(Boolean);
         const statusLabel = resuming ? 'Resuming…' : finalizing ? finalizationStageLabel(progress.finalizationStage) : progress.statusLabel;
         // Legacy V8.12 presentation contract retained for source compatibility: {statusLabel}{percent !== null ? ` · ${percent}%` : ''}
-        const displayStatusLabel = waitingForConnection
-          ? 'Waiting for connection…'
-          : phaseResuming
-            ? 'Resuming…'
-            : finalizing
-              ? finalizationStageLabel(progress.finalizationStage)
-              : progress.statusLabel;
+        const displayStatusLabel = recoveryCountdown
+          ? recoveryCountdown.remainingSeconds > 0
+            ? `Retrying in ${recoveryCountdown.remainingSeconds}s`
+            : 'Retrying now…'
+          : retryExhausted
+            ? 'Download interrupted'
+            : waitingForConnection
+              ? 'Waiting for connection…'
+              : phaseResuming
+                ? 'Resuming…'
+                : finalizing
+                  ? finalizationStageLabel(progress.finalizationStage)
+                  : progress.statusLabel;
 
         return (
           <View key={job.jobId} style={[styles.downloadItem, { borderBottomColor: theme.border }]}>
