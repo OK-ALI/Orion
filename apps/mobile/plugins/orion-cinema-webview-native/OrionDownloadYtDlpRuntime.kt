@@ -163,8 +163,9 @@ internal object OrionDownloadYtDlpRuntime {
         )
 
         if (!proof.complete) {
+          val interrupted = proof.providerReadErrors > 0L || proof.providerWriteErrors > 0L
           return OrionYtDlpOutcome.Failed(
-            "yt-dlp-hls-transfer-incomplete",
+            if (interrupted) "network-interrupted" else "yt-dlp-hls-transfer-incomplete",
             true,
           )
         }

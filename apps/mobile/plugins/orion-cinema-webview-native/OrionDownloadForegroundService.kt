@@ -113,12 +113,13 @@ class OrionDownloadForegroundService : Service() {
   private fun prepareLiveHlsResume(jobId: String) {
     OrionDownloadRecoveryScheduler.cancel(applicationContext, jobId)
     OrionDownloadJobStore.clearControl(jobId)
-    OrionDownloadJobStore.setState(jobId, "recovering")
+    OrionDownloadJobStore.markResuming(jobId, "explicit-resume-resuming")
   }
 
   private fun prepareExplicitResume(jobId: String) {
     OrionDownloadJobStore.clearControl(jobId)
     OrionDownloadJobStore.setState(jobId, "recovering")
+    OrionDownloadJobStore.markResuming(jobId, "explicit-resume-resuming")
     OrionDownloadRecoveryScheduler.schedule(applicationContext, jobId)
   }
 

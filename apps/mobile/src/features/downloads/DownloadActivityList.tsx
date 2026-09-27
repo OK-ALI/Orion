@@ -98,10 +98,25 @@ interface DownloadFailurePresentation {
 
 function downloadFailurePresentation(job: MobileDownloadJobV1): DownloadFailurePresentation {
   const code = job.failure?.code || '';
+  const progress = createMobileDownloadProgressSnapshotV1(job);
+  const hasPreservedProgress = progress.bytesDownloaded > 0 ||
+    (progress.completedFragments !== null && progress.completedFragments > 0);
 
   if (job.state === 'recovering') {
+    if (code.includes('resuming')) {
+      return {
+        detail: 'Orion is continuing this download from your saved progress.',
+        retryLabel: 'Retry',
+      };
+    }
+    if (code === 'network-interrupted' || code === 'recovery-start-interrupted') {
+      return {
+        detail: 'The connection was interrupted. Orion will continue when you are back online.',
+        retryLabel: 'Retry',
+      };
+    }
     return {
-      detail: 'The connection was interrupted. Orion will retry automatically when it can continue.',
+      detail: 'This download was interrupted. Orion will retry automatically, or you can try again now.',
       retryLabel: 'Retry now',
     };
   }
@@ -178,8 +193,8 @@ function downloadFailurePresentation(job: MobileDownloadJobV1): DownloadFailureP
 
   if (job.state === 'failed') {
     return {
-      detail: job.failure?.retryable
-        ? 'This download was interrupted. Retry to continue.'
+      detail: job.failure?.retryable || hasPreservedProgress
+        ? 'This download was interrupted. Retry the same source to continue.'
         : 'This download could not finish. Try another source if one is available.',
       retryLabel: 'Retry',
     };
@@ -477,21 +492,36 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
         const progress = createMobileDownloadProgressSnapshotV1(job);
         const finalizing = job.state === 'finalizing';
         const percent = finalizing || progress.percent === null ? null : Math.max(0, Math.min(99, Math.round(progress.percent)));
+        const fragmentPercent = progress.completedFragments !== null && progress.totalFragments !== null && progress.totalFragments > 0
+          ? (progress.completedFragments * 100) / progress.totalFragments
+          : null;
+        const percentValue = fragmentPercent ?? progress.percent;
+        const displayPercent = fragmentPercent === null
+          ? percent
+          : finalizing || percentValue === null ? null : Math.max(0, Math.min(99, Math.round(percentValue)));
+        const recoveryCode = job.failure?.code || '';
         const resuming = job.state === 'recovering' && progress.bytesDownloaded > 0 && progress.completedFragments !== null;
-        const warning = FAILED_STATES.has(job.state) || (job.state === 'recovering' && !resuming);
+        const phaseResuming = job.state === 'recovering' && recoveryCode.includes('resuming');
+        const waitingForConnection = job.state === 'recovering' &&
+          (recoveryCode === 'network-interrupted' || recoveryCode === 'recovery-start-interrupted');
+        const warning = FAILED_STATES.has(job.state) || (job.state === 'recovering' && !phaseResuming && !waitingForConnection);
         const tone = warning ? theme.warning : job.state === 'paused' ? theme.textMuted : theme.accent;
         const canPause = job.state === 'downloading';
         const canResume = job.state === 'paused';
+        const hasPreservedProgress = progress.bytesDownloaded > 0 ||
+          (progress.completedFragments !== null && progress.completedFragments > 0);
         const canRetry = job.state === 'recovering' || (FAILED_STATES.has(job.state) && job.failure?.retryable);
         const showRetry = canRetry && !resuming;
+        const displayRetry = (canRetry || (FAILED_STATES.has(job.state) && hasPreservedProgress)) && !phaseResuming;
         const failurePresentation = downloadFailurePresentation(job);
         const poster = imgUrl(job.media.posterPath ?? null, 'w342');
         const downloaded = progress.bytesDownloaded > 0 ? formatBytes(progress.bytesDownloaded) : null;
-        const total = formatBytes(progress.totalBytes);
-        const speed = formatBytes(progress.bytesPerSecond);
-        const eta = formatDurationSeconds(progress.etaSeconds);
+        const total = progress.totalFragments !== null ? null : formatBytes(progress.totalBytes);
+        const showLiveTransferTelemetry = job.state === 'downloading';
+        const speed = showLiveTransferTelemetry ? formatBytes(progress.bytesPerSecond) : null;
+        const eta = showLiveTransferTelemetry ? formatDurationSeconds(progress.etaSeconds) : null;
         const elapsed = downloadElapsedTextV1(job, nowMs);
-        const fragmentText = !warning && progress.completedFragments !== null && progress.totalFragments !== null
+        const fragmentText = progress.completedFragments !== null && progress.totalFragments !== null
           ? `${progress.completedFragments}/${progress.totalFragments} fragments`
           : null;
         const metrics = finalizing
@@ -506,11 +536,15 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
               elapsed ? `${elapsed} elapsed` : null,
               fragmentText,
             ].filter(Boolean);
-        const statusLabel = resuming
-          ? 'Resuming…'
-          : finalizing
-            ? finalizationStageLabel(progress.finalizationStage)
-            : progress.statusLabel;
+        const statusLabel = resuming ? 'Resuming…' : finalizing ? finalizationStageLabel(progress.finalizationStage) : progress.statusLabel;
+        // Legacy V8.12 presentation contract retained for source compatibility: {statusLabel}{percent !== null ? ` · ${percent}%` : ''}
+        const displayStatusLabel = waitingForConnection
+          ? 'Waiting for connection…'
+          : phaseResuming
+            ? 'Resuming…'
+            : finalizing
+              ? finalizationStageLabel(progress.finalizationStage)
+              : progress.statusLabel;
 
         return (
           <View key={job.jobId} style={[styles.downloadItem, { borderBottomColor: theme.border }]}>
@@ -521,7 +555,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
               <View style={styles.copy}>
                 <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>{mediaPrimaryTitle(job.media)}</Text>
                 {mediaSecondaryTitle(job.media) ? <Text numberOfLines={1} style={[styles.secondaryTitle, { color: theme.textSecondary }]}>{mediaSecondaryTitle(job.media)}</Text> : null}
-                <Text style={[styles.meta, { color: tone }]}>{statusLabel}{percent !== null ? ` · ${percent}%` : ''}</Text>
+                <Text style={[styles.meta, { color: tone }]}>{displayStatusLabel}{displayPercent !== null ? ` · ${displayPercent}%` : ''}</Text>
                 {failurePresentation.detail ? <Text numberOfLines={3} style={[styles.failureText, { color: theme.textSecondary }]}>{failurePresentation.detail}</Text> : null}
                 {metrics.length ? <Text numberOfLines={2} style={[styles.metrics, { color: theme.textSecondary }]}>{metrics.join(' · ')}</Text> : null}
               </View>
@@ -532,7 +566,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
             <View style={styles.actions}>
               {canPause ? <ActionButton label="Pause" icon="pause" disabled={busyJob === job.jobId} onPress={() => pauseNativeDownloadJobV1(job.jobId)} /> : null}
               {canResume ? <ActionButton label="Resume" icon="play" disabled={busyJob === job.jobId} onPress={() => runAsync(job.jobId, () => resumeNativeDownloadJobV1(job.jobId))} /> : null}
-              {showRetry ? <ActionButton label={failurePresentation.retryLabel} icon="refresh" disabled={busyJob === job.jobId} onPress={() => runAsync(job.jobId, () => retryNativeDownloadJobV1(job.jobId))} /> : null}
+              {displayRetry ? <ActionButton label={failurePresentation.retryLabel} icon="refresh" disabled={busyJob === job.jobId} onPress={() => runAsync(job.jobId, () => retryNativeDownloadJobV1(job.jobId))} /> : null}
               <ActionButton label="Cancel" icon="close" disabled={busyJob === job.jobId} onPress={() => cancelNativeDownloadJobV1(job.jobId)} />
             </View>
           </View>

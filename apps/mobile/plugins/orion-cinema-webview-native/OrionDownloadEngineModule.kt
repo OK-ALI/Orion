@@ -265,7 +265,7 @@ class OrionDownloadEngineModule(
       OrionDownloadRecoveryScheduler.cancel(reactContext, jobId)
       if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, jobId)) {
         OrionDownloadJobStore.clearControl(jobId)
-        OrionDownloadJobStore.setState(jobId, "recovering")
+        OrionDownloadJobStore.markResuming(jobId, "manual-retry-resuming")
         OrionDownloadForegroundService.start(reactContext, jobId, recovery = true)
         restarted += 1
         continue
@@ -280,7 +280,7 @@ class OrionDownloadEngineModule(
         continue
       }
       OrionDownloadJobStore.clearControl(jobId)
-      OrionDownloadJobStore.setState(jobId, "recovering")
+      OrionDownloadJobStore.markResuming(jobId, "manual-retry-resuming")
       OrionDownloadRecoveryScheduler.schedule(reactContext, jobId)
       OrionDownloadForegroundService.start(reactContext, jobId, recovery = true)
       restarted += 1

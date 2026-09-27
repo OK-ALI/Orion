@@ -51,9 +51,15 @@ class OrionDownloadRecoveryWorker(
       return Result.success()
     }
     return try {
+      OrionDownloadJobStore.markResuming(jobId, "automatic-recovery-resuming")
       OrionDownloadForegroundService.start(applicationContext, jobId, recovery = true)
       Result.success()
     } catch (_: Throwable) {
+      OrionDownloadJobStore.markRecovering(
+        jobId,
+        "recovery-start-interrupted",
+        "Orion will retry when the connection is ready.",
+      )
       Result.retry()
     }
   }

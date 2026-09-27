@@ -201,6 +201,17 @@ internal object OrionDownloadJobStore {
       }
       val previous = job.optJSONObject("progress") ?: emptyProgress()
       val progress = JSONObject(previous.toString())
+      val hasVerifiedHlsProgress =
+        job.optString("_transferKind") == "hls" &&
+          previous.optInt("totalFragments", 0) > 0 &&
+          previous.optInt("completedFragments", 0) > 0
+      if (hasVerifiedHlsProgress && percent == null && bytesDownloaded <= 0L && totalBytes == null) {
+        progress.put("bytesPerSecond", JSONObject.NULL)
+        progress.put("etaSeconds", JSONObject.NULL)
+        job.put("progress", progress)
+        job.put("updatedAt", System.currentTimeMillis())
+        return@mutateJobLocked
+      }
       val derivedPercent = when {
         percent != null && percent.isFinite() -> percent.coerceIn(0.0, 99.0)
         totalBytes != null && totalBytes > 0L -> (bytesDownloaded.toDouble() * 100.0 / totalBytes.toDouble()).coerceIn(0.0, 99.0)
@@ -732,6 +743,26 @@ internal object OrionDownloadJobStore {
       job.put("state", "recovering")
       job.put("recoveryCount", job.optInt("recoveryCount", 0) + 1)
       job.put("failure", failure(code, message, retryable = true, actionRequired = false))
+      val progress = job.optJSONObject("progress") ?: emptyProgress()
+      progress.put("bytesPerSecond", JSONObject.NULL)
+      progress.put("etaSeconds", JSONObject.NULL)
+      job.put("progress", progress)
+      gatewayTelemetrySamples.remove(jobId)
+      job.put("updatedAt", System.currentTimeMillis())
+    }
+  }
+
+  @Synchronized
+  fun markResuming(jobId: String, code: String = "recovery-resuming") {
+    Log.i("OrionDownloadStage", "state=recovering phase=resuming code=${code.filter { it.isLetterOrDigit() || it == '-' }.take(64)}")
+    mutateJobLocked(jobId) { job ->
+      job.put("state", "recovering")
+      job.put("failure", failure(code, "Orion is continuing this download from its saved progress.", retryable = true, actionRequired = false))
+      val progress = job.optJSONObject("progress") ?: emptyProgress()
+      progress.put("bytesPerSecond", JSONObject.NULL)
+      progress.put("etaSeconds", JSONObject.NULL)
+      job.put("progress", progress)
+      gatewayTelemetrySamples.remove(jobId)
       job.put("updatedAt", System.currentTimeMillis())
     }
   }

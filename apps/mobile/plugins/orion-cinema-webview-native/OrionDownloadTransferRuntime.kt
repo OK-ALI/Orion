@@ -407,10 +407,13 @@ internal object OrionDownloadTransferEngine {
       jobId,
     )
 
-    OrionDownloadJobStore.setState(
-      jobId,
-      "downloading",
-    )
+    val resumingHls = OrionDownloadJobStore.getJob(jobId)?.optString("state") == "recovering"
+    if (!resumingHls) {
+      OrionDownloadJobStore.setState(
+        jobId,
+        "downloading",
+      )
+    }
 
     OrionDownloadJobStore.setProcessProgress(
       jobId,
