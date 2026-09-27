@@ -99,13 +99,32 @@ internal object OrionDownloadTransferEngine {
       OrionDownloadJobStore.getJob(jobId)
         ?: return false
 
+    val transferKind =
+      job.optString("_transferKind")
+
+    val transferCompletion =
+      OrionDownloadJobStore
+        .ytDlpTransferCompletion(jobId)
+        ?: return false
+
+    val expectedSizeBytes =
+      transferCompletion
+        .optLong("expectedSizeBytes", -1L)
+
+    if (
+      transferCompletion.optString("kind") != transferKind ||
+      expectedSizeBytes <= 0L
+    ) {
+      return false
+    }
+
     val selectedSubtitleCount =
       job.optJSONArray(
         "selectedSubtitleAssetIds",
       )?.length() ?: 0
 
     if (
-      job.optString("_transferKind") !in
+      transferKind !in
       setOf(
         "hls",
         "dash",
@@ -127,15 +146,47 @@ internal object OrionDownloadTransferEngine {
 
     val pendingPublication = job.optJSONObject("_pendingPublication")
 
-    val media =
+    val localMedia =
       OrionFinalizedArtifactOwner
         .finalFile(context, jobId)
         ?.takeIf { it.isFile && it.length() > 0L }
         ?: OrionFinalizedArtifactOwner
           .stagingOutput(staging)
-        ?: if (pendingPublication?.optString("kind") == "saf-finalized-mp4" &&
-          pendingPublication.optLong("expectedSizeBytes", -1L) > 0L
-        ) java.io.File(staging, "missing-recovery-source.mp4") else return false
+
+    val pendingExpectedSize =
+      pendingPublication
+        ?.takeIf { it.optString("kind") == "saf-finalized-mp4" }
+        ?.optLong("expectedSizeBytes", -1L)
+        ?.takeIf { it > 0L }
+
+    val availableSize =
+      localMedia
+        ?.takeIf { it.isFile }
+        ?.length()
+        ?.takeIf { it > 0L }
+        ?: pendingExpectedSize
+        ?: return false
+
+    if (availableSize != expectedSizeBytes) return false
+
+    val media =
+      localMedia
+        ?: java.io.File(staging, "missing-recovery-source.mp4")
+
+    if (localMedia != null) {
+      val recoveryVerification =
+        OrionFinalizedMediaVerifier.verify(
+          localMedia,
+          requireAudio = true,
+        )
+
+      if (
+        !recoveryVerification.ok ||
+        recoveryVerification.sizeBytes != expectedSizeBytes
+      ) {
+        return false
+      }
+    }
 
     if (
       !OrionDownloadSubtitleRuntime
@@ -160,11 +211,10 @@ internal object OrionDownloadTransferEngine {
       "verifying",
     )
 
-    // The staging file is not the playback artifact. finalizeDirect settles and
-    // verifies the durable Orion Library file before any Verified record exists.
-    val verifiedBytes = media.length().takeIf { it > 0L }
-      ?: pendingPublication?.optLong("expectedSizeBytes", -1L)?.takeIf { it > 0L }
-      ?: return false
+    // Recovery may finalize only bytes that were durably sealed after a
+    // successful yt-dlp transfer. A playable staging MP4 alone is not transfer
+    // completion evidence.
+    val verifiedBytes = expectedSizeBytes
 
     OrionDownloadJobStore.setProgress(
       jobId,
@@ -240,14 +290,20 @@ internal object OrionDownloadTransferEngine {
 
   fun hasCompleteLocalYtDlpFinalization(context: android.content.Context, jobId: String): Boolean {
     val job = OrionDownloadJobStore.getJob(jobId) ?: return false
-    if (job.optString("_transferKind") !in setOf("hls", "dash") || job.optString("state") == "cancelled") return false
+    val transferKind = job.optString("_transferKind")
+    if (transferKind !in setOf("hls", "dash") || job.optString("state") == "cancelled") return false
+    val transferCompletion = OrionDownloadJobStore.ytDlpTransferCompletion(jobId) ?: return false
+    val expectedSizeBytes = transferCompletion.optLong("expectedSizeBytes", -1L)
+    if (transferCompletion.optString("kind") != transferKind || expectedSizeBytes <= 0L) return false
     val staging = OrionDownloadYtDlpRuntime.stagingDir(context, jobId)
     val media = OrionFinalizedArtifactOwner.finalFile(context, jobId)?.takeIf { it.isFile && it.length() > 0L }
       ?: OrionFinalizedArtifactOwner.stagingOutput(staging)
     val pendingReady = job.optJSONObject("_pendingPublication")?.let { pending ->
-      pending.optString("kind") == "saf-finalized-mp4" && pending.optLong("expectedSizeBytes", -1L) > 0L &&
+      pending.optString("kind") == "saf-finalized-mp4" &&
+        pending.optLong("expectedSizeBytes", -1L) == expectedSizeBytes &&
         pending.optString("expectedSha256").matches(Regex("^[a-f0-9]{64}$"))
     } == true
+    if (media != null && media.isFile && media.length() != expectedSizeBytes) return false
     if ((media == null || !media.isFile || media.length() <= 0L) && !pendingReady) return false
     val selectedCount = job.optJSONArray("selectedSubtitleAssetIds")?.length() ?: 0
     return OrionDownloadSubtitleRuntime.hasLocalSelection(context, jobId, selectedCount)
@@ -522,6 +578,22 @@ internal object OrionDownloadTransferEngine {
         // Verify staging media before promoting its size to completed transfer
         // progress. Orion Library also verifies the durable settled copy below.
         val verifiedBytes = mediaVerification.sizeBytes
+
+        if (
+          !OrionDownloadJobStore.sealYtDlpTransferCompletion(
+            jobId,
+            "hls",
+            verifiedBytes,
+          )
+        ) {
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            "yt-dlp-transfer-proof-persist-failed",
+            "Orion could not preserve completed transfer verification.",
+            retryable = true,
+          )
+          return
+        }
 
         OrionDownloadJobStore.setProgress(
           jobId,
@@ -962,6 +1034,22 @@ internal object OrionDownloadTransferEngine {
           return
         }
         val verifiedBytes = mediaVerification.sizeBytes
+
+        if (
+          !OrionDownloadJobStore.sealYtDlpTransferCompletion(
+            jobId,
+            "dash",
+            verifiedBytes,
+          )
+        ) {
+          OrionDownloadJobStore.markFailed(
+            jobId,
+            "yt-dlp-transfer-proof-persist-failed",
+            "Orion could not preserve completed transfer verification.",
+            retryable = true,
+          )
+          return
+        }
 
         OrionDownloadJobStore.setProgress(
           jobId,

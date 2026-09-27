@@ -426,6 +426,42 @@ internal object OrionDownloadJobStore {
   fun finalizationPlan(jobId: String): JSONObject? = getJob(jobId)?.optJSONObject("_finalizationPlan")?.let { JSONObject(it.toString()) }
 
   @Synchronized
+  fun sealYtDlpTransferCompletion(
+    jobId: String,
+    kind: String,
+    expectedSizeBytes: Long,
+  ): Boolean {
+    if (kind !in setOf("hls", "dash") || expectedSizeBytes <= 0L) return false
+    var accepted = false
+    mutateJobLocked(jobId) { job ->
+      if (job.optString("_transferKind") != kind ||
+        job.optString("state") in setOf("cancelled", "completed") ||
+        job.optString("_control", "run") == "cancel"
+      ) return@mutateJobLocked
+      job.put(
+        "_ytDlpTransferCompletion",
+        JSONObject()
+          .put("schemaVersion", 1)
+          .put("kind", kind)
+          .put("expectedSizeBytes", expectedSizeBytes)
+          .put("sealedAt", System.currentTimeMillis()),
+      )
+      accepted = true
+    }
+    return accepted
+  }
+
+  @Synchronized
+  fun ytDlpTransferCompletion(jobId: String): JSONObject? {
+    val job = getJob(jobId) ?: return null
+    val proof = job.optJSONObject("_ytDlpTransferCompletion") ?: return null
+    if (proof.optInt("schemaVersion", 0) != 1) return null
+    if (proof.optString("kind") !in setOf("hls", "dash")) return null
+    if (proof.optLong("expectedSizeBytes", -1L) <= 0L) return null
+    return JSONObject(proof.toString())
+  }
+
+  @Synchronized
   fun executionGeneration(jobId: String): Long? {
     val job = getJob(jobId) ?: return null
     if (job.optString("state") in setOf("cancelled", "completed")) return null
@@ -496,6 +532,7 @@ internal object OrionDownloadJobStore {
       progress.put("finalizationStageStartedAt", JSONObject.NULL)
       job.put("progress", progress)
       job.remove("_finalizationPlan")
+      job.remove("_ytDlpTransferCompletion")
       persistAndNotifyLocked(state)
       return generation
     }
@@ -815,6 +852,7 @@ internal object OrionDownloadJobStore {
       job.remove("_finalizationPlan")
       job.remove("_pendingPublication")
       job.remove("_pendingSubtitlePublications")
+      job.remove("_ytDlpTransferCompletion")
       committed = true
       break
     }
