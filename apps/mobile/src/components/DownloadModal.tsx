@@ -200,14 +200,14 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
       };
     }
     if (!latestCandidate) {
-      return { tone: 'neutral' as const, icon: 'play-circle-outline' as const, title: 'Playback source required', detail: 'Open the player. Orion will return here automatically as soon as a ready HLS, DASH, or Direct media stream is resolved.' };
+      return { tone: 'neutral' as const, icon: 'play-circle-outline' as const, title: 'Download source required', detail: 'Prepare the download source. Orion will return here automatically as soon as a ready HLS, DASH, or Direct media stream is resolved.' };
     }
     const state = latestCandidate.preflight.state;
     const kind = latestCandidate.preflight.resolvedManifestKind;
     if (state === 'checking') return { tone: 'warning' as const, icon: 'sync-outline' as const, title: 'Resolving stream…', detail: `Checking ${sourceLabel(latestCandidate.sourceId)} for a downloadable media stream.` };
-    if (state === 'expired' || state === 'action-required') return { tone: 'warning' as const, icon: 'refresh-circle-outline' as const, title: 'Source needs refresh', detail: latestCandidate.preflight.reason || 'Open the player and choose a source again.' };
+    if (state === 'expired' || state === 'action-required') return { tone: 'warning' as const, icon: 'refresh-circle-outline' as const, title: 'Source needs refresh', detail: latestCandidate.preflight.reason || 'Prepare this source again to refresh its downloadable stream.' };
     if (state === 'protected' || state === 'unreachable' || state === 'unsupported') return { tone: 'danger' as const, icon: 'alert-circle-outline' as const, title: 'This source is not download-ready', detail: latestCandidate.preflight.reason || 'Try another playback source.' };
-    return { tone: 'neutral' as const, icon: 'play-circle-outline' as const, title: 'Playback source required', detail: 'Open the player and choose a source that exposes a ready HLS, DASH, or Direct media stream.' };
+    return { tone: 'neutral' as const, icon: 'play-circle-outline' as const, title: 'Download source required', detail: 'Prepare a source that exposes a ready HLS, DASH, or Direct media stream.' };
   }, [destination, latestCandidate, preferences.preferredQuality, selectedCandidate, sourceResolutionFailure]);
 
   const statusColor = sourceStatus.tone === 'success' ? theme.success : sourceStatus.tone === 'warning' ? theme.warning : sourceStatus.tone === 'danger' ? theme.danger : theme.textMuted;
@@ -343,18 +343,34 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
             </View>
 
             <StatusCard icon={sourceStatus.icon} color={statusColor} title={sourceStatus.title} detail={sourceStatus.detail} theme={theme} />
-            {!selectedCandidate ? (
+            {!needsEpisode ? (
               <View style={styles.optionGrid}>
-                <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Choose a source</Text>
-                {alternateSources.map((source) => (
-                  <Pressable key={source.id} accessibilityRole="button" accessibilityLabel={`Resolve download with ${source.label}`} disabled={!storageReady} onPress={() => resolveWithSource(source.id)} style={({ pressed }) => [styles.optionCard, { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: theme.border, opacity: storageReady ? 1 : 0.5 }]}>
-                    <Ionicons name="play-circle-outline" size={21} color={theme.accent} />
-                    <View style={styles.optionCopy}>
-                      <Text style={[styles.optionTitle, { color: theme.text }]}>{source.label}</Text>
-                      <Text style={[styles.description, { color: theme.textSecondary }]}>{getMobileSourceSafetyNotice(source.id)?.shortLabel || 'Check this source for a downloadable stream'}</Text>
-                    </View>
-                  </Pressable>
-                ))}
+                <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Download source</Text>
+                {alternateSources.map((source) => {
+                  const sourceReady = selectedCandidate?.candidate.sourceId === source.id;
+                  return (
+                    <Pressable
+                      key={source.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={sourceReady ? `${source.label}, ready download source` : `Prepare download with ${source.label}`}
+                      accessibilityState={{ selected: sourceReady, disabled: !storageReady || sourceReady }}
+                      disabled={!storageReady || sourceReady}
+                      onPress={() => resolveWithSource(source.id)}
+                      style={({ pressed }) => [styles.optionCard, {
+                        backgroundColor: sourceReady ? theme.accentSoft : pressed ? theme.surfaceHover : theme.surface,
+                        borderColor: sourceReady ? theme.accent : theme.border,
+                        opacity: storageReady ? 1 : 0.5,
+                      }]}
+                    >
+                      <Ionicons name={sourceReady ? 'checkmark-circle' : 'play-circle-outline'} size={21} color={sourceReady ? theme.success : theme.accent} />
+                      <View style={styles.optionCopy}>
+                        <Text style={[styles.optionTitle, { color: theme.text }]}>{source.label}{sourceReady ? ' · Ready' : ''}</Text>
+                        <Text style={[styles.description, { color: theme.textSecondary }]}>{sourceReady ? 'Selected for this download' : getMobileSourceSafetyNotice(source.id)?.shortLabel || 'Prepare this source for a downloadable stream'}</Text>
+                      </View>
+                      {!sourceReady ? <Ionicons name="chevron-forward" size={18} color={theme.textMuted} /> : null}
+                    </Pressable>
+                  );
+                })}
               </View>
             ) : null}
             {duplicateJob ? <StatusCard icon="copy-outline" color={theme.warning} title={duplicateJob.state === 'completed' ? 'Already downloaded here' : 'Download already active'} detail={duplicateJob.state === 'completed' ? `This title already has a verified ${destinationTitle} copy.` : `Wait for, cancel, or resolve the existing ${destinationTitle} download before starting another copy.`} theme={theme} /> : null}
@@ -432,8 +448,8 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
             <Pressable accessibilityRole="button" accessibilityLabel="Cancel download options" onPress={onClose} style={({ pressed }) => [styles.secondaryButton, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.surface }]}>
               <Text style={[styles.secondaryButtonText, { color: theme.textSecondary }]}>Cancel</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={!storageReady ? 'Choose a storage folder before downloading' : needsEpisode ? 'Choose an episode before downloading' : selectedCandidate ? 'Start download' : 'Open player to resolve download source'} accessibilityState={{ disabled: !storageReady || needsEpisode || starting || subtitleCheckPending || Boolean(duplicateJob) || !capability.available }} disabled={!storageReady || needsEpisode || starting || subtitleCheckPending || Boolean(duplicateJob) || !capability.available} onPress={selectedCandidate ? handleStart : handleResolveSource} style={({ pressed }) => [styles.primaryButton, { backgroundColor: !storageReady || needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.accentSoft : pressed ? theme.accentSoft : theme.accent, borderColor: !storageReady || needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.border : theme.accent }]}>
-              <Text style={[styles.primaryButtonText, { color: !storageReady || needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.textMuted : theme.onAccent }]}>{storageChecking ? 'Checking storage folder…' : !storageReady ? 'Choose storage folder' : needsEpisode ? 'Choose episode' : duplicateJob ? (duplicateJob.state === 'completed' ? 'Already downloaded' : 'Already active') : starting ? 'Starting…' : selectedCandidate ? 'Start download' : 'Open player'}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={!storageReady ? 'Choose a storage folder before downloading' : needsEpisode ? 'Choose an episode before downloading' : selectedCandidate ? 'Start download' : 'Prepare download source'} accessibilityState={{ disabled: !storageReady || needsEpisode || starting || subtitleCheckPending || Boolean(duplicateJob) || !capability.available }} disabled={!storageReady || needsEpisode || starting || subtitleCheckPending || Boolean(duplicateJob) || !capability.available} onPress={selectedCandidate ? handleStart : handleResolveSource} style={({ pressed }) => [styles.primaryButton, { backgroundColor: !storageReady || needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.accentSoft : pressed ? theme.accentSoft : theme.accent, borderColor: !storageReady || needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.border : theme.accent }]}>
+              <Text style={[styles.primaryButtonText, { color: !storageReady || needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.textMuted : theme.onAccent }]}>{storageChecking ? 'Checking storage folder…' : !storageReady ? 'Choose storage folder' : needsEpisode ? 'Choose episode' : duplicateJob ? (duplicateJob.state === 'completed' ? 'Already downloaded' : 'Already active') : starting ? 'Starting…' : selectedCandidate ? 'Start download' : 'Prepare download'}</Text>
             </Pressable>
           </View>
         </View>

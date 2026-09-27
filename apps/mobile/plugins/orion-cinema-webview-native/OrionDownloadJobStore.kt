@@ -12,6 +12,15 @@ internal object OrionDownloadJobStore {
   private val listeners = linkedSetOf<(JSONObject) -> Unit>()
   private var appContext: Context? = null
 
+  private data class GatewayTelemetrySample(
+    val windowBytes: Long,
+    val windowAt: Long,
+    val completedFragments: Int,
+    val bytesPerSecond: Long?,
+  )
+
+  private val gatewayTelemetrySamples = mutableMapOf<String, GatewayTelemetrySample>()
+
   internal data class ArtifactManagementCommit(
     val removedAssetIds: Set<String>,
     val rejectedAssetIds: Set<String>,
@@ -131,6 +140,11 @@ internal object OrionDownloadJobStore {
         progress.put("finalizationStageStartedAt", JSONObject.NULL)
       }
       if (stateName == "completed") progress.put("percent", 100)
+      if (stateName != "downloading") {
+        progress.put("bytesPerSecond", JSONObject.NULL)
+        progress.put("etaSeconds", JSONObject.NULL)
+        gatewayTelemetrySamples.remove(jobId)
+      }
       job.put("progress", progress)
     }
   }
@@ -182,6 +196,9 @@ internal object OrionDownloadJobStore {
   ) {
     mutateJobLocked(jobId, notify = true) { job ->
       if (job.optString("state") == "completed") return@mutateJobLocked
+      if (percent == null && bytesDownloaded <= 0L && totalBytes == null) {
+        gatewayTelemetrySamples.remove(jobId)
+      }
       val previous = job.optJSONObject("progress") ?: emptyProgress()
       val progress = JSONObject(previous.toString())
       val derivedPercent = when {
@@ -199,22 +216,101 @@ internal object OrionDownloadJobStore {
     }
   }
 
-  /** Segmented gateway bytes are measured, but the final episode size is unknown. */
+  /**
+   * HLS gateway telemetry is episode-wide. yt-dlp/ffmpeg percentage output can
+   * describe one fragment, so Orion derives the visible percentage from the
+   * gateway's completed media-route count instead. The final byte size remains
+   * unknown until finalization and is intentionally not fabricated here.
+   */
   @Synchronized
   fun setGatewayMediaProgress(jobId: String, bytes: Long, completed: Int, total: Int) {
     mutateJobLocked(jobId, notify = true) { job ->
       if (job.optString("state") != "downloading") return@mutateJobLocked
+
+      val now = System.currentTimeMillis()
+      val safeBytes = bytes.coerceAtLeast(0L)
+      val safeTotal = total.coerceAtLeast(0)
+      val safeCompleted = completed.coerceIn(0, safeTotal)
+      val previous = gatewayTelemetrySamples[jobId]
+
+      val restartDetected = previous != null && (
+        safeBytes < previous.windowBytes || safeCompleted < previous.completedFragments
+      )
+      val base = if (restartDetected) null else previous
+      var speed = base?.bytesPerSecond
+      var windowBytes = base?.windowBytes ?: safeBytes
+      var windowAt = base?.windowAt ?: now
+
+      if (base == null) {
+        val startedAt = if (job.isNull("startedAt")) now else job.optLong("startedAt", now)
+        val elapsedMs = (now - startedAt).coerceAtLeast(0L)
+        if (elapsedMs >= GATEWAY_SPEED_WINDOW_MS && safeBytes > 0L) {
+          speed = safeRate(safeBytes, elapsedMs)
+        }
+      } else {
+        val elapsedMs = now - base.windowAt
+        val deltaBytes = safeBytes - base.windowBytes
+        if (elapsedMs >= GATEWAY_SPEED_WINDOW_MS && deltaBytes >= 0L) {
+          val windowSpeed = safeRate(deltaBytes, elapsedMs)
+          speed = when {
+            windowSpeed == null -> base.bytesPerSecond
+            base.bytesPerSecond == null -> windowSpeed
+            else -> ((base.bytesPerSecond.toDouble() * 2.0 + windowSpeed.toDouble()) / 3.0).toLong().coerceAtLeast(1L)
+          }
+          windowBytes = safeBytes
+          windowAt = now
+        }
+      }
+
+      gatewayTelemetrySamples[jobId] = GatewayTelemetrySample(
+        windowBytes = windowBytes,
+        windowAt = windowAt,
+        completedFragments = safeCompleted,
+        bytesPerSecond = speed,
+      )
+
+      val percent = if (safeTotal > 0) {
+        (safeCompleted.toDouble() * 100.0 / safeTotal.toDouble()).coerceIn(0.0, 99.0)
+      } else null
+      val etaSeconds = estimateGatewayEtaSeconds(
+        bytes = safeBytes,
+        completed = safeCompleted,
+        total = safeTotal,
+        bytesPerSecond = speed,
+      )
+
       val progress = JSONObject((job.optJSONObject("progress") ?: emptyProgress()).toString())
-      progress.put("bytesDownloaded", bytes.coerceAtLeast(0L))
+      progress.put("bytesDownloaded", safeBytes)
       progress.put("totalBytes", JSONObject.NULL)
-      progress.put("completedFragments", completed.coerceIn(0, total.coerceAtLeast(0)))
-      progress.put("totalFragments", total.coerceAtLeast(0))
-      progress.put("percent", JSONObject.NULL)
-      progress.put("bytesPerSecond", JSONObject.NULL)
-      progress.put("etaSeconds", JSONObject.NULL)
+      progress.put("completedFragments", safeCompleted)
+      progress.put("totalFragments", safeTotal)
+      progress.put("percent", percent ?: JSONObject.NULL)
+      progress.put("bytesPerSecond", speed?.takeIf { it > 0L } ?: JSONObject.NULL)
+      progress.put("etaSeconds", etaSeconds ?: JSONObject.NULL)
       job.put("progress", progress)
-      job.put("updatedAt", System.currentTimeMillis())
+      job.put("updatedAt", now)
     }
+  }
+
+  private fun safeRate(bytes: Long, elapsedMs: Long): Long? {
+    if (bytes <= 0L || elapsedMs <= 0L) return null
+    val rate = bytes.toDouble() * 1000.0 / elapsedMs.toDouble()
+    if (!rate.isFinite() || rate <= 0.0) return null
+    return rate.coerceAtMost(Long.MAX_VALUE.toDouble()).toLong().coerceAtLeast(1L)
+  }
+
+  private fun estimateGatewayEtaSeconds(
+    bytes: Long,
+    completed: Int,
+    total: Int,
+    bytesPerSecond: Long?,
+  ): Long? {
+    val speed = bytesPerSecond?.takeIf { it > 0L } ?: return null
+    if (bytes <= 0L || completed <= 0 || total <= completed) return if (total > 0 && completed >= total) 0L else null
+    val averageBytesPerFragment = bytes.toDouble() / completed.toDouble()
+    val remainingBytes = averageBytesPerFragment * (total - completed).toDouble()
+    if (!remainingBytes.isFinite() || remainingBytes < 0.0) return null
+    return (remainingBytes / speed.toDouble()).toLong().coerceAtLeast(0L)
   }
   @Synchronized
   fun setFinalizationStage(jobId: String, stage: String, expectedGeneration: Long? = null) {
@@ -1096,6 +1192,8 @@ internal object OrionDownloadJobStore {
     .put("message", message.take(220))
     .put("retryable", retryable)
     .put("actionRequired", actionRequired)
+
+  private const val GATEWAY_SPEED_WINDOW_MS = 1_000L
 
   private val FINALIZATION_STAGES = setOf(
     "preparing", "remuxing", "verifying-output", "publishing-media", "confirming-publication", "publishing-subtitles",

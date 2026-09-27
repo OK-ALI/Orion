@@ -174,6 +174,13 @@ class OrionDownloadEngineModule(
     OrionDownloadJobStore.requestControl(clean, "pause")
     OrionDownloadJobStore.setState(clean, "paused")
     OrionDownloadRecoveryScheduler.cancel(reactContext, clean)
+    try { OrionDownloadYtDlpRuntime.stop(clean) } catch (_: Throwable) {}
+    OrionDownloadNotifications.reconcile(reactContext)
+  }
+
+  private fun prepareCompleteLocalResume(jobId: String) {
+    OrionDownloadJobStore.clearControl(jobId)
+    OrionDownloadJobStore.setState(jobId, "recovering")
   }
 
   @ReactMethod
@@ -188,8 +195,7 @@ class OrionDownloadEngineModule(
     // recovery first so WorkManager cannot race the immediate foreground run.
     OrionDownloadRecoveryScheduler.cancel(reactContext, clean)
     if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, clean)) {
-      OrionDownloadJobStore.clearControl(clean)
-      OrionDownloadJobStore.setState(clean, "recovering")
+      prepareCompleteLocalResume(clean)
       OrionDownloadForegroundService.start(reactContext, clean, recovery = true)
       promise.resolve(true)
       return
@@ -204,10 +210,7 @@ class OrionDownloadEngineModule(
       promise.reject("DOWNLOAD_SOURCE_REFRESH_REQUIRED", "Open the title and start playback again to refresh the download source.")
       return
     }
-    OrionDownloadJobStore.clearControl(clean)
-    OrionDownloadJobStore.setState(clean, "recovering")
-    OrionDownloadRecoveryScheduler.schedule(reactContext, clean)
-    OrionDownloadForegroundService.start(reactContext, clean, recovery = true)
+    OrionDownloadForegroundService.resume(reactContext, clean)
     promise.resolve(true)
   }
 

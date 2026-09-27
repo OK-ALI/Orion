@@ -83,8 +83,10 @@ test('HLS progress counts completed provider routes and never treats a yt-dlp fr
   assert.match(transfer, /onMeasuredMediaProgress = \{ bytes, completed, total ->[\s\S]*?setGatewayMediaProgress\(jobId, bytes, completed, total\)/);
   const measured = between(store, 'fun setGatewayMediaProgress(', 'fun setFinalizationStage(');
   assert.match(measured, /progress\.put\("totalBytes", JSONObject\.NULL\)/);
-  assert.match(measured, /progress\.put\("percent", JSONObject\.NULL\)/);
-  assert.match(measured, /progress\.put\("completedFragments", completed\.coerceIn/);
+  assert.match(measured, /safeCompleted\.toDouble\(\) \* 100\.0 \/ safeTotal\.toDouble\(\)/);
+  assert.match(measured, /progress\.put\("percent", percent \?: JSONObject\.NULL\)/);
+  assert.match(measured, /progress\.put\("completedFragments", safeCompleted\)/);
+  assert.match(measured, /estimateGatewayEtaSeconds/);
 });
 
 test('HLS and DASH verify staged audio/video before treating Orion Library output size as complete', () => {

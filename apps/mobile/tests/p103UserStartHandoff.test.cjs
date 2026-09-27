@@ -22,7 +22,7 @@ test('P10.3 user entry activates only against the real Android native engine', (
 test('P10.3 Download sheet preserves Auto and opens Player when no candidate exists', () => {
   assert.match(modal, /useState<MobileDownloadTransferMethodV1>\('auto'\)/);
   assert.match(modal, /selectedCandidate \? handleStart : handleResolveSource/);
-  assert.match(modal, /'Open player'/);
+  assert.match(modal, /'Prepare download'/);
   assert.match(modal, /Ready to download/);
   assert.match(modal, /return here automatically/);
 });

@@ -36,7 +36,8 @@ test('P10.6-D2 separates explicit Resume from background recovery so recovery ca
   const service = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadForegroundService.kt');
 
   assert.match(service, /const val ACTION_RECOVER = "com\.okali\.orion\.download\.RECOVER"/);
-  assert.match(service, /ACTION_RESUME -> \{[\s\S]{0,400}clearControl\(jobId\)[\s\S]{0,300}setState\(jobId, "recovering"\)[\s\S]{0,300}OrionDownloadRecoveryScheduler\.schedule\(applicationContext, jobId\)/);
+  assert.match(service, /ACTION_RESUME -> \{[\s\S]{0,700}activeJobs\.contains\(jobId\)[\s\S]{0,600}prepareExplicitResume\(jobId\)/);
+  assert.match(service, /private fun prepareExplicitResume\(jobId: String\)[\s\S]{0,400}clearControl\(jobId\)[\s\S]{0,300}setState\(jobId, "recovering"\)[\s\S]{0,300}OrionDownloadRecoveryScheduler\.schedule\(applicationContext, jobId\)/);
   assert.match(service, /ACTION_RECOVER -> \{[\s\S]{0,500}OrionDownloadRecoveryPolicy\.shouldRemainIdle/);
   assert.match(service, /action = if \(recovery\) ACTION_RECOVER else ACTION_START/);
   assert.doesNotMatch(service, /action = if \(recovery\) ACTION_RESUME else ACTION_START/);

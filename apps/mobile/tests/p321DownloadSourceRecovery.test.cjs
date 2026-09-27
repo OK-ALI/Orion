@@ -42,8 +42,10 @@ test('manual download source choices exclude retired, disabled, incompatible and
   assert.equal(registry.getNextMobileDownloadSource, undefined);
   assert.deepEqual(registry.getMobileDownloadSourceChoices('tv').map((entry) => entry.id), ['vixsrc', 'vidsrc', '111movies']);
   const modal = fs.readFileSync(path.join(mobileRoot, 'src', 'components', 'DownloadModal.tsx'), 'utf8');
-  assert.match(modal, /!selectedCandidate \? \([\s\S]{0,220}Choose a source/);
-  assert.doesNotMatch(modal, /sourceResolutionFailure && !selectedCandidate \? \([\s\S]{0,220}Try a specific source/);
+  assert.match(modal, /!needsEpisode \? \([\s\S]{0,220}Download source/);
+  assert.match(modal, /const sourceReady = selectedCandidate\?\.candidate\.sourceId === source\.id/);
+  assert.match(modal, /Prepare download with \${source\.label}/);
+  assert.doesNotMatch(modal, /!selectedCandidate \? \([\s\S]{0,220}Choose a source/);
 });
 
 test('Dr. House S2E1 download start rejects a stale episode and accepts its exact candidate', async () => {

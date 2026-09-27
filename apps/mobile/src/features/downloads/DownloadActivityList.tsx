@@ -338,13 +338,15 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const [nowMs, setNowMs] = useState(Date.now());
 
-  const hasFinalizingWork = jobs.some((job) => job.state === 'finalizing');
+  const hasLiveTimingWork = jobs.some((job) => (
+    job.state === 'downloading' || job.state === 'recovering' || job.state === 'verifying' || job.state === 'finalizing'
+  ));
   useEffect(() => {
-    if (!active || !hasFinalizingWork) return undefined;
+    if (!active || !hasLiveTimingWork) return undefined;
     setNowMs(Date.now());
     const timer = setInterval(() => setNowMs(Date.now()), 1_000);
     return () => clearInterval(timer);
-  }, [active, hasFinalizingWork]);
+  }, [active, hasLiveTimingWork]);
 
   const assetById = useMemo(() => new Map(assets.map((asset) => [asset.assetId, asset])), [assets]);
   const normalizedQuery = query.trim().toLowerCase();
