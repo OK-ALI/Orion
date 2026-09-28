@@ -69,6 +69,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     val rangeStart: Long?,
     val rangeEndInclusive: Long?,
     val isKey: Boolean,
+    val requiredForCompletion: Boolean,
     val resumeFingerprint: String?,
   ) : Route
 
@@ -98,6 +99,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     ConcurrentHashMap<String, Route>()
 
   private val providerRouteCount = AtomicInteger(0)
+  private val optionalProviderRouteCount = AtomicInteger(0)
   private val completedProviderBytes = ConcurrentHashMap<String, Long>()
   private val completedProviderByteCount = AtomicLong(0L)
   private val loopbackRequestCount = AtomicInteger(0)
@@ -280,6 +282,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     isKey: Boolean = false,
     routeSuffix: String = "bin",
     resumeScope: String? = null,
+    requiredForCompletion: Boolean = true,
   ): String? {
     if (
       closed.get() ||
@@ -321,6 +324,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
         rangeStart = rangeStart,
         rangeEndInclusive = rangeEndInclusive,
         isKey = isKey,
+        requiredForCompletion = requiredForCompletion,
         resumeFingerprint =
           if (isKey) null else resumeFingerprint(
             bound = bound,
@@ -362,7 +366,13 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
           route,
         ) == null
       ) {
-        if (route is ProviderRoute && !route.isKey) providerRouteCount.incrementAndGet()
+        if (route is ProviderRoute && !route.isKey) {
+          if (route.requiredForCompletion) {
+            providerRouteCount.incrementAndGet()
+          } else {
+            optionalProviderRouteCount.incrementAndGet()
+          }
+        }
         return buildUrl(path)
       }
     }
@@ -382,7 +392,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
 
     Log.i(
       "OrionDownloadStage",
-      "stage=yt-dlp-gateway outcome=summary requests=${loopbackRequestCount.get()} provider=${providerRequestCount.get()} ranges=${clientRangeRequestCount.get()} provider2xx=${provider2xxCount.get()} provider4xx=${provider4xxCount.get()} provider5xx=${provider5xxCount.get()} mediaRoutes=${providerRouteCount.get()} completedRoutes=${completedProviderBytes.size} bytes=${completedProviderByteCount.get()} providerReadBytes=${providerReadByteCount.get()} providerWrittenBytes=${providerWrittenByteCount.get()} providerEof=${providerEofCount.get()} providerReadErrors=${providerReadErrorCount.get()} providerWriteErrors=${providerWriteErrorCount.get()} resumeHits=${resumeHitCount.get()} resumeCommits=${resumeCommitCount.get()} resumeFullRangeCaptures=${resumeFullRangeCaptureCount.get()}",
+      "stage=yt-dlp-gateway outcome=summary requests=${loopbackRequestCount.get()} provider=${providerRequestCount.get()} ranges=${clientRangeRequestCount.get()} provider2xx=${provider2xxCount.get()} provider4xx=${provider4xxCount.get()} provider5xx=${provider5xxCount.get()} mediaRoutes=${providerRouteCount.get()} optionalMediaRoutes=${optionalProviderRouteCount.get()} completedRoutes=${completedProviderBytes.size} bytes=${completedProviderByteCount.get()} providerReadBytes=${providerReadByteCount.get()} providerWrittenBytes=${providerWrittenByteCount.get()} providerEof=${providerEofCount.get()} providerReadErrors=${providerReadErrorCount.get()} providerWriteErrors=${providerWriteErrorCount.get()} resumeHits=${resumeHitCount.get()} resumeCommits=${resumeCommitCount.get()} resumeFullRangeCaptures=${resumeFullRangeCaptureCount.get()}",
     )
 
     routes.clear()
@@ -1126,7 +1136,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
         activeResumeCapture = null
       }
 
-      if (completeBody) {
+      if (completeBody && route.requiredForCompletion) {
         synchronized(mediaProgressLock) {
           if (completedProviderBytes.putIfAbsent(routeKey, deliveredBytes) == null) {
             val bytes = completedProviderByteCount.addAndGet(deliveredBytes)
@@ -1396,7 +1406,9 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     }
     output.flush()
     resumeHitCount.incrementAndGet()
-    if (!headOnly) markMediaComplete(routeKey, size, notifyProgress = false)
+    if (!headOnly && route.requiredForCompletion) {
+      markMediaComplete(routeKey, size, notifyProgress = false)
+    }
     Log.i("OrionDownloadStage", "stage=hls-resume-cache outcome=hit bytes=$size")
     return true
   }

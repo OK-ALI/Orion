@@ -61,6 +61,7 @@ internal object OrionDownloadYtDlpHlsGateway {
       childUrl: String,
       isKey: Boolean = false,
       resumeScope: String? = null,
+      requiredForCompletion: Boolean = true,
     ): String? =
       session.registerProvider(
         bound = bound,
@@ -75,6 +76,7 @@ internal object OrionDownloadYtDlpHlsGateway {
         // local suffix. The bytes are still content-probed by FFmpeg.
         routeSuffix = if (isKey) "bin" else "ts",
         resumeScope = resumeScope,
+        requiredForCompletion = requiredForCompletion,
       )
 
     val rootBody =
@@ -110,7 +112,14 @@ internal object OrionDownloadYtDlpHlsGateway {
         rewriteMediaPlaylist(
           resolved.url,
           resolved.body,
-          { childUrl -> route(resolved.url, childUrl, resumeScope = resolved.body) },
+          { childUrl, requiredForCompletion ->
+            route(
+              resolved.url,
+              childUrl,
+              resumeScope = resolved.body,
+              requiredForCompletion = requiredForCompletion,
+            )
+          },
           { keyUrl -> route(resolved.url, keyUrl, isKey = true) },
         ) ?: return null
 
@@ -144,7 +153,14 @@ internal object OrionDownloadYtDlpHlsGateway {
       rewriteMediaPlaylist(
         resolvedVideo.url,
         resolvedVideo.body,
-        { childUrl -> route(resolvedVideo.url, childUrl, resumeScope = resolvedVideo.body) },
+        { childUrl, requiredForCompletion ->
+          route(
+            resolvedVideo.url,
+            childUrl,
+            resumeScope = resolvedVideo.body,
+            requiredForCompletion = requiredForCompletion,
+          )
+        },
         { keyUrl -> route(resolvedVideo.url, keyUrl, isKey = true) },
       ) ?: return null
 
@@ -176,7 +192,14 @@ internal object OrionDownloadYtDlpHlsGateway {
             rewriteMediaPlaylist(
               resolvedAudio.url,
               resolvedAudio.body,
-              { childUrl -> route(resolvedAudio.url, childUrl, resumeScope = resolvedAudio.body) },
+              { childUrl, requiredForCompletion ->
+                route(
+                  resolvedAudio.url,
+                  childUrl,
+                  resumeScope = resolvedAudio.body,
+                  requiredForCompletion = requiredForCompletion,
+                )
+              },
               { keyUrl -> route(resolvedAudio.url, keyUrl, isKey = true) },
             ) ?: return null
 
@@ -210,13 +233,18 @@ internal object OrionDownloadYtDlpHlsGateway {
     baseUrl: String,
     body: String,
     providerRoute: (String) -> String?,
-  ): String? = rewriteMediaPlaylist(baseUrl, body, providerRoute, providerRoute)
+  ): String? = rewriteMediaPlaylist(
+    baseUrl,
+    body,
+    { childUrl, _ -> providerRoute(childUrl) },
+    providerRoute,
+  )
 
   internal fun rewriteMediaPlaylist(
     baseUrl: String,
     body: String,
     providerRoute:
-      (String) -> String?,
+      (String, Boolean) -> String?,
     keyRoute:
       (String) -> String?,
   ): String? {
@@ -228,6 +256,8 @@ internal object OrionDownloadYtDlpHlsGateway {
 
     val output =
       mutableListOf<String>()
+
+    var nextMediaIsGap = false
 
     for (raw in body.lineSequence()) {
       val line =
@@ -260,6 +290,21 @@ internal object OrionDownloadYtDlpHlsGateway {
         )
       ) {
         return null
+      }
+
+      if (
+        trimmed.equals(
+          "#EXT-X-GAP",
+          ignoreCase = true,
+        )
+      ) {
+        // RFC 8216 gap segments remain in the rewritten manifest so FFmpeg
+        // preserves the provider's timeline semantics. FFmpeg is expected to
+        // skip requesting the following media URI, so that opaque route must
+        // not be counted as required completion work.
+        nextMediaIsGap = true
+        output.add(line)
+        continue
       }
 
       if (
@@ -301,7 +346,7 @@ internal object OrionDownloadYtDlpHlsGateway {
           rewriteUriAttribute(
             baseUrl,
             line,
-            providerRoute,
+            { childUrl -> providerRoute(childUrl, true) },
           ) ?: return null
 
         output.add(rewritten)
@@ -319,9 +364,14 @@ internal object OrionDownloadYtDlpHlsGateway {
           trimmed,
         ) ?: return null
 
+      val requiredForCompletion = !nextMediaIsGap
+      nextMediaIsGap = false
+
       val localUrl =
-        providerRoute(providerUrl)
-          ?: return null
+        providerRoute(
+          providerUrl,
+          requiredForCompletion,
+        ) ?: return null
 
       output.add(localUrl)
     }

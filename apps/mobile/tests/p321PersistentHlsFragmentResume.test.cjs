@@ -167,3 +167,39 @@ test('V8.19 cache is an optional fail-open layer with bounded fragment and free-
   assert.match(hls, /#EXT-X-PRELOAD-HINT:/);
   assert.match(hls, /#EXT-X-RENDITION-REPORT:/);
 });
+
+
+test('V8.19.3 excludes RFC 8216 EXT-X-GAP media routes from required HLS completion without exposing provider URLs', () => {
+  const registration = between(gateway, 'fun registerProvider(', 'private fun registerRoute(');
+  const providerWriter = between(gateway, 'private fun writeProvider(', 'private data class ResumeProof(');
+  const cachedReplay = between(gateway, 'private fun writeVerifiedResumeFragment(', 'private fun verifiedResumeFile(');
+  const rewrite = between(hls, 'internal fun rewriteMediaPlaylist(', 'internal fun rewriteSelectedMaster(');
+
+  // All existing callers remain required by default. Only the HLS rewriter may
+  // explicitly mark a provider-advertised gap URI as optional completion work.
+  assert.match(registration, /requiredForCompletion: Boolean = true/);
+  assert.match(gateway, /route\.requiredForCompletion/);
+  assert.match(gateway, /if \(route is ProviderRoute && !route\.isKey\)/);
+  assert.match(gateway, /if \(route\.requiredForCompletion\)/);
+  assert.match(gateway, /optionalProviderRouteCount\.incrementAndGet\(\)/);
+  assert.match(gateway, /optionalMediaRoutes=\$\{optionalProviderRouteCount\.get\(\)\}/);
+
+  // Optional gap routes remain opaque/provider-authorized if FFmpeg requests
+  // them, but they can never inflate the required route total or completed
+  // route count used by the final HLS transfer proof.
+  assert.match(providerWriter, /if \(completeBody && route\.requiredForCompletion\)/);
+  assert.match(cachedReplay, /if \(!headOnly && route\.requiredForCompletion\)/);
+
+  // RFC 8216 EXT-X-GAP applies to the following media URI. Preserve the tag and
+  // route opacity, but mark exactly that URI as non-required before resetting
+  // the state for the next normal media segment.
+  assert.match(rewrite, /trimmed\.equals\(\s*"#EXT-X-GAP",\s*ignoreCase = true/);
+  assert.match(rewrite, /var nextMediaIsGap = false/);
+  assert.match(rewrite, /val requiredForCompletion = !nextMediaIsGap/);
+  assert.match(rewrite, /nextMediaIsGap = false/);
+  assert.match(rewrite, /providerRoute\(\s*providerUrl,\s*requiredForCompletion/);
+
+  // AES keys retain their separate non-persistent/non-completion path.
+  assert.match(hls, /isKey = true/);
+  assert.match(gateway, /if \(isKey\) null else resumeFingerprint/);
+});
