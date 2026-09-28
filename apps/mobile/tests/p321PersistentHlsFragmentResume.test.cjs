@@ -94,14 +94,35 @@ test('V8.19 verifies every reused fragment by size and SHA-256 and falls back to
   assert.match(provider, /commitResumeCapture/);
 });
 
-test('V8.19.1 persists VixSrc full-object 206 range responses but never partial ranges', () => {
+test('V8.19.2 persists safe VidSrc full-body 200 responses and VixSrc full-object 206 responses without partial-range reuse', () => {
   const eligibility = between(gateway, 'private fun canPersistResumeResponse(', 'private fun openResumeCapture(');
+  const provider = between(gateway, 'private fun writeProvider(', 'private data class ResumeProof(');
 
   // Existing 200/no-Range behavior remains valid.
   assert.match(eligibility, /status == HttpURLConnection\.HTTP_OK &&\s*!clientRangeRequested/);
 
-  // The physical VixSrc shape is bytes=0- with a provider 206 that proves the
-  // response covers exactly 0..total-1 and whose Content-Length equals total.
+  // VidSrc physically ignores yt-dlp's unbounded bytes=0- request and returns
+  // a normal 200 body with no Content-Range or Content-Length. That is still a
+  // complete representation from byte zero, but only for the exact unbounded
+  // start-at-zero shape. Bounded/nonzero ranges remain ineligible.
+  assert.match(
+    eligibility,
+    /status == HttpURLConnection\.HTTP_OK &&\s*clientRangeRequested &&\s*clientRangeStart == 0L &&\s*clientRangeEndInclusive == null &&\s*providerRange == null/,
+  );
+
+  // Unknown-length 200 bodies become durable only after a clean provider EOF,
+  // positive delivered bytes, and exact read/write parity.
+  assert.match(
+    provider,
+    /val completeBody = reachedEnd && deliveredBytes > 0L &&\s*\(contentLength < 0L \|\| deliveredBytes == contentLength\)/,
+  );
+  assert.match(
+    provider,
+    /if \(completeBody && readBytes == deliveredBytes\) \{\s*commitResumeCapture\(route, capture, deliveredBytes\)/,
+  );
+
+  // The physical VixSrc shape remains bytes=0- with a provider 206 that proves
+  // the response covers exactly 0..total-1 and whose Content-Length equals total.
   assert.match(eligibility, /status != HttpURLConnection\.HTTP_PARTIAL/);
   assert.match(eligibility, /clientRangeStart != 0L/);
   assert.match(eligibility, /clientRangeEndInclusive != null/);

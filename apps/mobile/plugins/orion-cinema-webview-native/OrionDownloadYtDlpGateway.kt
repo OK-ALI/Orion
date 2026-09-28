@@ -1209,6 +1209,16 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     }
 
     if (
+      status == HttpURLConnection.HTTP_OK &&
+      clientRangeRequested &&
+      clientRangeStart == 0L &&
+      clientRangeEndInclusive == null &&
+      providerRange == null
+    ) {
+      return true
+    }
+
+    if (
       status != HttpURLConnection.HTTP_PARTIAL ||
       !clientRangeRequested ||
       clientRangeStart != 0L ||
