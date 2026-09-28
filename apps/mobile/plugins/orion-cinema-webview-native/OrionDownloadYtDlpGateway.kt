@@ -4,6 +4,9 @@ import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -12,6 +15,7 @@ import java.net.Socket
 import java.net.SocketException
 import android.util.Log
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -49,6 +53,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
   private val server: ServerSocket,
   private val capability: String,
   private val onMediaProgress: (Long, Int, Int) -> Unit,
+  private var hlsResumeRoot: File?,
 ) : Closeable {
   private sealed interface Route
 
@@ -64,6 +69,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     val rangeStart: Long?,
     val rangeEndInclusive: Long?,
     val isKey: Boolean,
+    val resumeFingerprint: String?,
   ) : Route
 
   private data class Request(
@@ -107,6 +113,9 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
   private val providerReadErrorCount = AtomicInteger(0)
   private val providerWriteErrorCount = AtomicInteger(0)
   private val mediaProgressLock = Any()
+  private val resumeCommitLock = Any()
+  private val resumeHitCount = AtomicInteger(0)
+  private val resumeCommitCount = AtomicInteger(0)
 
   private val activeSockets =
     ConcurrentHashMap.newKeySet<Socket>()
@@ -135,6 +144,12 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
 
   fun owns(jobId: String): Boolean =
     cleanJobId(jobId) == ownerJobId
+
+  fun configureHlsResumeRoot(root: File): Boolean {
+    if (closed.get() || routes.isNotEmpty() || hlsResumeRoot != null) return false
+    hlsResumeRoot = root
+    return true
+  }
 
   private fun awaitTransferPermission(): Boolean {
     while (!closed.get()) {
@@ -263,6 +278,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     rangeEndInclusive: Long?,
     isKey: Boolean = false,
     routeSuffix: String = "bin",
+    resumeScope: String? = null,
   ): String? {
     if (
       closed.get() ||
@@ -304,6 +320,15 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
         rangeStart = rangeStart,
         rangeEndInclusive = rangeEndInclusive,
         isKey = isKey,
+        resumeFingerprint =
+          if (isKey) null else resumeFingerprint(
+            bound = bound,
+            parentUrl = parentUrl,
+            childUrl = childUrl,
+            rangeStart = rangeStart,
+            rangeEndInclusive = rangeEndInclusive,
+            resumeScope = resumeScope,
+          ),
       ),
     )
   }
@@ -356,7 +381,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
 
     Log.i(
       "OrionDownloadStage",
-      "stage=yt-dlp-gateway outcome=summary requests=${loopbackRequestCount.get()} provider=${providerRequestCount.get()} ranges=${clientRangeRequestCount.get()} provider2xx=${provider2xxCount.get()} provider4xx=${provider4xxCount.get()} provider5xx=${provider5xxCount.get()} mediaRoutes=${providerRouteCount.get()} completedRoutes=${completedProviderBytes.size} bytes=${completedProviderByteCount.get()} providerReadBytes=${providerReadByteCount.get()} providerWrittenBytes=${providerWrittenByteCount.get()} providerEof=${providerEofCount.get()} providerReadErrors=${providerReadErrorCount.get()} providerWriteErrors=${providerWriteErrorCount.get()}",
+      "stage=yt-dlp-gateway outcome=summary requests=${loopbackRequestCount.get()} provider=${providerRequestCount.get()} ranges=${clientRangeRequestCount.get()} provider2xx=${provider2xxCount.get()} provider4xx=${provider4xxCount.get()} provider5xx=${provider5xxCount.get()} mediaRoutes=${providerRouteCount.get()} completedRoutes=${completedProviderBytes.size} bytes=${completedProviderByteCount.get()} providerReadBytes=${providerReadByteCount.get()} providerWrittenBytes=${providerWrittenByteCount.get()} providerEof=${providerEofCount.get()} providerReadErrors=${providerReadErrorCount.get()} providerWriteErrors=${providerWriteErrorCount.get()} resumeHits=${resumeHitCount.get()} resumeCommits=${resumeCommitCount.get()}",
     )
 
     routes.clear()
@@ -719,13 +744,27 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     clientRangeEndInclusive: Long?,
     clientRangeRequested: Boolean,
   ) {
+    // A live HLS pause keeps FFmpeg and its output state alive. Hold both
+    // provider-backed and locally replayed requests behind the same fence.
+    if (!awaitTransferPermission()) return
+
+    if (
+      !route.isKey &&
+      writeVerifiedResumeFragment(
+        output = output,
+        route = route,
+        routeKey = routeKey,
+        headOnly = headOnly,
+        clientRangeStart = clientRangeStart,
+        clientRangeEndInclusive = clientRangeEndInclusive,
+        clientRangeRequested = clientRangeRequested,
+      )
+    ) {
+      return
+    }
+
     providerRequestCount.incrementAndGet()
     val providerAttempt = providerAttemptCount.incrementAndGet()
-
-    // A live HLS pause keeps FFmpeg and its output state alive. Hold the
-    // loopback request here until Resume clears the durable pause fence rather
-    // than reopening the provider stream from fragment zero.
-    if (!awaitTransferPermission()) return
 
     // FFmpeg may probe or seek a loopback HLS media route with Range.
     // Preserve that range when this route represents the whole provider object;
@@ -767,6 +806,8 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     activeProviderConnections.add(
       connection,
     )
+
+    var activeResumeCapture: ResumeCapture? = null
 
     try {
       val status =
@@ -842,6 +883,19 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
 
       val contentLength =
         connection.contentLengthLong
+
+      activeResumeCapture =
+        if (
+          !headOnly &&
+          status == HttpURLConnection.HTTP_OK &&
+          !clientRangeRequested &&
+          route.rangeStart == null &&
+          route.rangeEndInclusive == null
+        ) {
+          openResumeCapture(route, contentLength)
+        } else {
+          null
+        }
 
       val providerContentRange =
         connection.getHeaderField(
@@ -973,6 +1027,25 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
               readBytes += read
               providerReadByteCount.addAndGet(read.toLong())
 
+              activeResumeCapture?.let { capture ->
+                if (
+                  readBytes > MAX_RESUME_FRAGMENT_BYTES ||
+                  resumeSpaceLow()
+                ) {
+                  abortResumeCapture(capture)
+                  activeResumeCapture = null
+                  if (resumeSpaceLow()) purgeResumeCache()
+                } else {
+                  try {
+                    capture.digest.update(buffer, 0, read)
+                    capture.output.write(buffer, 0, read)
+                  } catch (_: Throwable) {
+                    abortResumeCapture(capture)
+                    activeResumeCapture = null
+                  }
+                }
+              }
+
               // Pause may arrive while a provider read is completing. Keep the
               // bytes buffered inside Orion until Resume instead of advancing
               // FFmpeg or the visible completed-fragment count.
@@ -1031,9 +1104,19 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
         "OrionDownloadStage",
         "stage=provider-body attempt=$providerAttempt outcome=${if (reachedEnd) "eof" else if (headOnly) "head" else "stopped"} readBytes=$readBytes writtenBytes=$deliveredBytes lengthMatch=${contentLengthMatch(contentLength, deliveredBytes, reachedEnd)}",
       )
-      if (reachedEnd && deliveredBytes > 0L &&
+      val completeBody = reachedEnd && deliveredBytes > 0L &&
         (contentLength < 0L || deliveredBytes == contentLength)
-      ) {
+
+      activeResumeCapture?.let { capture ->
+        if (completeBody && readBytes == deliveredBytes) {
+          commitResumeCapture(route, capture, deliveredBytes)
+        } else {
+          abortResumeCapture(capture)
+        }
+        activeResumeCapture = null
+      }
+
+      if (completeBody) {
         synchronized(mediaProgressLock) {
           if (completedProviderBytes.putIfAbsent(routeKey, deliveredBytes) == null) {
             val bytes = completedProviderByteCount.addAndGet(deliveredBytes)
@@ -1042,6 +1125,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
         }
       }
     } finally {
+      activeResumeCapture?.let(::abortResumeCapture)
       activeProviderConnections.remove(
         connection,
       )
@@ -1052,6 +1136,274 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
       }
     }
   }
+
+  private data class ResumeProof(
+    val sizeBytes: Long,
+    val sha256: String,
+  )
+
+  private data class ResumeCapture(
+    val tempFile: File,
+    val stream: FileOutputStream,
+    val output: BufferedOutputStream,
+    val digest: MessageDigest,
+  )
+
+  private fun resumeFingerprint(
+    bound: BoundTransferContext,
+    parentUrl: String,
+    childUrl: String,
+    rangeStart: Long?,
+    rangeEndInclusive: Long?,
+    resumeScope: String?,
+  ): String? {
+    if (hlsResumeRoot == null || bound.transferKind != "hls") return null
+    val material = buildString {
+      append("orion-hls-resume-v1\n")
+      append(bound.requestContextId).append('\n')
+      append(bound.candidateId).append('\n')
+      append(bound.sourceId).append('\n')
+      append(parentUrl).append('\n')
+      append(childUrl).append('\n')
+      append(resumeScope.orEmpty()).append('\n')
+      append(rangeStart?.toString().orEmpty()).append('\n')
+      append(rangeEndInclusive?.toString().orEmpty())
+    }
+    return sha256(material.toByteArray(StandardCharsets.UTF_8))
+  }
+
+  private fun openResumeCapture(
+    route: ProviderRoute,
+    contentLength: Long,
+  ): ResumeCapture? {
+    val root = hlsResumeRoot ?: return null
+    val fingerprint = route.resumeFingerprint ?: return null
+    if (contentLength > MAX_RESUME_FRAGMENT_BYTES) return null
+    if (resumeSpaceLow()) {
+      purgeResumeCache()
+      if (resumeSpaceLow()) return null
+    }
+    return try {
+      if (!root.exists() && !root.mkdirs()) return null
+      if (!root.isDirectory) return null
+      val temp = File.createTempFile("$fingerprint-", ".part", root)
+      val stream = FileOutputStream(temp)
+      ResumeCapture(
+        tempFile = temp,
+        stream = stream,
+        output = BufferedOutputStream(stream, PROVIDER_BUFFER_SIZE),
+        digest = MessageDigest.getInstance("SHA-256"),
+      )
+    } catch (_: Throwable) {
+      null
+    }
+  }
+
+  private fun commitResumeCapture(
+    route: ProviderRoute,
+    capture: ResumeCapture,
+    sizeBytes: Long,
+  ) {
+    val root = hlsResumeRoot ?: return abortResumeCapture(capture)
+    val fingerprint = route.resumeFingerprint ?: return abortResumeCapture(capture)
+    try {
+      capture.output.flush()
+      capture.output.close()
+    } catch (_: Throwable) {
+      abortResumeCapture(capture)
+      return
+    }
+    if (sizeBytes <= 0L || capture.tempFile.length() != sizeBytes) {
+      capture.tempFile.delete()
+      return
+    }
+    val digest = hex(capture.digest.digest())
+    val data = File(root, "$fingerprint.fragment")
+    val proof = File(root, "$fingerprint.proof")
+    synchronized(resumeCommitLock) {
+      if (verifiedResumeFile(fingerprint) != null) {
+        capture.tempFile.delete()
+        return
+      }
+      try {
+        data.delete()
+        proof.delete()
+        if (!capture.tempFile.renameTo(data)) {
+          capture.tempFile.delete()
+          return
+        }
+        val proofTemp = File.createTempFile("$fingerprint-", ".proof.part", root)
+        proofTemp.writeText("v1\n$sizeBytes\n$digest\n", Charsets.US_ASCII)
+        if (!proofTemp.renameTo(proof)) {
+          proofTemp.delete()
+          data.delete()
+          return
+        }
+        resumeCommitCount.incrementAndGet()
+      } catch (_: Throwable) {
+        capture.tempFile.delete()
+        proof.delete()
+        data.delete()
+      }
+    }
+  }
+
+  private fun abortResumeCapture(capture: ResumeCapture) {
+    try { capture.output.close() } catch (_: Throwable) {}
+    try { capture.stream.close() } catch (_: Throwable) {}
+    try { capture.tempFile.delete() } catch (_: Throwable) {}
+  }
+
+  private fun writeVerifiedResumeFragment(
+    output: BufferedOutputStream,
+    route: ProviderRoute,
+    routeKey: String,
+    headOnly: Boolean,
+    clientRangeStart: Long?,
+    clientRangeEndInclusive: Long?,
+    clientRangeRequested: Boolean,
+  ): Boolean {
+    val fingerprint = route.resumeFingerprint ?: return false
+    val file = verifiedResumeFile(fingerprint) ?: return false
+    val size = file.length()
+    val start: Long
+    val end: Long
+    val status: Int
+    val reason: String
+    val headers = linkedMapOf<String, String>()
+    headers["Content-Type"] = "application/octet-stream"
+    headers["Accept-Ranges"] = "bytes"
+    headers["Cache-Control"] = "no-store"
+    headers["X-Content-Type-Options"] = "nosniff"
+    headers["Connection"] = "close"
+
+    if (clientRangeRequested) {
+      start = clientRangeStart ?: return false
+      if (start >= size) {
+        writeEmpty(
+          output,
+          HTTP_RANGE_NOT_SATISFIABLE,
+          "Range Not Satisfiable",
+          mapOf("Content-Range" to "bytes */$size", "Accept-Ranges" to "bytes"),
+        )
+        return true
+      }
+      end = (clientRangeEndInclusive ?: (size - 1L)).coerceAtMost(size - 1L)
+      val length = end - start + 1L
+      status = HttpURLConnection.HTTP_PARTIAL
+      reason = "Partial Content"
+      headers["Content-Length"] = length.toString()
+      headers["Content-Range"] = "bytes $start-$end/$size"
+    } else {
+      start = 0L
+      end = size - 1L
+      status = HttpURLConnection.HTTP_OK
+      reason = "OK"
+      headers["Content-Length"] = size.toString()
+    }
+
+    writeHead(output, status, reason, headers)
+    if (!headOnly) {
+      FileInputStream(file).use { input ->
+        var skipped = 0L
+        while (skipped < start) {
+          val step = input.skip(start - skipped)
+          if (step <= 0L) return true
+          skipped += step
+        }
+        var remaining = end - start + 1L
+        val buffer = ByteArray(PROVIDER_BUFFER_SIZE)
+        while (remaining > 0L && !closed.get()) {
+          if (!awaitTransferPermission()) return true
+          val read = input.read(buffer, 0, kotlin.math.min(buffer.size.toLong(), remaining).toInt())
+          if (read < 0) return true
+          if (read == 0) continue
+          output.write(buffer, 0, read)
+          remaining -= read
+        }
+        if (remaining != 0L) return true
+      }
+    }
+    output.flush()
+    resumeHitCount.incrementAndGet()
+    if (!headOnly) markMediaComplete(routeKey, size, notifyProgress = false)
+    Log.i("OrionDownloadStage", "stage=hls-resume-cache outcome=hit bytes=$size")
+    return true
+  }
+
+  private fun verifiedResumeFile(fingerprint: String): File? {
+    val root = hlsResumeRoot ?: return null
+    if (!fingerprint.matches(Regex("^[0-9a-f]{64}$"))) return null
+    val data = File(root, "$fingerprint.fragment")
+    val proofFile = File(root, "$fingerprint.proof")
+    if (!data.isFile || data.length() <= 0L || !proofFile.isFile || proofFile.length() !in 1L..256L) return null
+    val proof = try {
+      val lines = proofFile.readLines(Charsets.US_ASCII)
+      if (lines.size < 3 || lines[0] != "v1") null else ResumeProof(
+        sizeBytes = lines[1].toLongOrNull() ?: -1L,
+        sha256 = lines[2].trim(),
+      )
+    } catch (_: Throwable) { null }
+    if (
+      proof == null ||
+      proof.sizeBytes <= 0L ||
+      proof.sizeBytes != data.length() ||
+      !proof.sha256.matches(Regex("^[0-9a-f]{64}$")) ||
+      sha256File(data) != proof.sha256
+    ) {
+      try { proofFile.delete() } catch (_: Throwable) {}
+      try { data.delete() } catch (_: Throwable) {}
+      return null
+    }
+    return data
+  }
+
+  private fun markMediaComplete(
+    routeKey: String,
+    bytesWritten: Long,
+    notifyProgress: Boolean,
+  ) {
+    synchronized(mediaProgressLock) {
+      if (completedProviderBytes.putIfAbsent(routeKey, bytesWritten) != null) return
+      val bytes = completedProviderByteCount.addAndGet(bytesWritten)
+      if (notifyProgress) onMediaProgress(bytes, completedProviderBytes.size, providerRouteCount.get())
+    }
+  }
+
+  private fun resumeSpaceLow(): Boolean =
+    hlsResumeRoot?.parentFile?.usableSpace?.let { it in 1 until MIN_RESUME_FREE_BYTES } == true
+
+  private fun purgeResumeCache() {
+    val root = hlsResumeRoot ?: return
+    try {
+      root.listFiles().orEmpty().forEach { file ->
+        if (file.isFile) file.delete()
+      }
+    } catch (_: Throwable) {
+    }
+  }
+
+  private fun sha256File(file: File): String =
+    try {
+      val digest = MessageDigest.getInstance("SHA-256")
+      FileInputStream(file).use { input ->
+        val buffer = ByteArray(PROVIDER_BUFFER_SIZE)
+        while (true) {
+          val read = input.read(buffer)
+          if (read < 0) break
+          if (read > 0) digest.update(buffer, 0, read)
+        }
+      }
+      hex(digest.digest())
+    } catch (_: Throwable) {
+      ""
+    }
+
+  private fun sha256(bytes: ByteArray): String =
+    hex(MessageDigest.getInstance("SHA-256").digest(bytes))
+
+  private fun hex(bytes: ByteArray): String =
+    bytes.joinToString(separator = "") { byte -> "%02x".format(Locale.US, byte.toInt() and 0xff) }
 
   private fun parseProviderContentRange(
     raw: String?,
@@ -1508,6 +1860,8 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     private const val MAX_HEADER_BYTES = 32 * 1024
     private const val CLIENT_READ_TIMEOUT_MS = 5_000
     private const val PROVIDER_BUFFER_SIZE = 64 * 1024
+    private const val MAX_RESUME_FRAGMENT_BYTES = 128L * 1024L * 1024L
+    private const val MIN_RESUME_FREE_BYTES = 512L * 1024L * 1024L
     private const val PAUSE_POLL_MS = 75L
     private const val COMPLETION_PROOF_POLL_MS = 25L
     private const val COMPLETION_PROOF_WAIT_MS = 1_500L
@@ -1555,6 +1909,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
               CAPABILITY_TOKEN_BYTES,
             ),
           onMediaProgress = onMediaProgress,
+          hlsResumeRoot = null,
         )
       } catch (_: Throwable) {
         try {

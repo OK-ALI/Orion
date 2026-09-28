@@ -56,7 +56,12 @@ internal object OrionDownloadYtDlpHlsGateway {
     val rootUrl =
       bound.root.url
 
-    fun route(parentUrl: String, childUrl: String, isKey: Boolean = false): String? =
+    fun route(
+      parentUrl: String,
+      childUrl: String,
+      isKey: Boolean = false,
+      resumeScope: String? = null,
+    ): String? =
       session.registerProvider(
         bound = bound,
         parentUrl = parentUrl,
@@ -69,6 +74,7 @@ internal object OrionDownloadYtDlpHlsGateway {
         // Keep provider coordinates opaque while giving media routes an HLS-safe
         // local suffix. The bytes are still content-probed by FFmpeg.
         routeSuffix = if (isKey) "bin" else "ts",
+        resumeScope = resumeScope,
       )
 
     val rootBody =
@@ -104,7 +110,7 @@ internal object OrionDownloadYtDlpHlsGateway {
         rewriteMediaPlaylist(
           resolved.url,
           resolved.body,
-          { childUrl -> route(resolved.url, childUrl) },
+          { childUrl -> route(resolved.url, childUrl, resumeScope = resolved.body) },
           { keyUrl -> route(resolved.url, keyUrl, isKey = true) },
         ) ?: return null
 
@@ -138,7 +144,7 @@ internal object OrionDownloadYtDlpHlsGateway {
       rewriteMediaPlaylist(
         resolvedVideo.url,
         resolvedVideo.body,
-        { childUrl -> route(resolvedVideo.url, childUrl) },
+        { childUrl -> route(resolvedVideo.url, childUrl, resumeScope = resolvedVideo.body) },
         { keyUrl -> route(resolvedVideo.url, keyUrl, isKey = true) },
       ) ?: return null
 
@@ -170,7 +176,7 @@ internal object OrionDownloadYtDlpHlsGateway {
             rewriteMediaPlaylist(
               resolvedAudio.url,
               resolvedAudio.body,
-              { childUrl -> route(resolvedAudio.url, childUrl) },
+              { childUrl -> route(resolvedAudio.url, childUrl, resumeScope = resolvedAudio.body) },
               { keyUrl -> route(resolvedAudio.url, keyUrl, isKey = true) },
             ) ?: return null
 

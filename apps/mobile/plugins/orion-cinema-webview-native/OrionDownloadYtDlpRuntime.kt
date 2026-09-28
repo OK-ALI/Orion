@@ -97,6 +97,10 @@ internal object OrionDownloadYtDlpRuntime {
           true,
         )
 
+    gateway.configureHlsResumeRoot(
+      File(stagingDir(context, cleanJobId), "hls-resume-v1"),
+    )
+
     return try {
       val entry =
         OrionDownloadYtDlpHlsGateway
