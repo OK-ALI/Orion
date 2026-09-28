@@ -72,12 +72,12 @@ test('V8.13 keeps live HLS paused in place while preserving stop-and-serialize f
   assert.doesNotMatch(resume, /clearControl\(clean\)/);
 });
 
-test('V8.12 keeps manual provider choice visible after a source becomes ready and uses product-safe preparation language', () => {
-  assert.match(modal, /!needsEpisode \? \([\s\S]*?Download source/);
-  assert.match(modal, /const sourceReady = selectedCandidate\?\.candidate\.sourceId === source\.id/);
-  assert.match(modal, /Prepare download with \$\{source\.label\}/);
-  assert.match(modal, /sourceReady \? 'Selected for this download'/);
-  assert.match(modal, /selectedCandidate \? 'Start download' : 'Prepare download'/);
-  assert.match(modal, /selectedCandidate \? handleStart : handleResolveSource/);
-  assert.doesNotMatch(modal, />Open player<|Open player to resolve download source/);
+test('V8.12+ Download Modal keeps manual provider choice visible and uses product-safe three-step preparation language', () => {
+  assert.match(modal, />Provider<\/Text>/);
+  assert.match(modal, /preparedSourceIds\.has\(source\.id\)/);
+  assert.match(modal, /Ready ✓/);
+  assert.match(modal, /Not available/);
+  assert.match(modal, /Orion will check this source and return here automatically when it is ready/);
+  assert.match(modal, /'Start Download'/);
+  assert.doesNotMatch(modal, />Open player<|Open player to resolve download source|Download method|HLS stream ready|DASH stream ready/);
 });

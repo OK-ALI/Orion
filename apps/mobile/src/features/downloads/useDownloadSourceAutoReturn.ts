@@ -20,7 +20,7 @@ export function useDownloadSourceAutoReturnV1(itemKey: string): void {
     if (returning.current) return;
     const intent = getMobileDownloadSourceResolutionIntentV1(itemKey);
     if (!intent || intent.autoReturnIssued) return;
-    const ready = selectMobileDownloadCandidateForItemV1(itemKey, intent.method, snapshots, 'orion-library');
+    const ready = selectMobileDownloadCandidateForItemV1(itemKey, intent.method, snapshots, 'orion-library', intent.sourceId);
     if (!ready || !markMobileDownloadSourceAutoReturnIssuedV1(itemKey)) return;
     returning.current = true;
     router.back();

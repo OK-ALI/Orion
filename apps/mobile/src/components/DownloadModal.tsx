@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { fontSizes, radii, spacing } from '@orion/shared/tokens';
 import type { MobileDownloadAssetV1, MobileDownloadJobV1, MobileDownloadPreferencesV1 } from '@orion/shared/types';
 import { useOrionTheme } from '../context/ThemeContext';
 import { OrionDialog } from './OrionDialog';
+import { ChoicePill, SummaryRow, StatusCard, downloadModalStyles as styles } from './DownloadModalPresentation';
 import { useResponsiveLayout } from '../services/responsive';
 import { getMobileDownloadCapability } from '../services/downloadManager';
 import { mobileDownloadItemKeyFromMediaV1, type MobileDownloadTargetV1 } from '../features/downloads/downloadIdentity';
@@ -31,6 +31,7 @@ import {
   discoverMobileDownloadSubtitlesV1,
   getPreferredMobileDownloadSubtitleIdsV1,
   type MobileDownloadSubtitleDiscoveryV1,
+  type MobileDownloadSubtitleOptionV1,
 } from '../features/downloads/downloadSubtitles';
 
 interface DownloadModalProps {
@@ -40,35 +41,52 @@ interface DownloadModalProps {
   onResolveSource: (target: MobileDownloadTargetV1, method: MobileDownloadTransferMethodV1, sourceId?: string) => void;
 }
 
+type DownloadStep = 'options' | 'prepare' | 'ready';
+type SubtitleChoice = 'auto' | 'subdl' | 'wyzie' | 'none';
+
 const EMPTY_PROVIDER_OUTCOMES: MobileDownloadSubtitleDiscoveryV1['providerOutcomes'] = {
   subdl: { configured: false, state: 'not-configured', count: 0 },
   wyzie: { configured: false, state: 'not-configured', count: 0 },
 };
-const EMPTY_SUBTITLES: MobileDownloadSubtitleDiscoveryV1 = { state: 'idle', tracks: [], providers: [], providerOutcomes: EMPTY_PROVIDER_OUTCOMES };
-const DUPLICATE_BLOCKING_STATES = new Set(['queued', 'preflighting', 'downloading', 'paused', 'recovering', 'verifying', 'finalizing', 'storage-blocked', 'action-required', 'expired', 'completed']);
+const EMPTY_SUBTITLES: MobileDownloadSubtitleDiscoveryV1 = {
+  state: 'idle',
+  tracks: [],
+  providers: [],
+  providerOutcomes: EMPTY_PROVIDER_OUTCOMES,
+};
+const DUPLICATE_BLOCKING_STATES = new Set([
+  'queued', 'preflighting', 'downloading', 'paused', 'recovering', 'verifying',
+  'finalizing', 'storage-blocked', 'action-required', 'expired', 'completed',
+]);
+const STEP_ORDER: readonly DownloadStep[] = ['options', 'prepare', 'ready'];
 const sourceLabel = (sourceId: string) => MOBILE_PLAYER_SOURCES.find((source) => source.id === sourceId)?.label || 'Playback source';
 
-function providerOutcomeSummary(discovery: MobileDownloadSubtitleDiscoveryV1): string {
-  return (['subdl', 'wyzie'] as const).map((provider) => {
-    const label = provider === 'subdl' ? 'SubDL' : 'Wyzie';
-    const outcome = discovery.providerOutcomes[provider];
-    if (!outcome.configured || outcome.state === 'not-configured') return `${label}: not configured`;
-    if (outcome.state === 'available') return `${label}: ${outcome.count}`;
-    if (outcome.state === 'no-results') return `${label}: 0 results`;
-    if (outcome.state === 'invalid-key') return `${label}: invalid key`;
-    if (outcome.state === 'quota-or-rate-limited') return `${label}: quota/rate limited`;
-    if (outcome.state === 'offline') return `${label}: offline`;
-    return `${label}: provider failure`;
-  }).join(' · ');
+function tracksForSubtitleChoice(
+  discovery: MobileDownloadSubtitleDiscoveryV1,
+  choice: SubtitleChoice,
+): MobileDownloadSubtitleOptionV1[] {
+  if (choice === 'none') return [];
+  if (choice === 'subdl' || choice === 'wyzie') {
+    return discovery.tracks.filter((track) => track.provider === choice);
+  }
+  return discovery.tracks.slice();
 }
 
 export function DownloadModal({ visible, onClose, target, onResolveSource }: DownloadModalProps) {
   const { theme } = useOrionTheme();
   const { isTablet } = useResponsiveLayout();
   const capability = getMobileDownloadCapability();
+
   const [preferences, setPreferences] = useState<MobileDownloadPreferencesV1>(getMobileDownloadPreferencesV1);
   const [transferMethod, setTransferMethod] = useState<MobileDownloadTransferMethodV1>('auto');
-  const [candidateSnapshots, setCandidateSnapshots] = useState<readonly MobileDownloadCandidateSnapshotV1[]>(getMobileDownloadCandidateSnapshotsV1);
+  const [step, setStep] = useState<DownloadStep>('options');
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [subtitleChoice, setSubtitleChoice] = useState<SubtitleChoice>(
+    getMobileDownloadPreferencesV1().subtitlePreference === 'none' ? 'none' : 'auto',
+  );
+  const [candidateSnapshots, setCandidateSnapshots] = useState<readonly MobileDownloadCandidateSnapshotV1[]>(
+    getMobileDownloadCandidateSnapshotsV1,
+  );
   const [repositoryJobs, setRepositoryJobs] = useState<MobileDownloadJobV1[]>(() => readMobileDownloadRepositoryV1().jobs);
   const [repositoryAssets, setRepositoryAssets] = useState<MobileDownloadAssetV1[]>(() => readMobileDownloadRepositoryV1().assets);
   const [subtitles, setSubtitles] = useState<MobileDownloadSubtitleDiscoveryV1>(EMPTY_SUBTITLES);
@@ -85,13 +103,6 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     setRepositoryJobs(snapshot.jobs);
     setRepositoryAssets(snapshot.assets);
   }), []);
-  useEffect(() => {
-    if (!visible) return;
-    const intent = target ? getMobileDownloadSourceResolutionIntentV1(target.itemKey) : null;
-    setTransferMethod(intent?.method ?? 'auto');
-    setStartError(null);
-    setStarting(false);
-  }, [visible, target?.itemKey]);
 
   const isEpisode = target?.media.mediaType === 'tv' && target.media.season !== null && target.media.episode !== null;
   const displayTitle = isEpisode
@@ -100,16 +111,48 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
   const supportingTitle = isEpisode ? target?.media.episodeTitle : null;
   const needsEpisode = target?.media.mediaType === 'tv' && !isEpisode;
   const destination: MobileDownloadJobV1['destination'] = 'orion-library';
-  const destinationTitle = 'Orion Library';
   const storageTarget = preferences.libraryStorageTarget;
-  const storageReady = storageTarget?.mode === 'user-folder' && Boolean(storageTarget.targetId) &&
-    storageTarget.targetId === validatedStorageTargetId && storageTarget.writable && storageTarget.persistedPermission;
+  const storageReady = storageTarget?.mode === 'user-folder' && Boolean(storageTarget.targetId)
+    && storageTarget.targetId === validatedStorageTargetId && storageTarget.writable && storageTarget.persistedPermission;
   const storageChecking = Boolean(storageTarget?.targetId) && !storageReady;
-  const destinationDetail = storageReady
-    ? `Storage folder: ${storageTarget.displayName}. The completed MP4 remains visible there.`
-    : storageChecking
-      ? 'Checking access to your Orion Library storage folder…'
-      : 'Choose a writable Android folder before starting your first Orion Library download.';
+  const alternateSources = target ? getMobileDownloadSourceChoices(target.media.mediaType) : [];
+
+  const selectedCandidate = target
+    ? selectMobileDownloadCandidateForItemV1(
+      target.itemKey,
+      transferMethod,
+      candidateSnapshots,
+      destination,
+      selectedSourceId,
+    )
+    : null;
+  const sourceResolutionFailure = target ? getMobileDownloadSourceResolutionFailureV1(target.itemKey) : null;
+
+  useEffect(() => {
+    if (!visible) return;
+    const intent = target ? getMobileDownloadSourceResolutionIntentV1(target.itemKey) : null;
+    const method = intent?.method ?? 'auto';
+    const sourceId = intent?.sourceId ?? null;
+    setTransferMethod(method);
+    setSelectedSourceId(sourceId);
+    setStartError(null);
+    setStarting(false);
+
+    if (!target) {
+      setStep('options');
+      return;
+    }
+
+    const ready = selectMobileDownloadCandidateForItemV1(
+      target.itemKey,
+      method,
+      getMobileDownloadCandidateSnapshotsV1(),
+      destination,
+      sourceId,
+    );
+    setStep(intent?.autoReturnIssued && ready ? 'ready' : 'options');
+  }, [visible, target?.itemKey]);
+
   useEffect(() => {
     const targetId = storageTarget?.targetId;
     if (!targetId) {
@@ -127,56 +170,75 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
       }
       setValidatedStorageTargetId(validated.targetId);
       if (
-        validated.displayName !== storageTarget?.displayName ||
-        validated.writable !== storageTarget?.writable ||
-        validated.persistedPermission !== storageTarget?.persistedPermission
+        validated.displayName !== storageTarget?.displayName
+        || validated.writable !== storageTarget?.writable
+        || validated.persistedPermission !== storageTarget?.persistedPermission
       ) {
         setPreferences(setMobileDownloadLibraryStorageTargetV1(validated));
       }
     });
     return () => { active = false; };
   }, [storageTarget?.displayName, storageTarget?.persistedPermission, storageTarget?.targetId, storageTarget?.writable, visible]);
+
   const duplicateJob = target ? repositoryJobs.find((job) => (
     job.destination === destination
     && DUPLICATE_BLOCKING_STATES.has(job.state)
     && mobileDownloadItemKeyFromMediaV1(job.media) === target.itemKey
     && (job.state !== 'completed' || repositoryAssets.find((asset) => asset.jobId === job.jobId)?.availability !== 'missing')
   )) : null;
-  const selectedCandidate = target
-    ? selectMobileDownloadCandidateForItemV1(target.itemKey, transferMethod, candidateSnapshots, destination)
-    : null;
-  const latestCandidate = target ? candidateSnapshots.find((entry) => entry.itemKey === target.itemKey)?.candidate ?? null : null;
-  const sourceResolutionFailure = target ? getMobileDownloadSourceResolutionFailureV1(target.itemKey) : null;
-  const alternateSources = target
-    ? getMobileDownloadSourceChoices(target.media.mediaType)
-    : [];
-  const methodOptions: readonly { id: MobileDownloadTransferMethodV1; title: string; description: string }[] = [
-    { id: 'auto', title: 'Auto', description: 'Recommended. Choose the best ready HLS, DASH, or Direct media stream.' },
-    { id: 'fragments', title: 'Stream fragments', description: 'Use a ready HLS or DASH stream explicitly.' },
-  ];
+
+  const preparedSourceIds = useMemo(() => new Set(
+    candidateSnapshots
+      .filter((entry) => entry.itemKey === target?.itemKey)
+      .filter((entry) => selectMobileDownloadCandidateForItemV1(
+        entry.itemKey,
+        transferMethod,
+        candidateSnapshots,
+        destination,
+        entry.candidate.sourceId,
+      ))
+      .map((entry) => entry.candidate.sourceId),
+  ), [candidateSnapshots, destination, target?.itemKey, transferMethod]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!visible || !target || !selectedCandidate || preferences.subtitlePreference === 'none') {
+    if (!visible || !target || !selectedCandidate || subtitleChoice === 'none') {
       setSubtitles(EMPTY_SUBTITLES);
       setSelectedSubtitleIds([]);
       return () => { cancelled = true; };
     }
+
     setSubtitles({ state: 'checking', tracks: [], providers: [], providerOutcomes: EMPTY_PROVIDER_OUTCOMES });
     setSelectedSubtitleIds([]);
     discoverMobileDownloadSubtitlesV1(target).then((result) => {
       if (cancelled) return;
       setSubtitles(result);
-      setSelectedSubtitleIds(getPreferredMobileDownloadSubtitleIdsV1(result));
+      const eligible = tracksForSubtitleChoice(result, subtitleChoice);
+      if (!eligible.length) {
+        setSelectedSubtitleIds([]);
+        return;
+      }
+      const scoped: MobileDownloadSubtitleDiscoveryV1 = { ...result, tracks: eligible };
+      setSelectedSubtitleIds(getPreferredMobileDownloadSubtitleIdsV1(scoped));
     }).catch(() => {
       if (cancelled) return;
       setSubtitles({ state: 'provider-failure', tracks: [], providers: [], providerOutcomes: EMPTY_PROVIDER_OUTCOMES });
       setSelectedSubtitleIds([]);
     });
     return () => { cancelled = true; };
-  }, [preferences.subtitlePreference, selectedCandidate?.candidate.candidateId, target?.itemKey, visible]);
+  }, [selectedCandidate?.candidate.candidateId, subtitleChoice, target?.itemKey, visible]);
 
-  const subtitleCheckPending = Boolean(selectedCandidate) && preferences.subtitlePreference === 'preferred' && (subtitles.state === 'idle' || subtitles.state === 'checking');
+  useEffect(() => {
+    if (step === 'prepare' && selectedCandidate) setStep('ready');
+  }, [selectedCandidate?.candidate.candidateId, step]);
+
+  const eligibleSubtitleTracks = useMemo(
+    () => tracksForSubtitleChoice(subtitles, subtitleChoice),
+    [subtitleChoice, subtitles],
+  );
+  const subtitleCheckPending = Boolean(selectedCandidate)
+    && subtitleChoice !== 'none'
+    && (subtitles.state === 'idle' || subtitles.state === 'checking');
 
   const toggleSubtitleSelection = (id: string) => {
     setSelectedSubtitleIds((current) => {
@@ -186,91 +248,22 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     });
   };
 
-  const sourceStatus = useMemo(() => {
-    if (sourceResolutionFailure && !selectedCandidate) {
-      return { tone: 'danger' as const, icon: 'alert-circle-outline' as const, title: 'No download-ready source found', detail: sourceResolutionFailure };
-    }
-    if (selectedCandidate) {
-      const kind = selectedCandidate.candidate.preflight.resolvedManifestKind.toUpperCase();
-      return {
-        tone: 'success' as const,
-        icon: 'checkmark-circle' as const,
-        title: 'Ready to download',
-        detail: `${kind} stream ready · ${sourceLabel(selectedCandidate.candidate.sourceId)} · ${preferences.preferredQuality === 'best' ? 'Best available' : preferences.preferredQuality}`,
-      };
-    }
-    if (!latestCandidate) {
-      return { tone: 'neutral' as const, icon: 'play-circle-outline' as const, title: 'Download source required', detail: 'Prepare the download source. Orion will return here automatically as soon as a ready HLS, DASH, or Direct media stream is resolved.' };
-    }
-    const state = latestCandidate.preflight.state;
-    const kind = latestCandidate.preflight.resolvedManifestKind;
-    if (state === 'checking') return { tone: 'warning' as const, icon: 'sync-outline' as const, title: 'Resolving stream…', detail: `Checking ${sourceLabel(latestCandidate.sourceId)} for a downloadable media stream.` };
-    if (state === 'expired' || state === 'action-required') return { tone: 'warning' as const, icon: 'refresh-circle-outline' as const, title: 'Source needs refresh', detail: latestCandidate.preflight.reason || 'Prepare this source again to refresh its downloadable stream.' };
-    if (state === 'protected' || state === 'unreachable' || state === 'unsupported') return { tone: 'danger' as const, icon: 'alert-circle-outline' as const, title: 'This source is not download-ready', detail: latestCandidate.preflight.reason || 'Try another playback source.' };
-    return { tone: 'neutral' as const, icon: 'play-circle-outline' as const, title: 'Download source required', detail: 'Prepare a source that exposes a ready HLS, DASH, or Direct media stream.' };
-  }, [destination, latestCandidate, preferences.preferredQuality, selectedCandidate, sourceResolutionFailure]);
+  const selectedSourceLabel = selectedSourceId
+    ? sourceLabel(selectedSourceId)
+    : selectedCandidate
+      ? sourceLabel(selectedCandidate.candidate.sourceId)
+      : 'Auto';
 
-  const statusColor = sourceStatus.tone === 'success' ? theme.success : sourceStatus.tone === 'warning' ? theme.warning : sourceStatus.tone === 'danger' ? theme.danger : theme.textMuted;
-
-  const subtitleStatus = useMemo(() => {
-    if (preferences.subtitlePreference === 'none') return { icon: 'remove-circle-outline' as const, color: theme.textMuted, title: 'Subtitles off', detail: 'No automatic subtitle will be attached to this download.' };
-    if (!selectedCandidate) return { icon: 'chatbox-ellipses-outline' as const, color: theme.textMuted, title: 'Subtitles', detail: 'SubDL and Wyzie are checked after the stream is ready.' };
-    if (subtitles.state === 'checking') return { icon: 'sync-outline' as const, color: theme.warning, title: 'Checking subtitles…', detail: 'Searching SubDL and Wyzie for an English match.' };
-    if (subtitles.state === 'ready') {
-      const providers = subtitles.providers.join(' + ');
-      const providerDetail = providerOutcomeSummary(subtitles);
-      if (selectedSubtitleIds.length === 0) {
-        return { icon: 'remove-circle-outline' as const, color: theme.textMuted, title: 'Subtitles ready', detail: `None selected · ${subtitles.tracks.length} available · ${providers} · ${providerDetail}` };
-      }
-      const selected = subtitles.tracks.filter((track) => selectedSubtitleIds.includes(track.id));
-      const selectionLabel = selected.length === 1 ? selected[0]?.languageLabel || '1 selected' : `${selected.length} selected`;
-      return { icon: 'checkmark-circle' as const, color: theme.success, title: 'Subtitles ready', detail: `${selectionLabel} · ${subtitles.tracks.length} available · ${providers} · ${providerDetail}` };
-    }
-    if (subtitles.state === 'provider-key-required') return { icon: 'key-outline' as const, color: theme.warning, title: 'Subtitle keys not configured', detail: 'Add your SubDL or Wyzie key in Downloads Settings. Video can still download without subtitles.' };
-    if (subtitles.state === 'provider-key-invalid') return { icon: 'key-outline' as const, color: theme.warning, title: 'Subtitle key needs attention', detail: 'A configured provider rejected its key. Update it in Downloads Settings.' };
-    if (subtitles.state === 'provider-limited') return { icon: 'speedometer-outline' as const, color: theme.warning, title: 'Subtitle quota or rate limit', detail: providerOutcomeSummary(subtitles) };
-    if (subtitles.state === 'offline') return { icon: 'cloud-offline-outline' as const, color: theme.warning, title: 'Subtitle check offline', detail: 'Video can still download. Orion could not reach SubDL or Wyzie right now.' };
-    if (subtitles.state === 'provider-failure') return { icon: 'alert-circle-outline' as const, color: theme.warning, title: 'Subtitle providers unavailable', detail: 'Video can still download without subtitles.' };
-    return { icon: 'checkmark-circle-outline' as const, color: theme.textMuted, title: 'No matching subtitles found', detail: `Video is still ready without subtitles. ${providerOutcomeSummary(subtitles)}` };
-  }, [preferences.subtitlePreference, selectedCandidate, selectedSubtitleIds, subtitles, theme.success, theme.textMuted, theme.warning]);
-
-
-  const handleResolveSource = () => {
-    if (!target || needsEpisode || starting) return;
-    setStartError(null);
-    onResolveSource(target, transferMethod);
-  };
-
-  const resolveWithSource = (sourceId: string) => {
-    if (!target || needsEpisode || starting || !storageReady) return;
-    const warning = getMobileSourceSafetyNotice(sourceId);
-    if (warning) {
-      setWarningSourceId(sourceId);
-      return;
-    }
-    onResolveSource(target, transferMethod, sourceId);
-  };
-
-  const handleStart = async () => {
-    if (!target || !selectedCandidate || needsEpisode || starting || duplicateJob || !storageReady) return;
-    setStarting(true);
-    setStartError(null);
-    try {
-      await startMobileDownloadFromSelectionV1({ target, selection: selectedCandidate, preferences, selectedSubtitleAssetIds: selectedSubtitleIds });
-      completeMobileDownloadSourceResolutionV1(target.itemKey);
-      onClose();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Orion could not start this download.';
-      setStartError(message);
-      const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: unknown }).code || '') : '';
-      if (code.includes('SOURCE') || code.includes('CONTEXT')) {
-        cancelMobileDownloadSourceResolutionV1(target.itemKey);
-        setCandidateSnapshots(getMobileDownloadCandidateSnapshotsV1());
-      }
-    } finally {
-      setStarting(false);
-    }
-  };
+  const subtitleSummary = useMemo(() => {
+    if (subtitleChoice === 'none') return 'None';
+    if (subtitles.state === 'checking') return 'Checking…';
+    const selected = eligibleSubtitleTracks.filter((track) => selectedSubtitleIds.includes(track.id));
+    if (selected.length === 1) return `${selected[0]?.languageLabel || 'Subtitle'} · ${selected[0]?.providerLabel || ''}`.trim();
+    if (selected.length > 1) return `${selected.length} selected`;
+    if (subtitleChoice === 'subdl') return subtitles.state === 'ready' ? 'SubDL · No match' : 'SubDL';
+    if (subtitleChoice === 'wyzie') return subtitles.state === 'ready' ? 'Wyzie · No match' : 'Wyzie';
+    return subtitles.state === 'ready' ? 'No match' : 'Automatic';
+  }, [eligibleSubtitleTracks, selectedSubtitleIds, subtitleChoice, subtitles.state]);
 
   const handleChooseStorage = async () => {
     if (choosingStorage) return;
@@ -291,241 +284,437 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     }
   };
 
-  return (
+  const handleOptionsContinue = () => {
+    if (!target || needsEpisode || !storageReady || duplicateJob || !capability.available) return;
+    setStartError(null);
+    if (selectedCandidate) {
+      setStep('ready');
+      return;
+    }
+    setStep('prepare');
+  };
+
+  const handlePrepare = () => {
+    if (!target || needsEpisode || starting || !storageReady) return;
+    setStartError(null);
+    if (selectedCandidate) {
+      setStep('ready');
+      return;
+    }
+    const warning = selectedSourceId ? getMobileSourceSafetyNotice(selectedSourceId) : null;
+    if (warning && selectedSourceId) {
+      setWarningSourceId(selectedSourceId);
+      return;
+    }
+    onResolveSource(target, transferMethod, selectedSourceId || undefined);
+  };
+
+  const handleStart = async () => {
+    if (!target || !selectedCandidate || needsEpisode || starting || duplicateJob || !storageReady) return;
+    setStarting(true);
+    setStartError(null);
+    try {
+      await startMobileDownloadFromSelectionV1({
+        target,
+        selection: selectedCandidate,
+        preferences,
+        selectedSubtitleAssetIds: selectedSubtitleIds,
+      });
+      completeMobileDownloadSourceResolutionV1(target.itemKey);
+      onClose();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Orion could not start this download.';
+      setStartError(message);
+      const code = typeof error === 'object' && error && 'code' in error
+        ? String((error as { code?: unknown }).code || '')
+        : '';
+      if (code.includes('SOURCE') || code.includes('CONTEXT')) {
+        cancelMobileDownloadSourceResolutionV1(target.itemKey);
+        setCandidateSnapshots(getMobileDownloadCandidateSnapshotsV1());
+        setStep('prepare');
+      }
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const chooseSource = (sourceId: string | null) => {
+    setSelectedSourceId(sourceId);
+    setStartError(null);
+  };
+
+  const renderStepRail = () => (
+    <View style={styles.stepRail} accessibilityLabel={`Download step ${step}`}>
+      {STEP_ORDER.map((entry, index) => {
+        const active = entry === step;
+        const complete = STEP_ORDER.indexOf(step) > index;
+        return (
+          <React.Fragment key={entry}>
+            {index > 0 ? <View style={[styles.stepLine, { backgroundColor: complete || active ? theme.accent : theme.border }]} /> : null}
+            <View style={styles.stepItem}>
+              <View style={[styles.stepDot, {
+                backgroundColor: active || complete ? theme.accent : theme.surface,
+                borderColor: active || complete ? theme.accent : theme.border,
+              }]}>
+                {complete
+                  ? <Ionicons name="checkmark" size={11} color={theme.onAccent} />
+                  : <Text style={[styles.stepNumber, { color: active ? theme.onAccent : theme.textMuted }]}>{index + 1}</Text>}
+              </View>
+              <Text style={[styles.stepLabel, { color: active ? theme.text : theme.textMuted }]}>
+                {entry.toUpperCase()}
+              </Text>
+            </View>
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+
+  const renderOptions = () => (
     <>
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close download options" style={styles.backdrop} onPress={onClose} />
-        <View style={[styles.card, isTablet && styles.cardTablet, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
-          <View style={styles.header}>
-            <View style={styles.headerCopy}>
-              <Text style={[styles.eyebrow, { color: theme.textMuted }]}>DOWNLOAD</Text>
-              <Text accessibilityRole="header" style={[styles.cardTitle, { color: theme.text }]} numberOfLines={2}>{displayTitle}</Text>
-              {supportingTitle ? <Text style={[styles.mediaTitle, { color: theme.textSecondary }]} numberOfLines={2}>{supportingTitle}</Text> : null}
-            </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close download options" style={({ pressed }) => [styles.closeBtn, { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: theme.border }]} onPress={onClose}>
-              <Ionicons name="close" size={20} color={theme.text} />
-            </Pressable>
+      {needsEpisode ? (
+        <StatusCard
+          icon="list-outline"
+          color={theme.accent}
+          title="Choose an episode"
+          detail="Open an episode below this title to download it for offline playback."
+          theme={theme}
+        />
+      ) : null}
+
+      {!storageReady ? (
+        <View style={[styles.optionCard, { backgroundColor: theme.surface, borderColor: storageChecking ? theme.border : theme.warning }]}>
+          <Ionicons name="folder-open-outline" size={21} color={theme.accent} />
+          <View style={styles.optionCopy}>
+            <Text style={[styles.optionTitle, { color: theme.text }]}>Orion Library storage</Text>
+            <Text style={[styles.description, { color: theme.textSecondary }]}>
+              {storageChecking ? 'Checking your selected folder…' : 'Choose a writable folder once. Orion will keep using it for your Library.'}
+            </Text>
           </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Choose Orion Library storage folder"
+            disabled={choosingStorage}
+            onPress={() => void handleChooseStorage()}
+            hitSlop={6}
+          >
+            <Text style={[styles.inlineAction, { color: theme.accent }]}>
+              {choosingStorage ? 'Choosing…' : 'Choose'}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
 
-          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            {needsEpisode ? <StatusCard icon="list-outline" color={theme.accent} title="Choose an episode" detail="Open an episode below this title to download it for offline playback." theme={theme} /> : null}
+      <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Provider</Text>
+      <View style={styles.choiceGrid}>
+        <ChoicePill
+          label="Auto"
+          icon="sparkles-outline"
+          selected={selectedSourceId === null}
+          ready={selectedSourceId === null && Boolean(selectedCandidate)}
+          onPress={() => chooseSource(null)}
+          theme={theme}
+        />
+        {alternateSources.map((source) => (
+          <ChoicePill
+            key={source.id}
+            label={source.label}
+            icon="play-circle-outline"
+            selected={selectedSourceId === source.id}
+            ready={preparedSourceIds.has(source.id)}
+            note={getMobileSourceSafetyNotice(source.id)?.shortLabel || undefined}
+            onPress={() => chooseSource(source.id)}
+            theme={theme}
+          />
+        ))}
+      </View>
 
-            <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Save to</Text>
-            <View style={[styles.optionCard, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
-              <Ionicons name="albums-outline" size={21} color={theme.accent} />
-              <View style={styles.optionCopy}>
-                <Text style={[styles.optionTitle, { color: theme.text }]}>{destinationTitle}</Text>
-                <Text style={[styles.description, { color: theme.textSecondary }]}>{destinationDetail}</Text>
-              </View>
-              <Ionicons name="checkmark-circle" size={20} color={theme.accent} />
-            </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Choose Orion Library storage folder" disabled={choosingStorage} onPress={() => void handleChooseStorage()} style={({ pressed }) => [styles.storageButton, { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: storageReady ? theme.border : theme.warning }]}>
-              <Ionicons name="folder-open-outline" size={18} color={theme.accent} />
-              <Text style={[styles.storageButtonText, { color: theme.text }]}>{choosingStorage ? 'Choosing folder…' : storageReady ? 'Change storage folder' : storageChecking ? 'Choose another folder' : 'Choose storage folder'}</Text>
-            </Pressable>
+      <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Subtitles</Text>
+      <View style={styles.choiceGrid}>
+        <ChoicePill label="Automatic" icon="chatbox-ellipses-outline" selected={subtitleChoice === 'auto'} onPress={() => setSubtitleChoice('auto')} theme={theme} />
+        <ChoicePill label="SubDL" icon="language-outline" selected={subtitleChoice === 'subdl'} onPress={() => setSubtitleChoice('subdl')} theme={theme} />
+        <ChoicePill label="Wyzie" icon="language-outline" selected={subtitleChoice === 'wyzie'} onPress={() => setSubtitleChoice('wyzie')} theme={theme} />
+        <ChoicePill label="None" icon="remove-circle-outline" selected={subtitleChoice === 'none'} onPress={() => setSubtitleChoice('none')} theme={theme} />
+      </View>
 
-            <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Download method</Text>
-            <View style={styles.optionGrid}>
-              {methodOptions.map((option) => {
-                const selected = transferMethod === option.id;
-                return (
-                  <Pressable key={option.id} accessibilityRole="radio" accessibilityLabel={`Download method ${option.title}`} accessibilityState={{ checked: selected }} onPress={() => setTransferMethod(option.id)} style={({ pressed }) => [styles.optionCard, { backgroundColor: selected ? theme.accentSoft : pressed ? theme.surfaceHover : theme.surface, borderColor: selected ? theme.accent : theme.border }]}>
-                    <Ionicons name={option.id === 'auto' ? 'sparkles-outline' : 'layers-outline'} size={21} color={selected ? theme.accent : theme.textSecondary} />
-                    <View style={styles.optionCopy}>
-                      <Text style={[styles.optionTitle, { color: theme.text }]}>{option.title}{option.id === 'auto' ? ' · Recommended' : ''}</Text>
-                      <Text style={[styles.description, { color: theme.textSecondary }]}>{option.description}</Text>
-                    </View>
-                    <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={20} color={selected ? theme.accent : theme.textMuted} />
-                  </Pressable>
-                );
-              })}
-            </View>
+      {duplicateJob ? (
+        <StatusCard
+          icon="copy-outline"
+          color={theme.warning}
+          title={duplicateJob.state === 'completed' ? 'Already downloaded' : 'Download already active'}
+          detail={duplicateJob.state === 'completed'
+            ? 'This title already has a verified Orion Library copy.'
+            : 'Wait for, cancel, or resolve the existing download before starting another copy.'}
+          theme={theme}
+        />
+      ) : null}
+    </>
+  );
 
-            <StatusCard icon={sourceStatus.icon} color={statusColor} title={sourceStatus.title} detail={sourceStatus.detail} theme={theme} />
-            {!needsEpisode ? (
-              <View style={styles.optionGrid}>
-                <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Download source</Text>
-                {alternateSources.map((source) => {
-                  const sourceReady = selectedCandidate?.candidate.sourceId === source.id;
-                  return (
-                    <Pressable
-                      key={source.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={sourceReady ? `${source.label}, ready download source` : `Prepare download with ${source.label}`}
-                      accessibilityState={{ selected: sourceReady, disabled: !storageReady || sourceReady }}
-                      disabled={!storageReady || sourceReady}
-                      onPress={() => resolveWithSource(source.id)}
-                      style={({ pressed }) => [styles.optionCard, {
-                        backgroundColor: sourceReady ? theme.accentSoft : pressed ? theme.surfaceHover : theme.surface,
-                        borderColor: sourceReady ? theme.accent : theme.border,
-                        opacity: storageReady ? 1 : 0.5,
-                      }]}
-                    >
-                      <Ionicons name={sourceReady ? 'checkmark-circle' : 'play-circle-outline'} size={21} color={sourceReady ? theme.success : theme.accent} />
-                      <View style={styles.optionCopy}>
-                        <Text style={[styles.optionTitle, { color: theme.text }]}>{source.label}{sourceReady ? ' · Ready' : ''}</Text>
-                        <Text style={[styles.description, { color: theme.textSecondary }]}>{sourceReady ? 'Selected for this download' : getMobileSourceSafetyNotice(source.id)?.shortLabel || 'Prepare this source for a downloadable stream'}</Text>
-                      </View>
-                      {!sourceReady ? <Ionicons name="chevron-forward" size={18} color={theme.textMuted} /> : null}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ) : null}
-            {duplicateJob ? <StatusCard icon="copy-outline" color={theme.warning} title={duplicateJob.state === 'completed' ? 'Already downloaded here' : 'Download already active'} detail={duplicateJob.state === 'completed' ? `This title already has a verified ${destinationTitle} copy.` : `Wait for, cancel, or resolve the existing ${destinationTitle} download before starting another copy.`} theme={theme} /> : null}
-            <StatusCard icon={subtitleStatus.icon} color={subtitleStatus.color} title={subtitleStatus.title} detail={subtitleStatus.detail} theme={theme} />
-            {preferences.subtitlePreference === 'preferred' && selectedCandidate && subtitles.state === 'ready' ? (
-              <View style={styles.subtitleSection}>
-                <View style={styles.subtitleSectionHeader}>
-                  <View style={styles.subtitleSectionCopy}>
-                    <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Choose subtitles</Text>
-                    <Text style={[styles.subtitleHint, { color: theme.textSecondary }]}>Select up to 2 · {selectedSubtitleIds.length} selected</Text>
-                  </View>
-                  {selectedSubtitleIds.length > 0 ? (
-                    <Pressable accessibilityRole="button" accessibilityLabel="Clear subtitle selection" onPress={() => setSelectedSubtitleIds([])} hitSlop={8}>
-                      <Text style={[styles.subtitleClear, { color: theme.accent }]}>Clear</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-
-                <View style={styles.subtitleOptionGrid}>
-                  <Pressable
-                    accessibilityRole="checkbox"
-                    accessibilityLabel="No subtitles for this download"
-                    accessibilityState={{ checked: selectedSubtitleIds.length === 0 }}
-                    onPress={() => setSelectedSubtitleIds([])}
-                    style={({ pressed }) => [styles.subtitleOption, { backgroundColor: selectedSubtitleIds.length === 0 ? theme.accentSoft : pressed ? theme.surfaceHover : theme.surface, borderColor: selectedSubtitleIds.length === 0 ? theme.accent : theme.border }]}
-                  >
-                    <Ionicons name={selectedSubtitleIds.length === 0 ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={selectedSubtitleIds.length === 0 ? theme.accent : theme.textMuted} />
-                    <View style={styles.subtitleOptionCopy}>
-                      <Text style={[styles.subtitleOptionTitle, { color: theme.text }]}>No subtitles for this download</Text>
-                      <Text style={[styles.subtitleOptionMeta, { color: theme.textSecondary }]}>Save only the video and audio for this item.</Text>
-                    </View>
-                  </Pressable>
-
-                  {subtitles.tracks.map((track) => {
-                    const selected = selectedSubtitleIds.includes(track.id);
-                    const disabled = !selected && selectedSubtitleIds.length >= 2;
-                    return (
-                      <Pressable
-                        key={track.id}
-                        accessibilityRole="checkbox"
-                        accessibilityLabel={`${track.languageLabel} subtitle from ${track.providerLabel}, ${track.label}`}
-                        accessibilityState={{ checked: selected, disabled }}
-                        disabled={disabled}
-                        onPress={() => toggleSubtitleSelection(track.id)}
-                        style={({ pressed }) => [styles.subtitleOption, { opacity: disabled ? 0.55 : 1, backgroundColor: selected ? theme.accentSoft : pressed ? theme.surfaceHover : theme.surface, borderColor: selected ? theme.accent : theme.border }]}
-                      >
-                        <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={selected ? theme.accent : theme.textMuted} />
-                        <View style={styles.subtitleOptionCopy}>
-                          <Text style={[styles.subtitleOptionTitle, { color: theme.text }]} numberOfLines={1}>{track.languageLabel} · {track.providerLabel} · {track.format.toUpperCase()}</Text>
-                          <Text style={[styles.subtitleOptionMeta, { color: theme.textSecondary }]} numberOfLines={2}>{track.label}</Text>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
-
-            <View style={[styles.preferenceRow, { borderColor: theme.border }]}>
-              <View style={styles.preferenceCopy}>
-                <Text style={[styles.preferenceLabel, { color: theme.textMuted }]}>QUALITY</Text>
-                <Text style={[styles.preferenceValue, { color: theme.text }]}>{preferences.preferredQuality === 'best' ? 'Best available' : preferences.preferredQuality}</Text>
-              </View>
-              <View style={styles.preferenceCopy}>
-                <Text style={[styles.preferenceLabel, { color: theme.textMuted }]}>SOURCE</Text>
-                <Text style={[styles.preferenceValue, { color: selectedCandidate ? theme.success : theme.textMuted }]} numberOfLines={1}>{selectedCandidate ? sourceLabel(selectedCandidate.candidate.sourceId) : 'Not ready'}</Text>
-              </View>
-            </View>
-
-            {startError ? <StatusCard icon="alert-circle-outline" color={theme.danger} title="Download needs attention" detail={startError} theme={theme} /> : null}
-            {!capability.available ? <StatusCard icon="time-outline" color={theme.textMuted} title="Waiting for download support" detail={capability.reason} theme={theme} /> : null}
-          </ScrollView>
-
-          <View style={[styles.footer, { borderTopColor: theme.border }]}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Cancel download options" onPress={onClose} style={({ pressed }) => [styles.secondaryButton, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.surface }]}>
-              <Text style={[styles.secondaryButtonText, { color: theme.textSecondary }]}>Cancel</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={!storageReady ? 'Choose a storage folder before downloading' : needsEpisode ? 'Choose an episode before downloading' : selectedCandidate ? 'Start download' : 'Prepare download source'} accessibilityState={{ disabled: !storageReady || needsEpisode || starting || subtitleCheckPending || Boolean(duplicateJob) || !capability.available }} disabled={!storageReady || needsEpisode || starting || subtitleCheckPending || Boolean(duplicateJob) || !capability.available} onPress={selectedCandidate ? handleStart : handleResolveSource} style={({ pressed }) => [styles.primaryButton, { backgroundColor: !storageReady || needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.accentSoft : pressed ? theme.accentSoft : theme.accent, borderColor: !storageReady || needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.border : theme.accent }]}>
-              <Text style={[styles.primaryButtonText, { color: !storageReady || needsEpisode || subtitleCheckPending || duplicateJob || !capability.available ? theme.textMuted : theme.onAccent }]}>{storageChecking ? 'Checking storage folder…' : !storageReady ? 'Choose storage folder' : needsEpisode ? 'Choose episode' : duplicateJob ? (duplicateJob.state === 'completed' ? 'Already downloaded' : 'Already active') : starting ? 'Starting…' : selectedCandidate ? 'Start download' : 'Prepare download'}</Text>
-            </Pressable>
-          </View>
+  const renderPrepare = () => (
+    <>
+      <View style={[styles.prepareHero, { backgroundColor: theme.surface, borderColor: selectedCandidate ? theme.success : sourceResolutionFailure ? theme.danger : theme.border }]}>
+        <View style={[styles.prepareIcon, { backgroundColor: selectedCandidate ? theme.success : theme.accentSoft }]}>
+          <Ionicons
+            name={selectedCandidate ? 'checkmark' : sourceResolutionFailure ? 'alert-circle-outline' : 'sparkles-outline'}
+            size={22}
+            color={selectedCandidate ? theme.onAccent : sourceResolutionFailure ? theme.danger : theme.accent}
+          />
+        </View>
+        <View style={styles.prepareCopy}>
+          <Text style={[styles.prepareTitle, { color: theme.text }]}>{selectedSourceLabel}</Text>
+          <Text style={[styles.description, { color: theme.textSecondary }]}>
+            {selectedCandidate
+              ? 'Ready ✓'
+              : sourceResolutionFailure
+                ? 'Not available'
+                : 'Orion will check this source and return here automatically when it is ready.'}
+          </Text>
         </View>
       </View>
-    </Modal>
-    <OrionDialog
-      visible={Boolean(warningSourceId)}
-      title={getMobileSourceSafetyNotice(warningSourceId || '')?.label || 'Source safety notice'}
-      message={getMobileSourceSafetyNotice(warningSourceId || '')?.selectionMessage}
-      onDismiss={() => setWarningSourceId(null)}
-      actions={[
-        { label: 'Cancel', role: 'cancel', onPress: () => setWarningSourceId(null) },
-        { label: 'Try source', role: 'primary', onPress: () => {
-          if (target && warningSourceId) onResolveSource(target, transferMethod, warningSourceId);
-          setWarningSourceId(null);
-        } },
-      ]}
-    />
+
+      {sourceResolutionFailure && !selectedCandidate ? (
+        <StatusCard
+          icon="alert-circle-outline"
+          color={theme.danger}
+          title="Not available"
+          detail={sourceResolutionFailure}
+          theme={theme}
+        />
+      ) : null}
+
+      {preparedSourceIds.size > 0 ? (
+        <Text style={[styles.quietHint, { color: theme.textMuted }]}>
+          Prepared providers stay reusable while their secure session remains valid.
+        </Text>
+      ) : null}
+    </>
+  );
+
+  const renderReady = () => (
+    <>
+      <View style={[styles.summaryCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <SummaryRow label="Provider" value={`${selectedSourceLabel}${selectedCandidate ? ' · Ready ✓' : ''}`} theme={theme} />
+        <SummaryRow label="Subtitles" value={subtitleSummary} theme={theme} />
+        <SummaryRow label="Quality" value={preferences.preferredQuality === 'best' ? 'Best available' : preferences.preferredQuality} theme={theme} />
+        <SummaryRow label="Save to" value="Orion Library" theme={theme} last />
+      </View>
+
+      {subtitleChoice !== 'none' && selectedCandidate && subtitles.state === 'checking' ? (
+        <StatusCard
+          icon="sync-outline"
+          color={theme.warning}
+          title="Checking subtitles…"
+          detail="Video is ready. Orion is checking your subtitle choice."
+          theme={theme}
+        />
+      ) : null}
+
+      {subtitleChoice !== 'none' && selectedCandidate && subtitles.state === 'ready' && eligibleSubtitleTracks.length > 0 ? (
+        <View style={styles.subtitleSection}>
+          <View style={styles.subtitleSectionHeader}>
+            <View style={styles.subtitleSectionCopy}>
+              <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Subtitle tracks</Text>
+              <Text style={[styles.subtitleHint, { color: theme.textSecondary }]}>Choose up to 2 · {selectedSubtitleIds.length} selected</Text>
+            </View>
+            {selectedSubtitleIds.length > 0 ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Clear subtitle selection" onPress={() => setSelectedSubtitleIds([])} hitSlop={8}>
+                <Text style={[styles.inlineAction, { color: theme.accent }]}>Clear</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <View style={styles.subtitleOptionGrid}>
+            {eligibleSubtitleTracks.map((track) => {
+              const selected = selectedSubtitleIds.includes(track.id);
+              const disabled = !selected && selectedSubtitleIds.length >= 2;
+              return (
+                <Pressable
+                  key={track.id}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={`${track.languageLabel} subtitle from ${track.providerLabel}`}
+                  accessibilityState={{ checked: selected, disabled }}
+                  disabled={disabled}
+                  onPress={() => toggleSubtitleSelection(track.id)}
+                  style={({ pressed }) => [styles.subtitleOption, {
+                    opacity: disabled ? 0.55 : 1,
+                    backgroundColor: selected ? theme.accentSoft : pressed ? theme.surfaceHover : theme.surface,
+                    borderColor: selected ? theme.accent : theme.border,
+                  }]}
+                >
+                  <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={19} color={selected ? theme.accent : theme.textMuted} />
+                  <View style={styles.subtitleOptionCopy}>
+                    <Text style={[styles.subtitleOptionTitle, { color: theme.text }]} numberOfLines={1}>
+                      {track.languageLabel} · {track.providerLabel}
+                    </Text>
+                    <Text style={[styles.subtitleOptionMeta, { color: theme.textSecondary }]} numberOfLines={1}>
+                      {track.label}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+
+      {subtitleChoice !== 'none' && selectedCandidate && !subtitleCheckPending
+        && subtitles.state !== 'ready' && subtitles.state !== 'idle' ? (
+        <StatusCard
+          icon="information-circle-outline"
+          color={theme.warning}
+          title="Subtitles unavailable"
+          detail="The video is still ready. You can download it without subtitles or go Back and choose another subtitle option."
+          theme={theme}
+        />
+      ) : null}
+
+      {duplicateJob ? (
+        <StatusCard
+          icon="copy-outline"
+          color={theme.warning}
+          title={duplicateJob.state === 'completed' ? 'Already downloaded' : 'Download already active'}
+          detail={duplicateJob.state === 'completed'
+            ? 'This title already has a verified Orion Library copy.'
+            : 'Wait for, cancel, or resolve the existing download before starting another copy.'}
+          theme={theme}
+        />
+      ) : null}
+    </>
+  );
+
+  const primaryDisabled = !storageReady || needsEpisode || Boolean(duplicateJob) || !capability.available
+    || starting || (step === 'ready' && (subtitleCheckPending || !selectedCandidate));
+
+  const primaryLabel = step === 'options'
+    ? storageChecking ? 'Checking storage…' : !storageReady ? 'Choose storage folder' : 'Continue'
+    : step === 'prepare'
+      ? selectedCandidate ? 'Ready' : 'Prepare'
+      : starting ? 'Starting…' : duplicateJob ? 'Already active' : 'Start Download';
+
+  const primaryAction = step === 'options'
+    ? handleOptionsContinue
+    : step === 'prepare'
+      ? handlePrepare
+      : handleStart;
+
+  const secondaryLabel = step === 'options' ? 'Cancel' : 'Back';
+  const secondaryAction = step === 'options' ? onClose : () => {
+    setStartError(null);
+    setStep('options');
+  };
+
+  return (
+    <>
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+        <View style={styles.overlay}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close download options"
+            style={styles.backdrop}
+            onPress={onClose}
+          />
+          <View style={[styles.card, isTablet && styles.cardTablet, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
+            <View style={styles.header}>
+              <View style={styles.headerCopy}>
+                <Text style={[styles.eyebrow, { color: theme.textMuted }]}>DOWNLOAD</Text>
+                <Text accessibilityRole="header" style={[styles.cardTitle, { color: theme.text }]} numberOfLines={2}>
+                  {displayTitle}
+                </Text>
+                {supportingTitle ? (
+                  <Text style={[styles.mediaTitle, { color: theme.textSecondary }]} numberOfLines={2}>
+                    {supportingTitle}
+                  </Text>
+                ) : null}
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close download options"
+                style={({ pressed }) => [styles.closeBtn, {
+                  backgroundColor: pressed ? theme.surfaceHover : theme.surface,
+                  borderColor: theme.border,
+                }]}
+                onPress={onClose}
+              >
+                <Ionicons name="close" size={20} color={theme.text} />
+              </Pressable>
+            </View>
+
+            <View style={styles.railWrap}>{renderStepRail()}</View>
+
+            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+              {step === 'options' ? renderOptions() : step === 'prepare' ? renderPrepare() : renderReady()}
+
+              {startError ? (
+                <StatusCard
+                  icon="alert-circle-outline"
+                  color={theme.danger}
+                  title="Download needs attention"
+                  detail={startError}
+                  theme={theme}
+                />
+              ) : null}
+              {!capability.available ? (
+                <StatusCard
+                  icon="time-outline"
+                  color={theme.textMuted}
+                  title="Waiting for download support"
+                  detail={capability.reason}
+                  theme={theme}
+                />
+              ) : null}
+            </ScrollView>
+
+            <View style={[styles.footer, { borderTopColor: theme.border }]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={secondaryLabel}
+                onPress={secondaryAction}
+                style={({ pressed }) => [styles.secondaryButton, {
+                  borderColor: theme.border,
+                  backgroundColor: pressed ? theme.surfaceHover : theme.surface,
+                }]}
+              >
+                <Text style={[styles.secondaryButtonText, { color: theme.textSecondary }]}>{secondaryLabel}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={primaryLabel}
+                accessibilityState={{ disabled: primaryDisabled }}
+                disabled={primaryDisabled}
+                onPress={() => void primaryAction()}
+                style={({ pressed }) => [styles.primaryButton, {
+                  backgroundColor: primaryDisabled ? theme.accentSoft : pressed ? theme.accentSoft : theme.accent,
+                  borderColor: primaryDisabled ? theme.border : theme.accent,
+                }]}
+              >
+                <Text style={[styles.primaryButtonText, {
+                  color: primaryDisabled ? theme.textMuted : theme.onAccent,
+                }]}>
+                  {primaryLabel}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <OrionDialog
+        visible={Boolean(warningSourceId)}
+        title={getMobileSourceSafetyNotice(warningSourceId || '')?.label || 'Source safety notice'}
+        message={getMobileSourceSafetyNotice(warningSourceId || '')?.selectionMessage}
+        onDismiss={() => setWarningSourceId(null)}
+        actions={[
+          { label: 'Cancel', role: 'cancel', onPress: () => setWarningSourceId(null) },
+          {
+            label: 'Try source',
+            role: 'primary',
+            onPress: () => {
+              if (target && warningSourceId) onResolveSource(target, transferMethod, warningSourceId);
+              setWarningSourceId(null);
+            },
+          },
+        ]}
+      />
     </>
   );
 }
-
-function StatusCard({ icon, color, title, detail, theme }: { icon: React.ComponentProps<typeof Ionicons>['name']; color: string; title: string; detail: string; theme: ReturnType<typeof useOrionTheme>['theme'] }) {
-  return (
-    <View style={[styles.notice, { backgroundColor: theme.surfaceHover, borderColor: color }]}>
-      <Ionicons name={icon} size={20} color={color} />
-      <View style={styles.noticeCopy}>
-        <Text style={[styles.noticeTitle, { color }]}>{title}</Text>
-        <Text style={[styles.description, { color: theme.textSecondary }]}>{detail}</Text>
-      </View>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing[4], paddingVertical: spacing[6] },
-  backdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0, 0, 0, 0.78)' },
-  card: { width: '100%', maxWidth: 460, maxHeight: '88%', borderRadius: radii['2xl'], borderWidth: 1, overflow: 'hidden' },
-  cardTablet: { maxWidth: 560 },
-  header: { padding: spacing[5], paddingBottom: spacing[3], flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
-  headerCopy: { flex: 1, minWidth: 0 },
-  eyebrow: { fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
-  cardTitle: { fontSize: 21, lineHeight: 26, fontWeight: '900', marginTop: 3 },
-  mediaTitle: { fontSize: fontSizes.sm, lineHeight: 19, marginTop: 3, fontWeight: '700' },
-  closeBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  scrollContent: { paddingHorizontal: spacing[5], paddingBottom: spacing[4], gap: spacing[3] },
-  groupTitle: { fontSize: fontSizes.sm, fontWeight: '900', marginTop: spacing[1] },
-  optionGrid: { gap: spacing[2] },
-  optionCard: { minHeight: 76, borderWidth: 1, borderRadius: radii.xl, padding: spacing[3], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  storageButton: { minHeight: 46, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2] },
-  storageButtonText: { fontSize: fontSizes.xs, fontWeight: '900' },
-  optionCopy: { flex: 1, minWidth: 0 },
-  optionTitle: { fontSize: fontSizes.sm, fontWeight: '900' },
-  description: { fontSize: fontSizes.xs, lineHeight: 17, marginTop: 3 },
-  compactNotice: { minHeight: 48, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: spacing[3], paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  compactNoticeText: { flex: 1, fontSize: fontSizes.xs, lineHeight: 17 },
-  subtitleSection: { gap: spacing[2] },
-  subtitleSectionHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing[3] },
-  subtitleSectionCopy: { flex: 1, minWidth: 0 },
-  subtitleHint: { fontSize: fontSizes.xs, lineHeight: 17, marginTop: 2 },
-  subtitleClear: { fontSize: fontSizes.xs, fontWeight: '900', paddingVertical: 4 },
-  subtitleOptionGrid: { gap: spacing[2] },
-  subtitleOption: { minHeight: 64, borderWidth: 1, borderRadius: radii.lg, paddingHorizontal: spacing[3], paddingVertical: spacing[2], flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
-  subtitleOptionCopy: { flex: 1, minWidth: 0 },
-  subtitleOptionTitle: { fontSize: fontSizes.sm, fontWeight: '800' },
-  subtitleOptionMeta: { fontSize: fontSizes.xs, lineHeight: 17, marginTop: 2 },
-  preferenceRow: { borderWidth: 1, borderRadius: radii.xl, padding: spacing[3], flexDirection: 'row', gap: spacing[4] },
-  preferenceCopy: { flex: 1, minWidth: 0 },
-  preferenceLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 0.9 },
-  preferenceValue: { fontSize: fontSizes.sm, fontWeight: '800', marginTop: 4 },
-  notice: { borderWidth: 1, borderRadius: radii.xl, padding: spacing[3], flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
-  noticeCopy: { flex: 1, minWidth: 0 },
-  noticeTitle: { fontSize: fontSizes.sm, fontWeight: '900' },
-  footer: { borderTopWidth: 1, padding: spacing[4], flexDirection: 'row', gap: spacing[3] },
-  secondaryButton: { flex: 1, minHeight: 48, borderRadius: radii.xl, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  secondaryButtonText: { fontSize: fontSizes.sm, fontWeight: '800' },
-  primaryButton: { flex: 1.25, minHeight: 48, borderRadius: radii.xl, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  primaryButtonText: { fontSize: fontSizes.sm, fontWeight: '900' },
-});

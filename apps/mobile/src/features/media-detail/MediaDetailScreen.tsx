@@ -145,7 +145,7 @@ export default function MediaDetailScreen() {
   }, [downloadTarget]);
   const resolveDownloadSource = useCallback((target: MobileDownloadTargetV1, method: MobileDownloadTransferMethodV1, sourceId?: string) => {
     if (!remoteReadyRef.current || String(target.media.id) !== String(id) || target.media.mediaType !== type) return;
-    requestMobileDownloadSourceResolutionV1(target.itemKey, method);
+    requestMobileDownloadSourceResolutionV1(target.itemKey, method, sourceId);
     pendingDownloadTargetRef.current = target;
     setDownloadTarget(null);
     router.push({

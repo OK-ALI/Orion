@@ -59,7 +59,7 @@ type Listener = (snapshots: readonly MobileDownloadCandidateSnapshotV1[]) => voi
 let activeSession: ActiveCaptureSessionV1 | null = null;
 let eventSubscription: { remove(): void } | null = null;
 let snapshots: MobileDownloadCandidateSnapshotV1[] = [];
-let pendingSourceResolution: { itemKey: string; method: MobileDownloadTransferMethodV1; expiresAt: number; autoReturnIssued: boolean; failure: string | null } | null = null;
+let pendingSourceResolution: { itemKey: string; method: MobileDownloadTransferMethodV1; sourceId: string | null; expiresAt: number; autoReturnIssued: boolean; failure: string | null } | null = null;
 const retainedSourceSessions = new Map<string, Set<string>>();
 const listeners = new Set<Listener>();
 
@@ -215,24 +215,42 @@ function pendingSourceResolutionActive(itemKey?: string): boolean {
  * while the user returns from Player to the Download sheet. Native request
  * material remains opaque and bounded by the broker's own expiry rules.
  */
-export function requestMobileDownloadSourceResolutionV1(itemKey: string, method: MobileDownloadTransferMethodV1 = 'auto'): void {
+export function requestMobileDownloadSourceResolutionV1(
+  itemKey: string,
+  method: MobileDownloadTransferMethodV1 = 'auto',
+  sourceId?: string,
+): void {
   const clean = text(itemKey, 180);
+  const cleanSourceId = text(sourceId, 80);
   if (!clean) return;
   if (pendingSourceResolution && pendingSourceResolution.itemKey !== clean) {
     releaseRetainedSessions(pendingSourceResolution.itemKey);
     snapshots = snapshots.filter((entry) => entry.itemKey !== pendingSourceResolution?.itemKey);
   }
-  releaseRetainedSessions(clean);
-  snapshots = snapshots.filter((entry) => entry.itemKey !== clean);
-  pendingSourceResolution = { itemKey: clean, method, expiresAt: Date.now() + SOURCE_RESOLUTION_RETENTION_MS, autoReturnIssued: false, failure: null };
+  // Keep still-valid prepared providers for this same item. Source-specific
+  // capture replacement happens in beginMobileDownloadCaptureSessionV1.
+  pendingSourceResolution = {
+    itemKey: clean,
+    method,
+    sourceId: cleanSourceId,
+    expiresAt: Date.now() + SOURCE_RESOLUTION_RETENTION_MS,
+    autoReturnIssued: false,
+    failure: null,
+  };
   ensureEventSubscription();
   publish();
 }
 
 
-export function getMobileDownloadSourceResolutionIntentV1(itemKey: string): { method: MobileDownloadTransferMethodV1; autoReturnIssued: boolean } | null {
+export function getMobileDownloadSourceResolutionIntentV1(
+  itemKey: string,
+): { method: MobileDownloadTransferMethodV1; sourceId: string | null; autoReturnIssued: boolean } | null {
   if (!pendingSourceResolutionActive(itemKey) || !pendingSourceResolution) return null;
-  return { method: pendingSourceResolution.method, autoReturnIssued: pendingSourceResolution.autoReturnIssued };
+  return {
+    method: pendingSourceResolution.method,
+    sourceId: pendingSourceResolution.sourceId,
+    autoReturnIssued: pendingSourceResolution.autoReturnIssued,
+  };
 }
 
 export function markMobileDownloadSourceAutoReturnIssuedV1(itemKey: string): boolean {
@@ -281,7 +299,20 @@ export function beginMobileDownloadCaptureSessionV1(input: BeginMobileDownloadCa
   if (activeSession?.itemKey === input.itemKey && activeSession.playbackSessionId !== input.playbackSessionId) {
     nativeModule()?.releaseSession(activeSession.playbackSessionId);
   }
-  releaseRetainedSessions(input.itemKey);
+  // Replacing one provider must not destroy another still-valid prepared
+  // provider for the same title. Only the provider being freshly prepared is
+  // replaced; all request material stays opaque inside the native broker.
+  const retained = retainedSourceSessions.get(input.itemKey);
+  if (retained) {
+    for (const sessionId of Array.from(retained)) {
+      const retainedSnapshot = snapshots.find((entry) => entry.candidate.playbackSessionId === sessionId);
+      if (retainedSnapshot?.candidate.sourceId === input.sourceId) {
+        nativeModule()?.releaseSession(sessionId);
+        retained.delete(sessionId);
+      }
+    }
+    if (!retained.size) retainedSourceSessions.delete(input.itemKey);
+  }
   activeSession = {
     playbackSessionId: input.playbackSessionId,
     sourceId: input.sourceId,
@@ -289,8 +320,11 @@ export function beginMobileDownloadCaptureSessionV1(input: BeginMobileDownloadCa
     itemKey: input.itemKey,
     media: { ...input.media },
   };
-  // A source switch must never let Auto silently select a stale provider.
-  snapshots = snapshots.filter((entry) => entry.itemKey !== input.itemKey);
+  // A fresh preparation replaces only snapshots from that provider.
+  // Other retained providers stay available for explicit user reuse.
+  snapshots = snapshots.filter((entry) => !(
+    entry.itemKey === input.itemKey && entry.candidate.sourceId === input.sourceId
+  ));
   ensureEventSubscription();
   publish();
 
@@ -376,9 +410,11 @@ export function selectMobileDownloadCandidateForItemV1(
   method: MobileDownloadTransferMethodV1 = 'auto',
   values: readonly MobileDownloadCandidateSnapshotV1[] = snapshots,
   destination: 'orion-library' | 'device-storage' = 'orion-library',
+  sourceId?: string | null,
 ): MobileDownloadCandidateSelectionV1 | null {
   const selected = values
     .filter((entry) => entry.itemKey === itemKey)
+    .filter((entry) => !sourceId || entry.candidate.sourceId === sourceId)
     .map((entry) => entry.candidate)
     .filter((candidate) => isReadyDownloadCandidate(candidate, destination))
     .filter((candidate) => {

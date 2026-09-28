@@ -19,12 +19,15 @@ test('P10.3 user entry activates only against the real Android native engine', (
   assert.doesNotMatch(manager, /setInterval|fakeProgress|Math\.min\(99.*Date/);
 });
 
-test('P10.3 Download sheet preserves Auto and opens Player when no candidate exists', () => {
-  assert.match(modal, /useState<MobileDownloadTransferMethodV1>\('auto'\)/);
-  assert.match(modal, /selectedCandidate \? handleStart : handleResolveSource/);
-  assert.match(modal, /'Prepare download'/);
-  assert.match(modal, /Ready to download/);
+test('P10.3 Download sheet uses the locked Options Prepare Ready flow without changing the native start handoff', () => {
+  assert.match(modal, /type DownloadStep = 'options' \| 'prepare' \| 'ready'/);
+  assert.match(modal, /STEP_ORDER: readonly DownloadStep\[\] = \['options', 'prepare', 'ready'\]/);
+  assert.match(modal, /setStep\('prepare'\)/);
+  assert.match(modal, /setStep\('ready'\)/);
+  assert.match(modal, /startMobileDownloadFromSelectionV1/);
+  assert.match(modal, /'Start Download'/);
   assert.match(modal, /return here automatically/);
+  assert.doesNotMatch(modal, /Download method/);
 });
 
 test('P10.3 user start creates only a safe V1 job and starts by opaque candidate id', () => {
@@ -35,17 +38,18 @@ test('P10.3 user start creates only a safe V1 job and starts by opaque candidate
   assert.doesNotMatch(start, /rawUrl|requestHeaders|cookieHeader|Authorization|signedUrl/);
 });
 
-test('P10.3 source resolution retention is explicit, title-scoped and bounded', () => {
+test('P10.3 source resolution retention is explicit, title-scoped, provider-aware and bounded', () => {
   assert.match(capture, /SOURCE_RESOLUTION_RETENTION_MS = 4 \* 60_000/);
   assert.match(capture, /pendingSourceResolution\.itemKey === itemKey/);
+  assert.match(capture, /sourceId: string \| null/);
   assert.match(capture, /retainedSourceSessions/);
   assert.match(capture, /releaseRetainedSessions/);
-  assert.match(capture, /snapshots = snapshots\.filter\(\(entry\) => entry\.itemKey !== input\.itemKey\)/);
+  assert.match(capture, /entry\.itemKey === input\.itemKey && entry\.candidate\.sourceId === input\.sourceId/);
 });
 
 test('P10.3 Media Detail returns from Player to the same download target', () => {
   assert.match(detail, /pendingDownloadTargetRef/);
-  assert.match(detail, /requestMobileDownloadSourceResolutionV1\(target\.itemKey, method\)/);
+  assert.match(detail, /requestMobileDownloadSourceResolutionV1\(target\.itemKey, method, sourceId\)/);
   assert.match(detail, /pathname: '\/player\/\[id\]'/);
   assert.match(detail, /setDownloadTarget\(pendingDownloadTarget\)/);
 });
