@@ -573,6 +573,10 @@ export default function MediaDetailScreen() {
                 ) : (
                   episodes.map((ep: any) => {
                     const episodeWatched = watchedActions.isEpisodeWatched(ep);
+                    const offlineCopy = local.copies.find((copy) =>
+                      copy.entry.media.season === selectedSeason && copy.entry.media.episode === ep.episode_number
+                    );
+                    const episodeOffline = Boolean(offlineCopy);
                     const episodeProgress = getPlaybackProgress('tv', id, selectedSeason, ep.episode_number);
                     const episodeProgressPercent = !episodeWatched
                       && episodeProgress
@@ -588,14 +592,15 @@ export default function MediaDetailScreen() {
                       <Pressable
                         key={ep.id}
                         accessibilityRole="button"
-                        accessibilityLabel={`Episode ${ep.episode_number}, ${ep.name}${episodeWatched ? ', watched' : progressLabel}`}
-                        accessibilityHint={network.remoteReady ? "Starts this episode" : "Plays a downloaded copy if available; streaming needs a connection"}
+                        accessibilityLabel={`Episode ${ep.episode_number}, ${ep.name}${episodeOffline ? ', available offline' : ''}${episodeWatched ? ', watched' : progressLabel}`}
+                        accessibilityHint={episodeOffline ? "Plays the verified downloaded copy from Orion Library" : network.remoteReady ? "Starts this episode" : "Streaming needs a connection"}
                         style={({ pressed }) => [
                           styles.episodeCard,
                           { backgroundColor: theme.elevated, borderColor: theme.border },
                           pressed && { opacity: 0.85 },
                         ]}
                         onPress={() => {
+                          if (offlineCopy) { playOffline(offlineCopy, selectedSeason, ep.episode_number); return; }
                           if (!remoteReadyRef.current) { playOffline(undefined, selectedSeason, ep.episode_number); return; }
                           router.push({
                           pathname: '/player/[id]',
@@ -644,6 +649,12 @@ export default function MediaDetailScreen() {
                             {!!ep.runtime && (
                               <Text style={[styles.epRuntimeText, { color: theme.textMuted }]}>{ep.runtime}m</Text>
                             )}
+                            {episodeOffline && (
+                              <View style={[styles.epOfflineBadge, { backgroundColor: theme.accentSoft, borderColor: theme.accent }]}>
+                                <Ionicons name="checkmark-circle" size={10} color={theme.accent} accessible={false} />
+                                <Text style={[styles.epOfflineBadgeText, { color: theme.accent }]}>Offline</Text>
+                              </View>
+                            )}
                           </View>
                           {!!ep.air_date && (
                             <Text style={[styles.episodeListDate, { color: theme.textMuted }]}>{ep.air_date}</Text>
@@ -659,34 +670,36 @@ export default function MediaDetailScreen() {
                               theme={theme}
                               onPress={() => watchedActions.toggleEpisodeWatched(ep)}
                             />
-                            <Pressable
-                              accessibilityRole="button"
-                              accessibilityLabel={`Download Episode ${ep.episode_number}`}
-                              accessibilityHint={network.remoteReady ? "Opens download options for this episode" : "Downloading new media needs a connection"}
-                              accessibilityState={{ disabled: !network.remoteReady }}
-                              disabled={!network.remoteReady}
-                              hitSlop={4}
-                              style={({ pressed }) => [styles.epDownloadBtn, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && { opacity: 0.7 }]}
-                              onPress={(e) => {
-                                e.stopPropagation();
-                                if (!remoteReadyRef.current) return;
-                                setDownloadTarget(createMobileDownloadTargetV1({
-                                  id,
-                                  mediaType: type,
-                                  title: ep.name,
-                                  year,
-                                  seriesTitle: title,
-                                  season: selectedSeason,
-                                  episode: ep.episode_number,
-                                  episodeTitle: ep.name,
-                                  posterPath: data.poster_path || null,
-                                  backdropPath: ep.still_path || data.backdrop_path || null,
-                                }));
-                              }}
-                            >
-                              <Ionicons name="download-outline" size={12} color={theme.accent} />
-                              <Text numberOfLines={1} style={[styles.epDownloadBtnText, { color: theme.text }]}>Download</Text>
-                            </Pressable>
+                            {!episodeOffline && (
+                              <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={`Download Episode ${ep.episode_number}`}
+                                accessibilityHint={network.remoteReady ? "Opens download options for this episode" : "Downloading new media needs a connection"}
+                                accessibilityState={{ disabled: !network.remoteReady }}
+                                disabled={!network.remoteReady}
+                                hitSlop={4}
+                                style={({ pressed }) => [styles.epDownloadBtn, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && { opacity: 0.7 }]}
+                                onPress={(e) => {
+                                  e.stopPropagation();
+                                  if (!remoteReadyRef.current) return;
+                                  setDownloadTarget(createMobileDownloadTargetV1({
+                                    id,
+                                    mediaType: type,
+                                    title: ep.name,
+                                    year,
+                                    seriesTitle: title,
+                                    season: selectedSeason,
+                                    episode: ep.episode_number,
+                                    episodeTitle: ep.name,
+                                    posterPath: data.poster_path || null,
+                                    backdropPath: ep.still_path || data.backdrop_path || null,
+                                  }));
+                                }}
+                              >
+                                <Ionicons name="download-outline" size={12} color={theme.accent} />
+                                <Text numberOfLines={1} style={[styles.epDownloadBtnText, { color: theme.text }]}>Download</Text>
+                              </Pressable>
+                            )}
                           </View>
                         </View>
                       </Pressable>

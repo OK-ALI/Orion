@@ -422,7 +422,8 @@ for (const themeId of ['midnight-premiere', 'amoled', 'mocha', 'slate', 'project
     assert.equal(buttonStyle.minHeight, 44); assert.equal(buttonStyle.minWidth, 44);
     assert.equal(buttonStyle.backgroundColor, h.theme.surface); assert.equal(buttonStyle.borderColor, h.theme.border);
     assert.equal(style(button.props.style({ pressed: true })).backgroundColor, h.theme.surfaceHover);
-    assert.equal(style(button.props.children.props.style).color, h.theme.text);
+    const buttonText = all.find(n => n.type === 'Text' && n.props.children === 'Play Offline');
+    assert.equal(style(buttonText.props.style).color, h.theme.text);
     const watch = h.find('Watch Remote title 1'); assert.equal(style(watch.props.style).width, '100%');
     assert.equal(watch.props.accessibilityHint, 'Streams this title'); assert.equal(watch.props.disabled, false);
     assert.ok(h.nodes().some(n => n.props.children === 'Watch Now'));
@@ -486,16 +487,42 @@ test('compact capability wraps without fixed heights, clipped labels or full-wid
   const source = read('MediaDetailFallback.tsx'); assert.doesNotMatch(source, /#[0-9a-f]{3,8}|rgba\(|Animated|LayoutAnimation|useWindowDimensions|useNetworkStatus/i);
 });
 
-test('compact TV choices preserve explicit episode identity and access to all downloads', async () => {
-  const snapshots = Array.from({ length: 9 }, (_, i) => downloaded('tv', 1, 1, i + 1, 'episode-' + (i + 1)));
-  const repository = { ...emptyRepository(), assets: snapshots.flatMap(s => s.assets), offlineEntries: snapshots.flatMap(s => s.offlineEntries) };
-  const h = harness({ type: 'tv', repository }); h.requests[0].resolve(titleResponse(1, 'tv')); await h.settle();
-  const choices = h.localChoiceNodes(); assert.equal(choices.filter(n => n.type === 'Pressable').length, 9);
-  choices.find(n => n.props.accessibilityLabel === 'Play Offline · S1 E3 · Local episode 3').props.onPress();
-  assert.equal(h.routes[0].params.offlineAssetId, 'episode-3'); assert.equal(h.routes[0].params.episode, 3);
-  const seeAll = choices.find(n => n.props.accessibilityLabel === 'See all downloads');
-  assert.equal(style(seeAll.props.style).minHeight, 44); assert.equal(style(seeAll.props.style).borderColor, h.theme.border);
-  seeAll.props.onPress(); assert.equal(h.routes[1], '/(tabs)/downloads'); h.unmount();
+test('online TV collapses local copies into one summary and downloaded episode cards use the exact Orion Library asset', async () => {
+  const h = harness({ type: 'tv', repository: episodeCopies() });
+  h.requests[0].resolve(titleResponse(1, 'tv')); await h.settle();
+
+  const choices = h.localChoiceNodes();
+  assert.ok(choices.some((node) => node.type === 'Text' && node.props.children === 'Offline · 3 episodes'));
+  assert.equal(choices.filter((node) => node.type === 'Pressable').length, 0, 'hero must not duplicate episode play pills');
+
+  h.press('Watch Remote series 1');
+  assert.equal(h.routes[0].params.isOffline, undefined);
+  assert.equal(h.routes[0].params.offlineAssetId, undefined);
+  h.routes.length = 0;
+
+  h.press('Episodes section');
+  const seasonRequest = h.requests.find((request) => request.url === '/tv/1/season/1');
+  assert.ok(seasonRequest, 'Episodes tab must request the selected season');
+  seasonRequest.resolve({ episodes: [
+    { id: 11, episode_number: 1, name: 'Episode 1', runtime: 52, vote_average: 8, overview: 'One' },
+    { id: 12, episode_number: 2, name: 'Episode 2', runtime: 49, vote_average: 7.5, overview: 'Two' },
+    { id: 13, episode_number: 3, name: 'Episode 3', runtime: 51, vote_average: 8.3, overview: 'Three' },
+  ] });
+  await h.settle();
+
+  const offlineEpisode = h.find('Episode 1, Episode 1, available offline');
+  assert.equal(offlineEpisode.props.accessibilityHint, 'Plays the verified downloaded copy from Orion Library');
+  assert.equal(h.nodes().some((node) => node.props.accessibilityLabel === 'Download Episode 1'), false);
+  assert.ok(h.find('Download Episode 2'));
+  assert.ok(h.nodes().some((node) => node.type === 'Text' && node.props.children === 'Offline'));
+
+  offlineEpisode.props.onPress();
+  h.render();
+  assert.equal(h.routes[0].params.isOffline, 'true');
+  assert.equal(h.routes[0].params.offlineAssetId, 's1e1');
+  assert.equal(h.routes[0].params.season, 1);
+  assert.equal(h.routes[0].params.episode, 1);
+  h.unmount();
 });
 
 test('route-only movie exposes watched action while remote detail is loading', () => {

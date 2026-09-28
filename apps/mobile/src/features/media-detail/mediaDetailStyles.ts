@@ -482,6 +482,20 @@ export const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
+  epOfflineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  epOfflineBadgeText: {
+    fontSize: 9,
+    fontFamily: fontFamilies.heading,
+    fontWeight: '800',
+  },
   episodeListDate: {
     color: text.muted,
     fontSize: 10,

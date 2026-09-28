@@ -12,18 +12,38 @@ export function MediaDetailLocalCopies({ copies, onPlay, onOpenLibrary, presenta
   const { theme } = useOrionTheme();
   if (!copies.length) return null;
   const compact = presentation === 'compact';
-  return (
-    <View style={compact ? styles.capability : [styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      {compact ? (
+  const isTv = copies[0].entry.media.mediaType === 'tv';
+  if (compact) {
+    return (
+      <View style={styles.capability}>
         <View style={styles.capabilityLabel}>
-          <Ionicons name="download-outline" size={16} color={theme.textSecondary} accessible={false} />
-          <Text style={[styles.capabilityText, { color: theme.textSecondary }]}>Available offline</Text>
+          <Ionicons name="checkmark-circle-outline" size={16} color={theme.textSecondary} accessible={false} />
+          <Text style={[styles.capabilityText, { color: theme.textSecondary }]}>
+            {isTv ? `Offline · ${copies.length} episode${copies.length === 1 ? '' : 's'}` : 'Available offline'}
+          </Text>
         </View>
-      ) : (
-        <Text accessibilityRole="header" style={[styles.heading, { color: theme.text }]}>
-          {copies.length > 1 && copies[0].entry.media.mediaType === 'tv' ? 'Offline Episodes' : 'Available offline'}
-        </Text>
-      )}
+        {!isTv && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Play Offline"
+            onPress={() => onPlay(copies[0])}
+            style={({ pressed }) => [
+              styles.compactButton,
+              { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: theme.border },
+            ]}
+          >
+            <Ionicons name="play" size={13} color={theme.text} accessible={false} />
+            <Text style={[styles.compactButtonText, { color: theme.text }]}>Play Offline</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <Text accessibilityRole="header" style={[styles.heading, { color: theme.text }]}>
+        {copies.length > 1 && isTv ? 'Offline Episodes' : 'Available offline'}
+      </Text>
       {copies.slice(0, 8).map((copy) => {
         const media = copy.entry.media;
         const label = media.mediaType === 'tv'
@@ -31,15 +51,13 @@ export function MediaDetailLocalCopies({ copies, onPlay, onOpenLibrary, presenta
           : 'Play Offline';
         return (
           <Pressable key={copy.asset.assetId} accessibilityRole="button" accessibilityLabel={label}
-            onPress={() => onPlay(copy)} style={compact
-              ? ({ pressed }) => [styles.compactButton, { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: theme.border }]
-              : [styles.button, { backgroundColor: theme.accent }]}>
-            <Text style={compact ? [styles.compactButtonText, { color: theme.text }] : [styles.buttonText, { color: theme.onAccent }]}>{label}</Text>
+            onPress={() => onPlay(copy)} style={[styles.button, { backgroundColor: theme.accent }]}>
+            <Text style={[styles.buttonText, { color: theme.onAccent }]}>{label}</Text>
           </Pressable>
         );
       })}
       {copies.length > 8 && (
-        <Pressable accessibilityRole="button" accessibilityLabel="See all downloads" onPress={onOpenLibrary} style={compact ? [styles.compactButton, { borderColor: theme.border }] : styles.button}>
+        <Pressable accessibilityRole="button" accessibilityLabel="See all downloads" onPress={onOpenLibrary} style={styles.button}>
           <Text style={[styles.buttonText, { color: theme.accent }]}>See all downloads</Text>
         </Pressable>
       )}
@@ -97,7 +115,7 @@ const styles = StyleSheet.create({
   capability: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing[3], rowGap: spacing[1], marginTop: spacing[2] },
   capabilityLabel: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, maxWidth: '100%' },
   capabilityText: { fontSize: 13, flexShrink: 1 },
-  compactButton: { minHeight: 44, minWidth: 44, maxWidth: '100%', flexShrink: 1, paddingHorizontal: spacing[3], paddingVertical: spacing[2], justifyContent: 'center', borderRadius: 22, borderWidth: StyleSheet.hairlineWidth },
+  compactButton: { minHeight: 44, minWidth: 44, maxWidth: '100%', flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing[3], paddingVertical: spacing[2], justifyContent: 'center', borderRadius: 22, borderWidth: StyleSheet.hairlineWidth },
   compactButtonText: { fontSize: 13, fontWeight: '600', flexShrink: 1 },
   card: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 16, gap: 12 },
   title: { fontSize: 26, fontWeight: '800' },
