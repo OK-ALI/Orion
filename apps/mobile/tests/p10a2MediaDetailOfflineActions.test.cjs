@@ -415,11 +415,11 @@ for (const themeId of ['midnight-premiere', 'amoled', 'mocha', 'slate', 'project
     for (const key of ['borderWidth', 'borderRadius', 'backgroundColor', 'padding', 'paddingVertical', 'height']) assert.equal(row[key], undefined, key);
     assert.equal(row.flexDirection, 'row'); assert.equal(row.flexWrap, 'wrap'); assert.equal(row.rowGap, 4);
     assert.equal(all.some(n => n.props.accessibilityRole === 'header'), false);
-    const label = all.find(n => n.props.children === 'Available offline');
+    const label = all.find(n => n.props.children === 'Offline');
     assert.equal(style(label.props.style).color, h.theme.textSecondary); assert.equal(style(label.props.style).fontSize, 13);
     const icon = all.find(n => n.type === 'Ionicons'); assert.equal(icon.props.color, h.theme.textSecondary); assert.equal(icon.props.accessible, false);
     const button = all.find(n => n.props.accessibilityLabel === 'Play Offline'), buttonStyle = style(button.props.style);
-    assert.equal(buttonStyle.minHeight, 44); assert.equal(buttonStyle.minWidth, 44);
+    assert.equal(buttonStyle.minHeight, 34); assert.equal(buttonStyle.minWidth, 44); assert.equal(button.props.hitSlop, 5);
     assert.equal(buttonStyle.backgroundColor, h.theme.surface); assert.equal(buttonStyle.borderColor, h.theme.border);
     assert.equal(style(button.props.style({ pressed: true })).backgroundColor, h.theme.surfaceHover);
     const buttonText = all.find(n => n.type === 'Text' && n.props.children === 'Play Offline');
@@ -480,7 +480,7 @@ test('compact capability wraps without fixed heights, clipped labels or full-wid
     for (const n of all) {
       const s = style(n.props.style); assert.equal(s.height, undefined); assert.equal(s.overflow, undefined);
       if (n.type === 'Text') { assert.equal(n.props.numberOfLines, undefined); assert.notEqual(n.props.allowFontScaling, false); assert.equal(s.flexShrink, 1); }
-      if (n.type === 'Pressable') { assert.equal(s.width, undefined); assert.equal(s.maxWidth, '100%'); assert.equal(s.paddingVertical, 8); assert.equal(s.minHeight, 44); }
+      if (n.type === 'Pressable') { assert.equal(s.width, undefined); assert.equal(s.maxWidth, '100%'); assert.equal(s.paddingVertical, 4); assert.equal(s.minHeight, 34); assert.equal(n.props.hitSlop, 5); }
     }
     h.unmount();
   }

@@ -19,7 +19,7 @@ export function MediaDetailLocalCopies({ copies, onPlay, onOpenLibrary, presenta
         <View style={styles.capabilityLabel}>
           <Ionicons name="checkmark-circle-outline" size={16} color={theme.textSecondary} accessible={false} />
           <Text style={[styles.capabilityText, { color: theme.textSecondary }]}>
-            {isTv ? `Offline · ${copies.length} episode${copies.length === 1 ? '' : 's'}` : 'Available offline'}
+            {isTv ? `Offline · ${copies.length} episode${copies.length === 1 ? '' : 's'}` : 'Offline'}
           </Text>
         </View>
         {!isTv && (
@@ -27,12 +27,13 @@ export function MediaDetailLocalCopies({ copies, onPlay, onOpenLibrary, presenta
             accessibilityRole="button"
             accessibilityLabel="Play Offline"
             onPress={() => onPlay(copies[0])}
+            hitSlop={5}
             style={({ pressed }) => [
               styles.compactButton,
               { backgroundColor: pressed ? theme.surfaceHover : theme.surface, borderColor: theme.border },
             ]}
           >
-            <Ionicons name="play" size={13} color={theme.text} accessible={false} />
+            <Ionicons name="play" size={12} color={theme.text} accessible={false} />
             <Text style={[styles.compactButtonText, { color: theme.text }]}>Play Offline</Text>
           </Pressable>
         )}
@@ -115,8 +116,8 @@ const styles = StyleSheet.create({
   capability: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing[3], rowGap: spacing[1], marginTop: spacing[2] },
   capabilityLabel: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, maxWidth: '100%' },
   capabilityText: { fontSize: 13, flexShrink: 1 },
-  compactButton: { minHeight: 44, minWidth: 44, maxWidth: '100%', flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing[3], paddingVertical: spacing[2], justifyContent: 'center', borderRadius: 22, borderWidth: StyleSheet.hairlineWidth },
-  compactButtonText: { fontSize: 13, fontWeight: '600', flexShrink: 1 },
+  compactButton: { minHeight: 34, minWidth: 44, maxWidth: '100%', flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing[2], paddingVertical: spacing[1], justifyContent: 'center', borderRadius: 17, borderWidth: StyleSheet.hairlineWidth },
+  compactButtonText: { fontSize: 12, fontWeight: '600', flexShrink: 1 },
   card: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 16, gap: 12 },
   title: { fontSize: 26, fontWeight: '800' },
   heading: { fontSize: 16, fontWeight: '700' },
