@@ -663,7 +663,8 @@ internal object OrionDownloadRequestContextBroker {
       }
       urls.add(fragment)
       val media = probeChild(context, fragment, 4096, false, mediaBytes = true).let { probe ->
-        tolerateKeyedOpaqueMimeMismatch(probe, plan.keyUrls.isNotEmpty())
+        val keyedTolerated = tolerateKeyedOpaqueMimeMismatch(probe, plan.keyUrls.isNotEmpty())
+        tolerateStrongAvMimeMismatch(keyedTolerated)
       }
       val mediaSignature = preflightMediaSignatureClass(media.bytes)
       val mediaIsPlaylist = media.bytes.isNotEmpty() && isHlsPlaylistProbe(media)
@@ -706,7 +707,8 @@ internal object OrionDownloadRequestContextBroker {
           }
           urls.add(representative.url)
           val representativeProbe = probeChild(context, representative.url, 4096, false, mediaBytes = true).let { probe ->
-            tolerateKeyedOpaqueMimeMismatch(probe, plan.keyUrls.isNotEmpty())
+            val keyedTolerated = tolerateKeyedOpaqueMimeMismatch(probe, plan.keyUrls.isNotEmpty())
+            tolerateStrongAvMimeMismatch(keyedTolerated)
           }
           val representativeSignature = preflightMediaSignatureClass(representativeProbe.bytes)
           val representativeIsPlaylist = representativeProbe.bytes.isNotEmpty() && isHlsPlaylistProbe(representativeProbe)
@@ -867,6 +869,38 @@ internal object OrionDownloadRequestContextBroker {
       probe
     }
   }
+
+  /**
+   * Some playback providers return real HLS audio/video segments with a bogus
+   * document MIME such as text/html. Keep the document/data rejection intact
+   * unless the sampled bytes have a strong, unambiguous A/V container signature.
+   */
+  private fun tolerateStrongAvMimeMismatch(probe: ChildProbe): ChildProbe {
+    if (probe.code != "invalid-media" || probe.bytes.isEmpty()) return probe
+
+    val declaredDocument =
+      probe.contentType.contains("text/html", ignoreCase = true) ||
+        probe.contentType.contains("application/json", ignoreCase = true)
+    if (!declaredDocument) return probe
+
+    val signature = preflightMediaSignatureClass(probe.bytes)
+    return if (isStrongAvMediaSignature(signature)) {
+      probe.copy(code = null, reason = null)
+    } else {
+      probe
+    }
+  }
+
+  private fun isStrongAvMediaSignature(signature: String): Boolean = signature in setOf(
+    "mpeg-ts",
+    "mpeg-ts-offset",
+    "iso-bmff",
+    "iso-bmff-offset",
+    "mpeg-ps",
+    "aac-adts",
+    "mp3",
+    "matroska",
+  )
 
   private fun isHlsPlaylistProbe(probe: ChildProbe): Boolean =
     probe.contentType.contains("mpegurl", ignoreCase = true)
