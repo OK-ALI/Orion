@@ -116,6 +116,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
   private val resumeCommitLock = Any()
   private val resumeHitCount = AtomicInteger(0)
   private val resumeCommitCount = AtomicInteger(0)
+  private val resumeFullRangeCaptureCount = AtomicInteger(0)
 
   private val activeSockets =
     ConcurrentHashMap.newKeySet<Socket>()
@@ -381,7 +382,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
 
     Log.i(
       "OrionDownloadStage",
-      "stage=yt-dlp-gateway outcome=summary requests=${loopbackRequestCount.get()} provider=${providerRequestCount.get()} ranges=${clientRangeRequestCount.get()} provider2xx=${provider2xxCount.get()} provider4xx=${provider4xxCount.get()} provider5xx=${provider5xxCount.get()} mediaRoutes=${providerRouteCount.get()} completedRoutes=${completedProviderBytes.size} bytes=${completedProviderByteCount.get()} providerReadBytes=${providerReadByteCount.get()} providerWrittenBytes=${providerWrittenByteCount.get()} providerEof=${providerEofCount.get()} providerReadErrors=${providerReadErrorCount.get()} providerWriteErrors=${providerWriteErrorCount.get()} resumeHits=${resumeHitCount.get()} resumeCommits=${resumeCommitCount.get()}",
+      "stage=yt-dlp-gateway outcome=summary requests=${loopbackRequestCount.get()} provider=${providerRequestCount.get()} ranges=${clientRangeRequestCount.get()} provider2xx=${provider2xxCount.get()} provider4xx=${provider4xxCount.get()} provider5xx=${provider5xxCount.get()} mediaRoutes=${providerRouteCount.get()} completedRoutes=${completedProviderBytes.size} bytes=${completedProviderByteCount.get()} providerReadBytes=${providerReadByteCount.get()} providerWrittenBytes=${providerWrittenByteCount.get()} providerEof=${providerEofCount.get()} providerReadErrors=${providerReadErrorCount.get()} providerWriteErrors=${providerWriteErrorCount.get()} resumeHits=${resumeHitCount.get()} resumeCommits=${resumeCommitCount.get()} resumeFullRangeCaptures=${resumeFullRangeCaptureCount.get()}",
     )
 
     routes.clear()
@@ -884,19 +885,6 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
       val contentLength =
         connection.contentLengthLong
 
-      activeResumeCapture =
-        if (
-          !headOnly &&
-          status == HttpURLConnection.HTTP_OK &&
-          !clientRangeRequested &&
-          route.rangeStart == null &&
-          route.rangeEndInclusive == null
-        ) {
-          openResumeCapture(route, contentLength)
-        } else {
-          null
-        }
-
       val providerContentRange =
         connection.getHeaderField(
           "Content-Range",
@@ -906,6 +894,28 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
         parseProviderContentRange(
           providerContentRange,
         )
+
+      val persistableResumeResponse =
+        canPersistResumeResponse(
+          route = route,
+          status = status,
+          contentLength = contentLength,
+          providerRange = providerRangeMetrics,
+          clientRangeStart = clientRangeStart,
+          clientRangeEndInclusive = clientRangeEndInclusive,
+          clientRangeRequested = clientRangeRequested,
+          headOnly = headOnly,
+        )
+
+      activeResumeCapture =
+        if (persistableResumeResponse) {
+          if (status == HttpURLConnection.HTTP_PARTIAL) {
+            resumeFullRangeCaptureCount.incrementAndGet()
+          }
+          openResumeCapture(route, contentLength)
+        } else {
+          null
+        }
 
       if (contentLength >= 0L) {
         headers["Content-Length"] =
@@ -1170,6 +1180,56 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
       append(rangeEndInclusive?.toString().orEmpty())
     }
     return sha256(material.toByteArray(StandardCharsets.UTF_8))
+  }
+
+  private fun canPersistResumeResponse(
+    route: ProviderRoute,
+    status: Int,
+    contentLength: Long,
+    providerRange: ProviderContentRange?,
+    clientRangeStart: Long?,
+    clientRangeEndInclusive: Long?,
+    clientRangeRequested: Boolean,
+    headOnly: Boolean,
+  ): Boolean {
+    if (
+      headOnly ||
+      route.isKey ||
+      route.rangeStart != null ||
+      route.rangeEndInclusive != null
+    ) {
+      return false
+    }
+
+    if (
+      status == HttpURLConnection.HTTP_OK &&
+      !clientRangeRequested
+    ) {
+      return true
+    }
+
+    if (
+      status != HttpURLConnection.HTTP_PARTIAL ||
+      !clientRangeRequested ||
+      clientRangeStart != 0L ||
+      clientRangeEndInclusive != null
+    ) {
+      return false
+    }
+
+    val range = providerRange ?: return false
+    val total = range.total ?: return false
+    if (
+      total <= 0L ||
+      range.start != 0L ||
+      range.endInclusive != total - 1L ||
+      range.length != total ||
+      contentLength != total
+    ) {
+      return false
+    }
+
+    return true
   }
 
   private fun openResumeCapture(

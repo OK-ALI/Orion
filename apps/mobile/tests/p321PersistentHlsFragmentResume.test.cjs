@@ -90,11 +90,34 @@ test('V8.19 verifies every reused fragment by size and SHA-256 and falls back to
   const provider = between(gateway, 'private fun writeProvider(', 'private data class ResumeProof(');
   assert.match(provider, /writeVerifiedResumeFragment/);
   assert.match(provider, /OrionDownloadAuthorizedHttp\s*\.openFollowingRedirects/);
-  assert.match(provider, /status == HttpURLConnection\.HTTP_OK/);
-  assert.match(provider, /!clientRangeRequested/);
-  assert.match(provider, /route\.rangeStart == null/);
-  assert.match(provider, /route\.rangeEndInclusive == null/);
+  assert.match(provider, /canPersistResumeResponse/);
   assert.match(provider, /commitResumeCapture/);
+});
+
+test('V8.19.1 persists VixSrc full-object 206 range responses but never partial ranges', () => {
+  const eligibility = between(gateway, 'private fun canPersistResumeResponse(', 'private fun openResumeCapture(');
+
+  // Existing 200/no-Range behavior remains valid.
+  assert.match(eligibility, /status == HttpURLConnection\.HTTP_OK &&\s*!clientRangeRequested/);
+
+  // The physical VixSrc shape is bytes=0- with a provider 206 that proves the
+  // response covers exactly 0..total-1 and whose Content-Length equals total.
+  assert.match(eligibility, /status != HttpURLConnection\.HTTP_PARTIAL/);
+  assert.match(eligibility, /clientRangeStart != 0L/);
+  assert.match(eligibility, /clientRangeEndInclusive != null/);
+  assert.match(eligibility, /val total = range\.total \?: return false/);
+  assert.match(eligibility, /range\.start != 0L/);
+  assert.match(eligibility, /range\.endInclusive != total - 1L/);
+  assert.match(eligibility, /range\.length != total/);
+  assert.match(eligibility, /contentLength != total/);
+
+  // Key routes and pre-bounded provider routes never become durable fragments.
+  assert.match(eligibility, /route\.isKey/);
+  assert.match(eligibility, /route\.rangeStart != null/);
+  assert.match(eligibility, /route\.rangeEndInclusive != null/);
+
+  assert.match(gateway, /resumeFullRangeCaptureCount\.incrementAndGet\(\)/);
+  assert.match(gateway, /resumeFullRangeCaptures=\$\{resumeFullRangeCaptureCount\.get\(\)\}/);
 });
 
 test('V8.19 cached replay preserves truthful recovery presentation until fresh provider media arrives', () => {
