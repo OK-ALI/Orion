@@ -3,6 +3,7 @@ import type {
   MobilePlaybackState,
 } from '@orion/shared/types';
 import type { PlaybackTelemetryInput } from './usePlaybackTelemetryController';
+import type { CinemaSourceDescriptor } from '@orion/shared/sources';
 
 const EVENT_TYPE = 'ORION_PLAYBACK_TELEMETRY';
 
@@ -11,6 +12,8 @@ interface BridgeOptions {
   sourceId: string;
   strategy: string;
   expectedOrigins: string[];
+  playerEventContract?: CinemaSourceDescriptor['playerEventContract'];
+  playerMessageHandshake?: CinemaSourceDescriptor['playerMessageHandshake'];
 }
 
 interface ParseContext {
@@ -83,8 +86,10 @@ export function createEmbeddedTelemetryScript({
   sourceId,
   strategy,
   expectedOrigins,
+  playerEventContract,
+  playerMessageHandshake,
 }: BridgeOptions): string {
-  const config = JSON.stringify({ sessionId, sourceId, strategy, expectedOrigins });
+  const config = JSON.stringify({ sessionId, sourceId, strategy, expectedOrigins, playerEventContract, playerMessageHandshake });
   return `
     (function() {
       var config = ${config};
@@ -99,6 +104,7 @@ export function createEmbeddedTelemetryScript({
       var sequence = 0;
       var attached = new WeakSet();
       var allowedOrigins = new Set(config.expectedOrigins || []);
+      var providerFrame = config.playerEventContract ? document.querySelector('iframe') : null;
       var providerMessageOrigins = {
         vidsrc: new Set(['https://cloudorchestranova.com']),
         vsembed: new Set(['https://cloudorchestranova.com'])
@@ -170,7 +176,67 @@ export function createEmbeddedTelemetryScript({
         document.querySelectorAll('video').forEach(attach);
       }
 
+      function providerFrameOrigin() {
+        if (!providerFrame) return null;
+        try {
+          var target = new URL(providerFrame.src);
+          return target.protocol === 'https:' && !target.username && !target.password
+            && allowedOrigins.has(target.origin) ? target.origin : null;
+        } catch (_) { return null; }
+      }
+
+      function initializeProviderMessages() {
+        var origin = providerFrameOrigin();
+        var handshake = config.playerMessageHandshake;
+        if (!origin || !handshake || !providerFrame.contentWindow) return;
+        providerFrame.contentWindow.postMessage({ type: handshake.initType }, origin);
+      }
+
+      function normalizeContractMessage(event) {
+        if (!providerFrame || event.source !== providerFrame.contentWindow
+          || !allowedOrigins.has(event.origin) || event.origin !== providerFrameOrigin()) return;
+        var value = event.data;
+        if (typeof value === 'string') {
+          if (value.length > 4096) return;
+          try { value = JSON.parse(value); } catch (_) { return; }
+        }
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+        if (config.playerMessageHandshake && value.type === config.playerMessageHandshake.readyType) {
+          initializeProviderMessages();
+          return;
+        }
+        if (value.type !== 'PLAYER_EVENT' || !value.data || typeof value.data !== 'object' || Array.isArray(value.data)) return;
+        var payload = value.data;
+        var currentTime;
+        var duration;
+        var state;
+        if (config.playerEventContract === 'standard') {
+          var standardStates = { play: 'playing', pause: 'paused', seeked: 'seeking', ended: 'ended', timeupdate: 'playing' };
+          if (!Object.prototype.hasOwnProperty.call(standardStates, payload.event)) return;
+          state = standardStates[payload.event];
+          currentTime = payload.currentTime;
+          duration = payload.duration;
+        } else if (config.playerEventContract === 'status') {
+          var statusStates = { playing: 'playing', paused: 'paused', completed: 'ended', seeked: 'seeking' };
+          if (!Object.prototype.hasOwnProperty.call(statusStates, payload.player_status)) return;
+          state = statusStates[payload.player_status];
+          currentTime = payload.player_progress;
+          duration = payload.player_duration;
+        } else return;
+        if (typeof currentTime !== 'number' || !Number.isFinite(currentTime) || currentTime < 0
+          || typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0 || currentTime > duration + 5) return;
+        if (payload.bufferedPosition != null && (typeof payload.bufferedPosition !== 'number'
+          || !Number.isFinite(payload.bufferedPosition) || payload.bufferedPosition < 0)) return;
+        send(state, 'provider-message', {
+          currentTime: currentTime,
+          duration: duration,
+          bufferedPosition: payload.bufferedPosition,
+          observedOrigin: event.origin
+        });
+      }
+
       function normalizeProviderMessage(event) {
+        if (config.playerEventContract) return normalizeContractMessage(event);
         var supportedSources = {
           videasy: true,
           vidlink: true,
@@ -252,6 +318,10 @@ export function createEmbeddedTelemetryScript({
       }
 
       window.addEventListener('message', normalizeProviderMessage, false);
+      if (providerFrame && config.playerMessageHandshake) {
+        providerFrame.addEventListener('load', initializeProviderMessages);
+        initializeProviderMessages();
+      }
       discoverVideos();
       var timer = setInterval(function() {
         discoverVideos();
@@ -267,6 +337,9 @@ export function createEmbeddedTelemetryScript({
         stop: function() {
           clearInterval(timer);
           window.removeEventListener('message', normalizeProviderMessage, false);
+          if (providerFrame && config.playerMessageHandshake) {
+            providerFrame.removeEventListener('load', initializeProviderMessages);
+          }
         }
       };
       return true;

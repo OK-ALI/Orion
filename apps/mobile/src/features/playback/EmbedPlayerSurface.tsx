@@ -62,7 +62,7 @@ import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import { beginMobileDownloadCaptureSessionV1 } from '../downloads/downloadCandidateCapture';
 import { useDownloadSourceAutoReturnV1 } from '../downloads/useDownloadSourceAutoReturn';
 import type { PlaybackPurpose } from './viewingPersistence';
-import { createProviderIframeDocument, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
+import { createProviderWebViewSource, getProviderCapturePolicy, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
 import { ProviderControlsReturn } from './ProviderControlsReturn';
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
   embedUrl: string;
@@ -134,7 +134,7 @@ export function EmbedPlayerSurface({
   const surfaceLoaded = useRef(false);
   const webViewRef = useRef<WebViewType>(null);
   const source = ALL_CINEMA_SOURCES.find((entry) => entry.id === sourceId);
-  const downloadQualificationCaptureEnabled = source != null && (source.supportsDownloads === true || ['vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc'].includes(sourceId));
+  const { captureEnabled: downloadQualificationCaptureEnabled, diagnosticOnly } = getProviderCapturePolicy(source);
   const sourceLabel = source?.label || 'VidEasy Direct';
   const expectedOrigins = source?.expectedOrigins || [];
   const sourceContinuity = getMobileSourceContinuityCapability(sourceId);
@@ -156,21 +156,7 @@ export function EmbedPlayerSurface({
       return embedUrl;
     }
   }, [embedUrl, selectedSubtitle?.id, source?.externalSubtitleLabelParam, source?.externalSubtitleLanguageParam, source?.externalSubtitleParam]);
-  const webViewSource = useMemo(() => {
-    if (!source?.requiresIframeWrapper) return { uri: shieldedEmbedUrl };
-    try {
-      const target = new URL(shieldedEmbedUrl);
-      if (target.protocol !== 'https:' || !expectedOrigins.includes(target.origin)) return { uri: 'about:blank' };
-      return {
-        html: createProviderIframeDocument(target.toString()),
-        // Orion-owned secure wrapper isolates provider storage/bootstrap behavior.
-        // The nested player receives no Orion state or secrets.
-        baseUrl: 'https://orion.local/player/',
-      };
-    } catch {
-      return { uri: 'about:blank' };
-    }
-  }, [expectedOrigins, shieldedEmbedUrl, source?.requiresIframeWrapper]);
+  const webViewSource = useMemo(() => createProviderWebViewSource(shieldedEmbedUrl, source), [shieldedEmbedUrl, source]);
   const media = useMemo(() => ({
     id,
     mediaType: type,
@@ -229,6 +215,8 @@ export function EmbedPlayerSurface({
     sourceId,
     strategy: source?.progressStrategy || 'none',
     expectedOrigins: telemetryExpectedOrigins,
+    playerEventContract: source?.playerEventContract,
+    playerMessageHandshake: source?.playerMessageHandshake,
   }), [playbackSessionId, sourceId]);
   const injectedScript = `${mobileAdBlockerScript}\n${telemetryScript}`;
 
@@ -240,8 +228,9 @@ export function EmbedPlayerSurface({
       providerClass: source.releaseStatus,
       itemKey: downloadTarget.itemKey,
       media: downloadTarget.media,
+      diagnosticOnly,
     });
-  }, [downloadQualificationCaptureEnabled, downloadTarget, playbackSessionId, source?.releaseStatus, sourceId]);
+  }, [diagnosticOnly, downloadQualificationCaptureEnabled, downloadTarget, playbackSessionId, source?.releaseStatus, sourceId]);
 
   useEffect(() => {
     loadStartedAt.current = Date.now();

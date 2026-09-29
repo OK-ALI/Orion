@@ -104,6 +104,11 @@ export interface CinemaSourceDescriptor {
   supportsResume: boolean;
   supportsExternalSubtitles: boolean;
   supportsDownloads: boolean;
+  /** Opt-in capture through the existing P102 lane; independent of downloads. */
+  supportsDiagnosticCapture?: boolean;
+  /** Documented parent-window event shape for an Orion-owned iframe wrapper. */
+  playerEventContract?: "standard" | "status";
+  playerMessageHandshake?: { readyType: string; initType: string };
   /** Product availability is independent from registration and release maturity. */
   routingMode?: SourceRoutingMode;
   availability?: SourceAvailability;
@@ -194,6 +199,27 @@ export function validateSourceDescriptor(source: CinemaSourceDescriptor): string
   if (!(SOURCE_SUBTITLE_STRATEGIES as readonly string[]).includes(source.subtitleStrategy)) errors.push("subtitleStrategy is invalid.");
   for (const field of ["supportsResume", "supportsExternalSubtitles", "supportsDownloads"] as const) {
     if (typeof source[field] !== "boolean") errors.push(`${field} must be boolean.`);
+  }
+  if (source.supportsDiagnosticCapture !== undefined && typeof source.supportsDiagnosticCapture !== "boolean") {
+    errors.push("supportsDiagnosticCapture must be boolean when provided.");
+  }
+  if (source.playerEventContract !== undefined) {
+    if (!["standard", "status"].includes(source.playerEventContract)) errors.push("playerEventContract is invalid.");
+    if (source.progressStrategy !== "player-event" || source.requiresIframeWrapper !== true) {
+      errors.push("playerEventContract requires player-event progress and an iframe wrapper.");
+    }
+    if (!Array.isArray(source.expectedOrigins) || !source.expectedOrigins.length
+      || source.expectedOrigins.some((origin) => !isOrigin(origin) || !origin.startsWith("https://"))) {
+      errors.push("playerEventContract requires exact HTTPS event origins.");
+    }
+  }
+  if (source.playerMessageHandshake !== undefined) {
+    const handshake = source.playerMessageHandshake;
+    if (!source.playerEventContract || !handshake || typeof handshake !== "object"
+      || ![handshake.readyType, handshake.initType].every((value) => typeof value === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(value))
+      || handshake.readyType === handshake.initType) {
+      errors.push("playerMessageHandshake requires a player event contract and distinct bounded message types.");
+    }
   }
   if (source.routingMode && !["automatic", "manual-only"].includes(source.routingMode)) errors.push("routingMode is invalid.");
   if (source.availability && !["ready", "having-trouble", "temporarily-unavailable"].includes(source.availability)) errors.push("availability is invalid.");
