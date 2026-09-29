@@ -367,6 +367,25 @@ function isReadyDownloadCandidate(
     destinationReady;
 }
 
+const HLS_AUDIO_QUALIFICATION_FAILURES = new Set([
+  'hls-audio-track-missing',
+  'hls-primary-media-audio-only',
+  'hls-audio-rendition-invalid',
+]);
+
+function blocksUnsafeDirectFallback(
+  candidate: MobileDownloadCandidateV1,
+  itemKey: string,
+  values: readonly MobileDownloadCandidateSnapshotV1[],
+): boolean {
+  if (candidate.preflight.resolvedManifestKind !== 'direct') return false;
+  return values.some((entry) => (
+    entry.itemKey === itemKey &&
+    entry.candidate.sourceId === candidate.sourceId &&
+    HLS_AUDIO_QUALIFICATION_FAILURES.has(entry.candidate.preflight.reasonCode || '')
+  ));
+}
+
 export type MobileDownloadSourceResolutionStateV1 = 'empty' | 'checking' | 'ready';
 
 /**
@@ -386,10 +405,13 @@ export function getMobileDownloadSourceResolutionStateV1(
     .filter((entry) => entry.itemKey === itemKey && entry.candidate.sourceId === sourceId)
     .map((entry) => entry.candidate);
   if (!candidates.length) return 'empty';
-  if (candidates.some((candidate) => (
-    isReadyDownloadCandidate(candidate, 'orion-library')
-    && ['hls', 'dash', 'direct'].includes(candidate.preflight.resolvedManifestKind)
-  ))) return 'ready';
+  if (selectMobileDownloadCandidateForItemV1(
+    itemKey,
+    'auto',
+    values,
+    'orion-library',
+    sourceId,
+  )) return 'ready';
   return 'checking';
 }
 
@@ -417,6 +439,7 @@ export function selectMobileDownloadCandidateForItemV1(
     .filter((entry) => !sourceId || entry.candidate.sourceId === sourceId)
     .map((entry) => entry.candidate)
     .filter((candidate) => isReadyDownloadCandidate(candidate, destination))
+    .filter((candidate) => !blocksUnsafeDirectFallback(candidate, itemKey, values))
     .filter((candidate) => {
       const kind = candidate.preflight.resolvedManifestKind;
       return method === 'fragments' ? kind === 'hls' || kind === 'dash' : kind === 'hls' || kind === 'dash' || kind === 'direct';

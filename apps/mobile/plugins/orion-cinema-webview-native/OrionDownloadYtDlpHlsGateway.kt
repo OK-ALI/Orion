@@ -727,3 +727,47 @@ internal object OrionDownloadYtDlpHlsGateway {
       null
     }
 }
+
+internal object OrionHlsAvComposition {
+  internal data class Result(
+    val video: Boolean,
+    val audio: Boolean,
+    val handlerCount: Int,
+  )
+
+  fun inspectIsoBmffInit(bytes: ByteArray): Result? {
+    if (bytes.size < 20) return null
+
+    var video = false
+    var audio = false
+    var handlers = 0
+
+    var index = 4
+    while (index + 16 <= bytes.size) {
+      if (
+        bytes[index] == 'h'.code.toByte() &&
+        bytes[index + 1] == 'd'.code.toByte() &&
+        bytes[index + 2] == 'l'.code.toByte() &&
+        bytes[index + 3] == 'r'.code.toByte()
+      ) {
+        val sizeOffset = index - 4
+        val size =
+          ((bytes[sizeOffset].toLong() and 0xffL) shl 24) or
+            ((bytes[sizeOffset + 1].toLong() and 0xffL) shl 16) or
+            ((bytes[sizeOffset + 2].toLong() and 0xffL) shl 8) or
+            (bytes[sizeOffset + 3].toLong() and 0xffL)
+        if (size >= 20L && sizeOffset + size <= bytes.size.toLong()) {
+          val handler = String(bytes, index + 12, 4, Charsets.US_ASCII)
+          when (handler) {
+            "vide" -> video = true
+            "soun" -> audio = true
+          }
+          handlers += 1
+        }
+      }
+      index += 1
+    }
+
+    return if (handlers > 0) Result(video, audio, handlers) else null
+  }
+}

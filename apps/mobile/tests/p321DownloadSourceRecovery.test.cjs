@@ -77,3 +77,72 @@ test('Dr. House S2E1 download start rejects a stale episode and accepts its exac
   assert.equal(jobs[0].itemKey, 'series:1408:s2:e1');
   assert.equal(jobs[0].job.candidateId, 's2e1');
 });
+
+test('111Movies A/V qualification rejects fMP4 video-only HLS before READY and proves same-authority master audio', () => {
+  const broker = fs.readFileSync(path.join(mobileRoot, 'plugins', 'orion-cinema-webview-native', 'OrionDownloadRequestContextBroker.kt'), 'utf8');
+  const hls = fs.readFileSync(path.join(mobileRoot, 'plugins', 'orion-cinema-webview-native', 'OrionDownloadYtDlpHlsGateway.kt'), 'utf8');
+
+  assert.match(broker, /MAX_HLS_INIT_PROBE_BYTES = 64 \* 1024/);
+  assert.match(broker, /OrionHlsAvComposition\.inspectIsoBmffInit\(probe\.bytes\)/);
+  assert.match(broker, /stage=hls-av-composition/);
+  assert.match(broker, /code = "hls-audio-track-missing"/);
+  assert.match(broker, /code = "hls-primary-media-audio-only"/);
+  assert.match(broker, /composition\.video && !composition\.audio && !separateAudioProven/);
+
+  assert.match(broker, /master\.audioPlaylistUrl\?\.let \{ audioUrl ->/);
+  assert.match(broker, /probeHlsAudioRendition\(context, audioUrl\)/);
+  assert.match(broker, /urls\.addAll\(audioProbe\.urls\)/);
+  assert.match(broker, /separateAudioProven = true/);
+  assert.match(broker, /parseHlsMedia\(audioUrl, body, "audio", allowAes128 = true\)/);
+  assert.match(broker, /code = "hls-audio-rendition-invalid"/);
+
+  assert.match(hls, /internal object OrionHlsAvComposition/);
+  assert.match(hls, /size >= 20L && sizeOffset \+ size <= bytes\.size\.toLong\(\)/);
+  assert.match(hls, /String\(bytes, index \+ 12, 4, Charsets\.US_ASCII\)/);
+  assert.match(hls, /"vide" -> video = true/);
+  assert.match(hls, /"soun" -> audio = true/);
+});
+
+test('111Movies HLS audio qualification failure cannot silently fall back to same-source direct fragments', () => {
+  const capture = loadTs('src/features/downloads/downloadCandidateCapture.ts', {
+    'react-native': {
+      DeviceEventEmitter: { addListener: () => ({ remove() {} }) },
+      NativeModules: {},
+      Platform: { OS: 'android' },
+    },
+  });
+  const itemKey = 'series:teach:s1:e6';
+  const candidate = (sourceId, kind, state = 'ready', reasonCode = null) => ({
+    candidateId: `${sourceId}-${kind}-${reasonCode || state}`,
+    sourceId,
+    capturedAt: 1,
+    expiry: 'stable',
+    capabilities: { orionLibrary: state === 'ready', deviceStorage: false, resumable: true },
+    preflight: {
+      state,
+      requestContextReady: state === 'ready',
+      resolvedManifestKind: kind,
+      protection: kind === 'hls' ? 'clear' : 'unknown',
+      descendantCount: kind === 'hls' ? 100 : 0,
+      reasonCode,
+    },
+  });
+  const values = [
+    { itemKey, candidate: candidate('111movies', 'hls', 'unsupported', 'hls-audio-track-missing') },
+    { itemKey, candidate: candidate('111movies', 'direct') },
+    { itemKey, candidate: candidate('vixsrc', 'direct') },
+  ];
+
+  assert.equal(
+    capture.selectMobileDownloadCandidateForItemV1(itemKey, 'auto', values, 'orion-library', '111movies'),
+    null,
+  );
+  assert.equal(
+    capture.getMobileDownloadSourceResolutionStateV1(itemKey, '111movies', values),
+    'checking',
+  );
+  assert.equal(
+    capture.selectMobileDownloadCandidateForItemV1(itemKey, 'auto', values, 'orion-library', 'vixsrc')?.candidate?.sourceId,
+    'vixsrc',
+  );
+});

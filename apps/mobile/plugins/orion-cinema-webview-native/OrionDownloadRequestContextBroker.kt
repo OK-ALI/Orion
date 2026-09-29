@@ -35,6 +35,7 @@ internal object OrionDownloadRequestContextBroker {
   private const val CONNECT_TIMEOUT_MS = 6_000
   private const val READ_TIMEOUT_MS = 6_000
   private const val MAX_MANIFEST_BYTES = 256 * 1024
+  private const val MAX_HLS_INIT_PROBE_BYTES = 64 * 1024
   private const val MAX_PREFLIGHT_DESCENDANTS = 512
   private const val MAX_HLS_PLAYLIST_DESCENT = 4
   private const val MAX_JOB_AUTHORIZED_URLS = 20_000
@@ -502,8 +503,15 @@ internal object OrionDownloadRequestContextBroker {
       },
     )
     if (mediaProbe.code != null) {
-      if (mediaProbe.code == "unsupported-direct-container" || mediaProbe.code == "invalid-media") {
-        return PreflightResult.unsupported(mediaProbe.code, mediaProbe.reason ?: "This direct media response is not supported for offline playback.")
+      if (mediaProbe.code in setOf(
+          "unsupported-direct-container",
+          "invalid-media",
+          "hls-audio-track-missing",
+          "hls-primary-media-audio-only",
+          "hls-audio-rendition-invalid",
+        )
+      ) {
+        return PreflightResult.unsupported(mediaProbe.code, mediaProbe.reason ?: "This media response is not supported for safe offline playback.")
       }
       return PreflightResult(
         state = if (mediaProbe.code == "request-context-rejected") "expired" else "unreachable",
@@ -592,6 +600,132 @@ internal object OrionDownloadRequestContextBroker {
     return MediaProbe(urls)
   }
 
+  private data class HlsInitCompositionProbe(
+    val composition: OrionHlsAvComposition.Result? = null,
+    val code: String? = null,
+    val reason: String? = null,
+  )
+
+  private fun probeHlsInitComposition(
+    context: CapturedContext,
+    plan: OrionHlsMediaPlan,
+    urls: MutableSet<String>,
+  ): HlsInitCompositionProbe {
+    val init = plan.fragments.firstOrNull { it.role.endsWith("-init") }
+      ?: return HlsInitCompositionProbe()
+    if (!descendantAllowed(context, init.url)) {
+      return HlsInitCompositionProbe(
+        code = "descendant-origin-not-approved",
+        reason = "The HLS initialization request left the approved source boundary.",
+      )
+    }
+    urls.add(init.url)
+    val probe = probeChild(context, init.url, MAX_HLS_INIT_PROBE_BYTES, false, mediaBytes = true)
+      .let(::tolerateStrongAvMimeMismatch)
+    if (probe.code != null) {
+      return HlsInitCompositionProbe(code = probe.code, reason = probe.reason)
+    }
+    return HlsInitCompositionProbe(
+      composition = OrionHlsAvComposition.inspectIsoBmffInit(probe.bytes),
+    )
+  }
+
+  private fun probeHlsAudioRendition(
+    context: CapturedContext,
+    audioUrl: String,
+  ): MediaProbe {
+    val urls = linkedSetOf<String>()
+    if (!descendantAllowed(context, audioUrl)) {
+      return MediaProbe(
+        code = "descendant-origin-not-approved",
+        reason = "The HLS audio playlist left the approved source boundary.",
+      )
+    }
+    urls.add(audioUrl)
+    val playlist = probeChild(context, audioUrl, MAX_MANIFEST_BYTES, false)
+    if (playlist.code != null) return MediaProbe(code = playlist.code, reason = playlist.reason)
+    val body = playlist.bytes.toString(Charsets.UTF_8)
+    if (!OrionDownloadFragmentPlanner.isHlsPlaylistBody(body) ||
+      OrionDownloadFragmentPlanner.selectHlsMaster(audioUrl, body, "best") != null
+    ) {
+      return MediaProbe(
+        code = "hls-audio-rendition-invalid",
+        reason = "The selected HLS audio rendition was not a downloadable media playlist.",
+      )
+    }
+
+    val plan = OrionDownloadFragmentPlanner.parseHlsMedia(audioUrl, body, "audio", allowAes128 = true)
+    if (plan.issueCode != null || plan.mediaFragmentCount <= 0) {
+      return MediaProbe(
+        code = "hls-audio-rendition-invalid",
+        reason = "The selected HLS audio rendition did not expose downloadable audio media.",
+      )
+    }
+
+    for (keyUrl in plan.keyUrls) {
+      if (!descendantAllowed(context, keyUrl)) {
+        return MediaProbe(
+          code = "descendant-origin-not-approved",
+          reason = "The HLS audio key left the approved source boundary.",
+        )
+      }
+      val key = probeChild(context, keyUrl, 17, false)
+      if (key.code != null || key.bytes.size != 16) {
+        return MediaProbe(
+          code = key.code ?: "hls-key-invalid",
+          reason = key.reason ?: "The HLS audio rendition did not return a valid media key.",
+        )
+      }
+      urls.add(keyUrl)
+    }
+
+    val initProbe = probeHlsInitComposition(context, plan, urls)
+    if (initProbe.code != null) {
+      return MediaProbe(code = initProbe.code, reason = initProbe.reason)
+    }
+    val initComposition = initProbe.composition
+    if (initComposition != null && !initComposition.audio) {
+      return MediaProbe(
+        code = "hls-audio-rendition-invalid",
+        reason = "The selected HLS audio rendition did not prove an audio track.",
+      )
+    }
+
+    val fragment = plan.firstMediaFragment()
+      ?: return MediaProbe(
+        code = "hls-audio-rendition-invalid",
+        reason = "The selected HLS audio rendition did not expose media fragments.",
+      )
+    if (!descendantAllowed(context, fragment.url)) {
+      return MediaProbe(
+        code = "descendant-origin-not-approved",
+        reason = "The HLS audio media request left the approved source boundary.",
+      )
+    }
+    urls.add(fragment.url)
+    val media = probeChild(context, fragment.url, 4096, false, mediaBytes = true).let { audioProbe ->
+      tolerateStrongAvMimeMismatch(
+        tolerateKeyedOpaqueMimeMismatch(audioProbe, plan.keyUrls.isNotEmpty()),
+      )
+    }
+    if (media.code != null) return MediaProbe(code = media.code, reason = media.reason)
+    if (isHlsPlaylistProbe(media)) {
+      return MediaProbe(
+        code = "hls-audio-rendition-invalid",
+        reason = "The selected HLS audio rendition changed shape during qualification.",
+      )
+    }
+    val signature = preflightMediaSignatureClass(media.bytes)
+    if (!isStrongAvMediaSignature(signature) && signature != "binary-other") {
+      return MediaProbe(
+        code = "hls-audio-rendition-invalid",
+        reason = "The selected HLS audio rendition did not expose audio/video media bytes.",
+      )
+    }
+
+    return MediaProbe(urls)
+  }
+
   private fun probeFirstHlsMedia(
     context: CapturedContext,
     rootUrl: String,
@@ -600,6 +734,7 @@ internal object OrionDownloadRequestContextBroker {
     val urls = linkedSetOf<String>()
     var playlistUrl = rootUrl
     var playlistBody = manifest
+    var separateAudioProven = false
 
     repeat(MAX_HLS_PLAYLIST_DESCENT) { depth ->
       val shape = inspectHlsShape(playlistBody)
@@ -624,6 +759,15 @@ internal object OrionDownloadRequestContextBroker {
 
       val master = OrionDownloadFragmentPlanner.selectHlsMaster(playlistUrl, playlistBody, "best")
       if (master != null) {
+        master.audioPlaylistUrl?.let { audioUrl ->
+          val audioProbe = probeHlsAudioRendition(context, audioUrl)
+          if (audioProbe.code != null) {
+            return MediaProbe(code = audioProbe.code, reason = audioProbe.reason)
+          }
+          urls.addAll(audioProbe.urls)
+          separateAudioProven = true
+        }
+
         val mediaUrl = master.videoPlaylistUrl
         if (!descendantAllowed(context, mediaUrl)) {
           return MediaProbe(code = "descendant-origin-not-approved", reason = "The media request left the approved source boundary.")
@@ -654,6 +798,40 @@ internal object OrionDownloadRequestContextBroker {
           return MediaProbe(code = "hls-key-invalid", reason = "The source did not return a valid media key.")
         }
         urls.add(keyUrl)
+      }
+
+      val initProbe = probeHlsInitComposition(context, plan, urls)
+      if (initProbe.code != null) return MediaProbe(code = initProbe.code, reason = initProbe.reason)
+      initProbe.composition?.let { composition ->
+        val outcome = when {
+          !composition.video && composition.audio -> "audio-only"
+          composition.video && !composition.audio && !separateAudioProven -> "video-only"
+          else -> "ok"
+        }
+        tracePhysicalOnce(
+          key = "${context.sessionId}:hls-av-composition:${context.candidateId}:$depth",
+          message = buildString {
+            append("stage=hls-av-composition")
+            append(" depth=").append(depth)
+            append(" video=").append(composition.video)
+            append(" audio=").append(composition.audio)
+            append(" separateAudio=").append(separateAudioProven)
+            append(" handlers=").append(composition.handlerCount)
+            append(" outcome=").append(outcome)
+          },
+        )
+        if (!composition.video && composition.audio) {
+          return MediaProbe(
+            code = "hls-primary-media-audio-only",
+            reason = "This HLS candidate exposed an audio-only rendition instead of the primary video.",
+          )
+        }
+        if (composition.video && !composition.audio && !separateAudioProven) {
+          return MediaProbe(
+            code = "hls-audio-track-missing",
+            reason = "This HLS rendition is video-only and does not expose a matching audio track.",
+          )
+        }
       }
 
       val fragment = plan.firstMediaFragment()?.url
