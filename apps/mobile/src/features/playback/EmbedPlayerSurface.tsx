@@ -134,6 +134,7 @@ export function EmbedPlayerSurface({
   const surfaceLoaded = useRef(false);
   const webViewRef = useRef<WebViewType>(null);
   const source = ALL_CINEMA_SOURCES.find((entry) => entry.id === sourceId);
+  const downloadQualificationCaptureEnabled = source != null && (source.supportsDownloads === true || sourceId === 'vidlink');
   const sourceLabel = source?.label || 'VidEasy Direct';
   const expectedOrigins = source?.expectedOrigins || [];
   const sourceContinuity = getMobileSourceContinuityCapability(sourceId);
@@ -232,7 +233,7 @@ export function EmbedPlayerSurface({
   const injectedScript = `${mobileAdBlockerScript}\n${telemetryScript}`;
 
   useEffect(() => {
-    if (Platform.OS !== 'android' || source?.supportsDownloads !== true) return undefined;
+    if (Platform.OS !== 'android' || !source || !downloadQualificationCaptureEnabled) return undefined;
     return beginMobileDownloadCaptureSessionV1({
       playbackSessionId,
       sourceId,
@@ -240,7 +241,7 @@ export function EmbedPlayerSurface({
       itemKey: downloadTarget.itemKey,
       media: downloadTarget.media,
     });
-  }, [downloadTarget, playbackSessionId, source?.releaseStatus, source?.supportsDownloads, sourceId]);
+  }, [downloadQualificationCaptureEnabled, downloadTarget, playbackSessionId, source?.releaseStatus, sourceId]);
 
   useEffect(() => {
     loadStartedAt.current = Date.now();
@@ -666,7 +667,7 @@ export function EmbedPlayerSurface({
             rules: [],
           }}
             shieldSessionId={playbackSessionId}
-            downloadCaptureEnabled={source?.supportsDownloads === true}
+            downloadCaptureEnabled={downloadQualificationCaptureEnabled}
             downloadProviderClass={source?.releaseStatus || null}
             onNativeShieldEvidence={handleNativeShieldEvidence}
             onNativeSingleTap={providerControlsMode ? undefined : controller.toggleChromeFromUserTap}

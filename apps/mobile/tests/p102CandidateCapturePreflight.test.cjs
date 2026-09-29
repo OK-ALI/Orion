@@ -135,7 +135,8 @@ test('P10.2 playback lifecycle scopes capture to the exact active session source
   assert.match(surface, /playbackSessionId/);
   assert.match(surface, /itemKey: downloadTarget\.itemKey/);
   assert.match(surface, /media: downloadTarget\.media/);
-  assert.match(surface, /downloadCaptureEnabled=\{source\?\.supportsDownloads === true\}/);
+  assert.match(surface, /source != null && \(source\.supportsDownloads === true \|\| sourceId === 'vidlink'\)/);
+  assert.match(surface, /downloadCaptureEnabled=\{downloadQualificationCaptureEnabled\}/);
 });
 
 test('P10.2 JavaScript normalization strips malicious native hitchhiker fields and rejects session mismatch', () => {
