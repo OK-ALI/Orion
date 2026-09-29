@@ -135,8 +135,19 @@ test('P10.2 playback lifecycle scopes capture to the exact active session source
   assert.match(surface, /playbackSessionId/);
   assert.match(surface, /itemKey: downloadTarget\.itemKey/);
   assert.match(surface, /media: downloadTarget\.media/);
-  assert.match(surface, /source != null && \(source\.supportsDownloads === true \|\| sourceId === 'vidlink'\)/);
+  assert.match(surface, /source != null && \(source\.supportsDownloads === true \|\| \['vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc'\]\.includes\(sourceId\)\)/);
   assert.match(surface, /downloadCaptureEnabled=\{downloadQualificationCaptureEnabled\}/);
+});
+
+test('P10.2 candidate-provider diagnostics stay playback-only until physical download qualification', () => {
+  const candidates = readShared('src', 'sources', 'adapters', 'candidates.ts');
+  for (const sourceId of ['vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc']) {
+    const start = candidates.indexOf(`id: "${sourceId}"`);
+    assert.notEqual(start, -1, `missing candidate source ${sourceId}`);
+    const block = candidates.slice(start, candidates.indexOf('  },', start) + 4);
+    assert.match(block, /supportsDownloads:\s*false/);
+    assert.match(block, /routingMode:\s*"manual-only"/);
+  }
 });
 
 test('P10.2 JavaScript normalization strips malicious native hitchhiker fields and rejects session mismatch', () => {

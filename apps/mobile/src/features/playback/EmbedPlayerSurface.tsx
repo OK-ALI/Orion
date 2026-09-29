@@ -134,7 +134,7 @@ export function EmbedPlayerSurface({
   const surfaceLoaded = useRef(false);
   const webViewRef = useRef<WebViewType>(null);
   const source = ALL_CINEMA_SOURCES.find((entry) => entry.id === sourceId);
-  const downloadQualificationCaptureEnabled = source != null && (source.supportsDownloads === true || sourceId === 'vidlink');
+  const downloadQualificationCaptureEnabled = source != null && (source.supportsDownloads === true || ['vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc'].includes(sourceId));
   const sourceLabel = source?.label || 'VidEasy Direct';
   const expectedOrigins = source?.expectedOrigins || [];
   const sourceContinuity = getMobileSourceContinuityCapability(sourceId);
