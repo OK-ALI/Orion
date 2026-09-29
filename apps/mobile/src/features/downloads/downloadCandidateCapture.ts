@@ -62,6 +62,23 @@ let snapshots: MobileDownloadCandidateSnapshotV1[] = [];
 let pendingSourceResolution: { itemKey: string; method: MobileDownloadTransferMethodV1; sourceId: string | null; expiresAt: number; autoReturnIssued: boolean; failure: string | null } | null = null;
 const retainedSourceSessions = new Map<string, Set<string>>();
 const listeners = new Set<Listener>();
+const HLS_AUDIO_QUALIFICATION_FAILURES = new Set([
+  'hls-audio-track-missing',
+  'hls-primary-media-audio-only',
+  'hls-audio-rendition-invalid',
+]);
+const unsafeDirectFallbackSources = new Set<string>();
+
+function sourcePreparationKey(itemKey: string, sourceId: string): string {
+  return `${itemKey}\u0000${sourceId}`;
+}
+
+function clearUnsafeDirectFallbacksForItem(itemKey: string): void {
+  const prefix = `${itemKey}\u0000`;
+  for (const key of Array.from(unsafeDirectFallbackSources)) {
+    if (key.startsWith(prefix)) unsafeDirectFallbackSources.delete(key);
+  }
+}
 
 function nativeModule(): NativeDownloadCaptureModule | null {
   if (Platform.OS !== 'android') return null;
@@ -204,6 +221,7 @@ function pendingSourceResolutionActive(itemKey?: string): boolean {
     pendingSourceResolution = null;
     releaseRetainedSessions(expiredItemKey);
     snapshots = snapshots.filter((entry) => entry.itemKey !== expiredItemKey);
+    clearUnsafeDirectFallbacksForItem(expiredItemKey);
     publish();
     return false;
   }
@@ -274,6 +292,7 @@ export function completeMobileDownloadSourceResolutionV1(itemKey: string): void 
   if (pendingSourceResolution?.itemKey === itemKey) pendingSourceResolution = null;
   releaseRetainedSessions(itemKey);
   snapshots = snapshots.filter((entry) => entry.itemKey !== itemKey);
+  clearUnsafeDirectFallbacksForItem(itemKey);
   publish();
 }
 
@@ -286,6 +305,9 @@ function ensureEventSubscription(): void {
   eventSubscription = DeviceEventEmitter.addListener(EVENT_NAME, (payload) => {
     const normalized = normalizeMobileDownloadCandidateEventV1(payload);
     if (!normalized) return;
+    if (HLS_AUDIO_QUALIFICATION_FAILURES.has(normalized.candidate.preflight.reasonCode || '')) {
+      unsafeDirectFallbackSources.add(sourcePreparationKey(normalized.itemKey, normalized.candidate.sourceId));
+    }
     snapshots = [
       normalized,
       ...snapshots.filter((entry) => entry.candidate.candidateId !== normalized.candidate.candidateId),
@@ -296,6 +318,7 @@ function ensureEventSubscription(): void {
 
 export function beginMobileDownloadCaptureSessionV1(input: BeginMobileDownloadCaptureSessionInputV1): () => void {
   pendingSourceResolutionActive();
+  unsafeDirectFallbackSources.delete(sourcePreparationKey(input.itemKey, input.sourceId));
   if (activeSession?.itemKey === input.itemKey && activeSession.playbackSessionId !== input.playbackSessionId) {
     nativeModule()?.releaseSession(activeSession.playbackSessionId);
   }
@@ -367,18 +390,13 @@ function isReadyDownloadCandidate(
     destinationReady;
 }
 
-const HLS_AUDIO_QUALIFICATION_FAILURES = new Set([
-  'hls-audio-track-missing',
-  'hls-primary-media-audio-only',
-  'hls-audio-rendition-invalid',
-]);
-
 function blocksUnsafeDirectFallback(
   candidate: MobileDownloadCandidateV1,
   itemKey: string,
   values: readonly MobileDownloadCandidateSnapshotV1[],
 ): boolean {
   if (candidate.preflight.resolvedManifestKind !== 'direct') return false;
+  if (unsafeDirectFallbackSources.has(sourcePreparationKey(itemKey, candidate.sourceId))) return true;
   return values.some((entry) => (
     entry.itemKey === itemKey &&
     entry.candidate.sourceId === candidate.sourceId &&

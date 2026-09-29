@@ -103,46 +103,110 @@ test('111Movies A/V qualification rejects fMP4 video-only HLS before READY and p
   assert.match(hls, /"soun" -> audio = true/);
 });
 
-test('111Movies HLS audio qualification failure cannot silently fall back to same-source direct fragments', () => {
+test('111Movies HLS audio qualification failure survives snapshot eviction and blocks direct fragments for that preparation', () => {
+  let onCandidate = null;
   const capture = loadTs('src/features/downloads/downloadCandidateCapture.ts', {
     'react-native': {
-      DeviceEventEmitter: { addListener: () => ({ remove() {} }) },
+      DeviceEventEmitter: {
+        addListener: (_name, listener) => {
+          onCandidate = listener;
+          return { remove() {} };
+        },
+      },
       NativeModules: {},
       Platform: { OS: 'android' },
     },
   });
   const itemKey = 'series:teach:s1:e6';
-  const candidate = (sourceId, kind, state = 'ready', reasonCode = null) => ({
-    candidateId: `${sourceId}-${kind}-${reasonCode || state}`,
+  const playbackSessionId = '111movies-session-1';
+  const sourceId = '111movies';
+  const nativeCandidate = (candidateId, kind, state = 'ready', reasonCode = null) => ({
+    schemaVersion: 1,
+    playbackSessionId,
     sourceId,
-    capturedAt: 1,
+    providerClass: 'experimental',
+    candidateId,
+    requestContextId: `ctx-${candidateId}`,
+    manifestKind: 'extensionless',
     expiry: 'stable',
-    capabilities: { orionLibrary: state === 'ready', deviceStorage: false, resumable: true },
-    preflight: {
-      state,
-      requestContextReady: state === 'ready',
-      resolvedManifestKind: kind,
-      protection: kind === 'hls' ? 'clear' : 'unknown',
-      descendantCount: kind === 'hls' ? 100 : 0,
-      reasonCode,
+    protection: kind === 'hls' ? 'clear' : 'unknown',
+    availableQualities: ['best'],
+    capabilities: {
+      orionLibrary: state === 'ready',
+      deviceStorage: false,
+      resumable: true,
+      subtitles: false,
+      audioSelection: false,
     },
+    preflight: {
+      schemaVersion: 1,
+      candidateId,
+      state,
+      reachability: 'reachable',
+      resolvedManifestKind: kind,
+      expiry: 'stable',
+      protection: kind === 'hls' ? 'clear' : 'unknown',
+      requestContextReady: state === 'ready',
+      descendantCount: kind === 'hls' ? 100 : 0,
+      requiredBytes: kind === 'direct' ? 78_131 : null,
+      storageRequirement: kind === 'direct' ? 'known' : 'unknown',
+      orionLibraryFreeBytes: null,
+      reasonCode,
+      reason: null,
+      checkedAt: 1,
+    },
+    capturedAt: 1,
   });
-  const values = [
-    { itemKey, candidate: candidate('111movies', 'hls', 'unsupported', 'hls-audio-track-missing') },
-    { itemKey, candidate: candidate('111movies', 'direct') },
-    { itemKey, candidate: candidate('vixsrc', 'direct') },
-  ];
 
+  capture.requestMobileDownloadSourceResolutionV1(itemKey, 'auto', sourceId);
+  const endSession = capture.beginMobileDownloadCaptureSessionV1({
+    playbackSessionId,
+    sourceId,
+    providerClass: 'experimental',
+    itemKey,
+    media: { mediaType: 'tv', tmdbId: 1, season: 1, episode: 6 },
+  });
+  assert.equal(typeof onCandidate, 'function');
+
+  onCandidate(nativeCandidate('hls-video-only', 'hls', 'unsupported', 'hls-audio-track-missing'));
+  for (let index = 0; index < 20; index += 1) {
+    onCandidate(nativeCandidate(`direct-fragment-${index}`, 'direct'));
+  }
+
+  const retained = capture.getMobileDownloadCandidateSnapshotsV1();
+  assert.equal(retained.length, 12);
+  assert.equal(retained.some((entry) => entry.candidate.preflight.reasonCode === 'hls-audio-track-missing'), false);
   assert.equal(
-    capture.selectMobileDownloadCandidateForItemV1(itemKey, 'auto', values, 'orion-library', '111movies'),
+    capture.selectMobileDownloadCandidateForItemV1(itemKey, 'auto', retained, 'orion-library', sourceId),
     null,
   );
+  assert.equal(capture.getMobileDownloadSourceResolutionStateV1(itemKey, sourceId, retained), 'checking');
+
+  endSession();
+  capture.completeMobileDownloadSourceResolutionV1(itemKey);
+
+  // A genuinely fresh preparation is not permanently poisoned by the prior failure.
+  const nextSessionId = '111movies-session-2';
+  capture.requestMobileDownloadSourceResolutionV1(itemKey, 'auto', sourceId);
+  capture.beginMobileDownloadCaptureSessionV1({
+    playbackSessionId: nextSessionId,
+    sourceId,
+    providerClass: 'experimental',
+    itemKey,
+    media: { mediaType: 'tv', tmdbId: 1, season: 1, episode: 6 },
+  });
+  onCandidate({
+    ...nativeCandidate('fresh-direct', 'direct'),
+    playbackSessionId: nextSessionId,
+    candidateId: 'fresh-direct',
+    requestContextId: 'ctx-fresh-direct',
+    preflight: {
+      ...nativeCandidate('fresh-direct', 'direct').preflight,
+      candidateId: 'fresh-direct',
+    },
+  });
   assert.equal(
-    capture.getMobileDownloadSourceResolutionStateV1(itemKey, '111movies', values),
-    'checking',
-  );
-  assert.equal(
-    capture.selectMobileDownloadCandidateForItemV1(itemKey, 'auto', values, 'orion-library', 'vixsrc')?.candidate?.sourceId,
-    'vixsrc',
+    capture.selectMobileDownloadCandidateForItemV1(itemKey, 'auto', undefined, 'orion-library', sourceId)?.candidate?.candidateId,
+    'fresh-direct',
   );
 });
