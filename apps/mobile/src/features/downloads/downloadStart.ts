@@ -1,6 +1,6 @@
 import type { MobileDownloadJobV1, MobileDownloadPreferencesV1, MobileDownloadStorageTargetV1 } from '@orion/shared/types';
 import { mobileDownloadItemKeyFromMediaV1, type MobileDownloadTargetV1 } from './downloadIdentity';
-import type { MobileDownloadCandidateSelectionV1 } from './downloadCandidateCapture';
+import { isMobileDownloadSourceAllowedV1, type MobileDownloadCandidateSelectionV1 } from './downloadCandidateCapture';
 import { startNativeDownloadJobV1 } from './nativeDownloadEngine';
 import { resolveMobileDownloadSubtitleSourcesForNativeV1 } from './downloadSubtitles';
 
@@ -23,6 +23,9 @@ function createJobId(): string {
 export async function startMobileDownloadFromSelectionV1(input: StartMobileDownloadSelectionInputV1): Promise<string> {
   const { target, selection, preferences } = input;
   const candidate = selection.candidate;
+  if (!isMobileDownloadSourceAllowedV1(candidate.sourceId)) {
+    throw new Error('This provider is not authorized for Mobile downloads.');
+  }
   if (mobileDownloadItemKeyFromMediaV1(candidate.media) !== target.itemKey ||
       String(candidate.media.id) !== String(target.media.id) ||
       candidate.media.mediaType !== target.media.mediaType ||

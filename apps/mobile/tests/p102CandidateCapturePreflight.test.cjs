@@ -24,6 +24,9 @@ function loadTypeScriptModule(filePath, mocks = {}) {
   const module = { exports: {} };
   const localRequire = (specifier) => {
     if (Object.prototype.hasOwnProperty.call(mocks, specifier)) return mocks[specifier];
+    if (specifier === '@orion/shared/sources') return {
+      getRegisteredSource: (id) => ['videasy', 'vixsrc', 'vidsrc'].includes(id) ? { supportsDownloads: true } : null,
+    };
     throw new Error(`Unexpected runtime import in P10.2 test: ${specifier}`);
   };
   const factory = new Function('exports', 'require', 'module', '__filename', '__dirname', output);

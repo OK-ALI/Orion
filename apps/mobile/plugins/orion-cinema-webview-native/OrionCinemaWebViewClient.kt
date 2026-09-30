@@ -47,8 +47,12 @@ class OrionCinemaWebViewClient(
     val next = ShieldManifest.parse(serialized)
     manifest = next
     if (previousSessionId != null && previousSessionId != next?.sessionId) {
+      OrionDownloadRequestContextBroker.stopCaptureSession(previousSessionId, revoke = next == null)
       OrionCinemaServiceWorkerDownloadObserver.deactivate(previousSessionId)
     }
+    if (next != null) OrionDownloadRequestContextBroker.setCaptureSession(
+      next.sourceId, next.sessionId, next.downloadCaptureEnabled, next.downloadAllowed,
+    )
     if (next?.downloadCaptureEnabled == true) {
       OrionCinemaServiceWorkerDownloadObserver.activate(reactContext, next)
     } else if (next != null) {
@@ -66,6 +70,7 @@ class OrionCinemaWebViewClient(
   }
 
   fun dispose() {
+    manifest?.sessionId?.let { OrionDownloadRequestContextBroker.stopCaptureSession(it) }
     manifest?.sessionId?.let(OrionCinemaServiceWorkerDownloadObserver::deactivate)
     manifest = null
   }
@@ -316,6 +321,7 @@ private data class ShieldManifest(
   val sessionId: String,
   val providerClass: String?,
   val downloadCaptureEnabled: Boolean,
+  val downloadAllowed: Boolean,
   val mode: String,
   val allowedNavigationOrigins: List<String>,
   val requiredOrigins: List<String>,
@@ -350,6 +356,7 @@ private data class ShieldManifest(
           json.optString("sessionId", ""),
           json.optString("providerClass", "").trim().takeIf { it.isNotEmpty() },
           json.optBoolean("downloadCaptureEnabled", false),
+          json.opt("downloadAllowed") == true,
           json.optString("mode", "observe"),
           strings("allowedNavigationOrigins"),
           strings("requiredOrigins"),

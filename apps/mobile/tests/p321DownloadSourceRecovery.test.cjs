@@ -13,6 +13,9 @@ function loadTs(relative, mocks = {}) {
   }).outputText;
   const module = { exports: {} };
   new Function('exports', 'require', 'module', js)(module.exports, (specifier) => {
+    if (!(specifier in mocks) && specifier === '@orion/shared/sources') return {
+      getRegisteredSource: (id) => ['vixsrc', 'vidsrc', '111movies'].includes(id) ? { supportsDownloads: true } : null,
+    };
     if (!(specifier in mocks)) throw new Error(`Unexpected import ${specifier}`);
     return mocks[specifier];
   }, module);
@@ -53,6 +56,7 @@ test('Dr. House S2E1 download start rejects a stale episode and accepts its exac
   const jobs = [];
   const identity = loadTs('src/features/downloads/downloadIdentity.ts');
   const start = loadTs('src/features/downloads/downloadStart.ts', {
+    './downloadCandidateCapture': { isMobileDownloadSourceAllowedV1: (id) => id === 'vixsrc' },
     './downloadIdentity': identity,
     './nativeDownloadEngine': { startNativeDownloadJobV1: async (input) => { jobs.push(input); return input.job.jobId; } },
     './downloadSubtitles': { resolveMobileDownloadSubtitleSourcesForNativeV1: () => [] },

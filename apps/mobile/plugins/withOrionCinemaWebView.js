@@ -82,6 +82,7 @@ const CINEMA_NATIVE_TEST_FILES = Object.freeze([
   'OrionDownloadManagementPolicyTest.kt',
   'OrionDownloadRetryPolicyTest.kt',
   'OrionDownloadOriginTrustTest.kt',
+  'OrionDownloadEligibilityTest.kt',
   'OrionDownloadCancellationFenceTest.kt',
   'OrionDownloadYtDlpGatewayTest.kt',
   'OrionDownloadYtDlpHlsGatewayTest.kt',

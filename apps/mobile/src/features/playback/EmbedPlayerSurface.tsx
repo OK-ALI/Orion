@@ -139,7 +139,6 @@ export function EmbedPlayerSurface({
   const expectedOrigins = source?.expectedOrigins || [];
   const sourceContinuity = getMobileSourceContinuityCapability(sourceId);
   const telemetryExpectedOrigins = expectedOrigins;
-
   const shieldManifest = source?.requestManifest;
   const selectedSubtitle = selectedSubtitleId ? getInternalSubtitleTrack(selectedSubtitleId) : null;
   const shieldedEmbedUrl = useMemo(() => {
@@ -668,6 +667,7 @@ export function EmbedPlayerSurface({
           }}
             shieldSessionId={playbackSessionId}
             downloadCaptureEnabled={downloadQualificationCaptureEnabled}
+            downloadAllowed={source?.supportsDownloads === true}
             downloadProviderClass={source?.releaseStatus || null}
             onNativeShieldEvidence={handleNativeShieldEvidence}
             onNativeSingleTap={providerControlsMode ? undefined : controller.toggleChromeFromUserTap}

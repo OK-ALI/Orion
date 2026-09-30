@@ -249,7 +249,7 @@ class OrionDownloadYtDlpHlsGatewayTest {
     val keys = mutableListOf<String>()
     val rewritten = OrionDownloadYtDlpHlsGateway.rewriteMediaPlaylist(
       base, body,
-      { media.add(it); "http://127.0.0.1:45678/media.bin" },
+      { childUrl, _ -> media.add(childUrl); "http://127.0.0.1:45678/media.bin" },
       { keys.add(it); "http://127.0.0.1:45678/key.bin" },
     )
     assertNotNull(rewritten)

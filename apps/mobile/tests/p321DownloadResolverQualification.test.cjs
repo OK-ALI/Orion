@@ -16,6 +16,9 @@ function loadTs(relative, mocks = {}) {
   }).outputText;
   const module = { exports: {} };
   new Function('exports', 'require', 'module', js)(module.exports, (specifier) => {
+    if (!(specifier in mocks) && specifier === '@orion/shared/sources') return {
+      getRegisteredSource: (id) => id === 'vixsrc' ? { supportsDownloads: true } : null,
+    };
     if (!(specifier in mocks)) throw new Error(`Unexpected import ${specifier}`);
     return mocks[specifier];
   }, module);

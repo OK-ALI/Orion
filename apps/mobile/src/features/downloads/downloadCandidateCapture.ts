@@ -1,4 +1,5 @@
 import { DeviceEventEmitter, NativeModules, Platform } from 'react-native';
+import { getRegisteredSource } from '@orion/shared/sources';
 import type {
   MobileDownloadCandidatePreflightV1,
   MobileDownloadCandidateV1,
@@ -15,6 +16,12 @@ import type {
 const EVENT_NAME = 'OrionDownloadCandidate';
 const MAX_REASON_LENGTH = 180;
 const SOURCE_RESOLUTION_RETENTION_MS = 4 * 60_000;
+
+/** Preparation capture never grants descriptor download eligibility. */
+export function isMobileDownloadSourceAllowedV1(sourceId: string): boolean {
+  const source = getRegisteredSource(sourceId);
+  return source?.supportsDownloads === true && source.releaseStatus !== 'disabled' && !source.quarantined;
+}
 
 const MANIFEST_KINDS = new Set<MobileDownloadManifestKindV1>(['direct', 'hls', 'dash', 'extensionless', 'unknown']);
 const RESOLVED_MANIFEST_KINDS = new Set<MobileDownloadCandidatePreflightV1['resolvedManifestKind']>(['direct', 'hls', 'dash', 'unknown']);
@@ -169,6 +176,7 @@ export function normalizeMobileDownloadCandidateEventV1(
   const nativeCapabilities = input.capabilities && typeof input.capabilities === 'object'
     ? input.capabilities as Record<string, unknown>
     : {};
+  const downloadAllowed = isMobileDownloadSourceAllowedV1(session.sourceId);
   const qualities = Array.isArray(input.availableQualities)
     ? input.availableQualities.filter((quality): quality is MobileDownloadQualityV1 => QUALITY_STATES.has(quality as MobileDownloadQualityV1))
     : [];
@@ -183,9 +191,9 @@ export function normalizeMobileDownloadCandidateEventV1(
     providerClass: text(input.providerClass, 40) || session.providerClass,
     manifestKind: manifestKind as MobileDownloadManifestKindV1,
     capabilities: {
-      orionLibrary: nativeCapabilities.orionLibrary === true,
-      deviceStorage: nativeCapabilities.deviceStorage === true,
-      resumable: nativeCapabilities.resumable === true,
+      orionLibrary: downloadAllowed && nativeCapabilities.orionLibrary === true,
+      deviceStorage: downloadAllowed && nativeCapabilities.deviceStorage === true,
+      resumable: downloadAllowed && nativeCapabilities.resumable === true,
       subtitles: nativeCapabilities.subtitles === true,
       audioSelection: nativeCapabilities.audioSelection === true,
       deviceStorageBlockedReason: text(nativeCapabilities.deviceStorageBlockedReason, MAX_REASON_LENGTH),
@@ -382,6 +390,7 @@ function isReadyDownloadCandidate(
   candidate: MobileDownloadCandidateV1,
   destination: 'orion-library' | 'device-storage',
 ): boolean {
+  if (!isMobileDownloadSourceAllowedV1(candidate.sourceId)) return false;
   const destinationReady = destination === 'device-storage'
     ? candidate.capabilities.deviceStorage === true
     : candidate.capabilities.orionLibrary === true;
@@ -489,6 +498,10 @@ export async function bindMobileDownloadRequestContextV1(
   candidateId: string,
   jobId: string,
 ): Promise<{ requestContextId: string; expiresAt: number | null }> {
+  const snapshot = snapshots.find((entry) => entry.candidate.candidateId === candidateId);
+  if (!snapshot || !isReadyDownloadCandidate(snapshot.candidate, 'orion-library')) {
+    throw new Error('This provider is not authorized for Mobile downloads.');
+  }
   const module = nativeModule();
   if (!module) throw new Error('Android download request context is unavailable.');
   const result = await module.bindRequestContext(candidateId, jobId);

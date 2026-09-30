@@ -49,6 +49,27 @@ internal object OrionDownloadRequestContextBroker {
   private val physicalTraceKeys = linkedSetOf<String>()
   private val opaqueProbeCounts = mutableMapOf<String, Int>()
   private val observedRequestMaterial = mutableMapOf<String, LinkedHashMap<String, CapturedRequestMaterial>>()
+  private val captureSessions = mutableMapOf<String, OrionDownloadCaptureSession>()
+
+  /** Called only by Orion's native WebView session prop, never by provider messages. */
+  @Synchronized
+  internal fun setCaptureSession(sourceId: String, sessionId: String, captureEnabled: Boolean, downloadAllowed: Any?) {
+    val previous = captureSessions[sessionId]
+    val allowed = downloadAllowed == true
+    if (previous != null && previous.sourceId == sourceId && previous.active &&
+      previous.captureEnabled == captureEnabled && previous.downloadAllowed == allowed) return
+    previous?.revoked = true
+    if (sourceId.isBlank() || sessionId.isBlank() || !captureEnabled) {
+      captureSessions.remove(sessionId)
+      return
+    }
+    captureSessions[sessionId] = OrionDownloadCaptureSession(sourceId, sessionId, captureEnabled, allowed)
+  }
+
+  @Synchronized
+  internal fun stopCaptureSession(sessionId: String, revoke: Boolean = false) {
+    captureSessions.remove(sessionId)?.let { it.active = false; if (revoke) it.revoked = true }
+  }
 
   fun observeRequest(
     reactContext: ReactContext,
@@ -72,6 +93,8 @@ internal object OrionDownloadRequestContextBroker {
       },
     )
     if (!downloadCaptureEnabled || request.isForMainFrame) return
+    val captureSession = synchronized(this) { captureSessions[sessionId] }
+      ?.takeIf { it.canObserve(sourceId, sessionId) } ?: return
     val uri = request.url ?: return
     val scheme = uri.scheme?.lowercase(Locale.US)
     if (scheme != "http" && scheme != "https") {
@@ -113,6 +136,7 @@ internal object OrionDownloadRequestContextBroker {
     val candidateId: String
     val context: CapturedContext
     synchronized(this) {
+      if (!captureSession.canObserve(sourceId, sessionId) || captureSessions[sessionId] !== captureSession) return
       cleanupExpiredLocked(System.currentTimeMillis())
       val existingId = candidateByFingerprint[fingerprint]
       if (existingId != null && contexts.containsKey(existingId)) return
@@ -144,6 +168,8 @@ internal object OrionDownloadRequestContextBroker {
         capturedAt = capturedAt,
         allowedOrigins = buildAllowedOrigins(rawUrl, allowedMediaOrigins),
         opaqueProbe = opaqueProbe,
+        downloadAllowed = captureSession.downloadAllowed,
+        captureSession = captureSession,
       )
       contexts[candidateId] = context
       candidateByFingerprint[fingerprint] = candidateId
@@ -170,6 +196,7 @@ internal object OrionDownloadRequestContextBroker {
     synchronized(this) {
       cleanupExpiredLocked(System.currentTimeMillis())
       val context = contexts[candidateId] ?: return null
+      if (!context.canDownload()) return null
       if (context.preflightState != "ready" || !context.requestContextReady) return null
       if (context.boundJobId != null && context.boundJobId != cleanJobId) return null
       context.boundJobId = cleanJobId
@@ -179,6 +206,7 @@ internal object OrionDownloadRequestContextBroker {
 
   fun releaseSession(sessionId: String) {
     synchronized(this) {
+      stopCaptureSession(sessionId)
       opaqueProbeCounts.remove(sessionId)
       val observed = observedRequestMaterial.remove(sessionId)
       // The player may close immediately after startJob binds a candidate.
@@ -215,6 +243,7 @@ internal object OrionDownloadRequestContextBroker {
     synchronized(this) {
       cleanupExpiredLocked(System.currentTimeMillis())
       val context = contexts[candidateId] ?: return null
+      if (!context.canDownload()) return null
       if (context.boundJobId != jobId || context.requestContextId != requestContextId) return null
       if (context.preflightState != "ready" || !context.requestContextReady) return null
       val normalized = normalizeHttpUrl(context.rawUrl) ?: return null
@@ -240,6 +269,7 @@ internal object OrionDownloadRequestContextBroker {
     synchronized(this) {
       cleanupExpiredLocked(System.currentTimeMillis())
       val context = contexts[candidateId] ?: return null
+      if (!context.canDownload()) return null
       if (context.boundJobId != jobId || context.requestContextId != requestContextId) return null
       val normalized = normalizeHttpUrl(rawUrl) ?: return null
       if (!isSafePublicHttpUrl(normalized)) return null
@@ -264,6 +294,7 @@ internal object OrionDownloadRequestContextBroker {
   ): Boolean {
     synchronized(this) {
       val context = contexts[candidateId] ?: return false
+      if (!context.canDownload()) return false
       if (context.boundJobId != jobId || context.requestContextId != requestContextId) return false
       val parent = normalizeHttpUrl(parentUrl) ?: return false
       if (!context.authorizedUrls.contains(parent)) return false
@@ -285,6 +316,7 @@ internal object OrionDownloadRequestContextBroker {
   ): Boolean {
     synchronized(this) {
       val context = contexts[candidateId] ?: return false
+      if (!context.canDownload()) return false
       if (context.boundJobId != jobId || context.requestContextId != requestContextId) return false
       val parent = normalizeHttpUrl(parentUrl) ?: return false
       if (!context.authorizedUrls.contains(parent)) return false
@@ -1156,10 +1188,10 @@ internal object OrionDownloadRequestContextBroker {
       }
     }
 
-    val ready = state == "ready" && context.downloadAllowed
+    val ready = state == "ready" && context.canDownload()
     val deviceStorageReady = ready && resolvedKind in setOf("hls", "dash")
     val deviceReason = when {
-      !context.downloadAllowed -> "This provider is not enabled for Mobile downloads."
+      !context.canDownload() -> "This provider is not enabled for Mobile downloads."
       state != "ready" -> reason ?: "This candidate is not ready to download."
       resolvedKind !in setOf("hls", "dash") -> "Device Storage requires a ready HLS or DASH stream that Orion can finalize safely."
       else -> null
@@ -1865,7 +1897,7 @@ internal data class AuthorizedTransferSeed(
   val request: AuthorizedRequest,
 )
 private data class DescendantDiscovery(val allowed: Set<String>, val deniedCount: Int)
-private data class CapturedRequestMaterial(val headers: Map<String, String>, val cookieHeader: String?)
+internal data class CapturedRequestMaterial(val headers: Map<String, String>, val cookieHeader: String?)
 /** Exact URL observations stay available only to their owning bound job after Player closes. */
 internal object OrionBoundObservationPolicy {
   fun <T> selectExact(active: Map<String, T>?, bound: Map<String, T>, url: String): T? =
@@ -1891,7 +1923,22 @@ internal object OrionBoundObservationPolicy {
 }
 
 private data class ExpiryResult(val kind: String, val expiresAt: Long?)
-private data class CapturedContext(
+/** Immutable authority identity; stopping observation does not revoke a bound job. */
+internal class OrionDownloadCaptureSession(
+  val sourceId: String,
+  val sessionId: String,
+  val captureEnabled: Boolean,
+  val downloadAllowed: Boolean = false,
+) {
+  @Volatile var active = true
+  @Volatile var revoked = false
+  fun matches(source: String, session: String): Boolean =
+    sourceId.isNotBlank() && sessionId.isNotBlank() && sourceId == source && sessionId == session
+  fun canObserve(source: String, session: String): Boolean =
+    active && !revoked && captureEnabled && matches(source, session)
+}
+
+internal data class CapturedContext(
   val candidateId: String,
   val requestContextId: String,
   val sourceId: String,
@@ -1916,8 +1963,13 @@ private data class CapturedContext(
   var requestContextReady: Boolean = false,
   var resumable: Boolean = false,
   var requiredBytes: Long? = null,
-  val downloadAllowed: Boolean = true,
-)
+  val downloadAllowed: Boolean = false,
+  val captureSession: OrionDownloadCaptureSession? = null,
+) {
+  fun canDownload(): Boolean = downloadAllowed && captureSession?.let {
+    !it.revoked && it.captureEnabled && it.downloadAllowed && it.matches(sourceId, sessionId)
+  } == true
+}
 
 private data class PreflightResult(
   val state: String,
