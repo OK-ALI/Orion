@@ -15,6 +15,7 @@ export interface OrionCinemaWebViewProps extends WebViewProps {
   downloadCaptureEnabled?: boolean;
   downloadProviderClass?: string | null;
   presentationMode?: MobilePlayerPresentation;
+  wrapperDiagnosticOrigins?: string[];
   onNativeShieldEvidence?(payload: string): void;
   onNativeSingleTap?(): void;
 }
@@ -30,6 +31,7 @@ export const OrionCinemaWebView = forwardRef<WebViewType, OrionCinemaWebViewProp
     downloadCaptureEnabled = false,
     downloadProviderClass = null,
     presentationMode = "provider",
+    wrapperDiagnosticOrigins,
     onNativeShieldEvidence,
     onNativeSingleTap,
     ...props
@@ -41,7 +43,8 @@ export const OrionCinemaWebView = forwardRef<WebViewType, OrionCinemaWebViewProp
       downloadCaptureEnabled,
       providerClass: downloadProviderClass,
       presentationMode,
-    }), [downloadCaptureEnabled, downloadProviderClass, presentationMode, shieldManifest, shieldSessionId]);
+      ...(wrapperDiagnosticOrigins ? { wrapperDiagnosticOrigins } : {}),
+    }), [downloadCaptureEnabled, downloadProviderClass, presentationMode, shieldManifest, shieldSessionId, wrapperDiagnosticOrigins]);
     const nativeConfig = useMemo(() => NativeCinemaWebView
       ? {
         component: NativeCinemaWebView as never,

@@ -5,6 +5,8 @@ import type {
 import type { PlaybackTelemetryInput } from './usePlaybackTelemetryController';
 import type { CinemaSourceDescriptor } from '@orion/shared/sources';
 
+export { createWrapperDiagnosticScript, recordWrapperDiagnosticMessage } from './embeddedWrapperDiagnostics';
+
 const EVENT_TYPE = 'ORION_PLAYBACK_TELEMETRY';
 
 interface BridgeOptions {
@@ -102,6 +104,7 @@ export function createEmbeddedTelemetryScript({
       }
 
       var sequence = 0;
+      var wrapperDiagnostics = window.__orionWrapperDiagnostics;
       var attached = new WeakSet();
       var allowedOrigins = new Set(config.expectedOrigins || []);
       var providerFrame = config.playerEventContract ? document.querySelector('iframe') : null;
@@ -335,6 +338,8 @@ export function createEmbeddedTelemetryScript({
         sessionId: config.sessionId,
         sourceId: config.sourceId,
         stop: function() {
+          if (wrapperDiagnostics && wrapperDiagnostics.sessionId === config.sessionId
+            && wrapperDiagnostics.sourceId === config.sourceId) wrapperDiagnostics.stop();
           clearInterval(timer);
           window.removeEventListener('message', normalizeProviderMessage, false);
           if (providerFrame && config.playerMessageHandshake) {

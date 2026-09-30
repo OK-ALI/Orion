@@ -27,6 +27,8 @@ import {
 import {
   createEmbeddedTelemetryScript,
   parseEmbeddedTelemetryMessage,
+  createWrapperDiagnosticScript,
+  recordWrapperDiagnosticMessage,
 } from './embeddedTelemetry';
 import {
   createCineSrcResumeScript,
@@ -62,7 +64,7 @@ import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import { beginMobileDownloadCaptureSessionV1 } from '../downloads/downloadCandidateCapture';
 import { useDownloadSourceAutoReturnV1 } from '../downloads/useDownloadSourceAutoReturn';
 import type { PlaybackPurpose } from './viewingPersistence';
-import { createProviderWebViewSource, getProviderCapturePolicy, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
+import { createProviderWebViewSource, getProviderShieldManifest, getProviderCapturePolicy, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
 import { ProviderControlsReturn } from './ProviderControlsReturn';
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
   embedUrl: string;
@@ -123,6 +125,7 @@ export function EmbedPlayerSurface({
   const observationTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadStartedAt = useRef(Date.now());
   const bridgeSequence = useRef(0);
+  const wrapperDiagnosticSequence = useRef(0);
   const nativeShieldSequence = useRef(0);
   const resumeRequested = useRef(false);
   const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -140,7 +143,7 @@ export function EmbedPlayerSurface({
   const sourceContinuity = getMobileSourceContinuityCapability(sourceId);
   const telemetryExpectedOrigins = expectedOrigins;
 
-  const shieldManifest = source?.requestManifest;
+  const shieldManifest = useMemo(() => getProviderShieldManifest(sourceId, source), [sourceId, source]);
   const selectedSubtitle = selectedSubtitleId ? getInternalSubtitleTrack(selectedSubtitleId) : null;
   const shieldedEmbedUrl = useMemo(() => {
     if (!selectedSubtitle?.url || !source?.externalSubtitleParam) return embedUrl;
@@ -218,7 +221,11 @@ export function EmbedPlayerSurface({
     playerEventContract: source?.playerEventContract,
     playerMessageHandshake: source?.playerMessageHandshake,
   }), [playbackSessionId, sourceId]);
-  const injectedScript = `${mobileAdBlockerScript}\n${telemetryScript}`;
+  const wrapperDiagnosticScript = useMemo(() => createWrapperDiagnosticScript({
+    sessionId: playbackSessionId, sourceId, expectedOrigins,
+    requiresIframeWrapper: source?.requiresIframeWrapper === true,
+  }), [playbackSessionId, sourceId]);
+  const injectedScript = `${wrapperDiagnosticScript}${mobileAdBlockerScript}\n${telemetryScript}`;
 
   useEffect(() => {
     if (Platform.OS !== 'android' || !source || !downloadQualificationCaptureEnabled) return undefined;
@@ -235,6 +242,7 @@ export function EmbedPlayerSurface({
   useEffect(() => {
     loadStartedAt.current = Date.now();
     bridgeSequence.current = 0;
+    wrapperDiagnosticSequence.current = 0;
     nativeShieldSequence.current = 0;
     resumeRequested.current = false;
     setIsBuffering(true);
@@ -478,6 +486,8 @@ export function EmbedPlayerSurface({
   }, [applyShieldEnvelope, sourceId, telemetry]);
 
   const handleMessage = (raw: string) => {
+    const diagnosticSequence = recordWrapperDiagnosticMessage(raw, source, telemetry.getSession().id, wrapperDiagnosticSequence.current);
+    if (diagnosticSequence !== null) { wrapperDiagnosticSequence.current = diagnosticSequence; return; }
     let envelope: any = null;
     try { envelope = JSON.parse(raw); } catch {}
     if (envelope?.kind === 'orion-shield') {
@@ -643,24 +653,15 @@ export function EmbedPlayerSurface({
           <OrionCinemaWebView
           key={`${sourceId}:${playbackSessionId}:${surfaceRetryKey}`}
           ref={webViewRef}
-          shieldManifest={shieldManifest || {
-            schemaVersion: 1,
-            sourceId,
-            mode: 'observe',
-            allowedNavigationOrigins: expectedOrigins,
-            requiredOrigins: expectedOrigins,
-            mediaOrigins: [],
-            artworkOrigins: [],
-            subtitleOrigins: [],
-            popupPolicy: 'block',
-            rules: [],
-          }}
+          shieldManifest={shieldManifest}
             shieldSessionId={playbackSessionId}
             downloadCaptureEnabled={downloadQualificationCaptureEnabled}
             downloadProviderClass={source?.releaseStatus || null}
             onNativeShieldEvidence={handleNativeShieldEvidence}
             onNativeSingleTap={providerControlsMode ? undefined : controller.toggleChromeFromUserTap}
             source={webViewSource}
+            wrapperDiagnosticOrigins={source?.requiresIframeWrapper ? expectedOrigins : undefined}
+            injectedJavaScriptBeforeContentLoaded={wrapperDiagnosticScript || undefined}
             javaScriptEnabled
             domStorageEnabled
             allowsInlineMediaPlayback

@@ -1,5 +1,5 @@
 import type { MobileShieldEvidenceV1 } from '@orion/shared/types';
-import type { CinemaSourceDescriptor } from '@orion/shared/sources';
+import type { CinemaSourceDescriptor, ProviderRequestManifestV1 } from '@orion/shared/sources';
 
 export const EMPTY_SHIELD_EVIDENCE: MobileShieldEvidenceV1 = {
   nativeSessionObserved: false,
@@ -53,6 +53,26 @@ export function createProviderWebViewSource(embedUrl: string, source: CinemaSour
   } catch {
     return { uri: 'about:blank' };
   }
+}
+
+export function getProviderShieldManifest(
+  sourceId: string,
+  source: CinemaSourceDescriptor | undefined,
+): ProviderRequestManifestV1 {
+  if (source?.requestManifest) return source.requestManifest;
+  return {
+    schemaVersion: 1,
+    sourceId,
+    mode: 'observe',
+    allowedNavigationOrigins: source?.allowedNavigationOrigins ?? source?.expectedOrigins ?? [],
+    requiredOrigins: source?.requiredRequestOrigins ?? source?.expectedOrigins ?? [],
+    // Navigation-only wrapper origins never confer media/request authority.
+    mediaOrigins: [],
+    artworkOrigins: [],
+    subtitleOrigins: [],
+    popupPolicy: 'block',
+    rules: [],
+  };
 }
 
 export function getProviderCapturePolicy(source: CinemaSourceDescriptor | undefined) {
