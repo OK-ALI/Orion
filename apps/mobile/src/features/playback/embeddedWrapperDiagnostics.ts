@@ -24,6 +24,41 @@ function exactHttpsOrigin(value: unknown): value is string {
   catch { return false; }
 }
 
+/** Inspect only construction metadata at the existing WebView handoff, before native loading. */
+export function recordWrapperSourceBuilt(
+  sourceId: string,
+  expectedOrigins: readonly string[],
+  webViewSource: unknown,
+  injectedBefore: unknown,
+  injectedAfter: unknown,
+): void {
+  if (!/^[a-z0-9-]{1,40}$/.test(sourceId) || !expectedOrigins.length || !expectedOrigins.every(exactHttpsOrigin)) return;
+  try {
+    const html = webViewSource && typeof webViewSource === 'object' && 'html' in webViewSource
+      && typeof webViewSource.html === 'string' ? webViewSource.html : '';
+    // Expected markup count, not a claim that Android parsed or attached the frame.
+    const frames = html.match(/<iframe\b[^>]*>/gi) || [];
+    let providerOrigin: string | null = expectedOrigins[0];
+    const src = frames[0]?.match(/\bsrc\s*=\s*"([^"]*)"/i)?.[1];
+    if (src) {
+      try {
+        const origin = new URL(src.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>')).origin;
+        providerOrigin = expectedOrigins.includes(origin) ? origin : null;
+      } catch { providerOrigin = null; }
+    }
+    const injections = [injectedBefore, injectedAfter].filter((value): value is string => typeof value === 'string');
+    console.info('[OrionP102Trace] wrapper', JSON.stringify({
+      stage: 'wrapper-source-built', sourceId, hasIframe: frames.length > 0,
+      iframeCountExpected: Math.min(100, frames.length), providerOrigin,
+      htmlLengthBucket: !html.length ? 'empty' : html.length < 1024 ? 'lt-1k'
+        : html.length < 4096 ? '1k-4k' : html.length < 16384 ? '4k-16k' : '16k-plus',
+      // These scripts are WebView injections associated with this source, not inline HTML.
+      hasDiagnosticScript: injections.some(value => value.includes(TYPE) && value.includes('__orionWrapperDiagnostics')),
+      hasAdBlocker: injections.some(value => value.includes('__orionCinemaCleanupInstalled')),
+    }));
+  } catch {} // Diagnostic inspection must never change loading or expose malformed input.
+}
+
 /** Observation only; runs before cosmetic cleanup and is owned by the existing playback bridge. */
 export function createWrapperDiagnosticScript(options: WrapperOptions): string {
   if (!options.requiresIframeWrapper || !options.expectedOrigins.length || !options.expectedOrigins.every(exactHttpsOrigin)) return '';

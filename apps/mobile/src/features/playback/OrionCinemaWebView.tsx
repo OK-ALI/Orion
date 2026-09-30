@@ -4,6 +4,7 @@ import { WebView } from "react-native-webview";
 import type { WebView as WebViewType, WebViewProps } from "react-native-webview";
 import type { ProviderRequestManifestV1 } from "@orion/shared/sources";
 import type { MobilePlayerPresentation } from "@orion/shared/types";
+import { recordWrapperSourceBuilt } from "./embeddedWrapperDiagnostics";
 
 const NativeCinemaWebView = Platform.OS === "android"
   ? requireNativeComponent("OrionCinemaWebView")
@@ -51,6 +52,13 @@ export const OrionCinemaWebView = forwardRef<WebViewType, OrionCinemaWebViewProp
         props: { orionShieldSession: serializedManifest },
       }
       : undefined, [serializedManifest]);
+    const observedSource = useMemo(() => {
+      if (wrapperDiagnosticOrigins) recordWrapperSourceBuilt(
+        shieldManifest.sourceId, wrapperDiagnosticOrigins, props.source,
+        props.injectedJavaScriptBeforeContentLoaded, props.injectedJavaScript,
+      );
+      return props.source;
+    }, [shieldManifest.sourceId, wrapperDiagnosticOrigins, props.source, props.injectedJavaScriptBeforeContentLoaded, props.injectedJavaScript]);
 
     useEffect(() => {
       if (Platform.OS !== "android" || !onNativeShieldEvidence) return undefined;
@@ -85,6 +93,7 @@ export const OrionCinemaWebView = forwardRef<WebViewType, OrionCinemaWebViewProp
     return (
       <WebView
         {...props}
+        source={observedSource}
         ref={ref}
         nativeConfig={nativeConfig}
       />

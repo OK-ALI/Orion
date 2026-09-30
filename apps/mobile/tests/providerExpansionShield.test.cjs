@@ -33,6 +33,7 @@ function renderCinemaWebView(props) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   new Function('exports', 'require', 'module', js)(module.exports, name => {
+    if (name === './embeddedWrapperDiagnostics') return load('apps/mobile/src/features/playback/embeddedWrapperDiagnostics.ts');
     assert.ok(Object.hasOwn(mocks, name), `Unexpected Cinema wrapper import: ${name}`);
     return mocks[name];
   }, module);

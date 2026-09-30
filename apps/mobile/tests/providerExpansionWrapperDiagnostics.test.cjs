@@ -297,7 +297,8 @@ function nativeManifest(source) {
   const js = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { fileName: filename,
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
-  new Function('exports', 'require', 'module', js)(module.exports, name => mocks[name], module);
+  new Function('exports', 'require', 'module', js)(module.exports, name => name === './embeddedWrapperDiagnostics'
+    ? load('apps/mobile/src/features/playback/embeddedWrapperDiagnostics.ts') : mocks[name], module);
   const props = module.exports.OrionCinemaWebView({
     shieldManifest: support.getProviderShieldManifest(source.id, source), shieldSessionId: 'native-session',
     wrapperDiagnosticOrigins: source.requiresIframeWrapper ? source.expectedOrigins : undefined,
