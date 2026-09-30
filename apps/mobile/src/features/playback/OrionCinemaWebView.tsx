@@ -4,7 +4,6 @@ import { WebView } from "react-native-webview";
 import type { WebView as WebViewType, WebViewProps } from "react-native-webview";
 import type { ProviderRequestManifestV1 } from "@orion/shared/sources";
 import type { MobilePlayerPresentation } from "@orion/shared/types";
-import { recordWrapperSourceBuilt } from "./embeddedWrapperDiagnostics";
 
 const NativeCinemaWebView = Platform.OS === "android"
   ? requireNativeComponent("OrionCinemaWebView")
@@ -16,7 +15,6 @@ export interface OrionCinemaWebViewProps extends WebViewProps {
   downloadCaptureEnabled?: boolean;
   downloadProviderClass?: string | null;
   presentationMode?: MobilePlayerPresentation;
-  wrapperDiagnosticOrigins?: string[];
   onNativeShieldEvidence?(payload: string): void;
   onNativeSingleTap?(): void;
 }
@@ -32,7 +30,6 @@ export const OrionCinemaWebView = forwardRef<WebViewType, OrionCinemaWebViewProp
     downloadCaptureEnabled = false,
     downloadProviderClass = null,
     presentationMode = "provider",
-    wrapperDiagnosticOrigins,
     onNativeShieldEvidence,
     onNativeSingleTap,
     ...props
@@ -44,21 +41,13 @@ export const OrionCinemaWebView = forwardRef<WebViewType, OrionCinemaWebViewProp
       downloadCaptureEnabled,
       providerClass: downloadProviderClass,
       presentationMode,
-      ...(wrapperDiagnosticOrigins ? { wrapperDiagnosticOrigins } : {}),
-    }), [downloadCaptureEnabled, downloadProviderClass, presentationMode, shieldManifest, shieldSessionId, wrapperDiagnosticOrigins]);
+    }), [downloadCaptureEnabled, downloadProviderClass, presentationMode, shieldManifest, shieldSessionId]);
     const nativeConfig = useMemo(() => NativeCinemaWebView
       ? {
         component: NativeCinemaWebView as never,
         props: { orionShieldSession: serializedManifest },
       }
       : undefined, [serializedManifest]);
-    const observedSource = useMemo(() => {
-      if (wrapperDiagnosticOrigins) recordWrapperSourceBuilt(
-        shieldManifest.sourceId, wrapperDiagnosticOrigins, props.source,
-        props.injectedJavaScriptBeforeContentLoaded, props.injectedJavaScript,
-      );
-      return props.source;
-    }, [shieldManifest.sourceId, wrapperDiagnosticOrigins, props.source, props.injectedJavaScriptBeforeContentLoaded, props.injectedJavaScript]);
 
     useEffect(() => {
       if (Platform.OS !== "android" || !onNativeShieldEvidence) return undefined;
@@ -93,7 +82,6 @@ export const OrionCinemaWebView = forwardRef<WebViewType, OrionCinemaWebViewProp
     return (
       <WebView
         {...props}
-        source={observedSource}
         ref={ref}
         nativeConfig={nativeConfig}
       />

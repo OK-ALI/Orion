@@ -135,18 +135,13 @@ test('P10.2 playback lifecycle scopes capture to the exact active session source
   assert.match(surface, /playbackSessionId/);
   assert.match(surface, /itemKey: downloadTarget\.itemKey/);
   assert.match(surface, /media: downloadTarget\.media/);
-  assert.match(surface, /getProviderCapturePolicy\(source\)/);
-  const support = readMobile('src', 'features', 'playback', 'providerEmbedSupport.ts');
-  assert.match(support, /source\.supportsDownloads === true/);
-  assert.match(support, /\['vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc'\]\.includes\(source\.id\)/);
-  assert.match(support, /source\.supportsDiagnosticCapture === true/);
-  assert.match(surface, /media: downloadTarget\.media,\s*diagnosticOnly,/);
+  assert.match(surface, /source != null && \(source\.supportsDownloads === true \|\| \['vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc'\]\.includes\(sourceId\)\)/);
   assert.match(surface, /downloadCaptureEnabled=\{downloadQualificationCaptureEnabled\}/);
 });
 
 test('P10.2 candidate-provider diagnostics stay playback-only until physical download qualification', () => {
   const candidates = readShared('src', 'sources', 'adapters', 'candidates.ts');
-  for (const sourceId of ['vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc', 'mapple', 'stellar', 'chillflix', 'vidsrc-sh', 'vidapi']) {
+  for (const sourceId of ['vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc']) {
     const start = candidates.indexOf(`id: "${sourceId}"`);
     assert.notEqual(start, -1, `missing candidate source ${sourceId}`);
     const block = candidates.slice(start, candidates.indexOf('  },', start) + 4);

@@ -45,8 +45,6 @@ interface ActiveCaptureSessionV1 {
   providerClass: string | null;
   itemKey: string;
   media: MobileDownloadMediaIdentityV1;
-  /** Native P102 observation only: never admit a candidate for transfer. */
-  diagnosticOnly?: boolean;
 }
 
 export interface BeginMobileDownloadCaptureSessionInputV1 extends ActiveCaptureSessionV1 {}
@@ -149,7 +147,7 @@ export function normalizeMobileDownloadCandidateEventV1(
   value: unknown,
   session: ActiveCaptureSessionV1 | null = activeSession,
 ): MobileDownloadCandidateSnapshotV1 | null {
-  if (!session || session.diagnosticOnly === true || !value || typeof value !== 'object') return null;
+  if (!session || !value || typeof value !== 'object') return null;
   const input = value as Record<string, unknown>;
   if (input.schemaVersion !== 1) return null;
   if (text(input.playbackSessionId) !== session.playbackSessionId) return null;
@@ -344,7 +342,6 @@ export function beginMobileDownloadCaptureSessionV1(input: BeginMobileDownloadCa
     providerClass: input.providerClass,
     itemKey: input.itemKey,
     media: { ...input.media },
-    diagnosticOnly: input.diagnosticOnly === true,
   };
   // A fresh preparation replaces only snapshots from that provider.
   // Other retained providers stay available for explicit user reuse.
@@ -355,15 +352,6 @@ export function beginMobileDownloadCaptureSessionV1(input: BeginMobileDownloadCa
   publish();
 
   return () => {
-    if (input.diagnosticOnly === true) {
-      // Diagnostic contexts never survive the player session or affect prepared downloads.
-      nativeModule()?.releaseSession(input.playbackSessionId);
-      if (activeSession?.playbackSessionId === input.playbackSessionId) {
-        activeSession = null;
-        publish();
-      }
-      return;
-    }
     if (activeSession?.playbackSessionId !== input.playbackSessionId) return;
     if (pendingSourceResolutionActive(input.itemKey)) {
       const sessions = retainedSourceSessions.get(input.itemKey) || new Set<string>();

@@ -37,7 +37,6 @@ class OrionCinemaWebViewClient(
   private var flushScheduled = false
   private var nativeSequence = 0L
   private var lastP102ManifestTraceKey: String? = null
-  private val wrapperDiagnosticKeys = mutableSetOf<String>()
 
   init {
     OrionCinemaServiceWorkerDownloadObserver.ensureInstalled()
@@ -46,9 +45,6 @@ class OrionCinemaWebViewClient(
   fun setShieldManifest(serialized: String?) {
     val previousSessionId = manifest?.sessionId
     val next = ShieldManifest.parse(serialized)
-    if (manifest?.sessionId != next?.sessionId || manifest?.sourceId != next?.sourceId) {
-      synchronized(wrapperDiagnosticKeys) { wrapperDiagnosticKeys.clear() }
-    }
     manifest = next
     if (previousSessionId != null && previousSessionId != next?.sessionId) {
       OrionCinemaServiceWorkerDownloadObserver.deactivate(previousSessionId)
@@ -80,24 +76,18 @@ class OrionCinemaWebViewClient(
 
   override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
     val decision = classify(request.url, request.isForMainFrame, isPopup = false)
-    traceWrapperFrame("navigation", request.url, request.isForMainFrame, null, decision.decision)
     emit(view, decision)
     return if (decision.decision == "blocked" && request.isForMainFrame) true else super.shouldOverrideUrlLoading(view, request)
   }
 
   override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
     val decision = classify(Uri.parse(url), isMainFrame = true, isPopup = false)
-    traceWrapperFrame("navigation-legacy", Uri.parse(url), null, null, decision.decision)
     emit(view, decision)
     return if (decision.decision == "blocked") true else super.shouldOverrideUrlLoading(view, url)
   }
 
   override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
     val decision = classify(request.url, request.isForMainFrame, isPopup = false)
-    if (manifest?.wrapperDiagnosticOrigins != null) {
-      val destination = request.requestHeaders.entries.firstOrNull { it.key.equals("sec-fetch-dest", true) }?.value
-      traceWrapperFrame("request", request.url, request.isForMainFrame, destination, decision.decision)
-    }
     emit(view, decision)
     val current = manifest
     if (decision.decision != "blocked" && current != null) {
@@ -118,20 +108,17 @@ class OrionCinemaWebViewClient(
   @Deprecated("Deprecated in Android")
   override fun shouldInterceptRequest(view: WebView, url: String): WebResourceResponse? {
     val decision = classify(Uri.parse(url), isMainFrame = false, isPopup = false)
-    traceWrapperFrame("request-legacy", Uri.parse(url), null, null, decision.decision)
     emit(view, decision)
     return if (decision.decision == "blocked") emptyBlockedResponse() else null
   }
 
   override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-    traceWrapperFrame("page-started", Uri.parse(url), true, null, "lifecycle")
     resetEvidence()
     emit(view, ShieldDecision("active", "native-session", null))
     super.onPageStarted(view, url, favicon)
   }
 
   override fun onPageFinished(view: WebView, url: String) {
-    traceWrapperFrame("page-finished", Uri.parse(url), true, null, "lifecycle")
     super.onPageFinished(view, url)
     onPageSettled?.invoke(view)
   }
@@ -150,32 +137,6 @@ class OrionCinemaWebViewClient(
     WebResourceResponse("text/plain", "utf-8", 204, "No Content", emptyMap(), ByteArrayInputStream(ByteArray(0)))
   } else {
     WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
-  }
-
-  /** Observation only: diagnostic origins never participate in classify or broker authorization. */
-  private fun traceWrapperFrame(stage: String, uri: Uri?, isMainFrame: Boolean?, destination: String?, decision: String) {
-    val current = manifest ?: return
-    val providerOrigins = current.wrapperDiagnosticOrigins ?: return
-    val origin = providerOrigins.firstOrNull { originMatches(it, uri) }
-      ?: if (originMatches("https://orion.local", uri) && current.allowedNavigationOrigins.contains("https://orion.local")) "https://orion.local" else "other"
-    val provider = providerOrigins.contains(origin)
-    val frameHint = destination?.lowercase(Locale.US)
-    val category = when {
-      isMainFrame == true && origin == "https://orion.local" -> "top-level-wrapper"
-      isMainFrame == true -> "top-level-other"
-      isMainFrame == null -> "frame-unknown"
-      provider && stage == "navigation" -> "provider-subframe-navigation"
-      provider && frameHint in setOf("iframe", "frame", "document") -> "provider-subframe-request"
-      frameHint in setOf("iframe", "frame", "document") -> "other-subframe-request"
-      frameHint == null || frameHint.isEmpty() -> "subresource-unclassified"
-      else -> "ordinary-subresource-request"
-    }
-    val key = "$stage:$category:$origin:$decision"
-    synchronized(wrapperDiagnosticKeys) {
-      if (wrapperDiagnosticKeys.size >= 32 || !wrapperDiagnosticKeys.add(key)) return
-    }
-    val source = current.sourceId.replace(Regex("[^a-z0-9-]"), "").take(40)
-    Log.i("OrionP102Trace", "stage=wrapper-native-$stage source=$source category=$category origin=$origin decision=$decision")
   }
 
   private fun classify(uri: Uri?, isMainFrame: Boolean, isPopup: Boolean): ShieldDecision {
@@ -362,7 +323,6 @@ private data class ShieldManifest(
   val artworkOrigins: List<String>,
   val subtitleOrigins: List<String>,
   val rules: List<ShieldRule>,
-  val wrapperDiagnosticOrigins: List<String>?,
 ) {
   companion object {
     fun parse(serialized: String?): ShieldManifest? = try {
@@ -397,13 +357,6 @@ private data class ShieldManifest(
           strings("artworkOrigins"),
           strings("subtitleOrigins"),
           rules,
-          if (json.has("wrapperDiagnosticOrigins")) strings("wrapperDiagnosticOrigins").filter { origin ->
-            try {
-              val uri = Uri.parse(origin)
-              origin.length <= 200 && uri.scheme == "https" && !uri.host.isNullOrBlank()
-                && uri.userInfo == null && uri.query == null && uri.fragment == null && uri.path.isNullOrEmpty()
-            } catch (_: Exception) { false }
-          }.take(8) else null,
         )
       }
     } catch (_: Exception) { null }
