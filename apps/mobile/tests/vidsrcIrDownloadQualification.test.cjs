@@ -8,7 +8,8 @@ const ts = require('typescript');
 
 const mobile = path.resolve(__dirname, '..');
 const shared = path.resolve(mobile, '../../packages/shared');
-const diagnosticSources = ['vidsrc-ir', 'vidlink', 'cinesrc', 'vidnest'];
+const diagnosticSources = ['vidlink', 'cinesrc', 'vidnest'];
+const downloadableSources = ['vixsrc', 'vidsrc', 'vidsrc-ir'];
 
 function environment() {
   const cache = new Map();
@@ -46,6 +47,7 @@ function environment() {
       if (specifier in mocks) return mocks[specifier];
       if (specifier === '@orion/shared/sources') return load(path.join(shared, 'src/sources/registry.ts'));
       if (specifier === '@orion/shared/cinema-block-rules') return require(path.join(shared, 'cinemaBlockRules.cjs'));
+      if (specifier === '../../services/sourceHealth') return { getMobileSourceHealth: () => null, getMobileSourceHealthV2: () => null };
       if (specifier === './nativeDownloadEngine') return { startNativeDownloadJobV1: async (input) => {
         calls.starts.push(input); return input.job.jobId;
       } };
@@ -77,7 +79,7 @@ function environment() {
     registry: load(path.join(shared, 'src/sources/registry.ts')) };
 }
 
-test('actual descriptors preserve preparation-only policy and accepted download controls', () => {
+test('actual descriptors admit only the VidSrc.ir qualification delta while preserving preparation-only controls', () => {
   const { registry, capture } = environment();
   for (const id of diagnosticSources) {
     const source = registry.getRegisteredSource(id);
@@ -86,8 +88,34 @@ test('actual descriptors preserve preparation-only policy and accepted download 
     assert.equal(source.routingMode, 'manual-only');
     assert.equal(capture.isMobileDownloadSourceAllowedV1(id), false);
   }
-  for (const id of ['vixsrc', 'vidsrc']) assert.equal(capture.isMobileDownloadSourceAllowedV1(id), true);
+  for (const id of downloadableSources) assert.equal(capture.isMobileDownloadSourceAllowedV1(id), true);
+  const qualification = registry.getRegisteredSource('vidsrc-ir');
+  assert.equal(qualification.supportsDownloads, true);
+  assert.equal(qualification.releaseStatus, 'candidate');
+  assert.equal(qualification.routingMode, 'manual-only');
+  assert.deepEqual(qualification.allowedNavigationOrigins, ['https://vidsrc.ir']);
+  assert.deepEqual(qualification.requiredRequestOrigins, ['https://vidsrc.ir']);
+  assert.deepEqual(qualification.requestManifest.mediaOrigins, []);
+  assert.equal(registry.getRegisteredSource('vixsrc').routingMode, 'automatic');
+  assert.equal(registry.getRegisteredSource('vidsrc').routingMode, 'manual-only');
   assert.equal(capture.isMobileDownloadSourceAllowedV1('unknown-provider'), false);
+});
+
+test('VidSrc.ir is a manual download choice without entering Auto or automatic continuity', () => {
+  const env = environment();
+  const sources = env.load(path.join(mobile, 'src/features/playback/mobileSources.ts'));
+  for (const mediaType of ['movie', 'tv']) {
+    const choices = sources.getMobileDownloadSourceChoices(mediaType);
+    assert.equal(choices.find((source) => source.id === 'vidsrc-ir').routingMode, 'manual-only');
+    for (const id of diagnosticSources) assert.equal(choices.some((source) => source.id === id), false);
+    assert.equal(sources.getPreferredMobileResumeSource('vidsrc-ir', mediaType), 'vixsrc');
+    assert.equal(sources.getNextMobileContinuitySource('vixsrc', mediaType,
+      sources.MOBILE_PLAYER_SOURCES.filter((source) => source.id !== 'vidsrc-ir').map((source) => source.id)), null);
+  }
+  assert.equal(env.registry.AUTOMATIC_PLAYER_SOURCES.some((source) => source.id === 'vidsrc-ir'), false);
+  assert.equal(sources.mobileSourceSupportsContinuity('vidsrc-ir'), false);
+  assert.equal(sources.getMobileSourceContinuityCapability('vidsrc-ir').automaticTarget, false);
+  assert.equal(sources.MOBILE_DEFAULT_CINEMA_SOURCE_ID, 'vixsrc');
 });
 
 test('WebView serializes capture independently and denies missing invalid unknown or diagnostic admission', () => {
@@ -102,7 +130,7 @@ test('WebView serializes capture independently and denies missing invalid unknow
     assert.equal(contract.downloadCaptureEnabled, true);
     assert.equal(contract.downloadAllowed, false);
   }
-  for (const id of ['vixsrc', 'vidsrc']) {
+  for (const id of downloadableSources) {
     assert.equal(serialize(id, true).downloadAllowed, true);
     for (const permission of [undefined, false, 'true', 1, {}]) assert.equal(serialize(id, permission).downloadAllowed, false);
     assert.equal(serialize(id, true, false).downloadAllowed, false);
@@ -159,12 +187,14 @@ test('stale or mismatched events cannot borrow an accepted session permission', 
   old(); end();
 });
 
-test('VixSrc and VidSrc retain normalized selection binding and exact-episode job start', async () => {
-  for (const id of ['vixsrc', 'vidsrc']) {
+test('VidSrc.ir qualification and accepted controls require normalized selection binding and exact-episode job start', async () => {
+  for (const id of downloadableSources) {
     const env = environment();
     const end = env.capture.beginMobileDownloadCaptureSessionV1(env.session(id));
     env.emit(env.event(id));
     const selection = env.capture.selectMobileDownloadCandidateForItemV1(env.target.itemKey, 'auto', undefined, 'orion-library', id);
+    assert.equal(env.capture.getMobileDownloadCandidateSnapshotsV1()[0].candidate.preflight.state, 'ready');
+    assert.equal(selection.candidate.capabilities.orionLibrary, true);
     assert.equal(selection.candidate.sourceId, id);
     assert.equal(selection.resolvedMethod, 'fragments');
     await env.capture.bindMobileDownloadRequestContextV1(selection.candidate.candidateId, 'job-1');

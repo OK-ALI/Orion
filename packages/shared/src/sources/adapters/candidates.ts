@@ -74,7 +74,7 @@ export const candidateSources: CinemaSourceDescriptor[] = [
     subtitleStrategy: "url-param",
     supportsResume: true,
     supportsExternalSubtitles: true,
-    supportsDownloads: false,
+    supportsDownloads: true,
     routingMode: "manual-only",
     availability: "having-trouble",
     availabilityReason: "This source is having trouble.",

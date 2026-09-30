@@ -142,15 +142,21 @@ test('P10.2 playback lifecycle scopes capture to the exact active session source
   assert.match(surface, /downloadCaptureEnabled=\{downloadQualificationCaptureEnabled\}/);
 });
 
-test('P10.2 candidate-provider diagnostics stay playback-only until physical download qualification', () => {
+test('P10.2 preparation-only candidates stay denied and VidSrc.ir enables manual qualification', () => {
   const candidates = readShared('src', 'sources', 'adapters', 'candidates.ts');
-  for (const sourceId of ['vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc']) {
+  for (const sourceId of ['vidlink', 'vidnest', 'cinesrc']) {
     const start = candidates.indexOf(`id: "${sourceId}"`);
     assert.notEqual(start, -1, `missing candidate source ${sourceId}`);
     const block = candidates.slice(start, candidates.indexOf('  },', start) + 4);
     assert.match(block, /supportsDownloads:\s*false/);
     assert.match(block, /routingMode:\s*"manual-only"/);
   }
+  const start = candidates.indexOf('id: "vidsrc-ir"');
+  assert.notEqual(start, -1);
+  const qualification = candidates.slice(start, candidates.indexOf('  },', start) + 4);
+  assert.match(qualification, /supportsDownloads:\s*true/);
+  assert.match(qualification, /releaseStatus:\s*"candidate"/);
+  assert.match(qualification, /routingMode:\s*"manual-only"/);
 });
 
 test('P10.2 JavaScript normalization strips malicious native hitchhiker fields and rejects session mismatch', () => {

@@ -62,8 +62,8 @@ class OrionDownloadEligibilityTest {
     assertNull(OrionDownloadRequestContextBroker.bindRequestContext(unknown.candidateId, "job-unknown"))
   }
 
-  @Test fun acceptedControlsBindOnlyTheirOwnReadyContext() {
-    for (source in listOf("vixsrc", "vidsrc")) {
+  @Test fun acceptedControlsAndVidSrcIrQualificationBindOnlyTheirOwnReadyContext() {
+    for (source in listOf("vixsrc", "vidsrc", "vidsrc-ir")) {
       val context = ready(source, true)
       assertNotNull(OrionDownloadRequestContextBroker.bindRequestContext(context.candidateId, "job-$source"))
       assertNull(OrionDownloadRequestContextBroker.bindRequestContext(context.candidateId, "another-job"))
