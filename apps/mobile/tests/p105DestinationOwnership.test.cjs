@@ -35,7 +35,7 @@ test('P10.5 new jobs have one logical Orion Library destination and a separate p
   );
 
   assert.doesNotMatch(modal, /\? 'Device Storage'\s*:\s*'Orion Library'/);
-  assert.match(modal, /Storage folder:/);
+  assert.match(modal, /Orion Library storage/);
   assert.match(modal, /preferences\.libraryStorageTarget/);
   assert.match(start, /storageTarget\.mode !== 'user-folder'/);
   assert.match(start, /storageTarget\.persistedPermission/);

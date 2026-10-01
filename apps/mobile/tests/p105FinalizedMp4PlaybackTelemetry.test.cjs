@@ -17,7 +17,7 @@ function loadTypeScriptModule(...parts) {
   return loaded.exports;
 }
 
-test('yt-dlp stdout telemetry populates the complete production progress contract', () => {
+test('yt-dlp stdout stays parseable while gateway media totals drive production progress', () => {
   const runtime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadYtDlpRuntime.kt');
   const parser = read('plugins', 'orion-cinema-webview-native', 'OrionYtDlpProgressParser.kt');
   const transfer = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
@@ -28,8 +28,8 @@ test('yt-dlp stdout telemetry populates the complete production progress contrac
   assert.match(runtime, /--progress-template/);
   for (const field of ['bytesDownloaded', 'totalBytes', 'bytesPerSecond', 'etaSeconds', 'percent']) {
     assert.match(parser, new RegExp(`val ${field}`));
-    assert.match(transfer, new RegExp(`progress\\.${field}`));
   }
+  assert.match(transfer, /OrionDownloadJobStore\.setGatewayMediaProgress\(jobId, bytes, completed, total\)/);
   assert.match(store, /progress\.put\("bytesDownloaded"/);
   assert.match(store, /progress\.put\("totalBytes"/);
   assert.match(store, /progress\.put\("bytesPerSecond"/);

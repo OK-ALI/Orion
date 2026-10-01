@@ -56,7 +56,7 @@ test("P10.5 Candidate 5 routes yt-dlp HLS and DASH execution through a strict br
   // Runtime owns the whole gateway lifetime around the blocking yt-dlp call.
   assert.match(runtime, /fun executeHlsGateway\(/);
   assert.match(runtime, /OrionDownloadYtDlpAuthorityBroker[\s\S]{0,100}\.issue\(bound\)/);
-  assert.match(runtime, /OrionDownloadYtDlpGatewaySession[\s\S]{0,80}\.start\(cleanJobId\)/);
+  assert.match(runtime, /OrionDownloadYtDlpGatewaySession[\s\S]{0,120}\.start\(cleanJobId, onMeasuredMediaProgress\)/);
   assert.match(runtime, /OrionDownloadYtDlpHlsGateway[\s\S]{0,100}\.prepare\(/);
   assert.match(runtime, /\.enforceViaLoopbackGateway\(/);
   assert.match(runtime, /execute\([\s\S]{0,180}authority =\s*executionAuthority/);

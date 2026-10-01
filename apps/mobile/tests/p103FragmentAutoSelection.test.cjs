@@ -14,8 +14,8 @@ test('P10.3 Auto restores verified Direct fallback while explicit fragments rema
   const runtime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
   assert.match(capture, /resolvedMethod: 'fragments' \| 'direct'/);
   assert.match(capture, /method === 'fragments' \? kind === 'hls' \|\| kind === 'dash' : kind === 'hls' \|\| kind === 'dash' \|\| kind === 'direct'/);
-  assert.match(modal, /best ready HLS, DASH, or Direct media stream/);
-  assert.match(modal, /Stream fragments[\s\S]*ready HLS or DASH stream explicitly/);
+  assert.match(modal, /label="Auto"/);
+  assert.match(modal, /selectMobileDownloadCandidateForItemV1\(/);
   assert.match(start, /selection\.resolvedMethod === 'direct'/);
   assert.match(start, /Mobile downloads require a ready Direct, HLS, or DASH stream/);
   assert.match(module, /transfer\.transferKind !in setOf\("direct", "hls", "dash"\)/);

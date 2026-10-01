@@ -23,7 +23,7 @@ test('new downloads are logical Orion Library assets with a required user-folder
   assert.doesNotMatch(start, /preferences\.defaultDestination/);
   assert.match(modal, /const destination[^=]+=[^;]+'orion-library'/);
   assert.match(modal, /Choose storage folder/);
-  assert.match(modal, /disabled=\{!storageReady/);
+  assert.match(modal, /const primaryDisabled = !storageReady/);
   assert.match(modal, /validateNativeLibraryStorageTargetV1/);
   assert.match(modal, /storageTarget\.targetId === validatedStorageTargetId/);
   assert.doesNotMatch(settings, /Device Storage download destination/);

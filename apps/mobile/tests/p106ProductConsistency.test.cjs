@@ -11,7 +11,7 @@ test('P10.6-E1 uses one short offline availability vocabulary across download su
   const sheet = read('src', 'features', 'downloads', 'DownloadManagementSheet.tsx');
 
   assert.match(activity, /return 'On device'/);
-  assert.match(activity, />Ready offline</);
+  assert.match(activity, /Ready offline\{!episodic/);
 
   assert.match(sheet, /return 'On device'/);
   assert.match(sheet, /'Ready offline'/);

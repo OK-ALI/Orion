@@ -76,7 +76,6 @@ test('yt-dlp telemetry contract remains intact', () => {
   const transfer = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
 
   assert.match(runtime, /OrionYtDlpProgressParser\.parse/);
-  for (const field of ['bytesDownloaded', 'totalBytes', 'bytesPerSecond', 'etaSeconds', 'percent']) {
-    assert.match(transfer, new RegExp(`progress\\.${field}`));
-  }
+  assert.match(transfer, /onMeasuredMediaProgress = \{ bytes, completed, total ->/);
+  assert.match(transfer, /OrionDownloadJobStore\.setGatewayMediaProgress\(jobId, bytes, completed, total\)/);
 });

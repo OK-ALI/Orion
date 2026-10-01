@@ -100,8 +100,8 @@ test('P10.4 final pre-lock duplicate exclusion stays native-atomic and destinati
   assert.match(modal, /preferences\.libraryStorageTarget/);
   assert.match(modal, /mobileDownloadItemKeyFromMediaV1\(job\.media\) === target\.itemKey/);
   assert.match(modal, /job\.destination === destination/);
-  assert.match(modal, /Already downloaded here/);
-  assert.match(modal, /verified \$\{destinationTitle\} copy/);
+  assert.match(modal, /Already downloaded/);
+  assert.match(modal, /verified Orion Library copy/);
   assert.doesNotMatch(modal, /other storage location for a second intentional copy/);
 });
 
@@ -121,8 +121,8 @@ test('P10.4 compatibility preferences feed the current Orion Library download pa
   assert.match(start, /storageTarget\.persistedPermission/);
   assert.match(modal, /const destination: MobileDownloadJobV1\['destination'\] = 'orion-library'/);
   assert.match(modal, /preferences\.libraryStorageTarget/);
-  assert.match(modal, /destinationTitle = 'Orion Library'/);
-  assert.match(modal, /selectMobileDownloadCandidateForItemV1\(target\.itemKey, transferMethod, candidateSnapshots, destination\)/);
+  assert.match(modal, /SummaryRow label="Save to" value="Orion Library"/);
+  assert.match(modal, /selectMobileDownloadCandidateForItemV1\([\s\S]{0,140}target\.itemKey,[\s\S]{0,140}transferMethod,[\s\S]{0,140}candidateSnapshots,[\s\S]{0,140}destination,[\s\S]{0,140}selectedSourceId,/);
   assert.doesNotMatch(modal, /chooseNativeDeviceStorageTargetV1/);
 });
 
@@ -150,15 +150,16 @@ test('P10.4 A2-S Mobile exposes safe subtitle candidates and preserves explicit 
   const subtitles = read('src', 'features', 'downloads', 'downloadSubtitles.ts');
   const start = read('src', 'features', 'downloads', 'downloadStart.ts');
   assert.match(modal, /const \[selectedSubtitleIds, setSelectedSubtitleIds\] = useState<string\[\]>\(\[\]\)/);
-  assert.match(modal, /setSelectedSubtitleIds\(getPreferredMobileDownloadSubtitleIdsV1\(result\)\)/);
+  assert.match(modal, /setSelectedSubtitleIds\(\[\]\)/);
+  assert.match(modal, /setSelectedSubtitleIds\(getPreferredMobileDownloadSubtitleIdsV1\(scoped\)\)/);
   assert.match(modal, /toggleSubtitleSelection/);
   assert.match(modal, /current\.length >= 2/);
-  assert.match(modal, /Choose subtitles/);
-  assert.match(modal, /Select up to 2/);
-  assert.match(modal, /No subtitles for this download/);
+  assert.match(modal, /Subtitle tracks/);
+  assert.match(modal, /Choose up to 2/);
+  assert.match(modal, /subtitles\.state !== 'idle' \? 'No match'/);
   assert.match(modal, /track\.languageLabel/);
   assert.match(modal, /track\.providerLabel/);
-  assert.match(modal, /track\.format\.toUpperCase\(\)/);
+  assert.match(modal, /accessibilityState=\{\{ checked: selected, disabled \}\}/);
   assert.match(modal, /track\.label/);
   assert.match(modal, /selectedSubtitleAssetIds: selectedSubtitleIds/);
   assert.doesNotMatch(modal, /\.url\b|https:\/\//);

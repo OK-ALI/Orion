@@ -11,8 +11,8 @@ test('P10.3 physical repair keeps fragment preference while restoring verified D
   const modal = read('src', 'components', 'DownloadModal.tsx');
   const start = read('src', 'features', 'downloads', 'downloadStart.ts');
   assert.match(capture, /resolvedMethod: 'fragments' \| 'direct'/);
-  assert.match(modal, /HLS, DASH, or Direct media stream/);
-  assert.match(modal, /Stream fragments/);
+  assert.match(modal, /label="Auto"/);
+  assert.match(modal, /preparedSourceIds\.has\(source\.id\)/);
   assert.match(start, /Mobile downloads require a ready Direct, HLS, or DASH stream/);
   assert.match(start, /selection\.resolvedMethod === 'direct'/);
 });
@@ -25,18 +25,18 @@ test('P10.3 source intent retains the selected method and auto-returns only on r
   assert.match(capture, /autoReturnIssued: boolean/);
   assert.match(capture, /markMobileDownloadSourceAutoReturnIssuedV1/);
   assert.doesNotMatch(hook, /getMobileDownloadPreferencesV1|defaultDestination/);
-  assert.match(hook, /selectMobileDownloadCandidateForItemV1\(itemKey, intent\.method, snapshots, 'orion-library'\)/);
+  assert.match(hook, /selectMobileDownloadCandidateForItemV1\(itemKey, intent\.method, snapshots, 'orion-library', intent\.sourceId\)/);
   assert.match(hook, /router\.back\(\)/);
   assert.doesNotMatch(hook, /setTimeout|setInterval|sleep/);
-  assert.match(detail, /requestMobileDownloadSourceResolutionV1\(target\.itemKey, method\)/);
+  assert.match(detail, /requestMobileDownloadSourceResolutionV1\(target\.itemKey, method, sourceId\)/);
 });
 
 test('P10.3 Download modal gives theme-aware readiness acknowledgement without raw transport material', () => {
   const modal = read('src', 'components', 'DownloadModal.tsx');
-  assert.match(modal, /Ready to download/);
-  assert.match(modal, /Resolving stream…/);
-  assert.match(modal, /Source needs refresh/);
-  assert.match(modal, /This source is not download-ready/);
+  assert.match(modal, /Ready ✓/);
+  assert.match(modal, /Orion will check this source and return here automatically when it is ready/);
+  assert.match(modal, /sourceResolutionFailure[\s\S]*'Not available'/);
+  assert.match(modal, /title="Not available"/);
   assert.match(modal, /theme\.success/);
   assert.match(modal, /theme\.warning/);
   assert.match(modal, /theme\.danger/);
@@ -59,8 +59,8 @@ test('P10.3 subtitle discovery uses user-owned SubDL and Wyzie keys and keeps pr
   assert.match(provider, /api-key-required/);
   assert.match(provider, /invalid-key/);
   assert.doesNotMatch(provider, /EXPO_PUBLIC_SUBDL_API_KEY|EXPO_PUBLIC_WYZIE_API_KEY|EXPO_PUBLIC_ORION_SUBTITLE_BROKER_URL\s*=/);
-  assert.match(modal, /Searching SubDL and Wyzie/);
-  assert.match(modal, /Subtitles ready/);
+  assert.match(modal, /label="SubDL"/);
+  assert.match(modal, /label="Wyzie"/);
   assert.match(modal, /subtitleCheckPending/);
   assert.match(modal, /Checking subtitles…/);
   assert.doesNotMatch(modal, /\.url\b|https:\/\//);
@@ -156,8 +156,8 @@ test('P10.4C Orion Library activation remains persisted-target, SAF-scoped and p
   assert.match(start, /candidate\.capabilities\.orionLibrary/);
   assert.match(start, /storageTarget\.persistedPermission/);
   assert.match(modal, /preferences\.libraryStorageTarget/);
-  assert.match(modal, /destinationTitle = 'Orion Library'/);
-  assert.match(modal, /The completed MP4 remains visible there/);
+  assert.match(modal, /SummaryRow label="Save to" value="Orion Library"/);
+  assert.match(modal, /verified Orion Library copy/);
   assert.doesNotMatch(modal, /chooseNativeDeviceStorageTargetV1/);
   assert.match(module, /destination !in setOf\("orion-library", "device-storage"\)/);
   assert.match(module, /OrionDownloadStorageRegistry\.describe/);
