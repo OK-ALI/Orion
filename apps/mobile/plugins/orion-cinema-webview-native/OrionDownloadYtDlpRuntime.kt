@@ -232,6 +232,18 @@ internal object OrionDownloadYtDlpRuntime {
           true,
         )
 
+    if (
+      !gateway.configureDashResumeRoot(
+        File(stagingDir(context, cleanJobId), "dash-resume-v1"),
+      )
+    ) {
+      gateway.close()
+      return OrionYtDlpOutcome.Failed(
+        "yt-dlp-dash-resume-cache-unavailable",
+        true,
+      )
+    }
+
     return try {
       val entry =
         OrionDownloadYtDlpDashGateway
@@ -271,14 +283,38 @@ internal object OrionDownloadYtDlpRuntime {
             false,
           )
 
-      execute(
-        context = context,
-        jobId = cleanJobId,
-        authority =
-          executionAuthority,
-        onProgress =
-          onProgress,
-      )
+      val outcome =
+        execute(
+          context = context,
+          jobId = cleanJobId,
+          authority =
+            executionAuthority,
+          onProgress =
+            onProgress,
+        )
+
+      if (outcome is OrionYtDlpOutcome.Completed) {
+        val proof =
+          gateway.awaitCompletionProof()
+
+        Log.i(
+          "OrionDownloadStage",
+          "stage=dash-transfer-proof complete=${proof.complete} mediaRoutes=${proof.totalMediaRoutes} completedRoutes=${proof.completedMediaRoutes} bytes=${proof.completedMediaBytes} readErrors=${proof.providerReadErrors} writeErrors=${proof.providerWriteErrors}",
+        )
+
+        if (!proof.complete) {
+          val interrupted =
+            proof.providerReadErrors > 0L ||
+              proof.providerWriteErrors > 0L
+
+          return OrionYtDlpOutcome.Failed(
+            if (interrupted) "network-interrupted" else "yt-dlp-dash-transfer-incomplete",
+            true,
+          )
+        }
+      }
+
+      outcome
     } finally {
       gateway.close()
     }
@@ -332,7 +368,7 @@ internal object OrionDownloadYtDlpRuntime {
       )
 
       executionPhase = "staging-recovery"
-      if (!prepareHlsExecutionOutput(cleanJobId, authority, workDir)) {
+      if (!prepareGatewayExecutionOutput(cleanJobId, authority, workDir)) {
         return OrionYtDlpOutcome.Failed("yt-dlp-staging-reset-failed", true)
       }
 
@@ -396,55 +432,105 @@ internal object OrionDownloadYtDlpRuntime {
   }
 
   /**
-   * External FFmpeg writes HLS directly to the final staging filename. If that
-   * process dies, yt-dlp can treat the still-present partial media.mp4 as an
-   * already-finished output on the next invocation and exit successfully
-   * without requesting any provider media routes.
+   * Every new gateway execution must begin from local process state that cannot
+   * masquerade as a completed transfer.
    *
-   * V8.16 owns the only durable proof that an HLS/DASH staging file actually
-   * finished. Without that proof, an HLS media.mp4 is untrusted partial state:
-   * remove it before a fresh process starts so recovery performs real network
-   * work instead of short-circuiting on the old output.
-   *
-   * The V8.13 in-place Pause/Resume path never starts a new execute() call, so
-   * its live FFmpeg output is not touched here.
+   * HLS FFmpeg writes directly to media.mp4, so an unsealed output is removed
+   * before a recovery execution. DASH uses yt-dlp fragment state, but Orion's
+   * durable provider-fragment cache is the authority we can verify across
+   * process restarts. Remove transient yt-dlp DASH outputs while preserving
+   * only dash-resume-v1 so the new process must request every required route
+   * again. Fully verified cached routes are replayed by the gateway and counted
+   * toward the new completion proof; incomplete routes return to the provider.
    */
-  private fun prepareHlsExecutionOutput(
+  private fun prepareGatewayExecutionOutput(
     jobId: String,
     authority: OrionYtDlpAuthority,
     workDir: File,
   ): Boolean {
-    if (authority.transferKind != "hls") return true
-
     if (OrionDownloadJobStore.ytDlpTransferCompletion(jobId) != null) {
       return true
     }
 
-    val output =
-      File(
-        workDir,
-        "media.mp4",
-      )
+    if (authority.transferKind == "hls") {
+      val output =
+        File(
+          workDir,
+          "media.mp4",
+        )
 
-    if (!output.exists()) return true
+      if (!output.exists()) return true
 
-    val staleBytes =
-      output
-        .length()
-        .coerceAtLeast(0L)
+      val staleBytes =
+        output
+          .length()
+          .coerceAtLeast(0L)
 
-    if (!output.delete()) {
+      if (!output.delete()) {
+        Log.i(
+          "OrionDownloadStage",
+          "stage=yt-dlp recovery=staging-reset outcome=failed bytes=$staleBytes",
+        )
+        return false
+      }
+
       Log.i(
         "OrionDownloadStage",
-        "stage=yt-dlp recovery=staging-reset outcome=failed bytes=$staleBytes",
+        "stage=yt-dlp recovery=staging-reset outcome=discarded bytes=$staleBytes",
       )
-      return false
+
+      return true
     }
 
-    Log.i(
-      "OrionDownloadStage",
-      "stage=yt-dlp recovery=staging-reset outcome=discarded bytes=$staleBytes",
-    )
+    if (authority.transferKind == "dash") {
+      val resumeRoot =
+        File(
+          workDir,
+          "dash-resume-v1",
+        )
+
+      var discardedBytes = 0L
+      var discardedEntries = 0
+
+      workDir
+        .listFiles()
+        .orEmpty()
+        .filter { child ->
+          child.absolutePath !=
+            resumeRoot.absolutePath
+        }
+        .forEach { child ->
+          val childBytes =
+            if (child.isFile) child.length().coerceAtLeast(0L) else 0L
+
+          val removed =
+            try {
+              child.deleteRecursively()
+            } catch (_: Throwable) {
+              false
+            }
+
+          if (!removed && child.exists()) {
+            Log.i(
+              "OrionDownloadStage",
+              "stage=yt-dlp recovery=staging-reset outcome=failed kind=dash entries=$discardedEntries bytes=$discardedBytes",
+            )
+            return false
+          }
+
+          discardedEntries += 1
+          discardedBytes += childBytes
+        }
+
+      if (discardedEntries > 0) {
+        Log.i(
+          "OrionDownloadStage",
+          "stage=yt-dlp recovery=staging-reset outcome=discarded kind=dash entries=$discardedEntries bytes=$discardedBytes",
+        )
+      }
+
+      return true
+    }
 
     return true
   }
@@ -486,6 +572,10 @@ internal object OrionDownloadYtDlpRuntime {
     // so DASH retains its existing downloader path.
     if (authority.transferKind == "hls") {
       request.addOption("--downloader", "m3u8:ffmpeg")
+    } else if (authority.transferKind == "dash") {
+      // yt-dlp normally tolerates unavailable fragments. Orion's offline
+      // contract does not: every selected DASH route is required.
+      request.addOption("--abort-on-unavailable-fragments")
     }
 
     authority.safeGlobalHeaders.forEach { (name, value) ->

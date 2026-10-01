@@ -29,7 +29,7 @@ test('V8.19 keeps the accepted production HLS path and V8.17 stale-output fence'
   const execute = between(runtime, 'fun executeHlsGateway(', 'fun executeDashGateway(');
   assert.match(execute, /OrionDownloadYtDlpHlsGateway/);
   assert.match(execute, /allowInPlacePause = true/);
-  assert.match(runtime, /private fun prepareHlsExecutionOutput/);
+  assert.match(runtime, /private fun prepareGatewayExecutionOutput/);
   assert.match(runtime, /if \(!output\.delete\(\)\)/);
   assert.match(runtime, /recovery=staging-reset outcome=discarded/);
 });

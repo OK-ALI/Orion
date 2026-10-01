@@ -8,8 +8,8 @@ const ts = require('typescript');
 
 const mobile = path.resolve(__dirname, '..');
 const shared = path.resolve(mobile, '../../packages/shared');
-const diagnosticSources = ['vidlink', 'cinesrc', 'vidnest'];
-const downloadableSources = ['vixsrc', 'vidsrc', 'vidsrc-ir'];
+const diagnosticSources = ['cinesrc', 'vidnest'];
+const downloadableSources = ['vixsrc', 'vidsrc', 'vidsrc-ir', 'vidlink'];
 
 function environment() {
   const cache = new Map();
@@ -79,7 +79,7 @@ function environment() {
     registry: load(path.join(shared, 'src/sources/registry.ts')) };
 }
 
-test('actual descriptors admit only the VidSrc.ir qualification delta while preserving preparation-only controls', () => {
+test('actual descriptors admit the qualified manual candidates while preserving preparation-only controls', () => {
   const { registry, capture } = environment();
   for (const id of diagnosticSources) {
     const source = registry.getRegisteredSource(id);
@@ -96,25 +96,35 @@ test('actual descriptors admit only the VidSrc.ir qualification delta while pres
   assert.deepEqual(qualification.allowedNavigationOrigins, ['https://vidsrc.ir']);
   assert.deepEqual(qualification.requiredRequestOrigins, ['https://vidsrc.ir']);
   assert.deepEqual(qualification.requestManifest.mediaOrigins, []);
+
+  const vidlink = registry.getRegisteredSource('vidlink');
+  assert.equal(vidlink.supportsDownloads, true);
+  assert.equal(vidlink.releaseStatus, 'candidate');
+  assert.equal(vidlink.routingMode, 'manual-only');
+  assert.deepEqual(vidlink.allowedNavigationOrigins, ['https://vidlink.pro']);
+  assert.deepEqual(vidlink.requiredRequestOrigins, ['https://vidlink.pro']);
+  assert.deepEqual(vidlink.requestManifest.mediaOrigins, []);
   assert.equal(registry.getRegisteredSource('vixsrc').routingMode, 'automatic');
   assert.equal(registry.getRegisteredSource('vidsrc').routingMode, 'manual-only');
   assert.equal(capture.isMobileDownloadSourceAllowedV1('unknown-provider'), false);
 });
 
-test('VidSrc.ir is a manual download choice without entering Auto or automatic continuity', () => {
+test('VidSrc.ir and VidLink are manual download choices without entering Auto or automatic continuity', () => {
   const env = environment();
   const sources = env.load(path.join(mobile, 'src/features/playback/mobileSources.ts'));
   for (const mediaType of ['movie', 'tv']) {
     const choices = sources.getMobileDownloadSourceChoices(mediaType);
-    assert.equal(choices.find((source) => source.id === 'vidsrc-ir').routingMode, 'manual-only');
+    for (const id of ['vidsrc-ir', 'vidlink']) {
+      assert.equal(choices.find((source) => source.id === id).routingMode, 'manual-only');
+      assert.equal(sources.getPreferredMobileResumeSource(id, mediaType), 'vixsrc');
+      assert.equal(env.registry.AUTOMATIC_PLAYER_SOURCES.some((source) => source.id === id), false);
+      assert.equal(sources.mobileSourceSupportsContinuity(id), false);
+      assert.equal(sources.getMobileSourceContinuityCapability(id).automaticTarget, false);
+    }
     for (const id of diagnosticSources) assert.equal(choices.some((source) => source.id === id), false);
-    assert.equal(sources.getPreferredMobileResumeSource('vidsrc-ir', mediaType), 'vixsrc');
     assert.equal(sources.getNextMobileContinuitySource('vixsrc', mediaType,
-      sources.MOBILE_PLAYER_SOURCES.filter((source) => source.id !== 'vidsrc-ir').map((source) => source.id)), null);
+      sources.MOBILE_PLAYER_SOURCES.filter((source) => !['vidsrc-ir', 'vidlink'].includes(source.id)).map((source) => source.id)), null);
   }
-  assert.equal(env.registry.AUTOMATIC_PLAYER_SOURCES.some((source) => source.id === 'vidsrc-ir'), false);
-  assert.equal(sources.mobileSourceSupportsContinuity('vidsrc-ir'), false);
-  assert.equal(sources.getMobileSourceContinuityCapability('vidsrc-ir').automaticTarget, false);
   assert.equal(sources.MOBILE_DEFAULT_CINEMA_SOURCE_ID, 'vixsrc');
 });
 
@@ -187,7 +197,7 @@ test('stale or mismatched events cannot borrow an accepted session permission', 
   old(); end();
 });
 
-test('VidSrc.ir qualification and accepted controls require normalized selection binding and exact-episode job start', async () => {
+test('qualified manual candidates and accepted controls require normalized selection binding and exact-episode job start', async () => {
   for (const id of downloadableSources) {
     const env = environment();
     const end = env.capture.beginMobileDownloadCaptureSessionV1(env.session(id));

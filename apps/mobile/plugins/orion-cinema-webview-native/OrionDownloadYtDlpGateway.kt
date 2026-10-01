@@ -53,7 +53,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
   private val server: ServerSocket,
   private val capability: String,
   private val onMediaProgress: (Long, Int, Int) -> Unit,
-  private var hlsResumeRoot: File?,
+  private var resumeRoot: File?,
 ) : Closeable {
   private sealed interface Route
 
@@ -148,9 +148,15 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
   fun owns(jobId: String): Boolean =
     cleanJobId(jobId) == ownerJobId
 
-  fun configureHlsResumeRoot(root: File): Boolean {
-    if (closed.get() || routes.isNotEmpty() || hlsResumeRoot != null) return false
-    hlsResumeRoot = root
+  fun configureHlsResumeRoot(root: File): Boolean =
+    configureResumeRoot(root)
+
+  fun configureDashResumeRoot(root: File): Boolean =
+    configureResumeRoot(root)
+
+  private fun configureResumeRoot(root: File): Boolean {
+    if (closed.get() || routes.isNotEmpty() || resumeRoot != null) return false
+    resumeRoot = root
     return true
   }
 
@@ -1177,9 +1183,9 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     rangeEndInclusive: Long?,
     resumeScope: String?,
   ): String? {
-    if (hlsResumeRoot == null || bound.transferKind != "hls") return null
+    if (resumeRoot == null || bound.transferKind !in setOf("hls", "dash")) return null
     val material = buildString {
-      append("orion-hls-resume-v1\n")
+      append("orion-${bound.transferKind}-resume-v1\n")
       append(bound.requestContextId).append('\n')
       append(bound.candidateId).append('\n')
       append(bound.sourceId).append('\n')
@@ -1256,7 +1262,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     route: ProviderRoute,
     contentLength: Long,
   ): ResumeCapture? {
-    val root = hlsResumeRoot ?: return null
+    val root = resumeRoot ?: return null
     val fingerprint = route.resumeFingerprint ?: return null
     if (contentLength > MAX_RESUME_FRAGMENT_BYTES) return null
     if (resumeSpaceLow()) {
@@ -1284,7 +1290,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     capture: ResumeCapture,
     sizeBytes: Long,
   ) {
-    val root = hlsResumeRoot ?: return abortResumeCapture(capture)
+    val root = resumeRoot ?: return abortResumeCapture(capture)
     val fingerprint = route.resumeFingerprint ?: return abortResumeCapture(capture)
     try {
       capture.output.flush()
@@ -1409,12 +1415,15 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
     if (!headOnly && route.requiredForCompletion) {
       markMediaComplete(routeKey, size, notifyProgress = false)
     }
-    Log.i("OrionDownloadStage", "stage=hls-resume-cache outcome=hit bytes=$size")
+    Log.i(
+      "OrionDownloadStage",
+      "stage=${route.bound.transferKind}-resume-cache outcome=hit bytes=$size",
+    )
     return true
   }
 
   private fun verifiedResumeFile(fingerprint: String): File? {
-    val root = hlsResumeRoot ?: return null
+    val root = resumeRoot ?: return null
     if (!fingerprint.matches(Regex("^[0-9a-f]{64}$"))) return null
     val data = File(root, "$fingerprint.fragment")
     val proofFile = File(root, "$fingerprint.proof")
@@ -1453,10 +1462,10 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
   }
 
   private fun resumeSpaceLow(): Boolean =
-    hlsResumeRoot?.parentFile?.usableSpace?.let { it in 1 until MIN_RESUME_FREE_BYTES } == true
+    resumeRoot?.parentFile?.usableSpace?.let { it in 1 until MIN_RESUME_FREE_BYTES } == true
 
   private fun purgeResumeCache() {
-    val root = hlsResumeRoot ?: return
+    val root = resumeRoot ?: return
     try {
       root.listFiles().orEmpty().forEach { file ->
         if (file.isFile) file.delete()
@@ -1991,7 +2000,7 @@ internal class OrionDownloadYtDlpGatewaySession private constructor(
               CAPABILITY_TOKEN_BYTES,
             ),
           onMediaProgress = onMediaProgress,
-          hlsResumeRoot = null,
+          resumeRoot = null,
         )
       } catch (_: Throwable) {
         try {
