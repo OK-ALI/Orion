@@ -9,8 +9,8 @@ const read = (...parts) => fs.readFileSync(path.join(mobileRoot, ...parts), 'utf
 test('P10.6-B3 presents completed media as an Offline Library instead of verified storage records', () => {
   const activity = read('src', 'features', 'downloads', 'DownloadActivityList.tsx');
 
-  assert.match(activity, />Ready offline</);
-  assert.match(activity, /\[episodeSize, 'Ready offline'\]/);
+  assert.match(activity, />Ready offline\{!episodic && sourceLabel/);
+  assert.match(activity, /\[episodeSize, 'Ready offline', sourceLabel\(assetById\.get\(episode\.primaryAssetId\)\?\.sourceId\)\]/);
   assert.doesNotMatch(activity, />Verified ·/);
   assert.doesNotMatch(activity, /\[episodeSize, 'Verified'/);
   assert.match(activity, /\{episodic \? `\$\{size\} total` : size\}/);
@@ -19,6 +19,16 @@ test('P10.6-B3 presents completed media as an Offline Library instead of verifie
   // stops dominating the normal completed-library presentation.
   assert.match(activity, /function assetLocationLabel/);
   assert.match(activity, /\{missing \? 'Missing' : 'Unavailable'\} · \{assetLocationLabel\(asset\)\}/);
+});
+
+test('episode rows keep local and management actions with compact touch targets and an accent primary play control', () => {
+  const activity = read('src', 'features', 'downloads', 'DownloadActivityList.tsx');
+  assert.match(activity, /moreButton: \{ width: 36, height: 36, borderWidth: 1, borderRadius: 18/);
+  assert.match(activity, /accessibilityLabel=\{`Play \$\{episode\.[\s\S]*?in Orion`\} hitSlop=\{4\}/);
+  assert.match(activity, /backgroundColor: theme\.accent, opacity: pressed \? 0\.82 : 1/);
+  assert.match(activity, /name="play" size=\{16\} color=\{theme\.onAccent\}/);
+  assert.match(activity, /onPlayLocally\(episodePlayableAssetId\)/);
+  assert.match(activity, /onManageAssets\(episode\.assetIds\)/);
 });
 
 test('P10.6-B3 gives series an explicit Series to Season to Episode browsing hierarchy', () => {

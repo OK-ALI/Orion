@@ -54,7 +54,7 @@ test('P10.6-B4 remains presentation/filter-state only and preserves prior Phase 
 
   assert.match(screen, /eyebrow="OFFLINE"/);
   assert.match(screen, /title="Downloads"/);
-  assert.match(activity, />Ready offline</);
+  assert.match(activity, />Ready offline\{!episodic && sourceLabel/);
   assert.match(activity, /<ActionButton primary label="Play in Orion"/);
   assert.match(activity, /label="Play Locally"/);
   assert.match(activity, /onManageAssets\(episode\.assetIds\)/);
