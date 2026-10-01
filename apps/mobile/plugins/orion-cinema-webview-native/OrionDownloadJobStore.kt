@@ -228,7 +228,7 @@ internal object OrionDownloadJobStore {
   }
 
   /**
-   * HLS gateway telemetry is episode-wide. yt-dlp/ffmpeg percentage output can
+   * Gateway telemetry is transfer-wide. yt-dlp/ffmpeg percentage output can
    * describe one fragment, so Orion derives the visible percentage from the
    * gateway's completed media-route count instead. The final byte size remains
    * unknown until finalization and is intentionally not fabricated here.
@@ -996,6 +996,8 @@ internal object OrionDownloadJobStore {
 
   private fun publicJob(job: JSONObject): JSONObject {
     val copy = JSONObject(job.toString())
+    job.optString("_sourceId").takeIf { it.isNotBlank() }?.let { copy.put("sourceId", it) }
+    job.optString("_transferKind").takeIf { it in setOf("direct", "hls", "dash") }?.let { copy.put("transferKind", it) }
     val remove = mutableListOf<String>()
     val keys = copy.keys()
     while (keys.hasNext()) {

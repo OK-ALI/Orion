@@ -209,6 +209,9 @@ export function normalizeMobileDownloadJobV1(value: unknown): MobileDownloadJobV
     schemaVersion: 1,
     jobId,
     candidateId,
+    sourceId: stringValue(input.sourceId) || undefined,
+    transferKind: ['direct', 'hls', 'dash'].includes(String(input.transferKind))
+      ? input.transferKind as MobileDownloadJobV1['transferKind'] : undefined,
     media,
     destination: input.destination,
     storageTarget,

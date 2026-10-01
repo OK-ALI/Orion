@@ -922,9 +922,6 @@ internal object OrionDownloadTransferEngine {
       null,
     )
 
-    var lastProgressAt =
-      0L
-
     val outcome =
       OrionDownloadYtDlpRuntime
         .executeDashGateway(
@@ -932,31 +929,12 @@ internal object OrionDownloadTransferEngine {
           jobId = jobId,
           bound = bound,
           requestedQuality = quality,
-        ) { progress ->
-          val now =
-            System.currentTimeMillis()
-
-          if (
-            now - lastProgressAt >= 500L ||
-            (progress.percent ?: 0.0) >= 99.0
-          ) {
-            OrionDownloadJobStore
-              .setProcessProgress(
-                jobId,
-                progress.percent,
-                progress.bytesDownloaded,
-                progress.totalBytes,
-                progress.bytesPerSecond,
-                progress.etaSeconds,
-              )
-
-            OrionDownloadNotifications
-              .reconcile(context)
-
-            lastProgressAt =
-              now
-          }
-        }
+          onProgress = {},
+          onMeasuredMediaProgress = { bytes, completed, total ->
+            OrionDownloadJobStore.setGatewayMediaProgress(jobId, bytes, completed, total)
+            OrionDownloadNotifications.reconcile(context)
+          },
+        )
 
     when (outcome) {
       is OrionYtDlpOutcome.Completed -> {

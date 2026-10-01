@@ -39,6 +39,31 @@ test('V8.12 restores whole-download HLS percentage speed and ETA without trustin
   assert.doesNotMatch(hls, /setProcessProgress/);
 });
 
+test('DASH displays only measured gateway route progress while retaining completion proof', () => {
+  const dash = between(runtime, 'fun executeDashGateway(', 'fun execute(');
+  const transfer = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
+  const dashTransfer = between(transfer, 'fun runDash', 'fun runDirect');
+  assert.match(dash, /\.start\(cleanJobId, onMeasuredMediaProgress\)/);
+  assert.match(dash, /gateway\.awaitCompletionProof\(\)/);
+  assert.match(dashTransfer, /onProgress = \{\}/);
+  assert.match(dashTransfer, /onMeasuredMediaProgress = \{ bytes, completed, total ->[\s\S]*?setGatewayMediaProgress\(jobId, bytes, completed, total\)/);
+  assert.doesNotMatch(dashTransfer, /progress\.percent/);
+  assert.match(list, /job\.transferKind === 'dash' \? 'routes' : 'fragments'/);
+});
+
+test('download rows use presentation-safe source identity and preserve native request privacy', () => {
+  const repository = read('src', 'features', 'downloads', 'downloadRepository.ts');
+  const types = read('..', '..', 'packages', 'shared', 'src', 'types', 'mobileDownloads.ts');
+  assert.match(store, /copy\.put\("sourceId", it\)/);
+  assert.match(store, /copy\.put\("transferKind", it\)/);
+  assert.match(store, /if \(key\.startsWith\("_"\)\) remove\.add\(key\)/);
+  assert.match(repository, /sourceId: stringValue\(input\.sourceId\)/);
+  assert.match(types, /sourceId\?: string;/);
+  assert.match(list, /sourceLabel\(job\.sourceId\)/);
+  assert.match(list, /sourceLabel\(assetById\.get\(episode\.primaryAssetId\)\?\.sourceId\)/);
+  assert.match(list, /This source is incomplete for this episode\. Try another provider\./);
+});
+
 test('V8.12 keeps elapsed time live for running work and preserves the existing Orion progress presentation', () => {
   assert.match(telemetry, /job\.state === 'downloading' \|\| job\.state === 'recovering' \|\| job\.state === 'verifying'/);
   assert.match(telemetry, /finalizing \? nowMs : running \? nowMs : job\.completedAt \?\? job\.updatedAt/);

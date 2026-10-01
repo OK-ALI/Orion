@@ -170,7 +170,7 @@ internal object OrionDownloadYtDlpRuntime {
           val interrupted = proof.providerReadErrors > 0L || proof.providerWriteErrors > 0L
           return OrionYtDlpOutcome.Failed(
             if (interrupted) "network-interrupted" else "yt-dlp-hls-transfer-incomplete",
-            true,
+            interrupted,
           )
         }
       }
@@ -186,6 +186,7 @@ internal object OrionDownloadYtDlpRuntime {
     bound: BoundTransferContext,
     requestedQuality: String,
     onProgress: (OrionYtDlpProgress) -> Unit = {},
+    onMeasuredMediaProgress: (Long, Int, Int) -> Unit = { _, _, _ -> },
   ): OrionYtDlpOutcome {
     val cleanJobId =
       cleanJobId(jobId)
@@ -226,7 +227,7 @@ internal object OrionDownloadYtDlpRuntime {
 
     val gateway =
       OrionDownloadYtDlpGatewaySession
-        .start(cleanJobId)
+        .start(cleanJobId, onMeasuredMediaProgress)
         ?: return OrionYtDlpOutcome.Failed(
           "yt-dlp-gateway-unavailable",
           true,

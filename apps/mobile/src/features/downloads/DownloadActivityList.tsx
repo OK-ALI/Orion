@@ -7,6 +7,7 @@ import type { MobileDownloadAssetV1, MobileDownloadJobV1, OfflineMediaEntryV1 } 
 import { useOrionTheme } from '../../context/ThemeContext';
 import { createMobileDownloadProgressSnapshotV1 } from './contracts';
 import { downloadElapsedSecondsV1 } from './downloadTelemetry';
+import { MOBILE_PLAYER_SOURCES } from '../playback/mobileSources';
 import { cancelNativeDownloadJobV1, pauseNativeDownloadJobV1, resumeNativeDownloadJobV1, retryNativeDownloadJobV1 } from './nativeDownloadEngine';
 interface DownloadActivityListProps {
   jobs: MobileDownloadJobV1[];
@@ -45,6 +46,7 @@ const SORTS: ReadonlyArray<{ id: DownloadSort; label: string }> = [
   { id: 'progress', label: 'Progress' },
   { id: 'size', label: 'Largest' },
 ];
+const sourceLabel = (sourceId?: string) => MOBILE_PLAYER_SOURCES.find((source) => source.id === sourceId)?.label || null;
 function sortOptionsForTab(tab: DownloadTab): ReadonlyArray<{ id: DownloadSort; label: string }> {
   if (tab === 'active' || tab === 'failed') return SORTS;
   return SORTS.filter((item) => item.id !== 'progress');
@@ -101,6 +103,7 @@ interface DownloadFailurePresentation {
 }
 function downloadFailurePresentation(job: MobileDownloadJobV1): DownloadFailurePresentation {
   const code = job.failure?.code || '';
+  if (code === 'yt-dlp-hls-transfer-incomplete' || code === 'hls-fragments-missing') return { detail: 'This source is incomplete for this episode. Try another provider.', retryLabel: 'Retry' };
   const progress = createMobileDownloadProgressSnapshotV1(job);
   const hasPreservedProgress = progress.bytesDownloaded > 0 ||
     (progress.completedFragments !== null && progress.completedFragments > 0);
@@ -530,7 +533,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
           (progress.completedFragments !== null && progress.completedFragments > 0);
         const canRetry = job.state === 'recovering' || (FAILED_STATES.has(job.state) && job.failure?.retryable);
         const showRetry = canRetry && !resuming;
-        const displayRetry = (canRetry || (FAILED_STATES.has(job.state) && hasPreservedProgress)) && !phaseResuming;
+        const displayRetry = (canRetry || (FAILED_STATES.has(job.state) && hasPreservedProgress)) && !phaseResuming && recoveryCode !== 'yt-dlp-hls-transfer-incomplete' && recoveryCode !== 'hls-fragments-missing';
         const failurePresentation = downloadFailurePresentation(job);
         const poster = imgUrl(job.media.posterPath ?? null, 'w342');
         const downloaded = progress.bytesDownloaded > 0 ? formatBytes(progress.bytesDownloaded) : null;
@@ -540,7 +543,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
         const eta = showLiveTransferTelemetry ? formatDurationSeconds(progress.etaSeconds) : null;
         const elapsed = downloadElapsedTextV1(job, nowMs);
         const fragmentText = progress.completedFragments !== null && progress.totalFragments !== null
-          ? `${progress.completedFragments}/${progress.totalFragments} fragments`
+          ? `${progress.completedFragments}/${progress.totalFragments} ${job.transferKind === 'dash' ? 'routes' : 'fragments'}`
           : null;
         const metrics = finalizing
           ? [
@@ -579,7 +582,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
               <View style={styles.copy}>
                 <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>{mediaPrimaryTitle(job.media)}</Text>
                 {mediaSecondaryTitle(job.media) ? <Text numberOfLines={1} style={[styles.secondaryTitle, { color: theme.textSecondary }]}>{mediaSecondaryTitle(job.media)}</Text> : null}
-                <Text style={[styles.meta, { color: tone }]}>{displayStatusLabel}{displayPercent !== null ? ` · ${displayPercent}%` : ''}</Text>
+                <Text style={[styles.meta, { color: tone }]}>{displayStatusLabel}{displayPercent !== null ? ` · ${displayPercent}%` : ''}{sourceLabel(job.sourceId) ? ` · ${sourceLabel(job.sourceId)}` : ''}</Text>
                 {failurePresentation.detail ? <Text numberOfLines={3} style={[styles.failureText, { color: theme.textSecondary }]}>{failurePresentation.detail}</Text> : null}
                 {metrics.length ? <Text numberOfLines={2} style={[styles.metrics, { color: theme.textSecondary }]}>{metrics.join(' · ')}</Text> : null}
               </View>
@@ -650,7 +653,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
                     ? `${seasonCount} season${seasonCount === 1 ? '' : 's'} · ${group.entries.length} episode${group.entries.length === 1 ? '' : 's'}`
                     : (entry.media.year ? String(entry.media.year) : 'Movie')}
                 </Text>
-                <Text style={[styles.meta, { color: theme.success }]}>Ready offline</Text>
+                <Text style={[styles.meta, { color: theme.success }]}>Ready offline{!episodic && sourceLabel(assetById.get(entry.primaryAssetId)?.sourceId) ? ` · ${sourceLabel(assetById.get(entry.primaryAssetId)?.sourceId)}` : ''}</Text>
                 {size ? <Text style={[styles.metrics, { color: theme.textSecondary }]}>{episodic ? `${size} total` : size}</Text> : null}
               </View>
               {episodic ? <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={theme.textMuted} /> : <Ionicons name="checkmark-circle" size={20} color={theme.success} />}
@@ -678,7 +681,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
                             </View>
                             <View style={styles.copy}>
                               <Text numberOfLines={1} style={[styles.episodeTitle, { color: theme.text }]}>{episode.episodeTitle || `Episode ${episode.media.episode ?? ''}`}</Text>
-                              <Text style={[styles.episodeMeta, { color: theme.textSecondary }]}>{[episodeSize, 'Ready offline'].filter(Boolean).join(' · ')}</Text>
+                              <Text style={[styles.episodeMeta, { color: theme.textSecondary }]}>{[episodeSize, 'Ready offline', sourceLabel(assetById.get(episode.primaryAssetId)?.sourceId)].filter(Boolean).join(' · ')}</Text>
                             </View>
                             {episodePlayableAssetId && onPlayInOrion ? <Pressable accessibilityRole="button" accessibilityLabel={`Play ${episode.episodeTitle || `episode ${episode.media.episode ?? ''}`} in Orion`} onPress={() => onPlayInOrion(episode, episodePlayableAssetId)} style={({ pressed }) => [styles.moreButton, { borderColor: theme.accent, backgroundColor: pressed ? theme.accentSoft : theme.elevated }]}><Ionicons name="play" size={18} color={theme.accent} /></Pressable> : null}
                             {episodePlayableAssetId && onPlayLocally && assetById.get(episodePlayableAssetId)?.actions.open ? <Pressable accessibilityRole="button" accessibilityLabel={`Play ${episode.episodeTitle || `episode ${episode.media.episode ?? ''}`} locally`} onPress={() => onPlayLocally(episodePlayableAssetId)} style={({ pressed }) => [styles.moreButton, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.elevated }]}><Ionicons name="open-outline" size={18} color={theme.textSecondary} /></Pressable> : null}

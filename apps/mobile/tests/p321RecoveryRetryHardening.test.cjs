@@ -37,7 +37,7 @@ test('V8.15 keeps HLS fragment truth authoritative during recovery and blocks fa
   assert.match(activity, /const fragmentPercent = progress\.completedFragments !== null && progress\.totalFragments !== null/);
   assert.match(activity, /const percentValue = fragmentPercent \?\? progress\.percent/);
   assert.match(activity, /const total = progress\.totalFragments !== null \? null : formatBytes\(progress\.totalBytes\)/);
-  const process = between(store, 'fun setProcessProgress(', '/**\n   * HLS gateway telemetry');
+  const process = between(store, 'fun setProcessProgress(', '/**\n   * Gateway telemetry');
   assert.match(process, /hasVerifiedHlsProgress/);
   assert.match(process, /previous\.optInt\("totalFragments", 0\) > 0/);
   assert.match(process, /progress\.put\("bytesPerSecond", JSONObject\.NULL\)/);
@@ -65,10 +65,12 @@ test('V8.15 classifies HLS provider I-O interruption separately from a generic i
   const hls = between(runtime, 'fun executeHlsGateway(', 'fun executeDashGateway(');
   assert.match(hls, /proof\.providerReadErrors > 0L \|\| proof\.providerWriteErrors > 0L/);
   assert.match(hls, /if \(interrupted\) "network-interrupted" else "yt-dlp-hls-transfer-incomplete"/);
+  assert.match(hls, /"yt-dlp-hls-transfer-incomplete",\s*interrupted,/);
 });
 
 test('V8.15 exposes same-job Retry for recoverable or preserved-progress failures', () => {
   assert.match(activity, /const displayRetry = \(canRetry \|\| \(FAILED_STATES\.has\(job\.state\) && hasPreservedProgress\)\) && !phaseResuming/);
+  assert.match(activity, /recoveryCode !== 'yt-dlp-hls-transfer-incomplete' && recoveryCode !== 'hls-fragments-missing'/);
   assert.match(activity, /retryNativeDownloadJobV1\(job\.jobId\)/);
   assert.match(activity, /Retry the same source to continue\./);
   assert.match(activity, /retryLabel: 'Retry now'/);

@@ -43,14 +43,14 @@ test('V8.14 waits briefly for gateway accounting to settle without turning provi
   assert.match(gateway, /private const val COMPLETION_PROOF_POLL_MS = 25L/);
 });
 
-test('V8.14 converts a zero-exit partial HLS result into retryable recovery instead of Ready Offline', () => {
+test('V8.14 rejects a zero-exit partial HLS result and retries only provider I-O interruptions', () => {
   const hls = between(runtime, 'fun executeHlsGateway(', 'fun executeDashGateway(');
   assert.match(hls, /if \(outcome is OrionYtDlpOutcome\.Completed\)/);
   assert.match(hls, /gateway\.awaitCompletionProof\(\)/);
   assert.match(hls, /stage=hls-transfer-proof/);
   assert.match(hls, /if \(!proof\.complete\)/);
   assert.match(hls, /"yt-dlp-hls-transfer-incomplete"/);
-  assert.match(hls, /OrionYtDlpOutcome\.Failed\([\s\S]*?true/);
+  assert.match(hls, /if \(interrupted\) "network-interrupted" else "yt-dlp-hls-transfer-incomplete",\s*interrupted,/);
 
   const failed = between(
     transfer,

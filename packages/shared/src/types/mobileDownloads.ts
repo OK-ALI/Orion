@@ -132,6 +132,8 @@ export interface MobileDownloadJobV1 {
   schemaVersion: 1;
   jobId: string;
   candidateId: string;
+  sourceId?: string;
+  transferKind?: 'direct' | 'hls' | 'dash';
   media: MobileDownloadMediaIdentityV1;
   destination: MobileDownloadDestinationModeV1;
   storageTarget: MobileDownloadStorageTargetV1;
