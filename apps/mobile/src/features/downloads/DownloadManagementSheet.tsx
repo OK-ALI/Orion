@@ -17,6 +17,7 @@ import {
   removeUnavailableNativeDownloadRecordsV1,
 } from './nativeDownloadEngine';
 import { setMobileDownloadLibraryStorageTargetV1 } from './downloadPreferences';
+import { CompletedSubtitleManager } from './CompletedSubtitleManager';
 
 type ManagementMode = 'manage' | 'free-space';
 type ManagementSort = 'size' | 'title' | 'destination';
@@ -92,6 +93,7 @@ export function DownloadManagementSheet({ visible, mode, assets, initialAssetIds
   const [confirmation, setConfirmation] = useState<ConfirmationSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [subtitleAssetId, setSubtitleAssetId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) return;
@@ -99,6 +101,7 @@ export function DownloadManagementSheet({ visible, mode, assets, initialAssetIds
     setSort(mode === 'free-space' ? 'size' : 'title');
     setConfirmation(null);
     setMessage(null);
+    setSubtitleAssetId(null);
   }, [initialAssetIds, mode, visible]);
 
   const sortedAssets = useMemo(() => [...assets].sort((left, right) => {
@@ -249,6 +252,7 @@ export function DownloadManagementSheet({ visible, mode, assets, initialAssetIds
                   <View style={styles.rowActions}>
                     {asset.actions.open ? <IconAction label="Play Locally" icon="open-outline" onPress={() => void runAssetAction(asset.assetId, 'play-local')} /> : null}
                     {asset.actions.locate ? <IconAction label="Locate" icon="folder-open-outline" onPress={() => void runAssetAction(asset.assetId, 'locate')} /> : null}
+                    {asset.availability === 'verified' ? <IconAction label="Manage Subtitles" icon="text-outline" onPress={() => setSubtitleAssetId(asset.assetId)} /> : null}
                     {asset.availability === 'unavailable' && (asset.destination === 'device-storage' || asset.storageTarget.mode === 'user-folder') ? <IconAction label="Reselect folder" icon="folder-outline" onPress={() => void reselectFolder(asset)} /> : null}
                   </View>
                 </View>
@@ -285,6 +289,7 @@ export function DownloadManagementSheet({ visible, mode, assets, initialAssetIds
             </View>
           </View>
         </Modal>
+        <CompletedSubtitleManager asset={assets.find((asset) => asset.assetId === subtitleAssetId) || null} onClose={() => setSubtitleAssetId(null)} />
       </View>
     </Modal>
   );

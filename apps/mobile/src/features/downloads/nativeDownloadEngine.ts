@@ -1,6 +1,7 @@
 import { DeviceEventEmitter, NativeModules, Platform } from 'react-native';
 import type { MobileDownloadAssetSelectionV1, MobileDownloadJobV1, MobileDownloadManagementResultV1, MobileDownloadStorageTargetV1 } from '@orion/shared/types';
 import type { MobileDownloadSubtitleSourceV1 } from './downloadSubtitles';
+import { resolveMobileDownloadSubtitleSourcesForNativeV1 } from './downloadSubtitles';
 import {
   normalizeMobileDownloadAssetV1,
   normalizeMobileDownloadJobV1,
@@ -47,6 +48,8 @@ interface NativeDownloadEngineModule {
   setForegroundNetworkAvailable(available: boolean): void;
   cancelJob(jobId: string): void;
   reconcileDownloads(): Promise<unknown>;
+  addCompletedSubtitle(assetId: string, managementToken: string, sourceJson: string): Promise<unknown>;
+  removeCompletedSubtitle(assetId: string, managementToken: string, trackId: string): Promise<unknown>;
   deleteAssets(assetIdsJson: string): Promise<unknown>;
   deleteAllDownloads(): Promise<unknown>;
   removeStaleRecords(assetIdsJson: string): Promise<unknown>;
@@ -256,6 +259,27 @@ export async function reconcileNativeDownloadsV1(): Promise<void> {
     }
     throw error;
   }
+}
+
+export async function addNativeCompletedSubtitleV1(assetId: string, managementToken: string, trackId: string): Promise<string> {
+  const module = nativeModule();
+  if (!module) throw new Error('Android download engine is unavailable.');
+  const source = resolveMobileDownloadSubtitleSourcesForNativeV1([trackId])[0];
+  if (!source || source.id !== trackId) throw new Error('This subtitle selection expired. Search again.');
+  const result = await module.addCompletedSubtitle(assetId, managementToken, JSON.stringify({
+    id: source.id, provider: source.provider, language: source.language,
+    label: source.label, format: source.format, url: source.url,
+  })) as { ok?: boolean; message?: string };
+  if (!result?.ok) throw new Error(result?.message || 'Orion could not save this subtitle.');
+  return result.message || 'Subtitle saved beside the video.';
+}
+
+export async function removeNativeCompletedSubtitleV1(assetId: string, managementToken: string, trackId: string): Promise<string> {
+  const module = nativeModule();
+  if (!module) throw new Error('Android download engine is unavailable.');
+  const result = await module.removeCompletedSubtitle(assetId, managementToken, trackId) as { ok?: boolean; message?: string };
+  if (!result?.ok) throw new Error(result?.message || 'Orion could not remove this subtitle.');
+  return result.message || 'Subtitle removed from the saved video.';
 }
 
 export async function deleteNativeDownloadAssetsV1(selections: readonly MobileDownloadAssetSelectionV1[]): Promise<MobileDownloadManagementResultV1> {

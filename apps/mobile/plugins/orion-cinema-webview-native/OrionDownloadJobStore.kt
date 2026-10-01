@@ -641,6 +641,86 @@ internal object OrionDownloadJobStore {
     .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
   @Synchronized
+  fun beginSubtitleMutation(assetId: String, token: String, mutation: JSONObject): Boolean {
+    val state = readStateLocked()
+    val assets = state.optJSONArray("assets") ?: return false
+    val asset = (0 until assets.length()).mapNotNull { assets.optJSONObject(it) }
+      .firstOrNull { it.optString("assetId") == assetId } ?: return false
+    if (asset.has("_subtitleMutation") || managementToken(asset) != token) return false
+    asset.put("_subtitleMutation", JSONObject(mutation.toString()))
+    return persistSubtitleMutationLocked(state)
+  }
+
+  @Synchronized
+  fun updateSubtitleMutation(assetId: String, mutationId: String, mutation: JSONObject): Boolean {
+    val state = readStateLocked()
+    val assets = state.optJSONArray("assets") ?: return false
+    val asset = (0 until assets.length()).mapNotNull { assets.optJSONObject(it) }
+      .firstOrNull { it.optString("assetId") == assetId } ?: return false
+    if (asset.optJSONObject("_subtitleMutation")?.optString("id") != mutationId) return false
+    asset.put("_subtitleMutation", JSONObject(mutation.toString()))
+    return persistSubtitleMutationLocked(state)
+  }
+
+  @Synchronized
+  fun completeSubtitleMutation(assetId: String, mutationId: String, token: String, replacement: JSONObject): Boolean {
+    val state = readStateLocked()
+    val assets = state.optJSONArray("assets") ?: return false
+    val index = (0 until assets.length()).firstOrNull { assets.optJSONObject(it)?.optString("assetId") == assetId } ?: return false
+    val asset = assets.optJSONObject(index) ?: return false
+    val mutation = asset.optJSONObject("_subtitleMutation") ?: return false
+    if (mutation.optString("id") != mutationId || managementToken(asset) != token) return false
+    if (replacement.optString("assetId") != assetId || replacement.has("_subtitleMutation")) return false
+    val currentArtifacts = asset.optJSONArray("_artifacts") ?: return false
+    val proposedArtifacts = replacement.optJSONArray("_artifacts") ?: return false
+    val currentById = (0 until currentArtifacts.length()).mapNotNull { currentArtifacts.optJSONObject(it) }
+      .associateBy { it.optString("artifactId") }
+    val mergedArtifacts = JSONArray()
+    for (artifactIndex in 0 until proposedArtifacts.length()) {
+      val proposed = proposedArtifacts.optJSONObject(artifactIndex) ?: return false
+      val existing = currentById[proposed.optString("artifactId")]
+      val merged = if (existing == null) JSONObject(proposed.toString()) else JSONObject(existing.toString())
+      if (existing != null && proposed.optString("role") == "primary" &&
+        proposed.optLong("expectedSizeBytes", -1L) != existing.optLong("expectedSizeBytes", -1L)) {
+        merged.put("expectedSizeBytes", proposed.optLong("expectedSizeBytes"))
+          .put("observedSizeBytes", proposed.optLong("observedSizeBytes"))
+      }
+      mergedArtifacts.put(merged)
+    }
+    if (mutation.optString("kind") == "add" &&
+      (0 until currentArtifacts.length()).mapNotNull { currentArtifacts.optJSONObject(it) }
+        .firstOrNull { it.optString("role") == "primary" }?.optString("availability") != "verified") return false
+    val merged = JSONObject(asset.toString()).apply { remove("_subtitleMutation") }
+    merged.put("tracks", JSONArray((replacement.optJSONArray("tracks") ?: return false).toString()))
+      .put("_artifacts", mergedArtifacts)
+      .put("verifiedSizeBytes", replacement.optLong("verifiedSizeBytes"))
+    assets.put(index, merged)
+    return persistSubtitleMutationLocked(state, notify = true)
+  }
+
+  @Synchronized
+  fun clearSubtitleMutation(assetId: String, mutationId: String): Boolean {
+    val state = readStateLocked()
+    val assets = state.optJSONArray("assets") ?: return false
+    val asset = (0 until assets.length()).mapNotNull { assets.optJSONObject(it) }
+      .firstOrNull { it.optString("assetId") == assetId } ?: return false
+    if (asset.optJSONObject("_subtitleMutation")?.optString("id") != mutationId) return false
+    asset.remove("_subtitleMutation")
+    return persistSubtitleMutationLocked(state)
+  }
+
+  private fun persistSubtitleMutationLocked(state: JSONObject, notify: Boolean = false): Boolean {
+    val context = appContext ?: return false
+    val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+      .putString(KEY_STATE, state.toString()).commit()
+    if (saved && notify) {
+      val snapshot = publicSnapshotLocked(state)
+      listeners.toList().forEach { listener -> try { listener(JSONObject(snapshot.toString())) } catch (_: Throwable) {} }
+    }
+    return saved
+  }
+
+  @Synchronized
   fun applyArtifactManagement(
     updates: JSONArray,
     expectedOwnership: Map<String, String>,
@@ -677,7 +757,7 @@ internal object OrionDownloadJobStore {
     val rejected = linkedSetOf<String>()
     for ((assetId, fingerprint) in expectedOwnership) {
       val asset = (0 until assets.length()).mapNotNull { assets.optJSONObject(it) }.firstOrNull { it.optString("assetId") == assetId }
-      if (asset == null || ownershipFingerprint(asset) != fingerprint) {
+      if (asset == null || asset.has("_subtitleMutation") || ownershipFingerprint(asset) != fingerprint) {
         rejected.add(assetId)
         continue
       }

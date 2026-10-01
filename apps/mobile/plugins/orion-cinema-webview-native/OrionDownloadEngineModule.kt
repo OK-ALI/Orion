@@ -70,7 +70,10 @@ class OrionDownloadEngineModule(
     OrionDownloadJobStore.initialize(reactContext)
     OrionDownloadJobStore.addListener(snapshotListener)
     reactContext.addActivityEventListener(activityListener)
-    ioExecutor.execute { OrionDownloadArtifactManager.reconcile(reactContext) }
+    ioExecutor.execute {
+      OrionCompletedSubtitleManager.recover(reactContext)
+      OrionDownloadArtifactManager.reconcile(reactContext)
+    }
   }
 
   override fun getName(): String = "OrionDownloadEngine"
@@ -314,8 +317,31 @@ class OrionDownloadEngineModule(
   @ReactMethod
   fun reconcileDownloads(promise: Promise) {
     ioExecutor.execute {
-      try { promise.resolve(toWritableMap(OrionDownloadArtifactManager.reconcile(reactContext))) }
+      try {
+        OrionCompletedSubtitleManager.recover(reactContext)
+        promise.resolve(toWritableMap(OrionDownloadArtifactManager.reconcile(reactContext)))
+      }
       catch (_: Throwable) { promise.reject("DOWNLOAD_RECONCILIATION_FAILED", "Orion could not check saved downloads right now.") }
+    }
+  }
+
+  @ReactMethod
+  fun addCompletedSubtitle(assetId: String, managementToken: String, sourceJson: String, promise: Promise) {
+    ioExecutor.execute {
+      try {
+        val source = JSONObject(sourceJson)
+        promise.resolve(toWritableMap(OrionCompletedSubtitleManager.add(reactContext, assetId, managementToken, source)))
+      } catch (_: Throwable) {
+        promise.reject("SUBTITLE_MANAGEMENT_FAILED", "Orion could not safely add this saved subtitle.")
+      }
+    }
+  }
+
+  @ReactMethod
+  fun removeCompletedSubtitle(assetId: String, managementToken: String, trackId: String, promise: Promise) {
+    ioExecutor.execute {
+      try { promise.resolve(toWritableMap(OrionCompletedSubtitleManager.remove(reactContext, assetId, managementToken, trackId))) }
+      catch (_: Throwable) { promise.reject("SUBTITLE_MANAGEMENT_FAILED", "Orion could not safely remove this saved subtitle.") }
     }
   }
 

@@ -762,6 +762,12 @@ internal object OrionDownloadArtifactManager {
       val asset = assets.optJSONObject(assetIndex) ?: continue
       val assetId = asset.optString("assetId")
       knownIds.add(assetId)
+      if (asset.has("_subtitleMutation")) {
+        retained.add(assetId)
+        finalDispositions[assetId] = OrionAssetManagementDisposition.RETAINED_FAILED
+        failures.put(failure(assetId, null, "subtitle-mutation-pending", "Finish or recover subtitle management before deleting this download."))
+        continue
+      }
       val artifacts = asset.optJSONArray("_artifacts") ?: JSONArray()
       val primary = (0 until artifacts.length()).mapNotNull { artifacts.optJSONObject(it) }.firstOrNull { it.optString("role") == "primary" }
       if (staleOnly && primary?.optString("availability") != "missing") {

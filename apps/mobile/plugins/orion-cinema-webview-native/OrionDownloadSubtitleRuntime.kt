@@ -215,40 +215,49 @@ internal object OrionDownloadSubtitleRuntime {
   }
 
   private fun downloadBounded(url: String, destination: File): Boolean {
-    var connection: HttpURLConnection? = null
     return try {
-      val active = URL(url).openConnection() as HttpURLConnection
-      connection = active
-      active.instanceFollowRedirects = true
-      active.connectTimeout = CONNECT_TIMEOUT_MS
-      active.readTimeout = READ_TIMEOUT_MS
-      active.useCaches = false
-      active.requestMethod = "GET"
-      active.setRequestProperty("User-Agent", "Orion")
-      val status = active.responseCode
-      if (status !in 200..299 || active.url.protocol != "https") return false
-      val declared = active.getHeaderFieldLong("Content-Length", -1L)
-      if (declared > MAX_SOURCE_BYTES) return false
-      var written = 0L
-      destination.outputStream().buffered().use { output ->
-        active.inputStream.use { input ->
-          val buffer = ByteArray(16 * 1024)
-          while (true) {
-            val read = input.read(buffer)
-            if (read < 0) break
-            if (read == 0) continue
-            written += read
-            if (written > MAX_SOURCE_BYTES) throw java.io.IOException("Subtitle payload exceeds bound")
-            output.write(buffer, 0, read)
+      var current = url
+      for (hop in 0..4) {
+        if (URL(current).protocol != "https" ||
+          !OrionDownloadRequestContextBroker.trustedManifestReferencedDestination(current)) return false
+        val active = URL(current).openConnection() as HttpURLConnection
+        try {
+          active.instanceFollowRedirects = false
+          active.connectTimeout = CONNECT_TIMEOUT_MS
+          active.readTimeout = READ_TIMEOUT_MS
+          active.useCaches = false
+          active.requestMethod = "GET"
+          active.setRequestProperty("User-Agent", "Orion")
+          val status = active.responseCode
+          if (status in 300..399) {
+            val location = active.getHeaderField("Location") ?: return false
+            current = URL(URL(current), location).toExternalForm()
+            continue
           }
-        }
+          if (status !in 200..299) return false
+          val declared = active.getHeaderFieldLong("Content-Length", -1L)
+          if (declared > MAX_SOURCE_BYTES) return false
+          var written = 0L
+          destination.outputStream().buffered().use { output ->
+            active.inputStream.use { input ->
+              val buffer = ByteArray(16 * 1024)
+              while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                if (read == 0) continue
+                written += read
+                if (written > MAX_SOURCE_BYTES) throw java.io.IOException("Subtitle payload exceeds bound")
+                output.write(buffer, 0, read)
+              }
+            }
+          }
+          return written > 0L && destination.length() == written
+        } finally { active.disconnect() }
       }
-      written > 0L && destination.length() == written
+      false
     } catch (_: Throwable) {
       destination.delete()
       false
-    } finally {
-      try { connection?.disconnect() } catch (_: Throwable) {}
     }
   }
 

@@ -196,6 +196,50 @@ internal object OrionDownloadStorageRegistry {
     }
   }
 
+  /** Exact tree-child lookup for recovering a journaled publication after process death. */
+  fun findDocumentsByName(context: Context, handle: String, displayName: String): List<Uri>? {
+    val tree = resolveTreeUri(context, handle) ?: return null
+    if (describe(context, handle) == null || displayName.isBlank()) return null
+    return try {
+      val parentId = DocumentsContract.getTreeDocumentId(tree)
+      val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentId)
+      val matches = mutableListOf<Uri>()
+      context.contentResolver.query(children, arrayOf(
+        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+      ), null, null, null)?.use { cursor ->
+        while (cursor.moveToNext()) {
+          if (cursor.getString(1) == displayName) {
+            matches += DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(0))
+          }
+        }
+      } ?: return null
+      matches
+    } catch (_: Throwable) { null }
+  }
+
+  /** Recovery uses only the operation's random marker, never a broad title match. */
+  fun findDocumentsByMarker(context: Context, handle: String, marker: String): List<Uri>? {
+    val tree = resolveTreeUri(context, handle) ?: return null
+    if (describe(context, handle) == null || !marker.matches(Regex("^orion-[a-f0-9]{32}$"))) return null
+    return try {
+      val parentId = DocumentsContract.getTreeDocumentId(tree)
+      val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentId)
+      val matches = mutableListOf<Uri>()
+      context.contentResolver.query(children, arrayOf(
+        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+      ), null, null, null)?.use { cursor ->
+        while (cursor.moveToNext()) {
+          if (cursor.getString(1).orEmpty().contains(marker)) {
+            matches += DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(0))
+          }
+        }
+      } ?: return null
+      matches
+    } catch (_: Throwable) { null }
+  }
+
   fun deleteDocument(context: Context, uri: Uri): DocumentDeleteResult {
     if (uri.scheme != "content") return DocumentDeleteResult.Unavailable
     return try {

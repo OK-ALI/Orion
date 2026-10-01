@@ -50,6 +50,7 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionDownloadStorageRegistry.kt',
   'OrionSafPublicationWritePolicy.kt',
   'OrionDownloadSubtitleRuntime.kt',
+  'OrionCompletedSubtitleManager.kt',
   'OrionOfflineMediaSourcePolicy.kt',
   'OrionOfflineMediaSourceFactory.kt',
   'OrionFinalizedMediaSourceFactory.kt',
