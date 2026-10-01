@@ -23,29 +23,30 @@ function between(source, start, end) {
 test('V8.17 removes only an unsealed HLS media.mp4 before a fresh yt-dlp process starts', () => {
   const execute = between(runtime, 'fun execute(', 'fun isLiveHls(');
   assert.match(execute, /executionPhase = "staging-recovery"/);
-  assert.match(execute, /prepareHlsExecutionOutput\(cleanJobId, authority, workDir\)/);
+  assert.match(execute, /prepareGatewayExecutionOutput\(cleanJobId, authority, workDir\)/);
   assert.match(execute, /"yt-dlp-staging-reset-failed"/);
   assert.ok(
-    execute.indexOf('prepareHlsExecutionOutput(cleanJobId, authority, workDir)') <
+    execute.indexOf('prepareGatewayExecutionOutput(cleanJobId, authority, workDir)') <
       execute.indexOf('val request = buildRequest(rootUrl, authority, workDir)'),
     'stale-output cleanup must happen before yt-dlp builds/starts the fresh request',
   );
 
-  const cleanup = between(runtime, 'private fun prepareHlsExecutionOutput(', 'fun isLiveHls(');
-  assert.match(cleanup, /authority\.transferKind != "hls"/);
+  const cleanup = between(runtime, 'private fun prepareGatewayExecutionOutput(', 'fun isLiveHls(');
+  const hlsCleanup = between(cleanup, 'if (authority.transferKind == "hls") {', 'if (authority.transferKind == "dash") {');
+  assert.match(cleanup, /authority\.transferKind == "hls"/);
   assert.match(cleanup, /OrionDownloadJobStore\.ytDlpTransferCompletion\(jobId\) != null/);
-  assert.match(cleanup, /File\([\s\S]*?workDir,[\s\S]*?"media\.mp4"/);
-  assert.match(cleanup, /if \(!output\.exists\(\)\) return true/);
-  assert.match(cleanup, /if \(!output\.delete\(\)\)/);
-  assert.match(cleanup, /recovery=staging-reset outcome=discarded/);
-  assert.doesNotMatch(cleanup, /deleteRecursively/);
+  assert.match(hlsCleanup, /File\([\s\S]*?workDir,[\s\S]*?"media\.mp4"/);
+  assert.match(hlsCleanup, /if \(!output\.exists\(\)\) return true/);
+  assert.match(hlsCleanup, /if \(!output\.delete\(\)\)/);
+  assert.match(hlsCleanup, /recovery=staging-reset outcome=discarded/);
+  assert.doesNotMatch(hlsCleanup, /deleteRecursively/);
 });
 
 test('V8.17 keeps V8.16 durable completion proof as the authority that protects a valid staging MP4', () => {
   assert.match(store, /fun sealYtDlpTransferCompletion\(/);
   assert.match(store, /fun ytDlpTransferCompletion\(jobId: String\): JSONObject\?/);
 
-  const cleanup = between(runtime, 'private fun prepareHlsExecutionOutput(', 'fun isLiveHls(');
+  const cleanup = between(runtime, 'private fun prepareGatewayExecutionOutput(', 'fun isLiveHls(');
   const proofCheck = cleanup.indexOf('OrionDownloadJobStore.ytDlpTransferCompletion(jobId) != null');
   const deleteCheck = cleanup.indexOf('output.delete()');
   assert.ok(proofCheck >= 0 && deleteCheck > proofCheck);
@@ -61,7 +62,7 @@ test('V8.17 does not alter the V8.13 live in-place Pause and Resume process path
   assert.match(runtime, /fun isLiveHls\(jobId: String\): Boolean/);
 
   const execute = between(runtime, 'fun execute(', 'fun isLiveHls(');
-  assert.match(execute, /prepareHlsExecutionOutput\(cleanJobId, authority, workDir\)/);
+  assert.match(execute, /prepareGatewayExecutionOutput\(cleanJobId, authority, workDir\)/);
 });
 
 test('V8.17 retains V8.14 incomplete-transfer proof instead of treating cleanup as completion evidence', () => {

@@ -10,7 +10,6 @@ import java.util.concurrent.Executors
 
 class OrionDownloadForegroundService : Service() {
   private val executor = Executors.newSingleThreadExecutor()
-  private val activeJobs = Collections.synchronizedSet(mutableSetOf<String>())
   private val queuedExplicitResumes = Collections.synchronizedSet(mutableSetOf<String>())
 
   override fun onCreate() {
@@ -148,6 +147,11 @@ class OrionDownloadForegroundService : Service() {
   }
 
   companion object {
+    // Process-local ownership survives Service recreation, but not process death.
+    private val activeJobs = Collections.synchronizedSet(mutableSetOf<String>())
+
+    fun hasActiveExecution(jobId: String): Boolean = activeJobs.contains(jobId)
+
     const val EXTRA_JOB_ID = "jobId"
     const val ACTION_START = "com.okali.orion.download.START"
     const val ACTION_RESUME = "com.okali.orion.download.RESUME"

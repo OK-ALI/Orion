@@ -180,8 +180,9 @@ test('P10.4C keeps Orion Library storage selection behind the Android-owned SAF 
   assert.match(manager, /state: 'ready'/);
   assert.match(modal, /!capability\.available/);
   assert.match(modal, /const subtitleCheckPending =/);
-  assert.match(modal, /disabled=\{!storageReady \|\| needsEpisode \|\| starting \|\| subtitleCheckPending \|\| Boolean\(duplicateJob\) \|\| !capability\.available\}/);
-  assert.match(modal, /accessibilityState=\{\{ disabled: !storageReady \|\| needsEpisode \|\| starting \|\| subtitleCheckPending \|\| Boolean\(duplicateJob\) \|\| !capability\.available \}\}/);
+  assert.match(modal, /const primaryDisabled = !storageReady \|\| needsEpisode \|\| Boolean\(duplicateJob\) \|\| !capability\.available[\s\S]*?\|\| starting \|\| \(step === 'ready' && \(subtitleCheckPending \|\| !selectedCandidate\)\)/);
+  assert.match(modal, /accessibilityState=\{\{ disabled: primaryDisabled \}\}/);
+  assert.match(modal, /disabled=\{primaryDisabled\}/);
   assert.doesNotMatch(manager, /setInterval|Math\.random/);
 });
 

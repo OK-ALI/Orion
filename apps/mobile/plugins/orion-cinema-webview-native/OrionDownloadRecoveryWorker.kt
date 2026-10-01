@@ -19,6 +19,9 @@ internal object OrionDownloadRecoveryPolicy {
   fun shouldRemainIdle(state: String, control: String): Boolean =
     state in setOf("completed", "cancelled", "unsupported", "protected", "paused") ||
       control == "pause"
+
+  fun shouldDeferToForegroundOwner(state: String, control: String, ownerActive: Boolean): Boolean =
+    ownerActive && !shouldRemainIdle(state, control)
 }
 
 
@@ -34,6 +37,12 @@ class OrionDownloadRecoveryWorker(
     val state = job.optString("state")
     val control = job.optString("_control", "run")
     if (OrionDownloadRecoveryPolicy.shouldRemainIdle(state, control)) return Result.success()
+    if (OrionDownloadRecoveryPolicy.shouldDeferToForegroundOwner(
+        state,
+        control,
+        OrionDownloadForegroundService.hasActiveExecution(jobId),
+      )
+    ) return Result.retry()
     OrionDownloadForegroundRecoveryCoordinator.cancel(jobId)
     if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(applicationContext, jobId) ||
       OrionDownloadTransferEngine.hasCompleteLocalYtDlpFinalization(applicationContext, jobId)

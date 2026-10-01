@@ -9,6 +9,18 @@ import java.nio.file.Files
 
 class OrionDownloadRetryPolicyTest {
   @Test
+  fun healthyForegroundOwnerDefersScheduledRecoveryWithoutChangingState() {
+    assertTrue(OrionDownloadRecoveryPolicy.shouldDeferToForegroundOwner("downloading", "run", true))
+    assertFalse(OrionDownloadRecoveryPolicy.shouldDeferToForegroundOwner("paused", "pause", true))
+  }
+
+  @Test
+  fun staleOwnerlessDownloadingJobStillReachesRecovery() {
+    assertFalse(OrionDownloadRecoveryPolicy.shouldRemainIdle("downloading", "run"))
+    assertFalse(OrionDownloadRecoveryPolicy.shouldDeferToForegroundOwner("downloading", "run", false))
+  }
+
+  @Test
   fun sealedLocalFragmentsValidateWithoutUrls() {
     val directory = Files.createTempDirectory("orion-local-retry").toFile()
     try {
