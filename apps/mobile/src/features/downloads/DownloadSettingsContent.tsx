@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { fontSizes, radii, spacing } from '@orion/shared/tokens';
 import type { MobileDownloadPreferencesV1, MobileDownloadQualityV1, MobileDownloadSubtitlePreferenceV1 } from '@orion/shared/types';
@@ -137,6 +137,10 @@ export function DownloadSettingsContent() {
         <Text style={[styles.description, { color: theme.textSecondary }]}>Add your own SubDL and/or Wyzie key. Orion uses any saved service automatically.</Text>
         <TextInput accessibilityLabel="SubDL API key" value={subdlKey} onChangeText={setSubdlKey} placeholder="SubDL API key" placeholderTextColor={theme.textMuted} secureTextEntry autoCapitalize="none" autoCorrect={false} style={[styles.keyInput, { color: theme.text, backgroundColor: theme.elevated, borderColor: theme.border }]} />
         <TextInput accessibilityLabel="Wyzie API key" value={wyzieKey} onChangeText={setWyzieKey} placeholder="wyzie-…" placeholderTextColor={theme.textMuted} secureTextEntry autoCapitalize="none" autoCorrect={false} style={[styles.keyInput, { color: theme.text, backgroundColor: theme.elevated, borderColor: theme.border }]} />
+        <View style={styles.pillRow}>
+          <Pressable accessibilityRole="link" accessibilityLabel="Get SubDL API key" onPress={() => { void Linking.openURL('https://subdl.com/panel/api').catch(() => setKeyStatus('Could not open SubDL. Visit subdl.com/panel/api.')); }} style={[styles.pill, { borderColor: theme.border }]}><Text style={[styles.pillText, { color: theme.accent }]}>Get SubDL key ↗</Text></Pressable>
+          <Pressable accessibilityRole="link" accessibilityLabel="Get Wyzie API key" onPress={() => { void Linking.openURL('https://store.wyzie.io/redeem').catch(() => setKeyStatus('Could not open Wyzie. Visit store.wyzie.io/redeem.')); }} style={[styles.pill, { borderColor: theme.border }]}><Text style={[styles.pillText, { color: theme.accent }]}>Get Wyzie key ↗</Text></Pressable>
+        </View>
         <Text style={[styles.keyStatus, { color: theme.textMuted }]}>{keyStatus}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Save subtitle service keys" disabled={savingKeys} onPress={() => void saveSubtitleKeys()} style={({ pressed }) => [styles.saveButton, { backgroundColor: pressed ? theme.accentSoft : theme.accent, borderColor: theme.accent }]}>
           <Ionicons name="key-outline" size={17} color={theme.onAccent} /><Text style={[styles.saveButtonText, { color: theme.onAccent }]}>{savingKeys ? 'Saving…' : 'Save keys'}</Text>

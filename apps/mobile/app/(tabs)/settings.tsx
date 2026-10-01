@@ -71,7 +71,7 @@ function SettingsSection({ sectionId, title, description, children, theme, onLay
       style={[styles.section, { borderBottomColor: theme.border }]}
     >
       <View style={styles.sectionHeader}>
-        <Text accessibilityRole="header" style={[styles.sectionTitle, { color: theme.text }]}>{title}</Text>
+        <Text accessibilityRole="header" style={[styles.sectionTitle, { color: theme.accent }]}>{title}</Text>
         <Text style={[styles.sectionDescription, { color: theme.textSecondary }]}>{description}</Text>
       </View>
       {children}

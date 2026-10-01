@@ -81,3 +81,13 @@ test('P10.6-C3 changes language only and preserves the C1/C2 Settings structure 
   assert.match(settings, /onValueChange=\{setFollowSystem\}/);
   assert.match(settings, /onPress=\{\(\) => setSelection\(option\.id as PerformanceProfileSelection\)\}/);
 });
+
+test('Settings uses the resolved Orion accent and links only to official subtitle key pages', () => {
+  const settings = read('app', '(tabs)', 'settings.tsx');
+  const downloads = read('src', 'features', 'downloads', 'DownloadSettingsContent.tsx');
+  assert.match(settings, /styles\.sectionTitle, \{ color: theme\.accent \}/);
+  assert.match(downloads, /Linking\.openURL\('https:\/\/subdl\.com\/panel\/api'\)/);
+  assert.match(downloads, /Linking\.openURL\('https:\/\/store\.wyzie\.io\/redeem'\)/);
+  assert.match(downloads, /accessibilityRole="link" accessibilityLabel="Get SubDL API key"/);
+  assert.match(downloads, /accessibilityRole="link" accessibilityLabel="Get Wyzie API key"/);
+});
