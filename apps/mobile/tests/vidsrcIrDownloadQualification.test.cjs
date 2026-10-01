@@ -283,3 +283,22 @@ test('CineSrc HLS audio failure blocks direct fallback even when native reports 
   assert.equal(env.capture.selectMobileDownloadCandidateForItemV1(env.target.itemKey, 'auto', undefined, 'orion-library', 'cinesrc'), null);
   end();
 });
+
+test('Mobile provider matrix keeps qualified, blocked and frozen sources out of Auto', () => {
+  const env = environment();
+  const sources = env.load(path.join(mobile, 'src/features/playback/mobileSources.ts'));
+  const visible = sources.MOBILE_PLAYER_SOURCES.map((source) => source.id);
+  assert.deepEqual(visible, ['vixsrc', 'vidsrc', 'vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc', '111movies']);
+  assert.deepEqual(sources.getMobileDownloadSourceChoices('tv').map((source) => source.id),
+    ['vixsrc', 'vidsrc', 'vidlink', 'vidsrc-ir', 'cinesrc', '111movies']);
+  assert.equal(sources.MOBILE_DEFAULT_CINEMA_SOURCE_ID, 'vixsrc');
+  for (const id of visible.filter((sourceId) => sourceId !== 'vixsrc')) {
+    assert.equal(sources.mobileSourceSupportsContinuity(id), false);
+    assert.equal(sources.getMobileSourceContinuityCapability(id).automaticTarget, false);
+  }
+  assert.equal(env.registry.getRegisteredSource('vidnest').supportsDownloads, false);
+  assert.equal(env.registry.getRegisteredSource('111movies').supportsDownloads, true);
+  for (const id of ['mapple', 'stellar', 'chillflix', 'vidsrc-sh', 'vidapi']) {
+    assert.equal(env.registry.getRegisteredSource(id), null);
+  }
+});
