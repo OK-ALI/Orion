@@ -32,7 +32,7 @@ test('live replacement providers remain manual-first while VixSrc owns automatic
   const experimental = readWorkspace('packages', 'shared', 'src', 'sources', 'adapters', 'experimental.ts');
   const capabilities = readMobile('src', 'features', 'playback', 'mobileSources.ts');
 
-  assert.match(candidates, /id: "vidlink"[\s\S]{0,900}supportsDownloads: false/);
+  assert.match(candidates, /id: "vidlink"[\s\S]{0,900}supportsDownloads: true/);
   assert.doesNotMatch(capabilities, /MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_IDS/);
   assert.doesNotMatch(capabilities, /getNextMobileDownloadSource/);
   for (const id of ['vidnest', 'vidsrc-ir', 'cinesrc']) {

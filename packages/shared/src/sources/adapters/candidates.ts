@@ -101,7 +101,7 @@ export const candidateSources: CinemaSourceDescriptor[] = [
     subtitleStrategy: "provider",
     supportsResume: true,
     supportsExternalSubtitles: false,
-    supportsDownloads: false,
+    supportsDownloads: true,
     routingMode: "manual-only",
     availability: "ready",
     availabilityReason: "New source. Try it and choose another if needed.",

@@ -8,8 +8,8 @@ const ts = require('typescript');
 
 const mobile = path.resolve(__dirname, '..');
 const shared = path.resolve(mobile, '../../packages/shared');
-const diagnosticSources = ['cinesrc', 'vidnest'];
-const downloadableSources = ['vixsrc', 'vidsrc', 'vidsrc-ir', 'vidlink'];
+const diagnosticSources = ['vidnest'];
+const downloadableSources = ['vixsrc', 'vidsrc', 'vidsrc-ir', 'vidlink', 'cinesrc'];
 
 function environment() {
   const cache = new Map();
@@ -104,17 +104,24 @@ test('actual descriptors admit the qualified manual candidates while preserving 
   assert.deepEqual(vidlink.allowedNavigationOrigins, ['https://vidlink.pro']);
   assert.deepEqual(vidlink.requiredRequestOrigins, ['https://vidlink.pro']);
   assert.deepEqual(vidlink.requestManifest.mediaOrigins, []);
+  const cinesrc = registry.getRegisteredSource('cinesrc');
+  assert.equal(cinesrc.supportsDownloads, true);
+  assert.equal(cinesrc.releaseStatus, 'candidate');
+  assert.equal(cinesrc.routingMode, 'manual-only');
+  assert.deepEqual(cinesrc.allowedNavigationOrigins, ['https://cinesrc.st']);
+  assert.deepEqual(cinesrc.requiredRequestOrigins, ['https://cinesrc.st']);
+  assert.deepEqual(cinesrc.requestManifest.mediaOrigins, []);
   assert.equal(registry.getRegisteredSource('vixsrc').routingMode, 'automatic');
   assert.equal(registry.getRegisteredSource('vidsrc').routingMode, 'manual-only');
   assert.equal(capture.isMobileDownloadSourceAllowedV1('unknown-provider'), false);
 });
 
-test('VidSrc.ir and VidLink are manual download choices without entering Auto or automatic continuity', () => {
+test('qualified candidates are manual download choices without entering Auto or automatic continuity', () => {
   const env = environment();
   const sources = env.load(path.join(mobile, 'src/features/playback/mobileSources.ts'));
   for (const mediaType of ['movie', 'tv']) {
     const choices = sources.getMobileDownloadSourceChoices(mediaType);
-    for (const id of ['vidsrc-ir', 'vidlink']) {
+    for (const id of ['vidsrc-ir', 'vidlink', 'cinesrc']) {
       assert.equal(choices.find((source) => source.id === id).routingMode, 'manual-only');
       assert.equal(sources.getPreferredMobileResumeSource(id, mediaType), 'vixsrc');
       assert.equal(env.registry.AUTOMATIC_PLAYER_SOURCES.some((source) => source.id === id), false);
@@ -123,7 +130,7 @@ test('VidSrc.ir and VidLink are manual download choices without entering Auto or
     }
     for (const id of diagnosticSources) assert.equal(choices.some((source) => source.id === id), false);
     assert.equal(sources.getNextMobileContinuitySource('vixsrc', mediaType,
-      sources.MOBILE_PLAYER_SOURCES.filter((source) => !['vidsrc-ir', 'vidlink'].includes(source.id)).map((source) => source.id)), null);
+      sources.MOBILE_PLAYER_SOURCES.filter((source) => !['vidsrc-ir', 'vidlink', 'cinesrc'].includes(source.id)).map((source) => source.id)), null);
   }
   assert.equal(sources.MOBILE_DEFAULT_CINEMA_SOURCE_ID, 'vixsrc');
 });
@@ -216,4 +223,63 @@ test('qualified manual candidates and accepted controls require normalized selec
     assert.equal(env.calls.starts[0].job.candidateId, `candidate-${id}`);
     end();
   }
+});
+
+test('CineSrc selects verified HLS ahead of direct media and never borrows another source', () => {
+  const env = environment();
+  const end = env.capture.beginMobileDownloadCaptureSessionV1(env.session('cinesrc'));
+  const direct = env.event('cinesrc');
+  direct.candidateId = 'candidate-cinesrc-direct';
+  direct.preflight.candidateId = direct.candidateId;
+  direct.manifestKind = 'direct';
+  direct.preflight.resolvedManifestKind = 'direct';
+  direct.preflight.descendantCount = 0;
+  env.emit(direct);
+  const directSelection = env.capture.selectMobileDownloadCandidateForItemV1(env.target.itemKey, 'auto', undefined, 'orion-library', 'cinesrc');
+  assert.equal(directSelection.candidate.candidateId, direct.candidateId);
+  assert.equal(directSelection.resolvedMethod, 'direct');
+  assert.equal(env.capture.selectMobileDownloadCandidateForItemV1(env.target.itemKey, 'fragments', undefined, 'orion-library', 'cinesrc'), null);
+
+  const hls = env.event('cinesrc');
+  hls.candidateId = 'candidate-cinesrc-hls';
+  hls.preflight.candidateId = hls.candidateId;
+  env.emit(hls);
+  const selected = env.capture.selectMobileDownloadCandidateForItemV1(env.target.itemKey, 'auto', undefined, 'orion-library', 'cinesrc');
+  assert.equal(selected.candidate.candidateId, hls.candidateId);
+  assert.equal(selected.resolvedMethod, 'fragments');
+  assert.equal(env.capture.selectMobileDownloadCandidateForItemV1(env.target.itemKey, 'auto', undefined, 'orion-library', 'vidlink'), null);
+  end();
+});
+
+test('CineSrc rejects malformed, stale and unsupported media before selection', () => {
+  const env = environment();
+  const end = env.capture.beginMobileDownloadCaptureSessionV1(env.session('cinesrc'));
+  const base = env.event('cinesrc');
+  env.emit({ ...base, playbackSessionId: 'stale' });
+  env.emit({ ...base, preflight: { ...base.preflight, candidateId: 'wrong-candidate' } });
+  env.emit({ ...base, manifestKind: 'unknown', preflight: { ...base.preflight, resolvedManifestKind: 'unknown' } });
+  assert.equal(env.capture.selectMobileDownloadCandidateForItemV1(env.target.itemKey, 'auto', undefined, 'orion-library', 'cinesrc'), null);
+  env.emit({ ...base, preflight: { ...base.preflight, state: 'unsupported', reasonCode: 'invalid-media', requestContextReady: false } });
+  assert.equal(env.capture.selectMobileDownloadCandidateForItemV1(env.target.itemKey, 'auto', undefined, 'orion-library', 'cinesrc'), null);
+  end();
+});
+
+test('CineSrc HLS audio failure blocks direct fallback even when native reports it ready', () => {
+  const env = environment();
+  const end = env.capture.beginMobileDownloadCaptureSessionV1(env.session('cinesrc'));
+  const hls = env.event('cinesrc');
+  hls.candidateId = 'candidate-cinesrc-audio-failure';
+  hls.preflight.candidateId = hls.candidateId;
+  hls.preflight.state = 'unsupported';
+  hls.preflight.requestContextReady = false;
+  hls.preflight.reasonCode = 'hls-audio-track-missing';
+  env.emit(hls);
+  const direct = env.event('cinesrc');
+  direct.candidateId = 'candidate-cinesrc-direct';
+  direct.preflight.candidateId = direct.candidateId;
+  direct.manifestKind = 'direct';
+  direct.preflight.resolvedManifestKind = 'direct';
+  env.emit(direct);
+  assert.equal(env.capture.selectMobileDownloadCandidateForItemV1(env.target.itemKey, 'auto', undefined, 'orion-library', 'cinesrc'), null);
+  end();
 });
