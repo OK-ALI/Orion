@@ -84,12 +84,40 @@ test('Wyzie direct URL format query survives download normalization without an e
   assert.equal(JSON.stringify(outcome).includes('https://'), false);
 });
 
-test('provider-specific key, quota, offline, failure, and zero states remain represented', () => {
+test('provider-specific key, quota, offline, failure, and zero states remain represented without false unavailable labels', () => {
   const service = fs.readFileSync(path.join(root, 'src/services/subtitles.ts'), 'utf8');
   const modal = fs.readFileSync(path.join(root, 'src/components/DownloadModal.tsx'), 'utf8');
   assert.match(service, /response\.status === 402 \|\| response\.status === 429/);
   assert.match(service, /providerOutcomes/);
   assert.match(service, /state: 'no-results'/);
-  assert.match(modal, /quota\/rate limited/);
-  assert.match(modal, /0 results/);
+  assert.match(modal, /title="Subtitles unavailable"/);
+  assert.match(modal, /subtitles\.state !== 'none'/);
+  assert.match(modal, /return 'Unavailable'/);
+  assert.match(modal, /'No match'/);
+});
+
+test('download subtitle summary distinguishes cleared selection, no matches and provider failure', () => {
+  const modal = fs.readFileSync(path.join(root, 'src/components/DownloadModal.tsx'), 'utf8');
+  const tree = ts.createSourceFile('DownloadModal.tsx', modal, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX);
+  let summaryCallback;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(tree) === 'subtitleSummary'
+      && node.initializer && ts.isCallExpression(node.initializer)) {
+      summaryCallback = node.initializer.arguments[0]?.getText(tree);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  assert.ok(summaryCallback);
+  const summarize = (tracks, selectedIds, choice, state) =>
+    new Function('eligibleSubtitleTracks', 'selectedSubtitleIds', 'subtitleChoice', 'subtitles',
+      `return (${summaryCallback})();`)(tracks, selectedIds, choice, { state });
+  const match = { id: 'subdl-1', languageLabel: 'English', providerLabel: 'SubDL' };
+  assert.equal(summarize([match], [], 'auto', 'ready'), 'None');
+  assert.equal(summarize([match], [], 'subdl', 'ready'), 'None');
+  assert.equal(summarize([match], ['subdl-1'], 'auto', 'ready'), 'English · SubDL');
+  assert.equal(summarize([], [], 'auto', 'none'), 'No match');
+  assert.equal(summarize([], [], 'subdl', 'none'), 'SubDL · No match');
+  assert.equal(summarize([], [], 'wyzie', 'none'), 'Wyzie · No match');
+  assert.equal(summarize([], [], 'auto', 'provider-failure'), 'Unavailable');
 });

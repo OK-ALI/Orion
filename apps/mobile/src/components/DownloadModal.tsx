@@ -260,9 +260,11 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
     const selected = eligibleSubtitleTracks.filter((track) => selectedSubtitleIds.includes(track.id));
     if (selected.length === 1) return `${selected[0]?.languageLabel || 'Subtitle'} · ${selected[0]?.providerLabel || ''}`.trim();
     if (selected.length > 1) return `${selected.length} selected`;
-    if (subtitleChoice === 'subdl') return subtitles.state === 'ready' ? 'SubDL · No match' : 'SubDL';
-    if (subtitleChoice === 'wyzie') return subtitles.state === 'ready' ? 'Wyzie · No match' : 'Wyzie';
-    return subtitles.state === 'ready' ? 'No match' : 'Automatic';
+    if (eligibleSubtitleTracks.length > 0) return 'None';
+    if (subtitles.state !== 'ready' && subtitles.state !== 'none' && subtitles.state !== 'idle') return 'Unavailable';
+    if (subtitleChoice === 'subdl') return subtitles.state !== 'idle' ? 'SubDL · No match' : 'SubDL';
+    if (subtitleChoice === 'wyzie') return subtitles.state !== 'idle' ? 'Wyzie · No match' : 'Wyzie';
+    return subtitles.state !== 'idle' ? 'No match' : 'Automatic';
   }, [eligibleSubtitleTracks, selectedSubtitleIds, subtitleChoice, subtitles.state]);
 
   const handleChooseStorage = async () => {
@@ -558,7 +560,7 @@ export function DownloadModal({ visible, onClose, target, onResolveSource }: Dow
       ) : null}
 
       {subtitleChoice !== 'none' && selectedCandidate && !subtitleCheckPending
-        && subtitles.state !== 'ready' && subtitles.state !== 'idle' ? (
+        && subtitles.state !== 'ready' && subtitles.state !== 'idle' && subtitles.state !== 'none' ? (
         <StatusCard
           icon="information-circle-outline"
           color={theme.warning}
