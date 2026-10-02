@@ -7,8 +7,15 @@ import {
   normalizeMobileDownloadJobV1,
   normalizeMobileDownloadRepositoryV1,
   normalizeOfflineMediaEntryV1,
+  readMobileDownloadRepositoryV1,
   writeMobileDownloadRepositoryV1,
 } from './downloadRepository';
+import { mobileDownloadItemKeyFromMediaV1 } from './downloadIdentity';
+import {
+  completeMobileDownloadSourceResolutionV1,
+  getMobileDownloadCandidateSnapshotsV1,
+  selectMobileDownloadCandidateForItemV1,
+} from './downloadCandidateCapture';
 
 const EVENT_NAME = 'OrionDownloadEngineSnapshot';
 const PLAYER_PROGRESS_EVENT_NAME = 'OrionFinalizedPlayerProgress';
@@ -44,6 +51,7 @@ interface NativeDownloadEngineModule {
   pauseJob(jobId: string): void;
   resumeJob(jobId: string): Promise<boolean>;
   retryJob(jobId: string): Promise<boolean>;
+  retryJobWithFreshCandidate(jobId: string, candidateId: string, sessionId: string, mediaJson: string): Promise<boolean>;
   retryAllJobs(): Promise<{ restarted?: number; actionRequired?: number }>;
   setForegroundNetworkAvailable(available: boolean): void;
   cancelJob(jobId: string): void;
@@ -158,6 +166,28 @@ export async function resumeNativeDownloadJobV1(jobId: string): Promise<void> {
 export async function retryNativeDownloadJobV1(jobId: string): Promise<void> {
   const module = nativeModule();
   if (!module) throw new Error('Android download engine is unavailable.');
+  const job = readMobileDownloadRepositoryV1().jobs.find((entry) => entry.jobId === jobId);
+  if (job && (job.failure?.code === 'request-context-refresh-required' || job.failure?.code === 'request-context-rejected' || job.state === 'expired')) {
+    const itemKey = mobileDownloadItemKeyFromMediaV1(job.media);
+    const values = getMobileDownloadCandidateSnapshotsV1().filter((entry) => (
+      entry.itemKey === itemKey && entry.candidate.sourceId === job.sourceId &&
+      entry.candidate.preflight.resolvedManifestKind === job.transferKind
+    ));
+    const selected = selectMobileDownloadCandidateForItemV1(itemKey, 'auto', values, job.destination, job.sourceId);
+    const candidate = selected?.candidate;
+    if (!candidate || candidate.candidateId === job.candidateId || !candidate.playbackSessionId || !candidate.requestContextId ||
+      candidate.preflight.reachability !== 'reachable' || candidate.preflight.protection !== 'clear' ||
+      candidate.preflight.expiry === 'expired' ||
+      mobileDownloadItemKeyFromMediaV1(candidate.media) !== itemKey ||
+      String(candidate.media.id) !== String(job.media.id) || candidate.media.mediaType !== job.media.mediaType ||
+      candidate.media.libraryKind !== job.media.libraryKind ||
+      candidate.media.season !== job.media.season || candidate.media.episode !== job.media.episode) {
+      throw new Error('A fresh source for this exact title, episode, and provider is not ready. Play it again, then retry.');
+    }
+    await module.retryJobWithFreshCandidate(jobId, candidate.candidateId, candidate.playbackSessionId, JSON.stringify(candidate.media));
+    completeMobileDownloadSourceResolutionV1(itemKey);
+    return;
+  }
   await module.retryJob(jobId);
 }
 

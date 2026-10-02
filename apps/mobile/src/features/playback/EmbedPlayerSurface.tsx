@@ -214,7 +214,7 @@ export function EmbedPlayerSurface({
     posterPath: posterPath || null,
     backdropPath: backdropPath || null,
   }), [backdropPath, episode, episodeTitle, id, posterPath, season, seriesTitle, title, type, year]);
-  useDownloadSourceAutoReturnV1(downloadTarget.itemKey);
+  useDownloadSourceAutoReturnV1(downloadTarget.itemKey, sourceId, downloadTarget.media);
   const sourceSheetOverlay = ['sources', 'subtitles', 'shield', 'diagnostics'].includes(controller.state.overlay);
   const showControls = controller.state.hudState !== 'hidden';
   const presentation = controller.state.presentation;

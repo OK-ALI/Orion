@@ -50,6 +50,8 @@ const nativeEngine = loadTypeScriptModule(path.join(root, 'src/features/download
     normalizeOfflineMediaEntryV1: (value) => value,
     writeMobileDownloadRepositoryV1: () => {},
   },
+  './downloadIdentity': {},
+  './downloadCandidateCapture': {},
   './downloadSubtitles': { resolveMobileDownloadSubtitleSourcesForNativeV1: () => [] },
 });
 

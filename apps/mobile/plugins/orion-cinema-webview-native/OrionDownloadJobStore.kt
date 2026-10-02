@@ -126,6 +126,45 @@ internal object OrionDownloadJobStore {
   }
 
   @Synchronized
+  fun rebindFreshCandidate(jobId: String, oldCandidateId: String, mediaInput: JSONObject, transfer: BoundTransferContext, retireOldCache: () -> Boolean): Boolean {
+    val media = sanitizeMedia(mediaInput) ?: return false
+    if (transfer.jobId != jobId || transfer.candidateId == oldCandidateId) return false
+    val state = readStateLocked()
+    val jobs = state.optJSONArray("jobs") ?: return false
+    for (index in 0 until jobs.length()) {
+      val job = jobs.optJSONObject(index) ?: continue
+      if (job.optString("jobId") != jobId) continue
+      val failureCode = job.optJSONObject("failure")?.optString("code").orEmpty()
+      if (job.optString("candidateId") != oldCandidateId ||
+        job.optString("state") !in setOf("action-required", "expired") ||
+        (job.optString("state") != "expired" && failureCode !in setOf("request-context-refresh-required", "request-context-rejected")) ||
+        job.optJSONObject("_ytDlpTransferCompletion") != null ||
+        job.optJSONObject("_finalizationPlan") != null ||
+        transfer.transferKind !in setOf("hls", "dash") ||
+        job.optString("_sourceId") != transfer.sourceId ||
+        job.optString("_transferKind") != transfer.transferKind ||
+        job.optString("_itemKey") != mediaItemKey(media)) return false
+      val previous = job.optJSONObject("media") ?: return false
+      if (previous.optString("mediaType") != media.optString("mediaType") ||
+        previous.optString("libraryKind") != media.optString("libraryKind") ||
+        previous.opt("id")?.toString() != media.opt("id")?.toString() ||
+        previous.opt("season") != media.opt("season") ||
+        previous.opt("episode") != media.opt("episode")) return false
+      if (!retireOldCache()) return false
+      job.put("candidateId", transfer.candidateId)
+      job.put("_resumable", transfer.resumable)
+      job.put("_expectedBytes", transfer.requiredBytes ?: JSONObject.NULL)
+      // Old route counts and bytes are not proof for a different authority.
+      job.put("progress", emptyProgress())
+      job.put("updatedAt", System.currentTimeMillis())
+      gatewayTelemetrySamples.remove(jobId)
+      persistAndNotifyLocked(state)
+      return true
+    }
+    return false
+  }
+
+  @Synchronized
   fun setState(jobId: String, stateName: String, failure: JSONObject? = null) {
     mutateJobLocked(jobId) { job ->
       val now = System.currentTimeMillis()

@@ -39,10 +39,38 @@ internal object OrionDownloadTransferRuntime {
   }
 
   @Synchronized
+  fun prepareReplacement(candidateId: String, sessionId: String, jobId: String): BoundTransferContext? {
+    if (contexts[jobId]?.candidateId == candidateId) return null
+    val bound = OrionDownloadRequestContextBroker.bindFreshRequestContext(candidateId, sessionId, jobId) ?: return null
+    val seed = OrionDownloadRequestContextBroker.resolveRootForJob(jobId, bound.requestContextId, candidateId)
+    if (seed == null) {
+      OrionDownloadRequestContextBroker.releaseCandidateForJob(candidateId, jobId)
+      return null
+    }
+    return BoundTransferContext(
+      jobId, candidateId, bound.requestContextId, seed.sourceId, seed.resolvedKind,
+      seed.resumable, seed.requiredBytes, bound.expiresAt, seed.request,
+    )
+  }
+
+  @Synchronized
+  fun commitReplacement(prepared: BoundTransferContext) {
+    val old = contexts.put(prepared.jobId, prepared)
+    if (old != null && old.candidateId != prepared.candidateId) {
+      OrionDownloadRequestContextBroker.releaseCandidateForJob(old.candidateId, prepared.jobId)
+    }
+  }
+
+  fun discardReplacement(prepared: BoundTransferContext) {
+    OrionDownloadRequestContextBroker.releaseCandidateForJob(prepared.candidateId, prepared.jobId)
+  }
+
+  @Synchronized
   fun get(jobId: String): BoundTransferContext? = contexts[jobId]
 
   @Synchronized
-  fun ensure(candidateId: String, jobId: String): BoundTransferContext? = contexts[jobId] ?: bind(candidateId, jobId)
+  fun ensure(candidateId: String, jobId: String): BoundTransferContext? =
+    contexts[jobId]?.takeIf { it.candidateId == candidateId } ?: bind(candidateId, jobId)
 
   @Synchronized
   fun release(jobId: String) {

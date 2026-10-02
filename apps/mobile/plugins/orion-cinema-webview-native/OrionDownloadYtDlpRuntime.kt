@@ -432,6 +432,15 @@ internal object OrionDownloadYtDlpRuntime {
     }
   }
 
+  /** Retire only this job's authority-keyed gateway cache before a fresh bind. */
+  fun discardAuthorityDependentResumeCache(context: Context, jobId: String, transferKind: String): Boolean {
+    if (transferKind !in setOf("hls", "dash")) return false
+    val clean = cleanJobId(jobId) ?: return false
+    if (activeJobs.contains(clean)) return false
+    val cache = File(stagingDir(context, clean), "$transferKind-resume-v1")
+    return try { !cache.exists() || (cache.deleteRecursively() && !cache.exists()) } catch (_: Throwable) { false }
+  }
+
   /**
    * Every new gateway execution must begin from local process state that cannot
    * masquerade as a completed transfer.

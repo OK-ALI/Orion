@@ -252,6 +252,68 @@ class OrionDownloadEngineModule(
   }
 
   @ReactMethod
+  fun retryJobWithFreshCandidate(jobId: String, candidateId: String, sessionId: String, mediaJson: String, promise: Promise) {
+    ioExecutor.execute {
+      val clean = jobId.trim()
+      val stored = OrionDownloadJobStore.getJob(clean)
+      val media = try { JSONObject(mediaJson) } catch (_: Throwable) { null }
+      if (stored == null || media == null ||
+        OrionDownloadForegroundService.hasActiveExecution(clean) ||
+        OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, clean) ||
+        OrionDownloadTransferEngine.hasCompleteLocalYtDlpFinalization(reactContext, clean)) {
+        promise.reject("DOWNLOAD_REFRESH_REJECTED", "This download cannot safely adopt the refreshed source.")
+        return@execute
+      }
+      val oldCandidateId = stored.optString("candidateId")
+      val oldMedia = stored.optJSONObject("media")
+      if (oldMedia == null ||
+        oldMedia.optString("mediaType") != media.optString("mediaType") ||
+        oldMedia.optString("libraryKind") != media.optString("libraryKind") ||
+        oldMedia.opt("id")?.toString() != media.opt("id")?.toString() ||
+        oldMedia.opt("season") != media.opt("season") ||
+        oldMedia.opt("episode") != media.opt("episode")) {
+        promise.reject("DOWNLOAD_REFRESH_REJECTED", "The refreshed source belongs to a different title or episode.")
+        return@execute
+      }
+      val prepared = try {
+        OrionDownloadTransferRuntime.prepareReplacement(candidateId.trim(), sessionId.trim(), clean)
+      } catch (_: Throwable) { null }
+      if (prepared == null) {
+        promise.reject("DOWNLOAD_SOURCE_REFRESH_REQUIRED", "The refreshed source is no longer ready. Play this provider again, then retry.")
+        return@execute
+      }
+      val eligible = prepared.transferKind in setOf("hls", "dash") &&
+        OrionDownloadJobStore.finalizationPlan(clean) == null &&
+        prepared.sourceId == stored.optString("_sourceId") &&
+        prepared.transferKind == stored.optString("_transferKind")
+      val admitted = eligible && try {
+        OrionDownloadJobStore.rebindFreshCandidate(clean, oldCandidateId, media, prepared) {
+          OrionDownloadYtDlpRuntime.discardAuthorityDependentResumeCache(reactContext, clean, prepared.transferKind)
+        }
+      } catch (_: Throwable) { false }
+      if (!admitted) {
+        OrionDownloadTransferRuntime.discardReplacement(prepared)
+        promise.reject("DOWNLOAD_REFRESH_REJECTED", "The refreshed source cannot safely replace this download's saved transfer authority. Cancel and start a new download if this continues.")
+        return@execute
+      }
+      OrionDownloadTransferRuntime.commitReplacement(prepared)
+      OrionDownloadJobStore.incrementRetry(clean)
+      OrionDownloadForegroundRecoveryCoordinator.cancel(clean)
+      OrionDownloadRecoveryScheduler.cancel(reactContext, clean)
+      OrionDownloadJobStore.clearControl(clean)
+      OrionDownloadJobStore.markResuming(clean, "manual-retry-resuming")
+      try {
+        OrionDownloadRecoveryScheduler.schedule(reactContext, clean)
+        OrionDownloadForegroundService.start(reactContext, clean, recovery = true)
+        promise.resolve(true)
+      } catch (_: Throwable) {
+        OrionDownloadJobStore.markRecovering(clean, "recovery-start-interrupted", "Orion could not restart this download yet. Retry when the connection is ready.")
+        promise.reject("DOWNLOAD_RESTART_INTERRUPTED", "Orion could not restart this download yet. Retry when the connection is ready.")
+      }
+    }
+  }
+
+  @ReactMethod
   fun retryAllJobs(promise: Promise) {
     val snapshot = OrionDownloadJobStore.snapshot()
     val jobs = snapshot.optJSONArray("jobs") ?: org.json.JSONArray()

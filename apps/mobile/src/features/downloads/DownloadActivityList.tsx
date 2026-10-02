@@ -146,10 +146,9 @@ function downloadFailurePresentation(job: MobileDownloadJobV1): DownloadFailureP
       retryLabel: 'Retry',
     };
   }
-
   if (code === 'request-context-refresh-required' || code === 'request-context-rejected') {
     return {
-      detail: 'Open this title and start playback again to refresh its download source. Then return here and retry.',
+      detail: job.transferKind === 'direct' ? 'This Direct download cannot safely continue with a new source. Cancel it and start a new download.' : 'Open this title and start playback again to refresh its download source. Then return here and retry.',
       retryLabel: 'Retry after refresh',
     };
   }
@@ -198,7 +197,7 @@ function downloadFailurePresentation(job: MobileDownloadJobV1): DownloadFailureP
 
   if (job.state === 'expired') {
     return {
-      detail: 'Open this title and start playback again to refresh its download source.',
+      detail: job.transferKind === 'direct' ? 'This Direct download cannot safely continue with a new source. Cancel it and start a new download.' : 'Open this title and start playback again to refresh its download source.',
       retryLabel: 'Retry after refresh',
     };
   }
@@ -365,6 +364,7 @@ function seasonDisplayTitle(season: number | null): string {
 export function DownloadActivityList({ jobs, assets, offlineEntries, active = true, onManageAssets, onPlayInOrion, onPlayLocally }: DownloadActivityListProps) {
   const { theme } = useOrionTheme();
   const [busyJob, setBusyJob] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<{ jobId: string; message: string } | null>(null);
   const [tab, setTab] = useState<DownloadTab>('all');
   const [mediaFilter, setMediaFilter] = useState<DownloadMediaFilter>('all');
   const [sort, setSort] = useState<DownloadSort>('newest');
@@ -423,11 +423,10 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
   const sortOptions = sortOptionsForTab(tab);
   const selectedFilterLabel = FILTERS.find((item) => item.id === mediaFilter)?.label || 'All media';
   const selectedSortLabel = sortOptions.find((item) => item.id === sort)?.label || 'Newest';
-
   const runAsync = async (jobId: string, action: () => Promise<void>) => {
     if (busyJob) return;
-    setBusyJob(jobId);
-    try { await action(); } finally { setBusyJob(null); }
+    setBusyJob(jobId); setActionError(null);
+    try { await action(); } catch (error) { setActionError({ jobId, message: error instanceof Error ? error.message : 'Orion could not retry this download.' }); } finally { setBusyJob(null); }
   };
 
   const cycleFilter = () => {
@@ -533,7 +532,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
           (progress.completedFragments !== null && progress.completedFragments > 0);
         const canRetry = job.state === 'recovering' || (FAILED_STATES.has(job.state) && job.failure?.retryable);
         const showRetry = canRetry && !resuming;
-        const displayRetry = (canRetry || (FAILED_STATES.has(job.state) && hasPreservedProgress)) && !phaseResuming && recoveryCode !== 'yt-dlp-hls-transfer-incomplete' && recoveryCode !== 'hls-fragments-missing';
+        const displayRetry = (canRetry || (FAILED_STATES.has(job.state) && hasPreservedProgress)) && !phaseResuming && recoveryCode !== 'yt-dlp-hls-transfer-incomplete' && recoveryCode !== 'hls-fragments-missing' && !(job.transferKind === 'direct' && (recoveryCode === 'request-context-refresh-required' || recoveryCode === 'request-context-rejected' || job.state === 'expired'));
         const failurePresentation = downloadFailurePresentation(job);
         const poster = imgUrl(job.media.posterPath ?? null, 'w342');
         const downloaded = progress.bytesDownloaded > 0 ? formatBytes(progress.bytesDownloaded) : null;
@@ -584,6 +583,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
                 {mediaSecondaryTitle(job.media) ? <Text numberOfLines={1} style={[styles.secondaryTitle, { color: theme.textSecondary }]}>{mediaSecondaryTitle(job.media)}</Text> : null}
                 <Text style={[styles.meta, { color: tone }]}>{displayStatusLabel}{displayPercent !== null ? ` · ${displayPercent}%` : ''}{sourceLabel(job.sourceId) ? ` · ${sourceLabel(job.sourceId)}` : ''}</Text>
                 {failurePresentation.detail ? <Text numberOfLines={3} style={[styles.failureText, { color: theme.textSecondary }]}>{failurePresentation.detail}</Text> : null}
+                {actionError?.jobId === job.jobId ? <Text numberOfLines={3} style={[styles.failureText, { color: theme.warning }]}>{actionError.message}</Text> : null}
                 {metrics.length ? <Text numberOfLines={2} style={[styles.metrics, { color: theme.textSecondary }]}>{metrics.join(' · ')}</Text> : null}
               </View>
             </View>

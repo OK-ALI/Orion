@@ -204,6 +204,13 @@ internal object OrionDownloadRequestContextBroker {
     }
   }
 
+  fun bindFreshRequestContext(candidateId: String, sessionId: String, jobId: String): BoundContextResult? {
+    synchronized(this) {
+      if (contexts[candidateId]?.sessionId != sessionId || sessionId.isBlank()) return null
+      return bindRequestContext(candidateId, jobId)
+    }
+  }
+
   fun releaseSession(sessionId: String) {
     synchronized(this) {
       stopCaptureSession(sessionId)
@@ -231,6 +238,12 @@ internal object OrionDownloadRequestContextBroker {
     synchronized(this) {
       val remove = contexts.values.filter { it.boundJobId == jobId }.map { it.candidateId }
       remove.forEach(::removeLocked)
+    }
+  }
+
+  fun releaseCandidateForJob(candidateId: String, jobId: String) {
+    synchronized(this) {
+      if (contexts[candidateId]?.boundJobId == jobId) removeLocked(candidateId)
     }
   }
 
