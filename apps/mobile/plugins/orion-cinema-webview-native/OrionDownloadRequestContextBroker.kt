@@ -262,6 +262,7 @@ internal object OrionDownloadRequestContextBroker {
       val normalized = normalizeHttpUrl(context.rawUrl) ?: return null
       if (!isSafePublicHttpUrl(normalized)) return null
       if (!context.authorizedUrls.contains(normalized)) return null
+      renewActiveLeaseLocked(context, jobId, candidateId, requestContextId)
       return AuthorizedTransferSeed(
         sourceId = context.sourceId,
         resolvedKind = context.resolvedKind,
@@ -287,6 +288,7 @@ internal object OrionDownloadRequestContextBroker {
       val normalized = normalizeHttpUrl(rawUrl) ?: return null
       if (!isSafePublicHttpUrl(normalized)) return null
       if (!context.authorizedUrls.contains(normalized)) return null
+      renewActiveLeaseLocked(context, jobId, candidateId, requestContextId)
       return authorizedRequestFor(context, normalized)
     }
   }
@@ -306,6 +308,7 @@ internal object OrionDownloadRequestContextBroker {
     childUrl: String,
   ): Boolean {
     synchronized(this) {
+      cleanupExpiredLocked(System.currentTimeMillis())
       val context = contexts[candidateId] ?: return false
       if (!context.canDownload()) return false
       if (context.boundJobId != jobId || context.requestContextId != requestContextId) return false
@@ -328,6 +331,7 @@ internal object OrionDownloadRequestContextBroker {
     redirectUrl: String,
   ): Boolean {
     synchronized(this) {
+      cleanupExpiredLocked(System.currentTimeMillis())
       val context = contexts[candidateId] ?: return false
       if (!context.canDownload()) return false
       if (context.boundJobId != jobId || context.requestContextId != requestContextId) return false
@@ -1882,9 +1886,20 @@ internal object OrionDownloadRequestContextBroker {
   private fun cleanupExpiredLocked(now: Long) {
     val remove = contexts.values.filter { context ->
       val deadline = context.expiresAt ?: (context.capturedAt + DEFAULT_CONTEXT_TTL_MS)
-      deadline <= now
+      deadline <= now && !activeLeaseValidLocked(context, now)
     }.map { it.candidateId }
     remove.forEach(::removeLocked)
+  }
+
+  private fun activeLeaseValidLocked(context: CapturedContext, now: Long): Boolean =
+    OrionActiveAuthorityLeasePolicy.valid(now, context.expiresAt, context.resolvedKind, context.boundJobId,
+      context.activeLeaseUntil, context.boundJobId?.let(OrionDownloadForegroundService::hasActiveExecution) == true)
+
+  private fun renewActiveLeaseLocked(context: CapturedContext, jobId: String, candidateId: String, requestContextId: String) {
+    val next = OrionActiveAuthorityLeasePolicy.renewedUntil(System.currentTimeMillis(), context.expiresAt,
+      context.resolvedKind, context.boundJobId == jobId && context.candidateId == candidateId &&
+        context.requestContextId == requestContextId, OrionDownloadForegroundService.hasActiveExecution(jobId))
+    if (next != null) context.activeLeaseUntil = next
   }
 
   private fun trimLocked() {
@@ -1970,6 +1985,7 @@ internal data class CapturedContext(
   var boundObservedRequestMaterial: Map<String, CapturedRequestMaterial> = emptyMap(),
   var sessionReleased: Boolean = false,
   var boundJobId: String? = null,
+  var activeLeaseUntil: Long = 0L,
   var preflightState: String = "checking",
   var resolvedKind: String = "unknown",
   var protection: String = "unknown",

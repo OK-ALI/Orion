@@ -167,7 +167,11 @@ export async function retryNativeDownloadJobV1(jobId: string): Promise<void> {
   const module = nativeModule();
   if (!module) throw new Error('Android download engine is unavailable.');
   const job = readMobileDownloadRepositoryV1().jobs.find((entry) => entry.jobId === jobId);
-  if (job && (job.failure?.code === 'request-context-refresh-required' || job.failure?.code === 'request-context-rejected' || job.state === 'expired')) {
+  const needsFreshAuthority = job && (job.failure?.code === 'request-context-refresh-required' || job.failure?.code === 'request-context-rejected' || job.state === 'expired');
+  if (needsFreshAuthority && job.state !== 'action-required' && job.state !== 'expired') {
+    throw new Error('This download is not in a state that can safely accept a refreshed source.');
+  }
+  if (needsFreshAuthority) {
     const itemKey = mobileDownloadItemKeyFromMediaV1(job.media);
     const values = getMobileDownloadCandidateSnapshotsV1().filter((entry) => (
       entry.itemKey === itemKey && entry.candidate.sourceId === job.sourceId &&

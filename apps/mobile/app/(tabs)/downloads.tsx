@@ -11,6 +11,9 @@ import { MobilePageHeader } from '../../src/components/MobilePageHeader';
 import { OrionDialog } from '../../src/components/OrionDialog';
 import { getMobileDownloadCapability } from '../../src/services/downloadManager';
 import { DownloadActivityList } from '../../src/features/downloads/DownloadActivityList';
+import { requestMobileDownloadSourceResolutionV1 } from '../../src/features/downloads/downloadCandidateCapture';
+import { mobileDownloadItemKeyFromMediaV1 } from '../../src/features/downloads/downloadIdentity';
+import { MOBILE_PLAYER_SOURCES } from '../../src/features/playback/mobileSources';
 import { DownloadManagementSheet } from '../../src/features/downloads/DownloadManagementSheet';
 import {
   deriveMobileDownloadLibrarySummaryV1,
@@ -204,6 +207,25 @@ export default function DownloadsScreen() {
             offlineEntries={offlineEntries}
             active={isFocused}
             onManageAssets={(assetIds) => setManagement({ assetIds: [...assetIds] })}
+            onRefreshAndResume={(job) => {
+              const sourceId = job.sourceId;
+              if (!sourceId || !MOBILE_PLAYER_SOURCES.some((source) => source.id === sourceId) ||
+                (job.transferKind !== 'hls' && job.transferKind !== 'dash')) return;
+              const itemKey = mobileDownloadItemKeyFromMediaV1(job.media);
+              requestMobileDownloadSourceResolutionV1(itemKey, 'fragments', sourceId, {
+                jobId: job.jobId, candidateId: job.candidateId, sourceId,
+                transferKind: job.transferKind, destination: job.destination, media: job.media,
+              });
+              router.push({ pathname: '/player/[id]', params: {
+                id: String(job.media.id), type: job.media.mediaType,
+                title: job.media.episodeTitle || job.media.title,
+                seriesTitle: job.media.seriesTitle || undefined,
+                season: job.media.season ?? undefined, episode: job.media.episode ?? undefined,
+                episodeTitle: job.media.episodeTitle || undefined, year: job.media.year ?? undefined,
+                posterPath: job.media.posterPath || undefined, backdropPath: job.media.backdropPath || undefined,
+                nextSourceId: sourceId,
+              } });
+            }}
             onPlayInOrion={(entry, assetId) => router.push({
               pathname: '/player/[id]',
               params: {

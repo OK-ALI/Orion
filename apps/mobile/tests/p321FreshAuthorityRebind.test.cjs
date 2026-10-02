@@ -103,6 +103,13 @@ test('ordinary retained-authority retry still calls the accepted retry owner', a
   assert.deepEqual(f.calls, [['retry', f.job.jobId]]);
 });
 
+test('fresh authority cannot be offered to an unrelated failed state', async () => {
+  const f = fixture();
+  f.setJob({ ...f.job, state: 'failed' });
+  await assert.rejects(f.engine.retryNativeDownloadJobV1(f.job.jobId), /not in a state/);
+  assert.deepEqual(f.calls, []);
+});
+
 test('player arms refresh only for exact media and current provider', () => {
   const requested = [];
   let job = fixture().job;
@@ -111,6 +118,7 @@ test('player arms refresh only for exact media and current provider', () => {
     'expo-router': { useRouter: () => ({ back() { throw new Error('unexpected return'); } }) },
     './downloadRepository': { listMobileDownloadJobsV1: () => [job] },
     './downloadIdentity': identity,
+    './nativeDownloadEngine': { retryNativeDownloadJobV1: async () => { throw new Error('unexpected retry'); } },
     './downloadCandidateCapture': {
       getMobileDownloadSourceResolutionIntentV1: () => null,
       requestMobileDownloadSourceResolutionV1: (...args) => requested.push(args),
@@ -150,7 +158,7 @@ test('native admission preserves same-job ownership, completion fence and author
   assert.match(store, /job\.optJSONObject\("_ytDlpTransferCompletion"\) != null/);
   assert.match(store, /job\.put\("progress", emptyProgress\(\)\)/);
   const admission = store.split('fun rebindFreshCandidate(')[1].split('fun setState(')[0];
-  assert.ok(admission.indexOf('previous.opt("episode")') < admission.indexOf('retireOldCache()'));
+  assert.ok(admission.indexOf('sameNullableMediaNumber(previous, media, "episode")') < admission.indexOf('retireOldCache()'));
   assert.ok(admission.indexOf('retireOldCache()') < admission.indexOf('job.put("candidateId"'));
   assert.match(broker, /contexts\[candidateId\]\?\.sessionId != sessionId/);
   assert.match(runtime, /contexts\[jobId\]\?\.takeIf \{ it\.candidateId == candidateId \}/);

@@ -61,12 +61,21 @@ export interface MobileDownloadCandidateSnapshotV1 {
   itemKey: string;
 }
 
+export interface MobileDownloadRecoveryIntentV1 {
+  jobId: string;
+  candidateId: string;
+  sourceId: string;
+  transferKind: 'hls' | 'dash';
+  destination: 'orion-library' | 'device-storage';
+  media: MobileDownloadMediaIdentityV1;
+}
+
 type Listener = (snapshots: readonly MobileDownloadCandidateSnapshotV1[]) => void;
 
 let activeSession: ActiveCaptureSessionV1 | null = null;
 let eventSubscription: { remove(): void } | null = null;
 let snapshots: MobileDownloadCandidateSnapshotV1[] = [];
-let pendingSourceResolution: { itemKey: string; method: MobileDownloadTransferMethodV1; sourceId: string | null; expiresAt: number; autoReturnIssued: boolean; failure: string | null } | null = null;
+let pendingSourceResolution: { itemKey: string; method: MobileDownloadTransferMethodV1; sourceId: string | null; recovery: MobileDownloadRecoveryIntentV1 | null; expiresAt: number; autoReturnIssued: boolean; failure: string | null } | null = null;
 const retainedSourceSessions = new Map<string, Set<string>>();
 const listeners = new Set<Listener>();
 const HLS_AUDIO_QUALIFICATION_FAILURES = new Set([
@@ -245,10 +254,13 @@ export function requestMobileDownloadSourceResolutionV1(
   itemKey: string,
   method: MobileDownloadTransferMethodV1 = 'auto',
   sourceId?: string,
+  recovery?: MobileDownloadRecoveryIntentV1,
 ): void {
   const clean = text(itemKey, 180);
   const cleanSourceId = text(sourceId, 80);
   if (!clean) return;
+  if (recovery && (recovery.sourceId !== cleanSourceId || !recovery.jobId || !recovery.candidateId ||
+    !['hls', 'dash'].includes(recovery.transferKind))) return;
   if (pendingSourceResolution && pendingSourceResolution.itemKey !== clean) {
     releaseRetainedSessions(pendingSourceResolution.itemKey);
     snapshots = snapshots.filter((entry) => entry.itemKey !== pendingSourceResolution?.itemKey);
@@ -259,6 +271,7 @@ export function requestMobileDownloadSourceResolutionV1(
     itemKey: clean,
     method,
     sourceId: cleanSourceId,
+    recovery: recovery ? { ...recovery, media: { ...recovery.media } } : null,
     expiresAt: Date.now() + SOURCE_RESOLUTION_RETENTION_MS,
     autoReturnIssued: false,
     failure: null,
@@ -270,12 +283,13 @@ export function requestMobileDownloadSourceResolutionV1(
 
 export function getMobileDownloadSourceResolutionIntentV1(
   itemKey: string,
-): { method: MobileDownloadTransferMethodV1; sourceId: string | null; autoReturnIssued: boolean } | null {
+): { method: MobileDownloadTransferMethodV1; sourceId: string | null; autoReturnIssued: boolean; recovery: MobileDownloadRecoveryIntentV1 | null } | null {
   if (!pendingSourceResolutionActive(itemKey) || !pendingSourceResolution) return null;
   return {
     method: pendingSourceResolution.method,
     sourceId: pendingSourceResolution.sourceId,
     autoReturnIssued: pendingSourceResolution.autoReturnIssued,
+    recovery: pendingSourceResolution.recovery,
   };
 }
 

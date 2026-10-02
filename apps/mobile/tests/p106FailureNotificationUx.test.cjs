@@ -10,7 +10,7 @@ test('P10.6-D4 presents failure truth as customer guidance instead of raw native
   const activity = read('src', 'features', 'downloads', 'DownloadActivityList.tsx');
   assert.match(activity, /function downloadFailurePresentation\(job: MobileDownloadJobV1\)/);
   assert.match(activity, /request-context-refresh-required/);
-  assert.match(activity, /Open this title and start playback again to refresh its download source/);
+  assert.match(activity, /Tap Refresh & resume to reopen this exact source and continue this download/);
   assert.match(activity, /Free up space on this device or in the selected Orion Library location/);
   assert.match(activity, /Choose the Orion Library folder again in Download settings/);
   assert.match(activity, /The downloaded media did not pass Orion’s safety check/);

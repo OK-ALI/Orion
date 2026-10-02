@@ -25,7 +25,7 @@ test('P10.3 source intent retains the selected method and auto-returns only on r
   assert.match(capture, /autoReturnIssued: boolean/);
   assert.match(capture, /markMobileDownloadSourceAutoReturnIssuedV1/);
   assert.doesNotMatch(hook, /getMobileDownloadPreferencesV1|defaultDestination/);
-  assert.match(hook, /selectMobileDownloadCandidateForItemV1\(itemKey, intent\.method, snapshots, 'orion-library', intent\.sourceId\)/);
+  assert.match(hook, /selectMobileDownloadCandidateForItemV1\(itemKey, intent\.method, snapshots, recovery\?\.destination \|\| 'orion-library', intent\.sourceId\)/);
   assert.match(hook, /router\.back\(\)/);
   assert.doesNotMatch(hook, /setTimeout|setInterval|sleep/);
   assert.match(detail, /requestMobileDownloadSourceResolutionV1\(target\.itemKey, method, sourceId\)/);

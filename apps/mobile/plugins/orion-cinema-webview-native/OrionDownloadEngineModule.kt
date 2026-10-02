@@ -2,6 +2,7 @@ package com.okali.orion.playback
 
 import android.app.Activity
 import android.content.Intent
+import android.util.Log
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.BaseActivityEventListener
@@ -286,11 +287,15 @@ class OrionDownloadEngineModule(
         OrionDownloadJobStore.finalizationPlan(clean) == null &&
         prepared.sourceId == stored.optString("_sourceId") &&
         prepared.transferKind == stored.optString("_transferKind")
+      if (!eligible) Log.i("OrionDownloadStage", "stage=fresh-rebind outcome=rejected reason=prepared-boundary-mismatch")
       val admitted = eligible && try {
         OrionDownloadJobStore.rebindFreshCandidate(clean, oldCandidateId, media, prepared) {
           OrionDownloadYtDlpRuntime.discardAuthorityDependentResumeCache(reactContext, clean, prepared.transferKind)
         }
-      } catch (_: Throwable) { false }
+      } catch (error: Throwable) {
+        Log.i("OrionDownloadStage", "stage=fresh-rebind outcome=rejected reason=admission-exception type=${error.javaClass.simpleName.take(40)}")
+        false
+      }
       if (!admitted) {
         OrionDownloadTransferRuntime.discardReplacement(prepared)
         promise.reject("DOWNLOAD_REFRESH_REJECTED", "The refreshed source cannot safely replace this download's saved transfer authority. Cancel and start a new download if this continues.")

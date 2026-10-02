@@ -7,8 +7,11 @@ import type { MobileDownloadAssetV1, MobileDownloadJobV1, OfflineMediaEntryV1 } 
 import { useOrionTheme } from '../../context/ThemeContext';
 import { createMobileDownloadProgressSnapshotV1 } from './contracts';
 import { downloadElapsedSecondsV1 } from './downloadTelemetry';
+import { formatBytes, formatDurationSeconds, mediaPrimaryTitle, mediaSecondaryTitle } from './downloadPresentationFormat';
 import { MOBILE_PLAYER_SOURCES } from '../playback/mobileSources';
 import { cancelNativeDownloadJobV1, pauseNativeDownloadJobV1, resumeNativeDownloadJobV1, retryNativeDownloadJobV1 } from './nativeDownloadEngine';
+import { cancelMobileDownloadSourceResolutionV1, completeMobileDownloadSourceResolutionV1, getMobileDownloadSourceResolutionFailureV1, getMobileDownloadSourceResolutionIntentV1 } from './downloadCandidateCapture';
+import { mobileDownloadItemKeyFromMediaV1 } from './downloadIdentity';
 interface DownloadActivityListProps {
   jobs: MobileDownloadJobV1[];
   assets: MobileDownloadAssetV1[];
@@ -17,6 +20,7 @@ interface DownloadActivityListProps {
   onManageAssets?: (assetIds: readonly string[]) => void;
   onPlayInOrion?: (entry: OfflineMediaEntryV1, assetId: string) => void;
   onPlayLocally?: (assetId: string) => void;
+  onRefreshAndResume?: (job: MobileDownloadJobV1) => void;
 }
 type DownloadTab = 'all' | 'active' | 'completed' | 'attention' | 'failed';
 type DownloadMediaFilter = 'all' | 'movies' | 'series';
@@ -50,23 +54,6 @@ const sourceLabel = (sourceId?: string) => MOBILE_PLAYER_SOURCES.find((source) =
 function sortOptionsForTab(tab: DownloadTab): ReadonlyArray<{ id: DownloadSort; label: string }> {
   if (tab === 'active' || tab === 'failed') return SORTS;
   return SORTS.filter((item) => item.id !== 'progress');
-}
-function formatBytes(value: number | null): string | null {
-  if (value === null || !Number.isFinite(value) || value < 0) return null;
-  if (value < 1024) return `${Math.round(value)} B`;
-  const kib = value / 1024;
-  if (kib < 1024) return `${kib.toFixed(kib >= 100 ? 0 : 1)} KB`;
-  const mib = kib / 1024;
-  if (mib < 1024) return `${mib.toFixed(mib >= 100 ? 0 : 1)} MB`;
-  const gib = mib / 1024;
-  return `${gib.toFixed(gib >= 10 ? 1 : 2)} GB`;
-}
-function formatDurationSeconds(value: number | null): string | null {
-  if (value === null || !Number.isFinite(value) || value < 0) return null;
-  const seconds = Math.max(0, Math.round(value));
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
 export function downloadElapsedTextV1(job: MobileDownloadJobV1, nowMs: number): string | null {
   return formatDurationSeconds(downloadElapsedSecondsV1(job, nowMs));
@@ -148,8 +135,8 @@ function downloadFailurePresentation(job: MobileDownloadJobV1): DownloadFailureP
   }
   if (code === 'request-context-refresh-required' || code === 'request-context-rejected') {
     return {
-      detail: job.transferKind === 'direct' ? 'This Direct download cannot safely continue with a new source. Cancel it and start a new download.' : 'Open this title and start playback again to refresh its download source. Then return here and retry.',
-      retryLabel: 'Retry after refresh',
+      detail: job.transferKind === 'direct' ? 'This Direct download cannot safely continue with a new source. Cancel it and start a new download.' : 'Tap Refresh & resume to reopen this exact source and continue this download.',
+      retryLabel: 'Refresh & resume',
     };
   }
 
@@ -197,8 +184,8 @@ function downloadFailurePresentation(job: MobileDownloadJobV1): DownloadFailureP
 
   if (job.state === 'expired') {
     return {
-      detail: job.transferKind === 'direct' ? 'This Direct download cannot safely continue with a new source. Cancel it and start a new download.' : 'Open this title and start playback again to refresh its download source.',
-      retryLabel: 'Retry after refresh',
+      detail: job.transferKind === 'direct' ? 'This Direct download cannot safely continue with a new source. Cancel it and start a new download.' : 'Tap Refresh & resume to reopen this exact source and continue this download.',
+      retryLabel: 'Refresh & resume',
     };
   }
 
@@ -219,18 +206,6 @@ function downloadFailurePresentation(job: MobileDownloadJobV1): DownloadFailureP
   }
 
   return { detail: null, retryLabel: 'Retry' };
-}
-
-function mediaPrimaryTitle(media: MobileDownloadJobV1['media']): string {
-  return media.mediaType === 'tv' ? media.seriesTitle || media.title : media.title;
-}
-
-function mediaSecondaryTitle(media: MobileDownloadJobV1['media']): string | null {
-  if (media.mediaType === 'tv' && media.season !== null && media.episode !== null) {
-    const episode = `S${media.season} E${media.episode}`;
-    return media.episodeTitle ? `${episode} · ${media.episodeTitle}` : episode;
-  }
-  return media.year ? String(media.year) : null;
 }
 
 function mediaMatchesFilter(media: MobileDownloadJobV1['media'], filter: DownloadMediaFilter): boolean {
@@ -361,7 +336,7 @@ function seasonDisplayTitle(season: number | null): string {
   return `Season ${season}`;
 }
 
-export function DownloadActivityList({ jobs, assets, offlineEntries, active = true, onManageAssets, onPlayInOrion, onPlayLocally }: DownloadActivityListProps) {
+export function DownloadActivityList({ jobs, assets, offlineEntries, active = true, onManageAssets, onPlayInOrion, onPlayLocally, onRefreshAndResume }: DownloadActivityListProps) {
   const { theme } = useOrionTheme();
   const [busyJob, setBusyJob] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ jobId: string; message: string } | null>(null);
@@ -371,6 +346,17 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
   const [query, setQuery] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const [nowMs, setNowMs] = useState(Date.now());
+  useEffect(() => {
+    if (!active) return;
+    for (const job of jobs) {
+      const itemKey = mobileDownloadItemKeyFromMediaV1(job.media);
+      if (getMobileDownloadSourceResolutionIntentV1(itemKey)?.recovery?.jobId !== job.jobId) continue;
+      const failure = getMobileDownloadSourceResolutionFailureV1(itemKey);
+      if (!failure) continue;
+      setActionError({ jobId: job.jobId, message: failure });
+      completeMobileDownloadSourceResolutionV1(itemKey);
+    }
+  }, [active, jobs]);
 
   const hasLiveTimingWork = jobs.some((job) => (
     job.state === 'downloading' || job.state === 'recovering' || job.state === 'verifying' || job.state === 'finalizing'
@@ -533,6 +519,9 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
         const canRetry = job.state === 'recovering' || (FAILED_STATES.has(job.state) && job.failure?.retryable);
         const showRetry = canRetry && !resuming;
         const displayRetry = (canRetry || (FAILED_STATES.has(job.state) && hasPreservedProgress)) && !phaseResuming && recoveryCode !== 'yt-dlp-hls-transfer-incomplete' && recoveryCode !== 'hls-fragments-missing' && !(job.transferKind === 'direct' && (recoveryCode === 'request-context-refresh-required' || recoveryCode === 'request-context-rejected' || job.state === 'expired'));
+        const refreshable = onRefreshAndResume && (job.transferKind === 'hls' || job.transferKind === 'dash') &&
+          (job.state === 'action-required' || job.state === 'expired') &&
+          (recoveryCode === 'request-context-refresh-required' || recoveryCode === 'request-context-rejected' || job.state === 'expired');
         const failurePresentation = downloadFailurePresentation(job);
         const poster = imgUrl(job.media.posterPath ?? null, 'w342');
         const downloaded = progress.bytesDownloaded > 0 ? formatBytes(progress.bytesDownloaded) : null;
@@ -593,8 +582,8 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
             <View style={styles.actions}>
               {canPause ? <ActionButton label="Pause" icon="pause" disabled={busyJob === job.jobId} onPress={() => pauseNativeDownloadJobV1(job.jobId)} /> : null}
               {canResume ? <ActionButton label="Resume" icon="play" disabled={busyJob === job.jobId} onPress={() => runAsync(job.jobId, () => resumeNativeDownloadJobV1(job.jobId))} /> : null}
-              {displayRetry ? <ActionButton label={failurePresentation.retryLabel} icon="refresh" disabled={busyJob === job.jobId} onPress={() => runAsync(job.jobId, () => retryNativeDownloadJobV1(job.jobId))} /> : null}
-              <ActionButton label="Cancel" icon="close" disabled={busyJob === job.jobId} onPress={() => cancelNativeDownloadJobV1(job.jobId)} />
+              {refreshable ? <ActionButton label="Refresh & resume" icon="refresh" disabled={busyJob === job.jobId} onPress={() => onRefreshAndResume(job)} /> : displayRetry ? <ActionButton label={failurePresentation.retryLabel} icon="refresh" disabled={busyJob === job.jobId} onPress={() => runAsync(job.jobId, () => retryNativeDownloadJobV1(job.jobId))} /> : null}
+              <ActionButton label="Cancel" icon="close" disabled={busyJob === job.jobId} onPress={() => { cancelMobileDownloadSourceResolutionV1(mobileDownloadItemKeyFromMediaV1(job.media)); cancelNativeDownloadJobV1(job.jobId); }} />
             </View>
           </View>
         );

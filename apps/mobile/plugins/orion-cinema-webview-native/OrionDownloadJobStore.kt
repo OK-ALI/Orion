@@ -127,30 +127,31 @@ internal object OrionDownloadJobStore {
 
   @Synchronized
   fun rebindFreshCandidate(jobId: String, oldCandidateId: String, mediaInput: JSONObject, transfer: BoundTransferContext, retireOldCache: () -> Boolean): Boolean {
-    val media = sanitizeMedia(mediaInput) ?: return false
-    if (transfer.jobId != jobId || transfer.candidateId == oldCandidateId) return false
+    val media = sanitizeMedia(mediaInput) ?: return rejectFreshRebind("invalid-media")
+    if (transfer.jobId != jobId) return rejectFreshRebind("job-mismatch")
+    if (transfer.candidateId == oldCandidateId) return rejectFreshRebind("candidate-not-replaced")
     val state = readStateLocked()
-    val jobs = state.optJSONArray("jobs") ?: return false
+    val jobs = state.optJSONArray("jobs") ?: return rejectFreshRebind("jobs-unavailable")
     for (index in 0 until jobs.length()) {
       val job = jobs.optJSONObject(index) ?: continue
       if (job.optString("jobId") != jobId) continue
       val failureCode = job.optJSONObject("failure")?.optString("code").orEmpty()
-      if (job.optString("candidateId") != oldCandidateId ||
-        job.optString("state") !in setOf("action-required", "expired") ||
-        (job.optString("state") != "expired" && failureCode !in setOf("request-context-refresh-required", "request-context-rejected")) ||
-        job.optJSONObject("_ytDlpTransferCompletion") != null ||
-        job.optJSONObject("_finalizationPlan") != null ||
-        transfer.transferKind !in setOf("hls", "dash") ||
-        job.optString("_sourceId") != transfer.sourceId ||
-        job.optString("_transferKind") != transfer.transferKind ||
-        job.optString("_itemKey") != mediaItemKey(media)) return false
-      val previous = job.optJSONObject("media") ?: return false
+      if (job.optString("candidateId") != oldCandidateId) return rejectFreshRebind("old-candidate-mismatch")
+      if (job.optString("state") !in setOf("action-required", "expired")) return rejectFreshRebind("wrong-state")
+      if (job.optString("state") != "expired" && failureCode !in setOf("request-context-refresh-required", "request-context-rejected")) return rejectFreshRebind("wrong-failure-code")
+      if (job.optJSONObject("_ytDlpTransferCompletion") != null) return rejectFreshRebind("completion-proof-present")
+      if (job.optJSONObject("_finalizationPlan") != null) return rejectFreshRebind("finalization-plan-present")
+      if (transfer.transferKind !in setOf("hls", "dash")) return rejectFreshRebind("unsupported-kind")
+      if (job.optString("_sourceId") != transfer.sourceId) return rejectFreshRebind("source-mismatch")
+      if (job.optString("_transferKind") != transfer.transferKind) return rejectFreshRebind("transfer-kind-mismatch")
+      if (job.optString("_itemKey") != mediaItemKey(media)) return rejectFreshRebind("item-key-mismatch")
+      val previous = job.optJSONObject("media") ?: return rejectFreshRebind("saved-media-missing")
       if (previous.optString("mediaType") != media.optString("mediaType") ||
         previous.optString("libraryKind") != media.optString("libraryKind") ||
         previous.opt("id")?.toString() != media.opt("id")?.toString() ||
-        previous.opt("season") != media.opt("season") ||
-        previous.opt("episode") != media.opt("episode")) return false
-      if (!retireOldCache()) return false
+        !sameNullableMediaNumber(previous, media, "season") ||
+        !sameNullableMediaNumber(previous, media, "episode")) return rejectFreshRebind("media-identity-mismatch")
+      if (!retireOldCache()) return rejectFreshRebind("cache-retirement-failed")
       job.put("candidateId", transfer.candidateId)
       job.put("_resumable", transfer.resumable)
       job.put("_expectedBytes", transfer.requiredBytes ?: JSONObject.NULL)
@@ -161,6 +162,17 @@ internal object OrionDownloadJobStore {
       persistAndNotifyLocked(state)
       return true
     }
+    return rejectFreshRebind("job-not-found")
+  }
+
+  private fun sameNullableMediaNumber(left: JSONObject, right: JSONObject, key: String): Boolean =
+    OrionFreshRebindNumberPolicy.same(
+      if (left.isNull(key)) null else left.opt(key),
+      if (right.isNull(key)) null else right.opt(key),
+    )
+
+  private fun rejectFreshRebind(reason: String): Boolean {
+    Log.i("OrionDownloadStage", "stage=fresh-rebind outcome=rejected reason=$reason")
     return false
   }
 

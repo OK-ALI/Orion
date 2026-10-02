@@ -35,7 +35,7 @@ test('prepared providers are retained source-by-source and source-specific auto 
   assert.match(capture, /sourceId: string \| null/);
   assert.match(capture, /entry\.itemKey === input\.itemKey && entry\.candidate\.sourceId === input\.sourceId/);
   assert.match(capture, /\.filter\(\(entry\) => !sourceId \|\| entry\.candidate\.sourceId === sourceId\)/);
-  assert.match(autoReturn, /selectMobileDownloadCandidateForItemV1\(itemKey, intent\.method, snapshots, 'orion-library', intent\.sourceId\)/);
+  assert.match(autoReturn, /selectMobileDownloadCandidateForItemV1\(itemKey, intent\.method, snapshots, recovery\?\.destination \|\| 'orion-library', intent\.sourceId\)/);
 });
 
 test('Back preserves local provider and subtitle choices because it only changes step state', () => {
