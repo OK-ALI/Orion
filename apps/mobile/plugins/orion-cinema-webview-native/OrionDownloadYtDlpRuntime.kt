@@ -458,9 +458,8 @@ internal object OrionDownloadYtDlpRuntime {
     authority: OrionYtDlpAuthority,
     workDir: File,
   ): Boolean {
-    if (OrionDownloadJobStore.ytDlpTransferCompletion(jobId) != null) {
-      return true
-    }
+    if (OrionDownloadJobStore.ytDlpTransferCompletion(jobId) != null ||
+      OrionDownloadJobStore.hasPostTransferCheckpoint(jobId)) return false
 
     if (authority.transferKind == "hls") {
       val output =

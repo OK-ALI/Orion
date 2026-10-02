@@ -225,7 +225,8 @@ class OrionDownloadEngineModule(
       )
       return
     }
-    if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, clean)) {
+    if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, clean) ||
+      OrionDownloadJobStore.hasPostTransferCheckpoint(clean)) {
       prepareCompleteLocalResume(clean)
       OrionDownloadForegroundService.start(reactContext, clean, recovery = true)
       promise.resolve(true)
@@ -261,7 +262,8 @@ class OrionDownloadEngineModule(
       if (stored == null || media == null ||
         OrionDownloadForegroundService.hasActiveExecution(clean) ||
         OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, clean) ||
-        OrionDownloadTransferEngine.hasCompleteLocalYtDlpFinalization(reactContext, clean)) {
+        OrionDownloadTransferEngine.hasCompleteLocalYtDlpFinalization(reactContext, clean) ||
+        OrionDownloadJobStore.hasPostTransferCheckpoint(clean)) {
         promise.reject("DOWNLOAD_REFRESH_REJECTED", "This download cannot safely adopt the refreshed source.")
         return@execute
       }
@@ -337,7 +339,8 @@ class OrionDownloadEngineModule(
       OrionDownloadJobStore.incrementRetry(jobId)
       OrionDownloadForegroundRecoveryCoordinator.cancel(jobId)
       OrionDownloadRecoveryScheduler.cancel(reactContext, jobId)
-      if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, jobId)) {
+      if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(reactContext, jobId) ||
+        OrionDownloadJobStore.hasPostTransferCheckpoint(jobId)) {
         OrionDownloadJobStore.clearControl(jobId)
         OrionDownloadJobStore.markResuming(jobId, "manual-retry-resuming")
         OrionDownloadForegroundService.start(reactContext, jobId, recovery = true)

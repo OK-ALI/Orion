@@ -140,6 +140,7 @@ internal object OrionDownloadJobStore {
       if (job.optString("state") !in setOf("action-required", "expired")) return rejectFreshRebind("wrong-state")
       if (job.optString("state") != "expired" && failureCode !in setOf("request-context-refresh-required", "request-context-rejected")) return rejectFreshRebind("wrong-failure-code")
       if (job.optJSONObject("_ytDlpTransferCompletion") != null) return rejectFreshRebind("completion-proof-present")
+      if (job.optJSONObject("_ytDlpCompletedTransfer") != null) return rejectFreshRebind("completed-transfer-present")
       if (job.optJSONObject("_finalizationPlan") != null) return rejectFreshRebind("finalization-plan-present")
       if (transfer.transferKind !in setOf("hls", "dash")) return rejectFreshRebind("unsupported-kind")
       if (job.optString("_sourceId") != transfer.sourceId) return rejectFreshRebind("source-mismatch")
@@ -477,6 +478,73 @@ internal object OrionDownloadJobStore {
   fun finalizationPlan(jobId: String): JSONObject? = getJob(jobId)?.optJSONObject("_finalizationPlan")?.let { JSONObject(it.toString()) }
 
   @Synchronized
+  fun sealCompletedYtDlpTransfer(jobId: String, kind: String, sizeBytes: Long, sha256: String, generation: Long): Boolean {
+    if (kind !in setOf("hls", "dash") || sizeBytes <= 0L || !sha256.matches(Regex("^[a-f0-9]{64}$"))) return false
+    var accepted = false
+    mutateJobLocked(jobId) { job ->
+      if (job.optString("_transferKind") != kind || job.optLong("_executionGeneration", -1L) != generation ||
+        job.optString("state") in setOf("cancelled", "completed") || job.optString("_control", "run") == "cancel"
+      ) return@mutateJobLocked
+      job.put("_ytDlpCompletedTransfer", JSONObject()
+        .put("schemaVersion", 1)
+        .put("kind", kind)
+        .put("sizeBytes", sizeBytes)
+        .put("sha256", sha256)
+        .put("generation", generation))
+      accepted = true
+    }
+    return accepted
+  }
+
+  @Synchronized
+  fun completedYtDlpTransfer(jobId: String): JSONObject? {
+    val job = getJob(jobId) ?: return null
+    val proof = job.optJSONObject("_ytDlpCompletedTransfer") ?: return null
+    if (job.optString("state") in setOf("cancelled", "completed") ||
+      proof.optInt("schemaVersion", 0) != 1 || proof.optLong("generation", -1L) != job.optLong("_executionGeneration", -2L) ||
+      proof.optString("kind") != job.optString("_transferKind") || proof.optString("kind") !in setOf("hls", "dash") ||
+      proof.optLong("sizeBytes", -1L) <= 0L || !proof.optString("sha256").matches(Regex("^[a-f0-9]{64}$"))
+    ) return null
+    return JSONObject(proof.toString())
+  }
+
+  @Synchronized
+  fun hasPostTransferCheckpoint(jobId: String): Boolean = getJob(jobId)?.let { job ->
+    job.optString("state") !in setOf("cancelled", "completed") &&
+      (job.optJSONObject("_ytDlpCompletedTransfer") != null || job.optJSONObject("_ytDlpTransferCompletion") != null)
+  } == true
+
+  @Synchronized
+  fun retireStaleCompletedYtDlpTransfer(jobId: String, generation: Long): Boolean {
+    var retired = false
+    mutateJobLocked(jobId) { job ->
+      val proof = job.optJSONObject("_ytDlpCompletedTransfer") ?: return@mutateJobLocked
+      if (job.optLong("_executionGeneration", -1L) != generation || proof.optLong("generation", -1L) == generation) return@mutateJobLocked
+      job.remove("_ytDlpCompletedTransfer")
+      retired = true
+    }
+    return retired
+  }
+
+  @Synchronized
+  fun setCompletedTransferVerifying(jobId: String, generation: Long): Boolean {
+    val job = getJob(jobId) ?: return false
+    if (job.optLong("_executionGeneration", -1L) != generation ||
+      job.optString("state") in setOf("cancelled", "completed") || job.optString("_control", "run") == "cancel") return false
+    setState(jobId, "verifying")
+    return true
+  }
+
+  @Synchronized
+  fun markCompletedTransferAttention(jobId: String, generation: Long, code: String, message: String): Boolean {
+    val job = getJob(jobId) ?: return false
+    if (job.optLong("_executionGeneration", -1L) != generation ||
+      job.optString("state") in setOf("cancelled", "completed") || job.optString("_control", "run") == "cancel") return false
+    markActionRequired(jobId, code, message)
+    return true
+  }
+
+  @Synchronized
   fun sealYtDlpTransferCompletion(
     jobId: String,
     kind: String,
@@ -584,6 +652,7 @@ internal object OrionDownloadJobStore {
       job.put("progress", progress)
       job.remove("_finalizationPlan")
       job.remove("_ytDlpTransferCompletion")
+      job.remove("_ytDlpCompletedTransfer")
       persistAndNotifyLocked(state)
       return generation
     }
@@ -1056,6 +1125,7 @@ internal object OrionDownloadJobStore {
       job.remove("_pendingPublication")
       job.remove("_pendingSubtitlePublications")
       job.remove("_ytDlpTransferCompletion")
+      job.remove("_ytDlpCompletedTransfer")
       committed = true
       break
     }

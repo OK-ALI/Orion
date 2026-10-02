@@ -45,7 +45,8 @@ class OrionDownloadRecoveryWorker(
     ) return Result.retry()
     OrionDownloadForegroundRecoveryCoordinator.cancel(jobId)
     if (OrionDownloadTransferEngine.hasCompleteLocalFinalization(applicationContext, jobId) ||
-      OrionDownloadTransferEngine.hasCompleteLocalYtDlpFinalization(applicationContext, jobId)
+      OrionDownloadTransferEngine.hasCompleteLocalYtDlpFinalization(applicationContext, jobId) ||
+      OrionDownloadJobStore.hasPostTransferCheckpoint(jobId)
     ) {
       return try {
         OrionDownloadForegroundService.start(applicationContext, jobId, recovery = true)

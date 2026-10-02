@@ -5,6 +5,7 @@ import android.media.MediaExtractor
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.net.Uri
+import android.util.Log
 import java.io.File
 import java.nio.ByteBuffer
 
@@ -31,6 +32,18 @@ internal data class OrionFinalizedMediaVerification(
 internal object OrionFinalizedMediaPolicy {
   private const val MAX_MEDIA_DURATION_US = 30L * 24L * 60L * 60L * 1_000_000L
   private const val MAX_SAMPLE_BYTES = 32L * 1024L * 1024L
+
+  // Android extractors can report a final sample at the declared endpoint,
+  // where seeking is EOS. Probe only within the track's playable timeline.
+  fun representativeSeekTimes(minimumTimeUs: Long, maximumTimeUs: Long, durationUs: Long): List<Long>? {
+    if (durationUs <= 0L || maximumTimeUs < minimumTimeUs) return null
+    val marginUs = (durationUs / 100L).coerceIn(1L, 1_000_000L)
+    val playableEndUs = durationUs - marginUs
+    val beginningUs = minimumTimeUs.coerceAtLeast(0L)
+    if (beginningUs > playableEndUs) return null
+    val tailUs = minOf(maximumTimeUs.coerceAtLeast(beginningUs), playableEndUs)
+    return linkedSetOf(beginningUs, beginningUs + (tailUs - beginningUs) / 2L, tailUs).toList()
+  }
 
   fun hasIsoBmffFileType(prefix: ByteArray, fileSize: Long): Boolean {
     if (fileSize < 16L || prefix.size < 12) return false
@@ -207,14 +220,14 @@ internal object OrionFinalizedMediaVerifier {
       var sampleBuffer = ByteBuffer.allocateDirect(64 * 1024)
       for ((index, probe) in selected) {
         extractor.selectTrack(index)
-        val sampleTimes = linkedSetOf(
-          probe.minimumTimeUs.coerceAtLeast(0L),
-          probe.maximumTimeUs.coerceAtLeast(0L),
-        )
+        val sampleTimes = OrionFinalizedMediaPolicy.representativeSeekTimes(
+          probe.minimumTimeUs, probe.maximumTimeUs, probe.declaredDurationUs,
+        ) ?: return OrionFinalizedMediaVerification(false, "yt-dlp-media-duration-invalid", "The finalized MP4 has an invalid media timeline.")
         for (sampleTime in sampleTimes) {
           extractor.seekTo(sampleTime, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
           val sampleSize = extractor.sampleSize
           if (extractor.sampleTrackIndex != index || sampleSize <= 0L || sampleSize > MAX_REPRESENTATIVE_SAMPLE_BYTES.toLong()) {
+            Log.i("OrionDownloadStage", "stage=media-probe result=unreadable track=$index kind=${probe.kind} targetUs=$sampleTime durationUs=${probe.declaredDurationUs}")
             probe.representativeSamplesReadable = false
             break
           }
@@ -228,6 +241,7 @@ internal object OrionFinalizedMediaVerifier {
           sampleBuffer.clear()
           val bytesRead = extractor.readSampleData(sampleBuffer, 0)
           if (bytesRead <= 0 || bytesRead.toLong() != sampleSize) {
+            Log.i("OrionDownloadStage", "stage=media-probe result=short-read track=$index kind=${probe.kind} targetUs=$sampleTime")
             probe.representativeSamplesReadable = false
             break
           }

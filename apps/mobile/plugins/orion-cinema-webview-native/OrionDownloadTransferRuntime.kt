@@ -93,8 +93,24 @@ internal object OrionDownloadTransferEngine {
         job.optString("_control", "run"),
       )
     ) return
+    val generation = job.optLong("_executionGeneration", 0L)
+    if (job.optJSONObject("_ytDlpCompletedTransfer")?.optLong("generation", -1L)?.let { it != generation } == true) {
+      val staging = OrionDownloadYtDlpRuntime.stagingDir(context, jobId)
+      val retired = try { !staging.exists() || staging.deleteRecursively() } catch (_: Throwable) { false }
+      if (!retired || !OrionDownloadJobStore.retireStaleCompletedYtDlpTransfer(jobId, generation)) {
+        OrionDownloadJobStore.markCompletedTransferAttention(jobId, generation, "completed-transfer-proof-invalid", "Orion could not retire an earlier completed transfer.")
+        return
+      }
+      OrionDownloadJobStore.markCompletedTransferAttention(jobId, generation, "completed-transfer-generation-stale", "The saved transfer belongs to an earlier download attempt. Start this download again.")
+      return
+    }
     if (runVerifiedLocalFinalization(context, jobId)) return
     if (runVerifiedYtDlpFinalization(context, jobId)) return
+    if (runCompletedYtDlpValidation(context, jobId)) return
+    if (OrionDownloadJobStore.hasPostTransferCheckpoint(jobId)) {
+      OrionDownloadJobStore.markCompletedTransferAttention(jobId, generation, "completed-transfer-proof-invalid", "Orion could not verify the completed transfer checkpoint.")
+      return
+    }
     if (OrionDownloadJobStore.getJob(jobId)?.optString("state") == "cancelled") return
     val candidateId = job.optString("candidateId")
     val bound = OrionDownloadTransferRuntime.ensure(candidateId, jobId)
@@ -117,6 +133,46 @@ internal object OrionDownloadTransferEngine {
         "This source did not expose a supported download method.",
       )
     }
+  }
+
+  private fun sealCompletedTransferCheckpoint(jobId: String, kind: String, media: java.io.File): Boolean {
+    val generation = OrionDownloadJobStore.executionGeneration(jobId) ?: return false
+    val digest = OrionFinalizedArtifactOwner.sha256(media) ?: return false
+    return OrionDownloadJobStore.sealCompletedYtDlpTransfer(jobId, kind, media.length(), digest, generation)
+  }
+
+  private fun postTransferValidationFailed(context: android.content.Context, jobId: String, generation: Long, code: String) {
+    android.util.Log.i("OrionDownloadStage", "stage=post-transfer-validation result=attention reason=${code.filter { it.isLetterOrDigit() || it == '-' }.take(64)}")
+    OrionDownloadRecoveryScheduler.cancel(context, jobId)
+    OrionDownloadJobStore.markCompletedTransferAttention(jobId, generation, "completed-transfer-validation-failed", "The transfer finished, but Orion could not validate the saved video. Retry finishing locally.")
+  }
+
+  private fun runCompletedYtDlpValidation(context: android.content.Context, jobId: String): Boolean {
+    val checkpoint = OrionDownloadJobStore.completedYtDlpTransfer(jobId) ?: return false
+    val staging = OrionDownloadYtDlpRuntime.stagingDir(context, jobId)
+    val media = OrionFinalizedArtifactOwner.stagingOutput(staging)
+    val expectedSize = checkpoint.optLong("sizeBytes", -1L)
+    val expectedDigest = checkpoint.optString("sha256")
+    val generation = checkpoint.optLong("generation", -1L)
+    if (media == null || !media.isFile || media.length() != expectedSize ||
+      !OrionDownloadOwnershipPolicy.canonicalContained(staging, media) ||
+      OrionFinalizedArtifactOwner.sha256(media) != expectedDigest
+    ) {
+      OrionDownloadRecoveryScheduler.cancel(context, jobId)
+      OrionDownloadJobStore.markCompletedTransferAttention(jobId, generation, "completed-transfer-staging-invalid", "The completed transfer's saved file changed or is unavailable. Orion will not restart the source automatically.")
+      return true
+    }
+    if (!OrionDownloadJobStore.setCompletedTransferVerifying(jobId, generation)) return true
+    val verification = OrionFinalizedMediaVerifier.verify(media, requireAudio = true)
+    if (!verification.ok || verification.sizeBytes != expectedSize) {
+      postTransferValidationFailed(context, jobId, generation, verification.code)
+      return true
+    }
+    if (!OrionDownloadJobStore.sealYtDlpTransferCompletion(jobId, checkpoint.optString("kind"), expectedSize)) {
+      OrionDownloadJobStore.markCompletedTransferAttention(jobId, generation, "completed-transfer-seal-failed", "Orion could not preserve local verification. Retry finishing.")
+      return true
+    }
+    return runVerifiedYtDlpFinalization(context, jobId)
   }
 
   private fun runVerifiedYtDlpFinalization(
@@ -193,9 +249,15 @@ internal object OrionDownloadTransferEngine {
         ?.length()
         ?.takeIf { it > 0L }
         ?: pendingExpectedSize
-        ?: return false
+        ?: run {
+          OrionDownloadJobStore.markCompletedTransferAttention(jobId, job.optLong("_executionGeneration", 0L), "completed-transfer-staging-invalid", "The completed transfer's saved file is unavailable. Orion will not restart the source automatically.")
+          return true
+        }
 
-    if (availableSize != expectedSizeBytes) return false
+    if (availableSize != expectedSizeBytes) {
+      OrionDownloadJobStore.markCompletedTransferAttention(jobId, job.optLong("_executionGeneration", 0L), "completed-transfer-staging-invalid", "The completed transfer's saved file changed. Orion will not restart the source automatically.")
+      return true
+    }
 
     val media =
       localMedia
@@ -212,7 +274,8 @@ internal object OrionDownloadTransferEngine {
         !recoveryVerification.ok ||
         recoveryVerification.sizeBytes != expectedSizeBytes
       ) {
-        return false
+        postTransferValidationFailed(context, jobId, job.optLong("_executionGeneration", 0L), recoveryVerification.code)
+        return true
       }
     }
 
@@ -234,10 +297,7 @@ internal object OrionDownloadTransferEngine {
       return true
     }
 
-    OrionDownloadJobStore.setState(
-      jobId,
-      "verifying",
-    )
+    if (!OrionDownloadJobStore.setCompletedTransferVerifying(jobId, job.optLong("_executionGeneration", 0L))) return true
 
     // Recovery may finalize only bytes that were durably sealed after a
     // successful yt-dlp transfer. A playable staging MP4 alone is not transfer
@@ -581,13 +641,15 @@ internal object OrionDownloadTransferEngine {
           return
         }
 
-        OrionDownloadJobStore.setState(
-          jobId,
-          "verifying",
-        )
+        if (!OrionDownloadJobStore.setCompletedTransferVerifying(jobId, job.optLong("_executionGeneration", 0L))) return
 
         val destination =
           job.optString("destination")
+
+        if (!sealCompletedTransferCheckpoint(jobId, "hls", media)) {
+          OrionDownloadJobStore.markCompletedTransferAttention(jobId, job.optLong("_executionGeneration", 0L), "completed-transfer-checkpoint-failed", "Orion could not preserve the completed transfer checkpoint.")
+          return
+        }
 
         val mediaVerification =
           OrionFinalizedMediaVerifier.verify(
@@ -595,12 +657,7 @@ internal object OrionDownloadTransferEngine {
             requireAudio = true,
           )
         if (!mediaVerification.ok) {
-          OrionDownloadJobStore.markFailed(
-            jobId,
-            mediaVerification.code,
-            mediaVerification.message,
-            retryable = false,
-          )
+          postTransferValidationFailed(context, jobId, job.optLong("_executionGeneration", 0L), mediaVerification.code)
           return
         }
         // Verify staging media before promoting its size to completed transfer
@@ -1017,13 +1074,15 @@ internal object OrionDownloadTransferEngine {
           return
         }
 
-        OrionDownloadJobStore.setState(
-          jobId,
-          "verifying",
-        )
+        if (!OrionDownloadJobStore.setCompletedTransferVerifying(jobId, job.optLong("_executionGeneration", 0L))) return
 
         val destination =
           job.optString("destination")
+
+        if (!sealCompletedTransferCheckpoint(jobId, "dash", media)) {
+          OrionDownloadJobStore.markCompletedTransferAttention(jobId, job.optLong("_executionGeneration", 0L), "completed-transfer-checkpoint-failed", "Orion could not preserve the completed transfer checkpoint.")
+          return
+        }
 
         val mediaVerification =
           OrionFinalizedMediaVerifier.verify(
@@ -1031,12 +1090,7 @@ internal object OrionDownloadTransferEngine {
             requireAudio = true,
           )
         if (!mediaVerification.ok) {
-          OrionDownloadJobStore.markFailed(
-            jobId,
-            mediaVerification.code,
-            mediaVerification.message,
-            retryable = false,
-          )
+          postTransferValidationFailed(context, jobId, job.optLong("_executionGeneration", 0L), mediaVerification.code)
           return
         }
         val verifiedBytes = mediaVerification.sizeBytes

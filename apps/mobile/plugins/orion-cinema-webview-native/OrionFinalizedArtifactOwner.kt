@@ -1400,7 +1400,7 @@ internal object OrionFinalizedArtifactOwner {
     }
   }
 
-  private fun sha256(file: File): String? = try {
+  fun sha256(file: File): String? = try {
     val digest = MessageDigest.getInstance("SHA-256")
     FileInputStream(file).use { input ->
       val buffer = ByteArray(HASH_BUFFER_BYTES)

@@ -90,6 +90,8 @@ interface DownloadFailurePresentation {
 }
 function downloadFailurePresentation(job: MobileDownloadJobV1): DownloadFailurePresentation {
   const code = job.failure?.code || '';
+  if (code === 'completed-transfer-generation-stale') return { detail: 'This saved transfer belongs to an earlier attempt. Cancel and start a new download.', retryLabel: 'Retry' };
+  if (code.startsWith('completed-transfer-')) return { detail: 'The source transfer finished. Orion needs to check the saved video locally before it can be ready offline.', retryLabel: 'Retry finishing' };
   if (code === 'yt-dlp-hls-transfer-incomplete' || code === 'hls-fragments-missing') return { detail: 'This source is incomplete for this episode. Try another provider.', retryLabel: 'Retry' };
   const progress = createMobileDownloadProgressSnapshotV1(job);
   const hasPreservedProgress = progress.bytesDownloaded > 0 ||
@@ -500,10 +502,11 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
           ? (progress.completedFragments * 100) / progress.totalFragments
           : null;
         const percentValue = fragmentPercent ?? progress.percent;
-        const displayPercent = fragmentPercent === null
+        const displayPercent = job.failure?.code?.startsWith('completed-transfer-') ? null : fragmentPercent === null
           ? percent
           : finalizing || percentValue === null ? null : Math.max(0, Math.min(99, Math.round(percentValue)));
         const recoveryCode = job.failure?.code || '';
+        const postTransferAttention = recoveryCode.startsWith('completed-transfer-') && recoveryCode !== 'completed-transfer-generation-stale';
         const recoveryCountdown = downloadRecoveryCountdownV1(job, nowMs);
         const retryExhausted = recoveryCode === 'auto-retry-exhausted';
         const resuming = job.state === 'recovering' && progress.bytesDownloaded > 0 && progress.completedFragments !== null;
@@ -518,7 +521,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
           (progress.completedFragments !== null && progress.completedFragments > 0);
         const canRetry = job.state === 'recovering' || (FAILED_STATES.has(job.state) && job.failure?.retryable);
         const showRetry = canRetry && !resuming;
-        const displayRetry = (canRetry || (FAILED_STATES.has(job.state) && hasPreservedProgress)) && !phaseResuming && recoveryCode !== 'yt-dlp-hls-transfer-incomplete' && recoveryCode !== 'hls-fragments-missing' && !(job.transferKind === 'direct' && (recoveryCode === 'request-context-refresh-required' || recoveryCode === 'request-context-rejected' || job.state === 'expired'));
+        const displayRetry = (canRetry || (FAILED_STATES.has(job.state) && hasPreservedProgress)) && !phaseResuming && recoveryCode !== 'yt-dlp-hls-transfer-incomplete' && recoveryCode !== 'hls-fragments-missing' && recoveryCode !== 'completed-transfer-generation-stale' && !(job.transferKind === 'direct' && (recoveryCode === 'request-context-refresh-required' || recoveryCode === 'request-context-rejected' || job.state === 'expired'));
         const refreshable = onRefreshAndResume && (job.transferKind === 'hls' || job.transferKind === 'dash') &&
           (job.state === 'action-required' || job.state === 'expired') &&
           (recoveryCode === 'request-context-refresh-required' || recoveryCode === 'request-context-rejected' || job.state === 'expired');
@@ -551,6 +554,8 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
           ? recoveryCountdown.remainingSeconds > 0
             ? `Retrying in ${recoveryCountdown.remainingSeconds}s`
             : 'Retrying now…'
+          : postTransferAttention
+            ? 'Finishing download needs attention'
           : retryExhausted
             ? 'Download interrupted'
             : waitingForConnection
@@ -577,7 +582,7 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
               </View>
             </View>
 
-            {percent !== null ? <View style={[styles.track, { backgroundColor: theme.surfaceHover }]}><View style={[styles.fill, { backgroundColor: tone, width: `${percent}%` as `${number}%` }]} /></View> : null}
+            {!postTransferAttention && percent !== null ? <View style={[styles.track, { backgroundColor: theme.surfaceHover }]}><View style={[styles.fill, { backgroundColor: tone, width: `${percent}%` as `${number}%` }]} /></View> : null}
 
             <View style={styles.actions}>
               {canPause ? <ActionButton label="Pause" icon="pause" disabled={busyJob === job.jobId} onPress={() => pauseNativeDownloadJobV1(job.jobId)} /> : null}

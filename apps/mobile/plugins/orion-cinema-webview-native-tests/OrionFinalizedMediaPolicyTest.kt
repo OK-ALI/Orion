@@ -63,4 +63,48 @@ class OrionFinalizedMediaPolicyTest {
       OrionFinalizedMediaPolicy.evaluate("media.mp4", 10L, listOf(video.copy(largestSampleBytes = 33L * 1024L * 1024L), audio), true).code,
     )
   }
+
+  @Test
+  fun probesBeginningMiddleAndTailStrictlyInsideTheDeclaredTrackDuration() {
+    val times = OrionFinalizedMediaPolicy.representativeSeekTimes(0L, 60_000_000L, 60_000_000L)!!
+    assertEquals(3, times.size)
+    assertEquals(0L, times.first())
+    assertTrue(times[1] > times.first() && times[1] < times.last())
+    assertTrue(times.last() < 60_000_000L)
+  }
+
+  @Test
+  fun normalEndpointEosNeverRequiresSeekingToTheEndpoint() {
+    val times = OrionFinalizedMediaPolicy.representativeSeekTimes(0L, 60_000_000L, 60_000_000L)!!
+    assertFalse(times.contains(60_000_000L))
+    assertEquals(59_400_000L, times.last())
+  }
+
+  @Test
+  fun shorterAudioTrackBoundsItsOwnTailInsteadOfTheContainerOrVideoDuration() {
+    val audioTimes = OrionFinalizedMediaPolicy.representativeSeekTimes(0L, 59_000_000L, 58_000_000L)!!
+    assertTrue(audioTimes.last() < 58_000_000L)
+  }
+
+  @Test
+  fun negativeEditListStartUsesNonnegativeSeekPositions() {
+    val times = OrionFinalizedMediaPolicy.representativeSeekTimes(-20_000L, 1_000_000L, 1_000_000L)!!
+    assertEquals(0L, times.first())
+    assertTrue(times.all { it >= 0L && it < 1_000_000L })
+  }
+
+  @Test
+  fun rejectsTimelinesWithNoPlayableInRangeSample() {
+    assertEquals(null, OrionFinalizedMediaPolicy.representativeSeekTimes(60_000_000L, 60_000_000L, 60_000_000L))
+    assertEquals(null, OrionFinalizedMediaPolicy.representativeSeekTimes(10L, 9L, 100L))
+    assertEquals(null, OrionFinalizedMediaPolicy.representativeSeekTimes(0L, 1L, 0L))
+  }
+
+  @Test
+  fun rejectsInsaneDurationAndUnreadableRepresentativeSamples() {
+    assertEquals("yt-dlp-media-duration-invalid", OrionFinalizedMediaPolicy.evaluate("media.mp4", 10L,
+      listOf(video.copy(durationUs = 31L * 24L * 60L * 60L * 1_000_000L), audio), true).code)
+    assertEquals("yt-dlp-media-payload-invalid", OrionFinalizedMediaPolicy.evaluate("media.mp4", 10L,
+      listOf(video, audio.copy(representativeSamplesReadable = false)), true).code)
+  }
 }
