@@ -15,6 +15,7 @@ import {
 import type { EmbeddedSubtitleTrackV1, MobileShieldEvidenceV1, ShieldVerificationState, SubtitleDiscoveryState } from '@orion/shared/types';
 
 interface SourcesSheetProps {
+  sourceExtras?: React.ReactNode;
   currentSourceId: string;
   onSelect: (sourceId: string) => void;
   onRetry?: () => void;
@@ -161,6 +162,7 @@ export function SourcesSheet(props: SourcesSheetProps) {
           </Pressable>
         );
       })}
+      {props.sourceExtras}
     </ScrollView>
   );
 

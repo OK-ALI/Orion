@@ -47,6 +47,7 @@ interface NativeDownloadCaptureModule {
 }
 
 interface ActiveCaptureSessionV1 {
+  diagnosticOnly?: boolean;
   playbackSessionId: string;
   sourceId: string;
   providerClass: string | null;
@@ -163,7 +164,7 @@ export function normalizeMobileDownloadCandidateEventV1(
   value: unknown,
   session: ActiveCaptureSessionV1 | null = activeSession,
 ): MobileDownloadCandidateSnapshotV1 | null {
-  if (!session || !value || typeof value !== 'object') return null;
+  if (!session || session.diagnosticOnly === true || !value || typeof value !== 'object') return null;
   const input = value as Record<string, unknown>;
   if (input.schemaVersion !== 1) return null;
   if (text(input.playbackSessionId) !== session.playbackSessionId) return null;
@@ -339,6 +340,14 @@ function ensureEventSubscription(): void {
 }
 
 export function beginMobileDownloadCaptureSessionV1(input: BeginMobileDownloadCaptureSessionInputV1): () => void {
+  if (input.diagnosticOnly === true) {
+    activeSession = { ...input, media: { ...input.media } };
+    ensureEventSubscription();
+    return () => {
+      nativeModule()?.releaseSession(input.playbackSessionId);
+      if (activeSession?.playbackSessionId === input.playbackSessionId) activeSession = null;
+    };
+  }
   pendingSourceResolutionActive();
   unsafeDirectFallbackSources.delete(sourcePreparationKey(input.itemKey, input.sourceId));
   if (activeSession?.itemKey === input.itemKey && activeSession.playbackSessionId !== input.playbackSessionId) {

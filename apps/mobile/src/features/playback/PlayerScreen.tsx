@@ -16,6 +16,7 @@ import {
 } from '../../services/sourceHealth';
 import { reportMobileDiagnosticError, updateMobileDiagnostics } from '../../services/mobileDiagnostics';
 import { EmbedPlayerSurface } from './EmbedPlayerSurface';
+import { AnimeSourceChoices, type AnimeTestSelection } from './AnimeSourceChoices';
 import { OrionFinalizedPlayerActivitySurface } from './OrionFinalizedPlayerActivitySurface';
 import { OrionOfflinePlayerSurface } from './OrionOfflinePlayerSurface';
 import {
@@ -143,6 +144,10 @@ export default function PlayerScreen() {
     type,
   ));
   const [imdbId, setImdbId] = useState<string | null>(null);
+  const [animeTest, setAnimeTest] = useState<AnimeTestSelection | null>(null);
+  const [animeAttempt, setAnimeAttempt] = useState(0);
+  const activeAnimeTest = animeTest?.identity.tmdbId === id && type === 'tv'
+    && animeTest.identity.season === resolvedSeason && animeTest.identity.episode === resolvedEpisode ? animeTest : null;
   const [handoff, setHandoffState] = useState<PlaybackHandoffV1 | null>(null);
   const handoffRef = useRef<PlaybackHandoffV1 | null>(null);
   const initialSavedTime = existingProgress?.completed
@@ -255,6 +260,9 @@ export default function PlayerScreen() {
 
   const activeStreamUrl = useMemo(() => {
     if (offlineRequested) return '';
+    if (sourceId === 'aniembed') return activeAnimeTest ? getSourceUrl(sourceId, type,
+      { tmdbId: id, anilistId: activeAnimeTest.identity.anilistId }, resolvedSeason || 1, resolvedEpisode || 1,
+      { lang: activeAnimeTest.variant }) : '';
     const resumeParams: Record<string, string | number> = {
       ...getSourceResumeParams(sourceId, resumeTime, type),
     };
@@ -268,7 +276,7 @@ export default function PlayerScreen() {
       resolvedEpisode || 1,
       resumeParams,
     );
-  }, [id, imdbId, offlineRequested, resolvedEpisode, resolvedSeason, resumeTime, sourceId, type]);
+  }, [activeAnimeTest, id, imdbId, offlineRequested, resolvedEpisode, resolvedSeason, resumeTime, sourceId, type]);
 
   const launchHandoff = useCallback(({
     targetSourceId,
@@ -518,7 +526,7 @@ export default function PlayerScreen() {
     episodeTitle,
     sourceId,
     onSourceChange: changeSource,
-    onAutomaticFailover: (snapshot: VerifiedPlaybackSnapshot | null) => getMobileDownloadSourceResolutionIntentV1(downloadItemKey)
+    onAutomaticFailover: (snapshot: VerifiedPlaybackSnapshot | null) => sourceId === 'aniembed' || getMobileDownloadSourceResolutionIntentV1(downloadItemKey)
       ? false : changeSource(sourceId, snapshot, 'automatic'),
     onPlaybackSnapshot: handlePlaybackSnapshot,
     onVerifiedPlaybackCompletion: handleVerifiedPlaybackCompletion,
@@ -560,8 +568,16 @@ export default function PlayerScreen() {
     )
   ) : (
     <EmbedPlayerSurface
-      key={`${sourceId}-${activeStreamUrl}`}
+      key={`${sourceId}-${activeStreamUrl}${sourceId === 'aniembed' ? `-${animeAttempt}` : ''}`}
       embedUrl={activeStreamUrl}
+      animeVariant={sourceId === 'aniembed' ? activeAnimeTest?.variant : undefined}
+      onExperimentalRetry={() => setAnimeAttempt((attempt) => attempt + 1)}
+      sourceExtras={(commit) => !downloadResolutionOnly && !handoffIsPending(handoff) && <AnimeSourceChoices id={id} type={type} season={resolvedSeason} episode={resolvedEpisode}
+        onSelect={(selection) => commit(() => {
+          publishHandoff(null); setResumeTime(0); setInitialChoicePending(false);
+          setAnimeTest(selection); setSourceId('aniembed');
+          setAnimeAttempt((attempt) => attempt + 1);
+        })} />}
       playbackPurpose={downloadResolutionOnly ? 'download-resolution' : 'viewing'}
       onResumeAttempt={handleResumeAttempt}
       {...commonProps}

@@ -17,6 +17,7 @@ import { primarySources } from "./adapters/primary";
 import { candidateSources } from "./adapters/candidates";
 import { experimentalSources, disabledSources } from "./adapters/experimental";
 import { allMangaSource } from "./adapters/allmanga";
+import { aniEmbedSource } from './adapters/aniembed';
 import { CINEMA_BLOCK_RULE_CATALOG_V1 } from "@orion/shared/cinema-block-rules";
 import {
   applyOrionProviderStatusV1,
@@ -86,6 +87,7 @@ export const ALL_CINEMA_SOURCES: readonly LegacyCompatibleSource[] = Object.free
   ...experimentalSources,
   ...disabledSources,
   allMangaSource,
+  aniEmbedSource,
 ].map(toLegacyCompatibleSource));
 
 assertSourceRegistry(ALL_CINEMA_SOURCES as unknown as CinemaSourceDescriptor[]);
@@ -218,12 +220,16 @@ export function getSourceResumeParams(
 export function resolveSourceMediaId(
   sourceId: string,
   type: "movie" | "tv",
-  ids: { tmdbId?: number | string; id?: number | string; imdbId?: string } = {}
+  ids: { tmdbId?: number | string; id?: number | string; imdbId?: string; anilistId?: number } = {}
 ): string | number | undefined {
   const source = getSource(sourceId);
   const policy = type === "movie" ? source.idPolicy.movie : source.idPolicy.tv;
   const tmdbId = ids.tmdbId ?? ids.id;
   const imdbId = ids.imdbId;
+  if (policy === 'anilist') {
+    if (!Number.isSafeInteger(ids.anilistId) || (ids.anilistId ?? 0) <= 0) throw new Error('Verified AniList identity is required.');
+    return ids.anilistId;
+  }
   if (policy === "imdb") return imdbId ?? tmdbId;
   if (policy === "imdb-preferred") return imdbId ?? tmdbId;
   return tmdbId ?? imdbId;
@@ -233,7 +239,7 @@ export function resolveSourceMediaId(
 export function getSourceUrl(
   sourceId: string,
   type: "movie" | "tv",
-  ids: { tmdbId?: number | string; id?: number | string; imdbId?: string } | string | number,
+  ids: { tmdbId?: number | string; id?: number | string; imdbId?: string; anilistId?: number } | string | number,
   season: number,
   episode: number,
   extraParams: Record<string, string | number | null | undefined> = {},
@@ -241,6 +247,8 @@ export function getSourceUrl(
   subtitleLang: string | null = null
 ): string {
   const source = getSource(sourceId);
+  if ((type === 'movie' ? source.idPolicy.movie : source.idPolicy.tv) === 'anilist'
+    && (typeof ids !== 'object' || ids === null)) throw new Error('Explicit AniList lookup identity is required.');
   const mediaId =
     typeof ids === "object" && ids !== null
       ? resolveSourceMediaId(source.id, type, ids)
@@ -263,6 +271,8 @@ export function getSourceUrl(
   for (const [key, value] of Object.entries(extraParams)) {
     if (value != null && value !== "") url.searchParams.set(key, String(value));
   }
+  if (source.animeProvider && !source.animeProvider.variants.includes(
+    url.searchParams.get(source.animeProvider.variantParam) as 'sub' | 'dub' | 'raw')) throw new Error('Unsupported Anime variant.');
   return url.toString();
 }
 

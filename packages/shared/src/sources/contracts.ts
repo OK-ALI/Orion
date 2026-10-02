@@ -16,6 +16,7 @@ export const SOURCE_ID_POLICIES = [
   "imdb",
   "imdb-preferred",
   "async",
+  "anilist",
 ] as const;
 
 export const SOURCE_PROGRESS_STRATEGIES = [
@@ -121,6 +122,8 @@ export interface CinemaSourceDescriptor {
   async?: boolean;
   requiresIframeWrapper?: boolean;
   animeOnly?: boolean;
+  /** Dedicated Anime lookup/testing; qualification is independent of registration. */
+  animeProvider?: { variants: ('sub' | 'dub' | 'raw')[]; variantParam: string; playbackQualified: boolean; downloadQualified: boolean };
   quarantined?: boolean;
   disabledReason?: string;
 }
@@ -157,6 +160,16 @@ export function validateSourceDescriptor(source: CinemaSourceDescriptor): string
   if (!source || typeof source !== "object") return ["Source must be an object."];
   if (!source.id || !/^[a-z0-9-]+$/.test(source.id)) errors.push("id must be a stable lowercase identifier.");
   if (!source.label?.trim()) errors.push("label is required.");
+  if (source.animeProvider) {
+    const capability = source.animeProvider;
+    if (source.animeOnly !== true || source.routingMode !== 'manual-only') errors.push('Anime providers must be Anime-only and manual-only.');
+    if (!Array.isArray(capability.variants) || !capability.variants.length
+      || capability.variants.some((value) => !['sub', 'dub', 'raw'].includes(value))
+      || new Set(capability.variants).size !== capability.variants.length) errors.push('Anime variants must be explicit and unique.');
+    if (typeof capability.playbackQualified !== 'boolean' || typeof capability.downloadQualified !== 'boolean') errors.push('Anime qualification must be explicit.');
+    if (!/^[a-z][a-z0-9_]*$/.test(capability.variantParam)) errors.push('Anime variant parameter is required.');
+    if (source.supportsDownloads && (!capability.playbackQualified || !capability.downloadQualified)) errors.push('Unqualified Anime providers cannot enable downloads.');
+  }
   if (!(SOURCE_RELEASE_STATUSES as readonly string[]).includes(source.releaseStatus)) errors.push("releaseStatus is invalid.");
   if (!source.media || !["movie", "tv", "anime"].every((key) => typeof (source.media as Record<string, unknown>)[key] === "boolean")) {
     errors.push("media capabilities must be explicit booleans.");

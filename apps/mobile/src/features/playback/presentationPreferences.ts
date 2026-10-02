@@ -41,6 +41,6 @@ export function savePresentationPreference(surface: 'native' | 'embed', sourceId
 export function getEmbeddedPresentationModes(sourceId: string): MobilePlayerPresentation[] {
   // These sources render inside a known responsive player viewport. Generic
   // DOM/CSS mutation remains prohibited; Orion only sizes the outer WebView.
-  const viewportSafe = new Set(['videasy', 'vidsrc', 'vidlink', 'autoembed', 'vsembed', '111movies', 'vixsrc', 'vidnest', 'vidsrc-ir', 'cinesrc']);
+  const viewportSafe = new Set(['videasy', 'vidsrc', 'vidlink', 'autoembed', 'vsembed', '111movies', 'vixsrc', 'vidnest', 'vidsrc-ir', 'cinesrc', 'aniembed']);
   return viewportSafe.has(sourceId) ? ['provider', 'fit', 'fill'] : ['provider'];
 }

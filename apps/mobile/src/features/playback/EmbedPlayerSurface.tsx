@@ -62,9 +62,13 @@ import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import { beginMobileDownloadCaptureSessionV1 } from '../downloads/downloadCandidateCapture';
 import { useDownloadSourceAutoReturnV1 } from '../downloads/useDownloadSourceAutoReturn';
 import type { PlaybackPurpose } from './viewingPersistence';
-import { createProviderIframeDocument, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
+import { createProviderWebViewSource, getProviderShieldManifest, isSelectedAnimeNavigation, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
+import { useAnimeReadiness } from './useAnimeReadiness';
 import { ProviderControlsReturn } from './ProviderControlsReturn';
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
+  sourceExtras?: (commit: (action: () => void) => void) => React.ReactNode;
+  animeVariant?: 'sub' | 'dub';
+  onExperimentalRetry?: () => void;
   embedUrl: string;
   playbackPurpose?: PlaybackPurpose;
   onResumeAttempt: (handoffId: string, status: 'applied' | 'unavailable') => void;
@@ -73,6 +77,9 @@ interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
 const WEBVIEW_AUDIO_RELEASE_MS = Platform.OS === 'android' ? 240 : 80;
 export function EmbedPlayerSurface({
   embedUrl,
+  sourceExtras,
+  animeVariant,
+  onExperimentalRetry,
   playbackPurpose = 'viewing',
   title,
   seriesTitle,
@@ -134,8 +141,9 @@ export function EmbedPlayerSurface({
   const surfaceLoaded = useRef(false);
   const webViewRef = useRef<WebViewType>(null);
   const source = ALL_CINEMA_SOURCES.find((entry) => entry.id === sourceId);
-  const downloadQualificationCaptureEnabled = source != null && (source.supportsDownloads === true || ['vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc'].includes(sourceId));
-  const sourceLabel = source?.label || 'VidEasy Direct';
+  const animeDiagnosticOnly = source?.animeProvider?.playbackQualified === false;
+  const downloadQualificationCaptureEnabled = (source != null && (source.supportsDownloads === true || ['vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc'].includes(sourceId))) || animeDiagnosticOnly;
+  const sourceLabel = animeVariant && source?.animeProvider ? `${source.label} · ${animeVariant === 'sub' ? 'Sub' : 'Dub'}` : source?.label || 'VidEasy Direct';
   const expectedOrigins = source?.expectedOrigins || [];
   const sourceContinuity = getMobileSourceContinuityCapability(sourceId);
   const telemetryExpectedOrigins = expectedOrigins;
@@ -155,21 +163,7 @@ export function EmbedPlayerSurface({
       return embedUrl;
     }
   }, [embedUrl, selectedSubtitle?.id, source?.externalSubtitleLabelParam, source?.externalSubtitleLanguageParam, source?.externalSubtitleParam]);
-  const webViewSource = useMemo(() => {
-    if (!source?.requiresIframeWrapper) return { uri: shieldedEmbedUrl };
-    try {
-      const target = new URL(shieldedEmbedUrl);
-      if (target.protocol !== 'https:' || !expectedOrigins.includes(target.origin)) return { uri: 'about:blank' };
-      return {
-        html: createProviderIframeDocument(target.toString()),
-        // Orion-owned secure wrapper isolates provider storage/bootstrap behavior.
-        // The nested player receives no Orion state or secrets.
-        baseUrl: 'https://orion.local/player/',
-      };
-    } catch {
-      return { uri: 'about:blank' };
-    }
-  }, [expectedOrigins, shieldedEmbedUrl, source?.requiresIframeWrapper]);
+  const webViewSource = useMemo(() => createProviderWebViewSource(source, shieldedEmbedUrl), [source, shieldedEmbedUrl]);
   const media = useMemo(() => ({
     id,
     mediaType: type,
@@ -239,8 +233,9 @@ export function EmbedPlayerSurface({
       providerClass: source.releaseStatus,
       itemKey: downloadTarget.itemKey,
       media: downloadTarget.media,
+      diagnosticOnly: animeDiagnosticOnly,
     });
-  }, [downloadQualificationCaptureEnabled, downloadTarget, playbackSessionId, source?.releaseStatus, sourceId]);
+  }, [animeDiagnosticOnly, downloadQualificationCaptureEnabled, downloadTarget, playbackSessionId, source?.releaseStatus, sourceId]);
 
   useEffect(() => {
     loadStartedAt.current = Date.now();
@@ -360,6 +355,7 @@ export function EmbedPlayerSurface({
 
   const retryCurrentSource = () => {
     if (sourceTransitionPending.current || activeHandoffId) return;
+    if (source?.animeProvider && onExperimentalRetry) return releaseSurfaceThen(() => { onExperimentalRetry(); return true; });
     telemetry.flush();
     setShowSources(false);
     setSurfaceReleased(true);
@@ -389,6 +385,9 @@ export function EmbedPlayerSurface({
   };
 
   const handleShouldStartLoad = (request: { url?: string; isTopFrame?: boolean }) => {
+    if (source?.animeProvider && request.isTopFrame !== false && !isSelectedAnimeNavigation(String(request.url || ''), embedUrl)) {
+      animeReadiness.fail(); return false;
+    }
     if (Platform.OS !== 'ios' || request.isTopFrame === false) return true;
     const value = String(request.url || '');
     if (value === 'about:blank') return true;
@@ -408,11 +407,12 @@ export function EmbedPlayerSurface({
   };
 
   const markSurfaceLoaded = () => {
+    if (source?.animeProvider && animeReadiness.getStatus() === 'failed') return;
     bridgeSequence.current = 0;
     webViewRef.current?.injectJavaScript(injectedScript);
     surfaceLoaded.current = true;
     setIsBuffering(false);
-    controller.setLoading(null);
+    controller.setLoading(source?.animeProvider && animeReadiness.getStatus() !== 'ready' ? 'waiting' : null);
     // A native session proves that interception is active. "Protected" is
     // reserved for a loaded session that actually blocked unwanted traffic.
     if (source?.requestManifest?.mode === 'enforce'
@@ -423,7 +423,7 @@ export function EmbedPlayerSurface({
     }
     if (observationTimeout.current) clearTimeout(observationTimeout.current);
     observationTimeout.current = setTimeout(() => {
-      if (!telemetry.getSession().verified) {
+      if (!source?.animeProvider && !telemetry.getSession().verified) {
         telemetry.markOpenedOnly();
         updateMobileDiagnostics({ playbackState: 'unobservable', playbackEvidence: 'opened-only' });
       }
@@ -442,6 +442,11 @@ export function EmbedPlayerSurface({
     updateMobileDiagnostics({ activeSourceId: sourceId, sourceHealth: health.state });
     reportMobileDiagnosticError({ area: 'playback', code: 'SOURCE_FAILED', message });
   };
+  const animeReadiness = useAnimeReadiness(Boolean(source?.animeProvider), playbackSessionId, surfaceRetryKey, () => {
+    webViewRef.current?.injectJavaScript(QUIET_CURRENT_SURFACE_SCRIPT);
+    setSurfaceReleased(true);
+    markFailed('This Anime source did not start usable playback. Retry or choose an existing source.');
+  });
 
   const applyShieldEnvelope = useCallback((envelope: any) => {
       const parsed = parseShieldEvidenceEnvelope(envelope);
@@ -575,6 +580,7 @@ export function EmbedPlayerSurface({
     if (!decision.accepted) {
       return;
     }
+    if (!animeReadiness.observe(parsed.input)) return;
     setIsBuffering(parsed.input.state === 'buffering');
     controller.updatePlayback({
       state: parsed.input.state,
@@ -653,18 +659,7 @@ export function EmbedPlayerSurface({
           <OrionCinemaWebView
           key={`${sourceId}:${playbackSessionId}:${surfaceRetryKey}`}
           ref={webViewRef}
-          shieldManifest={shieldManifest || {
-            schemaVersion: 1,
-            sourceId,
-            mode: 'observe',
-            allowedNavigationOrigins: expectedOrigins,
-            requiredOrigins: expectedOrigins,
-            mediaOrigins: [],
-            artworkOrigins: [],
-            subtitleOrigins: [],
-            popupPolicy: 'block',
-            rules: [],
-          }}
+          shieldManifest={getProviderShieldManifest(sourceId, source)}
             shieldSessionId={playbackSessionId}
             downloadCaptureEnabled={downloadQualificationCaptureEnabled}
             downloadAllowed={source?.supportsDownloads === true}
@@ -683,14 +678,15 @@ export function EmbedPlayerSurface({
             style={[styles.webVideo, presentationStyle]}
             userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             onLoadStart={() => {
+              if (source?.animeProvider && animeReadiness.getStatus() === 'failed') return;
               surfaceLoaded.current = false;
               setIsBuffering(true);
               controller.setLoading('waiting');
             }}
             onLoadEnd={markSurfaceLoaded}
-            onError={({ nativeEvent }) => markFailed(nativeEvent.description || 'This source failed to load')}
+            onError={({ nativeEvent }) => source?.animeProvider ? animeReadiness.fail() : markFailed(nativeEvent.description || 'This source failed to load')}
             onHttpError={({ nativeEvent }) => {
-              if (nativeEvent.statusCode >= 400) markFailed('This source is having trouble');
+              if (nativeEvent.statusCode >= 400) source?.animeProvider ? animeReadiness.fail() : markFailed('This source is having trouble');
             }}
             onMessage={(event) => handleMessage(event.nativeEvent.data)}
           />
@@ -699,6 +695,7 @@ export function EmbedPlayerSurface({
 
       <PlayerStateOverlay
         state={controller.state.loadingState}
+        detail={animeReadiness.detail}
         onRetry={retryCurrentSource}
         onSwitchSource={() => controller.openOverlay('sources')}
       />
@@ -744,6 +741,7 @@ export function EmbedPlayerSurface({
       )}
       {sourceSheetOverlay && (
         <SourcesSheet
+          sourceExtras={sourceExtras?.((action) => releaseSurfaceThen(() => { action(); return true; }))}
           currentSourceId={sourceId}
           onSelect={selectSource}
           onRetry={retryCurrentSource}
