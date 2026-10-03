@@ -1,84 +1,82 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { isAnimeContent, lookupAnimeEntries, tmdbFetch, type AnimeIdentityResult } from '@orion/shared/api';
+import { Ionicons } from '@expo/vector-icons';
 import { getRegisteredSource } from '@orion/shared/sources';
+import { radii } from '@orion/shared/tokens';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { getMobileSourceHealthV2 } from '../../services/sourceHealth';
+import { getMobileSourceContinuityCapability } from './mobileSources';
 import { useMobilePlayerController } from './MobilePlayerController';
-import { resolveAnimeTestIdentity } from './animeIdentityRequest';
-import { createAnimeIdentityTrace } from './animeIdentityDiagnostics';
+import type { AnimeSourceSelection } from './useAnimeSource';
+import type { AnimeVariant } from './animeSourceAffinity';
 
-export interface AnimeTestSelection {
-  identity: Extract<AnimeIdentityResult, { state: 'verified' }>;
-  variant: 'sub' | 'dub';
-}
-
-/** Explicit testing lane. Unverified providers never become ordinary source rows. */
-export function AnimeSourceChoices({ id, type, season, episode, onSelect }: {
-  id: string; type: 'movie' | 'tv'; season: number | null; episode: number | null;
-  onSelect(selection: AnimeTestSelection): void;
+/** Selection uses Orion's existing source switch and resume prompt. */
+export function AnimeSourceChoices({ currentSourceId, variant, prepare, onSelect }: {
+  currentSourceId: string; variant?: AnimeVariant;
+  prepare(variant: AnimeVariant): Promise<AnimeSourceSelection | null>;
+  onSelect(selection: AnimeSourceSelection): void;
 }) {
   const { theme } = useOrionTheme();
   const controller = useMobilePlayerController();
-  const [detail, setDetail] = useState<any>(null);
-  const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const scope = useRef<AbortController | null>(null);
-  useEffect(() => {
-    const request = new AbortController();
-    scope.current = request;
-    setDetail(null); setError(null); setExpanded(false); setBusy(false);
-    tmdbFetch<any>(`/${type}/${id}?append_to_response=alternative_titles`, { signal: request.signal })
-      .then((result) => { if (!request.signal.aborted && String(result?.id) === id && isAnimeContent(result)) setDetail(result); })
-      .catch(() => {});
-    return () => { request.abort(); };
-  }, [id, type, season, episode]);
-
-  const testVariant = async (variant: 'sub' | 'dub') => {
-    const request = scope.current;
-    const source = getRegisteredSource('aniembed');
-    if (busy || !detail || !request || request.signal.aborted || type !== 'tv' || !season || !episode
-      || source?.animeProvider?.variants.includes(variant) !== true || source.supportsDownloads) return;
+  const operation = useRef(0);
+  useEffect(() => () => { operation.current += 1; }, []);
+  const source = getRegisteredSource('aniembed');
+  const selected = currentSourceId === source?.id;
+  const capability = getMobileSourceContinuityCapability('aniembed');
+  const health = getMobileSourceHealthV2('aniembed', 'tv');
+  const choose = async (next: AnimeVariant) => {
+    if (busy || (selected && variant === next) || !source?.animeProvider?.variants.includes(next)) return;
+    const attempt = ++operation.current;
     setBusy(true); setError(null);
-    const diagnostic = createAnimeIdentityTrace();
     try {
-      const result = await resolveAnimeTestIdentity({ id, type, season, episode, detail, variant, signal: request.signal },
-        { fetchSeason: tmdbFetch, lookup: lookupAnimeEntries }, diagnostic);
-      if (request.signal.aborted) return;
-      if (result.state !== 'verified') {
-        setError('Orion could not verify this Anime season and episode. Choose an existing source.');
-        return;
-      }
-      onSelect({ identity: result, variant });
-      controller.closeOverlay();
-    } catch {
-      diagnostic({ stage: 'decision', outcome: 'rejected', reason: 'selection-failed' });
-      if (!request.signal.aborted) setError('Orion could not verify this Anime season and episode. Choose an existing source.');
-    } finally { if (!request.signal.aborted) setBusy(false); }
+      const selection = await prepare(next);
+      if (attempt !== operation.current) return;
+      if (!selection) { setError('Orion could not verify this Anime season and episode. Choose another source.'); return; }
+      onSelect(selection); controller.closeOverlay();
+    } finally { if (attempt === operation.current) setBusy(false); }
   };
-
-  if (!detail || type !== 'tv' || (season ?? 0) < 1 || (episode ?? 0) < 1) return null;
-  return <View style={[styles.section, { borderColor: theme.border }]}>
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} style={styles.action}>
-      <Text style={[styles.title, { color: theme.text }]}>Anime source testing</Text>
-    </Pressable>
-    {expanded && <>
-      <Text style={[styles.copy, { color: theme.textSecondary }]}>Experimental playback test. Episode identity is checked first. Playback, variants and downloads have not been physically qualified.</Text>
-      {(['sub', 'dub'] as const).map((variant) => <Pressable key={variant} accessibilityRole="button"
-        disabled={busy} accessibilityState={{ disabled: busy }}
-        accessibilityLabel={`Test AniEmbed ${variant === 'sub' ? 'Sub' : 'Dub'}. Experimental; downloads disabled.`}
-        onPress={() => { void testVariant(variant); }} style={[styles.action, { backgroundColor: theme.surface }]}>
-        <Text style={[styles.title, { color: theme.text }]}>Test AniEmbed · {variant === 'sub' ? 'Sub' : 'Dub'}</Text>
-      </Pressable>)}
-      {busy && <ActivityIndicator accessibilityLabel="Verifying Anime identity" color={theme.accent} />}
-      {error && <Text accessibilityLiveRegion="polite" style={[styles.copy, { color: theme.danger }]}>{error}</Text>}
-    </>}
+  if (!source) return null;
+  return <View style={[styles.card, { backgroundColor: selected ? theme.accentSoft : theme.surface,
+    borderColor: selected ? theme.accent : theme.border }]}>
+    <View style={styles.row}>
+      <View style={[styles.icon, { backgroundColor: selected ? theme.accent : theme.elevated, borderColor: theme.border }]}>
+        <Ionicons name={selected ? 'play' : 'hardware-chip-outline'} size={17} color={selected ? theme.onAccent : theme.textSecondary} />
+      </View>
+      <View style={styles.copy}>
+        <Text style={[styles.name, { color: theme.text }]}>{source.label}</Text>
+        <Text style={[styles.status, { color: health?.state === 'failed' ? theme.danger : theme.textSecondary }]}>
+          {health?.state === 'ready' ? 'Playing normally' : health?.state === 'failed' ? 'Having trouble' : 'Ready'}
+        </Text>
+      </View>
+      <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={21} color={selected ? theme.accent : theme.textSecondary} />
+    </View>
+    <View style={styles.variants}>
+      {source.animeProvider?.variants.filter((value): value is AnimeVariant => value === 'sub' || value === 'dub').map((value) => {
+        const active = selected && variant === value;
+        return <Pressable key={value} accessibilityRole="button" disabled={busy}
+          accessibilityLabel={source.label + ' · ' + (value === 'sub' ? 'Sub' : 'Dub') + '. ' + capability.label + '.'}
+          accessibilityHint={capability.description} accessibilityState={{ selected: active, disabled: busy }}
+          onPress={() => { void choose(value); }}
+          style={[styles.variant, { backgroundColor: active ? theme.accent : theme.elevated,
+            borderColor: active ? theme.accent : theme.border }]}>
+          <Text style={[styles.variantText, { color: active ? theme.onAccent : theme.text }]}>{value === 'sub' ? 'Sub' : 'Dub'}</Text>
+        </Pressable>;
+      })}
+      {busy && <ActivityIndicator accessibilityLabel="Verifying episode" color={theme.accent} />}
+    </View>
+    <Text style={[styles.status, { color: theme.textSecondary }]}>{capability.shortLabel}</Text>
+    {error && <Text accessibilityLiveRegion="polite" style={[styles.status, { color: theme.danger }]}>{error}</Text>}
   </View>;
 }
 
 const styles = StyleSheet.create({
-  section: { borderTopWidth: 1, paddingTop: 8, marginTop: 8, gap: 8 },
-  action: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 12 },
-  title: { fontSize: 13, fontWeight: '700' },
-  copy: { fontSize: 12, lineHeight: 18, paddingHorizontal: 12 },
+  card: { borderRadius: radii.lg, borderWidth: 1, padding: 12, gap: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  icon: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  copy: { flex: 1, minWidth: 0 }, name: { fontSize: 14, fontWeight: '800' },
+  status: { fontSize: 11, lineHeight: 16 }, variants: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  variant: { minHeight: 44, minWidth: 52, borderRadius: radii.lg, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12 },
+  variantText: { fontSize: 12, fontWeight: '700' },
 });

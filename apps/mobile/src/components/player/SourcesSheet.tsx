@@ -7,6 +7,7 @@ import { getSource } from '@orion/shared/sources';
 import { getMobileSourceHealthV2 } from '../../services/sourceHealth';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { OrionDialog } from '../OrionDialog';
+import { SourceGroup } from './SourceGroup';
 import {
   MOBILE_PLAYER_SOURCES,
   getMobileSourceContinuityCapability,
@@ -16,6 +17,8 @@ import type { EmbeddedSubtitleTrackV1, MobileShieldEvidenceV1, ShieldVerificatio
 
 interface SourcesSheetProps {
   sourceExtras?: React.ReactNode;
+  animeAvailable?: boolean;
+  currentSourceLabel?: string;
   currentSourceId: string;
   onSelect: (sourceId: string) => void;
   onRetry?: () => void;
@@ -76,6 +79,8 @@ export function SourcesSheet(props: SourcesSheetProps) {
   const wide = width >= 700 || width > height;
   const [detailsOpen, setDetailsOpen] = useState(wide || section !== 'sources');
   const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
+  const [animeExpanded, setAnimeExpanded] = useState(currentSourceId === 'aniembed');
+  const [generalExpanded, setGeneralExpanded] = useState(currentSourceId !== 'aniembed');
   useEffect(() => setDetailsOpen(wide || section !== 'sources'), [section, wide]);
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -84,9 +89,9 @@ export function SourcesSheet(props: SourcesSheetProps) {
     });
     return () => subscription.remove();
   }, [onClose]);
-  const active = MOBILE_PLAYER_SOURCES.find((source) => source.id === currentSourceId);
+  const active = getSource(currentSourceId);
   const health = getMobileSourceHealthV2(currentSourceId, mediaType);
-  const sourceName = DISPLAY_NAMES[currentSourceId] || active?.label || 'Selected source';
+  const sourceName = props.currentSourceLabel || DISPLAY_NAMES[currentSourceId] || active?.label || 'Selected source';
   const activeContinuity = getMobileSourceContinuityCapability(currentSourceId);
   const activeSafety = getMobileSourceSafetyNotice(currentSourceId);
   const pendingSafety = pendingSourceId ? getMobileSourceSafetyNotice(pendingSourceId) : null;
@@ -103,6 +108,9 @@ export function SourcesSheet(props: SourcesSheetProps) {
 
   const sourceList = (
     <ScrollView style={styles.sourceScroll} contentContainerStyle={styles.sourceList} showsVerticalScrollIndicator={false}>
+      {props.animeAvailable && <SourceGroup title="Anime Sources" expanded={animeExpanded} onToggle={() => setAnimeExpanded(!animeExpanded)}>{props.sourceExtras}</SourceGroup>}
+      <SourceGroup title="General Sources" expanded={!props.animeAvailable || generalExpanded}
+        onToggle={props.animeAvailable ? () => setGeneralExpanded(!generalExpanded) : undefined}>
       {MOBILE_PLAYER_SOURCES.map((source) => {
         source = getSource(source.id);
         const selected = source.id === currentSourceId;
@@ -162,7 +170,7 @@ export function SourcesSheet(props: SourcesSheetProps) {
           </Pressable>
         );
       })}
-      {props.sourceExtras}
+      </SourceGroup>
     </ScrollView>
   );
 

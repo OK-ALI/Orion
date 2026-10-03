@@ -31,5 +31,5 @@ export function useAnimeReadiness(enabled: boolean, sessionId: string, attempt: 
   }, [enabled, sessionId, failed]);
   return { status, observe, fail: failed, getStatus: () => state.current.status,
     detail: !enabled || status === 'ready' ? undefined : status === 'failed'
-      ? 'This Anime source did not start usable playback. Retry or choose an existing source.' : 'Waiting for verified Anime playback.' };
+      ? 'This source did not start. Retry or choose another source.' : 'Waiting for playback.' };
 }

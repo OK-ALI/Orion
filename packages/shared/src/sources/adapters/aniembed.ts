@@ -6,20 +6,19 @@ function aniListEpisode(id: string | number, episode: number): string {
   return `https://aniembed.se/e/${id}/${episode}`;
 }
 
-/** Documentation contract only. Available solely for explicit physical testing. */
+/** Sub playback is physically proven; incoming continuity still needs qualification. */
 export const aniEmbedSource: CinemaSourceDescriptor = {
-  id: 'aniembed', label: 'AniEmbed', releaseStatus: 'experimental',
+  id: 'aniembed', label: 'AniEmbed', releaseStatus: 'candidate',
   media: { movie: false, tv: true, anime: true },
   idPolicy: { movie: 'anilist', tv: 'anilist' },
   buildMovieUrl: () => { throw new Error('AniEmbed movies have not been qualified.'); },
   buildEpisodeUrl: (id, _season, episode) => aniListEpisode(id, episode),
   expectedOrigins: ['https://aniembed.se'], allowedNavigationOrigins: ['https://aniembed.se'],
   requiredRequestOrigins: ['https://aniembed.se'],
-  progressStrategy: 'frame-video', resumeStrategy: 'none', subtitleStrategy: 'provider',
-  supportsResume: false, supportsExternalSubtitles: false, supportsDownloads: false,
-  routingMode: 'manual-only', availability: 'having-trouble',
-  availabilityReason: 'Playback and downloads have not been physically qualified.',
+  progressStrategy: 'frame-video', resumeStrategy: 'url-param', resumeParam: 't', subtitleStrategy: 'provider',
+  supportsResume: true, supportsExternalSubtitles: false, supportsDownloads: false,
+  routingMode: 'manual-only', availability: 'ready', availabilityReason: 'Ready.',
   animeOnly: true,
-  animeProvider: { variants: ['sub', 'dub'], variantParam: 'lang', playbackQualified: false, downloadQualified: false },
+  animeProvider: { variants: ['sub', 'dub'], variantParam: 'lang', playbackQualified: true, downloadQualified: false },
   params: { lang: 'sub', autoplay: '1', t: '0' },
 };

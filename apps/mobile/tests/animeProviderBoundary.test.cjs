@@ -6,11 +6,11 @@ const registry = load('packages/shared/src/sources/registry.ts');
 const contracts = load('packages/shared/src/sources/contracts.ts');
 const provider = registry.getRegisteredSource('aniembed');
 
-test('AniEmbed is registered through Orion with independent unqualified capabilities', () => {
+test('AniEmbed is registered through Orion with physically proven Sub playback and independently unqualified downloads', () => {
   assert.deepEqual(contracts.validateSourceDescriptor(provider), []);
   assert.equal(provider.animeOnly, true); assert.equal(provider.routingMode, 'manual-only');
-  assert.equal(provider.releaseStatus, 'experimental'); assert.equal(provider.supportsDownloads, false);
-  assert.deepEqual(provider.animeProvider, { variants: ['sub', 'dub'], variantParam: 'lang', playbackQualified: false, downloadQualified: false });
+  assert.equal(provider.releaseStatus, 'candidate'); assert.equal(provider.supportsDownloads, false);
+  assert.deepEqual(provider.animeProvider, { variants: ['sub', 'dub'], variantParam: 'lang', playbackQualified: true, downloadQualified: false });
   assert.equal(provider.media.movie, false);
   assert.ok(!registry.AUTOMATIC_PLAYER_SOURCES.some((source) => source.id === 'aniembed'));
 });
@@ -26,7 +26,7 @@ test('URL building uses explicit AniList evidence and exact language/episode par
     'https://aniembed.se/e/151807/4?lang=sub&autoplay=1&t=0');
   assert.equal(registry.getSourceUrl('aniembed', 'tv', { anilistId: 172463 }, 2, 3, { lang: 'dub' }),
     'https://aniembed.se/e/172463/3?lang=dub&autoplay=1&t=0');
-  assert.deepEqual(registry.getSourceResumeParams('aniembed', 140, 'tv'), {});
+  assert.deepEqual(registry.getSourceResumeParams('aniembed', 140, 'tv'), { t: 140 });
   for (const ids of [{ tmdbId: 151807 }, { imdbId: 'tt151807' }, { anilistId: 0 }, { anilistId: 1.5 }, 151807]) {
     assert.throws(() => registry.getSourceUrl('aniembed', 'tv', ids, 1, 1));
   }
@@ -40,19 +40,19 @@ test('new provider manifest grants one explicit page origin and no guessed depen
   for (const field of ['mediaOrigins', 'subtitleOrigins', 'artworkOrigins']) assert.deepEqual(provider.requestManifest[field], []);
   assert.equal(provider.requestManifest.popupPolicy, 'block');
 });
-test('existing Mobile source order/default/Auto/download choices remain intact; testing is opt-in', () => {
+test('existing Mobile source order/default/Auto/download choices remain intact; Anime preference is separate from General Auto', () => {
   const mobile = loader({ '../../services/sourceHealth': { getMobileSourceHealth: () => null, getMobileSourceHealthV2: () => null } })('apps/mobile/src/features/playback/mobileSources.ts');
   assert.deepEqual(mobile.MOBILE_PLAYER_SOURCES.map((source) => source.id), ['vixsrc', 'vidsrc', 'vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc', '111movies']);
   assert.equal(mobile.MOBILE_DEFAULT_CINEMA_SOURCE_ID, 'vixsrc');
   assert.equal(mobile.mobileSourceSupportsContinuity('aniembed'), false);
   assert.ok(!mobile.getMobileDownloadSourceChoices('tv').some((source) => source.id === 'aniembed'));
   const screen = read('apps/mobile/src/features/playback/PlayerScreen.tsx');
-  assert.match(screen, /sourceExtras=\{\(commit\) => !downloadResolutionOnly && !handoffIsPending\(handoff\) && <AnimeSourceChoices/);
-  assert.match(screen, /onSelect=\{\(selection\) => commit\(\(\) =>/);
+  assert.match(screen, /sourceExtras=\{\(select\) => !downloadResolutionOnly && !handoffIsPending\(handoff\) && anime.detail/);
+  assert.match(screen, /pendingAnimeSelection.current = selection; select\('aniembed', true\)/);
   assert.match(screen, /sourceId === 'aniembed' \? `-\$\{animeAttempt\}` : ''/);
-  assert.match(read('apps/mobile/src/features/playback/EmbedPlayerSurface.tsx'), /sourceExtras=\{sourceExtras\?\.\(\(action\) => releaseSurfaceThen/);
+  assert.match(read('apps/mobile/src/features/playback/EmbedPlayerSurface.tsx'), /sourceExtras=\{sourceExtras\?\.\(selectSource\)\}/);
   assert.match(screen, /onAutomaticFailover:[\s\S]{0,100}sourceId === 'aniembed'/);
-  assert.match(read('apps/mobile/src/features/playback/AnimeSourceChoices.tsx'), /isAnimeContent\(result\)/);
+  assert.match(read('apps/mobile/src/features/playback/useAnimeSource.ts'), /isAnimeContent\(detail\)/);
 });
 test('wrapper extraction preserves legacy Videasy CSP and direct source contract', () => {
   const helper = load('apps/mobile/src/features/playback/providerEmbedSupport.ts');

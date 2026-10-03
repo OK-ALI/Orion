@@ -1,5 +1,5 @@
-import { AppState, NativeModules, Platform } from 'react-native';
-import { useEffect, useRef } from 'react';
+import { AppState, NativeModules, Platform, useWindowDimensions } from 'react-native';
+import { useEffect } from 'react';
 
 const module = NativeModules.OrionPlayerSystemUi as undefined | {
   enter(): void;
@@ -8,20 +8,15 @@ const module = NativeModules.OrionPlayerSystemUi as undefined | {
   exit(): void;
 };
 
-export function usePlayerImmersiveSystemUi(active: boolean, playing: boolean, hudHidden: boolean) {
-  const playingRef = useRef(playing);
-
-  useEffect(() => {
-    playingRef.current = playing;
-  }, [playing]);
+export function usePlayerImmersiveSystemUi(active: boolean, _playing: boolean, _hudHidden: boolean) {
+  const { width, height } = useWindowDimensions();
 
   useEffect(() => {
     if (Platform.OS !== 'android' || !module || !active) return undefined;
     module.enter();
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        if (playingRef.current) module.enter();
-        else module.show();
+        module.enter();
       } else module.exit();
     });
     return () => {
@@ -32,7 +27,7 @@ export function usePlayerImmersiveSystemUi(active: boolean, playing: boolean, hu
 
   useEffect(() => {
     if (Platform.OS !== 'android' || !module || !active) return;
-    if (playing || hudHidden) module.hide();
-    else module.show();
-  }, [active, hudHidden, playing]);
+    // Pausing or opening Orion chrome does not leave the Player's immersive scope.
+    module.hide();
+  }, [active, width, height]);
 }

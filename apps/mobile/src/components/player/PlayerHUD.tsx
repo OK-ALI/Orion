@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Platform, Dimensions, LayoutChangeEvent } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Platform, useWindowDimensions, LayoutChangeEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useEvent } from 'expo';
 import { BlurView } from 'expo-blur';
@@ -9,10 +9,8 @@ import * as Brightness from 'expo-brightness';
 import { VolumeManager } from 'react-native-volume-manager';
 import { spacing, fontSizes } from '@orion/shared/tokens';
 import { useOrionTheme } from '../../context/ThemeContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PlayerChromeHandle } from './PlayerChromeHandle';
+import { PlayerEdgeDrawer } from './PlayerEdgeDrawer';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface PlayerHUDProps {
   player: any; // expo-video player instance
@@ -40,13 +38,12 @@ export function PlayerHUD({
   onToggle,
 }: PlayerHUDProps) {
   const { theme } = useOrionTheme();
-  const insets = useSafeAreaInsets();
   const [localControlsVisible, setLocalControlsVisible] = useState(true);
   const controlsVisible = controlledVisible ?? localControlsVisible;
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrubberWidth = useRef(1);
   
-  const { width, height } = Dimensions.get('window');
+  const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
   // Video State
@@ -198,7 +195,7 @@ export function PlayerHUD({
     })
     .onUpdate((e) => {
       // Swipe down (positive Y) decreases, up (negative Y) increases
-      const delta = -(e.translationY / (SCREEN_HEIGHT / 2)); 
+      const delta = -(e.translationY / (height / 2));
       runOnJS(updateBrightness)(startBrightness + delta);
     })
     .onEnd(() => {
@@ -212,7 +209,7 @@ export function PlayerHUD({
       startVolume = currentVolume.current;
     })
     .onUpdate((e) => {
-      const delta = -(e.translationY / (SCREEN_HEIGHT / 2)); 
+      const delta = -(e.translationY / (height / 2));
       runOnJS(updateVolume)(startVolume + delta);
     })
     .onEnd(() => {
@@ -238,31 +235,30 @@ export function PlayerHUD({
       {/* Floating Indicator (Volume/Brightness) */}
       {hudIndicator && (
         <View style={styles.indicatorContainer}>
-          <BlurView intensity={80} tint="dark" style={styles.indicatorHud}>
+          <BlurView intensity={80} tint={theme.dark ? "dark" : "light"} style={styles.indicatorHud}>
             <Ionicons 
               name={hudIndicator.type === 'volume' ? 'volume-high' : 'sunny'} 
               size={24} 
-              color={theme.onAccent}
+              color={theme.text}
             />
             <View style={[styles.barTrack, { backgroundColor: theme.border }]}>
-              <View style={[styles.barFill, { width: `${hudIndicator.value * 100}%`, backgroundColor: theme.onAccent }]} />
+              <View style={[styles.barFill, { width: `${hudIndicator.value * 100}%`, backgroundColor: theme.text }]} />
             </View>
           </BlurView>
         </View>
       )}
 
       {/* Control Overlay */}
-      <PlayerChromeHandle controlsVisible={controlsVisible} onPress={toggleControls} />
-      {controlsVisible && (
+      <PlayerEdgeDrawer controlsVisible={controlsVisible} onPress={toggleControls}>
         <View style={styles.controlsOverlay}>
           {/* Top Bar */}
-          <BlurView intensity={50} tint="dark" style={[styles.topBar, isLandscape && styles.topBarLandscape, { paddingTop: Math.max(insets.top, isLandscape ? 8 : 12) + 44 }]}>
+          <BlurView intensity={50} tint={theme.dark ? "dark" : "light"} style={[styles.topBar, isLandscape && styles.topBarLandscape, { paddingTop: 8 }]}>
             <Pressable onPress={onBack} style={styles.iconButton}>
-              <Ionicons name="chevron-back" size={28} color={theme.onAccent} />
+              <Ionicons name="chevron-back" size={28} color={theme.text} />
             </Pressable>
-            <Text style={[styles.titleText, { color: theme.onAccent }]} numberOfLines={1}>{title}</Text>
+            <Text style={[styles.titleText, { color: theme.text }]} numberOfLines={1}>{title}</Text>
             <View style={styles.iconButton}>
-              <Ionicons name="tv-outline" size={24} color={theme.onAccent} />
+              <Ionicons name="tv-outline" size={24} color={theme.text} />
             </View>
           </BlurView>
 
@@ -279,15 +275,15 @@ export function PlayerHUD({
                   resetHideTimer();
                 }}
               >
-                <BlurView intensity={60} tint="dark" style={styles.playPauseBlur}>
-                  <Ionicons name={isPlaying ? "pause" : "play"} size={48} color={theme.onAccent} />
+                <BlurView intensity={60} tint={theme.dark ? "dark" : "light"} style={styles.playPauseBlur}>
+                  <Ionicons name={isPlaying ? "pause" : "play"} size={48} color={theme.text} />
                 </BlurView>
               </Pressable>
             )}
           </View>
 
           {/* Bottom Bar (Scrubber) */}
-          <BlurView intensity={60} tint="dark" style={[styles.bottomBar, isLandscape && styles.bottomBarLandscape, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <BlurView intensity={60} tint={theme.dark ? "dark" : "light"} style={[styles.bottomBar, isLandscape && styles.bottomBarLandscape, { paddingBottom: 8 }]}>
             <View style={styles.scrubberRow}>
               <Text style={[styles.timeText, { color: theme.textSecondary }]}>{formatTime(currentTime)}</Text>
               <Pressable
@@ -313,7 +309,7 @@ export function PlayerHUD({
                   <View style={[styles.scrubberFill, { width: `${playedRatio * 100}%`, backgroundColor: theme.accent }]} />
                   {duration > 0 && <View style={[styles.scrubberThumb, {
                     left: `${playedRatio * 100}%`,
-                    backgroundColor: theme.onAccent,
+                    backgroundColor: theme.text,
                     borderColor: theme.accent,
                   }]} />}
                 </View>
@@ -342,7 +338,7 @@ export function PlayerHUD({
             </View>
           </BlurView>
         </View>
-      )}
+      </PlayerEdgeDrawer>
     </View>
   );
 }
@@ -356,9 +352,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   controlsOverlay: {
-    ...StyleSheet.absoluteFill,
-    justifyContent: 'space-between',
-    pointerEvents: 'box-none',
+    gap: 12,
   },
   topBar: {
     flexDirection: 'row',
@@ -370,7 +364,7 @@ const styles = StyleSheet.create({
   },
   topBarLandscape: {
     paddingTop: 16,
-    paddingHorizontal: Platform.OS === 'ios' ? spacing[8] : spacing[4],
+    paddingHorizontal: spacing[2],
   },
   titleText: {
     color: '#fff',
@@ -383,9 +377,9 @@ const styles = StyleSheet.create({
     padding: spacing[2],
   },
   centerControls: {
-    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 8,
   },
   playPauseButton: {
     borderRadius: 50,
@@ -399,12 +393,12 @@ const styles = StyleSheet.create({
     paddingLeft: 4, // optical alignment for play icon
   },
   bottomBar: {
-    paddingHorizontal: spacing[6],
+    paddingHorizontal: spacing[2],
     paddingVertical: spacing[4],
     paddingBottom: Platform.OS === 'ios' ? 30 : 20,
   },
   bottomBarLandscape: {
-    paddingHorizontal: Platform.OS === 'ios' ? spacing[8] : spacing[5],
+    paddingHorizontal: spacing[2],
     paddingVertical: spacing[3],
     paddingBottom: spacing[3],
   },

@@ -66,7 +66,8 @@ import { createProviderWebViewSource, getProviderShieldManifest, isSelectedAnime
 import { useAnimeReadiness } from './useAnimeReadiness';
 import { ProviderControlsReturn } from './ProviderControlsReturn';
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
-  sourceExtras?: (commit: (action: () => void) => void) => React.ReactNode;
+  sourceExtras?: (select: (sourceId: string, variantChange?: boolean) => void) => React.ReactNode;
+  sourceError?: string | null; animeAvailable?: boolean;
   animeVariant?: 'sub' | 'dub';
   onExperimentalRetry?: () => void;
   embedUrl: string;
@@ -77,7 +78,7 @@ interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
 const WEBVIEW_AUDIO_RELEASE_MS = Platform.OS === 'android' ? 240 : 80;
 export function EmbedPlayerSurface({
   embedUrl,
-  sourceExtras,
+  sourceExtras, sourceError, animeAvailable,
   animeVariant,
   onExperimentalRetry,
   playbackPurpose = 'viewing',
@@ -141,7 +142,7 @@ export function EmbedPlayerSurface({
   const surfaceLoaded = useRef(false);
   const webViewRef = useRef<WebViewType>(null);
   const source = ALL_CINEMA_SOURCES.find((entry) => entry.id === sourceId);
-  const animeDiagnosticOnly = source?.animeProvider?.playbackQualified === false;
+  const animeDiagnosticOnly = source?.animeProvider != null && source.supportsDownloads !== true;
   const downloadQualificationCaptureEnabled = (source != null && (source.supportsDownloads === true || ['vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc'].includes(sourceId))) || animeDiagnosticOnly;
   const sourceLabel = animeVariant && source?.animeProvider ? `${source.label} · ${animeVariant === 'sub' ? 'Sub' : 'Dub'}` : source?.label || 'VidEasy Direct';
   const expectedOrigins = source?.expectedOrigins || [];
@@ -312,8 +313,8 @@ export function EmbedPlayerSurface({
     }, WEBVIEW_AUDIO_RELEASE_MS);
   };
 
-  const selectSource = (nextSourceId: string) => {
-    if (nextSourceId === sourceId) return;
+  const selectSource = (nextSourceId: string, variantChange = false) => {
+    if (nextSourceId === sourceId && !variantChange) return;
     setShowSources(false);
     telemetry.flush();
     const snapshot = telemetry.getVerifiedSnapshot();
@@ -445,7 +446,7 @@ export function EmbedPlayerSurface({
   const animeReadiness = useAnimeReadiness(Boolean(source?.animeProvider), playbackSessionId, surfaceRetryKey, () => {
     webViewRef.current?.injectJavaScript(QUIET_CURRENT_SURFACE_SCRIPT);
     setSurfaceReleased(true);
-    markFailed('This Anime source did not start usable playback. Retry or choose an existing source.');
+    markFailed('This source did not start. Retry or choose another source.');
   });
 
   const applyShieldEnvelope = useCallback((envelope: any) => {
@@ -645,7 +646,7 @@ export function EmbedPlayerSurface({
   return (
     <View style={styles.container}>
       <View style={styles.videoBoxWrapper}>
-        {surfaceReleased ? (
+        {surfaceReleased || !embedUrl ? (
           <View style={styles.webVideo} accessibilityLabel="Releasing previous playback source" />
         ) : Platform.OS === 'web' ? (
           <iframe
@@ -694,8 +695,8 @@ export function EmbedPlayerSurface({
       </View>
 
       <PlayerStateOverlay
-        state={controller.state.loadingState}
-        detail={animeReadiness.detail}
+        state={sourceError ? 'failed' : controller.state.loadingState}
+        detail={sourceError || animeReadiness.detail}
         onRetry={retryCurrentSource}
         onSwitchSource={() => controller.openOverlay('sources')}
       />
@@ -741,7 +742,8 @@ export function EmbedPlayerSurface({
       )}
       {sourceSheetOverlay && (
         <SourcesSheet
-          sourceExtras={sourceExtras?.((action) => releaseSurfaceThen(() => { action(); return true; }))}
+          sourceExtras={sourceExtras?.(selectSource)}
+          animeAvailable={animeAvailable} currentSourceLabel={sourceLabel}
           currentSourceId={sourceId}
           onSelect={selectSource}
           onRetry={retryCurrentSource}

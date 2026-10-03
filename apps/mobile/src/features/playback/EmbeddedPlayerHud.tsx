@@ -1,10 +1,8 @@
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useOrionTheme } from '../../context/ThemeContext';
 import type { MobilePlayerPresentation, ShieldVerificationState } from '@orion/shared/types';
-import { playerStyles as styles } from './playerStyles';
-import { PlayerChromeHandle } from '../../components/player/PlayerChromeHandle';
+import { PlayerEdgeDrawer } from '../../components/player/PlayerEdgeDrawer';
 import { presentationModeLabel } from '../../components/player/PresentationSheet';
 
 interface EmbeddedPlayerHudProps {
@@ -37,73 +35,33 @@ function protectionText(state: ShieldVerificationState, nativeObserved: boolean)
 }
 
 export function EmbeddedPlayerHud(props: EmbeddedPlayerHudProps) {
-  const insets = useSafeAreaInsets();
-  const shieldColor = props.shieldState === 'verified'
-    ? '#4ade80'
-    : props.shieldState === 'failed' ? '#fb7185' : '#fbbf24';
-  return (
-    <View style={styles.embedHudLayer} pointerEvents="box-none">
-      <PlayerChromeHandle
-        controlsVisible={props.visible}
-        onPress={props.visible ? props.onCollapse : props.onReveal}
-      />
-      {props.visible && (
-      <LinearGradient
-        colors={['rgba(0, 0, 0, 0.95)', 'rgba(0, 0, 0, 0.65)', 'transparent']}
-        style={[styles.fullWidthHeaderGradient, { paddingTop: Math.max(insets.top, 8) }]}
-        pointerEvents="box-none"
-      >
-      <Pressable accessibilityLabel="Back" onPress={props.onBack} style={styles.floatingGlassBackBtn}>
-        <Ionicons name="arrow-back" size={18} color="#fff" />
-      </Pressable>
-      <Pressable accessibilityLabel={`Resize picture. Current mode ${presentationModeLabel(props.presentation)}.`} onPress={props.onPresentation} style={styles.floatingGlassBackBtn}>
-        <Ionicons name="resize-outline" size={16} color="#fff" />
-      </Pressable>
-      <View style={styles.headerTitleWrapper}>
-        <Text style={styles.framelessTitle} numberOfLines={1}>{props.title}</Text>
-      </View>
-      <View style={styles.headerActions}>
-        <Pressable
-          accessibilityLabel={`${protectionText(props.shieldState, props.nativeShieldObserved)}. Open shield details.`}
-          onPress={props.onShield}
-          style={[
-            styles.shieldBadge,
-            props.shieldState === 'verified'
-              ? styles.shieldBadgeVerified
-              : props.shieldState === 'failed' ? styles.shieldBadgeFailed : styles.shieldBadgeLimited,
-          ]}
-        >
-          <Ionicons name={props.shieldState === 'failed' ? 'shield-outline' : 'shield-checkmark'} size={12} color={shieldColor} />
-          {props.blockedRequests > 0 && (
-            <Text style={[
-              styles.shieldCounter,
-              props.shieldState === 'verified'
-                ? styles.shieldCounterVerified
-                : props.shieldState === 'failed' ? styles.shieldCounterFailed : styles.shieldCounterLimited,
-            ]}>{props.blockedRequests}</Text>
-          )}
-          {!props.compact && (
-            <Text style={[styles.shieldText, props.shieldState !== 'verified' && styles.shieldTextLimited]}>
-              {protectionText(props.shieldState, props.nativeShieldObserved)}
-            </Text>
-          )}
-        </Pressable>
-        <Pressable accessibilityLabel="Subtitles" onPress={props.onSubtitles} style={styles.floatingGlassBackBtn}>
-          <Ionicons name="chatbox-ellipses-outline" size={16} color="#fff" />
-        </Pressable>
-        <Pressable accessibilityLabel="Use provider controls" onPress={props.onProviderControls} style={styles.floatingGlassBackBtn}>
-          <Ionicons name="options-outline" size={16} color="#fff" />
-        </Pressable>
-        <Pressable accessibilityLabel="Rotate player" onPress={props.onRotate} style={styles.floatingGlassBackBtn}>
-          <Ionicons name={props.landscape ? 'refresh-outline' : 'expand-outline'} size={16} color="#fff" />
-        </Pressable>
-        <Pressable accessibilityLabel={`Sources. Current source ${props.sourceLabel}`} onPress={props.onSources} style={styles.floatingGlassSourceChip}>
-          <Ionicons name="hardware-chip-outline" size={14} color="#f87171" />
-          {!props.compact && <Text style={styles.sourceChipText} numberOfLines={1}>{props.sourceLabel}</Text>}
-        </Pressable>
-      </View>
-      </LinearGradient>
-      )}
+  const { theme } = useOrionTheme();
+  const shieldColor = props.shieldState === 'verified' ? theme.success : props.shieldState === 'failed' ? theme.danger : theme.warning;
+  const actions: { label: string; icon: keyof typeof Ionicons.glyphMap; run(): void; color?: string }[] = [
+    { label: 'Back', icon: 'arrow-back', run: props.onBack },
+    { label: 'Resize picture. Current mode ' + presentationModeLabel(props.presentation) + '.', icon: 'resize-outline', run: props.onPresentation },
+    { label: protectionText(props.shieldState, props.nativeShieldObserved) + '. Open shield details.', icon: 'shield-checkmark', run: props.onShield, color: shieldColor },
+    { label: 'Subtitles', icon: 'chatbox-ellipses-outline', run: props.onSubtitles },
+    { label: 'Use provider controls', icon: 'options-outline', run: props.onProviderControls },
+    { label: 'Rotate player', icon: props.landscape ? 'refresh-outline' : 'expand-outline', run: props.onRotate },
+    { label: 'Sources. Current source ' + props.sourceLabel, icon: 'hardware-chip-outline', run: props.onSources },
+  ];
+  return <PlayerEdgeDrawer controlsVisible={props.visible} onPress={props.visible ? props.onCollapse : props.onReveal}>
+    <Text style={[styles.title, { color: theme.text }]}>{props.title}</Text>
+    <Text style={[styles.meta, { color: theme.textSecondary }]}>{props.sourceLabel}</Text>
+    <View style={styles.actions}>
+      {actions.map((action) => <Pressable key={action.label} accessibilityRole="button" accessibilityLabel={action.label}
+        onPress={action.run} style={({ pressed }) => [styles.action, { backgroundColor: pressed ? theme.accentSoft : theme.surface, borderColor: theme.border }]}>
+        <Ionicons name={action.icon} size={18} color={action.color || theme.text} />
+        <Text style={[styles.label, { color: action.color || theme.text }]}>{action.label.startsWith('Sources.') ? 'Sources' : action.label.startsWith('Resize') ? 'Resize' : action.color ? protectionText(props.shieldState, props.nativeShieldObserved) : action.label}</Text>
+        {action.color && props.blockedRequests > 0 && <Text style={[styles.shieldCounter, { color: action.color }]}>{props.blockedRequests}</Text>}
+      </Pressable>)}
     </View>
-  );
+  </PlayerEdgeDrawer>;
 }
+const styles = StyleSheet.create({
+  title: { fontSize: 14, fontWeight: '800' }, meta: { fontSize: 11 },
+  shieldCounter: { fontSize: 11 },
+  actions: { gap: 8 }, action: { minHeight: 44, borderWidth: 1, borderRadius: 12, padding: 10, gap: 10, flexDirection: 'row', alignItems: 'center' },
+  label: { fontSize: 12, fontWeight: '700', flex: 1, flexShrink: 1 },
+});

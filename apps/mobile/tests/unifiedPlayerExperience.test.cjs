@@ -33,11 +33,12 @@ test("native and embedded surfaces register adapters without creating a second p
   assert.equal((embeddedSurface.match(/<OrionCinemaWebView/g) || []).length, 1);
   assert.match(nativeSurface, /controller\.registerSurface/);
   assert.match(embeddedSurface, /controller\.registerSurface/);
-  assert.match(embeddedHud, /pointerEvents="box-none"/);
+  assert.match(embeddedHud, /PlayerEdgeDrawer/);
+  assert.match(readMobile("src/components/player/PlayerEdgeDrawer.tsx"), /pointerEvents="box-none"/);
   assert.doesNotMatch(embeddedSurface, /GestureDetector/);
   assert.match(embeddedSurface, /EmbeddedPlayerHud/);
   assert.match(nativeHud, /if \(controlledVisible === undefined\) resetHideTimer\(\)/);
-  assert.match(nativeHud, /PlayerChromeHandle controlsVisible=\{controlsVisible\}/);
+  assert.match(nativeHud, /PlayerEdgeDrawer controlsVisible=\{controlsVisible\}/);
 });
 
 test("presentation modes use safe defaults and versioned provider preferences", () => {
@@ -69,19 +70,20 @@ test("embedded HUD leaves provider touch ownership uncovered and keeps a safe re
   const wrapper = readMobile("src/features/playback/OrionCinemaWebView.tsx");
   const manager = readMobile("plugins/orion-cinema-webview-native/OrionCinemaWebViewManager.kt");
   const blocker = readMobile("src/features/playback/mobileAdBlocker.ts");
-  assert.match(hud, /useSafeAreaInsets/);
-  assert.match(hud, /Math\.max\(insets\.top, 8\)/);
+  const drawer = readMobile("src/components/player/PlayerEdgeDrawer.tsx");
+  assert.match(drawer, /useSafeAreaInsets/);
+  assert.match(drawer, /resolvePlayerDrawerLayout/);
   assert.doesNotMatch(hud, /Math\.max\(insets\.top, 8\) \+ 44/);
-  assert.match(hud, /pointerEvents="box-none"/);
-  assert.match(hud, /PlayerChromeHandle/);
-  assert.match(handle, /insets\.left \+ \(safeWidth \/ 2\) - 38/);
+  assert.match(drawer, /pointerEvents="box-none"/);
+  assert.match(hud, /PlayerEdgeDrawer/);
+  assert.match(handle, /left: hit.x, top: hit.y/);
   assert.match(handle, /accessibilityLabel=\{controlsVisible \? 'Hide player controls' : 'Show player controls'\}/);
   assert.match(handle, /height: 44/);
   assert.match(surface, /PlayerStateOverlay/);
   assert.match(surface, /controller\.state\.overlay === 'subtitles'/);
   assert.match(surface, /onNativeSingleTap=\{providerControlsMode \? undefined : controller\.toggleChromeFromUserTap\}/);
   assert.match(surface, /ProviderControlsReturn/);
-  assert.match(hud, /accessibilityLabel="Use provider controls"/);
+  assert.match(hud, /label: 'Use provider controls'/);
   assert.match(wrapper, /DeviceEventEmitter\.addListener\(["']OrionPlayerSingleTap["']/);
   assert.match(manager, /onSingleTapConfirmed/);
   assert.match(manager, /View\.OnTouchListener/);

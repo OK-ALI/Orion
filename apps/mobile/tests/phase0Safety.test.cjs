@@ -134,6 +134,6 @@ test("embedded source switches release the previous audio owner before mounting 
   assert.match(surface, /QUIET_CURRENT_SURFACE_SCRIPT/);
   assert.match(support, /media\.muted = true; media\.pause\(\)/);
   assert.match(surface, /setSurfaceReleased\(true\)/);
-  assert.match(surface, /surfaceReleased \? \(/);
+  assert.match(surface, /surfaceReleased \|\| !embedUrl \? \(/);
   assert.match(playerTypes, /\) => boolean;/);
 });

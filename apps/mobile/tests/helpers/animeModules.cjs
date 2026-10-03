@@ -23,7 +23,7 @@ function loader(mocks = {}) {
     };
     const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { fileName: file,
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
-    new Function('require', 'module', 'exports', code)(localRequire, module, module.exports);
+    new Function('require', 'exports', code)(localRequire, module.exports);
     return module.exports;
   };
 }

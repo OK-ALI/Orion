@@ -14,6 +14,15 @@ import com.facebook.react.bridge.ReactMethod
 class OrionPlayerSystemUiModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
   private var owned = false
   private var previousCutoutMode: Int? = null
+  private var ownedDecor: View? = null
+  private val layoutListener = View.OnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+    if (owned && (left != oldLeft || top != oldTop || right != oldRight || bottom != oldBottom)) {
+      withWindow { if (owned) hideBars(it) }
+    }
+  }
+  private val focusListener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { focused ->
+    if (focused && owned) withWindow { window -> window.decorView.post { if (owned) hideBars(window) } }
+  }
 
   override fun getName(): String = "OrionPlayerSystemUi"
 
@@ -26,6 +35,9 @@ class OrionPlayerSystemUiModule(private val context: ReactApplicationContext) : 
   fun enter() = withWindow { window ->
     if (!owned) {
       owned = true
+      ownedDecor = window.decorView
+      window.decorView.addOnLayoutChangeListener(layoutListener)
+      window.decorView.viewTreeObserver.addOnWindowFocusChangeListener(focusListener)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         previousCutoutMode = window.attributes.layoutInDisplayCutoutMode
         window.attributes = window.attributes.apply {
@@ -47,6 +59,11 @@ class OrionPlayerSystemUiModule(private val context: ReactApplicationContext) : 
 
   @ReactMethod
   fun exit() = withWindow { window ->
+    if (!owned) return@withWindow
+    ownedDecor?.removeOnLayoutChangeListener(layoutListener)
+    ownedDecor?.viewTreeObserver?.takeIf { it.isAlive }?.removeOnWindowFocusChangeListener(focusListener)
+    ownedDecor = null
+    owned = false
     WindowCompat.getInsetsController(window, window.decorView).apply {
       show(WindowInsetsCompat.Type.systemBars())
       systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
@@ -60,7 +77,6 @@ class OrionPlayerSystemUiModule(private val context: ReactApplicationContext) : 
     @Suppress("DEPRECATION")
     run { window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE }
     previousCutoutMode = null
-    owned = false
   }
 
   private fun hideBars(window: android.view.Window) {
