@@ -213,15 +213,19 @@ export function createCineSrcResumeScript(seconds: number, handoffId: string): s
       var handoffId = ${safeHandoffId};
       var targetTime = ${safeTime};
       if (window.__orionCineSrcResumeHandoffId === handoffId) return true;
+      if (window.__orionCineSrcResumeStop) window.__orionCineSrcResumeStop();
       window.__orionCineSrcResumeHandoffId = handoffId;
-      var attempts = 0;
       var done = false;
-      var retryTimer = null;
-      function report(status, actualTime) {
-        if (done) return;
+      var timer = null;
+      function cleanup() {
         done = true;
-        if (retryTimer) clearTimeout(retryTimer);
+        if (timer) clearTimeout(timer);
         window.removeEventListener('message', onMessage, false);
+        window.removeEventListener('pagehide', cleanup, false);
+      }
+      function report(status, actualTime) {
+        if (done || window.__orionCineSrcResumeHandoffId !== handoffId) return;
+        cleanup();
         if (window.ReactNativeWebView) {
           window.ReactNativeWebView.postMessage(JSON.stringify({
             type: 'ORION_RESUME_RESULT',
@@ -233,26 +237,27 @@ export function createCineSrcResumeScript(seconds: number, handoffId: string): s
       }
       function sendSeek() {
         if (done || window.__orionCineSrcResumeHandoffId !== handoffId) return;
-        attempts += 1;
         try {
           window.postMessage({
             type: 'cinesrc:command',
             command: 'seek',
             args: [targetTime]
-          }, window.location.origin);
-        } catch (_) {}
-        if (attempts >= 20) report('unavailable', null);
-        else retryTimer = setTimeout(sendSeek, 400);
+          }, 'https://cinesrc.st');
+          if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'ORION_RESUME_RESULT', handoffId: handoffId, status: 'requested'
+          }));
+        } catch (_) { report('unavailable', null); }
       }
       function onMessage(event) {
-        if (event.origin !== window.location.origin && event.origin !== 'https://cinesrc.st') return;
+        if (done || window.__orionCineSrcResumeHandoffId !== handoffId || event.origin !== 'https://cinesrc.st') return;
         var value = event.data;
         if (typeof value === 'string' && value.length <= 4096) {
           try { value = JSON.parse(value); } catch (_) { return; }
         }
         if (!value || typeof value !== 'object' || typeof value.type !== 'string') return;
         if (value.type === 'cinesrc:ready' || value.type === 'cinesrc:loadedmetadata') {
-          sendSeek();
+          // The surface already requires verified playback before injection.
+          // Readiness notifications must never reapply the one-shot target.
           return;
         }
         if (value.type !== 'cinesrc:seeked' && value.type !== 'cinesrc:timeupdate') return;
@@ -260,9 +265,11 @@ export function createCineSrcResumeScript(seconds: number, handoffId: string): s
         if (!Number.isFinite(currentTime)) return;
         if (Math.abs(currentTime - targetTime) <= 5) report('applied', currentTime);
       }
+      window.__orionCineSrcResumeStop = cleanup;
       window.addEventListener('message', onMessage, false);
+      window.addEventListener('pagehide', cleanup, false);
+      timer = setTimeout(function() { report('unavailable', null); }, 9000);
       sendSeek();
-      setTimeout(function() { if (!done) report('unavailable', null); }, 9000);
       return true;
     })();
     true;

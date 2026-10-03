@@ -19,6 +19,7 @@ import {
   clearMobileDiagnosticError,
   reportMobileDiagnosticError,
   updateMobileDiagnostics,
+  traceMobilePlayback,
 } from '../../services/mobileDiagnostics';
 import {
   markMobileSourceFailure,
@@ -28,11 +29,7 @@ import {
   createEmbeddedTelemetryScript,
   parseEmbeddedTelemetryMessage,
 } from './embeddedTelemetry';
-import {
-  createCineSrcResumeScript,
-  createVerifiedResumeScript,
-  mobileAdBlockerScript,
-} from './mobileAdBlocker';
+import { mobileAdBlockerScript } from './mobileAdBlocker';
 import { OrionCinemaWebView } from './OrionCinemaWebView';
 import { classifyCinemaSourceFailure } from './sourceFailure';
 import {
@@ -42,7 +39,7 @@ import {
   getInternalSubtitleTrack,
 } from './subtitleDiscovery';
 import { playerStyles as styles } from './playerStyles';
-import type { PlaybackSurfaceProps } from './playerTypes';
+import type { PlaybackSurfaceProps, PlaybackTargetObservation } from './playerTypes';
 import { ResumePlaybackPrompt } from './ResumePlaybackPrompt';
 import { resolveResumeChoiceTime, type ResumePlaybackChoice } from './resumeChoice';
 import {
@@ -62,7 +59,7 @@ import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import { beginMobileDownloadCaptureSessionV1 } from '../downloads/downloadCandidateCapture';
 import { useDownloadSourceAutoReturnV1 } from '../downloads/useDownloadSourceAutoReturn';
 import type { PlaybackPurpose } from './viewingPersistence';
-import { createProviderWebViewSource, getProviderShieldManifest, getEmbeddedPresentationStyle, hasProviderPlaybackSource, isSelectedAnimeNavigation, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
+import { createProviderResumeScript, retainPlaybackTargetObservation, createProviderWebViewSource, getProviderShieldManifest, getEmbeddedPresentationStyle, hasProviderPlaybackSource, isSelectedAnimeNavigation, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
 import { useAnimeReadiness } from './useAnimeReadiness';
 import { ProviderControlsReturn } from './ProviderControlsReturn';
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
@@ -101,6 +98,8 @@ export function EmbedPlayerSurface({
   onPlaybackSnapshot,
   onVerifiedPlaybackCompletion,
   activeHandoffId,
+  continuityAttemptId,
+  onContinuitySession,
   onResumeAttempt,
   onExit,
   isLandscape = true,
@@ -133,6 +132,7 @@ export function EmbedPlayerSurface({
   const bridgeSequence = useRef(0);
   const nativeShieldSequence = useRef(0);
   const resumeRequested = useRef(false);
+  const targetObservation = useRef<PlaybackTargetObservation | null>(null);
   const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sourceTransitionPending = useRef(false);
   const healthRecorded = useRef(false);
@@ -201,6 +201,9 @@ export function EmbedPlayerSurface({
     purpose: playbackPurpose,
   });
   const playbackSessionId = telemetry.getSession().id;
+  useEffect(() => { traceMobilePlayback?.('surface-mount', { sourceId, sessionId: playbackSessionId, attemptId: continuityAttemptId, routeIdentity: `${type}:${id}:s${season || 0}:e${episode || 0}` }); }, [playbackSessionId]);
+  useEffect(() => { if (hasPlaybackSource) traceMobilePlayback?.('webview-mount', { sourceId, sessionId: playbackSessionId, attemptId: continuityAttemptId, routeIdentity: `${type}:${id}:s${season || 0}:e${episode || 0}` }); }, [playbackSessionId, surfaceRetryKey, hasPlaybackSource]);
+  useEffect(() => { if (continuityAttemptId) onContinuitySession?.(continuityAttemptId, sourceId, playbackSessionId); }, [continuityAttemptId, playbackSessionId, onContinuitySession, sourceId]);
   const downloadTarget = useMemo(() => createMobileDownloadTargetV1({
     id,
     mediaType: type,
@@ -553,6 +556,8 @@ export function EmbedPlayerSurface({
       return;
     }
     if (envelope?.type === 'ORION_RESUME_RESULT') {
+      if (envelope.handoffId === (continuityAttemptId || `initial-${playbackSessionId}`)) traceMobilePlayback?.('resume-result', { sourceId,
+        attemptId: continuityAttemptId, sessionId: playbackSessionId, reason: envelope.status, position: Number(envelope.actualTime) });
       if (envelope.handoffId === activeHandoffId
         && ['applied', 'unavailable'].includes(envelope.status)) {
         onResumeAttempt(envelope.handoffId, envelope.status);
@@ -586,10 +591,13 @@ export function EmbedPlayerSurface({
     }
     bridgeSequence.current = parsed.bridgeSequence;
     const decision = telemetry.emitTelemetry(parsed.input);
+    traceMobilePlayback?.('telemetry', { sourceId, attemptId: continuityAttemptId, sessionId: playbackSessionId,
+      state: parsed.input.state, position: parsed.input.currentTime, verified: decision.state.session.verified, persistenceEligible: !activeHandoffId && !continuityError, reason: decision.accepted ? 'accepted' : decision.reason });
     if (!decision.accepted) {
       return;
     }
     if (!animeReadiness.observe(parsed.input)) return;
+    targetObservation.current = retainPlaybackTargetObservation(targetObservation.current, continuityAttemptId, playbackSessionId, sourceId, initialResumeTime, parsed.input);
     setIsBuffering(parsed.input.state === 'buffering');
     controller.updatePlayback({
       state: parsed.input.state,
@@ -622,22 +630,15 @@ export function EmbedPlayerSurface({
       clearMobileDiagnosticError('playback');
       clearMobileDiagnosticError('playback-telemetry');
       const snapshot = telemetry.getVerifiedSnapshot();
-      if (snapshot) {
-        onPlaybackSnapshot?.(snapshot);
-      }
+      if (snapshot) onPlaybackSnapshot?.({ ...snapshot, targetObservation: targetObservation.current || undefined });
       const shouldUseCineSrcCommandSeek = sourceId === 'cinesrc' && sourceContinuity.canReceivePosition;
-      const shouldUseTopLevelVerifiedSeek = sourceContinuity.canReceivePosition
-        && (source?.resumeStrategy === 'verified-seek' || sourceId === 'vidlink' || forceStartFromBeginning);
+      const shouldUseTopLevelVerifiedSeek = sourceContinuity.canReceivePosition && (source?.resumeStrategy === 'verified-seek' || sourceId === 'vidlink' || forceStartFromBeginning);
       if ((shouldUseCineSrcCommandSeek || shouldUseTopLevelVerifiedSeek)
         && (initialResumeTime > 0 || forceStartFromBeginning)
         && !resumeRequested.current) {
         resumeRequested.current = true;
-        const handoffId = activeHandoffId || `initial-${telemetry.getSession().id}`;
-        webViewRef.current?.injectJavaScript(
-          shouldUseCineSrcCommandSeek
-            ? createCineSrcResumeScript(initialResumeTime, handoffId)
-            : createVerifiedResumeScript(initialResumeTime, handoffId),
-        );
+        const handoffId = continuityAttemptId || activeHandoffId || `initial-${telemetry.getSession().id}`;
+        webViewRef.current?.injectJavaScript(createProviderResumeScript(sourceId, initialResumeTime, handoffId));
       }
     }
   };

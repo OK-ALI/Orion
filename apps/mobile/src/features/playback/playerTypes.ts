@@ -1,5 +1,14 @@
 export type MobileMediaType = 'movie' | 'tv';
 
+/** Accepted timing is only a target observation; it does not verify playback. */
+export interface PlaybackTargetObservation {
+  attemptId: string;
+  sessionId: string;
+  sourceId: string;
+  currentTime: number;
+  observedAt: number;
+}
+
 export interface VerifiedPlaybackSnapshot {
   sessionId: string;
   sourceId: string;
@@ -8,6 +17,7 @@ export interface VerifiedPlaybackSnapshot {
   evidence: string | null;
   observedAt: number;
   state?: import('@orion/shared/types').MobilePlaybackState;
+  targetObservation?: PlaybackTargetObservation;
 }
 
 export interface PlaybackSurfaceProps {
@@ -35,6 +45,8 @@ export interface PlaybackSurfaceProps {
   onPlaybackSnapshot?: (snapshot: VerifiedPlaybackSnapshot) => void;
   onVerifiedPlaybackCompletion?: (snapshot: VerifiedPlaybackSnapshot) => void;
   activeHandoffId?: string | null;
+  continuityAttemptId?: string | null;
+  onContinuitySession?: (attemptId: string, sourceId: string, sessionId: string) => void;
   onExit(): void;
   isLandscape?: boolean;
   onToggleOrientation?(): void;

@@ -1,5 +1,30 @@
 import type { MobileShieldEvidenceV1, MobilePlayerPresentation } from '@orion/shared/types';
 import type { CinemaSourceDescriptor, ProviderRequestManifestV1 } from '@orion/shared/sources';
+import { getSourceResumeParams } from '@orion/shared/sources';
+import type { PlaybackTargetObservation } from './playerTypes';
+import type { PlaybackTelemetryInput } from './usePlaybackTelemetryController';
+import { createCineSrcResumeScript, createVerifiedResumeScript } from './mobileAdBlocker';
+import { HANDOFF_POSITION_TOLERANCE_SECONDS, HANDOFF_SNAPSHOT_MAX_AGE_MS, HANDOFF_LATE_CONFIRMATION_WINDOW_MS } from './handoffPolicy';
+
+/** CineSrc's documented command seek owns the Mobile target; Desktop stays unchanged. */
+export function getMobileEmbedResumeParams(sourceId: string, time: number, type: 'movie' | 'tv') {
+  return sourceId === 'cinesrc' ? {} : getSourceResumeParams(sourceId, time, type);
+}
+
+export function createProviderResumeScript(sourceId: string, time: number, attemptId: string) {
+  return sourceId === 'cinesrc' ? createCineSrcResumeScript(time, attemptId) : createVerifiedResumeScript(time, attemptId);
+}
+
+export function retainPlaybackTargetObservation(previous: PlaybackTargetObservation | null, attemptId: string | null | undefined,
+  sessionId: string, sourceId: string, target: number, input: PlaybackTelemetryInput): PlaybackTargetObservation | null {
+  if (!attemptId) return null;
+  const sameAttempt = previous?.attemptId === attemptId && previous.sessionId === sessionId;
+  if (sameAttempt && input.observedAt != null && input.observedAt - previous.observedAt <= HANDOFF_LATE_CONFIRMATION_WINDOW_MS) return previous;
+  if (!['playing', 'seeking', 'paused'].includes(input.state) || input.currentTime == null || input.observedAt == null
+    || !Number.isFinite(input.currentTime) || !Number.isFinite(input.observedAt) || Date.now() - input.observedAt > HANDOFF_SNAPSHOT_MAX_AGE_MS
+    || input.observedAt > Date.now() + 1000 || Math.abs(input.currentTime - target) > HANDOFF_POSITION_TOLERANCE_SECONDS) return sameAttempt ? previous : null;
+  return { attemptId, sessionId, sourceId, currentTime: input.currentTime, observedAt: input.observedAt };
+}
 
 export const EMPTY_SHIELD_EVIDENCE: MobileShieldEvidenceV1 = {
   nativeSessionObserved: false,

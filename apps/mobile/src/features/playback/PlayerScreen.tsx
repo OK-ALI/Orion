@@ -14,7 +14,7 @@ import {
   getMobileSourceHealth,
   hydrateMobileSourceHealth,
 } from '../../services/sourceHealth';
-import { reportMobileDiagnosticError, updateMobileDiagnostics } from '../../services/mobileDiagnostics';
+import { reportMobileDiagnosticError, updateMobileDiagnostics, traceMobilePlayback } from '../../services/mobileDiagnostics';
 import { EmbedPlayerSurface } from './EmbedPlayerSurface';
 import { AnimeSourceChoices } from './AnimeSourceChoices';
 import { useAnimeSource, type AnimeSourceSelection } from './useAnimeSource';
@@ -32,7 +32,7 @@ import {
 } from './resumeChoice';
 import {
   HANDOFF_CONFIRMATION_TIMEOUT_MS,
-  confirmPlaybackHandoff,
+  evaluatePlaybackHandoff,
   createPlaybackHandoff,
   getFreshVerifiedPosition,
   handoffCanCarryPosition,
@@ -62,6 +62,7 @@ import {
 } from './playbackCompletion';
 import { resolvePlaybackRouteIdentity } from './routePlaybackIdentity';
 import { usePlayerOrientation } from './usePlayerOrientation';
+import { getMobileEmbedResumeParams } from './providerEmbedSupport';
 
 type PlayerRouteParams = {
   id: string;
@@ -189,6 +190,8 @@ export default function PlayerScreen() {
       handoffConfirmedTime: next?.confirmedTime ?? null,
       handoffFailureCode: next?.failureCode ?? null,
     });
+    if (next) traceMobilePlayback?.('handoff', { sourceId: next.targetSourceId, attemptId: next.id,
+      strategy: next.strategy, state: next.status, target: next.requestedTime, reason: next.failureCode });
   }, []);
 
   // Download source resolution is intentionally current-source only.
@@ -291,10 +294,11 @@ export default function PlayerScreen() {
       { tmdbId: id, anilistId: activeAnimeTest.identity.anilistId }, resolvedSeason || 1, resolvedEpisode || 1,
       { ...getSourceResumeParams(sourceId, resumeTime, type), lang: activeAnimeTest.variant }) : '';
     const resumeParams: Record<string, string | number> = {
-      ...getSourceResumeParams(sourceId, resumeTime, type),
+      ...getMobileEmbedResumeParams(sourceId, resumeTime, type),
     };
     // URL resume params are emitted only when the registered source contract
     // exposes one. Sources that cannot receive continuity are given resumeTime=0.
+    traceMobilePlayback?.('url-build', { sourceId, attemptId: handoffRef.current?.id, routeIdentity: playbackIdentity });
     return getSourceUrl(
       sourceId,
       type,
@@ -436,12 +440,19 @@ export default function PlayerScreen() {
     });
   }, [launchHandoff, publishHandoff, type]);
 
-  const handlePlaybackSnapshot = useCallback((snapshot: VerifiedPlaybackSnapshot) => {
+  const handlePlaybackSnapshot = useCallback((snapshot: VerifiedPlaybackSnapshot, attemptId?: string) => {
     if (currentIdentityRef.current !== playbackIdentity || episodeTransitionRef.current) return;
-    anime.recordSuccess(snapshot.sourceId);
     const active = handoffRef.current;
+    if (active && active.id !== attemptId) {
+      traceMobilePlayback?.('settlement', { sourceId, attemptId, sessionId: snapshot.sessionId, reason: 'attempt-mismatch' });
+      return;
+    }
+    anime.recordSuccess(snapshot.sourceId);
     if (!active || active.targetSourceId !== sourceId) return;
-    const confirmed = confirmPlaybackHandoff(active, snapshot);
+    const decision = evaluatePlaybackHandoff(active, snapshot);
+    traceMobilePlayback?.('settlement', { sourceId, attemptId: active.id, sessionId: snapshot.sessionId,
+      routeIdentity: playbackIdentity, state: snapshot.state, position: snapshot.currentTime, reason: decision.reason });
+    const confirmed = decision.handoff;
     if (confirmed) {
       publishHandoff(confirmed);
       return;
@@ -451,6 +462,15 @@ export default function PlayerScreen() {
     if (active.reason === 'automatic') retryAutomaticHandoff(missed);
     else publishHandoff(missed);
   }, [anime.recordSuccess, playbackIdentity, publishHandoff, retryAutomaticHandoff, sourceId]);
+
+  const bindContinuitySession = useCallback((attemptId: string, providerId: string, sessionId: string) => {
+    const active = handoffRef.current;
+    if (currentIdentityRef.current !== playbackIdentity || episodeTransitionRef.current || !active
+      || active.id !== attemptId || active.targetSourceId !== providerId || sourceId !== providerId) return;
+    if (!active.targetSessionId) publishHandoff({ ...active, targetSessionId: sessionId });
+    else if (active.targetSessionId !== sessionId) traceMobilePlayback?.('settlement', {
+      sourceId, attemptId, sessionId, reason: 'session-mismatch' });
+  }, [playbackIdentity, publishHandoff, sourceId]);
 
   useEffect(() => {
     if (!handoff || !handoffIsPending(handoff) || episodeTransition || waitingExternalIdentity
@@ -582,9 +602,11 @@ export default function PlayerScreen() {
       && getFreshVerifiedPosition(snapshot) != null && getNextMobileContinuitySource(sourceId, type, []) != null,
     onAutomaticFailover: (snapshot: VerifiedPlaybackSnapshot | null) => sourceId === 'aniembed' || getMobileDownloadSourceResolutionIntentV1(downloadItemKey)
       ? false : changeSource(sourceId, snapshot, 'automatic'),
-    onPlaybackSnapshot: handlePlaybackSnapshot,
+    onPlaybackSnapshot: (snapshot: VerifiedPlaybackSnapshot) => handlePlaybackSnapshot(snapshot, handoff?.id),
     onVerifiedPlaybackCompletion: handleVerifiedPlaybackCompletion,
     activeHandoffId: handoffIsPending(handoff) ? handoff?.id : null,
+    continuityAttemptId: handoff?.id,
+    onContinuitySession: bindContinuitySession,
     id,
     type,
     season: resolvedSeason == null ? undefined : String(resolvedSeason),

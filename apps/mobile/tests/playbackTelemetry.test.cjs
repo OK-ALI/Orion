@@ -300,7 +300,7 @@ test("bounded verified seek is idempotent and reports its result", () => {
   assert.doesNotMatch(script, /prototype\.|set currentTime/);
 });
 
-test("CineSrc resume retries the documented command channel and reports confirmation", () => {
+test("CineSrc resume applies one documented command and reports confirmation", () => {
   const script = createCineSrcResumeScript(125.7, "cinesrc-handoff-1");
   assert.match(script, /__orionCineSrcResumeHandoffId/);
   assert.match(script, /type: 'cinesrc:command'/);
@@ -311,7 +311,10 @@ test("CineSrc resume retries the documented command channel and reports confirma
   assert.match(script, /cinesrc:seeked/);
   assert.match(script, /Math\.abs\(currentTime - targetTime\) <= 5/);
   assert.match(script, /ORION_RESUME_RESULT/);
-  assert.match(script, /attempts >= 20/);
+  assert.match(script, /__orionCineSrcResumeStop/);
+  assert.match(script, /pagehide/);
+  assert.doesNotMatch(script, /setTimeout\(sendSeek/);
+  assert.equal(script.match(/sendSeek\(\);/g).length, 1);
 });
 
 test("verified seek treats start over as an explicit zero-position request", () => {

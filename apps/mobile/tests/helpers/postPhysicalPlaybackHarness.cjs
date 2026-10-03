@@ -23,19 +23,21 @@ function nodes(tree, name, result = []) {
 function playbackFixture(initialRoute, storage, animeOverrides = {}, fetchOverride) {
   const library = libraryFixture(storage), player = hookHarness();
   let route = initialRoute, surface = null, surfaceKey = null, mounted = 0, sequence = 0, sessionId = null, disposed = false;
-  const navigation = [], failures = [], success = [], diagnostics = [], updates = [], injections = [], episodeRequests = [];
+  const navigation = [], failures = [], success = [], diagnostics = [], updates = [], injections = [], episodeRequests = [], traces = [], urlBuilds = [];
   const controller = { state: { overlay: 'none', hudState: 'hidden', presentation: 'fit', playback: { playing: false }, loadingState: null },
     setLoading(value) { controller.state.loadingState = value; }, registerSurface: () => () => {},
     updatePlayback(value) { controller.state.playback = value; controller.state.loadingState = value.state === 'buffering' ? 'buffering' : value.state === 'error' ? 'failed' : null; },
     openOverlay(value) { controller.state.overlay = value; }, closeOverlay() { controller.state.overlay = 'none'; }, reveal() {}, dismiss() {}, toggleChromeFromUserTap() {} };
   const general = { phase: 'general', selection: null, detail: null, error: null, manualGeneral() {}, recordSuccess() {}, prepare() {}, activate: () => false, retry() {}, ...animeOverrides };
-  const diagnosticMock = { reportMobileDiagnosticError: value => diagnostics.push(value), updateMobileDiagnostics: value => updates.push(value), clearMobileDiagnosticError() {} };
+  const diagnosticMock = { reportMobileDiagnosticError: value => diagnostics.push(value), updateMobileDiagnostics: value => updates.push(value), clearMobileDiagnosticError() {}, traceMobilePlayback: (event, value) => traces.push({ event, ...value }) };
   const api = { tmdbFetch: async path => {
     if (fetchOverride) return fetchOverride(path);
     if (path.includes('/season/')) { episodeRequests.push(path); return { episodes: [{ season_number: 1, episode_number: 6, name: 'Next episode', air_date: '2020-01-01' }] }; }
     return { imdb_id: null };
   } };
+  const sources = loader()('packages/shared/src/sources/registry.ts');
   const loadPlayer = loader({ react: player.react, 'react/jsx-runtime': { jsx, jsxs: jsx }, 'react-native': { View: 'View' },
+    '@orion/shared/sources': { ...sources, getSourceUrl: (...args) => { const url = sources.getSourceUrl(...args); urlBuilds.push(url); return url; } },
     'expo-router': { useLocalSearchParams: () => route, useRouter: () => ({ back() {}, replace: value => navigation.push(value) }) },
     '@orion/shared/api': api, '../../context/LibraryContext': { useLibraryPlaybackActions: () => library.library },
     '../../services/sourceHealth': { getMobileSourceHealth: () => null, getMobileSourceHealthV2: () => null, hydrateMobileSourceHealth() {} },
@@ -84,7 +86,7 @@ function playbackFixture(initialRoute, storage, animeOverrides = {}, fetchOverri
     }) } }); await settle();
   }
   reconcile();
-  return { library, player, navigation, failures, success, diagnostics, updates, injections, episodeRequests, anime: general, emit, settle,
+  return { library, player, navigation, failures, success, diagnostics, updates, injections, episodeRequests, traces, urlBuilds, anime: general, emit, settle,
     get mounted() { return mounted; }, get surface() { return surface; },
     get props() { return nodes(player.result, 'EmbedPlayerSurface')[0]?.props; },
     find(name) { return nodes(player.result, name)[0]?.props; },

@@ -73,42 +73,65 @@ export function updateHandoffStatus(
   return { ...handoff, status, failureCode, updatedAt: now };
 }
 
-export function confirmPlaybackHandoff(
+export function evaluatePlaybackHandoff(
   handoff: PlaybackHandoffV1,
   snapshot: VerifiedPlaybackSnapshot | null | undefined,
   now = Date.now(),
-): PlaybackHandoffV1 | null {
+): { handoff: PlaybackHandoffV1 | null; reason: string } {
+  const reject = (reason: string) => ({ handoff: null, reason });
   const late = handoff.status === 'unconfirmed' && ['TARGET_NOT_CONFIRMED', 'POSITION_NOT_RESTORED'].includes(handoff.failureCode || '')
     && handoff.reason !== 'automatic';
-  if (!handoffIsPending(handoff) && !late) return null;
-  if (!finiteNonNegative(handoff.requestedTime) || !snapshot) return null;
-  if (snapshot.sourceId !== handoff.targetSourceId) return null;
-  if (typeof snapshot.sessionId !== 'string' || !snapshot.sessionId.trim()) return null;
-  if (!finiteNonNegative(snapshot.currentTime)) return null;
-  if (!Number.isFinite(snapshot.observedAt) || snapshot.observedAt < handoff.startedAt
-    || now - snapshot.observedAt > HANDOFF_SNAPSHOT_MAX_AGE_MS || snapshot.observedAt > now + 1000) return null;
-  if (handoff.targetSessionId && handoff.targetSessionId !== snapshot.sessionId) return null;
+  if (!handoffIsPending(handoff) && !late) return reject('inactive-or-terminal');
+  if (!finiteNonNegative(handoff.requestedTime) || !snapshot) return reject('missing-target-or-snapshot');
+  if (snapshot.sourceId !== handoff.targetSourceId) return reject('source-mismatch');
+  if (typeof snapshot.sessionId !== 'string' || !snapshot.sessionId.trim()) return reject('missing-session');
+  if (!finiteNonNegative(snapshot.currentTime)) return reject('invalid-position');
+  if (!Number.isFinite(snapshot.observedAt) || snapshot.observedAt < handoff.startedAt) return reject('pre-attempt-observation');
+  if (now - snapshot.observedAt > HANDOFF_SNAPSHOT_MAX_AGE_MS) return reject('stale-observation');
+  if (snapshot.observedAt > now + 1000) return reject('future-observation');
+  if (handoff.targetSessionId && handoff.targetSessionId !== snapshot.sessionId) return reject('session-mismatch');
   const proofExpired = late && handoff.targetReachedAt != null && handoff.confirmedTime != null
     && snapshot.observedAt - handoff.targetReachedAt > HANDOFF_LATE_CONFIRMATION_WINDOW_MS;
   if (handoff.targetReachedAt == null || handoff.confirmedTime == null || proofExpired) {
     if (proofExpired) {
       const elapsedSeconds = (snapshot.observedAt - handoff.targetReachedAt!) / 1000;
       if (snapshot.currentTime < handoff.confirmedTime!
-        || snapshot.currentTime > handoff.confirmedTime! + elapsedSeconds + HANDOFF_POSITION_TOLERANCE_SECONDS) return null;
-    } else if (Math.abs(snapshot.currentTime - handoff.requestedTime) > HANDOFF_POSITION_TOLERANCE_SECONDS) return null;
-    return { ...handoff, status: late ? 'unconfirmed' : 'seeking', confirmedTime: snapshot.currentTime,
-      targetReachedAt: snapshot.observedAt, targetSessionId: snapshot.sessionId, updatedAt: now };
+        || snapshot.currentTime > handoff.confirmedTime! + elapsedSeconds + HANDOFF_POSITION_TOLERANCE_SECONDS) return reject('implausible-forward-position');
+    } else if (Math.abs(snapshot.currentTime - handoff.requestedTime) > HANDOFF_POSITION_TOLERANCE_SECONDS) {
+      // Coarse provider cadence may verify playback only after the playhead has
+      // left the target tolerance. Retain accepted timing from this exact attempt,
+      // then still require a subsequent verified, advancing playing snapshot.
+      const target = snapshot.targetObservation;
+      if (handoff.reason === 'automatic' || handoff.strategy !== 'url-param' || !target) return reject('target-outside-tolerance');
+      if (target.attemptId !== handoff.id) return reject('target-attempt-mismatch');
+      if (target.sourceId !== snapshot.sourceId || target.sessionId !== snapshot.sessionId) return reject('target-identity-mismatch');
+      const elapsed = snapshot.observedAt - target.observedAt;
+      if (!Number.isFinite(target.observedAt) || target.observedAt < handoff.startedAt || elapsed <= 0
+        || elapsed > HANDOFF_LATE_CONFIRMATION_WINDOW_MS) return reject('target-observation-expired');
+      if (!finiteNonNegative(target.currentTime) || Math.abs(target.currentTime - handoff.requestedTime) > HANDOFF_POSITION_TOLERANCE_SECONDS) return reject('target-observation-missed');
+      if (snapshot.state !== 'playing' || snapshot.currentTime < target.currentTime + 1
+        || snapshot.currentTime > target.currentTime + elapsed / 1000 + HANDOFF_POSITION_TOLERANCE_SECONDS) return reject('target-forward-proof-insufficient');
+      return { reason: 'target-observation-retained', handoff: { ...handoff, status: late ? 'unconfirmed' : 'seeking',
+        confirmedTime: target.currentTime, targetReachedAt: target.observedAt, targetSessionId: snapshot.sessionId, updatedAt: now } };
+    }
+    return { reason: 'target-reached', handoff: { ...handoff, status: late ? 'unconfirmed' : 'seeking', confirmedTime: snapshot.currentTime,
+      targetReachedAt: snapshot.observedAt, targetSessionId: snapshot.sessionId, updatedAt: now } };
   }
   // A seek/paused timestamp is not playback success. Once reached, never pin the target.
-  if (snapshot.state !== 'playing' || snapshot.observedAt <= handoff.targetReachedAt
-    || snapshot.currentTime < handoff.confirmedTime + 1) return null;
-  return {
+  if (snapshot.state !== 'playing') return reject('not-playing');
+  if (snapshot.observedAt <= handoff.targetReachedAt) return reject('non-advancing-observation');
+  if (snapshot.currentTime < handoff.confirmedTime + 1) return reject('non-advancing-position');
+  return { reason: 'settled', handoff: {
     ...handoff,
     status: 'confirmed',
     confirmedTime: snapshot.currentTime,
     updatedAt: now,
     failureCode: null,
-  };
+  } };
+}
+
+export function confirmPlaybackHandoff(handoff: PlaybackHandoffV1, snapshot: VerifiedPlaybackSnapshot | null | undefined, now = Date.now()) {
+  return evaluatePlaybackHandoff(handoff, snapshot, now).handoff;
 }
 
 export function handoffTargetMissedPosition(

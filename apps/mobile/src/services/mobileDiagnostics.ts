@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { getRegisteredSource } from '@orion/shared/sources';
 import { SMART_CONNECT_PROTOCOL_VERSION } from '@orion/shared/types';
 import {
   getMobileStorageHealth,
@@ -126,6 +127,69 @@ export function reportMobileDiagnosticError(error: {
 
 export function clearMobileDiagnosticError(area?: string) {
   if (!area || state.lastError?.area === area) state.lastError = null;
+}
+
+type PlaybackTraceEvent = 'url-build' | 'surface-mount' | 'webview-mount' | 'handoff' | 'telemetry' | 'settlement' | 'resume-result';
+const playbackTraceIds = new Map<string, number>();
+const playbackTraceScopes = new Map<number, { rows: number; counts: Record<string, number>; lastPosition?: number }>();
+let playbackTraceSequence = 0;
+const traceCategories = new Set([
+  'url-param', 'verified-seek', 'none', 'preparing', 'loading', 'seeking', 'unconfirmed', 'confirmed', 'failed',
+  'playing', 'paused', 'buffering', 'ended', 'error', 'accepted', 'requested', 'applied', 'unavailable',
+  'inactive-or-terminal', 'missing-target-or-snapshot', 'source-mismatch', 'missing-session', 'invalid-position',
+  'pre-attempt-observation', 'stale-observation', 'future-observation', 'session-mismatch', 'implausible-forward-position',
+  'target-outside-tolerance', 'target-attempt-mismatch', 'target-identity-mismatch', 'target-observation-expired',
+  'target-observation-missed', 'target-forward-proof-insufficient', 'target-observation-retained', 'target-reached',
+  'not-playing', 'non-advancing-observation', 'non-advancing-position', 'settled', 'attempt-mismatch',
+  'TARGET_NOT_CONFIRMED', 'POSITION_NOT_RESTORED', 'POSITION_UNAVAILABLE', 'SEEK_UNAVAILABLE', 'NO_CONFIRMED_TARGET',
+  'stale-sequence', 'stale-observation-time', 'invalid-observation-time', 'invalid-currentTime', 'invalid-duration',
+  'invalid-bufferedPosition', 'position-after-duration', 'impossible-duration-change', 'unexplained-regression',
+]);
+const safeTraceCategory = (value?: string | null) => value == null ? null : traceCategories.has(value) ? value : 'rejected-category';
+function playbackTraceId(kind: string, value?: string | null) {
+  if (!value) return null;
+  const identity = `${kind}:${value}`;
+  if (!playbackTraceIds.has(identity)) {
+    if (playbackTraceIds.size >= 128) playbackTraceIds.delete(playbackTraceIds.keys().next().value!);
+    playbackTraceIds.set(identity, ++playbackTraceSequence);
+  }
+  return playbackTraceIds.get(identity)!;
+}
+
+/** Existing diagnostic lane: bounded numeric identities and allowlisted categories only. */
+export function traceMobilePlayback(event: PlaybackTraceEvent, fields: {
+  sourceId: string; attemptId?: string | null; sessionId?: string | null; routeIdentity?: string | null;
+  strategy?: string; state?: string; target?: number | null; position?: number | null; reason?: string | null; verified?: boolean; persistenceEligible?: boolean;
+}) {
+  const provider = getRegisteredSource(fields.sourceId)?.id || 'unknown';
+  const attempt = playbackTraceId('attempt', fields.attemptId), session = playbackTraceId('session', fields.sessionId);
+  const route = playbackTraceId('route', fields.routeIdentity);
+  const scope = attempt || playbackTraceId('scope', `${route || 0}:${provider}`)!;
+  if (!playbackTraceScopes.has(scope)) {
+    if (playbackTraceScopes.size >= 64) playbackTraceScopes.delete(playbackTraceScopes.keys().next().value!);
+    playbackTraceScopes.set(scope, { rows: 0, counts: {} });
+  }
+  const trace = playbackTraceScopes.get(scope)!;
+  if (trace.rows >= 128) return;
+  trace.rows++;
+  trace.counts[event] = (trace.counts[event] || 0) + 1;
+  if (event === 'telemetry' && fields.reason === 'accepted') {
+    if (fields.state === 'playing') trace.counts.playing = (trace.counts.playing || 0) + 1;
+    if (fields.state === 'buffering') trace.counts.buffering = (trace.counts.buffering || 0) + 1;
+    if (fields.state === 'playing' && fields.position != null && trace.lastPosition != null && fields.position > trace.lastPosition)
+      trace.counts.forward = (trace.counts.forward || 0) + 1;
+    if (fields.position != null) trace.lastPosition = fields.position;
+  }
+  if (event === 'resume-result' && fields.reason === 'requested') trace.counts.seek = (trace.counts.seek || 0) + 1;
+  if (event === 'resume-result' && fields.reason === 'applied') trace.counts.targetApplied = (trace.counts.targetApplied || 0) + 1;
+  const rounded = (value?: number | null) => value != null && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+  console.info('[OrionContinuity]', JSON.stringify({ event, provider, attempt, session, route, sequence: trace.rows,
+    at: Date.now(), strategy: safeTraceCategory(fields.strategy), state: safeTraceCategory(fields.state),
+    target: rounded(fields.target), position: rounded(fields.position), reason: safeTraceCategory(fields.reason),
+    verified: fields.verified === true, persistenceEligible: fields.persistenceEligible === true,
+    urlBuilds: trace.counts['url-build'] || 0, surfaces: trace.counts['surface-mount'] || 0,
+    webViews: trace.counts['webview-mount'] || 0, seeks: trace.counts.seek || 0, targetApplied: trace.counts.targetApplied || 0,
+    playing: trace.counts.playing || 0, buffering: trace.counts.buffering || 0, forward: trace.counts.forward || 0 }));
 }
 
 export function getMobileDiagnosticsSnapshot(): MobileDiagnosticsSnapshot {
