@@ -92,7 +92,7 @@ test('late reconciliation remains bounded, same-session/target/source-only and r
   for (const failureCode of ['SEEK_UNAVAILABLE', 'NO_CONFIRMED_TARGET']) {
     assert.equal(policy.confirmPlaybackHandoff({ ...timedOut, failureCode }, sample, 14000), null);
   }
-  assert.equal(policy.confirmPlaybackHandoff(timedOut, { ...sample, observedAt: 100000 }, 100000), null);
+  assert.equal(policy.confirmPlaybackHandoff(timedOut, { ...sample, observedAt: 15000 }, 100000), null, 'stale observations cannot recover a provisional handoff');
   assert.equal(policy.confirmPlaybackHandoff({ ...timedOut, reason: 'automatic' }, sample, 14000), null);
 });
 

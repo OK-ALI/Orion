@@ -7,8 +7,8 @@ import type { VerifiedPlaybackSnapshot } from './playerTypes';
 
 export const HANDOFF_SNAPSHOT_MAX_AGE_MS = 5_000;
 export const HANDOFF_CONFIRMATION_TIMEOUT_MS = 12_000;
-// The original deadline still presents recovery. Fresh proof may reconcile that
-// provisional timeout for one bounded window, without retrying or seeking again.
+// The deadline still presents recovery. A live provisional handoff can reconcile
+// when fresh proof arrives; target/forward observations share one bounded window.
 export const HANDOFF_LATE_CONFIRMATION_WINDOW_MS = 12_000;
 export const HANDOFF_POSITION_TOLERANCE_SECONDS = 5;
 export const HANDOFF_TARGET_SETTLE_MS = 4_000;
@@ -79,8 +79,7 @@ export function confirmPlaybackHandoff(
   now = Date.now(),
 ): PlaybackHandoffV1 | null {
   const late = handoff.status === 'unconfirmed' && ['TARGET_NOT_CONFIRMED', 'POSITION_NOT_RESTORED'].includes(handoff.failureCode || '')
-    && handoff.reason !== 'automatic'
-    && now <= handoff.startedAt + HANDOFF_CONFIRMATION_TIMEOUT_MS + HANDOFF_LATE_CONFIRMATION_WINDOW_MS;
+    && handoff.reason !== 'automatic';
   if (!handoffIsPending(handoff) && !late) return null;
   if (!finiteNonNegative(handoff.requestedTime) || !snapshot) return null;
   if (snapshot.sourceId !== handoff.targetSourceId) return null;
@@ -89,8 +88,14 @@ export function confirmPlaybackHandoff(
   if (!Number.isFinite(snapshot.observedAt) || snapshot.observedAt < handoff.startedAt
     || now - snapshot.observedAt > HANDOFF_SNAPSHOT_MAX_AGE_MS || snapshot.observedAt > now + 1000) return null;
   if (handoff.targetSessionId && handoff.targetSessionId !== snapshot.sessionId) return null;
-  if (handoff.targetReachedAt == null || handoff.confirmedTime == null) {
-    if (Math.abs(snapshot.currentTime - handoff.requestedTime) > HANDOFF_POSITION_TOLERANCE_SECONDS) return null;
+  const proofExpired = late && handoff.targetReachedAt != null && handoff.confirmedTime != null
+    && snapshot.observedAt - handoff.targetReachedAt > HANDOFF_LATE_CONFIRMATION_WINDOW_MS;
+  if (handoff.targetReachedAt == null || handoff.confirmedTime == null || proofExpired) {
+    if (proofExpired) {
+      const elapsedSeconds = (snapshot.observedAt - handoff.targetReachedAt!) / 1000;
+      if (snapshot.currentTime < handoff.confirmedTime!
+        || snapshot.currentTime > handoff.confirmedTime! + elapsedSeconds + HANDOFF_POSITION_TOLERANCE_SECONDS) return null;
+    } else if (Math.abs(snapshot.currentTime - handoff.requestedTime) > HANDOFF_POSITION_TOLERANCE_SECONDS) return null;
     return { ...handoff, status: late ? 'unconfirmed' : 'seeking', confirmedTime: snapshot.currentTime,
       targetReachedAt: snapshot.observedAt, targetSessionId: snapshot.sessionId, updatedAt: now };
   }
