@@ -12,6 +12,7 @@ interface BridgeOptions {
   strategy: string;
   expectedOrigins: string[];
   frameOrigin?: string;
+  pageContext?: { origin: string; pathname: string; mediaType: string; id: string; season: number | null; episode: number | null };
 }
 
 interface ParseContext {
@@ -97,8 +98,9 @@ export function createEmbeddedTelemetryScript({
   strategy,
   expectedOrigins,
   frameOrigin,
+  pageContext,
 }: BridgeOptions): string {
-  const config = JSON.stringify({ sessionId, sourceId, strategy, expectedOrigins, frameOrigin });
+  const config = JSON.stringify({ sessionId, sourceId, strategy, expectedOrigins, frameOrigin, pageContext });
   return `
     (function() {
       var config = ${config};
@@ -184,6 +186,44 @@ export function createEmbeddedTelemetryScript({
         document.querySelectorAll('video').forEach(attach);
       }
 
+      // VidSrc.ir owns a selected child player even when its relay is top-level.
+      // Observe that relationship without changing provider DOM, storage or topology.
+      function selectedVidSrcIrOrigin(event, payload) {
+        var page = config.pageContext;
+        var owner = window.__orionPlaybackTelemetry;
+        if (!page || !owner || owner.sessionId !== config.sessionId || owner.sourceId !== config.sourceId
+          || window !== window.top || window.location.origin !== page.origin || window.location.pathname !== page.pathname
+          || !allowedOrigins.has(page.origin)) return null;
+        var frame = document.getElementById('player_iframe');
+        if (!frame || frame.tagName !== 'IFRAME' || !frame.isConnected || event.source !== frame.contentWindow
+          || document.querySelectorAll('iframe#player_iframe').length !== 1) return null;
+        try {
+          var frameSource = frame.getAttribute('src');
+          if (!frameSource) return null;
+          var selected = new URL(frameSource, window.location.href);
+          // No arbitrary message origin is trusted: match this provider-owned,
+          // currently visible frame, require HTTPS and reject local/IP authorities.
+          if (selected.protocol !== 'https:' || selected.username || selected.password || event.origin !== selected.origin
+            || !/^[a-z0-9]+(?:[.-][a-z0-9]+)+$/i.test(selected.hostname)
+            || /^[0-9.]+$/.test(selected.hostname) || /\\.(local|localhost|internal|invalid|test)$/i.test(selected.hostname)) return null;
+          var rect = frame.getBoundingClientRect(), style = window.getComputedStyle(frame);
+          if (frame.hidden || rect.width <= 0 || rect.height <= 0 || style.display === 'none'
+            || style.visibility === 'hidden' || Number(style.opacity) === 0) return null;
+        } catch (_) { return null; }
+        var info = payload.player_info;
+        if (!info || typeof info !== 'object' || info.mediaType !== page.mediaType) return null;
+        var contentId = page.id.indexOf('tt') === 0 ? info.imdb : info.tmdb;
+        if (String(contentId) !== page.id || (page.mediaType === 'tv'
+          && (Number(info.season) !== page.season || Number(info.episode) !== page.episode))) return null;
+        if (typeof payload.player_progress !== 'number' || !Number.isFinite(payload.player_progress)
+          || typeof payload.player_duration !== 'number' || !Number.isFinite(payload.player_duration)
+          || payload.player_progress < 0 || payload.player_duration <= 0 || payload.player_progress > payload.player_duration
+          || !['playing', 'paused', 'seeked', 'completed', 'buffering', 'waiting', 'loading', 'seeking', 'ended', 'error'].includes(payload.player_status)) return null;
+        // Attribute only the validated selected-child contract to its trusted
+        // top-level provider. This grants no native navigation/request authority.
+        return page.origin;
+      }
+
       function normalizeProviderMessage(event) {
         var supportedSources = {
           videasy: true,
@@ -201,7 +241,7 @@ export function createEmbeddedTelemetryScript({
           if (!frame || event.source !== frame.contentWindow || event.origin !== config.frameOrigin) return;
         }
         var extraOrigins = providerMessageOrigins[config.sourceId];
-        if (!allowedOrigins.has(event.origin) && !(extraOrigins && extraOrigins.has(event.origin))) return;
+        if (config.sourceId !== 'vidsrc-ir' && !allowedOrigins.has(event.origin) && !(extraOrigins && extraOrigins.has(event.origin))) return;
 
         var value = event.data;
         if (typeof value === 'string' && value.length <= 4096) {
@@ -213,6 +253,12 @@ export function createEmbeddedTelemetryScript({
           ? (value.data && typeof value.data === 'object' ? value.data : value)
           : isCineSrcEvent ? value : null;
         if (!payload) return;
+        var observedOrigin = event.origin;
+        if (config.sourceId === 'vidsrc-ir') {
+          if (value.type !== 'PLAYER_EVENT') return;
+          observedOrigin = selectedVidSrcIrOrigin(event, payload);
+          if (!observedOrigin) return;
+        }
 
         // VidSrc/VsEmbed use provider_progress/provider_duration/provider_status
         // fields inside PLAYER_EVENT. These are physically verified outgoing
@@ -242,7 +288,7 @@ export function createEmbeddedTelemetryScript({
               currentTime: providerProgress,
               duration: providerDuration,
               bufferedPosition: payload.bufferedPosition,
-              observedOrigin: event.origin
+              observedOrigin: observedOrigin
             });
             return;
           }
@@ -265,7 +311,7 @@ export function createEmbeddedTelemetryScript({
           currentTime: payload.currentTime != null ? payload.currentTime : payload.time != null ? payload.time : payload.position,
           duration: payload.duration != null ? payload.duration : payload.totalTime != null ? payload.totalTime : payload.length,
           bufferedPosition: payload.bufferedPosition,
-          observedOrigin: event.origin
+          observedOrigin: observedOrigin
         });
       }
 

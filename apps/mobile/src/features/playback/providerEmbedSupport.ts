@@ -77,6 +77,19 @@ export function getProviderTelemetryFrameOrigin(source: CinemaSourceDescriptor |
     && source.expectedOrigins.includes(target.origin) ? target.origin : undefined; } catch { return undefined; }
 }
 
+/** Only public route identity enters the top-level player bridge; query/request data stays out. */
+export function getProviderTelemetryPageContext(sourceId: string, url: string) {
+  if (sourceId !== 'vidsrc-ir') return undefined;
+  try {
+    const page = new URL(url);
+    const route = /^\/embed\/(movie|tv)\/(tt\d+|\d+)(?:\/(\d+)\/(\d+))?$/.exec(page.pathname);
+    if (page.origin !== 'https://vidsrc.ir' || page.username || page.password || !route
+      || (route[1] === 'tv' ? !route[3] || !route[4] : route[3] != null)) return undefined;
+    return { origin: page.origin, pathname: page.pathname, mediaType: route[1], id: route[2],
+      season: route[1] === 'tv' ? Number(route[3]) : null, episode: route[1] === 'tv' ? Number(route[4]) : null };
+  } catch { return undefined; }
+}
+
 /** Explicit wrapper navigation never grants synthetic media/request authority. */
 export function getProviderShieldManifest(sourceId: string, source?: CinemaSourceDescriptor): ProviderRequestManifestV1 {
   return source?.requestManifest || { schemaVersion: 1, sourceId, mode: 'observe',

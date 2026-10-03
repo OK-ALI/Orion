@@ -60,7 +60,7 @@ import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import { beginMobileDownloadCaptureSessionV1 } from '../downloads/downloadCandidateCapture';
 import { useDownloadSourceAutoReturnV1 } from '../downloads/useDownloadSourceAutoReturn';
 import type { PlaybackPurpose } from './viewingPersistence';
-import { createProviderResumeScript, retainPlaybackTargetObservation, createProviderWebViewSource, getProviderTelemetryFrameOrigin, getProviderShieldManifest, getEmbeddedPresentationStyle, hasProviderPlaybackSource, isSelectedAnimeNavigation, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
+import { createProviderResumeScript, retainPlaybackTargetObservation, createProviderWebViewSource, getProviderTelemetryFrameOrigin, getProviderTelemetryPageContext, getProviderShieldManifest, getEmbeddedPresentationStyle, hasProviderPlaybackSource, isSelectedAnimeNavigation, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
 import { useAnimeReadiness } from './useAnimeReadiness';
 import { ProviderControlsReturn } from './ProviderControlsReturn';
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
@@ -232,6 +232,7 @@ export function EmbedPlayerSurface({
     strategy: source?.progressStrategy || 'none',
     expectedOrigins: telemetryExpectedOrigins,
     frameOrigin: getProviderTelemetryFrameOrigin(source, shieldedEmbedUrl),
+    pageContext: getProviderTelemetryPageContext(sourceId, shieldedEmbedUrl),
   }), [playbackSessionId, sourceId, shieldedEmbedUrl]);
   const injectedScript = `${mobileAdBlockerScript}\n${telemetryScript}`;
 
@@ -672,7 +673,7 @@ export function EmbedPlayerSurface({
             mediaPlaybackRequiresUserAction={false}
             setSupportMultipleWindows={false} androidLayerType="none" presentationMode={presentation}
             injectedJavaScript={injectedScript}
-            injectedJavaScriptBeforeContentLoaded={source?.requiresIframeWrapper ? telemetryScript : undefined}
+            injectedJavaScriptBeforeContentLoaded={source?.requiresIframeWrapper || sourceId === 'vidsrc-ir' ? telemetryScript : undefined}
             onShouldStartLoadWithRequest={handleShouldStartLoad}
             containerStyle={presentation === 'provider' ? presentationStyle : undefined}
             style={[styles.webVideo, presentationStyle]}

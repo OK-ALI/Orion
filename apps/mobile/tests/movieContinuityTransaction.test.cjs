@@ -8,6 +8,7 @@ const load = loader(), registry = load('packages/shared/src/sources/registry.ts'
 const { createEmbeddedTelemetryScript } = load('apps/mobile/src/features/playback/embeddedTelemetry.ts');
 const { createCineSrcResumeScript } = load('apps/mobile/src/features/playback/mobileAdBlocker.ts');
 const policy = load('apps/mobile/src/features/playback/handoffPolicy.ts');
+const { vidsrcIrFrameHost } = require('./helpers/vidsrcIrFrameHarness.cjs');
 const movie = { id: '9', type: 'movie', title: 'Movie A' }, duration = 8000;
 function saved(sourceId, currentTime) {
   const storage = memoryStorage(), seed = libraryFixture(storage);
@@ -34,6 +35,13 @@ function runtime(origin, onNative = () => {}) {
 function provider(f) {
   const view = nodes(f.surface.result, 'WebView')[0].props;
   const origin = new URL(f.props.embedUrl).origin;
+  if (f.props.sourceId === 'vidsrc-ir') {
+    const received = [], r = vidsrcIrFrameHost(view.injectedJavaScriptBeforeContentLoaded,
+      raw => nodes(f.surface.result, 'WebView')[0].props.onMessage({ nativeEvent: { data: raw } }), view.source.uri);
+    return { ...r, commands: [], videoSeeks: [], playRequests: 0, received,
+      async observe(data, messageOrigin) { received.push(data.type); r.send(data, messageOrigin); await f.settle(); },
+      webViewKey: view.key, sessionId: view.shieldSessionId };
+  }
   const r = runtime(origin, raw => nodes(f.surface.result, 'WebView')[0].props.onMessage({ nativeEvent: { data: raw } }));
   r.inject(createEmbeddedTelemetryScript({ sessionId: view.shieldSessionId, sourceId: f.props.sourceId,
     strategy: registry.getRegisteredSource(f.props.sourceId).progressStrategy, expectedOrigins: [origin] }));

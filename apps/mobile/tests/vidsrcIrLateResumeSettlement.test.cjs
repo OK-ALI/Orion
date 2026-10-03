@@ -8,6 +8,7 @@ const load = loader();
 const policy = load('apps/mobile/src/features/playback/handoffPolicy.ts');
 const { createEmbeddedTelemetryScript } = load('apps/mobile/src/features/playback/embeddedTelemetry.ts');
 const registry = load('packages/shared/src/sources/registry.ts');
+const { vidsrcIrFrameHost } = require('./helpers/vidsrcIrFrameHarness.cjs');
 const movie = { id: '9', type: 'movie', title: 'Movie A' };
 const target = 2700, duration = 8000;
 
@@ -20,6 +21,18 @@ function savedMovie(sourceId) {
 function providerBridge(f) {
   const sourceId = f.props.sourceId, origin = new URL(f.props.embedUrl).origin;
   const view = nodes(f.surface.result, 'WebView')[0].props, messages = [], listeners = new Map();
+  if (sourceId === 'vidsrc-ir') {
+    const runtime = vidsrcIrFrameHost(view.injectedJavaScriptBeforeContentLoaded, raw => messages.push(raw), view.source.uri);
+    return { messages, async send(currentTime, event = 'timeupdate', messageOrigin) {
+      const start = messages.length;
+      runtime.send({ type: 'PLAYER_EVENT', data: { player_info: { tmdb: 9, mediaType: 'movie' },
+        player_status: event === 'pause' ? 'paused' : event === 'seeked' ? 'seeked' : 'playing',
+        player_progress: currentTime, player_duration: duration } }, messageOrigin);
+      for (const raw of messages.slice(start)) view.onMessage({ nativeEvent: { data: raw } });
+      await f.settle();
+    }, async replay(raw) { view.onMessage({ nativeEvent: { data: raw } }); await f.settle(); } };
+  }
+
   const window = { location: { origin }, ReactNativeWebView: { postMessage: raw => messages.push(raw) },
     addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) };
   const context = vm.createContext({ window, Date, document: { querySelectorAll: () => [], querySelector: () => null },

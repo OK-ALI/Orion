@@ -348,7 +348,8 @@ test("player-event observer is restricted to documented mobile providers and sha
   assert.match(script, /'vidsrc-ir': true/);
   assert.match(script, /cinesrc: true/);
   assert.match(script, /vixsrc: true/);
-  assert.match(script, /observedOrigin: event\.origin/);
+  assert.match(script, /var observedOrigin = event\.origin/);
+  assert.match(script, /observedOrigin: observedOrigin/);
   assert.match(script, /value\.type === 'PLAYER_EVENT'/);
   assert.match(script, /allowedOrigins\.has\(event\.origin\)/);
   assert.doesNotMatch(script, /data\.currentTime\s*\|\|/);
