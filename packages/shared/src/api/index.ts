@@ -1,6 +1,8 @@
 export { type IStorageAdapter, MemoryStorageAdapter } from "./storageAdapter";
 export { lookupAnimeEntries } from './animeLookup';
 export { verifyAnimeIdentity, type AnimeCatalogEvidence, type AnimeIdentityResult } from './animeIdentity';
+export { ANIME_IDENTITY_REASONS, AnimeLookupError, normalizeAnimeTitle, type AnimeIdentityDiagnostic,
+  type AnimeIdentityDiagnosticSink, type AnimeIdentityReason } from './animeIdentityDiagnostics';
 export {
   initTmdbClient,
   type TmdbClientConfig,

@@ -8,6 +8,7 @@ import com.facebook.react.uimanager.ViewManager
 class OrionCinemaWebViewPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> = listOf(
     OrionPlayerSystemUiModule(reactContext),
+    OrionAnimeIdentityModule(reactContext),
     OrionDownloadCaptureModule(reactContext),
     OrionDownloadEngineModule(reactContext),
   )

@@ -1,20 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { isAnimeContent, lookupAnimeEntries, tmdbFetch, verifyAnimeIdentity, type AnimeIdentityResult } from '@orion/shared/api';
+import { isAnimeContent, lookupAnimeEntries, tmdbFetch, type AnimeIdentityResult } from '@orion/shared/api';
 import { getRegisteredSource } from '@orion/shared/sources';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { useMobilePlayerController } from './MobilePlayerController';
+import { resolveAnimeTestIdentity } from './animeIdentityRequest';
+import { createAnimeIdentityTrace } from './animeIdentityDiagnostics';
 
 export interface AnimeTestSelection {
   identity: Extract<AnimeIdentityResult, { state: 'verified' }>;
   variant: 'sub' | 'dub';
 }
-
-const titlesOf = (detail: any): string[] => [...new Set<string>([
-  detail.name, detail.original_name, detail.title, detail.original_title,
-  ...(detail.alternative_titles?.results || detail.alternative_titles?.titles || []).map((entry: any) => entry?.title),
-].filter((value) => typeof value === 'string' && value.trim().length > 0))];
-const yearOf = (date: unknown): number => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? Number(date.slice(0, 4)) : 0;
 
 /** Explicit testing lane. Unverified providers never become ordinary source rows. */
 export function AnimeSourceChoices({ id, type, season, episode, onSelect }: {
@@ -44,29 +40,19 @@ export function AnimeSourceChoices({ id, type, season, episode, onSelect }: {
     if (busy || !detail || !request || request.signal.aborted || type !== 'tv' || !season || !episode
       || source?.animeProvider?.variants.includes(variant) !== true || source.supportsDownloads) return;
     setBusy(true); setError(null);
+    const diagnostic = createAnimeIdentityTrace();
     try {
-      const selectedSeason = await tmdbFetch<any>(`/tv/${id}/season/${season}`, { signal: request.signal });
+      const result = await resolveAnimeTestIdentity({ id, type, season, episode, detail, variant, signal: request.signal },
+        { fetchSeason: tmdbFetch, lookup: lookupAnimeEntries }, diagnostic);
       if (request.signal.aborted) return;
-      const episodes = selectedSeason?.episodes;
-      // Only canonical released TMDb episode numbers, with a complete season list.
-      if (!Array.isArray(episodes) || selectedSeason.season_number !== season
-        || !episodes.some((entry: any) => entry?.episode_number === episode && entry?.air_date
-          && Date.parse(entry.air_date) <= Date.now())
-        || episodes.some((entry: any, index: number) => entry?.episode_number !== index + 1)) {
-        throw new Error('unsupported-numbering');
+      if (result.state !== 'verified') {
+        setError('Orion could not verify this Anime season and episode. Choose an existing source.');
+        return;
       }
-      const entries = await lookupAnimeEntries(titlesOf(detail), request.signal);
-      if (request.signal.aborted) return;
-      const result = verifyAnimeIdentity({ tmdbId: id, mediaType: type, titles: titlesOf(detail),
-        year: yearOf(detail.first_air_date), season, episode, episodeCount: episodes.length,
-        seasonYear: yearOf(selectedSeason.air_date),
-        seasonAirDate: selectedSeason.air_date,
-        seasonTitles: titlesOf({ name: selectedSeason.name }).filter((title) => !/^season\s*\d+$/i.test(title)),
-      }, entries);
-      if (result.state !== 'verified') throw new Error(result.reason);
       onSelect({ identity: result, variant });
       controller.closeOverlay();
     } catch {
+      diagnostic({ stage: 'decision', outcome: 'rejected', reason: 'selection-failed' });
       if (!request.signal.aborted) setError('Orion could not verify this Anime season and episode. Choose an existing source.');
     } finally { if (!request.signal.aborted) setBusy(false); }
   };
