@@ -15,7 +15,7 @@ export const aniEmbedSource: CinemaSourceDescriptor = {
   buildEpisodeUrl: (id, _season, episode) => aniListEpisode(id, episode),
   expectedOrigins: ['https://aniembed.se'], allowedNavigationOrigins: ['https://aniembed.se'],
   requiredRequestOrigins: ['https://aniembed.se'],
-  progressStrategy: 'frame-video', resumeStrategy: 'url-param', resumeParam: 't', subtitleStrategy: 'provider',
+  progressStrategy: 'frame-video', resumeStrategy: 'verified-seek', resumeParam: 't', subtitleStrategy: 'provider',
   supportsResume: true, supportsExternalSubtitles: false, supportsDownloads: false,
   routingMode: 'manual-only', availability: 'ready', availabilityReason: 'Ready.',
   animeOnly: true,

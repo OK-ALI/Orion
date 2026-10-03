@@ -6,6 +6,8 @@ import {
   type PlaybackProgressV3,
 } from '@orion/shared/types';
 import { tmdbFetch, type IStorageAdapter } from '@orion/shared/api';
+import { resolveSourcePreference, rememberSourcePreference, type SourcePreference, type SourceVariant } from '../features/library/sourceAffinity';
+import { getAnimeAffinity } from '../features/playback/animeSourceAffinity';
 import { canPersistVerifiedPlayback } from '../features/playback/playbackEvidence';
 import { updateMobileDiagnostics } from '../services/mobileDiagnostics';
 import {
@@ -103,12 +105,14 @@ interface LibraryContextType {
     currentTime: number;
     duration: number;
     sourceId?: string | null;
+    sourceVariant?: SourceVariant;
     season?: number | null;
     episode?: number | null;
     evidence?: MobilePlaybackEvidence | null;
     sessionId?: string | null;
     completionVerified?: boolean;
   }) => void;
+  getPlaybackSourcePreference: (mediaType: 'movie' | 'tv', id: string | number) => SourcePreference | null;
   getPlaybackProgress: (mediaType: 'movie' | 'tv', id: string | number, season?: number | null, episode?: number | null) => PlaybackProgressV3 | null;
 }
 
@@ -132,7 +136,7 @@ type LibraryVisualContextType = Pick<
 
 type LibraryPlaybackActionsContextType = Pick<
   LibraryContextType,
-  'recordPlayback' | 'getPlaybackProgress'
+  'recordPlayback' | 'getPlaybackProgress' | 'getPlaybackSourcePreference'
 >;
 
 const LibraryVisualContext = createContext<LibraryVisualContextType | null>(null);
@@ -379,6 +383,7 @@ export function LibraryProvider({ children, storage }: { children: React.ReactNo
     currentTime,
     duration,
     sourceId = null,
+    sourceVariant,
     season = null,
     episode = null,
     evidence = null,
@@ -390,6 +395,7 @@ export function LibraryProvider({ children, storage }: { children: React.ReactNo
     currentTime: number;
     duration: number;
     sourceId?: string | null;
+    sourceVariant?: SourceVariant;
     season?: number | null;
     episode?: number | null;
     evidence?: MobilePlaybackEvidence | null;
@@ -425,12 +431,14 @@ export function LibraryProvider({ children, storage }: { children: React.ReactNo
       duration: safeDuration,
       percent,
       sourceId,
+      ...(sourceVariant ? { sourceVariant } : {}),
       evidence,
       sessionId,
       completed: percent != null && percent >= 90,
       startedAt: existing?.startedAt || updatedAt,
       lastPlayedAt: updatedAt,
     };
+    rememberSourcePreference(storage, mediaType, id, { sourceId: sourceId || '', variant: sourceVariant }, evidence, sessionId, updatedAt);
     const nextProgress = { ...progressRef.current, [key]: progressRecord };
     if (completionVerified) {
       if (watchedRef.current[key]) {
@@ -463,6 +471,7 @@ export function LibraryProvider({ children, storage }: { children: React.ReactNo
       currentTime: safeCurrent,
       duration: safeDuration,
       sourceId,
+      ...(sourceVariant ? { sourceVariant } : {}),
       evidence,
       sessionId,
       lastPlayedAt: updatedAt,
@@ -481,7 +490,13 @@ export function LibraryProvider({ children, storage }: { children: React.ReactNo
     setHistory(nextHistory);
     storage.set(STORAGE_KEYS.HISTORY, JSON.stringify(nextHistory));
     updateMobileDiagnostics({ lastHistoryPersistedAt: updatedAt });
-  }, [getProgressKey]);
+  }, [getProgressKey, storage]);
+
+  const getPlaybackSourcePreference = useCallback((mediaType: 'movie' | 'tv', id: string | number) => {
+    const legacy = mediaType === 'tv' ? getAnimeAffinity(String(id)) : null;
+    return resolveSourcePreference(storage, mediaType, id, progressRef.current, historyRef.current,
+      legacy ? { sourceId: legacy.providerId, variant: legacy.variant } : null);
+  }, [storage]);
 
   const getPlaybackProgress = useCallback((
     mediaType: 'movie' | 'tv',
@@ -597,7 +612,8 @@ export function LibraryProvider({ children, storage }: { children: React.ReactNo
   const playbackActionsValue = useMemo<LibraryPlaybackActionsContextType>(() => ({
     recordPlayback,
     getPlaybackProgress,
-  }), [recordPlayback, getPlaybackProgress]);
+    getPlaybackSourcePreference,
+  }), [recordPlayback, getPlaybackProgress, getPlaybackSourcePreference]);
 
   const value = {
     saved,
@@ -626,6 +642,7 @@ export function LibraryProvider({ children, storage }: { children: React.ReactNo
     enrichPlaybackMetadata,
     recordPlayback,
     getPlaybackProgress,
+    getPlaybackSourcePreference,
   };
 
   return (

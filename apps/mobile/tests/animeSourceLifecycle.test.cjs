@@ -24,7 +24,8 @@ test('qualified initial preference requires safe Anime detection and exact curre
   assert.equal(f.harness.result.phase, 'anime'); assert.equal(f.chosen.length, 1);
   assert.equal(f.chosen[0].identity.episode, 1); assert.equal(f.chosen[0].variant, 'sub');
   assert.equal(f.affinity.getAnimeAffinity('62715'), null, 'opening alone cannot persist success');
-  f.harness.result.recordSuccess('aniembed'); assert.equal(f.affinity.getAnimeAffinity('62715').variant, 'sub');
+  f.harness.result.recordSuccess('aniembed'); assert.equal(f.affinity.getAnimeFlowChoice('62715').variant, 'sub');
+  assert.equal(f.affinity.getAnimeAffinity('62715'), null, 'durable success is owned by the shared verified library writer');
   f.harness.dispose();
 });
 for (const variant of ['sub', 'dub']) test(`next episode freshly resolves identity while retaining AniEmbed ${variant}`, async () => {
@@ -75,7 +76,29 @@ test('canonical metadata failure on an explicit Anime continuation fails closed 
 });
 test('manual General intent remains authoritative even if Anime affinity exists and catalog is unavailable', async () => {
   const f = fixture({ catalogError: true });
-  f.affinity.rememberAnimeAffinity('62715', { providerId: 'aniembed', variant: 'dub' });
-  f.harness.update({ ...f.props, routedSource: 'vixsrc' }); await f.harness.settle();
+  f.harness.update({ ...f.props, preference: { sourceId: 'aniembed', variant: 'dub' }, routedSource: 'vixsrc' }); await f.harness.settle();
+  assert.equal(f.harness.result.phase, 'general'); assert.equal(f.chosen.length, 0); f.harness.dispose();
+});
+
+test('metadata-null failed Anime continuation escapes immediately to manual General and a real source URL', async () => {
+  const f = fixture({ catalogError: true });
+  f.harness.update({ ...f.props, preference: { sourceId: 'aniembed', variant: 'sub' } }); await f.harness.settle();
+  assert.equal(f.harness.result.phase, 'failed'); assert.equal(f.harness.result.detail, null);
+  f.harness.result.manualGeneral('vidlink'); await f.harness.settle();
+  assert.equal(f.harness.result.phase, 'general'); assert.equal(f.harness.result.error, null);
+  assert.equal(f.harness.result.selection, null);
+  const registry = loader()('packages/shared/src/sources/registry.ts');
+  assert.match(registry.getSourceUrl('vidlink', 'tv', { tmdbId: 62715 }, 1, 1), /^https:\/\/vidlink\.pro\/tv\/62715\/1\/1/);
+  f.harness.update({ ...f.props, episode: 2, preference: { sourceId: 'aniembed', variant: 'sub' } }); await f.harness.settle();
+  assert.equal(f.harness.result.phase, 'general'); f.harness.dispose();
+});
+
+test('successful General series preference suppresses default Anime on reopen across seasons', async () => {
+  const f = fixture(); f.harness.update({ ...f.props, season: 2, preference: { sourceId: 'vidlink' } }); await f.harness.settle();
+  assert.equal(f.harness.result.phase, 'general'); assert.equal(f.chosen.length, 0); f.harness.dispose();
+});
+
+test('manual General choice cannot be overwritten by late metadata resolution', async () => {
+  const f = fixture(); f.harness.result.manualGeneral('vidlink'); await f.harness.settle();
   assert.equal(f.harness.result.phase, 'general'); assert.equal(f.chosen.length, 0); f.harness.dispose();
 });

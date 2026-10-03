@@ -12,7 +12,6 @@ import { useLibraryPlaybackActions } from '../../context/LibraryContext';
 import {
   getMobileSourceHealth,
   hydrateMobileSourceHealth,
-  markMobileSourceFailure,
 } from '../../services/sourceHealth';
 import { reportMobileDiagnosticError, updateMobileDiagnostics } from '../../services/mobileDiagnostics';
 import { EmbedPlayerSurface } from './EmbedPlayerSurface';
@@ -48,7 +47,6 @@ import {
   getPreferredMobileResumeSource,
   mobileSourceCanReceiveContinuity,
 } from './mobileSources';
-import { classifyCinemaSourceFailure } from './sourceFailure';
 import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import {
   getMobileDownloadSourceResolutionIntentV1,
@@ -123,7 +121,7 @@ export default function PlayerScreen() {
   } =
     useLocalSearchParams<PlayerRouteParams>();
   const routeIdRef = useRef(id); routeIdRef.current = id;
-  const { getPlaybackProgress } = useLibraryPlaybackActions();
+  const { getPlaybackProgress, getPlaybackSourcePreference } = useLibraryPlaybackActions();
   const offlineRequested = isOffline === 'true';
   const [offlineResolutionAttempt, setOfflineResolutionAttempt] = useState(0);
   const [offlineSource, setOfflineSource] = useState<NativeOfflinePlaybackRouteV1 | null>(null);
@@ -144,15 +142,16 @@ export default function PlayerScreen() {
     && MOBILE_PLAYER_SOURCES.some((source) => source.id === nextSourceId)
     ? nextSourceId
     : null;
+  const sourcePreference = getPlaybackSourcePreference(type, id);
   const [sourceId, setSourceId] = useState(() => routedNextSource || getPreferredMobileResumeSource(
-    existingProgress?.sourceId || MOBILE_DEFAULT_CINEMA_SOURCE_ID,
+    sourcePreference?.sourceId || existingProgress?.sourceId || MOBILE_DEFAULT_CINEMA_SOURCE_ID,
     type,
   ));
   const [imdbId, setImdbId] = useState<string | null>(null);
   const [animeAttempt, setAnimeAttempt] = useState(0);
   const pendingAnimeSelection = useRef<AnimeSourceSelection | null>(null);
   const anime = useAnimeSource({ id, type, season: resolvedSeason, episode: resolvedEpisode,
-    enabled: !offlineRequested && !downloadResolutionOnly,
+    enabled: !offlineRequested && !downloadResolutionOnly, preference: sourcePreference,
     routedSource: nextSourceId === 'aniembed' ? nextSourceId : routedNextSource || undefined, routedVariant: nextAnimeVariant,
     onPreferred: () => setSourceId('aniembed') });
   const activeAnimeTest = anime.selection;
@@ -170,6 +169,7 @@ export default function PlayerScreen() {
   const nextEpisodeRequestRef = useRef(0);
   const playbackIdentity = `${type}:${id}:s${resolvedSeason || 0}:e${resolvedEpisode || 0}`;
   const playbackIdentityRef = useRef(playbackIdentity);
+  const [readyPlaybackIdentity, setReadyPlaybackIdentity] = useState(playbackIdentity);
 
   const publishHandoff = useCallback((next: PlaybackHandoffV1 | null) => {
     handoffRef.current = next;
@@ -193,11 +193,15 @@ export default function PlayerScreen() {
   useEffect(() => {
     if (playbackIdentityRef.current === playbackIdentity) return;
     playbackIdentityRef.current = playbackIdentity;
+    setReadyPlaybackIdentity(playbackIdentity);
+    setImdbId(null);
     setDownloadResolutionLatched(downloadIntentAtOpen);
     nextEpisodeRequestRef.current += 1;
     setNextEpisodePrompt(null);
     publishHandoff(null);
     pendingAnimeSelection.current = null;
+    setSourceId(routedNextSource || getPreferredMobileResumeSource(
+      getPlaybackSourcePreference(type, id)?.sourceId || getPlaybackProgress(type, id, resolvedSeason, resolvedEpisode)?.sourceId, type));
     const routeProgress = getPlaybackProgress(
       type,
       id,
@@ -210,7 +214,7 @@ export default function PlayerScreen() {
     setInitialChoicePending(savedTime > 30 && !downloadIntentAtOpen);
     setResumeTime(downloadIntentAtOpen || savedTime > 30 ? 0 : savedTime);
     setForceStartFromBeginning(false);
-  }, [downloadIntentAtOpen, getPlaybackProgress, id, playbackIdentity, publishHandoff, resolvedEpisode, resolvedSeason, type]);
+  }, [downloadIntentAtOpen, getPlaybackProgress, getPlaybackSourcePreference, routedNextSource, id, playbackIdentity, publishHandoff, resolvedEpisode, resolvedSeason, type]);
 
   useEffect(() => { hydrateMobileSourceHealth(); }, []);
   useEffect(() => {
@@ -379,7 +383,7 @@ export default function PlayerScreen() {
         fromSessionId: snapshot?.sessionId ?? null,
       });
     }
-    if (requestedTime === 0) {
+    if (requestedTime === 0 || (reason === 'manual' && requestedTime == null)) {
       publishHandoff(null);
       setResumeTime(0);
       setSourceId(nextSourceId);
@@ -395,12 +399,8 @@ export default function PlayerScreen() {
   }, [anime.activate, anime.manualGeneral, launchHandoff, publishHandoff, sourceId, type]);
 
   const retryAutomaticHandoff = useCallback((expired: PlaybackHandoffV1) => {
-    markMobileSourceFailure(
-      expired.targetSourceId,
-      type,
-      expired.failureCode || 'CONTINUITY_UNCONFIRMED',
-      classifyCinemaSourceFailure(expired.failureCode || 'continuity unconfirmed'),
-    );
+    reportMobileDiagnosticError({ area: 'playback-handoff', code: expired.failureCode || 'CONTINUITY_UNCONFIRMED',
+      message: 'Playback position could not be confirmed.' });
     const nextTarget = getNextMobileContinuitySource(
       expired.targetSourceId,
       type,
@@ -476,11 +476,11 @@ export default function PlayerScreen() {
     setResumeTime(chosenTime);
     setForceStartFromBeginning(choice === 'start-over');
     setInitialChoicePending(false);
-    if (sourceId === 'aniembed' && chosenTime > 0) launchHandoff({
+    if (!offlineRequested && chosenTime > 0) launchHandoff({
       targetSourceId: sourceId, requestedTime: chosenTime, reason: 'return',
       fromSourceId: sourceId, fromSessionId: null,
     });
-  }, [initialSavedTime, launchHandoff, sourceId]);
+  }, [initialSavedTime, launchHandoff, offlineRequested, sourceId]);
 
   const handleVerifiedPlaybackCompletion = useCallback((_snapshot: VerifiedPlaybackSnapshot) => {
     if (type !== 'tv' || offlineRequested || downloadResolutionOnly
@@ -553,6 +553,9 @@ export default function PlayerScreen() {
     episodeTitle,
     sourceId,
     onSourceChange: changeSource,
+    canAutomaticFailover: (snapshot: VerifiedPlaybackSnapshot | null) => sourceId !== 'aniembed'
+      && !getMobileDownloadSourceResolutionIntentV1(downloadItemKey) && !handoffIsPending(handoffRef.current)
+      && getFreshVerifiedPosition(snapshot) != null && getNextMobileContinuitySource(sourceId, type, []) != null,
     onAutomaticFailover: (snapshot: VerifiedPlaybackSnapshot | null) => sourceId === 'aniembed' || getMobileDownloadSourceResolutionIntentV1(downloadItemKey)
       ? false : changeSource(sourceId, snapshot, 'automatic'),
     onPlaybackSnapshot: handlePlaybackSnapshot,
@@ -569,7 +572,7 @@ export default function PlayerScreen() {
     onToggleOrientation: toggleOrientation,
   };
 
-  const surface = anime.phase === 'checking' ? (
+  const surface = readyPlaybackIdentity !== playbackIdentity || anime.phase === 'checking' ? (
     <PlayerStateOverlay state="preparing" onBack={exitPlayer} />
   ) : initialChoicePending ? null : offlineRequested ? (
     offlineAssetId && offlineSource ? (
@@ -600,6 +603,10 @@ export default function PlayerScreen() {
       key={`${sourceId}-${activeStreamUrl}${sourceId === 'aniembed' ? `-${animeAttempt}` : ''}`}
       embedUrl={activeStreamUrl}
       sourceError={anime.error}
+      continuityError={handoff && ['failed', 'unconfirmed'].includes(handoff.status)
+        ? 'Playback could not continue from the saved position. Retry or choose another source.' : undefined}
+      onContinuityRetry={() => launchHandoff({ targetSourceId: sourceId, requestedTime: handoff?.requestedTime ?? resumeTime,
+        reason: 'return', fromSourceId: sourceId, fromSessionId: null })}
       animeAvailable={Boolean(anime.detail)}
       animeVariant={sourceId === 'aniembed' ? activeAnimeTest?.variant : undefined}
       onExperimentalRetry={() => { if (anime.error) anime.retry(); else setAnimeAttempt((attempt) => attempt + 1); }}

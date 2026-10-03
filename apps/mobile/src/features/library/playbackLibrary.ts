@@ -111,6 +111,7 @@ export function normalizePlaybackProgress(
     duration,
     percent,
     sourceId: nullableText(record.sourceId),
+    ...(['sub', 'dub', 'raw'].includes(record.sourceVariant) ? { sourceVariant: record.sourceVariant } : {}),
     evidence,
     ...(portableVerified ? { portableVerified: true as const } : {}),
     sessionId: nullableText(record.sessionId),

@@ -223,10 +223,12 @@ test("handoff confirms only matching target telemetry within tolerance", () => {
     evidence: "provider-message",
     observedAt: 10_500,
   };
-  assert.equal(confirmPlaybackHandoff(handoff, target, 10_600)?.status, "confirmed");
-  assert.equal(confirmPlaybackHandoff(handoff, { ...target, sourceId: "vidlink" }), null);
-  assert.equal(confirmPlaybackHandoff(handoff, { ...target, currentTime: 65.1 }), null);
-  assert.equal(confirmPlaybackHandoff(handoff, { ...target, observedAt: 9_999 }), null);
+  const reached = confirmPlaybackHandoff(handoff, target, 10_600);
+  assert.equal(reached?.status, "seeking");
+  assert.equal(confirmPlaybackHandoff(reached, { ...target, state: "playing", currentTime: 66, observedAt: 11_600 }, 11_600)?.status, "confirmed");
+  assert.equal(confirmPlaybackHandoff(handoff, { ...target, sourceId: "vidlink" }, 10_600), null);
+  assert.equal(confirmPlaybackHandoff(handoff, { ...target, currentTime: 65.1 }, 10_600), null);
+  assert.equal(confirmPlaybackHandoff(handoff, { ...target, observedAt: 9_999 }, 10_600), null);
 });
 
 test("handoff identifies an advancing target that missed the carried position after settling", () => {

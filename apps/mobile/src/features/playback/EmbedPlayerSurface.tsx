@@ -62,12 +62,13 @@ import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import { beginMobileDownloadCaptureSessionV1 } from '../downloads/downloadCandidateCapture';
 import { useDownloadSourceAutoReturnV1 } from '../downloads/useDownloadSourceAutoReturn';
 import type { PlaybackPurpose } from './viewingPersistence';
-import { createProviderWebViewSource, getProviderShieldManifest, isSelectedAnimeNavigation, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
+import { createProviderWebViewSource, getProviderShieldManifest, getEmbeddedPresentationStyle, hasProviderPlaybackSource, isSelectedAnimeNavigation, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
 import { useAnimeReadiness } from './useAnimeReadiness';
 import { ProviderControlsReturn } from './ProviderControlsReturn';
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
   sourceExtras?: (select: (sourceId: string, variantChange?: boolean) => void) => React.ReactNode;
   sourceError?: string | null; animeAvailable?: boolean;
+  continuityError?: string; onContinuityRetry?: () => void;
   animeVariant?: 'sub' | 'dub';
   onExperimentalRetry?: () => void;
   embedUrl: string;
@@ -78,7 +79,7 @@ interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
 const WEBVIEW_AUDIO_RELEASE_MS = Platform.OS === 'android' ? 240 : 80;
 export function EmbedPlayerSurface({
   embedUrl,
-  sourceExtras, sourceError, animeAvailable,
+  sourceExtras, sourceError, animeAvailable, continuityError, onContinuityRetry,
   animeVariant,
   onExperimentalRetry,
   playbackPurpose = 'viewing',
@@ -96,7 +97,7 @@ export function EmbedPlayerSurface({
   initialResumeTime = 0,
   forceStartFromBeginning = false,
   onSourceChange,
-  onAutomaticFailover,
+  onAutomaticFailover, canAutomaticFailover,
   onPlaybackSnapshot,
   onVerifiedPlaybackCompletion,
   activeHandoffId,
@@ -118,7 +119,6 @@ export function EmbedPlayerSurface({
   const [subtitleState, setSubtitleState] = useState<SubtitleDiscoveryState>('idle');
   const [subtitleTracks, setSubtitleTracks] = useState<EmbeddedSubtitleTrackV1[]>([]);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string | null>(null);
-  const [watchdogDismissed, setWatchdogDismissed] = useState(false);
   const [surfaceReleased, setSurfaceReleased] = useState(false);
   const [surfaceRetryKey, setSurfaceRetryKey] = useState(0);
   const [providerControlsMode, setProviderControlsMode] = useState(false);
@@ -136,12 +136,14 @@ export function EmbedPlayerSurface({
   const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sourceTransitionPending = useRef(false);
   const healthRecorded = useRef(false);
+  const failureRecorded = useRef(false);
   const nativeShieldObserved = useRef(false);
   const nativeBlockObserved = useRef(false);
   const shieldFailureObserved = useRef(false);
   const surfaceLoaded = useRef(false);
   const webViewRef = useRef<WebViewType>(null);
   const source = ALL_CINEMA_SOURCES.find((entry) => entry.id === sourceId);
+  const hasPlaybackSource = hasProviderPlaybackSource(embedUrl);
   const animeDiagnosticOnly = source?.animeProvider != null && source.supportsDownloads !== true;
   const downloadQualificationCaptureEnabled = (source != null && (source.supportsDownloads === true || ['vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc'].includes(sourceId))) || animeDiagnosticOnly;
   const sourceLabel = animeVariant && source?.animeProvider ? `${source.label} · ${animeVariant === 'sub' ? 'Sub' : 'Dub'}` : source?.label || 'VidEasy Direct';
@@ -191,6 +193,8 @@ export function EmbedPlayerSurface({
     item,
     media,
     sourceId,
+    sourceVariant: animeVariant,
+    persistEnabled: !activeHandoffId && !continuityError,
     surface: 'embed',
     recordPlayback,
     onVerifiedCompletion: onVerifiedPlaybackCompletion,
@@ -227,7 +231,7 @@ export function EmbedPlayerSurface({
   const injectedScript = `${mobileAdBlockerScript}\n${telemetryScript}`;
 
   useEffect(() => {
-    if (Platform.OS !== 'android' || !source || !downloadQualificationCaptureEnabled) return undefined;
+    if (!hasPlaybackSource || Platform.OS !== 'android' || !source || !downloadQualificationCaptureEnabled) return undefined;
     return beginMobileDownloadCaptureSessionV1({
       playbackSessionId,
       sourceId,
@@ -236,7 +240,7 @@ export function EmbedPlayerSurface({
       media: downloadTarget.media,
       diagnosticOnly: animeDiagnosticOnly,
     });
-  }, [animeDiagnosticOnly, downloadQualificationCaptureEnabled, downloadTarget, playbackSessionId, source?.releaseStatus, sourceId]);
+  }, [hasPlaybackSource, animeDiagnosticOnly, downloadQualificationCaptureEnabled, downloadTarget, playbackSessionId, source?.releaseStatus, sourceId]);
 
   useEffect(() => {
     loadStartedAt.current = Date.now();
@@ -244,7 +248,7 @@ export function EmbedPlayerSurface({
     nativeShieldSequence.current = 0;
     resumeRequested.current = false;
     setIsBuffering(true);
-    controller.setLoading('preparing');
+    controller.setLoading(hasPlaybackSource ? 'preparing' : null);
     setShieldState(Platform.OS === 'android' ? 'limited' : 'unavailable');
     setBlockedRequests(0);
     setAllowedDependencies(0);
@@ -252,12 +256,11 @@ export function EmbedPlayerSurface({
     setSubtitleState('idle');
     setSubtitleTracks([]);
     setSelectedSubtitleId(null);
-    healthRecorded.current = false;
+    healthRecorded.current = false; failureRecorded.current = false;
     nativeShieldObserved.current = false;
     nativeBlockObserved.current = false;
     shieldFailureObserved.current = false;
     surfaceLoaded.current = false;
-    setWatchdogDismissed(false);
     setProviderControlsMode(false);
     return () => {
       if (observationTimeout.current) clearTimeout(observationTimeout.current);
@@ -292,12 +295,10 @@ export function EmbedPlayerSurface({
   }, [sourceId, surfaceRetryKey]);
 
   usePlayerImmersiveSystemUi(true, controller.state.playback.playing, !showControls);
-
-
   const releaseSurfaceThen = (
     switchSource: (snapshot: ReturnType<typeof telemetry.getVerifiedSnapshot>) => boolean,
   ) => {
-    if (sourceTransitionPending.current || activeHandoffId) return;
+    if (sourceTransitionPending.current || activeHandoffId) return false;
     telemetry.flush();
     const snapshot = telemetry.getVerifiedSnapshot();
     sourceTransitionPending.current = true;
@@ -311,8 +312,8 @@ export function EmbedPlayerSurface({
         setSurfaceReleased(false);
       }
     }, WEBVIEW_AUDIO_RELEASE_MS);
+    return true;
   };
-
   const selectSource = (nextSourceId: string, variantChange = false) => {
     if (nextSourceId === sourceId && !variantChange) return;
     setShowSources(false);
@@ -346,16 +347,17 @@ export function EmbedPlayerSurface({
     ));
   };
   const handleFailover = () => {
-    releaseSurfaceThen((snapshot) => onSourceChange(
-      sourceId,
-      snapshot,
-      'automatic',
-      snapshot ? undefined : Math.max(0, initialResumeTime),
-    ));
+    if (!hasPlaybackSource || !canAutomaticFailover?.(telemetry.getVerifiedSnapshot())) return false;
+    return releaseSurfaceThen((snapshot) => {
+      const accepted = onAutomaticFailover(snapshot);
+      if (!accepted) { sourceTransitionPending.current = false; markFailed('This source could not continue. Retry it or choose another source.'); }
+      return accepted;
+    });
   };
 
   const retryCurrentSource = () => {
     if (sourceTransitionPending.current || activeHandoffId) return;
+    if (continuityError) onContinuityRetry?.();
     if (source?.animeProvider && onExperimentalRetry) return releaseSurfaceThen(() => { onExperimentalRetry(); return true; });
     telemetry.flush();
     setShowSources(false);
@@ -408,6 +410,7 @@ export function EmbedPlayerSurface({
   };
 
   const markSurfaceLoaded = () => {
+    if (!hasPlaybackSource || surfaceReleased) return;
     if (source?.animeProvider && animeReadiness.getStatus() === 'failed') return;
     bridgeSequence.current = 0;
     webViewRef.current?.injectJavaScript(injectedScript);
@@ -432,6 +435,8 @@ export function EmbedPlayerSurface({
   };
 
   const markFailed = (message: string) => {
+    if (!hasPlaybackSource || sourceTransitionPending.current || surfaceReleased || failureRecorded.current) return;
+    failureRecorded.current = true;
     setIsBuffering(false);
     controller.setLoading('failed');
     telemetry.emitTelemetry({ evidence: 'provider-message', state: 'error' });
@@ -439,14 +444,16 @@ export function EmbedPlayerSurface({
       superseded: sourceTransitionPending.current || surfaceReleased,
     });
     if (failure === 'user-cancelled') return;
-    const health = markMobileSourceFailure(sourceId, type, message, failure);
-    updateMobileDiagnostics({ activeSourceId: sourceId, sourceHealth: health.state });
+    if (!activeHandoffId && !continuityError) {
+      const health = markMobileSourceFailure(sourceId, type, message, failure);
+      updateMobileDiagnostics({ activeSourceId: sourceId, sourceHealth: health.state });
+    }
     reportMobileDiagnosticError({ area: 'playback', code: 'SOURCE_FAILED', message });
   };
-  const animeReadiness = useAnimeReadiness(Boolean(source?.animeProvider), playbackSessionId, surfaceRetryKey, () => {
+  const animeReadiness = useAnimeReadiness(hasPlaybackSource && Boolean(source?.animeProvider), playbackSessionId, surfaceRetryKey, () => {
+    markFailed('This source did not start. Retry or choose another source.');
     webViewRef.current?.injectJavaScript(QUIET_CURRENT_SURFACE_SCRIPT);
     setSurfaceReleased(true);
-    markFailed('This source did not start. Retry or choose another source.');
   });
 
   const applyShieldEnvelope = useCallback((envelope: any) => {
@@ -494,6 +501,7 @@ export function EmbedPlayerSurface({
   }, [applyShieldEnvelope, sourceId, telemetry]);
 
   const handleMessage = (raw: string) => {
+    if (!hasPlaybackSource || surfaceReleased || sourceTransitionPending.current) return;
     let envelope: any = null;
     try { envelope = JSON.parse(raw); } catch {}
     if (envelope?.kind === 'orion-shield') {
@@ -635,14 +643,7 @@ export function EmbedPlayerSurface({
   };
 
   const compact = windowWidth < 480;
-  const screenWiderThanVideo = windowWidth / Math.max(1, windowHeight) > 16 / 9;
-  const presentationStyle = presentation === 'provider'
-    ? { width: '100%' as const, height: '100%' as const, flex: 0, alignSelf: 'stretch' as const }
-    : presentation === 'fit'
-      ? (screenWiderThanVideo ? { height: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 } : { width: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 })
-      : presentation === 'fill'
-        ? (screenWiderThanVideo ? { width: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 } : { height: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 })
-        : undefined;
+  const presentationStyle = getEmbeddedPresentationStyle(presentation, windowWidth, windowHeight);
   return (
     <View style={styles.container}>
       <View style={styles.videoBoxWrapper}>
@@ -695,8 +696,8 @@ export function EmbedPlayerSurface({
       </View>
 
       <PlayerStateOverlay
-        state={sourceError ? 'failed' : controller.state.loadingState}
-        detail={sourceError || animeReadiness.detail}
+        state={sourceSheetOverlay || pendingManualSource ? null : sourceError || continuityError ? 'failed' : controller.state.loadingState}
+        detail={sourceError || continuityError || animeReadiness.detail}
         onRetry={retryCurrentSource}
         onSwitchSource={() => controller.openOverlay('sources')}
       />
@@ -732,14 +733,12 @@ export function EmbedPlayerSurface({
       />
       )}
 
-      {!watchdogDismissed && (
-        <WatchdogWarning
-          isBuffering={isBuffering}
-          onFailover={handleFailover}
-          onSelectSource={() => setShowSources(true)}
-          onDismiss={() => setWatchdogDismissed(true)}
-        />
-      )}
+      <WatchdogWarning
+        isBuffering={hasPlaybackSource && !surfaceReleased && !activeHandoffId && !continuityError
+          && (!source?.animeProvider || animeReadiness.status === 'ready') && isBuffering}
+        onFailover={handleFailover}
+        onTimeout={() => markFailed('This source could not continue. Retry it or choose another source.')}
+      />
       {sourceSheetOverlay && (
         <SourcesSheet
           sourceExtras={sourceExtras?.(selectSource)}

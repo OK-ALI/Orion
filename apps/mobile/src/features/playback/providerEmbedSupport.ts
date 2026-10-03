@@ -1,4 +1,4 @@
-import type { MobileShieldEvidenceV1 } from '@orion/shared/types';
+import type { MobileShieldEvidenceV1, MobilePlayerPresentation } from '@orion/shared/types';
 import type { CinemaSourceDescriptor, ProviderRequestManifestV1 } from '@orion/shared/sources';
 
 export const EMPTY_SHIELD_EVIDENCE: MobileShieldEvidenceV1 = {
@@ -56,4 +56,20 @@ export function isSelectedAnimeNavigation(requestedUrl: string, selectedUrl: str
       && requested.origin === selected.origin && requested.pathname === selected.pathname
       && requested.searchParams.get('lang') === selected.searchParams.get('lang');
   } catch { return false; }
+}
+
+export function hasProviderPlaybackSource(url: string): boolean {
+  try { const parsed = new URL(url); return parsed.protocol === 'https:' && !parsed.username && !parsed.password; }
+  catch { return false; }
+}
+
+export function getEmbeddedPresentationStyle(presentation: MobilePlayerPresentation, width: number, height: number) {
+  const screenWiderThanVideo = width / Math.max(1, height) > 16 / 9;
+  return presentation === 'provider'
+    ? { width: '100%' as const, height: '100%' as const, flex: 0, alignSelf: 'stretch' as const }
+    : presentation === 'fit'
+      ? (screenWiderThanVideo ? { height: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 } : { width: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 })
+      : presentation === 'fill'
+        ? (screenWiderThanVideo ? { width: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 } : { height: '100%' as const, aspectRatio: 16 / 9, alignSelf: 'center' as const, flex: 0 })
+        : undefined;
 }

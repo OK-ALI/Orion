@@ -2,8 +2,9 @@ import {
   DEFAULT_CINEMA_SOURCE_ID,
   PLAYER_SOURCES,
   getSource,
+  getRegisteredSource,
 } from '@orion/shared/sources';
-import { getMobileSourceHealth, getMobileSourceHealthV2 } from '../../services/sourceHealth';
+import { getMobileSourceHealthV2 } from '../../services/sourceHealth';
 
 /**
  * Mobile-only provider boundaries. Retired/dead sources stay in the shared
@@ -251,15 +252,16 @@ export function getPreferredMobileResumeSource(
   sourceId: string | null | undefined,
   mediaType: 'movie' | 'tv',
 ): string {
-  // Continue Watching must land on a physically verified incoming target. An
-  // outgoing-only source can still contribute its verified position, but Orion
-  // resumes that position through the default seamless source instead.
-  if (!sourceId || !mobileSourceSupportsContinuity(sourceId)) return MOBILE_DEFAULT_CINEMA_SOURCE_ID;
-  const source = MOBILE_PLAYER_SOURCES.find((entry) => entry.id === sourceId);
+  // Restoring a successful explicit choice is independent of Auto targeting.
+  if (!sourceId) return MOBILE_DEFAULT_CINEMA_SOURCE_ID;
+  const registered = getRegisteredSource(sourceId);
+  const source = MOBILE_PLAYER_SOURCES.find((entry) => entry.id === sourceId)
+    || (registered?.animeProvider?.playbackQualified ? registered : undefined);
   const supportsMedia = mediaType === 'movie' ? source?.media.movie : source?.media.tv;
   if (!source || !supportsMedia) return MOBILE_DEFAULT_CINEMA_SOURCE_ID;
-  const health = getMobileSourceHealth(sourceId, mediaType);
-  if (health?.state === 'failed' && health.cooldownUntil > Date.now()) return MOBILE_DEFAULT_CINEMA_SOURCE_ID;
+  const effective = getSource(sourceId);
+  if (effective.id !== sourceId || effective.quarantined || effective.releaseStatus === 'disabled'
+    || effective.availability === 'temporarily-unavailable') return MOBILE_DEFAULT_CINEMA_SOURCE_ID;
   return sourceId;
 }
 

@@ -168,34 +168,34 @@ export function createVerifiedResumeScript(seconds: number, handoffId: string): 
       var handoffId = ${safeHandoffId};
       if (window.__orionResumeHandoffId === handoffId) return true;
       window.__orionResumeHandoffId = handoffId;
-      var attempts = 0;
-      var done = false;
+      var attempts = 0, applied = false, done = false;
       function report(status, actualTime) {
         if (done) return;
         done = true;
-        if (window.ReactNativeWebView) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'ORION_RESUME_RESULT',
-            handoffId: handoffId,
-            status: status,
-            actualTime: Number.isFinite(actualTime) ? actualTime : null
-          }));
-        }
+        if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'ORION_RESUME_RESULT', handoffId: handoffId, status: status,
+          actualTime: Number.isFinite(actualTime) ? actualTime : null
+        }));
       }
       function attempt() {
         if (done || window.__orionResumeHandoffId !== handoffId) return;
         attempts += 1;
         var video = document.querySelector('video');
-        if (video && Number.isFinite(video.duration) && video.duration > 0) {
-          video.currentTime = Math.min(video.duration, ${safeTime});
-          setTimeout(function() {
-            if (Math.abs(Number(video.currentTime) - ${safeTime}) <= 5) report('applied', Number(video.currentTime));
-            else if (attempts >= 32) report('unavailable', Number(video.currentTime));
-            else setTimeout(attempt, 250);
-          }, 100);
-          return;
+        if (video && Number.isFinite(video.duration) && video.duration > 0
+            && (typeof video.readyState !== 'number' || video.readyState >= 1)) {
+          if (!applied) {
+            applied = true;
+            try {
+              video.currentTime = Math.min(video.duration, ${safeTime});
+              var playing = video.play();
+              if (playing && playing.catch) playing.catch(function() {});
+            } catch (_) { report('unavailable', Number(video.currentTime)); return; }
+          }
+          if (Math.abs(Number(video.currentTime) - ${safeTime}) <= 5) {
+            report('applied', Number(video.currentTime)); return;
+          }
         }
-        if (attempts >= 32) report('unavailable', null);
+        if (attempts >= 32) report('unavailable', video ? Number(video.currentTime) : null);
         else setTimeout(attempt, 250);
       }
       attempt();

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { isAnimeContent, lookupAnimeEntries, tmdbFetch, type AnimeIdentityResult } from '@orion/shared/api';
 import { createAnimeIdentityTrace } from './animeIdentityDiagnostics';
 import { resolveAnimeTestIdentity } from './animeIdentityRequest';
-import { getAnimeAffinity, getAnimeFlowChoice, preferredAnimeSource, rememberAnimeAffinity, setAnimeFlowChoice,
+import { getAnimeFlowChoice, preferredAnimeSource, setAnimeFlowChoice,
   type AnimeVariant } from './animeSourceAffinity';
 
 export interface AnimeSourceSelection {
@@ -13,8 +13,9 @@ type State = { key: string; phase: 'checking' | 'general' | 'anime' | 'failed'; 
   selection: AnimeSourceSelection | null; error: string | null };
 
 /** Identity/affinity integration only. Resume and progress belong to Orion's existing player. */
-export function useAnimeSource({ id, type, season, episode, enabled, routedSource, routedVariant, onPreferred }: {
+export function useAnimeSource({ id, type, season, episode, enabled, routedSource, routedVariant, preference, onPreferred }: {
   id: string; type: 'movie' | 'tv'; season: number | null; episode: number | null; enabled: boolean;
+  preference?: { sourceId: string; variant?: string } | null;
   routedSource?: string; routedVariant?: string; onPreferred(selection: AnimeSourceSelection): void;
 }) {
   const key = `${type}:${id}:${season}:${episode}`;
@@ -24,6 +25,8 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
   const detailRef = useRef<any>(null);
   const preferred = useRef(onPreferred); preferred.current = onPreferred;
   const selectionRef = useRef<AnimeSourceSelection | null>(null);
+  const preferenceRef = useRef(preference); preferenceRef.current = preference;
+  const manualChoice = useRef(false);
   const [retryAttempt, setRetryAttempt] = useState(0);
 
   const resolve = useCallback(async (variant: AnimeVariant, detail: any, signal: AbortSignal) => {
@@ -40,7 +43,7 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
 
   useEffect(() => {
     const scope = new AbortController(); request.current = scope;
-    detailRef.current = null; selectionRef.current = null;
+    detailRef.current = null; selectionRef.current = null; manualChoice.current = false;
     setState({ key, phase: eligible ? 'checking' : 'general', detail: null, selection: null, error: null });
     if (!eligible) return () => scope.abort();
     // Bound the catalog request as well as AniList lookup. No stale episode may be activated.
@@ -48,7 +51,7 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
     const failure = () => {
       const flow = getAnimeFlowChoice(id);
       const manualGeneral = Boolean((routedSource && routedSource !== 'aniembed') || (flow && 'generalSourceId' in flow));
-      const continuation = !manualGeneral && (routedSource === 'aniembed' || Boolean(getAnimeAffinity(id)) || Boolean(flow));
+      const continuation = !manualGeneral && (routedSource === 'aniembed' || preferenceRef.current?.sourceId === 'aniembed' || Boolean(flow));
       setState({ key, phase: continuation ? 'failed' : 'general', detail: detailRef.current, selection: null,
         error: continuation ? 'Could not continue this episode with AniEmbed.' : null });
     };
@@ -56,27 +59,27 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
     (async () => {
       try {
         const detail = await tmdbFetch<any>(`/${type}/${id}?append_to_response=alternative_titles`, { signal: scope.signal });
-        if (scope.signal.aborted || disposed) return;
+        if (scope.signal.aborted || disposed || manualChoice.current) return;
         if (String(detail?.id) !== id || !isAnimeContent(detail)) {
           failure(); return;
         }
         detailRef.current = detail;
-        const affinity = preferredAnimeSource(id, routedSource, routedVariant);
+        const affinity = preferredAnimeSource(id, routedSource, routedVariant, preferenceRef.current);
         if (!affinity) {
           if (routedSource === 'aniembed') failure();
           else setState({ key, phase: 'general', detail, selection: null, error: null });
           return;
         }
         const selection = await resolve(affinity.variant, detail, scope.signal);
-        if (scope.signal.aborted || disposed) return;
+        if (scope.signal.aborted || disposed || manualChoice.current) return;
         if (!selection) { failure(); return; }
         selectionRef.current = selection;
         setState({ key, phase: 'anime', detail, selection, error: null });
         preferred.current(selection);
-      } catch { if (!disposed) failure(); }
+      } catch { if (!disposed && !manualChoice.current) failure(); }
       finally { clearTimeout(timer); }
     })();
-    const abort = () => { if (!disposed) failure(); };
+    const abort = () => { if (!disposed && !manualChoice.current) failure(); };
     scope.signal.addEventListener('abort', abort, { once: true });
     return () => { disposed = true; scope.signal.removeEventListener('abort', abort); clearTimeout(timer); scope.abort(); };
   }, [eligible, id, key, resolve, retryAttempt, routedSource, routedVariant, type]);
@@ -92,12 +95,13 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
   }, [resolve]);
   const activate = useCallback((selection: AnimeSourceSelection) => {
     if (selection.identity.tmdbId !== id || selection.identity.season !== season || selection.identity.episode !== episode) return false;
+    manualChoice.current = true;
     selectionRef.current = selection;
     setAnimeFlowChoice(id, { providerId: 'aniembed', variant: selection.variant });
     setState((current) => ({ ...current, phase: 'anime', selection, error: null })); return true;
   }, [episode, id, season]);
   const manualGeneral = useCallback((generalSourceId: string) => {
-    if (!detailRef.current) return;
+    manualChoice.current = true;
     setAnimeFlowChoice(id, { generalSourceId });
     selectionRef.current = null;
     setState((current) => ({ ...current, phase: 'general', selection: null, error: null }));
@@ -106,7 +110,7 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
     const selection = selectionRef.current;
     if (sourceId !== 'aniembed' || !selection) return;
     const affinity = { providerId: 'aniembed', variant: selection.variant } as const;
-    setAnimeFlowChoice(id, affinity); rememberAnimeAffinity(id, affinity);
+    setAnimeFlowChoice(id, affinity);
   }, [id]);
   const current = state.key === key ? state : { key, phase: eligible ? 'checking' as const : 'general' as const,
     detail: null, selection: null, error: null };

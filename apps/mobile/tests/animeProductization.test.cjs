@@ -19,14 +19,17 @@ for (const variant of ['sub', 'dub']) for (const [choice, expected] of [['resume
     const time = resume.resolveResumeChoiceTime(choice, 240);
     const url = new URL(registry.getSourceUrl('aniembed', 'tv', { anilistId: 21175 }, 1, 1,
       { lang: variant, ...registry.getSourceResumeParams('aniembed', time, 'tv') }));
-    assert.equal(url.searchParams.get('t'), String(expected)); assert.equal(url.searchParams.get('lang'), variant);
+    assert.equal(time, expected); assert.equal(url.searchParams.get('t'), '0');
+    assert.equal(registry.sourceResumeStrategy('aniembed'), 'verified-seek'); assert.equal(url.searchParams.get('lang'), variant);
   });
 }
 test('incoming AniEmbed handoff requires the same source/time/observation proof as General providers', () => {
   const transfer = handoff.createPlaybackHandoff({ reason: 'manual', fromSessionId: 'old', fromSourceId: 'vixsrc',
     targetSourceId: 'aniembed', requestedTime: 240, strategy: 'url-param', now: 1000 });
   const snapshot = { sourceId: 'aniembed', currentTime: 241, observedAt: 2000 };
-  assert.equal(handoff.confirmPlaybackHandoff(transfer, snapshot, 2000).status, 'confirmed');
+  const reached = handoff.confirmPlaybackHandoff(transfer, { ...snapshot, sessionId: 'target', state: 'seeking' }, 2000);
+  assert.equal(reached.status, 'seeking');
+  assert.equal(handoff.confirmPlaybackHandoff(reached, { ...snapshot, sessionId: 'target', state: 'playing', currentTime: 243, observedAt: 3000 }, 3000).status, 'confirmed');
   for (const patch of [{ sourceId: 'vixsrc' }, { observedAt: 999 }, { currentTime: 1 }]) {
     assert.equal(handoff.confirmPlaybackHandoff(transfer, { ...snapshot, ...patch }, 2000), null);
   }
@@ -35,7 +38,7 @@ test('incoming AniEmbed handoff requires the same source/time/observation proof 
 test('General ordering/Auto/default/download choices remain unchanged and dedicated providers stay scoped', () => {
   assert.deepEqual(mobile.MOBILE_PLAYER_SOURCES.map(s => s.id), ['vixsrc', 'vidsrc', 'vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc', '111movies']);
   assert.equal(mobile.MOBILE_DEFAULT_CINEMA_SOURCE_ID, 'vixsrc');
-  assert.equal(mobile.getPreferredMobileResumeSource('aniembed', 'tv'), 'vixsrc');
+  assert.equal(mobile.getPreferredMobileResumeSource('aniembed', 'tv'), 'aniembed');
   assert.equal(mobile.mobileSourceSupportsContinuity('aniembed'), false);
   assert.ok(!mobile.getMobileDownloadSourceChoices('tv').some(s => s.id === 'aniembed'));
   assert.ok(!registry.AUTOMATIC_PLAYER_SOURCES.some(s => s.id === 'aniembed'));

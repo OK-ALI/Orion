@@ -204,6 +204,7 @@ export function getSourceResumeParams(
   mediaType: "movie" | "tv" | null = null
 ): Record<string, number> {
   const source = getSource(sourceId);
+  if (source.resumeStrategy !== "url-param") return {};
   const value = Math.max(0, Math.floor(Number(seconds) || 0));
   let resumeParam = source.resumeParam;
   if (mediaType === "movie") {

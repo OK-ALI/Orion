@@ -29,6 +29,7 @@ interface PlaybackRecordWriter {
     currentTime: number;
     duration: number;
     sourceId?: string | null;
+    sourceVariant?: 'sub' | 'dub' | 'raw';
     season?: number | null;
     episode?: number | null;
     evidence?: MobilePlaybackEvidence | null;
@@ -41,10 +42,12 @@ interface ControllerOptions {
   item: any;
   media: MediaIdentity;
   sourceId: string;
+  sourceVariant?: 'sub' | 'dub' | 'raw';
   surface: MobilePlayerSurface;
   recordPlayback: PlaybackRecordWriter;
   onVerifiedCompletion?: (snapshot: VerifiedPlaybackSnapshot) => void;
   purpose?: PlaybackPurpose;
+  persistEnabled?: boolean;
 }
 
 export interface PlaybackTelemetryInput {
@@ -85,10 +88,12 @@ export function usePlaybackTelemetryController({
   item,
   media,
   sourceId,
+  sourceVariant,
   surface,
   recordPlayback,
   onVerifiedCompletion,
   purpose = 'viewing',
+  persistEnabled = true,
 }: ControllerOptions) {
   const stateRef = useRef<PlaybackTelemetryState>(
     createPlaybackTelemetryState(createMobilePlaybackSession(media, sourceId, surface)),
@@ -96,10 +101,11 @@ export function usePlaybackTelemetryController({
   const sequenceRef = useRef(0);
   const lastPersistedAtRef = useRef(0);
   const completionReportedRef = useRef(false);
+  const persistenceAllowed = useRef(persistEnabled); persistenceAllowed.current = persistEnabled;
 
   const persistState = useCallback((state = stateRef.current) => {
     const verifiedTime = state.session.lastVerifiedTime;
-    if (!state.session.verified || verifiedTime == null) return false;
+    if (!persistenceAllowed.current || !state.session.verified || verifiedTime == null) return false;
     return runViewingSideEffect(purpose, () => {
       recordPlayback({
       item,
@@ -107,6 +113,7 @@ export function usePlaybackTelemetryController({
       currentTime: verifiedTime,
       duration: state.duration || 0,
       sourceId,
+      sourceVariant,
       season: media.season ?? null,
       episode: media.episode ?? null,
       evidence: state.evidence,
@@ -120,7 +127,7 @@ export function usePlaybackTelemetryController({
       });
       lastPersistedAtRef.current = Date.now();
     });
-  }, [item, media, purpose, recordPlayback, sourceId]);
+  }, [item, media, purpose, recordPlayback, sourceId, sourceVariant]);
 
   const emitTelemetry = useCallback((input: PlaybackTelemetryInput) => {
     const event: MobilePlaybackTelemetryV1 = {
@@ -164,7 +171,7 @@ export function usePlaybackTelemetryController({
       currentTime: decision.state.session.lastVerifiedTime,
       duration: decision.state.duration,
     });
-    const firstCompletion = completionVerified && !completionReportedRef.current;
+    const firstCompletion = persistenceAllowed.current && completionVerified && !completionReportedRef.current;
     const terminal = ['paused', 'seeking', 'ended', 'error'].includes(input.state);
     if (decision.shouldPersist
       && (firstCompletion || terminal || Date.now() - lastPersistedAtRef.current >= 5_000)) {
@@ -209,6 +216,7 @@ export function usePlaybackTelemetryController({
           duration: state.duration,
           evidence: state.evidence,
           observedAt: state.session.updatedAt,
+          state: state.session.state,
         }
       : null;
   }, []);

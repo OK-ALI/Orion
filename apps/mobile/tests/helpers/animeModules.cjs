@@ -14,15 +14,19 @@ function loader(mocks = {}) {
       if (Object.hasOwn(mocks, id)) return mocks[id];
       if (id === '@orion/shared/cinema-block-rules') return require(path.join(root, 'packages/shared/cinemaBlockRules.cjs'));
       if (id === '@orion/shared/sources') return load('packages/shared/src/sources/registry.ts');
+      if (id.startsWith('@orion/shared/')) {
+        const target = path.join(root, 'packages/shared/src', id.slice('@orion/shared/'.length));
+        return load(fs.existsSync(target + '.ts') ? target + '.ts' : path.join(target, 'index.ts'));
+      }
       if (id.startsWith('.')) {
         const target = path.resolve(path.dirname(file), id);
-        const resolved = fs.existsSync(target + '.ts') ? target + '.ts' : path.join(target, 'index.ts');
+        const resolved = fs.existsSync(target + '.ts') ? target + '.ts' : fs.existsSync(target + '.tsx') ? target + '.tsx' : path.join(target, 'index.ts');
         return load(resolved);
       }
       return createRequire(file)(id);
     };
     const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { fileName: file,
-      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
     new Function('require', 'exports', code)(localRequire, module.exports);
     return module.exports;
   };

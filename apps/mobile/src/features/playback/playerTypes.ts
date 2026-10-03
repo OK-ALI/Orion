@@ -7,6 +7,7 @@ export interface VerifiedPlaybackSnapshot {
   duration: number | null;
   evidence: string | null;
   observedAt: number;
+  state?: import('@orion/shared/types').MobilePlaybackState;
 }
 
 export interface PlaybackSurfaceProps {
@@ -29,6 +30,7 @@ export interface PlaybackSurfaceProps {
     reason: 'manual' | 'automatic',
     requestedTimeOverride?: number | null,
   ) => boolean;
+  canAutomaticFailover?: (snapshot: VerifiedPlaybackSnapshot | null) => boolean;
   onAutomaticFailover: (verifiedSnapshot: VerifiedPlaybackSnapshot | null) => boolean;
   onPlaybackSnapshot?: (snapshot: VerifiedPlaybackSnapshot) => void;
   onVerifiedPlaybackCompletion?: (snapshot: VerifiedPlaybackSnapshot) => void;

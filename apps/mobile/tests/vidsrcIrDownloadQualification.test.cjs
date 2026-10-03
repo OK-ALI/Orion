@@ -123,7 +123,7 @@ test('qualified candidates are manual download choices without entering Auto or 
     const choices = sources.getMobileDownloadSourceChoices(mediaType);
     for (const id of ['vidsrc-ir', 'vidlink', 'cinesrc']) {
       assert.equal(choices.find((source) => source.id === id).routingMode, 'manual-only');
-      assert.equal(sources.getPreferredMobileResumeSource(id, mediaType), 'vixsrc');
+      assert.equal(sources.getPreferredMobileResumeSource(id, mediaType), id, 'restoring a successful manual source is separate from Auto');
       assert.equal(env.registry.AUTOMATIC_PLAYER_SOURCES.some((source) => source.id === id), false);
       assert.equal(sources.mobileSourceSupportsContinuity(id), false);
       assert.equal(sources.getMobileSourceContinuityCapability(id).automaticTarget, false);

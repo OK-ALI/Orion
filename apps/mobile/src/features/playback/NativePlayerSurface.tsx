@@ -59,7 +59,6 @@ export function NativePlayerSurface({
 }: NativePlayerSurfaceProps) {
   const { recordPlayback } = useLibraryPlaybackActions();
   const controller = useMobilePlayerController();
-  const [watchdogDismissed, setWatchdogDismissed] = useState(false);
   const [localPlaybackError, setLocalPlaybackError] = useState<string | null>(null);
   const [embeddedSubtitleTracks, setEmbeddedSubtitleTracks] = useState<SubtitleTrack[]>([]);
   const [selectedSubtitleKey, setSelectedSubtitleKey] = useState<string | null>(null);
@@ -254,8 +253,6 @@ export function NativePlayerSurface({
     };
   }, [telemetry.flush]);
 
-  useEffect(() => setWatchdogDismissed(false), [sourceId]);
-
   const selectSource = (nextSourceId: string) => {
     telemetry.flush();
     const snapshot = telemetry.getVerifiedSnapshot();
@@ -283,9 +280,9 @@ export function NativePlayerSurface({
     onSourceChange(pending.id, snapshot, 'manual', requestedTime);
   };
   const handleFailover = () => {
-    if (!allowSourceSwitch) return;
+    if (!allowSourceSwitch || !streamUrl) return false;
     telemetry.flush();
-    onAutomaticFailover(telemetry.getVerifiedSnapshot());
+    return onAutomaticFailover(telemetry.getVerifiedSnapshot());
   };
 
   const selectSubtitleTrack = (track: SubtitleTrack | null) => {
@@ -308,7 +305,7 @@ export function NativePlayerSurface({
         </View>
       ) : null}
       <PlayerStateOverlay
-        state={controller.state.loadingState}
+        state={allowSourceSwitch && (controller.state.overlay !== 'none' || pendingManualSource) ? null : controller.state.loadingState}
         detail={localPlaybackError || undefined}
         onBack={localPlaybackError ? onExit : undefined}
         onRetry={() => {
@@ -365,12 +362,11 @@ export function NativePlayerSurface({
         }}
         onClose={controller.closeOverlay}
       />
-      {allowSourceSwitch && !watchdogDismissed && (
+      {allowSourceSwitch && Boolean(streamUrl) && (
         <WatchdogWarning
           isBuffering={statusEvent.status === 'loading'}
           onFailover={handleFailover}
-          onSelectSource={() => controller.openOverlay('sources')}
-          onDismiss={() => setWatchdogDismissed(true)}
+          onTimeout={() => controller.setLoading('failed')}
         />
       )}
       {pendingManualSource && (

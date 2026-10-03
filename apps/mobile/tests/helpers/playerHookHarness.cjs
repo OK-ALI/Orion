@@ -18,6 +18,10 @@ function hookHarness() {
         slots[at].value = value; schedule();
       }];
     },
+    useMemo(fn, deps) {
+      const at = index++; if (!slots[at] || !same(slots[at].deps, deps)) slots[at] = { deps, value: fn() };
+      return slots[at].value;
+    },
     useCallback(fn, deps) {
       const at = index++; if (!slots[at] || !same(slots[at].deps, deps)) slots[at] = { deps, fn };
       return slots[at].fn;

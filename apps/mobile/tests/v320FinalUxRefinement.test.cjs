@@ -60,7 +60,7 @@ test("v3.2 final Settings reorder keeps Orion theme, responsiveness and active-o
 });
 
 test("v3.2 final embedded Original restores a visible provider surface without changing healthy Fit or Fill", () => {
-  const surface = read("src/features/playback/EmbedPlayerSurface.tsx");
+  const surface = read("src/features/playback/EmbedPlayerSurface.tsx") + '\n' + read("src/features/playback/providerEmbedSupport.ts");
 
   assert.match(surface, /presentation === 'provider'\s*\? \{ width: '100%' as const, height: '100%' as const, flex: 0, alignSelf: 'stretch' as const \}/);
   assert.match(surface, /containerStyle=\{presentation === 'provider' \? presentationStyle : undefined\}/);

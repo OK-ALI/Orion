@@ -135,7 +135,7 @@ test("loading truth distinguishes source preparation, provider wait, buffering, 
   for (const state of ["preparing", "waiting", "buffering", "switching", "offline", "failed"]) {
     assert.match(overlay, new RegExp(`${state}:`));
   }
-  assert.match(surface, /controller\.setLoading\('preparing'\)/);
+  assert.match(surface, /controller\.setLoading\(hasPlaybackSource \? 'preparing' : null\)/);
   assert.match(surface, /controller\.setLoading\('waiting'\)/);
   assert.match(surface, /controller\.setLoading\('switching'\)/);
 });

@@ -39,7 +39,7 @@ test('v3.2 Original uses the existing Cinema owner for a bounded post-layout com
 });
 
 test('v3.2 Original repair freezes accepted Original geometry and healthy Fit Fill geometry', () => {
-  const surface = read('src', 'features', 'playback', 'EmbedPlayerSurface.tsx');
+  const surface = read('src', 'features', 'playback', 'EmbedPlayerSurface.tsx') + '\n' + read('src', 'features', 'playback', 'providerEmbedSupport.ts');
 
   assert.match(surface, /presentation === 'provider'\s*\? \{ width: '100%' as const, height: '100%' as const, flex: 0, alignSelf: 'stretch' as const \}/);
   assert.match(surface, /containerStyle=\{presentation === 'provider' \? presentationStyle : undefined\}/);

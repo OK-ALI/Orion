@@ -39,17 +39,6 @@ export function getAnimeAffinity(tmdbId: string): AnimeSourceAffinity | null {
   } catch { return null; }
 }
 
-/** Only verified successful playback persists affinity; progress stays in Orion's library. */
-export function rememberAnimeAffinity(tmdbId: string, affinity: AnimeSourceAffinity): void {
-  if (!validId(tmdbId) || !validAnimeAffinity(affinity)) return;
-  try {
-    const next = [{ tmdbId, providerId: affinity.providerId, variant: affinity.variant },
-      ...parseAnimeAffinities(mmkvStorageAdapter.get(KEY)).filter((entry) => entry.tmdbId !== tmdbId)]
-      .slice(0, MAX_ANIME_AFFINITIES);
-    mmkvStorageAdapter.set(KEY, JSON.stringify(next));
-  } catch { /* Storage failure cannot change verified playback or identity. */ }
-}
-
 export function setAnimeFlowChoice(tmdbId: string, choice: AnimeSourceAffinity | { generalSourceId: string }): void {
   if (!validId(tmdbId)) return;
   if ('generalSourceId' in choice) {
@@ -64,13 +53,16 @@ export function clearAnimeFlowChoice(tmdbId: string): void { flowChoices.delete(
 export function getAnimeFlowChoice(tmdbId: string) { return flowChoices.get(tmdbId) ?? null; }
 
 /** Initial preference is Anime-scoped, independent of General Auto and download routing. */
-export function preferredAnimeSource(tmdbId: string, routedSource?: string, routedVariant?: string): AnimeSourceAffinity | null {
+export function preferredAnimeSource(tmdbId: string, routedSource?: string, routedVariant?: string,
+  preference?: { sourceId: string; variant?: string } | null): AnimeSourceAffinity | null {
   const flow = getAnimeFlowChoice(tmdbId);
   if ((routedSource && routedSource !== 'aniembed') || (flow && 'generalSourceId' in flow)) return null;
   const routed = { providerId: 'aniembed', variant: routedVariant };
   if (routedSource === 'aniembed' && validAnimeAffinity(routed)) return routed;
   if (routedSource === 'aniembed' && routedVariant != null) return null;
   if (flow && validAnimeAffinity(flow)) return flow;
-  return getAnimeAffinity(tmdbId) || (validAnimeAffinity({ providerId: 'aniembed', variant: 'sub' })
+  if (preference?.sourceId && preference.sourceId !== 'aniembed') return null;
+  const saved = { providerId: preference?.sourceId, variant: preference?.variant };
+  return (validAnimeAffinity(saved) ? saved : null) || (validAnimeAffinity({ providerId: 'aniembed', variant: 'sub' })
     ? { providerId: 'aniembed', variant: 'sub' } : null);
 }

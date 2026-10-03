@@ -191,6 +191,7 @@ export interface PlaybackProgressV3 {
   duration: number;
   percent: number | null;
   sourceId: string | null;
+  sourceVariant?: 'sub' | 'dub' | 'raw';
   evidence: MobilePlaybackEvidence | null;
   /** Verified cross-device truth imported from PortableProfileV3, not local telemetry. */
   portableVerified?: true;
@@ -226,6 +227,8 @@ export interface PlaybackHandoffV1 {
   targetSourceId: string;
   requestedTime: number | null;
   confirmedTime: number | null;
+  targetSessionId?: string;
+  targetReachedAt?: number;
   strategy: MobileResumeStrategy;
   status: PlaybackHandoffStatus;
   attemptedSourceIds: string[];

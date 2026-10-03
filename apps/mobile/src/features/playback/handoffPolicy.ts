@@ -78,11 +78,19 @@ export function confirmPlaybackHandoff(
   if (!['loading', 'seeking', 'preparing'].includes(handoff.status)) return null;
   if (!finiteNonNegative(handoff.requestedTime) || !snapshot) return null;
   if (snapshot.sourceId !== handoff.targetSourceId) return null;
+  if (typeof snapshot.sessionId !== 'string' || !snapshot.sessionId.trim()) return null;
   if (!finiteNonNegative(snapshot.currentTime)) return null;
-  if (!Number.isFinite(snapshot.observedAt) || snapshot.observedAt < handoff.startedAt) return null;
-  if (Math.abs(snapshot.currentTime - handoff.requestedTime) > HANDOFF_POSITION_TOLERANCE_SECONDS) {
-    return null;
+  if (!Number.isFinite(snapshot.observedAt) || snapshot.observedAt < handoff.startedAt
+    || now - snapshot.observedAt > HANDOFF_SNAPSHOT_MAX_AGE_MS || snapshot.observedAt > now + 1000) return null;
+  if (handoff.targetSessionId && handoff.targetSessionId !== snapshot.sessionId) return null;
+  if (handoff.targetReachedAt == null || handoff.confirmedTime == null) {
+    if (Math.abs(snapshot.currentTime - handoff.requestedTime) > HANDOFF_POSITION_TOLERANCE_SECONDS) return null;
+    return { ...handoff, status: 'seeking', confirmedTime: snapshot.currentTime,
+      targetReachedAt: snapshot.observedAt, targetSessionId: snapshot.sessionId, updatedAt: now };
   }
+  // A seek/paused timestamp is not playback success. Once reached, never pin the target.
+  if (snapshot.state !== 'playing' || snapshot.observedAt <= handoff.targetReachedAt
+    || snapshot.currentTime < handoff.confirmedTime + 1) return null;
   return {
     ...handoff,
     status: 'confirmed',
@@ -97,7 +105,8 @@ export function handoffTargetMissedPosition(
   snapshot: VerifiedPlaybackSnapshot | null | undefined,
   now = Date.now(),
 ): boolean {
-  if (!handoffIsPending(handoff) || !snapshot) return false;
+  if (!handoffIsPending(handoff) || !snapshot || handoff.targetReachedAt != null) return false;
+  if (handoff.strategy === 'verified-seek' && handoff.status !== 'seeking') return false;
   if (!finiteNonNegative(handoff.requestedTime)) return false;
   if (snapshot.sourceId !== handoff.targetSourceId) return false;
   if (!finiteNonNegative(snapshot.currentTime)) return false;

@@ -63,7 +63,7 @@ test("v3.2 picture resize repair keeps one presentation owner and tells the trut
   const sheet = readMobile("src/components/player/PresentationSheet.tsx");
   const embeddedHud = readMobile("src/features/playback/EmbeddedPlayerHud.tsx");
   const preferences = readMobile("src/features/playback/presentationPreferences.ts");
-  const surface = readMobile("src/features/playback/EmbedPlayerSurface.tsx");
+  const surface = readMobile("src/features/playback/EmbedPlayerSurface.tsx") + '\n' + readMobile("src/features/playback/providerEmbedSupport.ts");
   const styles = readMobile("src/features/playback/playerStyles.ts");
 
   assert.match(sheet, />Resize picture</);

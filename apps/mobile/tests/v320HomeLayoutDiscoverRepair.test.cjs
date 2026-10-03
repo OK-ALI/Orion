@@ -75,7 +75,7 @@ test("v3.2 Discover Explore More feeds stay truthful, paged and responsive", () 
 });
 
 test("v3.2 embedded Original keeps an explicit full-size provider viewport without touching healthy Fit or Fill", () => {
-  const surface = read("src/features/playback/EmbedPlayerSurface.tsx");
+  const surface = read("src/features/playback/EmbedPlayerSurface.tsx") + '\n' + read("src/features/playback/providerEmbedSupport.ts");
   const preferences = read("src/features/playback/presentationPreferences.ts");
   const styles = read("src/features/playback/playerStyles.ts");
 

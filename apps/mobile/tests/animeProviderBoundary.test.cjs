@@ -26,7 +26,7 @@ test('URL building uses explicit AniList evidence and exact language/episode par
     'https://aniembed.se/e/151807/4?lang=sub&autoplay=1&t=0');
   assert.equal(registry.getSourceUrl('aniembed', 'tv', { anilistId: 172463 }, 2, 3, { lang: 'dub' }),
     'https://aniembed.se/e/172463/3?lang=dub&autoplay=1&t=0');
-  assert.deepEqual(registry.getSourceResumeParams('aniembed', 140, 'tv'), { t: 140 });
+  assert.deepEqual(registry.getSourceResumeParams('aniembed', 140, 'tv'), {}, 'verified seek owns the positive target; URL stays at zero');
   for (const ids of [{ tmdbId: 151807 }, { imdbId: 'tt151807' }, { anilistId: 0 }, { anilistId: 1.5 }, 151807]) {
     assert.throws(() => registry.getSourceUrl('aniembed', 'tv', ids, 1, 1));
   }
