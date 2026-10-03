@@ -7,7 +7,7 @@ export function intersects(a: PlayerRect, b: PlayerRect): boolean {
 }
 
 /** Reserve provider top/bottom controls and subtitle space; accept measured exclusion regions. */
-export function resolvePlayerDrawerLayout(width: number, height: number, rawInsets: PlayerInsets, occupied: PlayerRect[] = []) {
+export function resolvePlayerDrawerLayout(width: number, height: number, rawInsets: PlayerInsets, occupied: PlayerRect[] = [], contentWidth = 200) {
   width = Math.max(1, finite(width)); height = Math.max(1, finite(height));
   const insets = { top: Math.min(height / 3, finite(rawInsets.top)), bottom: Math.min(height / 3, finite(rawInsets.bottom)),
     left: Math.min(width / 3, finite(rawInsets.left)), right: Math.min(width / 3, finite(rawInsets.right)) };
@@ -15,7 +15,10 @@ export function resolvePlayerDrawerLayout(width: number, height: number, rawInse
   const top = Math.min(height / 3, Math.max(insets.top + 8, height * 0.14));
   const bottom = Math.max(insets.bottom + 8, height * 0.23);
   const bodyHeight = Math.max(44, height - top - bottom);
-  const bodyWidth = Math.max(1, Math.min(360, Math.max(248, safeWidth * (width > height ? 0.38 : 0.82)), safeWidth - 44));
+  // Intrinsic label/icon/padding measurements drive width; viewport only bounds it.
+  const maximumWidth = Math.max(1, Math.min(248, safeWidth - 44));
+  const minimumWidth = Math.min(160, maximumWidth);
+  const bodyWidth = Math.min(maximumWidth, Math.max(minimumWidth, finite(contentWidth)));
   const hitSize = Math.min(44, safeWidth, bodyHeight);
   const candidates = (edge: DrawerEdge) => {
     const x = edge === 'right' ? width - insets.right - hitSize : insets.left;
@@ -29,7 +32,10 @@ export function resolvePlayerDrawerLayout(width: number, height: number, rawInse
   for (const option of [preferred, preferred === 'right' ? 'left' : 'right'] as DrawerEdge[]) {
     const body = { x: option === 'right' ? width - insets.right - bodyWidth : insets.left,
       y: top, width: bodyWidth, height: bodyHeight };
-    const available = candidates(option).find((rect) => !occupied.some((obstacle) => intersects(rect, obstacle) || intersects(body, obstacle)));
+    const available = candidates(option).find((rect) => {
+      const openHit = { ...rect, x: rect.x + (option === 'right' ? -bodyWidth : bodyWidth) };
+      return !occupied.some((obstacle) => intersects(rect, obstacle) || intersects(openHit, obstacle) || intersects(body, obstacle));
+    });
     if (available) { edge = option; hit = available; found = true; break; }
   }
   return { edge, hit, available: found, body: { x: edge === 'right' ? width - insets.right - bodyWidth : insets.left,

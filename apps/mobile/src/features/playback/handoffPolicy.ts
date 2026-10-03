@@ -7,6 +7,9 @@ import type { VerifiedPlaybackSnapshot } from './playerTypes';
 
 export const HANDOFF_SNAPSHOT_MAX_AGE_MS = 5_000;
 export const HANDOFF_CONFIRMATION_TIMEOUT_MS = 12_000;
+// The original deadline still presents recovery. Fresh proof may reconcile that
+// provisional timeout for one bounded window, without retrying or seeking again.
+export const HANDOFF_LATE_CONFIRMATION_WINDOW_MS = 12_000;
 export const HANDOFF_POSITION_TOLERANCE_SECONDS = 5;
 export const HANDOFF_TARGET_SETTLE_MS = 4_000;
 
@@ -75,7 +78,10 @@ export function confirmPlaybackHandoff(
   snapshot: VerifiedPlaybackSnapshot | null | undefined,
   now = Date.now(),
 ): PlaybackHandoffV1 | null {
-  if (!['loading', 'seeking', 'preparing'].includes(handoff.status)) return null;
+  const late = handoff.status === 'unconfirmed' && ['TARGET_NOT_CONFIRMED', 'POSITION_NOT_RESTORED'].includes(handoff.failureCode || '')
+    && handoff.reason !== 'automatic'
+    && now <= handoff.startedAt + HANDOFF_CONFIRMATION_TIMEOUT_MS + HANDOFF_LATE_CONFIRMATION_WINDOW_MS;
+  if (!handoffIsPending(handoff) && !late) return null;
   if (!finiteNonNegative(handoff.requestedTime) || !snapshot) return null;
   if (snapshot.sourceId !== handoff.targetSourceId) return null;
   if (typeof snapshot.sessionId !== 'string' || !snapshot.sessionId.trim()) return null;
@@ -85,7 +91,7 @@ export function confirmPlaybackHandoff(
   if (handoff.targetSessionId && handoff.targetSessionId !== snapshot.sessionId) return null;
   if (handoff.targetReachedAt == null || handoff.confirmedTime == null) {
     if (Math.abs(snapshot.currentTime - handoff.requestedTime) > HANDOFF_POSITION_TOLERANCE_SECONDS) return null;
-    return { ...handoff, status: 'seeking', confirmedTime: snapshot.currentTime,
+    return { ...handoff, status: late ? 'unconfirmed' : 'seeking', confirmedTime: snapshot.currentTime,
       targetReachedAt: snapshot.observedAt, targetSessionId: snapshot.sessionId, updatedAt: now };
   }
   // A seek/paused timestamp is not playback success. Once reached, never pin the target.

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Platform, useWindowDimensions, LayoutChangeEvent } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Platform, useWindowDimensions, LayoutChangeEvent, TextLayoutEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useEvent } from 'expo';
 import { BlurView } from 'expo-blur';
@@ -39,6 +39,12 @@ export function PlayerHUD({
 }: PlayerHUDProps) {
   const { theme } = useOrionTheme();
   const [localControlsVisible, setLocalControlsVisible] = useState(true);
+  const [drawerLabelWidths, setDrawerLabelWidths] = useState<Record<string, number>>({});
+  const measureDrawerLabel = (label: string, event: TextLayoutEvent) => {
+    const lines = event.nativeEvent.lines;
+    const width = Math.ceil(lines.reduce((sum, line) => sum + line.width, 0) + Math.max(0, lines.length - 1) * 4);
+    setDrawerLabelWidths((current) => current[label] === width ? current : { ...current, [label]: width });
+  };
   const controlsVisible = controlledVisible ?? localControlsVisible;
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrubberWidth = useRef(1);
@@ -249,7 +255,11 @@ export function PlayerHUD({
       )}
 
       {/* Control Overlay */}
-      <PlayerEdgeDrawer controlsVisible={controlsVisible} onPress={toggleControls}>
+      <PlayerEdgeDrawer controlsVisible={controlsVisible} contentWidth={Math.max(200, ...Object.values(drawerLabelWidths).map((value) => value + 74))} onPress={(open) => {
+        if (open) resetHideTimer();
+        else if (onDismiss) onDismiss();
+        else setLocalControlsVisible(false);
+      }}>
         <View style={styles.controlsOverlay}>
           {/* Top Bar */}
           <BlurView intensity={50} tint={theme.dark ? "dark" : "light"} style={[styles.topBar, isLandscape && styles.topBarLandscape, { paddingTop: 8 }]}>
@@ -320,19 +330,19 @@ export function PlayerHUD({
               {onOpenPresentation && (
                 <Pressable style={[styles.sourceButton, { backgroundColor: theme.surface }]} onPress={onOpenPresentation}>
                   <Ionicons name="resize-outline" size={18} color={theme.textSecondary} />
-                  <Text style={[styles.sourceText, { color: theme.textSecondary }]}>Resize</Text>
+                  <Text onTextLayout={(event) => measureDrawerLabel('Resize', event)} style={[styles.sourceText, { color: theme.textSecondary }]}>Resize</Text>
                 </Pressable>
               )}
               {onOpenSubtitles && (
                 <Pressable style={[styles.sourceButton, { backgroundColor: theme.surface }]} onPress={onOpenSubtitles}>
                   <Ionicons name="chatbox-ellipses-outline" size={18} color={theme.textSecondary} />
-                  <Text style={[styles.sourceText, { color: theme.textSecondary }]}>Subtitles</Text>
+                  <Text onTextLayout={(event) => measureDrawerLabel('Subtitles', event)} style={[styles.sourceText, { color: theme.textSecondary }]}>Subtitles</Text>
                 </Pressable>
               )}
               {onOpenSources && (
                 <Pressable style={[styles.sourceButton, { backgroundColor: theme.surface }]} onPress={onOpenSources}>
                   <Ionicons name="server-outline" size={18} color={theme.textSecondary} />
-                  <Text style={[styles.sourceText, { color: theme.textSecondary }]}>Source</Text>
+                  <Text onTextLayout={(event) => measureDrawerLabel('Source', event)} style={[styles.sourceText, { color: theme.textSecondary }]}>Source</Text>
                 </Pressable>
               )}
             </View>

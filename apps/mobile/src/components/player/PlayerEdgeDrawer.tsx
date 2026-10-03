@@ -7,16 +7,22 @@ import { PlayerChromeHandle } from './PlayerChromeHandle';
 import { resolvePlayerDrawerLayout, type PlayerRect } from './playerDrawerLayout';
 
 /** One drawer for every Orion surface; the existing controller still owns chrome intent. */
-export function PlayerEdgeDrawer({ controlsVisible, onPress, occupied = [], children }: PropsWithChildren<{
-  controlsVisible: boolean; onPress(): void; occupied?: PlayerRect[];
+export function PlayerEdgeDrawer({ controlsVisible, onPress, occupied = [], contentWidth, children }: PropsWithChildren<{
+  controlsVisible: boolean; onPress(open: boolean): void; occupied?: PlayerRect[]; contentWidth?: number;
 }>) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { theme } = useOrionTheme();
   const controller = useMobilePlayerController();
   const blocked = controller.state.overlay !== 'none';
-  const layout = resolvePlayerDrawerLayout(width, height, insets, occupied);
-  const visible = controlsVisible && !blocked;
+  const layout = resolvePlayerDrawerLayout(width, height, insets, occupied, contentWidth);
+  const [openedFromGrip, setOpenedFromGrip] = useState(false);
+  const visible = openedFromGrip && controlsVisible && !blocked;
+  useEffect(() => {
+    if (!controlsVisible || blocked) setOpenedFromGrip(false);
+  }, [blocked, controlsVisible]);
+  useEffect(() => { setOpenedFromGrip(false); }, [controller.state.activeSessionId]);
+  const activateGrip = () => { const open = !visible; setOpenedFromGrip(open); onPress(open); };
   const progress = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [mounted, setMounted] = useState(visible);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -46,7 +52,7 @@ export function PlayerEdgeDrawer({ controlsVisible, onPress, occupied = [], chil
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content} bounces={false}>{children}</ScrollView>
     </Animated.View>}
     {layout.available && <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { transform: [{ translateX: tabTranslation }] }]}>
-      <PlayerChromeHandle controlsVisible={visible} onPress={onPress} edge={layout.edge} hit={{ ...layout.hit, x: layout.hit.x - layout.safeLeft }} />
+      <PlayerChromeHandle controlsVisible={visible} onPress={activateGrip} edge={layout.edge} hit={{ ...layout.hit, x: layout.hit.x - layout.safeLeft }} />
     </Animated.View>}
   </View>;
 }

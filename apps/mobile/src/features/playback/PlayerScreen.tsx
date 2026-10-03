@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   getSourceResumeParams,
   getSourceUrl,
+  getRegisteredSource,
   sourceResumeStrategy,
 } from '@orion/shared/sources';
 import type { PlaybackHandoffV1 } from '@orion/shared/types';
@@ -147,7 +148,11 @@ export default function PlayerScreen() {
     sourcePreference?.sourceId || existingProgress?.sourceId || MOBILE_DEFAULT_CINEMA_SOURCE_ID,
     type,
   ));
-  const [imdbId, setImdbId] = useState<string | null>(null);
+  const catalogIdentity = `${type}:${id}`;
+  const [externalIdentity, setExternalIdentity] = useState<{ key: string; imdbId: string | null } | null>(null);
+  const imdbId = externalIdentity?.key === catalogIdentity ? externalIdentity.imdbId : null;
+  const needsExternalIdentity = getRegisteredSource(sourceId)?.idPolicy[type].startsWith('imdb');
+  const waitingExternalIdentity = !offlineRequested && needsExternalIdentity && externalIdentity?.key !== catalogIdentity;
   const [animeAttempt, setAnimeAttempt] = useState(0);
   const pendingAnimeSelection = useRef<AnimeSourceSelection | null>(null);
   const anime = useAnimeSource({ id, type, season: resolvedSeason, episode: resolvedEpisode,
@@ -169,6 +174,9 @@ export default function PlayerScreen() {
   const nextEpisodeRequestRef = useRef(0);
   const playbackIdentity = `${type}:${id}:s${resolvedSeason || 0}:e${resolvedEpisode || 0}`;
   const playbackIdentityRef = useRef(playbackIdentity);
+  const currentIdentityRef = useRef(playbackIdentity); currentIdentityRef.current = playbackIdentity;
+  const [episodeTransition, setEpisodeTransition] = useState<string | null>(null);
+  const episodeTransitionRef = useRef<string | null>(null);
   const [readyPlaybackIdentity, setReadyPlaybackIdentity] = useState(playbackIdentity);
 
   const publishHandoff = useCallback((next: PlaybackHandoffV1 | null) => {
@@ -193,8 +201,9 @@ export default function PlayerScreen() {
   useEffect(() => {
     if (playbackIdentityRef.current === playbackIdentity) return;
     playbackIdentityRef.current = playbackIdentity;
+    episodeTransitionRef.current = null;
+    setEpisodeTransition(null);
     setReadyPlaybackIdentity(playbackIdentity);
-    setImdbId(null);
     setDownloadResolutionLatched(downloadIntentAtOpen);
     nextEpisodeRequestRef.current += 1;
     setNextEpisodePrompt(null);
@@ -262,15 +271,18 @@ export default function PlayerScreen() {
 
   useEffect(() => {
     if (offlineRequested) {
-      setImdbId(null);
+      setExternalIdentity(null);
       return undefined;
     }
     let cancelled = false;
-    tmdbFetch<any>(`/${type}/${id}/external_ids`)
-      .then((result) => { if (!cancelled) setImdbId(result?.imdb_id || null); })
-      .catch(() => { if (!cancelled) setImdbId(null); });
-    return () => { cancelled = true; };
-  }, [id, offlineRequested, type]);
+    const scope = new AbortController();
+    const finish = (imdb: string | null) => { if (!cancelled) setExternalIdentity({ key: catalogIdentity, imdbId: imdb }); };
+    const timer = setTimeout(() => { finish(null); cancelled = true; scope.abort(); }, 20_000);
+    tmdbFetch<any>(`/${type}/${id}/external_ids`, { signal: scope.signal })
+      .then((result) => finish(result?.imdb_id || null)).catch(() => finish(null))
+      .finally(() => clearTimeout(timer));
+    return () => { cancelled = true; clearTimeout(timer); scope.abort(); };
+  }, [catalogIdentity, id, offlineRequested, type]);
 
   const activeStreamUrl = useMemo(() => {
     if (offlineRequested) return '';
@@ -317,7 +329,9 @@ export default function PlayerScreen() {
       setSourceId(targetSourceId);
       return true;
     }
-    const strategy = sourceResumeStrategy(targetSourceId);
+    // These sources already use Orion's verified/command seek in the surface.
+    // Do not classify loading position as a missed URL target before that seek.
+    const strategy = ['vidlink', 'cinesrc'].includes(targetSourceId) ? 'verified-seek' : sourceResumeStrategy(targetSourceId);
     const next = createPlaybackHandoff({
       reason,
       fromSessionId,
@@ -338,7 +352,7 @@ export default function PlayerScreen() {
       }
       return false;
     }
-    publishHandoff(next);
+    publishHandoff(updateHandoffStatus(next, 'preparing'));
     setResumeTime(requestedTime || 0);
     setSourceId(targetSourceId);
     return true;
@@ -423,6 +437,7 @@ export default function PlayerScreen() {
   }, [launchHandoff, publishHandoff, type]);
 
   const handlePlaybackSnapshot = useCallback((snapshot: VerifiedPlaybackSnapshot) => {
+    if (currentIdentityRef.current !== playbackIdentity || episodeTransitionRef.current) return;
     anime.recordSuccess(snapshot.sourceId);
     const active = handoffRef.current;
     if (!active || active.targetSourceId !== sourceId) return;
@@ -432,13 +447,20 @@ export default function PlayerScreen() {
       return;
     }
     if (!handoffTargetMissedPosition(active, snapshot)) return;
-    const missed = updateHandoffStatus(active, 'unconfirmed', 'POSITION_NOT_RESTORED');
+    const missed = { ...updateHandoffStatus(active, 'unconfirmed', 'POSITION_NOT_RESTORED'), targetSessionId: snapshot.sessionId };
     if (active.reason === 'automatic') retryAutomaticHandoff(missed);
     else publishHandoff(missed);
-  }, [anime.recordSuccess, publishHandoff, retryAutomaticHandoff, sourceId]);
+  }, [anime.recordSuccess, playbackIdentity, publishHandoff, retryAutomaticHandoff, sourceId]);
 
   useEffect(() => {
-    if (!handoff || !handoffIsPending(handoff)) return undefined;
+    if (!handoff || !handoffIsPending(handoff) || episodeTransition || waitingExternalIdentity
+      || readyPlaybackIdentity !== playbackIdentity || anime.phase === 'checking'
+      || initialChoicePending || !activeStreamUrl) return undefined;
+    if (handoff.status === 'preparing') {
+      const now = Date.now();
+      publishHandoff({ ...handoff, status: 'loading', startedAt: now, updatedAt: now });
+      return undefined;
+    }
     const remaining = Math.max(0, handoff.startedAt + HANDOFF_CONFIRMATION_TIMEOUT_MS - Date.now());
     const timer = setTimeout(() => {
       const active = handoffRef.current;
@@ -449,7 +471,8 @@ export default function PlayerScreen() {
       else publishHandoff(updateHandoffStatus(active, 'unconfirmed', 'TARGET_NOT_CONFIRMED'));
     }, remaining);
     return () => clearTimeout(timer);
-  }, [handoff, publishHandoff, retryAutomaticHandoff]);
+  }, [activeStreamUrl, anime.phase, episodeTransition, handoff, initialChoicePending, playbackIdentity,
+    publishHandoff, readyPlaybackIdentity, retryAutomaticHandoff, waitingExternalIdentity]);
 
   useEffect(() => {
     if (handoff?.status !== 'confirmed') return undefined;
@@ -483,6 +506,7 @@ export default function PlayerScreen() {
   }, [initialSavedTime, launchHandoff, offlineRequested, sourceId]);
 
   const handleVerifiedPlaybackCompletion = useCallback((_snapshot: VerifiedPlaybackSnapshot) => {
+    if (currentIdentityRef.current !== playbackIdentity || episodeTransitionRef.current) return;
     if (type !== 'tv' || offlineRequested || downloadResolutionOnly
       || resolvedSeason == null || resolvedEpisode == null) return;
     const seasonNumber = resolvedSeason;
@@ -502,17 +526,17 @@ export default function PlayerScreen() {
         if (next) setNextEpisodePrompt(next);
       })
       .catch(() => {});
-  }, [downloadResolutionOnly, id, offlineRequested, resolvedEpisode, resolvedSeason, type]);
+  }, [downloadResolutionOnly, id, offlineRequested, playbackIdentity, resolvedEpisode, resolvedSeason, type]);
 
   const playNextEpisode = useCallback(() => {
     const next = nextEpisodePrompt;
     if (!next) return;
     nextEpisodeRequestRef.current += 1;
+    const targetIdentity = `tv:${id}:s${next.seasonNumber}:e${next.episodeNumber}`;
+    episodeTransitionRef.current = targetIdentity;
+    setEpisodeTransition(targetIdentity);
     setNextEpisodePrompt(null);
     publishHandoff(null);
-    setResumeTime(0);
-    setForceStartFromBeginning(false);
-    setInitialChoicePending(false);
     router.replace({
       pathname: '/player/[id]',
       params: {
@@ -572,7 +596,7 @@ export default function PlayerScreen() {
     onToggleOrientation: toggleOrientation,
   };
 
-  const surface = readyPlaybackIdentity !== playbackIdentity || anime.phase === 'checking' ? (
+  const surface = episodeTransition || waitingExternalIdentity || readyPlaybackIdentity !== playbackIdentity || anime.phase === 'checking' ? (
     <PlayerStateOverlay state="preparing" onBack={exitPlayer} />
   ) : initialChoicePending ? null : offlineRequested ? (
     offlineAssetId && offlineSource ? (
@@ -620,10 +644,10 @@ export default function PlayerScreen() {
   );
 
   return (
-    <MobilePlayerControllerProvider>
+    <MobilePlayerControllerProvider key={offlineRequested ? 'offline' : playbackIdentity}>
     <View style={{ flex: 1 }}>
       {surface}
-      {initialChoicePending && anime.phase !== 'checking' && (
+      {initialChoicePending && !episodeTransition && anime.phase !== 'checking' && (
         <ResumePlaybackPrompt
           title={title || 'this title'}
           savedTime={initialSavedTime}

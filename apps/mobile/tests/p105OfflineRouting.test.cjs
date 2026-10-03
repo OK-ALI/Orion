@@ -32,7 +32,7 @@ test('P10.5 finalized files launch the framework Activity while legacy bundles k
   const legacy = read('src', 'features', 'playback', 'OrionOfflinePlayerSurface.tsx');
 
   assert.match(screen, /offlineAssetId\?: string/);
-  assert.match(screen, /if \(offlineRequested\) \{\s*setImdbId\(null\);\s*return undefined;/);
+  assert.match(screen, /if \(offlineRequested\) \{\s*setExternalIdentity\(null\);\s*return undefined;/);
   assert.match(screen, /if \(offlineRequested\) return '';/);
   assert.match(screen, /classifyNativeOfflinePlaybackV1\(offlineAssetId\)/);
   assert.match(screen, /offlineSource\.sourceKind === 'file' \? \([\s\S]*<OrionFinalizedPlayerActivitySurface/);

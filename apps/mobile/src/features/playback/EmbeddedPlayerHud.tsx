@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useOrionTheme } from '../../context/ThemeContext';
 import type { MobilePlayerPresentation, ShieldVerificationState } from '@orion/shared/types';
@@ -36,6 +37,7 @@ function protectionText(state: ShieldVerificationState, nativeObserved: boolean)
 
 export function EmbeddedPlayerHud(props: EmbeddedPlayerHudProps) {
   const { theme } = useOrionTheme();
+  const [labelWidths, setLabelWidths] = useState<Record<string, number>>({});
   const shieldColor = props.shieldState === 'verified' ? theme.success : props.shieldState === 'failed' ? theme.danger : theme.warning;
   const actions: { label: string; icon: keyof typeof Ionicons.glyphMap; run(): void; color?: string }[] = [
     { label: 'Back', icon: 'arrow-back', run: props.onBack },
@@ -46,14 +48,22 @@ export function EmbeddedPlayerHud(props: EmbeddedPlayerHudProps) {
     { label: 'Rotate player', icon: props.landscape ? 'refresh-outline' : 'expand-outline', run: props.onRotate },
     { label: 'Sources. Current source ' + props.sourceLabel, icon: 'hardware-chip-outline', run: props.onSources },
   ];
-  return <PlayerEdgeDrawer controlsVisible={props.visible} onPress={props.visible ? props.onCollapse : props.onReveal}>
-    <Text style={[styles.title, { color: theme.text }]}>{props.title}</Text>
-    <Text style={[styles.meta, { color: theme.textSecondary }]}>{props.sourceLabel}</Text>
+  const measuredWidths = actions.map((action) => labelWidths[action.label]).filter(Number.isFinite);
+  const contentWidth = measuredWidths.length ? Math.max(...measuredWidths) + 82 : undefined;
+  return <PlayerEdgeDrawer controlsVisible={props.visible} contentWidth={contentWidth}
+    onPress={(open) => open ? props.onReveal() : props.onCollapse()}>
+    <Text numberOfLines={2} style={[styles.title, { color: theme.text }]}>{props.title}</Text>
+    <Text numberOfLines={2} style={[styles.meta, { color: theme.textSecondary }]}>{props.sourceLabel}</Text>
     <View style={styles.actions}>
       {actions.map((action) => <Pressable key={action.label} accessibilityRole="button" accessibilityLabel={action.label}
         onPress={action.run} style={({ pressed }) => [styles.action, { backgroundColor: pressed ? theme.accentSoft : theme.surface, borderColor: theme.border }]}>
         <Ionicons name={action.icon} size={18} color={action.color || theme.text} />
-        <Text style={[styles.label, { color: action.color || theme.text }]}>{action.label.startsWith('Sources.') ? 'Sources' : action.label.startsWith('Resize') ? 'Resize' : action.color ? protectionText(props.shieldState, props.nativeShieldObserved) : action.label}</Text>
+        <Text style={[styles.label, { color: action.color || theme.text }]} onTextLayout={({ nativeEvent }) => {
+          const measured = Math.ceil(nativeEvent.lines.reduce((sum, line) => sum + line.width, 0)
+            + Math.max(0, nativeEvent.lines.length - 1) * 4)
+            + (action.color && props.blockedRequests > 0 ? 10 + String(props.blockedRequests).length * 8 : 0);
+          setLabelWidths((current) => current[action.label] === measured ? current : { ...current, [action.label]: measured });
+        }}>{action.label.startsWith('Sources.') ? 'Sources' : action.label.startsWith('Resize') ? 'Resize' : action.color ? protectionText(props.shieldState, props.nativeShieldObserved) : action.label}</Text>
         {action.color && props.blockedRequests > 0 && <Text style={[styles.shieldCounter, { color: action.color }]}>{props.blockedRequests}</Text>}
       </Pressable>)}
     </View>

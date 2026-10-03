@@ -183,6 +183,9 @@ test('same mounted Player direct later-season route cannot render the old episod
 
 test('manual General recovery with no mounted/verified position starts the chosen source without a false Resume failure', async () => {
   const f = libraryFixture(), p = playerRouteFixture(f, { id: '9', type: 'tv', title: 'Title', season: '1', episode: '1' });
+  assert.equal(p.find('EmbedPlayerSurface'), null, 'IMDb provider waits for catalog identity before its sole mount');
+  assert.equal(p.find('PlayerStateOverlay').state, 'preparing');
+  await p.harness.settle();
   const source = p.find('EmbedPlayerSurface'); assert.equal(source.sourceId, 'vixsrc');
   assert.equal(source.onSourceChange('vidlink', null, 'manual'), true); await p.harness.settle();
   const recovery = p.find('EmbedPlayerSurface'); assert.equal(recovery.sourceId, 'vidlink'); assert.equal(recovery.initialResumeTime, 0);
