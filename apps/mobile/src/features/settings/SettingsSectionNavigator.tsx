@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { radii, spacing, fontSizes } from '@orion/shared/tokens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { resolveMotionPolicy } from '../../services/motionPolicy';
 import type { MobileSettingsSectionDefinition, MobileSettingsSectionId } from './settingsArchitecture';
 import { moveSettingsSection } from './settingsSectionOrderPreferences';
 
@@ -50,7 +51,8 @@ function SettingsSectionOption({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const { theme, preferences } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const dragY = React.useRef(new Animated.Value(0)).current;
   const rowHeight = React.useRef(54);
   const currentIndex = React.useRef(index);
@@ -79,7 +81,7 @@ function SettingsSectionOption({
       setDragging(false);
       Animated.timing(dragY, {
         toValue: 0,
-        duration: preferences.reducedMotion ? 0 : 120,
+        duration: motion.reduceMotion ? 0 : 120,
         useNativeDriver: false,
       }).start();
     },
@@ -87,11 +89,11 @@ function SettingsSectionOption({
       setDragging(false);
       Animated.timing(dragY, {
         toValue: 0,
-        duration: preferences.reducedMotion ? 0 : 120,
+        duration: motion.reduceMotion ? 0 : 120,
         useNativeDriver: false,
       }).start();
     },
-  }), [dragY, preferences.reducedMotion, section.id, total]);
+  }), [dragY, motion.reduceMotion, section.id, total]);
 
   const moveBy = (delta: number) => moveSettingsSection(section.id, index + delta);
 
@@ -145,7 +147,8 @@ function SettingsSectionOption({
 }
 
 export function SettingsSectionNavigator({ sections, currentSectionId, onSelect }: SettingsSectionNavigatorProps) {
-  const { theme, preferences } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const current = useMemo(
@@ -179,7 +182,7 @@ export function SettingsSectionNavigator({ sections, currentSectionId, onSelect 
       <Modal
         visible={open}
         transparent
-        animationType={preferences.reducedMotion ? 'fade' : 'slide'}
+        animationType={motion.reduceMotion ? 'fade' : 'slide'}
         statusBarTranslucent
         onRequestClose={() => setOpen(false)}
       >

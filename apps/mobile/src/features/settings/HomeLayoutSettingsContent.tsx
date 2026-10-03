@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { fontSizes, radii, spacing } from '@orion/shared/tokens';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { resolveMotionPolicy } from '../../services/motionPolicy';
 import {
   HOME_RAIL_LABELS,
   moveHomeRail,
@@ -37,7 +38,8 @@ function HomeLayoutRow({
   enabled: boolean;
   onMove: (id: HomeRailId, targetIndex: number) => void;
 }) {
-  const { theme, preferences } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const dragY = React.useRef(new Animated.Value(0)).current;
   const rowHeight = React.useRef(68);
   const currentIndex = React.useRef(index);
@@ -66,7 +68,7 @@ function HomeLayoutRow({
       setDragging(false);
       Animated.timing(dragY, {
         toValue: 0,
-        duration: preferences.reducedMotion ? 0 : 120,
+        duration: motion.reduceMotion ? 0 : 120,
         useNativeDriver: false,
       }).start();
     },
@@ -74,11 +76,11 @@ function HomeLayoutRow({
       setDragging(false);
       Animated.timing(dragY, {
         toValue: 0,
-        duration: preferences.reducedMotion ? 0 : 120,
+        duration: motion.reduceMotion ? 0 : 120,
         useNativeDriver: false,
       }).start();
     },
-  }), [dragY, id, onMove, preferences.reducedMotion, total]);
+  }), [dragY, id, onMove, motion.reduceMotion, total]);
 
   const moveBy = (delta: number) => moveHomeRail(id, index + delta);
 
@@ -133,7 +135,8 @@ function HomeLayoutRow({
 }
 
 export function HomeLayoutSettingsContent() {
-  const { theme, preferences } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const insets = useSafeAreaInsets();
   const layout = useHomeLayoutPreferences();
   const [open, setOpen] = React.useState(false);
@@ -170,7 +173,7 @@ export function HomeLayoutSettingsContent() {
       <Modal
         visible={open}
         transparent
-        animationType={preferences.reducedMotion ? 'fade' : 'slide'}
+        animationType={motion.reduceMotion ? 'fade' : 'slide'}
         statusBarTranslucent
         onRequestClose={() => setOpen(false)}
       >

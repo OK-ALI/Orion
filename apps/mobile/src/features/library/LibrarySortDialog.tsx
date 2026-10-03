@@ -1,6 +1,7 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { resolveMotionPolicy } from '../../services/motionPolicy';
 import {
   MOBILE_LIBRARY_SORT_OPTIONS,
   type MobileLibrarySort,
@@ -19,12 +20,13 @@ export function LibrarySortDialog({
   onSelect,
   onDismiss,
 }: LibrarySortDialogProps) {
-  const { theme, preferences } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   return (
     <Modal
       visible={visible}
       transparent
-      animationType={preferences.reducedMotion ? 'fade' : 'slide'}
+      animationType={motion.reduceMotion ? 'fade' : 'slide'}
       onRequestClose={onDismiss}
       statusBarTranslucent
     >

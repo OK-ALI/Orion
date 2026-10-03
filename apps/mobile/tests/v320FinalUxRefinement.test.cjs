@@ -50,7 +50,7 @@ test("v3.2 final Settings reorder keeps Orion theme, responsiveness and active-o
   assert.match(navigator, /maxHeight: '82%'/);
   assert.match(navigator, /<ScrollView[\s\S]*nestedScrollEnabled/);
   assert.match(navigator, /minHeight: 48/);
-  assert.match(navigator, /preferences\.reducedMotion \? 0 : 120/);
+  assert.match(navigator, /motion\.reduceMotion \? 0 : 120/);
   assert.match(navigator, /theme\.accentSoft/);
   assert.match(navigator, /theme\.accent/);
   assert.match(navigator, /theme\.surface/);

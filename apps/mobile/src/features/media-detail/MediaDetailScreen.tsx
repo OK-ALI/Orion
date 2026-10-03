@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator, Pressable, FlatList, Animated, useWindowDimensions, Modal, Share } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator, Pressable, FlatList, useWindowDimensions, Modal, Share } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { spacing } from '@orion/shared/tokens';
@@ -10,6 +10,7 @@ import { imgUrl } from '@orion/shared/api';
 import { useMediaDetailRemoteState, mediaDetailConnectionCopy } from './useMediaDetailRemoteState';
 import { useMediaDetailLocalAvailability, type MediaDetailLocalCopy } from './useMediaDetailLocalAvailability';
 import { MediaDetailFallback, MediaDetailLocalCopies } from './MediaDetailFallback';
+import { MediaDetailLoading, EpisodeListLoading } from './MediaDetailLoading';
 import { TmdbMediaItem } from '@orion/shared/types';
 import { DownloadModal } from '../../components/DownloadModal';
 import { TrailerModal } from '../../components/TrailerModal';
@@ -76,14 +77,7 @@ export default function MediaDetailScreen() {
   const [, setProgressRefreshVersion] = useState(0);
   const { width, isTablet } = useResponsiveLayout();
   const { fontScale } = useWindowDimensions();
-  const tabFadeAnim = useRef(new Animated.Value(1)).current;
-  const handleTabChange = (tabKey: typeof activeTab) => {
-    Animated.sequence([
-      Animated.timing(tabFadeAnim, { toValue: 0.2, duration: 80, useNativeDriver: true }),
-      Animated.timing(tabFadeAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
-    ]).start();
-    setActiveTab(tabKey);
-  };
+  const handleTabChange = (tabKey: typeof activeTab) => setActiveTab(tabKey);
   const isMovie = type === 'movie';
   const watchedActions = useMediaDetailWatched({
     data,
@@ -173,7 +167,7 @@ export default function MediaDetailScreen() {
     setDownloadTarget(null);
   }, [id, type, network.remoteReady]);
   if (loading && !data && !local.record && !isMovie) {
-    return <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}><ActivityIndicator size="large" color={theme.accent} /></View>;
+    return <MediaDetailLoading onBack={() => router.back()} />;
   }
   if (!data) {
     return <MediaDetailFallback title={local.record?.title} year={local.record?.year} copies={local.copies}
@@ -569,7 +563,7 @@ export default function MediaDetailScreen() {
                   {!network.remoteReady ? connectionMessage : remote.episodesError ? 'Episode information is unavailable. Please try again later.' : 'Episode information has not loaded yet.'}
                 </Text>}
                 {episodesLoading ? (
-                  <ActivityIndicator size="small" color={theme.accent} style={{ marginTop: 20 }} />
+                  <EpisodeListLoading />
                 ) : (
                   episodes.map((ep: any) => {
                     const episodeWatched = watchedActions.isEpisodeWatched(ep);

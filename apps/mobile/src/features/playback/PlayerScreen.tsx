@@ -181,6 +181,7 @@ export default function PlayerScreen() {
   const [readyPlaybackIdentity, setReadyPlaybackIdentity] = useState(playbackIdentity);
 
   const publishHandoff = useCallback((next: PlaybackHandoffV1 | null) => {
+    const previous = handoffRef.current;
     handoffRef.current = next;
     setHandoffState(next);
     updateMobileDiagnostics({
@@ -191,7 +192,13 @@ export default function PlayerScreen() {
       handoffFailureCode: next?.failureCode ?? null,
     });
     if (next) traceMobilePlayback?.('handoff', { sourceId: next.targetSourceId, attemptId: next.id,
-      strategy: next.strategy, state: next.status, target: next.requestedTime, reason: next.failureCode });
+      sessionId: next.targetSessionId, routeIdentity: playbackIdentityRef.current, strategy: next.strategy, state: next.status,
+      target: next.requestedTime, position: next.confirmedTime, reason: next.failureCode,
+      warningVisible: ['unconfirmed', 'failed'].includes(next.status), handoffState: next.status });
+    if (previous && (!next || next.status === 'confirmed')) traceMobilePlayback?.('warning-clear', {
+      sourceId: previous.targetSourceId, attemptId: previous.id, sessionId: previous.targetSessionId,
+      routeIdentity: playbackIdentityRef.current, reason: next ? 'settled' : 'released',
+      persistenceEligible: next?.status === 'confirmed' || previous.status === 'confirmed' });
   }, []);
 
   // Download source resolution is intentionally current-source only.
@@ -451,7 +458,12 @@ export default function PlayerScreen() {
     if (!active || active.targetSourceId !== sourceId) return;
     const decision = evaluatePlaybackHandoff(active, snapshot);
     traceMobilePlayback?.('settlement', { sourceId, attemptId: active.id, sessionId: snapshot.sessionId,
-      routeIdentity: playbackIdentity, state: snapshot.state, position: snapshot.currentTime, reason: decision.reason });
+      routeIdentity: playbackIdentity, state: snapshot.state, position: snapshot.currentTime, reason: decision.reason,
+      target: active.requestedTime, boundSessionId: active.targetSessionId, targetAttemptId: snapshot.targetObservation?.attemptId,
+      targetSessionId: snapshot.targetObservation?.sessionId, targetPosition: snapshot.targetObservation?.currentTime,
+      targetObservedAt: snapshot.targetObservation?.observedAt, targetReachedAt: active.targetReachedAt,
+      confirmedTime: active.confirmedTime, handoffState: active.status, verified: true,
+      warningVisible: ['unconfirmed', 'failed'].includes(active.status) && decision.handoff?.status !== 'confirmed' });
     const confirmed = decision.handoff;
     if (confirmed) {
       publishHandoff(confirmed);

@@ -11,6 +11,7 @@ interface BridgeOptions {
   sourceId: string;
   strategy: string;
   expectedOrigins: string[];
+  frameOrigin?: string;
 }
 
 interface ParseContext {
@@ -78,13 +79,26 @@ export function parseEmbeddedTelemetryMessage(
   };
 }
 
+export function getEmbeddedTelemetryRejectReason(data: any, context: ParseContext): string {
+  const sequence = Number(data.sequence);
+  if (data.sessionId !== context.sessionId) return 'session-mismatch';
+  if (data.sourceId !== context.sourceId) return 'source-mismatch';
+  if (!Number.isInteger(sequence)) return 'invalid-sequence';
+  if (sequence <= context.lastSequence) return 'stale-bridge-sequence';
+  if (typeof data.origin !== 'string' || !context.expectedOrigins.includes(data.origin)) return 'unexpected-origin';
+  if (!normalizeState(data.state)) return 'invalid-state';
+  if (!['provider-message', 'provider-video-event'].includes(data.evidence)) return 'invalid-evidence';
+  return 'parse-rejected';
+}
+
 export function createEmbeddedTelemetryScript({
   sessionId,
   sourceId,
   strategy,
   expectedOrigins,
+  frameOrigin,
 }: BridgeOptions): string {
-  const config = JSON.stringify({ sessionId, sourceId, strategy, expectedOrigins });
+  const config = JSON.stringify({ sessionId, sourceId, strategy, expectedOrigins, frameOrigin });
   return `
     (function() {
       var config = ${config};
@@ -182,6 +196,10 @@ export function createEmbeddedTelemetryScript({
           vsembed: true
         };
         if (!supportedSources[config.sourceId]) return;
+        if (config.frameOrigin) {
+          var frame = document.getElementById('orion-provider-frame');
+          if (!frame || event.source !== frame.contentWindow || event.origin !== config.frameOrigin) return;
+        }
         var extraOrigins = providerMessageOrigins[config.sourceId];
         if (!allowedOrigins.has(event.origin) && !(extraOrigins && extraOrigins.has(event.origin))) return;
 
@@ -212,7 +230,7 @@ export function createEmbeddedTelemetryScript({
               ? 'buffering'
               : providerStatus.indexOf('seek') >= 0
                 ? 'seeking'
-                : providerStatus.indexOf('end') >= 0 || providerStatus.indexOf('finish') >= 0
+                : providerStatus.indexOf('end') >= 0 || providerStatus.indexOf('finish') >= 0 || (config.sourceId === 'vidsrc-ir' && providerStatus === 'completed')
                   ? 'ended'
                   : providerStatus.indexOf('error') >= 0
                     ? 'error'

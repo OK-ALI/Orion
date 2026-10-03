@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useOrionTheme } from '../context/ThemeContext';
+import { resolveMotionPolicy } from '../services/motionPolicy';
 
 const ORION_LETTERS = [...'ORION'];
 
@@ -18,7 +19,8 @@ interface StartupIntroProps {
 }
 
 export function StartupIntro({ active, onComplete }: StartupIntroProps) {
-  const { theme, preferences } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const { width, height } = useWindowDimensions();
   const overlayOpacity = useRef(new Animated.Value(1)).current;
   const markOpacity = useRef(new Animated.Value(0)).current;
@@ -39,7 +41,7 @@ export function StartupIntro({ active, onComplete }: StartupIntroProps) {
     const finish = () => completionRef.current();
     let animation: Animated.CompositeAnimation;
 
-    if (preferences.reducedMotion) {
+    if (motion.reduceMotion) {
       markOpacity.setValue(1);
       markScale.setValue(1);
       auraOpacity.setValue(0.2);
@@ -120,7 +122,7 @@ export function StartupIntro({ active, onComplete }: StartupIntroProps) {
     markOpacity,
     markScale,
     overlayOpacity,
-    preferences.reducedMotion,
+    motion.reduceMotion,
     taglineOpacity,
   ]);
 

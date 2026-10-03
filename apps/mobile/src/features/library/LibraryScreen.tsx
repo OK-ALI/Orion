@@ -14,6 +14,7 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 
 import type { ContinueWatchingEntry } from '@orion/shared/types';
 import { useLibrary } from '../../context/LibraryContext';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { resolveMotionPolicy } from '../../services/motionPolicy';
 import { MediaCard } from '../../components/MediaCard';
 import { MobilePageHeader } from '../../components/MobilePageHeader';
 import { OrionDialog } from '../../components/OrionDialog';
@@ -75,7 +76,8 @@ export default function LibraryScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
   const { width, shortestEdge, isLandscape, isTablet } = useResponsiveLayout();
-  const { theme, preferences } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const { resolvedProfile } = usePerformanceProfile();
   const {
     saved, savedOrder, history, progress, watched,
@@ -227,8 +229,8 @@ export default function LibraryScreen() {
   }, [router]);
 
   useEffect(() => {
-    pagerX.value = withTiming(-activeIndex * width, { duration: preferences.reducedMotion ? 0 : 210 });
-  }, [activeIndex, pagerX, preferences.reducedMotion, width]);
+    pagerX.value = withTiming(-activeIndex * width, { duration: motion.reduceMotion ? 0 : 210 });
+  }, [activeIndex, pagerX, motion.reduceMotion, width]);
 
   const pagerGesture = Gesture.Pan()
     .activeOffsetX([-24, 24])
@@ -245,7 +247,7 @@ export default function LibraryScreen() {
       const forward = event.translationX < -width * 0.18 || event.velocityX < -650;
       const backward = event.translationX > width * 0.18 || event.velocityX > 650;
       const target = Math.max(0, Math.min(TABS.length - 1, activeIndex + (forward ? 1 : backward ? -1 : 0)));
-      pagerX.value = withTiming(-target * width, { duration: preferences.reducedMotion ? 0 : 210 });
+      pagerX.value = withTiming(-target * width, { duration: motion.reduceMotion ? 0 : 210 });
       if (target !== activeIndex) runOnJS(changeTab)(target);
     });
   const pagerStyle = useAnimatedStyle(() => ({ transform: [{ translateX: pagerX.value }] }));

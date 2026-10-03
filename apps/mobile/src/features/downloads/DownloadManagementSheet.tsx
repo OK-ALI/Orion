@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { fontSizes, radii, spacing } from '@orion/shared/tokens';
 import type { MobileDownloadAssetV1, MobileDownloadManagementResultV1 } from '@orion/shared/types';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { resolveMotionPolicy } from '../../services/motionPolicy';
 import { useResponsiveLayout } from '../../services/responsive';
 import {
   chooseNativeLibraryStorageTargetV1,
@@ -86,7 +87,8 @@ function resultMessage(result: MobileDownloadManagementResultV1): string {
 }
 
 export function DownloadManagementSheet({ visible, mode, assets, initialAssetIds = [], onClose }: DownloadManagementSheetProps) {
-  const { theme, preferences } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const { isTablet } = useResponsiveLayout();
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initialAssetIds));
   const [sort, setSort] = useState<ManagementSort>(mode === 'free-space' ? 'size' : 'title');
@@ -198,7 +200,7 @@ export function DownloadManagementSheet({ visible, mode, assets, initialAssetIds
     <Modal
       visible={visible}
       transparent
-      animationType={preferences.reducedMotion ? 'fade' : 'slide'}
+      animationType={motion.reduceMotion ? 'fade' : 'slide'}
       statusBarTranslucent
       onRequestClose={onClose}
     >

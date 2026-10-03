@@ -52,23 +52,36 @@ function escapeHtmlAttribute(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export function createProviderIframeDocument(target: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; frame-src https://player.videasy.net https://player.videasy.to"><style>html,body,iframe{width:100%;height:100%;margin:0;border:0;background:#000;overflow:hidden}</style></head><body><iframe src="${escapeHtmlAttribute(target)}" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="origin"></iframe></body></html>`;
+export function createProviderIframeDocument(target: string, frameOrigins = ['https://player.videasy.net', 'https://player.videasy.to']): string {
+  const origins = frameOrigins.filter((origin) => {
+    try { const url = new URL(origin); return url.protocol === 'https:' && url.origin === origin && !url.username && !url.password; }
+    catch { return false; }
+  });
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; frame-src ${origins.join(' ') || "'none'"}"><style>html,body,iframe{width:100%;height:100%;margin:0;border:0;background:#000;overflow:hidden}</style></head><body><iframe id="orion-provider-frame" src="${escapeHtmlAttribute(target)}" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="origin"></iframe></body></html>`;
 }
 
 export function createProviderWebViewSource(source: CinemaSourceDescriptor | undefined, url: string) {
   if (!source?.requiresIframeWrapper) return { uri: url };
   try {
     const target = new URL(url);
-    if (target.protocol !== 'https:' || !source.expectedOrigins.includes(target.origin)) return { uri: 'about:blank' };
-    return { html: createProviderIframeDocument(target.toString()), baseUrl: 'https://orion.local/player/' };
+    if (target.protocol !== 'https:' || target.username || target.password || !source.expectedOrigins.includes(target.origin)) return { uri: 'about:blank' };
+    const frameOrigins = source.expectedOrigins.some((origin) => origin === 'https://player.videasy.net' || origin === 'https://player.videasy.to')
+      ? undefined : source.expectedOrigins;
+    return { html: createProviderIframeDocument(target.toString(), frameOrigins), baseUrl: 'https://orion.local/player/' };
   } catch { return { uri: 'about:blank' }; }
 }
 
-/** Preserves the legacy fallback while keeping the player surface below its ceiling. */
+export function getProviderTelemetryFrameOrigin(source: CinemaSourceDescriptor | undefined, url: string): string | undefined {
+  if (!source?.requiresIframeWrapper) return undefined;
+  try { const target = new URL(url); return target.protocol === 'https:' && !target.username && !target.password
+    && source.expectedOrigins.includes(target.origin) ? target.origin : undefined; } catch { return undefined; }
+}
+
+/** Explicit wrapper navigation never grants synthetic media/request authority. */
 export function getProviderShieldManifest(sourceId: string, source?: CinemaSourceDescriptor): ProviderRequestManifestV1 {
   return source?.requestManifest || { schemaVersion: 1, sourceId, mode: 'observe',
-    allowedNavigationOrigins: source?.expectedOrigins || [], requiredOrigins: source?.expectedOrigins || [],
+    allowedNavigationOrigins: (source?.requiresIframeWrapper ? source.allowedNavigationOrigins ?? source.expectedOrigins : source?.expectedOrigins) || [],
+    requiredOrigins: (source?.requiresIframeWrapper ? source.requiredRequestOrigins ?? source.expectedOrigins : source?.expectedOrigins) || [],
     mediaOrigins: [], artworkOrigins: [], subtitleOrigins: [], popupPolicy: 'block', rules: [] };
 }
 

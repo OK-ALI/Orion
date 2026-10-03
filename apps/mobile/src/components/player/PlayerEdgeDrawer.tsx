@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
-import { AccessibilityInfo, Animated, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Animated, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { resolveMotionPolicy } from '../../services/motionPolicy';
 import { useMobilePlayerController } from '../../features/playback/MobilePlayerController';
 import { PlayerChromeHandle } from './PlayerChromeHandle';
 import { resolvePlayerDrawerLayout, type PlayerRect } from './playerDrawerLayout';
@@ -12,7 +13,8 @@ export function PlayerEdgeDrawer({ controlsVisible, onPress, occupied = [], cont
 }>) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { theme } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const reducedMotion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion).reduceMotion;
   const controller = useMobilePlayerController();
   const blocked = controller.state.overlay !== 'none';
   const layout = resolvePlayerDrawerLayout(width, height, insets, occupied, contentWidth);
@@ -25,13 +27,6 @@ export function PlayerEdgeDrawer({ controlsVisible, onPress, occupied = [], cont
   const activateGrip = () => { const open = !visible; setOpenedFromGrip(open); onPress(open); };
   const progress = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const [mounted, setMounted] = useState(visible);
-  const [reducedMotion, setReducedMotion] = useState(false);
-  useEffect(() => {
-    let disposed = false;
-    AccessibilityInfo.isReduceMotionEnabled().then((value) => { if (!disposed) setReducedMotion(value); });
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReducedMotion);
-    return () => { disposed = true; subscription.remove(); };
-  }, []);
   useEffect(() => {
     progress.stopAnimation();
     if (visible) setMounted(true);

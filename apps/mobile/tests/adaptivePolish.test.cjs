@@ -63,7 +63,7 @@ test("Library keeps explicit tabs and adds direction-locked finger paging", () =
   assert.match(library, /activeOffsetX\(\[-24, 24\]\)/);
   assert.match(library, /failOffsetY\(\[-14, 14\]\)/);
   assert.match(library, /accessibilityRole="tab"/);
-  assert.match(library, /preferences\.reducedMotion \? 0 : 210/);
+  assert.match(library, /motion\.reduceMotion \? 0 : 210/);
 });
 
 test("offline status floats inside the safe area and compacts after four seconds", () => {
@@ -286,14 +286,14 @@ test("Phase 7 global Search shortcut is reachable everywhere except playback and
   assert.match(shortcut, /accessibilityHint="Opens Discover and focuses search"/);
   assert.match(shortcut, /pathname\.startsWith\('\/player'\)/);
   assert.match(shortcut, /keyboardDidShow/);
-  assert.match(shortcut, /preferences\.reducedMotion/);
+  assert.match(shortcut, /motion\.reduceMotion/);
   assert.match(shortcut, /pathname: '\/discover', params: \{ focusSearch: request \}/);
   assert.match(shortcut, /router\.setParams\(\{ focusSearch: request \}\)/);
   assert.match(discover, /useLocalSearchParams<\{[^}]*focusSearch\?: string/);
   assert.match(discover, /searchInputRef\.current\?\.focus\(\)/);
   assert.match(discover, /router\.setParams\(\{ focusSearch: '0' \}\)/);
   assert.match(discover, /accessibilityLabel="Search Orion"/);
-  assert.match(discover, /duration: 190/);
+  assert.match(read("src/features/discover/useSearchArrivalAnimation.ts"), /duration: 190/);
 });
 
 test("Phase 7.7.1b keeps global Search behavior and blur glass without a hard highlight line", () => {
@@ -359,7 +359,7 @@ test("Phase 7.8.1 bounds Hero work to the visible active Home route", () => {
   assert.match(hero, /usePathname/);
   assert.match(hero, /AppState\.addEventListener\('change', setAppState\)/);
   assert.match(hero, /pathname === '\/' \|\| pathname === '\/index'/);
-  assert.match(hero, /preferences\.reducedMotion \|\| !heroActive/);
+  assert.match(hero, /motion\.reduceMotion \|\| !heroActive/);
   assert.match(hero, /initialNumToRender=\{3\}/);
   assert.match(hero, /maxToRenderPerBatch=\{3\}/);
   assert.match(hero, /windowSize=\{5\}/);

@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useMemo, useState } from
 import { Appearance, AppState, type ColorSchemeName } from "react-native";
 import type { MobileThemePreferences, OrionThemeId } from "@orion/shared/types";
 import { mmkvStorageAdapter } from "../services/storageAdapter";
+import { useSystemReducedMotion } from "../hooks/useSystemReducedMotion";
 
 export interface MobileThemeTokens {
   id: OrionThemeId;
@@ -103,6 +104,7 @@ const THEMES: Record<OrionThemeId, MobileThemeTokens> = {
 };
 
 interface ThemeContextValue {
+  systemReducedMotion: boolean | null;
   theme: MobileThemeTokens;
   preferences: MobileThemePreferences;
   setTheme: (theme: OrionThemeId) => void;
@@ -128,6 +130,7 @@ function loadPreferences(systemDark: boolean): MobileThemePreferences {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const systemReducedMotion = useSystemReducedMotion();
   const [systemScheme, setSystemScheme] = useState<ColorSchemeName>(() => Appearance.getColorScheme() || "dark");
   const [preferences, setPreferences] = useState(() => loadPreferences(systemScheme !== "light"));
   const persist = useCallback((next: MobileThemePreferences) => {
@@ -182,7 +185,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [preferences]);
 
   return (
-    <ThemeContext.Provider value={{ theme, preferences, setTheme, setReducedMotion, setFollowSystem, setCustomAccent }}>
+    <ThemeContext.Provider value={{ theme, preferences, systemReducedMotion, setTheme, setReducedMotion, setFollowSystem, setCustomAccent }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -9,6 +9,8 @@ import { MediaCard } from '../../components/MediaCard';
 import { PersonCard } from '../../components/PersonCard';
 import { MobilePageHeader } from '../../components/MobilePageHeader';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { resolveMotionPolicy } from '../../services/motionPolicy';
+import { useSearchArrivalAnimation } from './useSearchArrivalAnimation';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   DISCOVER_FEEDS,
@@ -39,7 +41,8 @@ import { DiscoverFilterModal } from './DiscoverFilterModal';
 import { PROVIDER_HUBS, WORLD_HUBS, hubQueryParams, hubTitleSearch, hubTitleSearchMatches, inferWatchRegion, type ProviderCatalog, type SelectedHub } from './discoveryHubs';
 
 export default function DiscoverScreen() {
-  const { theme, preferences } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const { resolvedProfile } = usePerformanceProfile();
   const styles = useMemo(() => createDiscoverStyles(theme), [theme]);
   const [query, setQuery] = useState('');
@@ -115,10 +118,7 @@ export default function DiscoverScreen() {
     return () => { active = false; };
   }, [selectedHub?.kind, watchRegion, network.remoteReady, refreshKey, providerCatalog?.region, generationRef, remoteReadyRef]);
 
-  const searchArrivalStyle = {
-    opacity: searchArrival.interpolate({ inputRange: [0, 1], outputRange: [0.84, 1] }),
-    transform: [{ scale: searchArrival.interpolate({ inputRange: [0, 1], outputRange: [0.985, 1] }) }],
-  };
+  const { style: searchArrivalStyle, animate: animateSearchArrival } = useSearchArrivalAnimation(searchArrival, motion.reduceMotion);
 
   useEffect(() => {
     const request = Number(params.focusSearch || 0);
@@ -126,15 +126,13 @@ export default function DiscoverScreen() {
     setSelectedGenre(null);
     setSelectedHub(null);
     setGenreResults([]);
-    searchArrival.setValue(preferences.reducedMotion ? 1 : 0);
-    requestAnimationFrame(() => {
+    const frame = requestAnimationFrame(() => {
       searchInputRef.current?.focus();
-      if (!preferences.reducedMotion) {
-        Animated.timing(searchArrival, { toValue: 1, duration: 190, useNativeDriver: true }).start();
-      }
+      animateSearchArrival();
       router.setParams({ focusSearch: '0' });
     });
-  }, [params.focusSearch, preferences.reducedMotion, router, searchArrival]);
+    return () => cancelAnimationFrame(frame);
+  }, [params.focusSearch, animateSearchArrival, router]);
 
   useEffect(() => {
     const request = Number(params.exploreIntent || 0);

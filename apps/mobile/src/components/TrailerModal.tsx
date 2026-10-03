@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { TrailerCandidateV1, TrailerPlaybackState } from '@orion/shared/types';
 import { useOrionTheme } from '../context/ThemeContext';
+import { resolveMotionPolicy } from '../services/motionPolicy';
 import { clearMobileDiagnosticError, reportMobileDiagnosticError } from '../services/mobileDiagnostics';
 import { createVimeoHtml, createYouTubeHtml } from '../features/trailers/trailerProviders';
 import { useTrailerSession } from '../features/trailers/hooks/useTrailerSession';
@@ -36,7 +37,8 @@ function errorCopy(state: TrailerPlaybackState, provider?: string) {
 }
 
 export function TrailerModal({ visible, onClose, title, candidates }: TrailerModalProps) {
-  const { theme, preferences } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const session = useTrailerSession(visible, candidates);
@@ -100,7 +102,7 @@ export function TrailerModal({ visible, onClose, title, candidates }: TrailerMod
     : ['https://www.youtube.com/', 'https://www.youtube-nocookie.com/', 'https://i.ytimg.com/', 'https://s.ytimg.com/', 'about:', 'data:'];
 
   return (
-    <Modal visible={visible} transparent animationType={preferences.reducedMotion ? 'fade' : 'slide'} onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={visible} transparent animationType={motion.reduceMotion ? 'fade' : 'slide'} onRequestClose={onClose} statusBarTranslucent>
       <View style={[styles.overlay, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 10 }]}>
         <Pressable accessibilityLabel="Close trailer" style={styles.backdrop} onPress={onClose} />
         <View style={[styles.sheet, { width: sheetWidth, maxHeight: height - insets.top - insets.bottom - 20, backgroundColor: theme.elevated, borderColor: theme.border }]}>

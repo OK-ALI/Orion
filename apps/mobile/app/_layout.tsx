@@ -12,6 +12,7 @@ import { useCallback, useRef, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { LibraryProvider } from '../src/context/LibraryContext';
 import { ThemeProvider, useOrionTheme } from '../src/context/ThemeContext';
+import { resolveMotionPolicy } from '../src/services/motionPolicy';
 import { PerformanceProvider } from '../src/context/PerformanceContext';
 import { NetworkProvider } from '../src/context/NetworkContext';
 import { AccountProvider } from '../src/context/AccountContext';
@@ -89,7 +90,8 @@ export default function RootLayout() {
 }
 
 function ThemedApplication() {
-  const { theme } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences.reducedMotion, systemReducedMotion);
   const storageHealth = getMobileStorageHealth();
   const libraryProfile = useOrionLibraryProfile();
   const [startupActive, setStartupActive] = useState(false);
@@ -131,6 +133,7 @@ function ThemedApplication() {
                 <Stack
                   screenOptions={{
                     headerShown: false,
+                    animation: motion.screenAnimation,
                     contentStyle: { backgroundColor: 'transparent' },
                   }}
                 >

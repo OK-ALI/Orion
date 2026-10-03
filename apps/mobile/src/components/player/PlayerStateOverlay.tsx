@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { MobilePlayerLoadingState } from '@orion/shared/types';
 import { radii, spacing } from '@orion/shared/tokens';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { resolveMotionPolicy } from '../../services/motionPolicy';
 
 const COPY: Record<Exclude<MobilePlayerLoadingState, null>, { title: string; body: string; icon: keyof typeof Ionicons.glyphMap }> = {
   preparing: { title: 'Preparing source', body: 'Orion is opening the selected playback source.', icon: 'sparkles-outline' },
@@ -22,15 +23,16 @@ interface PlayerStateOverlayProps {
 }
 
 export function PlayerStateOverlay({ state, detail, onBack, onRetry, onSwitchSource }: PlayerStateOverlayProps) {
-  const { theme } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   if (!state) return null;
   const content = COPY[state];
   const busy = !['failed', 'offline'].includes(state);
   return (
     <View pointerEvents={busy ? 'none' : 'box-none'} style={styles.layer} accessibilityLiveRegion="polite">
       <View style={[styles.panel, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
-        {busy ? <ActivityIndicator size="small" color={theme.accent} /> : (
-          <Ionicons name={content.icon} size={22} color={state === 'failed' ? theme.danger : theme.warning} />
+        {busy && !motion.reduceMotion ? <ActivityIndicator size="small" color={theme.accent} /> : (
+          <Ionicons name={content.icon} size={22} color={busy ? theme.accent : state === 'failed' ? theme.danger : theme.warning} />
         )}
         <View style={styles.copy}>
           <Text style={[styles.title, { color: theme.text }]}>{content.title}</Text>

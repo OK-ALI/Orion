@@ -129,7 +129,7 @@ export function clearMobileDiagnosticError(area?: string) {
   if (!area || state.lastError?.area === area) state.lastError = null;
 }
 
-type PlaybackTraceEvent = 'url-build' | 'surface-mount' | 'webview-mount' | 'handoff' | 'telemetry' | 'settlement' | 'resume-result';
+type PlaybackTraceEvent = 'url-build' | 'surface-mount' | 'webview-mount' | 'handoff' | 'telemetry' | 'settlement' | 'resume-result' | 'warning-clear';
 const playbackTraceIds = new Map<string, number>();
 const playbackTraceScopes = new Map<number, { rows: number; counts: Record<string, number>; lastPosition?: number }>();
 let playbackTraceSequence = 0;
@@ -144,6 +144,8 @@ const traceCategories = new Set([
   'TARGET_NOT_CONFIRMED', 'POSITION_NOT_RESTORED', 'POSITION_UNAVAILABLE', 'SEEK_UNAVAILABLE', 'NO_CONFIRMED_TARGET',
   'stale-sequence', 'stale-observation-time', 'invalid-observation-time', 'invalid-currentTime', 'invalid-duration',
   'invalid-bufferedPosition', 'position-after-duration', 'impossible-duration-change', 'unexplained-regression',
+  'invalid-current-time', 'invalid-buffered-position', 'invalid-sequence', 'stale-bridge-sequence', 'unexpected-origin',
+  'invalid-state', 'invalid-evidence', 'parse-rejected', 'released',
 ]);
 const safeTraceCategory = (value?: string | null) => value == null ? null : traceCategories.has(value) ? value : 'rejected-category';
 function playbackTraceId(kind: string, value?: string | null) {
@@ -160,6 +162,8 @@ function playbackTraceId(kind: string, value?: string | null) {
 export function traceMobilePlayback(event: PlaybackTraceEvent, fields: {
   sourceId: string; attemptId?: string | null; sessionId?: string | null; routeIdentity?: string | null;
   strategy?: string; state?: string; target?: number | null; position?: number | null; reason?: string | null; verified?: boolean; persistenceEligible?: boolean;
+  boundSessionId?: string; targetAttemptId?: string; targetSessionId?: string; targetPosition?: number;
+  targetObservedAt?: number; targetReachedAt?: number; confirmedTime?: number | null; handoffState?: string; warningVisible?: boolean;
 }) {
   const provider = getRegisteredSource(fields.sourceId)?.id || 'unknown';
   const attempt = playbackTraceId('attempt', fields.attemptId), session = playbackTraceId('session', fields.sessionId);
@@ -170,7 +174,7 @@ export function traceMobilePlayback(event: PlaybackTraceEvent, fields: {
     playbackTraceScopes.set(scope, { rows: 0, counts: {} });
   }
   const trace = playbackTraceScopes.get(scope)!;
-  if (trace.rows >= 128) return;
+  if (trace.rows >= 128 && event !== 'settlement' && event !== 'warning-clear') return;
   trace.rows++;
   trace.counts[event] = (trace.counts[event] || 0) + 1;
   if (event === 'telemetry' && fields.reason === 'accepted') {
@@ -187,6 +191,11 @@ export function traceMobilePlayback(event: PlaybackTraceEvent, fields: {
     at: Date.now(), strategy: safeTraceCategory(fields.strategy), state: safeTraceCategory(fields.state),
     target: rounded(fields.target), position: rounded(fields.position), reason: safeTraceCategory(fields.reason),
     verified: fields.verified === true, persistenceEligible: fields.persistenceEligible === true,
+    boundSession: playbackTraceId('session', fields.boundSessionId), targetAttempt: playbackTraceId('attempt', fields.targetAttemptId),
+    targetSession: playbackTraceId('session', fields.targetSessionId), targetPosition: rounded(fields.targetPosition),
+    targetObservedAt: rounded(fields.targetObservedAt), targetReachedAt: rounded(fields.targetReachedAt), confirmedTime: rounded(fields.confirmedTime),
+    handoffState: safeTraceCategory(fields.handoffState), warningVisible: fields.warningVisible === true,
+    warningOwner: fields.warningVisible === true ? 'handoff' : null,
     urlBuilds: trace.counts['url-build'] || 0, surfaces: trace.counts['surface-mount'] || 0,
     webViews: trace.counts['webview-mount'] || 0, seeks: trace.counts.seek || 0, targetApplied: trace.counts.targetApplied || 0,
     playing: trace.counts.playing || 0, buffering: trace.counts.buffering || 0, forward: trace.counts.forward || 0 }));

@@ -132,5 +132,5 @@ test('sort selector remains modal, radio-based, dismissible, and reduced-motion 
   assert.match(dialog, /accessibilityRole="radio"/);
   assert.match(dialog, /accessibilityState=\{\{ checked \}\}/);
   assert.match(dialog, /onRequestClose=\{onDismiss\}/);
-  assert.match(dialog, /preferences\.reducedMotion/);
+  assert.match(dialog, /motion\.reduceMotion/);
 });

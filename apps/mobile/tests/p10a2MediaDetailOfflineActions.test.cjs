@@ -543,7 +543,7 @@ test('route-only movie exposes watched action while remote detail is loading', (
 
   const tv = harness({ state: 'online', type: 'tv' });
   assert.equal(tv.component('MediaDetailFallback'), undefined);
-  assert.ok(tv.component('ActivityIndicator'));
+  assert.ok(tv.component('MediaDetailLoading'));
   tv.unmount();
 });
 

@@ -28,6 +28,7 @@ import {
 import {
   createEmbeddedTelemetryScript,
   parseEmbeddedTelemetryMessage,
+  getEmbeddedTelemetryRejectReason,
 } from './embeddedTelemetry';
 import { mobileAdBlockerScript } from './mobileAdBlocker';
 import { OrionCinemaWebView } from './OrionCinemaWebView';
@@ -59,7 +60,7 @@ import { createMobileDownloadTargetV1 } from '../downloads/downloadIdentity';
 import { beginMobileDownloadCaptureSessionV1 } from '../downloads/downloadCandidateCapture';
 import { useDownloadSourceAutoReturnV1 } from '../downloads/useDownloadSourceAutoReturn';
 import type { PlaybackPurpose } from './viewingPersistence';
-import { createProviderResumeScript, retainPlaybackTargetObservation, createProviderWebViewSource, getProviderShieldManifest, getEmbeddedPresentationStyle, hasProviderPlaybackSource, isSelectedAnimeNavigation, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
+import { createProviderResumeScript, retainPlaybackTargetObservation, createProviderWebViewSource, getProviderTelemetryFrameOrigin, getProviderShieldManifest, getEmbeddedPresentationStyle, hasProviderPlaybackSource, isSelectedAnimeNavigation, EMPTY_SHIELD_EVIDENCE, QUIET_CURRENT_SURFACE_SCRIPT } from './providerEmbedSupport';
 import { useAnimeReadiness } from './useAnimeReadiness';
 import { ProviderControlsReturn } from './ProviderControlsReturn';
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
@@ -230,7 +231,8 @@ export function EmbedPlayerSurface({
     sourceId,
     strategy: source?.progressStrategy || 'none',
     expectedOrigins: telemetryExpectedOrigins,
-  }), [playbackSessionId, sourceId]);
+    frameOrigin: getProviderTelemetryFrameOrigin(source, shieldedEmbedUrl),
+  }), [playbackSessionId, sourceId, shieldedEmbedUrl]);
   const injectedScript = `${mobileAdBlockerScript}\n${telemetryScript}`;
 
   useEffect(() => {
@@ -399,7 +401,7 @@ export function EmbedPlayerSurface({
     if (value === 'about:blank') return true;
     try {
       const requested = new URL(value);
-      const allowed = new Set(shieldManifest?.allowedNavigationOrigins || expectedOrigins);
+      const allowed = new Set(getProviderShieldManifest(sourceId, source).allowedNavigationOrigins);
       const accepted = requested.protocol === 'https:' && allowed.has(requested.origin);
       if (!accepted) {
         nativeBlockObserved.current = true;
@@ -572,15 +574,9 @@ export function EmbedPlayerSurface({
     });
     if (!parsed) {
       if (envelope?.type === 'ORION_PLAYBACK_TELEMETRY') {
-        const sequence = Number(envelope.sequence);
-        let rejectReason = 'parse-rejected';
-        if (envelope.sessionId !== telemetry.getSession().id) rejectReason = 'session-mismatch';
-        else if (envelope.sourceId !== sourceId) rejectReason = 'source-mismatch';
-        else if (!Number.isInteger(sequence)) rejectReason = 'invalid-sequence';
-        else if (sequence <= bridgeSequence.current) rejectReason = 'stale-bridge-sequence';
-        else if (typeof envelope.origin !== 'string' || !telemetryExpectedOrigins.includes(envelope.origin)) rejectReason = 'unexpected-origin';
-        else if (!['loading', 'playing', 'paused', 'buffering', 'seeking', 'ended', 'error'].includes(String(envelope.state || '').toLowerCase())) rejectReason = 'invalid-state';
-        else if (!['provider-message', 'provider-video-event'].includes(envelope.evidence)) rejectReason = 'invalid-evidence';
+        const rejectReason = getEmbeddedTelemetryRejectReason(envelope, { sessionId: playbackSessionId,
+          sourceId, expectedOrigins: telemetryExpectedOrigins, lastSequence: bridgeSequence.current });
+        traceMobilePlayback?.('telemetry', { sourceId, attemptId: continuityAttemptId, sessionId: playbackSessionId, reason: rejectReason });
         reportMobileDiagnosticError({
           area: 'playback-telemetry',
           code: 'TELEMETRY_REJECTED',
@@ -676,6 +672,7 @@ export function EmbedPlayerSurface({
             mediaPlaybackRequiresUserAction={false}
             setSupportMultipleWindows={false} androidLayerType="none" presentationMode={presentation}
             injectedJavaScript={injectedScript}
+            injectedJavaScriptBeforeContentLoaded={source?.requiresIframeWrapper ? telemetryScript : undefined}
             onShouldStartLoadWithRequest={handleShouldStartLoad}
             containerStyle={presentation === 'provider' ? presentationStyle : undefined}
             style={[styles.webVideo, presentationStyle]}

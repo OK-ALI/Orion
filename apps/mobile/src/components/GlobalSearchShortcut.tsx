@@ -5,6 +5,7 @@ import { BlurView } from 'expo-blur';
 import { usePathname, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOrionTheme } from '../context/ThemeContext';
+import { resolveMotionPolicy } from '../services/motionPolicy';
 
 /**
  * A single app-level express lane into Discover search.
@@ -15,7 +16,8 @@ export function GlobalSearchShortcut() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const { theme, preferences } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const scale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(1)).current;
@@ -44,7 +46,7 @@ export function GlobalSearchShortcut() {
       opacity.setValue(1);
     };
 
-    if (preferences.reducedMotion) {
+    if (motion.reduceMotion) {
       navigate();
       return;
     }

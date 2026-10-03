@@ -93,7 +93,8 @@ test('actual descriptors admit the qualified manual candidates while preserving 
   assert.equal(qualification.supportsDownloads, true);
   assert.equal(qualification.releaseStatus, 'candidate');
   assert.equal(qualification.routingMode, 'manual-only');
-  assert.deepEqual(qualification.allowedNavigationOrigins, ['https://vidsrc.ir']);
+  assert.equal(qualification.requiresIframeWrapper, true);
+  assert.deepEqual(qualification.allowedNavigationOrigins, ['https://orion.local', 'https://vidsrc.ir']);
   assert.deepEqual(qualification.requiredRequestOrigins, ['https://vidsrc.ir']);
   assert.deepEqual(qualification.requestManifest.mediaOrigins, []);
 

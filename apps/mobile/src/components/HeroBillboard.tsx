@@ -9,6 +9,7 @@ import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { usePathname } from 'expo-router';
 import { useLibraryVisual } from '../context/LibraryContext';
 import { useOrionTheme } from '../context/ThemeContext';
+import { resolveMotionPolicy } from '../services/motionPolicy';
 
 interface HeroBillboardProps {
   items: TmdbMediaItem[];
@@ -122,7 +123,8 @@ function HeroSlide({ item, onPlay, onInfo, onPress, width }: {
 }
 
 export function HeroBillboard({ items, onPlay, onInfo, onPress }: HeroBillboardProps) {
-  const { theme, preferences } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const pathname = usePathname();
   const [appState, setAppState] = useState(AppState.currentState);
   const heroActive = (pathname === '/' || pathname === '/index') && appState === 'active';
@@ -158,7 +160,7 @@ export function HeroBillboard({ items, onPlay, onInfo, onPress }: HeroBillboardP
   // Smooth continuous forward auto-rotation
   const startTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
-    if (baseCount <= 1 || loopItems.length === 0 || preferences.reducedMotion || !heroActive) return;
+    if (baseCount <= 1 || loopItems.length === 0 || motion.reduceMotion || !heroActive) return;
 
     timerRef.current = setInterval(() => {
       let nextIndex = flatIndexRef.current + 1;
@@ -176,7 +178,7 @@ export function HeroBillboard({ items, onPlay, onInfo, onPress }: HeroBillboardP
       flatIndexRef.current = nextIndex;
       setActiveDotIndex(nextIndex % baseCount);
     }, AUTO_ROTATE_INTERVAL);
-  }, [baseCount, heroActive, loopItems.length, preferences.reducedMotion]);
+  }, [baseCount, heroActive, loopItems.length, motion.reduceMotion]);
 
   useEffect(() => {
     startTimer();

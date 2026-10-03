@@ -20,7 +20,7 @@ test("mobile startup uses the saved live theme and unmounts after completion", (
   const layout = read("app/_layout.tsx");
   const intro = read("src/components/StartupIntro.tsx");
   assert.match(intro, /useOrionTheme\(\)/);
-  assert.match(intro, /preferences\.reducedMotion/);
+  assert.match(intro, /motion\.reduceMotion/);
   assert.match(intro, /brand-mark\.png/);
   assert.match(intro, /ORION_LETTERS/);
   assert.match(intro, /A universe made to be felt\./);
