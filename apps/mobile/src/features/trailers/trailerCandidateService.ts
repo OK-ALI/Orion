@@ -25,6 +25,7 @@ export interface TmdbTrailerVideo {
   published_at?: string;
   size?: number;
   seasonNum?: number;
+  originalLanguageAlternative?: boolean;
 }
 
 function providerOf(site: string | undefined): TrailerProvider | null {
@@ -69,6 +70,7 @@ export function normalizeTrailerCandidates(
   originalLanguage = preferredLanguage,
 ): TrailerCandidateV1[] {
   const seen = new Set<string>();
+  const originalLanguageAlternatives = new Set<string>();
   const candidates: TrailerCandidateV1[] = [];
   for (const [videos, scope] of [[titleVideos, 'title'], [seasonVideos, 'season']] as const) {
     for (const video of videos) {
@@ -79,6 +81,7 @@ export function normalizeTrailerCandidates(
       const id = `${site.toLowerCase()}:${providerKey}`;
       if (seen.has(id)) continue;
       seen.add(id);
+      if (video.originalLanguageAlternative) originalLanguageAlternatives.add(id);
       const base: Omit<TrailerCandidateV1, 'score'> = {
         id,
         site,
@@ -96,5 +99,7 @@ export function normalizeTrailerCandidates(
       candidates.push({ ...base, score: score(base, preferredLanguage, originalLanguage) });
     }
   }
-  return candidates.sort((a, b) => candidateTier(a) - candidateTier(b) || b.score - a.score || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  // Keep the existing candidate order ahead of additional original-language discoveries.
+  return candidates.sort((a, b) => Number(originalLanguageAlternatives.has(a.id)) - Number(originalLanguageAlternatives.has(b.id)) ||
+    candidateTier(a) - candidateTier(b) || b.score - a.score || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }

@@ -17,6 +17,8 @@ export function useTrailerSession(visible: boolean, incomingCandidates: TrailerC
   const [error, setError] = useState<TrailerProviderError | null>(null);
   const retriesRef = useRef<Record<string, number>>({});
   const attemptedRef = useRef<Set<string>>(new Set());
+  const terminalFailuresRef = useRef<Set<string>>(new Set());
+  const playedRef = useRef<Set<string>>(new Set());
   const rotationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scope = visible ? titleKey : null;
   const scopeRef = useRef(scope);
@@ -30,6 +32,11 @@ export function useTrailerSession(visible: boolean, incomingCandidates: TrailerC
   const candidateKey = incomingCandidates.map(candidate => candidate.id).join('|');
   const activeCandidate = visible && scopeRef.current === scope ? candidates[activeIndex] || null : null;
   const exhausted = state === 'exhausted';
+  const eligibleExternal = (item: TrailerCandidateV1) => !terminalFailuresRef.current.has(item.id);
+  const bestExternalCandidate = activeCandidate ?
+    (playedRef.current.has(activeCandidate.id) && eligibleExternal(activeCandidate) ? activeCandidate : null) ||
+    candidates.find(item => playedRef.current.has(item.id) && eligibleExternal(item)) ||
+    (eligibleExternal(activeCandidate) ? activeCandidate : null) || candidates.find(eligibleExternal) || null : null;
 
   const clearRotation = useCallback(() => {
     if (rotationTimerRef.current) clearTimeout(rotationTimerRef.current);
@@ -51,6 +58,8 @@ export function useTrailerSession(visible: boolean, incomingCandidates: TrailerC
     setState(visible ? incomingCandidates.length ? 'preparing' : 'exhausted' : 'idle');
     retriesRef.current = {};
     attemptedRef.current = new Set();
+    terminalFailuresRef.current = new Set();
+    playedRef.current = new Set();
     return () => { scopeRef.current = null; settledFailureRef.current = true; clearRotation(); };
   }, [visible, titleKey, clearRotation]);
 
@@ -112,6 +121,7 @@ export function useTrailerSession(visible: boolean, incomingCandidates: TrailerC
     setState(stateByCategory[providerError.category] || 'playback-error');
     // Client identity, network and unknown errors do not prove an upload is unusable.
     if (!isTerminalTrailerError(providerError)) return;
+    terminalFailuresRef.current.add(activeCandidate.id);
     attemptedRef.current.add(activeCandidate.id);
     rotationTimerRef.current = setTimeout(() => { rotationTimerRef.current = null; next(); }, 700);
   }, [activeCandidate, clearRotation, next, startAttempt]);
@@ -124,7 +134,11 @@ export function useTrailerSession(visible: boolean, incomingCandidates: TrailerC
       const message = JSON.parse(raw || '{}');
       if (!message || message.candidateId !== activeCandidate.id || message.attemptToken !== messageToken) return;
       if (message.type === 'ready' || message.type === 'direct-loaded') setState('ready');
-      else if (message.type === 'playing') { clearRotation(); setState('playing'); setError(null); }
+      else if (message.type === 'playing') {
+        terminalFailuresRef.current.delete(activeCandidate.id);
+        playedRef.current.add(activeCandidate.id);
+        clearRotation(); setState('playing'); setError(null);
+      }
       else if (message.type === 'paused') setState('paused');
       else if (message.type === 'buffering' || message.type === 'autoplay-blocked') setState('ready');
       else if (message.type === 'network-error') fail({ provider: activeCandidate.site, category: 'network', publicCode: null, retryable: false });
@@ -144,7 +158,7 @@ export function useTrailerSession(visible: boolean, incomingCandidates: TrailerC
   const retry = useCallback(() => { if (activeCandidate) select(activeIndex); }, [activeCandidate, activeIndex, select]);
 
   return useMemo(() => ({
-    candidates, activeCandidate, activeIndex, state, attempt, messageToken, transport, error, exhausted,
+    candidates, activeCandidate, bestExternalCandidate, activeIndex, state, attempt, messageToken, transport, error, exhausted,
     select, next, retry, handleMessage,
-  }), [candidates, activeCandidate, activeIndex, attempt, messageToken, error, exhausted, handleMessage, next, retry, select, state, transport]);
+  }), [candidates, activeCandidate, bestExternalCandidate, activeIndex, attempt, messageToken, error, exhausted, handleMessage, next, retry, select, state, transport]);
 }

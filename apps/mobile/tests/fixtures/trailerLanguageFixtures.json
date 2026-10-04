@@ -1,0 +1,150 @@
+{
+  "beerus": {
+    "id": 312359,
+    "title": "Dragon Ball Super: Beerus",
+    "originalTitle": "ドラゴンボール超 ビルス",
+    "primary": [
+      {
+        "id": "6a98da319cc6c7c874972dcc",
+        "key": "iCD3Lf7Jf9o",
+        "name": "Super Surge Official Trailer [Subtitled]",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2026-09-02T22:42:37.000Z",
+        "size": 1080
+      },
+      {
+        "id": "69f7ae7381d0bfe570c5fdfa",
+        "key": "Tf4wBaSj7SE",
+        "name": "ENHANCED Edition - SUPER GEKITOU Trailer [Subtitled]",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2026-04-19T22:56:52.000Z",
+        "size": 1080
+      },
+      {
+        "id": "697683c785b34dd3eceaf3ee",
+        "key": "Plp6IJ9utjU",
+        "name": "ENHANCED Edition - SUPER Launch Trailer [Subtitled]",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2026-01-25T14:00:44.000Z",
+        "size": 1080
+      }
+    ],
+    "original": [
+      {
+        "id": "6a9f198995a65ce51bc7525b",
+        "key": "0ExAS1lmMJg",
+        "name": "超（スーパー）開幕トレーラー",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "ja",
+        "iso_3166_1": "JP",
+        "published_at": "2026-09-02T22:00:11.000Z",
+        "size": 1080
+      },
+      {
+        "id": "69f7af100be6b591673e4a17",
+        "key": "sjXXTgYaer0",
+        "name": "超(スーパー)激闘トレーラー",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "ja",
+        "iso_3166_1": "JP",
+        "published_at": "2026-04-19T21:00:49.000Z",
+        "size": 1080
+      },
+      {
+        "id": "697686d8c04ca6c8676949c9",
+        "key": "UkQnfgxZ5vc",
+        "name": "超(スーパー)始動トレーラー",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "ja",
+        "iso_3166_1": "JP",
+        "published_at": "2026-01-25T04:45:04.000Z",
+        "size": 1080
+      }
+    ]
+  },
+  "control": {
+    "id": 275102,
+    "title": "The Scandal",
+    "originalLanguage": "ko",
+    "videos": [
+      {
+        "id": "6a9f58852e6c9a8ac1997450",
+        "key": "FeISX5E1uJc",
+        "name": "Official Trailer [ENG SUB]",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2026-09-08T00:00:00.000Z",
+        "size": 1080
+      },
+      {
+        "id": "6a8d047eb379f68ba54dc85c",
+        "key": "vxyzFk_z-Wc",
+        "name": "Official Teaser [ENG SUB]",
+        "site": "YouTube",
+        "type": "Teaser",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2026-08-25T00:00:00.000Z",
+        "size": 1080
+      }
+    ],
+    "expected": {
+      "title": "The Scandal",
+      "id": 275102,
+      "first": "FeISX5E1uJc",
+      "key": "youtube:FeISX5E1uJc-0",
+      "player": {
+        "host": "https://www.youtube.com",
+        "videoId": "FeISX5E1uJc",
+        "width": "100%",
+        "height": "100%",
+        "playerVars": {
+          "playsinline": 1,
+          "controls": 1,
+          "rel": 0,
+          "fs": 1,
+          "enablejsapi": 1,
+          "origin": "https://com.okali.orion",
+          "widget_referrer": "https://com.okali.orion/"
+        },
+        "events": {}
+      },
+      "baseUrl": "https://com.okali.orion",
+      "controlProps": {
+        "applicationNameForUserAgent": "Orion/2.1.1",
+        "originWhitelist": [
+          "*"
+        ],
+        "javaScriptEnabled": true,
+        "domStorageEnabled": true,
+        "allowsInlineMediaPlayback": true,
+        "allowsFullscreenVideo": true,
+        "mediaPlaybackRequiresUserAction": false,
+        "setSupportMultipleWindows": false,
+        "mixedContentMode": "never"
+      }
+    }
+  }
+}

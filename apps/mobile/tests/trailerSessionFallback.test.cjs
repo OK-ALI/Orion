@@ -42,7 +42,7 @@ test('terminal failure advances once through the same modal/player; healthy fall
   await action(f,'Open in browser')();assert.equal(f.opened.at(-1),`https://www.youtube.com/watch?v=${list[1].providerKey}`);
   assert.equal(f.nodes('Modal').length,1);
 });
-test('several dead Trailers reach a Teaser; exhaustion is finite with an exact-video external action', async t => {
+test('several dead Trailers reach a Teaser; exhaustion is finite with an external search action', async t => {
   const timer=clock(),f=trailerFixture(list.slice(0,4));t.after(()=>{f.dispose();timer.restore();});await f.h.settle();
   for(let i=0;i<3;i++){f.bridge().options.events.onError({data:i===0?100:101});await f.h.settle();await rotate(timer,f);}
   assert.equal(f.view().key,`${list[3].id}-3`);assert.equal(list[3].type,'Teaser');
@@ -50,7 +50,7 @@ test('several dead Trailers reach a Teaser; exhaustion is finite with an exact-v
   f.bridge().options.events.onError({data:150});await f.h.settle();await rotate(timer,f);
   assert.equal(f.view(),undefined);assert.ok(text(f).includes('Trailer unavailable'));
   timer.tick(90000);await f.h.settle();assert.equal(f.view(),undefined);
-  await action(f,'Open in browser')();assert.equal(f.opened.at(-1),`https://www.youtube.com/watch?v=${list[3].providerKey}`);
+  await action(f,'Search YouTube')();assert.equal(f.opened.at(-1),'https://www.youtube.com/results?search_query=Trailer%20fixture%20official%20trailer');
 });
 test('no videos produces unavailable state without mounting an empty player; late data may initialize once', async t => {
   const timer=clock(),f=trailerFixture([]);t.after(()=>{f.dispose();timer.restore();});await f.h.settle();

@@ -12,6 +12,7 @@ import { resolveMotionPolicy } from '../services/motionPolicy';
 import { clearMobileDiagnosticError, reportMobileDiagnosticError } from '../services/mobileDiagnostics';
 import { createVimeoHtml, createYouTubeHtml } from '../features/trailers/trailerProviders';
 import { useTrailerSession } from '../features/trailers/hooks/useTrailerSession';
+import { exactTrailerUrl, trailerExternalTarget, type TrailerSearchMetadata } from '../features/trailers/trailerExternalTarget';
 
 interface TrailerModalProps {
   visible: boolean;
@@ -19,6 +20,7 @@ interface TrailerModalProps {
   title: string;
   titleKey?: string;
   candidates: TrailerCandidateV1[];
+  searchMetadata?: Omit<TrailerSearchMetadata, 'title'>;
 }
 
 const IDENTITY = {
@@ -28,16 +30,18 @@ const IDENTITY = {
   referrer: 'https://com.okali.orion/',
 };
 
-function errorCopy(state: TrailerPlaybackState, provider?: string) {
+function errorCopy(state: TrailerPlaybackState, provider?: string, externalKind?: 'video' | 'search') {
   if (state === 'removed' || state === 'private') return ['Trailer is unavailable', 'This upload was removed or made private. Orion is trying another trailer.'];
   if (state === 'embed-disabled') return ['Embedding is disabled', `The owner does not allow this ${provider || 'provider'} trailer inside apps. Orion is trying another one.`];
   if (state === 'client-identity-error') return ['Player identification failed', 'The provider could not verify Orion on this device. You can retry or continue externally.'];
   if (state === 'network-error') return ['Trailer connection failed', 'Check your connection, retry this trailer, or open it in the provider app.'];
-  if (state === 'exhausted') return ['Trailer unavailable', 'No available trailer could play here. You can still open this video externally.'];
+  if (state === 'exhausted') return ['Trailer unavailable', externalKind === 'search'
+    ? 'You can search YouTube for another version.'
+    : externalKind === 'video' ? 'You can continue externally.' : 'Try again later or choose another trailer.'];
   return ['Trailer could not play', 'Orion could not start this candidate. Try it again, choose another trailer, or open it externally.'];
 }
 
-export function TrailerModal({ visible, onClose, title, titleKey = title, candidates: incomingCandidates }: TrailerModalProps) {
+export function TrailerModal({ visible, onClose, title, titleKey = title, candidates: incomingCandidates, searchMetadata }: TrailerModalProps) {
   const { theme, preferences, systemReducedMotion } = useOrionTheme();
   const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const insets = useSafeAreaInsets();
@@ -85,19 +89,20 @@ export function TrailerModal({ visible, onClose, title, titleKey = title, candid
     }
   }, [candidate?.site, session.error?.category, session.state]);
 
-  const externalUrl = candidate?.site === 'Vimeo'
-    ? `https://vimeo.com/${candidate.providerKey}`
-    : candidate ? `https://www.youtube.com/watch?v=${candidate.providerKey}` : null;
-  const openBrowser = () => externalUrl && Linking.openURL(externalUrl).catch(() => {});
+  const activeVideoUrl = candidate ? exactTrailerUrl(candidate) : null;
+  const externalTarget = trailerExternalTarget(session.bestExternalCandidate, { ...searchMetadata, title }, session.exhausted);
+  const openBrowser = () => externalTarget && Linking.openURL(externalTarget.url).catch(() => {});
   const openProvider = async () => {
-    if (!candidate) return;
-    const appUrl = candidate.site === 'YouTube' ? `vnd.youtube://${candidate.providerKey}` : `vimeo://video/${candidate.providerKey}`;
+    if (!externalTarget) return;
+    const externalCandidate = externalTarget.candidate;
+    if (!externalCandidate) return openBrowser();
+    const appUrl = externalCandidate.site === 'YouTube' ? `vnd.youtube://${externalCandidate.providerKey}` : `vimeo://video/${externalCandidate.providerKey}`;
     if (Platform.OS !== 'web' && await Linking.canOpenURL(appUrl).catch(() => false)) return Linking.openURL(appUrl);
     return openBrowser();
   };
 
   const nativeMessage = (type: string) => session.handleMessage(JSON.stringify({ candidateId: candidate?.id, attemptToken: session.messageToken, type }));
-  const [errorTitle, errorText] = errorCopy(session.state, candidate?.site);
+  const [errorTitle, errorText] = errorCopy(session.state, candidate?.site, externalTarget?.kind);
   const showError = ['network-error', 'removed', 'private', 'embed-disabled', 'client-identity-error', 'playback-error', 'exhausted'].includes(session.state);
   const isPreparing = ['preparing', 'rotating'].includes(session.state);
   const allowedPrefixes = candidate?.site === 'Vimeo'
@@ -145,7 +150,7 @@ export function TrailerModal({ visible, onClose, title, titleKey = title, candid
           <View style={[styles.playerFrame, { width: playerWidth, height: playerHeight, borderColor: theme.border }]}>
             {candidate && !showError && (
               Platform.OS === 'web' ? (
-                <iframe key={`${candidate.id}-${session.attempt}`} src={externalUrl?.replace('watch?v=', 'embed/').replace('vimeo.com/', 'player.vimeo.com/video/')} style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#000' }} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen onLoad={() => nativeMessage('ready')} />
+                <iframe key={`${candidate.id}-${session.attempt}`} src={activeVideoUrl?.replace('watch?v=', 'embed/').replace('vimeo.com/', 'player.vimeo.com/video/')} style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#000' }} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen onLoad={() => nativeMessage('ready')} />
               ) : (
                 <WebView
                   key={`${candidate.id}-${session.attempt}`}
@@ -186,10 +191,10 @@ export function TrailerModal({ visible, onClose, title, titleKey = title, candid
             {candidates.length > 1 && <Pressable accessibilityRole="button" onPress={session.next} style={[styles.action, landscape && styles.actionLandscape, { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1 }]}>
               <Ionicons name="play-skip-forward" size={18} color={theme.text} /><Text style={[styles.actionText, { color: theme.text }]}>Try next</Text>
             </Pressable>}
-            <Pressable accessibilityRole="button" onPress={openProvider} disabled={!candidate} style={[styles.action, landscape && styles.actionLandscape, { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1 }]}>
-              <Ionicons name="open-outline" size={18} color={theme.text} /><Text style={[styles.actionText, { color: theme.text }]} numberOfLines={2}>Open {candidate?.site || 'provider'}</Text>
+            <Pressable accessibilityRole="button" onPress={openProvider} disabled={!externalTarget} style={[styles.action, landscape && styles.actionLandscape, { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1 }]}>
+              <Ionicons name="open-outline" size={18} color={theme.text} /><Text style={[styles.actionText, { color: theme.text }]} numberOfLines={2}>{externalTarget?.kind === 'search' ? 'Search YouTube' : `Open ${externalTarget?.candidate.site || candidate?.site || 'provider'}`}</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" onPress={openBrowser} disabled={!candidate} style={[styles.browserAction, landscape && styles.browserActionLandscape]}><Text style={[styles.browserText, { color: theme.textSecondary }]}>Open in browser</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={openBrowser} disabled={!externalTarget} style={[styles.browserAction, landscape && styles.browserActionLandscape]}><Text style={[styles.browserText, { color: theme.textSecondary }]}>Open in browser</Text></Pressable>
           </View>
           </View>
         </View>

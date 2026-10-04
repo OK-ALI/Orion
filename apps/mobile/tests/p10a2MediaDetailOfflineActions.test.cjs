@@ -250,13 +250,15 @@ test('stale title work is fenced across route, type, loss, and unmount; loaded d
 test('episodes and season videos are lazy, blocked offline, and fenced across season and recovery', async () => {
   const h = harness({ mode: 'remote', type: 'tv' }); assert.equal(h.requests.length, 1);
   h.requests[0].resolve(titleResponse(1, 'tv')); await h.settle();
-  h.options({ activeTab: 'episodes', showTrailerModal: true }); assert.equal(h.requests.length, 3);
-  h.options({ selectedSeason: 2 }); assert.equal(h.requests.length, 5);
+  assert.equal(h.requests[1].url, '/tv/1/videos'); assert.equal(h.requests[1].options.language, 'en');
+  h.requests[1].resolve({ results: [] }); await h.settle();
+  h.options({ activeTab: 'episodes', showTrailerModal: true }); assert.equal(h.requests.length, 4);
+  h.options({ selectedSeason: 2 }); assert.equal(h.requests.length, 6);
   h.connect('offline'); assert.equal(h.result.episodesLoading, false); assert.equal(h.result.episodesLoaded, false);
-  h.connect('online', 1); assert.equal(h.requests.length, 8);
-  h.requests[6].resolve({ episodes: [{ id: 22, episode_number: 2 }] });
-  h.requests[7].resolve({ results: [{ id: 'new' }] }); await h.settle();
-  for (const request of h.requests.slice(0, 5)) request.resolve({ episodes: [{ id: 11 }], results: [{ id: 'old' }] });
+  h.connect('online', 1); assert.equal(h.requests.length, 9);
+  h.requests[7].resolve({ episodes: [{ id: 22, episode_number: 2 }] });
+  h.requests[8].resolve({ results: [{ id: 'new' }] }); await h.settle();
+  for (const request of h.requests.slice(0, 6)) request.resolve({ episodes: [{ id: 11 }], results: [{ id: 'old' }] });
   await h.settle(); assert.equal(h.result.episodes[0].id, 22); assert.equal(h.result.seasonVideos[0].id, 'new');
   h.connect('offline'); assert.equal(h.result.episodes[0].id, 22); h.options({ selectedSeason: 3 });
   assert.equal(h.result.episodes.length, 0); assert.equal(h.result.episodesLoaded, false); h.unmount();

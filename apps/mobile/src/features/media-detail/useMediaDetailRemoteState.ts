@@ -20,7 +20,7 @@ function mergeVideos(primary: any[], fallback: any[]) {
     const identity = site && key ? `${site}:${key}` : String(video?.id || `${site}:${key}:${merged.length}`);
     if (seen.has(identity)) continue;
     seen.add(identity);
-    merged.push(video);
+    merged.push(primary.includes(video) ? video : { ...video, originalLanguageAlternative: true });
   }
   return merged;
 }
@@ -88,7 +88,7 @@ export function useMediaDetailRemoteState({ id, type, selectedSeason, activeTab,
         setDetailStatus({ key: detailRequestKey, error: false });
         const primaryVideos = Array.isArray(res?.videos?.results) ? res.videos.results : [];
         const fallbackLanguage = originalVideoLanguage(res);
-        if (!hasPlayableVideo(primaryVideos) && fallbackLanguage) {
+        if (fallbackLanguage) {
           tmdbFetch<any>(`/${type}/${id}/videos`, { language: fallbackLanguage })
             .then((fallback) => {
               if (!isCurrent()) return;

@@ -429,6 +429,7 @@ export default function MediaDetailScreen() {
             title={title}
             titleKey={`${type}:${id}`}
             candidates={allTrailers}
+            searchMetadata={{ originalTitle: data.original_title || data.original_name, year }}
           />
           <View style={[styles.tabsContainer, { borderBottomColor: theme.border }]}>
             {fitCollectionTabs ? (
