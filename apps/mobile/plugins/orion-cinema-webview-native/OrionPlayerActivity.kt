@@ -124,6 +124,10 @@ class OrionPlayerActivity : Activity(), TextureView.SurfaceTextureListener {
   private var borderColor = 0x1AFFFFFF
   private var chromeTextColor = Color.WHITE
   private var reducedMotion = false
+    get() = field || try {
+      Settings.Global.getString(contentResolver, Settings.Global.TRANSITION_ANIMATION_SCALE)
+        ?.replace(',', '.')?.toFloatOrNull() == 0f
+    } catch (_: Throwable) { true }
   private var safeInsetLeft = 0
   private var safeInsetTop = 0
   private var safeInsetRight = 0

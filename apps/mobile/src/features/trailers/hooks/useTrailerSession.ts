@@ -4,11 +4,12 @@ import type {
   TrailerPlaybackState,
   TrailerProviderError,
 } from '@orion/shared/types';
-import { classifyVimeoError, classifyYouTubeError } from '../trailerProviders';
+import { classifyVimeoError, classifyYouTubeError, isTerminalTrailerError } from '../trailerProviders';
 
 const MAX_SAME_CANDIDATE_RETRIES = 1;
 
-export function useTrailerSession(visible: boolean, candidates: TrailerCandidateV1[]) {
+export function useTrailerSession(visible: boolean, incomingCandidates: TrailerCandidateV1[], titleKey = '') {
+  const [candidates, setCandidates] = useState(incomingCandidates);
   const [activeIndex, setActiveIndex] = useState(0);
   const [state, setState] = useState<TrailerPlaybackState>('idle');
   const [attempt, setAttempt] = useState(0);
@@ -17,112 +18,133 @@ export function useTrailerSession(visible: boolean, candidates: TrailerCandidate
   const retriesRef = useRef<Record<string, number>>({});
   const attemptedRef = useRef<Set<string>>(new Set());
   const rotationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const candidateKey = candidates.map((candidate) => candidate.id).join('|');
+  const scope = visible ? titleKey : null;
+  const scopeRef = useRef(scope);
+  const generationRef = useRef(0);
+  const [generation, setGeneration] = useState(0);
+  const attemptRef = useRef(0);
+  const settledFailureRef = useRef(false);
+  const instanceRef = useRef<string | null>(null);
+  if (!instanceRef.current) instanceRef.current = Math.random().toString(36).slice(2);
+  const messageToken = `${instanceRef.current}:${generation}:${attempt}`;
+  const candidateKey = incomingCandidates.map(candidate => candidate.id).join('|');
+  const activeCandidate = visible && scopeRef.current === scope ? candidates[activeIndex] || null : null;
+  const exhausted = state === 'exhausted';
 
-  const activeCandidate = candidates[activeIndex] || null;
-  const exhausted = candidates.length > 0 && attemptedRef.current.size >= candidates.length;
+  const clearRotation = useCallback(() => {
+    if (rotationTimerRef.current) clearTimeout(rotationTimerRef.current);
+    rotationTimerRef.current = null;
+  }, []);
 
   useEffect(() => {
-    if (rotationTimerRef.current) {
-      clearTimeout(rotationTimerRef.current);
-      rotationTimerRef.current = null;
-    }
-    if (!visible) {
-      setState('idle');
-      return;
-    }
-    setActiveIndex(0);
+    clearRotation();
+    if (scopeRef.current !== scope) generationRef.current++;
+    scopeRef.current = scope;
+    setGeneration(generationRef.current);
+    attemptRef.current = 0;
+    settledFailureRef.current = false;
     setAttempt(0);
+    setCandidates(incomingCandidates);
+    setActiveIndex(0);
     setTransport('wrapper');
     setError(null);
-    setState(candidates.length ? 'preparing' : 'exhausted');
+    setState(visible ? incomingCandidates.length ? 'preparing' : 'exhausted' : 'idle');
     retriesRef.current = {};
     attemptedRef.current = new Set();
-    return () => {
-      if (rotationTimerRef.current) clearTimeout(rotationTimerRef.current);
-      rotationTimerRef.current = null;
-    };
-  }, [visible, candidateKey]);
+    return () => { scopeRef.current = null; settledFailureRef.current = true; clearRotation(); };
+  }, [visible, titleKey, clearRotation]);
+
+  useEffect(() => {
+    if (!visible) return;
+    // Append late season alternatives without replacing the current player or its ordering.
+    const additions = incomingCandidates.filter(item => !candidates.some(current => current.id === item.id));
+    if (!additions.length) return;
+    if (!candidates.length) setState('preparing');
+    setCandidates(current => [...current, ...additions.filter(item => !current.some(value => value.id === item.id))]);
+  }, [visible, titleKey, candidateKey]);
+
+  const startAttempt = useCallback(() => {
+    settledFailureRef.current = false;
+    attemptRef.current++;
+    setAttempt(attemptRef.current);
+  }, []);
 
   const select = useCallback((index: number) => {
-    if (index < 0 || index >= candidates.length) return;
+    if (!visible || index < 0 || index >= candidates.length) return;
+    clearRotation();
+    attemptedRef.current.delete(candidates[index].id);
+    retriesRef.current[candidates[index].id] = 0;
     setActiveIndex(index);
     setTransport('wrapper');
     setError(null);
     setState('preparing');
-    setAttempt((value) => value + 1);
-  }, [candidates.length]);
+    startAttempt();
+  }, [visible, candidates, clearRotation, startAttempt]);
 
   const next = useCallback(() => {
-    if (!candidates.length) return setState('exhausted');
+    clearRotation();
+    if (activeCandidate) attemptedRef.current.add(activeCandidate.id);
     const nextIndex = candidates.findIndex((item, index) => index > activeIndex && !attemptedRef.current.has(item.id));
-    const wrappedIndex = nextIndex >= 0 ? nextIndex : candidates.findIndex((item) => !attemptedRef.current.has(item.id));
+    const wrappedIndex = nextIndex >= 0 ? nextIndex : candidates.findIndex(item => !attemptedRef.current.has(item.id));
     if (wrappedIndex < 0) return setState('exhausted');
     setState('rotating');
-    if (rotationTimerRef.current) clearTimeout(rotationTimerRef.current);
-    rotationTimerRef.current = setTimeout(() => {
-      rotationTimerRef.current = null;
-      select(wrappedIndex);
-    }, 120);
-  }, [activeIndex, candidates, select]);
+    rotationTimerRef.current = setTimeout(() => { rotationTimerRef.current = null; select(wrappedIndex); }, 120);
+  }, [activeCandidate, activeIndex, candidates, clearRotation, select]);
 
   const fail = useCallback((providerError: TrailerProviderError) => {
-    if (!activeCandidate) return;
+    if (!activeCandidate || settledFailureRef.current) return;
+    settledFailureRef.current = true;
+    clearRotation();
     setError(providerError);
     const retries = retriesRef.current[activeCandidate.id] || 0;
+    // Retain the existing single direct-transport retry only for explicit player errors.
     if (providerError.retryable && retries < MAX_SAME_CANDIDATE_RETRIES) {
       retriesRef.current[activeCandidate.id] = retries + 1;
       setTransport('direct');
       setState('preparing');
-      setAttempt((value) => value + 1);
+      startAttempt();
       return;
     }
-    attemptedRef.current.add(activeCandidate.id);
     const stateByCategory: Partial<Record<TrailerProviderError['category'], TrailerPlaybackState>> = {
       removed: 'removed', private: 'private', 'embed-disabled': 'embed-disabled',
       'client-identity': 'client-identity-error', network: 'network-error',
     };
     setState(stateByCategory[providerError.category] || 'playback-error');
-    if (rotationTimerRef.current) clearTimeout(rotationTimerRef.current);
-    rotationTimerRef.current = setTimeout(() => {
-      rotationTimerRef.current = null;
-      next();
-    }, 700);
-  }, [activeCandidate, next]);
+    // Client identity, network and unknown errors do not prove an upload is unusable.
+    if (!isTerminalTrailerError(providerError)) return;
+    attemptedRef.current.add(activeCandidate.id);
+    rotationTimerRef.current = setTimeout(() => { rotationTimerRef.current = null; next(); }, 700);
+  }, [activeCandidate, clearRotation, next, startAttempt]);
 
   const handleMessage = useCallback((raw: string) => {
-    if (!activeCandidate) return;
+    if (!visible || !activeCandidate || scopeRef.current !== scope || settledFailureRef.current) return;
+    const currentToken = `${instanceRef.current}:${generationRef.current}:${attemptRef.current}`;
+    if (messageToken !== currentToken) return;
     try {
       const message = JSON.parse(raw || '{}');
-      if (message.candidateId !== activeCandidate.id) return;
-      if (message.type === 'ready') setState('ready');
-      else if (message.type === 'direct-loaded') setState('ready');
-      else if (message.type === 'playing') { setState('playing'); setError(null); }
+      if (!message || message.candidateId !== activeCandidate.id || message.attemptToken !== messageToken) return;
+      if (message.type === 'ready' || message.type === 'direct-loaded') setState('ready');
+      else if (message.type === 'playing') { clearRotation(); setState('playing'); setError(null); }
       else if (message.type === 'paused') setState('paused');
       else if (message.type === 'buffering' || message.type === 'autoplay-blocked') setState('ready');
-      else if (message.type === 'network-error') fail({ provider: activeCandidate.site, category: 'network', publicCode: null, retryable: true });
-      else if (message.type === 'timeout') fail({ provider: activeCandidate.site, category: 'timeout', publicCode: null, retryable: true });
+      else if (message.type === 'network-error') fail({ provider: activeCandidate.site, category: 'network', publicCode: null, retryable: false });
       else if (message.type === 'provider-error') {
         const code = message.detail?.code ?? null;
+        if (code === null || (typeof code !== 'number' && typeof code !== 'string')) return;
         fail(activeCandidate.site === 'YouTube' ? classifyYouTubeError(code) : classifyVimeoError(code));
       }
-    } catch {
-      // Ignore provider console chatter that is not an Orion bridge message.
-    }
-  }, [activeCandidate, fail]);
+      // No-event timeouts, buffering and blocked autoplay never trigger transport or candidate changes.
+    } catch { /* Ignore console chatter and malformed bridge payloads. */ }
+  }, [visible, activeCandidate, scope, messageToken, clearRotation, fail]);
 
-  const retry = useCallback(() => {
-    if (!activeCandidate) return;
-    attemptedRef.current.delete(activeCandidate.id);
-    retriesRef.current[activeCandidate.id] = 0;
-    setTransport('wrapper');
-    setError(null);
-    setState('preparing');
-    setAttempt((value) => value + 1);
-  }, [activeCandidate]);
+  useEffect(() => {
+    if (visible && exhausted && attemptedRef.current.size && candidates.some(item => !attemptedRef.current.has(item.id))) next();
+  }, [visible, exhausted, candidates, next]);
+
+  const retry = useCallback(() => { if (activeCandidate) select(activeIndex); }, [activeCandidate, activeIndex, select]);
 
   return useMemo(() => ({
-    activeCandidate, activeIndex, state, attempt, transport, error, exhausted,
+    candidates, activeCandidate, activeIndex, state, attempt, messageToken, transport, error, exhausted,
     select, next, retry, handleMessage,
-  }), [activeCandidate, activeIndex, attempt, error, exhausted, handleMessage, next, retry, select, state, transport]);
+  }), [candidates, activeCandidate, activeIndex, attempt, messageToken, error, exhausted, handleMessage, next, retry, select, state, transport]);
 }

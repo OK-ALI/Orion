@@ -1,4 +1,5 @@
 import React from "react";
+import { resolveMotionPolicy } from "../../src/services/motionPolicy";
 import { useLocalSearchParams } from "expo-router";
 import {
   ScrollView,
@@ -80,7 +81,8 @@ function SettingsSection({ sectionId, title, description, children, theme, onLay
 }
 
 export default function MobileSettingsScreen() {
-  const { theme, preferences, setTheme, setReducedMotion, setFollowSystem, setCustomAccent } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion, setTheme, setReducedMotion, setFollowSystem, setCustomAccent } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences.reducedMotion, systemReducedMotion);
   const { selection, resolvedProfile, setSelection } = usePerformanceProfile();
   const { isTablet } = useResponsiveLayout();
   const { section: requestedSectionParam } = useLocalSearchParams<{ section?: string | string[] }>();
@@ -108,8 +110,8 @@ export default function MobileSettingsScreen() {
     const y = sectionOffsets.current[sectionId];
     if (typeof y !== 'number') return;
     setCurrentSectionId(sectionId);
-    scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing[2]), animated: !preferences.reducedMotion });
-  }, [preferences.reducedMotion]);
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing[2]), animated: !motion.reduceMotion });
+  }, [motion.reduceMotion]);
 
   const recordSectionLayout = React.useCallback((sectionId: MobileSettingsSectionId) => (event: LayoutChangeEvent) => {
     sectionOffsets.current[sectionId] = event.nativeEvent.layout.y;

@@ -13,8 +13,8 @@ const importSource = (relative) => import(pathToFileURL(path.join(root, relative
 test("candidate normalization deduplicates provider keys and ranks official trailers", async () => {
   const { normalizeTrailerCandidates } = await importSource("src/features/trailers/trailerCandidateService.ts");
   const candidates = normalizeTrailerCandidates([
-    { site: "YouTube", key: "duplicate", name: "Fan reaction", type: "Trailer", official: false, iso_639_1: "en" },
-    { site: "YouTube", key: "duplicate", name: "Duplicate upload", type: "Trailer", official: false, iso_639_1: "en" },
+    { site: "YouTube", key: "duplicate_1", name: "Fan reaction", type: "Trailer", official: false, iso_639_1: "en" },
+    { site: "YouTube", key: "duplicate_1", name: "Duplicate upload", type: "Trailer", official: false, iso_639_1: "en" },
     { site: "Vimeo", key: "official", name: "Official Trailer", type: "Trailer", official: true, iso_639_1: "en", size: 1080 },
   ], [], "en", "en");
   assert.equal(candidates.length, 2);

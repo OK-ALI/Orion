@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Animated, Pressable, ActivityIndicator, FlatList, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, Text, StyleSheet, Animated, Pressable, FlatList, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { imgUrl, fetchPersonDetails } from '@orion/shared/api';
@@ -13,6 +13,7 @@ import { getRailRenderBudget } from '../../src/services/listPerformance';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePerformanceProfile } from '../../src/context/PerformanceContext';
 import { personFilmography } from '../../src/features/media-detail/personProfile';
+import { resolveMotionPolicy } from '../../src/services/motionPolicy';
 
 const BIO_PREVIEW_LINES = 6;
 
@@ -25,7 +26,8 @@ export default function PersonDetailScreen() {
     id: string; originTitle?: string; originRole?: string; originKind?: string;
   }>();
   const router = useRouter();
-  const { theme, preferences } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences.reducedMotion, systemReducedMotion);
   const { width, isLandscape, isTablet } = useResponsiveLayout();
   const insets = useSafeAreaInsets();
   const { resolvedProfile } = usePerformanceProfile();
@@ -72,21 +74,13 @@ export default function PersonDetailScreen() {
   }, []);
 
   const toggleBiography = useCallback(() => {
-    if (!preferences.reducedMotion) {
+    if (!motion.reduceMotion) {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     }
     setBioExpanded((expanded) => !expanded);
-  }, [preferences.reducedMotion]);
+  }, [motion.reduceMotion]);
 
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
-        <ActivityIndicator size="large" color={theme.accent} />
-      </View>
-    );
-  }
-
-  if (!data) {
+  if (!loading && !data) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: theme.background }]}>
         <Text style={{ color: theme.text }}>Failed to load profile.</Text>
@@ -94,7 +88,7 @@ export default function PersonDetailScreen() {
     );
   }
 
-  const profileImage = imgUrl(data.profile_path, 'h632');
+  const profileImage = imgUrl(data?.profile_path, 'h632');
   const fromTitle = String(originTitle || '').trim().slice(0, 120);
   const fromRole = String(originRole || '').trim().slice(0, 100);
   const originCredit = fromTitle
@@ -133,6 +127,7 @@ export default function PersonDetailScreen() {
       </Pressable>
 
       <Animated.ScrollView
+        accessibilityState={{ busy: loading }}
         showsVerticalScrollIndicator={false}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -146,7 +141,7 @@ export default function PersonDetailScreen() {
             source={{ uri: profileImage || undefined }}
             style={[
               styles.backdrop,
-              { transform: [{ translateY: headerTranslateY }, { scale: headerScale }] }
+              !motion.reduceMotion && { transform: [{ translateY: headerTranslateY }, { scale: headerScale }] }
             ]}
           /> : <View style={[styles.backdrop, styles.portraitFallback, { backgroundColor: theme.surface }]}>
             <Ionicons name="person-outline" size={88} color={theme.textMuted} />
@@ -166,13 +161,13 @@ export default function PersonDetailScreen() {
             tint={theme.dark ? 'dark' : 'light'}
             style={[styles.infoHud, { backgroundColor: theme.elevated, borderColor: theme.border }]}
           >
-            <Text style={[styles.title, { color: theme.text }]}>{data.name}</Text>
+            <Text accessibilityLiveRegion={loading ? "polite" : "none"} style={[styles.title, { color: theme.text }]}>{loading ? 'Loading profile…' : data.name}</Text>
             
             <View style={styles.metaRow}>
-              {!!data.birthday && (
+              {!!data?.birthday && (
                 <Text style={[styles.metaText, { color: theme.textSecondary }]}>Born: {data.birthday}</Text>
               )}
-              {!!data.place_of_birth && (
+              {!!data?.place_of_birth && (
                 <>
                   <Text style={[styles.metaText, { color: theme.textSecondary }]}>•</Text>
                   <Text style={[styles.metaText, { color: theme.textSecondary }]}>{data.place_of_birth}</Text>
@@ -180,11 +175,13 @@ export default function PersonDetailScreen() {
               )}
             </View>
 
-            {!!data.known_for_department && <Text style={[styles.knownForText, { color: theme.accent }]}>Known for {data.known_for_department}</Text>}
+            {!!data?.known_for_department && <Text style={[styles.knownForText, { color: theme.accent }]}>Known for {data.known_for_department}</Text>}
             {!!originCredit && <Text style={[styles.metaText, { color: theme.textSecondary }]}>{originCredit}</Text>}
           </BlurView>
 
-          {data.biography ? (
+          {loading ? <View style={styles.section} accessible={false} pointerEvents="none">
+            {[0, 1, 2, 3, 4, 5].map(line => <View key={line} style={{ height: 16, marginBottom: 8, borderRadius: radii.sm, backgroundColor: theme.surface }} />)}
+          </View> : data.biography ? (
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: theme.text }]}>Biography</Text>
               <Text
@@ -235,7 +232,9 @@ export default function PersonDetailScreen() {
           {/* Filmography */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Filmography</Text>
-            {uniqueCredits.length ? <FlatList
+            {loading ? <View style={{ height: 230, flexDirection: 'row', gap: spacing[4] }} accessible={false} pointerEvents="none">
+              {[0, 1, 2].map(card => <View key={card} style={{ width: 140, height: 210, borderRadius: radii.lg, backgroundColor: theme.surface }} />)}
+            </View> : uniqueCredits.length ? <FlatList
               data={uniqueCredits}
               horizontal
               showsHorizontalScrollIndicator={false}

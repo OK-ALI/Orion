@@ -1,0 +1,335 @@
+[
+  {
+    "type": "tv",
+    "id": 312359,
+    "title": "Dragon Ball Super: Beerus",
+    "originalLanguage": "ja",
+    "videos": [
+      {
+        "id": "6a98da319cc6c7c874972dcc",
+        "key": "iCD3Lf7Jf9o",
+        "name": "Super Surge Official Trailer [Subtitled]",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2026-09-02T22:42:37.000Z",
+        "size": 1080
+      },
+      {
+        "id": "69f7ae7381d0bfe570c5fdfa",
+        "key": "Tf4wBaSj7SE",
+        "name": "ENHANCED Edition - SUPER GEKITOU Trailer [Subtitled]",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2026-04-19T22:56:52.000Z",
+        "size": 1080
+      },
+      {
+        "id": "697683c785b34dd3eceaf3ee",
+        "key": "Plp6IJ9utjU",
+        "name": "ENHANCED Edition - SUPER Launch Trailer [Subtitled]",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2026-01-25T14:00:44.000Z",
+        "size": 1080
+      }
+    ],
+    "expected": {
+      "title": "Dragon Ball Super: Beerus",
+      "type": "tv",
+      "tmdbId": 312359,
+      "firstCandidate": "youtube:Tf4wBaSj7SE",
+      "player": {
+        "host": "https://www.youtube.com",
+        "videoId": "Tf4wBaSj7SE",
+        "width": "100%",
+        "height": "100%",
+        "playerVars": {
+          "playsinline": 1,
+          "controls": 1,
+          "rel": 0,
+          "fs": 1,
+          "enablejsapi": 1,
+          "origin": "https://com.okali.orion",
+          "widget_referrer": "https://com.okali.orion/"
+        },
+        "events": {}
+      },
+      "key": "youtube:Tf4wBaSj7SE-0",
+      "baseUrl": "https://com.okali.orion",
+      "controlProps": {
+        "applicationNameForUserAgent": "Orion/2.1.1",
+        "originWhitelist": [
+          "*"
+        ],
+        "javaScriptEnabled": true,
+        "domStorageEnabled": true,
+        "allowsInlineMediaPlayback": true,
+        "allowsFullscreenVideo": true,
+        "mediaPlaybackRequiresUserAction": false,
+        "setSupportMultipleWindows": false,
+        "mixedContentMode": "never",
+        "style": {
+          "flex": 1,
+          "backgroundColor": "#000"
+        }
+      },
+      "healthyPreservation": "same key/source/player controls after playing and 90s",
+      "controls": [
+        "Retry",
+        "Try next",
+        "Open in browser"
+      ]
+    }
+  },
+  {
+    "type": "tv",
+    "id": 62715,
+    "title": "Dragon Ball Super",
+    "originalLanguage": "ja",
+    "videos": [
+      {
+        "id": "626de4e938e5100068d2493c",
+        "key": "_DDm-2h8sbw",
+        "name": "Dragon Ball Super - Trailer (Official) • Now Streaming on Hulu",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2020-10-05T21:00:10.000Z",
+        "size": 1080
+      },
+      {
+        "id": "699f05d8732524cf80efea08",
+        "key": "1dhekVG95Jc",
+        "name": "Dragon Ball Super - Streaming on FunimationNow on 12/5!",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2017-12-04T17:54:29.000Z",
+        "size": 1080
+      },
+      {
+        "id": "699f05e0e171611dfcf22c48",
+        "key": "2Vej889SS6s",
+        "name": "Dragon Ball Super Part One - Available Now",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2017-09-25T20:30:00.000Z",
+        "size": 1080
+      },
+      {
+        "id": "65f651e7d8f44e017c4fa363",
+        "key": "4p2rH49c3rI",
+        "name": "English Opening 1 (Toonami Version) | Chōzetsu☆Dynamic! - Kazuya Yoshii",
+        "site": "YouTube",
+        "type": "Opening Credits",
+        "official": false,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2017-05-14T16:41:47.000Z",
+        "size": 720
+      },
+      {
+        "id": "69000abde0a7e46200927b45",
+        "key": "ycaU9xEEdi8",
+        "name": "Dragon Ball Super FunimationNow Teaser",
+        "site": "YouTube",
+        "type": "Teaser",
+        "official": false,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2016-11-04T17:00:05.000Z",
+        "size": 1080
+      }
+    ],
+    "expected": {
+      "title": "Dragon Ball Super",
+      "type": "tv",
+      "tmdbId": 62715,
+      "firstCandidate": "youtube:_DDm-2h8sbw",
+      "player": {
+        "host": "https://www.youtube.com",
+        "videoId": "_DDm-2h8sbw",
+        "width": "100%",
+        "height": "100%",
+        "playerVars": {
+          "playsinline": 1,
+          "controls": 1,
+          "rel": 0,
+          "fs": 1,
+          "enablejsapi": 1,
+          "origin": "https://com.okali.orion",
+          "widget_referrer": "https://com.okali.orion/"
+        },
+        "events": {}
+      },
+      "key": "youtube:_DDm-2h8sbw-0",
+      "baseUrl": "https://com.okali.orion",
+      "controlProps": {
+        "applicationNameForUserAgent": "Orion/2.1.1",
+        "originWhitelist": [
+          "*"
+        ],
+        "javaScriptEnabled": true,
+        "domStorageEnabled": true,
+        "allowsInlineMediaPlayback": true,
+        "allowsFullscreenVideo": true,
+        "mediaPlaybackRequiresUserAction": false,
+        "setSupportMultipleWindows": false,
+        "mixedContentMode": "never",
+        "style": {
+          "flex": 1,
+          "backgroundColor": "#000"
+        }
+      },
+      "healthyPreservation": "same key/source/player controls after playing and 90s",
+      "controls": [
+        "Retry",
+        "Try next",
+        "Open in browser"
+      ]
+    }
+  },
+  {
+    "type": "movie",
+    "id": 503314,
+    "title": "Dragon Ball Super: Broly",
+    "originalLanguage": "ja",
+    "videos": [
+      {
+        "id": "67ed1bcc35f5b70e3ace7729",
+        "key": "1GtIJsvIFAQ",
+        "name": "Trailer",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2019-03-27T03:00:00.000Z",
+        "size": 1080
+      },
+      {
+        "id": "67ed1c0ab9424cd895aaf3c0",
+        "key": "nv5FD7NLHCc",
+        "name": "Official Trailer",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2018-11-29T06:43:54.000Z",
+        "size": 1080
+      },
+      {
+        "id": "5be381689251415c6901f1a9",
+        "key": "wuIbeQv3v7c",
+        "name": "Trailer #3",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": false,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2018-11-07T23:10:02.000Z",
+        "size": 1080
+      },
+      {
+        "id": "5bc8aa079251410a0601a5c5",
+        "key": "ynuFEc_Zg5I",
+        "name": "Trailer #2",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": false,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2018-10-05T22:58:16.000Z",
+        "size": 1080
+      },
+      {
+        "id": "5b5121370e0a262599006c62",
+        "key": "FHgm89hKpXU",
+        "name": "Trailer",
+        "site": "YouTube",
+        "type": "Trailer",
+        "official": false,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2018-07-19T22:15:02.000Z",
+        "size": 1080
+      },
+      {
+        "id": "66b1462f1a6620bcbf482003",
+        "key": "xBflpbZawAY",
+        "name": "Official Movie Teaser [Subtitled]",
+        "site": "YouTube",
+        "type": "Teaser",
+        "official": true,
+        "iso_639_1": "en",
+        "iso_3166_1": "US",
+        "published_at": "2018-03-20T18:20:48.000Z",
+        "size": 1080
+      }
+    ],
+    "expected": {
+      "title": "Dragon Ball Super: Broly",
+      "type": "movie",
+      "tmdbId": 503314,
+      "firstCandidate": "youtube:1GtIJsvIFAQ",
+      "player": {
+        "host": "https://www.youtube.com",
+        "videoId": "1GtIJsvIFAQ",
+        "width": "100%",
+        "height": "100%",
+        "playerVars": {
+          "playsinline": 1,
+          "controls": 1,
+          "rel": 0,
+          "fs": 1,
+          "enablejsapi": 1,
+          "origin": "https://com.okali.orion",
+          "widget_referrer": "https://com.okali.orion/"
+        },
+        "events": {}
+      },
+      "key": "youtube:1GtIJsvIFAQ-0",
+      "baseUrl": "https://com.okali.orion",
+      "controlProps": {
+        "applicationNameForUserAgent": "Orion/2.1.1",
+        "originWhitelist": [
+          "*"
+        ],
+        "javaScriptEnabled": true,
+        "domStorageEnabled": true,
+        "allowsInlineMediaPlayback": true,
+        "allowsFullscreenVideo": true,
+        "mediaPlaybackRequiresUserAction": false,
+        "setSupportMultipleWindows": false,
+        "mixedContentMode": "never",
+        "style": {
+          "flex": 1,
+          "backgroundColor": "#000"
+        }
+      },
+      "healthyPreservation": "same key/source/player controls after playing and 90s",
+      "controls": [
+        "Retry",
+        "Try next",
+        "Open in browser"
+      ]
+    }
+  }
+]

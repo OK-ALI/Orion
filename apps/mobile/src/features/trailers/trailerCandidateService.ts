@@ -28,7 +28,7 @@ export interface TmdbTrailerVideo {
 }
 
 function providerOf(site: string | undefined): TrailerProvider | null {
-  const normalized = String(site || '').toLowerCase();
+  const normalized = String(site || '').trim().toLowerCase();
   if (normalized === 'youtube') return 'YouTube';
   if (normalized === 'vimeo') return 'Vimeo';
   return null;
@@ -53,6 +53,15 @@ function score(candidate: Omit<TrailerCandidateV1, 'score'>, preferredLanguage: 
   return Math.round(value);
 }
 
+function candidateTier(candidate: TrailerCandidateV1) {
+  const name = candidate.name.toLowerCase();
+  if (TITLE_PENALTIES.some(phrase => name.includes(phrase))) return 5;
+  const type = candidate.type.toLowerCase();
+  if (type === 'trailer') return candidate.official ? 0 : 1;
+  if (type === 'teaser') return candidate.official ? 2 : 3;
+  return 4;
+}
+
 export function normalizeTrailerCandidates(
   titleVideos: TmdbTrailerVideo[],
   seasonVideos: TmdbTrailerVideo[],
@@ -63,9 +72,10 @@ export function normalizeTrailerCandidates(
   const candidates: TrailerCandidateV1[] = [];
   for (const [videos, scope] of [[titleVideos, 'title'], [seasonVideos, 'season']] as const) {
     for (const video of videos) {
+      if (!video || typeof video !== 'object') continue;
       const site = providerOf(video.site);
-      const providerKey = String(video.key || '').trim();
-      if (!site || !providerKey) continue;
+      const providerKey = typeof video.key === 'string' ? video.key.trim() : '';
+      if (!site || !providerKey || (site === 'YouTube' && !/^[A-Za-z0-9_-]{11}$/.test(providerKey))) continue;
       const id = `${site.toLowerCase()}:${providerKey}`;
       if (seen.has(id)) continue;
       seen.add(id);
@@ -86,5 +96,5 @@ export function normalizeTrailerCandidates(
       candidates.push({ ...base, score: score(base, preferredLanguage, originalLanguage) });
     }
   }
-  return candidates.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+  return candidates.sort((a, b) => candidateTier(a) - candidateTier(b) || b.score - a.score || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }

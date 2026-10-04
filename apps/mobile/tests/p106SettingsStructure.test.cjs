@@ -57,7 +57,7 @@ test('P10.6 Settings hierarchy polish preserves measured Jump to section anchors
   assert.match(settings, /nativeID=\{`settings-section-\$\{sectionId\}`\}/);
   assert.match(settings, /onLayout=\{onLayout\}/);
   assert.match(settings, /sectionOffsets\.current\[sectionId\] = event\.nativeEvent\.layout\.y/);
-  assert.match(settings, /scrollRef\.current\?\.scrollTo\(\{ y: Math\.max\(0, y - spacing\[2\]\), animated: !preferences\.reducedMotion \}\)/);
+  assert.match(settings, /scrollRef\.current\?\.scrollTo\(\{ y: Math\.max\(0, y - spacing\[2\]\), animated: !motion\.reduceMotion \}\)/);
   assert.match(navigator, /onSelect=\{\(\) => \{[\s\S]{0,160}setOpen\(false\);[\s\S]{0,160}onSelect\(section\.id\)/);
 });
 

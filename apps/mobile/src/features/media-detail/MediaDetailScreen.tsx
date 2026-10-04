@@ -427,6 +427,7 @@ export default function MediaDetailScreen() {
             visible={showTrailerModal}
             onClose={() => setShowTrailerModal(false)}
             title={title}
+            titleKey={`${type}:${id}`}
             candidates={allTrailers}
           />
           <View style={[styles.tabsContainer, { borderBottomColor: theme.border }]}>

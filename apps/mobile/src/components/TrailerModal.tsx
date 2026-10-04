@@ -17,6 +17,7 @@ interface TrailerModalProps {
   visible: boolean;
   onClose: () => void;
   title: string;
+  titleKey?: string;
   candidates: TrailerCandidateV1[];
 }
 
@@ -32,16 +33,17 @@ function errorCopy(state: TrailerPlaybackState, provider?: string) {
   if (state === 'embed-disabled') return ['Embedding is disabled', `The owner does not allow this ${provider || 'provider'} trailer inside apps. Orion is trying another one.`];
   if (state === 'client-identity-error') return ['Player identification failed', 'The provider could not verify Orion on this device. You can retry or continue externally.'];
   if (state === 'network-error') return ['Trailer connection failed', 'Check your connection, retry this trailer, or open it in the provider app.'];
-  if (state === 'exhausted') return ['No in-app trailer is available', 'Every available trailer rejected embedded playback or could not be reached.'];
+  if (state === 'exhausted') return ['Trailer unavailable', 'No available trailer could play here. You can still open this video externally.'];
   return ['Trailer could not play', 'Orion could not start this candidate. Try it again, choose another trailer, or open it externally.'];
 }
 
-export function TrailerModal({ visible, onClose, title, candidates }: TrailerModalProps) {
+export function TrailerModal({ visible, onClose, title, titleKey = title, candidates: incomingCandidates }: TrailerModalProps) {
   const { theme, preferences, systemReducedMotion } = useOrionTheme();
   const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const session = useTrailerSession(visible, candidates);
+  const session = useTrailerSession(visible, incomingCandidates, titleKey);
+  const candidates = session.candidates;
   const candidate = session.activeCandidate;
   const landscape = width > height;
   const sheetWidth = Math.min(width - 24, landscape ? 1080 : 820);
@@ -57,8 +59,8 @@ export function TrailerModal({ visible, onClose, title, candidates }: TrailerMod
 
   const html = useMemo(() => {
     if (!candidate) return '';
-    return candidate.site === 'YouTube' ? createYouTubeHtml(candidate, IDENTITY) : createVimeoHtml(candidate);
-  }, [candidate]);
+    return candidate.site === 'YouTube' ? createYouTubeHtml(candidate, IDENTITY, false, session.messageToken) : createVimeoHtml(candidate, session.messageToken);
+  }, [candidate, session.messageToken]);
 
   const directEmbedUrl = useMemo(() => {
     if (!candidate) return '';
@@ -94,6 +96,7 @@ export function TrailerModal({ visible, onClose, title, candidates }: TrailerMod
     return openBrowser();
   };
 
+  const nativeMessage = (type: string) => session.handleMessage(JSON.stringify({ candidateId: candidate?.id, attemptToken: session.messageToken, type }));
   const [errorTitle, errorText] = errorCopy(session.state, candidate?.site);
   const showError = ['network-error', 'removed', 'private', 'embed-disabled', 'client-identity-error', 'playback-error', 'exhausted'].includes(session.state);
   const isPreparing = ['preparing', 'rotating'].includes(session.state);
@@ -142,7 +145,7 @@ export function TrailerModal({ visible, onClose, title, candidates }: TrailerMod
           <View style={[styles.playerFrame, { width: playerWidth, height: playerHeight, borderColor: theme.border }]}>
             {candidate && !showError && (
               Platform.OS === 'web' ? (
-                <iframe key={`${candidate.id}-${session.attempt}`} src={externalUrl?.replace('watch?v=', 'embed/').replace('vimeo.com/', 'player.vimeo.com/video/')} style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#000' }} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen onLoad={() => session.handleMessage(JSON.stringify({ candidateId: candidate.id, type: 'ready' }))} />
+                <iframe key={`${candidate.id}-${session.attempt}`} src={externalUrl?.replace('watch?v=', 'embed/').replace('vimeo.com/', 'player.vimeo.com/video/')} style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#000' }} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen onLoad={() => nativeMessage('ready')} />
               ) : (
                 <WebView
                   key={`${candidate.id}-${session.attempt}`}
@@ -156,9 +159,9 @@ export function TrailerModal({ visible, onClose, title, candidates }: TrailerMod
                   setSupportMultipleWindows={false}
                   mixedContentMode="never"
                   onMessage={({ nativeEvent }) => session.handleMessage(nativeEvent.data)}
-                  onLoad={() => session.transport === 'direct' && session.handleMessage(JSON.stringify({ candidateId: candidate.id, type: 'direct-loaded' }))}
-                  onError={() => session.handleMessage(JSON.stringify({ candidateId: candidate.id, type: 'network-error' }))}
-                  onHttpError={({ nativeEvent }) => nativeEvent.statusCode >= 400 && session.handleMessage(JSON.stringify({ candidateId: candidate.id, type: 'provider-error', detail: { code: `http-${nativeEvent.statusCode}` } }))}
+                  onLoad={() => session.transport === 'direct' && nativeMessage('direct-loaded')}
+                  onError={() => nativeMessage('network-error')}
+                  onHttpError={({ nativeEvent }) => session.transport === 'direct' && nativeEvent.url === directEmbedUrl && nativeEvent.statusCode >= 400 && nativeMessage('network-error')}
                   onShouldStartLoadWithRequest={({ url, navigationType }) => {
                     const allowed = allowedPrefixes.some((prefix) => url.startsWith(prefix)) || url.includes('.googlevideo.com/');
                     if (!allowed && navigationType === 'click') Linking.openURL(url).catch(() => {});

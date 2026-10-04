@@ -396,14 +396,14 @@ test("Phase 7.8.3 keeps catalog ordering while removing repeated scans and compa
   assert.match(profile, /if \(seen\.has\(key\)\) return false/);
   assert.match(profile, /\.sort\(\(a, b\) =>/);
   assert.doesNotMatch(person, /acc\.find\(item => item\.id === current\.id\)/);
-  assert.ok(person.indexOf("const uniqueCredits = useMemo") < person.indexOf("if (loading)"));
+  assert.ok(person.indexOf("const uniqueCredits = useMemo") < person.indexOf("if (!loading && !data)"));
 
   assert.match(person, /const BIO_PREVIEW_LINES = 6/);
   assert.match(person, /numberOfLines=\{bioExpanded \? undefined : BIO_PREVIEW_LINES\}/);
   assert.match(person, /onTextLayout=\{\(event\) => measureBiography\(event\.nativeEvent\.lines\.length\)\}/);
   assert.match(person, /LayoutAnimation\.configureNext\(LayoutAnimation\.Presets\.easeInEaseOut\)/);
   assert.match(person, /setLayoutAnimationEnabledExperimental\?\.\(true\)/);
-  assert.match(person, /if \(!preferences\.reducedMotion\)/);
+  assert.match(person, /if \(!motion\.reduceMotion\)/);
   assert.match(person, /accessibilityState=\{\{ expanded: bioExpanded \}\}/);
   assert.match(person, /bioToggle: \{[\s\S]*?minHeight: 44/);
   assert.match(person, /\{bioExpanded \? 'Show less' : 'Show more'\}/);

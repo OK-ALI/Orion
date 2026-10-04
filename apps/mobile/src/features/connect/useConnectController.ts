@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, AppState, Platform, TextInput } from 'react-native';
+import { AppState, TextInput } from 'react-native';
+import { useConnectPresentationMotion } from './useConnectPresentationMotion';
 import { useCameraPermissions } from 'expo-camera';
 import * as SecureStore from 'expo-secure-store';
 import { SMART_CONNECT_PROTOCOL_VERSION, type SmartConnectPlaybackTelemetryV1 } from '@orion/shared/types';
@@ -82,8 +83,7 @@ export function useConnectController() {
   const [remoteText, setRemoteText] = useState('');
   const { attemptsRemaining, lockoutSeconds, lockoutUntil, setAttemptsRemaining, setLockoutUntil } = usePairingGuardState();
   const hiddenPinInputRef = useRef<TextInput>(null);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const scanLineAnim = useRef(new Animated.Value(0)).current;
+  const { pulseAnim, scanLineAnim } = useConnectPresentationMotion({ isConnected, showPairingModal, pairingMethod });
   const connectionRef = useRef({ endpoint: null as TrustedEndpoint | null, deviceId: '', connectionId: '', connected: false });
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -515,10 +515,6 @@ export function useConnectController() {
     mmkvStorageAdapter.set('orion_smart_connect_trusted_endpoint_v1', 'null');
     mmkvStorageAdapter.set('orion_pair_status', JSON.stringify({ paired: false, time: Date.now() }));
   };
-
-  const useNativeDriver = Platform.OS !== 'web';
-  useEffect(() => { const loop = Animated.loop(Animated.sequence([Animated.timing(pulseAnim, { toValue: 1.12, duration: 1200, useNativeDriver }), Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver })])); loop.start(); return () => loop.stop(); }, []);
-  useEffect(() => { if (!showPairingModal || pairingMethod !== 'qr') return; const loop = Animated.loop(Animated.sequence([Animated.timing(scanLineAnim, { toValue: 140, duration: 1400, useNativeDriver }), Animated.timing(scanLineAnim, { toValue: 0, duration: 1400, useNativeDriver })])); loop.start(); return () => loop.stop(); }, [showPairingModal, pairingMethod]);
 
   return {
     activeTab, cameraPermission, currentSpeedIndex, desktopIp, formatTime: formatConnectTime,
