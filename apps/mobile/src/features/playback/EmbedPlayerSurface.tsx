@@ -66,7 +66,7 @@ import { ProviderControlsReturn } from './ProviderControlsReturn';
 interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
   sourceExtras?: (select: (sourceId: string, variantChange?: boolean) => void) => React.ReactNode;
   sourceError?: string | null; animeAvailable?: boolean;
-  continuityError?: string; onContinuityRetry?: () => void;
+  continuityError?: string; showContinuityWarning?: boolean; onContinuityRetry?: () => void;
   animeVariant?: 'sub' | 'dub';
   onExperimentalRetry?: () => void;
   embedUrl: string;
@@ -77,7 +77,7 @@ interface EmbedPlayerSurfaceProps extends PlaybackSurfaceProps {
 const WEBVIEW_AUDIO_RELEASE_MS = Platform.OS === 'android' ? 240 : 80;
 export function EmbedPlayerSurface({
   embedUrl,
-  sourceExtras, sourceError, animeAvailable, continuityError, onContinuityRetry,
+  sourceExtras, sourceError, animeAvailable, continuityError, showContinuityWarning = true, onContinuityRetry,
   animeVariant,
   onExperimentalRetry,
   playbackPurpose = 'viewing',
@@ -695,8 +695,8 @@ export function EmbedPlayerSurface({
       </View>
 
       <PlayerStateOverlay
-        state={sourceSheetOverlay || pendingManualSource ? null : sourceError || continuityError ? 'failed' : controller.state.loadingState}
-        detail={sourceError || continuityError || animeReadiness.detail}
+        state={sourceSheetOverlay || pendingManualSource ? null : sourceError || (showContinuityWarning && continuityError) ? 'failed' : controller.state.loadingState}
+        detail={sourceError || (showContinuityWarning ? continuityError : undefined) || animeReadiness.detail}
         onRetry={retryCurrentSource}
         onSwitchSource={() => controller.openOverlay('sources')}
       />

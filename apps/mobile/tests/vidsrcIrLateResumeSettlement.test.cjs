@@ -47,6 +47,11 @@ function providerBridge(f) {
   }, async replay(raw) { view.onMessage({ nativeEvent: { data: raw } }); await f.settle(); } };
 }
 const warningVisible = f => nodes(f.surface.result, 'PlayerStateOverlay')[0].props.state === 'failed';
+function assertProvisional(f, message) {
+  assert.match(f.props.continuityError, /saved position/, message);
+  assert.equal(f.updates.filter(row => row.handoffState).at(-1).handoffState, 'unconfirmed', message);
+  assert.equal(warningVisible(f), f.props.sourceId !== 'vidsrc-ir', 'control-provider warning stays visible');
+}
 
 for (const [provider, delay] of [['vidlink', 15000], ['vidsrc-ir', 15000], ['vidsrc-ir', 45000]]) {
   test(provider + ': real PLAYER_EVENT progress settles Movie Resume after ' + delay + 'ms without a play event', async () => {
@@ -55,10 +60,10 @@ for (const [provider, delay] of [['vidlink', 15000], ['vidsrc-ir', 15000], ['vid
       f.find('ResumePlaybackPrompt').onChoose('resume'); await f.settle(); const bridge = providerBridge(f);
       const mounted = f.mounted, url = f.props.embedUrl;
       if (provider === 'vidsrc-ir') assert.equal(new URL(url).searchParams.get('startAt'), String(target));
-      time.tick(delay); await f.settle(); assert.ok(warningVisible(f));
+      time.tick(delay); await f.settle(); assertProvisional(f);
       assert.equal(f.props.sourceId, provider); assert.match(f.props.continuityError, /saved position/);
       for (const position of [2699.8, 2700.4, 2701.2]) {
-        time.tick(1000); await bridge.send(position); assert.ok(warningVisible(f), 'one target or sub-second progress is insufficient');
+        time.tick(1000); await bridge.send(position); assertProvisional(f, 'one target or sub-second progress is insufficient');
       }
       time.tick(1000); await bridge.send(2702.0);
       assert.equal(f.updates.filter(value => value.handoffState).at(-1).handoffState, 'confirmed');
@@ -108,16 +113,16 @@ test('fresh late proof still rejects wrong source/session, stale/future, stalled
   }
 });
 
-test('VidSrc.ir loads, stationary timestamps, wrong targets and buffering cannot clear the visible warning or persist', async () => {
+test('VidSrc.ir loads, stationary timestamps, wrong targets and buffering cannot settle the provisional transaction or persist', async () => {
   const time = clock(), storage = savedMovie('vidsrc-ir'), f = playbackFixture(movie, storage);
   try {
     f.find('ResumePlaybackPrompt').onChoose('resume'); await f.settle(); const bridge = providerBridge(f);
-    time.tick(45000); await f.settle(); assert.ok(warningVisible(f));
+    time.tick(45000); await f.settle(); assertProvisional(f);
     for (const [position, event] of [[target, 'pause'], [target, 'timeupdate'], [target, 'timeupdate'], [target + 2, 'buffering']]) {
-      time.tick(1000); await bridge.send(position, event); assert.ok(warningVisible(f));
+      time.tick(1000); await bridge.send(position, event); assertProvisional(f);
     }
     time.tick(1000); await bridge.send(target + 3, 'timeupdate', 'https://unrelated.example');
-    assert.ok(warningVisible(f)); assert.equal(f.library.library.getPlaybackProgress('movie', 9).currentTime, target);
+    assertProvisional(f); assert.equal(f.library.library.getPlaybackProgress('movie', 9).currentTime, target);
     assert.equal(f.library.library.getPlaybackSourcePreference('movie', 9).sourceId, 'vidsrc-ir');
     assert.equal(f.props.sourceId, 'vidsrc-ir'); assert.deepEqual(f.failures, []);
   } finally { f.dispose(); time.restore(); }
@@ -131,7 +136,7 @@ test('VidSrc.ir replayed bridge sequences and stale observations do not count as
     for (const position of [2699.8, 2700.4]) { time.tick(1000); await bridge.send(position); }
     const raw = bridge.messages.at(-1); time.tick(1000); await bridge.replay(raw);
     await bridge.replay(JSON.stringify({ ...JSON.parse(raw), sequence: 100, currentTime: 2702, observedAt: Date.now() - 20000 }));
-    assert.ok(warningVisible(f)); assert.equal(f.library.library.getPlaybackProgress('movie', 9).currentTime, target);
+    assertProvisional(f); assert.equal(f.library.library.getPlaybackProgress('movie', 9).currentTime, target);
     time.tick(1000); await bridge.send(2702); assert.equal(warningVisible(f), false);
   } finally { f.dispose(); time.restore(); }
 });

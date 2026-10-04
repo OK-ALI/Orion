@@ -63,6 +63,7 @@ import {
 import { resolvePlaybackRouteIdentity } from './routePlaybackIdentity';
 import { usePlayerOrientation } from './usePlayerOrientation';
 import { getMobileEmbedResumeParams } from './providerEmbedSupport';
+import { shouldPresentContinuityWarning } from './continuityWarningPresentation';
 
 type PlayerRouteParams = {
   id: string;
@@ -194,7 +195,7 @@ export default function PlayerScreen() {
     if (next) traceMobilePlayback?.('handoff', { sourceId: next.targetSourceId, attemptId: next.id,
       sessionId: next.targetSessionId, routeIdentity: playbackIdentityRef.current, strategy: next.strategy, state: next.status,
       target: next.requestedTime, position: next.confirmedTime, reason: next.failureCode,
-      warningVisible: ['unconfirmed', 'failed'].includes(next.status), handoffState: next.status });
+      warningVisible: shouldPresentContinuityWarning(next.targetSourceId, next), handoffState: next.status });
     if (previous && (!next || next.status === 'confirmed')) traceMobilePlayback?.('warning-clear', {
       sourceId: previous.targetSourceId, attemptId: previous.id, sessionId: previous.targetSessionId,
       routeIdentity: playbackIdentityRef.current, reason: next ? 'settled' : 'released',
@@ -463,7 +464,7 @@ export default function PlayerScreen() {
       targetSessionId: snapshot.targetObservation?.sessionId, targetPosition: snapshot.targetObservation?.currentTime,
       targetObservedAt: snapshot.targetObservation?.observedAt, targetReachedAt: active.targetReachedAt,
       confirmedTime: active.confirmedTime, handoffState: active.status, verified: true,
-      warningVisible: ['unconfirmed', 'failed'].includes(active.status) && decision.handoff?.status !== 'confirmed' });
+      warningVisible: shouldPresentContinuityWarning(sourceId, active) && decision.handoff?.status !== 'confirmed' });
     const confirmed = decision.handoff;
     if (confirmed) {
       publishHandoff(confirmed);
@@ -663,6 +664,7 @@ export default function PlayerScreen() {
       sourceError={anime.error}
       continuityError={handoff && ['failed', 'unconfirmed'].includes(handoff.status)
         ? 'Playback could not continue from the saved position. Retry or choose another source.' : undefined}
+      showContinuityWarning={shouldPresentContinuityWarning(sourceId, handoff)}
       onContinuityRetry={() => launchHandoff({ targetSourceId: sourceId, requestedTime: handoff?.requestedTime ?? resumeTime,
         reason: 'return', fromSourceId: sourceId, fromSessionId: null })}
       animeAvailable={Boolean(anime.detail)}

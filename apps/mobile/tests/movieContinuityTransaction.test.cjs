@@ -17,6 +17,11 @@ function saved(sourceId, currentTime) {
   seed.harness.dispose(); return storage;
 }
 const warning = f => nodes(f.surface.result, 'PlayerStateOverlay')[0].props.state === 'failed';
+function assertProvisional(f, message) {
+  assert.match(f.props.continuityError, /saved position/, message);
+  assert.equal(f.updates.filter(row => row.handoffState).at(-1).handoffState, 'unconfirmed', message);
+  assert.equal(warning(f), false, 'VidSrc.ir provisional warning is presentation-only suppressed');
+}
 function runtime(origin, onNative = () => {}) {
   const listeners = new Map(), commands = [], messages = [], received = [], videoSeeks = []; let playRequests = 0, video = null;
   const window = { location: { origin }, ReactNativeWebView: { postMessage(raw) { messages.push(JSON.parse(raw)); onNative(raw); } },
@@ -71,10 +76,10 @@ for (const delay of [15000, 45000]) test(`documented VidSrc.ir status cadence se
     f.find('ResumePlaybackPrompt').onChoose('resume'); await f.settle(); const p = provider(f);
     const attempt = f.props.activeHandoffId, url = f.props.embedUrl, mounts = f.mounted, builds = f.urlBuilds.length;
     assert.equal(new URL(url).searchParams.get('startAt'), '2700');
-    time.tick(delay); await f.settle(); assert.ok(warning(f));
-    await p.observe(ir(2700)); assert.ok(warning(f), 'an accepted target without verified forward playback cannot settle');
+    time.tick(delay); await f.settle(); assertProvisional(f);
+    await p.observe(ir(2700)); assertProvisional(f, 'an accepted target without verified forward playback cannot settle');
     assert.equal(f.library.library.getPlaybackProgress('movie', 9).currentTime, 2700);
-    time.tick(1000); await p.observe(ir(2700, 'buffering')); assert.ok(warning(f));
+    time.tick(1000); await p.observe(ir(2700, 'buffering')); assertProvisional(f);
     time.tick(4400); await p.observe(ir(2705.4));
     time.tick(5400); await p.observe(ir(2710.8));
     assert.equal(warning(f), false); assert.equal(f.props.continuityError, undefined);
@@ -115,9 +120,9 @@ test('VidSrc.ir refreshes expired target timing after long buffering without wid
   try {
     f.find('ResumePlaybackPrompt').onChoose('resume'); await f.settle(); const p = provider(f);
     await p.observe(ir(2700, 'seeked')); time.tick(1000); await p.observe(ir(2700, 'buffering'));
-    time.tick(45000); await f.settle(); assert.ok(warning(f));
-    await p.observe(ir(2700)); assert.ok(warning(f));
-    time.tick(5400); await p.observe(ir(2705.4)); assert.ok(warning(f));
+    time.tick(45000); await f.settle(); assertProvisional(f);
+    await p.observe(ir(2700)); assertProvisional(f);
+    time.tick(5400); await p.observe(ir(2705.4)); assertProvisional(f);
     time.tick(5400); await p.observe(ir(2710.8)); assert.equal(warning(f), false);
     assert.equal(f.props.sourceId, 'vidsrc-ir'); assert.equal(f.mounted, 1);
   } finally { f.dispose(); time.restore(); }
@@ -197,21 +202,21 @@ test('healthy VidLink Movie control retains its existing URL/seek behavior witho
   } finally { f.dispose(); time.restore(); }
 });
 
-test('a stale attempt callback and a replacement session cannot clear the current VidSrc.ir warning', async () => {
+test('a stale attempt callback and a replacement session cannot settle the current VidSrc.ir provisional transaction', async () => {
   const time = clock(), f = playbackFixture(movie, saved('vidsrc-ir', 2700));
   try {
     f.find('ResumePlaybackPrompt').onChoose('resume'); await f.settle(); const old = f.props;
-    time.tick(15000); await f.settle(); assert.ok(warning(f));
+    time.tick(15000); await f.settle(); assertProvisional(f);
     f.props.onContinuityRetry(); await f.settle(); time.tick(15000); await f.settle();
     const current = f.props, view = nodes(f.surface.result, 'WebView')[0].props;
     assert.notEqual(current.continuityAttemptId, old.continuityAttemptId);
     for (const position of [2700, 2702]) old.onPlaybackSnapshot({ sessionId: view.shieldSessionId, sourceId: 'vidsrc-ir',
       currentTime: position, duration, observedAt: Date.now(), state: 'playing' });
-    await f.settle(); assert.ok(warning(f)); assert.ok(f.traces.some(row => row.reason === 'attempt-mismatch'));
+    await f.settle(); assertProvisional(f); assert.ok(f.traces.some(row => row.reason === 'attempt-mismatch'));
     current.onContinuitySession(current.continuityAttemptId, 'vidsrc-ir', 'replacement');
     for (const position of [2700, 2702]) { time.tick(1000); current.onPlaybackSnapshot({ sessionId: 'replacement', sourceId: 'vidsrc-ir',
       currentTime: position, duration, observedAt: Date.now(), state: 'playing' }); }
-    await f.settle(); assert.ok(warning(f)); assert.ok(f.traces.some(row => row.reason === 'session-mismatch'));
+    await f.settle(); assertProvisional(f); assert.ok(f.traces.some(row => row.reason === 'session-mismatch'));
     assert.equal(f.library.library.getPlaybackProgress('movie', 9).currentTime, 2700);
   } finally { f.dispose(); time.restore(); }
 });
