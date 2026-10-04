@@ -302,7 +302,7 @@ export default function PlayerScreen() {
       { tmdbId: id, anilistId: activeAnimeTest.identity.anilistId }, resolvedSeason || 1, resolvedEpisode || 1,
       { ...getSourceResumeParams(sourceId, resumeTime, type), lang: activeAnimeTest.variant }) : '';
     const resumeParams: Record<string, string | number> = {
-      ...getMobileEmbedResumeParams(sourceId, resumeTime, type),
+      ...getMobileEmbedResumeParams(sourceId, resumeTime, type, forceStartFromBeginning),
     };
     // URL resume params are emitted only when the registered source contract
     // exposes one. Sources that cannot receive continuity are given resumeTime=0.
@@ -315,7 +315,7 @@ export default function PlayerScreen() {
       resolvedEpisode || 1,
       resumeParams,
     );
-  }, [activeAnimeTest, anime.phase, id, imdbId, offlineRequested, resolvedEpisode, resolvedSeason, resumeTime, sourceId, type]);
+  }, [activeAnimeTest, anime.phase, forceStartFromBeginning, id, imdbId, offlineRequested, resolvedEpisode, resolvedSeason, resumeTime, sourceId, type]);
 
   const launchHandoff = useCallback(({
     targetSourceId,

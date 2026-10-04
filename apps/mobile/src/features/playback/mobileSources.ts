@@ -36,12 +36,16 @@ export const MOBILE_PLAYER_SOURCES = Object.freeze([
  * advances through this list automatically; the user explicitly chooses a
  * provider whenever the current source does not expose a ready candidate.
  */
+// Presentation boundary only; existing capture and transfer eligibility stay intact.
+const MOBILE_DOWNLOAD_SELECTION_EXCLUDED_SOURCE_IDS: ReadonlySet<string> = new Set(['111movies']);
+
 export function getMobileDownloadSourceChoices(
   mediaType: 'movie' | 'tv',
 ): readonly (typeof MOBILE_PLAYER_SOURCES)[number][] {
   const now = Date.now();
   return MOBILE_PLAYER_SOURCES
     .filter((source) => source.supportsDownloads === true)
+    .filter((source) => !MOBILE_DOWNLOAD_SELECTION_EXCLUDED_SOURCE_IDS.has(source.id))
     .filter((source) => source.availability !== 'temporarily-unavailable')
     .filter((source) => mediaType === 'movie' ? source.media.movie : source.media.tv)
     .filter((source) => {
@@ -113,10 +117,10 @@ const CAPABILITIES: Readonly<Record<string, MobileSourceContinuityCapability>> =
     automaticTarget: true,
   }),
   vidlink: Object.freeze({
-    mode: 'limited-resume',
-    label: 'Limited Resume',
-    shortLabel: 'Limited Resume',
-    description: 'Orion restores your saved place after the player becomes ready. You can try this source manually.',
+    mode: 'seamless',
+    label: 'Resume supported',
+    shortLabel: 'Resume supported',
+    description: 'Fast alternative',
     canTrackProgress: true,
     canTransferOut: true,
     canReceivePosition: true,
@@ -126,7 +130,7 @@ const CAPABILITIES: Readonly<Record<string, MobileSourceContinuityCapability>> =
     mode: 'seamless',
     label: 'Seamless Resume',
     shortLabel: 'Seamless Resume',
-    description: 'Your place is saved here, and you can continue smoothly when switching to or from this source.',
+    description: 'Reliable default',
     canTrackProgress: true,
     canTransferOut: true,
     canReceivePosition: true,
@@ -156,37 +160,37 @@ const CAPABILITIES: Readonly<Record<string, MobileSourceContinuityCapability>> =
     mode: 'seamless',
     label: 'Seamless Resume',
     shortLabel: 'Seamless Resume',
-    description: 'Your place is saved here, and you can continue smoothly when switching to or from this source.',
+    description: 'Streaming only',
     canTrackProgress: true,
     canTransferOut: true,
     canReceivePosition: true,
     automaticTarget: false,
   }),
   vidnest: Object.freeze({
-    mode: 'resume-unverified',
-    label: 'Resume May Vary',
-    shortLabel: 'Resume May Vary',
-    description: 'Resume behavior is still being confirmed. You can try this source manually.',
+    mode: 'seamless',
+    label: 'Resume supported',
+    shortLabel: 'Resume supported',
+    description: 'Flexible source',
     canTrackProgress: true,
     canTransferOut: true,
     canReceivePosition: true,
     automaticTarget: false,
   }),
   'vidsrc-ir': Object.freeze({
-    mode: 'resume-unverified',
-    label: 'Resume May Vary',
-    shortLabel: 'Resume May Vary',
-    description: 'Resume behavior is still being confirmed. You can try this source manually.',
+    mode: 'seamless',
+    label: 'Resume supported',
+    shortLabel: 'Resume supported',
+    description: 'Slow start, solid',
     canTrackProgress: true,
     canTransferOut: true,
     canReceivePosition: true,
     automaticTarget: false,
   }),
   cinesrc: Object.freeze({
-    mode: 'limited-resume',
-    label: 'Limited Resume',
-    shortLabel: 'Limited Resume',
-    description: "Orion saves your place and retries CineSrc's own seek control, but some CineSrc streams may still start from the beginning while the provider initializes a server.",
+    mode: 'seamless',
+    label: 'Resume supported',
+    shortLabel: 'Resume supported',
+    description: 'Smooth resume',
     canTrackProgress: true,
     canTransferOut: true,
     canReceivePosition: true,

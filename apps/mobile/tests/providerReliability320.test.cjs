@@ -49,8 +49,8 @@ test('live replacement providers remain manual-first while VixSrc owns automatic
   }
   const cineStart = capabilities.indexOf('cinesrc: Object.freeze');
   const cine = capabilities.slice(cineStart, cineStart + 800);
-  assert.match(cine, /mode: 'limited-resume'/);
-  assert.match(cine, /retries CineSrc\'s own seek control/);
+  assert.match(cine, /mode: 'seamless'/);
+  assert.match(cine, /description: 'Smooth resume'/);
 });
 
 test('episode transitions keep one orientation owner and every route exit unlocks first', () => {

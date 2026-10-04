@@ -291,7 +291,7 @@ test('Mobile provider matrix keeps qualified, blocked and frozen sources out of 
   const visible = sources.MOBILE_PLAYER_SOURCES.map((source) => source.id);
   assert.deepEqual(visible, ['vixsrc', 'vidsrc', 'vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc', '111movies']);
   assert.deepEqual(sources.getMobileDownloadSourceChoices('tv').map((source) => source.id),
-    ['vixsrc', 'vidsrc', 'vidlink', 'vidsrc-ir', 'cinesrc', '111movies']);
+    ['vixsrc', 'vidsrc', 'vidlink', 'vidsrc-ir', 'cinesrc']);
   assert.equal(sources.MOBILE_DEFAULT_CINEMA_SOURCE_ID, 'vixsrc');
   for (const id of visible.filter((sourceId) => sourceId !== 'vixsrc')) {
     assert.equal(sources.mobileSourceSupportsContinuity(id), false);

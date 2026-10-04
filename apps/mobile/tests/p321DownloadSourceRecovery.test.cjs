@@ -43,7 +43,7 @@ test('manual download source choices exclude retired, disabled, incompatible and
   assert.deepEqual(registry.MOBILE_PLAYER_SOURCES.map((entry) => entry.id), ['vixsrc', 'not-downloadable', 'movie-only', 'cooldown', 'vidsrc', '111movies', 'vidlink']);
   assert.equal(registry.MOBILE_AUTOMATIC_DOWNLOAD_SOURCE_IDS, undefined);
   assert.equal(registry.getNextMobileDownloadSource, undefined);
-  assert.deepEqual(registry.getMobileDownloadSourceChoices('tv').map((entry) => entry.id), ['vixsrc', 'vidsrc', '111movies']);
+  assert.deepEqual(registry.getMobileDownloadSourceChoices('tv').map((entry) => entry.id), ['vixsrc', 'vidsrc']);
   const modal = fs.readFileSync(path.join(mobileRoot, 'src', 'components', 'DownloadModal.tsx'), 'utf8');
   assert.match(modal, />Provider<\/Text>/);
   assert.match(modal, /preparedSourceIds\.has\(source\.id\)/);

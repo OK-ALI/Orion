@@ -1,14 +1,18 @@
 import type { MobileShieldEvidenceV1, MobilePlayerPresentation } from '@orion/shared/types';
 import type { CinemaSourceDescriptor, ProviderRequestManifestV1 } from '@orion/shared/sources';
-import { getSourceResumeParams } from '@orion/shared/sources';
+import { getSource, getSourceResumeParams } from '@orion/shared/sources';
 import type { PlaybackTargetObservation } from './playerTypes';
 import type { PlaybackTelemetryInput } from './usePlaybackTelemetryController';
 import { createCineSrcResumeScript, createVerifiedResumeScript } from './mobileAdBlocker';
 import { HANDOFF_POSITION_TOLERANCE_SECONDS, HANDOFF_SNAPSHOT_MAX_AGE_MS, HANDOFF_LATE_CONFIRMATION_WINDOW_MS } from './handoffPolicy';
 
-/** CineSrc's documented command seek owns the Mobile target; Desktop stays unchanged. */
-export function getMobileEmbedResumeParams(sourceId: string, time: number, type: 'movie' | 'tv') {
-  return sourceId === 'cinesrc' ? {} : getSourceResumeParams(sourceId, time, type);
+/** Explicit Start Over includes zero for URL contracts; CineSrc keeps its command owner. */
+export function getMobileEmbedResumeParams(sourceId: string, time: number, type: 'movie' | 'tv', forceStartFromBeginning = false) {
+  if (sourceId === 'cinesrc') return {};
+  if (!forceStartFromBeginning || time !== 0) return getSourceResumeParams(sourceId, time, type);
+  const source = getSource(sourceId);
+  const param = type === 'movie' ? source.movieResumeParam ?? source.resumeParam : source.tvResumeParam ?? source.resumeParam;
+  return source.resumeStrategy === 'url-param' && param ? { [param]: 0 } : {};
 }
 
 export function createProviderResumeScript(sourceId: string, time: number, attemptId: string) {
