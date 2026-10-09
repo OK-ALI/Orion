@@ -64,7 +64,6 @@ import {
 import { resolvePlaybackRouteIdentity } from './routePlaybackIdentity';
 import { usePlayerOrientation } from './usePlayerOrientation';
 import { getMobileEmbedResumeParams } from './providerEmbedSupport';
-import { getAniLinkResumeDiagnosticUrl } from './aniLinkResumeDiagnostic';
 import { shouldPresentContinuityWarning } from './continuityWarningPresentation';
 
 type PlayerRouteParams = {
@@ -300,10 +299,10 @@ export default function PlayerScreen() {
   const activeStreamUrl = useMemo(() => {
     if (offlineRequested) return '';
     if (anime.phase === 'failed') return '';
-    if (isManualAnimeProvider(sourceId)) return activeAnimeTest ? getAniLinkResumeDiagnosticUrl(sourceId, getSourceUrl(sourceId, type,
+    if (isManualAnimeProvider(sourceId)) return activeAnimeTest ? getSourceUrl(sourceId, type,
       { tmdbId: id, anilistId: activeAnimeTest.identity.anilistId }, resolvedSeason || 1, resolvedEpisode || 1,
       { ...getMobileEmbedResumeParams(sourceId, resumeTime, type, forceStartFromBeginning),
-        [getRegisteredSource(sourceId)!.animeProvider!.variantParam]: activeAnimeTest.variant })) : '';
+        [getRegisteredSource(sourceId)!.animeProvider!.variantParam]: activeAnimeTest.variant }) : '';
     const resumeParams: Record<string, string | number> = {
       ...getMobileEmbedResumeParams(sourceId, resumeTime, type, forceStartFromBeginning),
     };

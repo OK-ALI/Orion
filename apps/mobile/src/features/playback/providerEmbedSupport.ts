@@ -16,13 +16,7 @@ export function getMobileEmbedResumeParams(sourceId: string, time: number, type:
 }
 
 export function createProviderResumeScript(sourceId: string, time: number, attemptId: string) {
-  const script = sourceId === 'cinesrc' ? createCineSrcResumeScript(time, attemptId) : createVerifiedResumeScript(time, attemptId);
-  if (sourceId !== 'aniembed') return script;
-  const target = Math.max(0, Math.floor(Number(time) || 0));
-  return `(function() { try { var owner = window.__orionPlaybackTelemetry;
-    if (owner && owner.sourceId === 'aniembed' && owner.diagnostics
-      && typeof owner.diagnostics.noteHostSeek === 'function') owner.diagnostics.noteHostSeek(${target});
-  } catch (_) {} })();\n${script}`;
+  return sourceId === 'cinesrc' ? createCineSrcResumeScript(time, attemptId) : createVerifiedResumeScript(time, attemptId);
 }
 
 export function retainPlaybackTargetObservation(previous: PlaybackTargetObservation | null, attemptId: string | null | undefined,

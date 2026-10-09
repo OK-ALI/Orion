@@ -4,7 +4,6 @@ import type {
 } from '@orion/shared/types';
 import type { PlaybackTelemetryInput } from './usePlaybackTelemetryController';
 import { createAniLinkTelemetryAdapterScript } from './aniLinkTelemetry';
-import { createAniEmbedRuntimeDiagnosticScript } from './aniEmbedRuntimeDiagnostics';
 
 const EVENT_TYPE = 'ORION_PLAYBACK_TELEMETRY';
 
@@ -117,7 +116,7 @@ export function createEmbeddedTelemetryScript({
       var sequence = 0;
       var attached = new WeakSet();
       var allowedOrigins = new Set(config.expectedOrigins || []);
-      var aniLinkStopped = false;${sourceId === 'aniembed' ? '\n      ' + createAniEmbedRuntimeDiagnosticScript() : ''}
+      var aniLinkStopped = false;
       var providerMessageOrigins = {
         vidsrc: new Set(['https://cloudorchestranova.com']),
         vsembed: new Set(['https://cloudorchestranova.com'])
@@ -166,7 +165,7 @@ export function createEmbeddedTelemetryScript({
         return 'playing';
       }
 
-      function reportVideo(video, eventName) {${sourceId === 'aniembed' ? '\n        aniEmbedDiagnostics.observe(video, eventName);' : ''}
+      function reportVideo(video, eventName) {
         send(stateFor(video, eventName), 'provider-video-event', {
           currentTime: video.currentTime,
           duration: video.duration,
@@ -332,7 +331,7 @@ export function createEmbeddedTelemetryScript({
 
       window.__orionPlaybackTelemetry = {
         sessionId: config.sessionId,
-        sourceId: config.sourceId,${sourceId === 'anilink' ? '\n        diagnostics: aniLinkDiagnostics,' : sourceId === 'aniembed' ? '\n        diagnostics: aniEmbedDiagnostics,' : ''}
+        sourceId: config.sourceId,
         stop: function() {
           aniLinkStopped = true;
           clearInterval(timer);

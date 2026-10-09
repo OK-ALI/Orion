@@ -40,15 +40,12 @@ class OrionCinemaWebViewManager : RNCWebViewManager() {
 
   override fun setNewSource(viewWrapper: RNCWebViewWrapper, value: ReadableMap?) {
     clients[viewWrapper]?.stageWrapperSource(value)
-    clients[viewWrapper]?.recordSourceDiagnostic(value)
     super.setNewSource(viewWrapper, value)
   }
 
   override fun onAfterUpdateTransaction(viewWrapper: RNCWebViewWrapper) {
     clients[viewWrapper]?.armWrapperSource()
-    clients[viewWrapper]?.recordSourceTransactionDiagnostic(viewWrapper.webView, "before")
     super.onAfterUpdateTransaction(viewWrapper)
-    clients[viewWrapper]?.recordSourceTransactionDiagnostic(viewWrapper.webView, "after")
   }
 
   override fun addEventEmitters(@NonNull reactContext: ThemedReactContext, viewWrapper: RNCWebViewWrapper) {
