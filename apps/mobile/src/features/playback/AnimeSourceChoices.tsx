@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getRegisteredSource } from '@orion/shared/sources';
+import { getRegisteredSource, PLAYER_SOURCES, isManualAnimeProvider } from '@orion/shared/sources';
 import { radii } from '@orion/shared/tokens';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { getMobileSourceHealthV2 } from '../../services/sourceHealth';
@@ -11,27 +11,32 @@ import type { AnimeSourceSelection } from './useAnimeSource';
 import type { AnimeVariant } from './animeSourceAffinity';
 
 /** Selection uses Orion's existing source switch and resume prompt. */
-export function AnimeSourceChoices({ currentSourceId, variant, prepare, onSelect }: {
+interface AnimeSourceChoicesProps {
   currentSourceId: string; variant?: AnimeVariant;
-  prepare(variant: AnimeVariant): Promise<AnimeSourceSelection | null>;
+  prepare(variant: AnimeVariant, providerId?: string): Promise<AnimeSourceSelection | null>;
   onSelect(selection: AnimeSourceSelection): void;
-}) {
+}
+export function AnimeSourceChoices(props: AnimeSourceChoicesProps) {
+  return <View style={{ gap: 8 }}>{PLAYER_SOURCES.filter((source) => isManualAnimeProvider(source.id)).map((source) =>
+    <AnimeProviderChoice key={source.id} {...props} providerId={source.id} />)}</View>;
+}
+function AnimeProviderChoice({ currentSourceId, variant, prepare, onSelect, providerId }: AnimeSourceChoicesProps & { providerId: string }) {
   const { theme } = useOrionTheme();
   const controller = useMobilePlayerController();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const operation = useRef(0);
   useEffect(() => () => { operation.current += 1; }, []);
-  const source = getRegisteredSource('aniembed');
+  const source = getRegisteredSource(providerId);
   const selected = currentSourceId === source?.id;
-  const capability = getMobileSourceContinuityCapability('aniembed');
-  const health = getMobileSourceHealthV2('aniembed', 'tv');
+  const capability = getMobileSourceContinuityCapability(providerId);
+  const health = getMobileSourceHealthV2(providerId, 'tv');
   const choose = async (next: AnimeVariant) => {
     if (busy || (selected && variant === next) || !source?.animeProvider?.variants.includes(next)) return;
     const attempt = ++operation.current;
     setBusy(true); setError(null);
     try {
-      const selection = await prepare(next);
+      const selection = await prepare(next, providerId);
       if (attempt !== operation.current) return;
       if (!selection) { setError('Orion could not verify this Anime season and episode. Choose another source.'); return; }
       onSelect(selection); controller.closeOverlay();

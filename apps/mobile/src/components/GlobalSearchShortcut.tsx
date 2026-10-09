@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOrionTheme } from '../context/ThemeContext';
 import { resolveMotionPolicy } from '../services/motionPolicy';
+import { useNetworkStatus } from '../context/NetworkContext';
 
 /**
  * A single app-level express lane into Discover search.
@@ -15,6 +16,7 @@ import { resolveMotionPolicy } from '../services/motionPolicy';
 export function GlobalSearchShortcut() {
   const router = useRouter();
   const pathname = usePathname();
+  const network = useNetworkStatus();
   const insets = useSafeAreaInsets();
   const { theme, preferences, systemReducedMotion } = useOrionTheme();
   const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
@@ -32,7 +34,8 @@ export function GlobalSearchShortcut() {
   }, []);
 
   const streaming = pathname.startsWith('/player');
-  if (streaming || keyboardVisible) return null;
+  // Discover search is remote-only; local Library/Downloads keep their own actions.
+  if (streaming || keyboardVisible || !network.remoteReady) return null;
 
   const openSearch = () => {
     const request = String(Date.now());

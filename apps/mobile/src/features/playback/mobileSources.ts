@@ -3,6 +3,7 @@ import {
   PLAYER_SOURCES,
   getSource,
   getRegisteredSource,
+  isManualAnimeProvider,
 } from '@orion/shared/sources';
 import { getMobileSourceHealthV2 } from '../../services/sourceHealth';
 
@@ -106,6 +107,10 @@ export function getMobileSourceSafetyNotice(sourceId: string): MobileSourceSafet
 }
 
 const CAPABILITIES: Readonly<Record<string, MobileSourceContinuityCapability>> = Object.freeze({
+  anilink: Object.freeze({
+    mode: 'resume-unverified', label: 'Resume May Vary', shortLabel: 'Resume May Vary', description: 'Anime focused',
+    canTrackProgress: true, canTransferOut: true, canReceivePosition: true, automaticTarget: false,
+  }),
   videasy: Object.freeze({
     mode: 'seamless',
     label: 'Seamless Resume',
@@ -260,7 +265,7 @@ export function getPreferredMobileResumeSource(
   if (!sourceId) return MOBILE_DEFAULT_CINEMA_SOURCE_ID;
   const registered = getRegisteredSource(sourceId);
   const source = MOBILE_PLAYER_SOURCES.find((entry) => entry.id === sourceId)
-    || (registered?.animeProvider?.playbackQualified ? registered : undefined);
+    || (isManualAnimeProvider(sourceId) ? registered : undefined);
   const supportsMedia = mediaType === 'movie' ? source?.media.movie : source?.media.tv;
   if (!source || !supportsMedia) return MOBILE_DEFAULT_CINEMA_SOURCE_ID;
   const effective = getSource(sourceId);

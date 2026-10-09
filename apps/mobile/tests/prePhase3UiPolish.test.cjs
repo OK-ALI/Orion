@@ -29,7 +29,7 @@ test("start over remains an explicit zero-position request through every player 
   assert.match(screen, /forceStartFromBeginning,/);
   assert.match(types, /forceStartFromBeginning\?: boolean/);
   assert.match(embed, /initialResumeTime > 0 \|\| forceStartFromBeginning/);
-  assert.match(embed, /sourceId === 'vidlink' \|\| forceStartFromBeginning/);
+  assert.match(embed, /sourceId === 'vidlink' \|\| \(forceStartFromBeginning && sourceId !== 'anilink'\)/);
   assert.match(native, /initialResumeTime > 0 \|\| forceStartFromBeginning/);
   assert.doesNotMatch(script, /video\.duration > 0 && \$\{safeTime\} > 0/);
 });

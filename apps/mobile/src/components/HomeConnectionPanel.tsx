@@ -10,6 +10,7 @@ import { spacing } from '@orion/shared/tokens';
 import { useOrionTheme } from '../context/ThemeContext';
 import type { NetworkProductState } from '../context/networkStatePolicy';
 import { HomeOfflineIntroduction } from './HomeOfflineIntroduction';
+import { resolveMotionPolicy } from '../services/motionPolicy';
 
 interface HomeConnectionPanelProps {
   state: NetworkProductState;
@@ -18,6 +19,8 @@ interface HomeConnectionPanelProps {
   onRetry: () => void;
   onOpenDownloads: () => void;
   onOpenLibrary: () => void;
+  compact?: boolean;
+  initialLoad?: boolean;
 }
 
 export function HomeConnectionPanel({
@@ -27,8 +30,11 @@ export function HomeConnectionPanel({
   onRetry,
   onOpenDownloads,
   onOpenLibrary,
+  compact = false,
+  initialLoad = false,
 }: HomeConnectionPanelProps) {
-  const { theme } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
 
   if (state === 'offline') {
     return <HomeOfflineIntroduction onOpenDownloads={onOpenDownloads} onOpenLibrary={onOpenLibrary} />;
@@ -77,7 +83,7 @@ export function HomeConnectionPanel({
           ? 'Checking Cinema connection.'
           : failedOnlineRefresh
             ? 'Cinema did not refresh.'
-            : 'Refreshing Orion Cinema.';
+            : initialLoad ? 'Loading Orion Cinema.' : 'Refreshing Orion Cinema.';
 
   const body = degraded
       ? 'Internet transport is available, but the Cinema catalog service is not. Your local Library and Downloads still work.'
@@ -99,6 +105,20 @@ export function HomeConnectionPanel({
       : failedOnlineRefresh
         ? 'refresh-outline'
         : 'cloud-outline';
+
+  if (compact) {
+    return <View accessibilityRole="summary" style={[styles.panel, styles.compactPanel, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <Ionicons name={iconName as any} size={18} color={tone} />
+      <View style={styles.copy}>
+        <Text style={[styles.compactTitle, { color: theme.text }]}>{title}</Text>
+        {degraded && <Text style={[styles.body, { color: theme.textSecondary }]}>Your Library and Downloads remain available.</Text>}
+        {failedOnlineRefresh && <Pressable accessibilityRole="button" accessibilityLabel="Retry Cinema refresh" onPress={onRetry}
+          style={[styles.retryAction, { borderColor: theme.border }]}>
+          <Text style={[styles.retryText, { color: theme.accent }]}>Retry Cinema</Text>
+        </Pressable>}
+      </View>
+    </View>;
+  }
 
   return (
     <View
@@ -122,9 +142,9 @@ export function HomeConnectionPanel({
           },
         ]}
       >
-        {reconnecting ||
+        {!motion.reduceMotion && (reconnecting ||
         checking ||
-        refreshing ? (
+        refreshing) ? (
           <ActivityIndicator
             size="small"
             color={tone}
@@ -283,6 +303,8 @@ export function HomeConnectionPanel({
 }
 
 const styles = StyleSheet.create({
+  compactPanel: { padding: spacing[3], alignItems: 'center', marginBottom: spacing[3] },
+  compactTitle: { fontSize: 14, lineHeight: 20, fontWeight: '700' },
   panel: {
     marginHorizontal: spacing[5],
     marginTop: spacing[2],

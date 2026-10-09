@@ -6,6 +6,7 @@ import {
   getSourceUrl,
   getRegisteredSource,
   sourceResumeStrategy,
+  isManualAnimeProvider,
 } from '@orion/shared/sources';
 import type { PlaybackHandoffV1 } from '@orion/shared/types';
 import { tmdbFetch } from '@orion/shared/api';
@@ -63,6 +64,7 @@ import {
 import { resolvePlaybackRouteIdentity } from './routePlaybackIdentity';
 import { usePlayerOrientation } from './usePlayerOrientation';
 import { getMobileEmbedResumeParams } from './providerEmbedSupport';
+import { getAniLinkResumeDiagnosticUrl } from './aniLinkResumeDiagnostic';
 import { shouldPresentContinuityWarning } from './continuityWarningPresentation';
 
 type PlayerRouteParams = {
@@ -159,10 +161,10 @@ export default function PlayerScreen() {
   const pendingAnimeSelection = useRef<AnimeSourceSelection | null>(null);
   const anime = useAnimeSource({ id, type, season: resolvedSeason, episode: resolvedEpisode,
     enabled: !offlineRequested && !downloadResolutionOnly, preference: sourcePreference,
-    routedSource: nextSourceId === 'aniembed' ? nextSourceId : routedNextSource || undefined, routedVariant: nextAnimeVariant,
-    onPreferred: () => setSourceId('aniembed') });
+    routedSource: isManualAnimeProvider(nextSourceId) ? nextSourceId : routedNextSource || undefined, routedVariant: nextAnimeVariant,
+    onPreferred: (selection) => setSourceId(selection.providerId || 'aniembed') });
   const activeAnimeTest = anime.selection;
-  useEffect(() => { if (anime.phase === 'failed') setSourceId('aniembed'); }, [anime.phase]);
+  useEffect(() => { if (anime.phase === 'failed') setSourceId(anime.providerId || 'aniembed'); }, [anime.phase, anime.providerId]);
   const [handoff, setHandoffState] = useState<PlaybackHandoffV1 | null>(null);
   const handoffRef = useRef<PlaybackHandoffV1 | null>(null);
   const initialSavedTime = existingProgress?.completed
@@ -298,9 +300,10 @@ export default function PlayerScreen() {
   const activeStreamUrl = useMemo(() => {
     if (offlineRequested) return '';
     if (anime.phase === 'failed') return '';
-    if (sourceId === 'aniembed') return activeAnimeTest ? getSourceUrl(sourceId, type,
+    if (isManualAnimeProvider(sourceId)) return activeAnimeTest ? getAniLinkResumeDiagnosticUrl(sourceId, getSourceUrl(sourceId, type,
       { tmdbId: id, anilistId: activeAnimeTest.identity.anilistId }, resolvedSeason || 1, resolvedEpisode || 1,
-      { ...getSourceResumeParams(sourceId, resumeTime, type), lang: activeAnimeTest.variant }) : '';
+      { ...getMobileEmbedResumeParams(sourceId, resumeTime, type, forceStartFromBeginning),
+        [getRegisteredSource(sourceId)!.animeProvider!.variantParam]: activeAnimeTest.variant })) : '';
     const resumeParams: Record<string, string | number> = {
       ...getMobileEmbedResumeParams(sourceId, resumeTime, type, forceStartFromBeginning),
     };
@@ -376,8 +379,8 @@ export default function PlayerScreen() {
     reason: 'manual' | 'automatic',
     requestedTimeOverride?: number | null,
   ) => {
-    const selection = nextSourceId === 'aniembed' ? pendingAnimeSelection.current : null;
-    if (reason === 'automatic' && sourceId === 'aniembed') return false;
+    const selection = isManualAnimeProvider(nextSourceId) ? pendingAnimeSelection.current : null;
+    if (reason === 'automatic' && isManualAnimeProvider(sourceId)) return false;
     if ((reason === 'manual' && nextSourceId === sourceId && !selection) || handoffIsPending(handoffRef.current)) return false;
     if (reason === 'manual') {
       if (selection) {
@@ -584,7 +587,7 @@ export default function PlayerScreen() {
         posterPath: posterPath || undefined,
         backdropPath: next.stillPath || backdropPath || undefined,
         nextSourceId: sourceId,
-        nextAnimeVariant: sourceId === 'aniembed' ? activeAnimeTest?.variant : undefined,
+        nextAnimeVariant: isManualAnimeProvider(sourceId) ? activeAnimeTest?.variant : undefined,
       },
     });
   }, [
@@ -610,10 +613,10 @@ export default function PlayerScreen() {
     episodeTitle,
     sourceId,
     onSourceChange: changeSource,
-    canAutomaticFailover: (snapshot: VerifiedPlaybackSnapshot | null) => sourceId !== 'aniembed'
+    canAutomaticFailover: (snapshot: VerifiedPlaybackSnapshot | null) => !isManualAnimeProvider(sourceId)
       && !getMobileDownloadSourceResolutionIntentV1(downloadItemKey) && !handoffIsPending(handoffRef.current)
       && getFreshVerifiedPosition(snapshot) != null && getNextMobileContinuitySource(sourceId, type, []) != null,
-    onAutomaticFailover: (snapshot: VerifiedPlaybackSnapshot | null) => sourceId === 'aniembed' || getMobileDownloadSourceResolutionIntentV1(downloadItemKey)
+    onAutomaticFailover: (snapshot: VerifiedPlaybackSnapshot | null) => isManualAnimeProvider(sourceId) || getMobileDownloadSourceResolutionIntentV1(downloadItemKey)
       ? false : changeSource(sourceId, snapshot, 'automatic'),
     onPlaybackSnapshot: (snapshot: VerifiedPlaybackSnapshot) => handlePlaybackSnapshot(snapshot, handoff?.id),
     onVerifiedPlaybackCompletion: handleVerifiedPlaybackCompletion,
@@ -659,7 +662,7 @@ export default function PlayerScreen() {
     )
   ) : (
     <EmbedPlayerSurface
-      key={`${sourceId}-${activeStreamUrl}${sourceId === 'aniembed' ? `-${animeAttempt}` : ''}`}
+      key={`${sourceId}-${activeStreamUrl}${isManualAnimeProvider(sourceId) ? `-${animeAttempt}` : ''}`}
       embedUrl={activeStreamUrl}
       sourceError={anime.error}
       continuityError={handoff && ['failed', 'unconfirmed'].includes(handoff.status)
@@ -668,11 +671,11 @@ export default function PlayerScreen() {
       onContinuityRetry={() => launchHandoff({ targetSourceId: sourceId, requestedTime: handoff?.requestedTime ?? resumeTime,
         reason: 'return', fromSourceId: sourceId, fromSessionId: null })}
       animeAvailable={Boolean(anime.detail)}
-      animeVariant={sourceId === 'aniembed' ? activeAnimeTest?.variant : undefined}
+      animeVariant={isManualAnimeProvider(sourceId) ? activeAnimeTest?.variant : undefined}
       onExperimentalRetry={() => { if (anime.error) anime.retry(); else setAnimeAttempt((attempt) => attempt + 1); }}
       sourceExtras={(select) => !downloadResolutionOnly && !handoffIsPending(handoff) && anime.detail && <AnimeSourceChoices
         currentSourceId={sourceId} variant={activeAnimeTest?.variant} prepare={anime.prepare}
-        onSelect={(selection) => { pendingAnimeSelection.current = selection; select('aniembed', true); }} />}
+        onSelect={(selection) => { pendingAnimeSelection.current = selection; select(selection.providerId || 'aniembed', true); }} />}
       playbackPurpose={downloadResolutionOnly ? 'download-resolution' : 'viewing'}
       onResumeAttempt={handleResumeAttempt}
       {...commonProps}

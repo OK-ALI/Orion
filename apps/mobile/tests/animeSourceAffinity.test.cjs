@@ -39,7 +39,7 @@ test('affinity storage is bounded, validated and contains only title key, source
   assert.deepEqual(Object.keys(entries[0]).sort(), ['key', 'sourceId', 'updatedAt', 'variant']);
   assert.doesNotMatch(JSON.stringify(entries), /SECRET|token|https|anilist|900/);
   for (const variant of ['raw', 'unknown', null]) assert.equal(affinity.validAnimeAffinity({ providerId: 'aniembed', variant }), false);
-  for (const providerId of ['vixsrc', 'allmanga', 'anilink']) assert.equal(affinity.validAnimeAffinity({ providerId, variant: 'sub' }), false);
+  for (const providerId of ['vixsrc', 'allmanga', 'unknown']) assert.equal(affinity.validAnimeAffinity({ providerId, variant: 'sub' }), false);
   for (const raw of ['invalid', '{}', 'x'.repeat(9000), '[{"tmdbId":"bad","providerId":"aniembed","variant":"sub"}]']) assert.deepEqual(affinity.parseAnimeAffinities(raw), []);
 });
 test('routed variants are checked and malformed affinity cannot promote an unqualified provider', () => {

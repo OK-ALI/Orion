@@ -1,8 +1,8 @@
-import { getRegisteredSource } from '@orion/shared/sources';
+import { getRegisteredSource, isManualAnimeProvider } from '@orion/shared/sources';
 import { mmkvStorageAdapter } from '../../services/storageAdapter';
 
 export type AnimeVariant = 'sub' | 'dub';
-export interface AnimeSourceAffinity { providerId: 'aniembed'; variant: AnimeVariant }
+export interface AnimeSourceAffinity { providerId: string; variant: AnimeVariant }
 const KEY = 'orion.player.anime-affinity.v1';
 export const MAX_ANIME_AFFINITIES = 32;
 type Entry = AnimeSourceAffinity & { tmdbId: string };
@@ -13,9 +13,8 @@ export function validAnimeAffinity(value: unknown): value is AnimeSourceAffinity
   if (!value || typeof value !== 'object') return false;
   const entry = value as AnimeSourceAffinity;
   const source = getRegisteredSource(entry.providerId);
-  return entry.providerId === 'aniembed' && source?.animeOnly === true
-    && source.routingMode === 'manual-only' && source.animeProvider?.playbackQualified === true
-    && source.animeProvider.variants.includes(entry.variant) && ['sub', 'dub'].includes(entry.variant);
+  return isManualAnimeProvider(entry.providerId) && source?.animeProvider?.variants.includes(entry.variant) === true
+    && ['sub', 'dub'].includes(entry.variant);
 }
 
 export function parseAnimeAffinities(raw: string | null): Entry[] {
@@ -56,13 +55,15 @@ export function getAnimeFlowChoice(tmdbId: string) { return flowChoices.get(tmdb
 export function preferredAnimeSource(tmdbId: string, routedSource?: string, routedVariant?: string,
   preference?: { sourceId: string; variant?: string } | null): AnimeSourceAffinity | null {
   const flow = getAnimeFlowChoice(tmdbId);
-  if ((routedSource && routedSource !== 'aniembed') || (flow && 'generalSourceId' in flow)) return null;
-  const routed = { providerId: 'aniembed', variant: routedVariant };
-  if (routedSource === 'aniembed' && validAnimeAffinity(routed)) return routed;
-  if (routedSource === 'aniembed' && routedVariant != null) return null;
+  if ((routedSource && !isManualAnimeProvider(routedSource)) || (flow && 'generalSourceId' in flow)) return null;
+  const routed = { providerId: routedSource, variant: routedVariant };
+  if (isManualAnimeProvider(routedSource) && validAnimeAffinity(routed)) return routed;
+  if (isManualAnimeProvider(routedSource) && routedVariant != null) return null;
   if (flow && validAnimeAffinity(flow)) return flow;
-  if (preference?.sourceId && preference.sourceId !== 'aniembed') return null;
+  if (preference?.sourceId && !isManualAnimeProvider(preference.sourceId)) return null;
   const saved = { providerId: preference?.sourceId, variant: preference?.variant };
+  // An unqualified provider requires explicit selection or a prior verified success.
+  if (routedSource === 'anilink') return null;
   return (validAnimeAffinity(saved) ? saved : null) || (validAnimeAffinity({ providerId: 'aniembed', variant: 'sub' })
     ? { providerId: 'aniembed', variant: 'sub' } : null);
 }

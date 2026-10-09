@@ -27,7 +27,7 @@ function style(value) { return Object.assign({}, ...(Array.isArray(value) ? valu
 // mocked native/router/context boundaries. No transport, probing, or recovery
 // implementation is loaded. Real theme definitions verify light/dark treatment.
 function harness({ mode = 'banner', state = 'online', latencyMs = 42, persistent = false,
-  tablet = false, themeId = 'midnight-premiere', reducedMotion = false, pathname = '/' } = {}) {
+  tablet = false, themeId = 'midnight-premiere', reducedMotion = false, pathname = '/discover' } = {}) {
   const slots = [], modules = new Map(), timers = new Map(), routes = [];
   let network = { productState: state, remoteReady: state === 'online', latencyMs, connectionType: 'wifi', restoredAt: 999, recoveryEpoch: 5 };
   let cursor = 0, dirty = false, effects = [], result, frames = [], clock = 0, timerId = 0, closes = 0;
@@ -114,6 +114,7 @@ function harness({ mode = 'banner', state = 'online', latencyMs = 42, persistent
     footer: () => nodes(result).find((node) => node.props.accessibilityLabel?.startsWith('Orion Mobile.')),
     downloads: () => nodes(result).find((node) => node.props.accessibilityRole === 'button' && node.props.accessibilityLabel.startsWith('Downloads')),
     connect(state, values = {}) { network = { ...network, productState: state, remoteReady: state === 'online', ...values }; render(); },
+    navigate(next) { pathname = next; render(); },
     advance(ms) {
       const target = clock + ms;
       while (true) {
@@ -298,6 +299,22 @@ test('global banner remains a single root mount under the existing NetworkProvid
   visit(path.join(root, 'app')); visit(path.join(root, 'src'));
   assert.deepEqual(mounts, ['app/_layout.tsx']);
   const layout = read('app/_layout.tsx'); assert.match(layout, /<NetworkProvider>[\s\S]*<ThemedApplication\s*\/>[\s\S]*<\/NetworkProvider>/);
+});
+
+test('Home owns its persistent connection copy without a duplicate global alert or UI timer', () => {
+  for (const state of cases.map((entry) => entry.state)) {
+    const h = harness({ pathname: '/', state });
+    assert.equal(h.result, null); assert.equal(h.timers, 0);
+    h.advance(10000); assert.equal(h.result, null);
+  }
+});
+
+test('route changes cancel duplicate Home alerts and restore the existing banner on other pages', () => {
+  const h = harness({ state: 'degraded' });
+  h.advance(2000); h.navigate('/'); assert.equal(h.result, null); assert.equal(h.timers, 0);
+  h.advance(5000); h.navigate('/library'); assert.equal(h.texts()[0], 'Service unavailable');
+  assert.equal(h.timers, 1); h.advance(4000); assert.deepEqual(h.texts(), ['Service unavailable']);
+  h.navigate('/'); assert.equal(h.result, null); assert.equal(h.timers, 0);
 });
 
 test('phone trigger and tablet layout retain the existing single SidebarDrawer owner', () => {

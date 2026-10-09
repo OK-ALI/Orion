@@ -16,6 +16,9 @@ import { tmdbFetch } from '@orion/shared/api';
 import { TmdbMediaItem, TmdbPaginatedResponse } from '@orion/shared/types';
 import { HeroBillboard } from '../../src/components/HeroBillboard';
 import { HomeConnectionPanel } from '../../src/components/HomeConnectionPanel';
+import { MobilePageHeader } from '../../src/components/MobilePageHeader';
+import { HomeCatalogPlaceholder } from '../../src/features/home/HomeCatalogPlaceholder';
+import { HomeLocalLibrary } from '../../src/features/home/HomeLocalLibrary';
 import { MediaCard } from '../../src/components/MediaCard';
 import { HomeContinueWatching } from '../../src/features/library/HomeContinueWatching';
 import { useOrionTheme } from '../../src/context/ThemeContext';
@@ -369,11 +372,19 @@ export default function HomeScreen() {
     }
   }
 
-  const showRemoteCatalog =
-    network.remoteReady;
   const offlineHome = network.productState === 'offline';
+  const hasRemoteContent = [trendingMovies, trendingTV, kDramas, topRated, newReleases, upcoming]
+    .some((items) => items.length > 0);
+  // Rendering retained data never grants permission to start remote requests.
+  const showRemoteCatalog = !offlineHome && (network.remoteReady || hasRemoteContent);
+  const showHero = showRemoteCatalog && spotlightItems.length > 0;
+  const waitingForCatalog = !offlineHome && !hasRemoteContent && !remoteError &&
+    (loadingRemote || network.productState === 'checking' || network.productState === 'reconnecting');
+  const showLocalLibrary = offlineHome || !network.remoteReady || !hasRemoteContent;
   const connectionPanel = (
     <HomeConnectionPanel
+      compact={!offlineHome}
+      initialLoad={!hasRemoteContent}
       state={network.productState}
       loading={loadingRemote}
       error={remoteError}
@@ -402,7 +413,7 @@ export default function HomeScreen() {
         <View key={railId} style={styles.section}>
           <SectionTitle title="Trending" highlight="Movies" />
           <MediaRow items={trendingMovies} onPress={navigateToMedia} exploreLabel="Explore more trending movies"
-            onExploreMore={() => exploreDiscover({ feed: 'trending', mediaType: 'movie', label: 'Trending Movies', window: 'week' })} />
+            onExploreMore={network.remoteReady ? () => exploreDiscover({ feed: 'trending', mediaType: 'movie', label: 'Trending Movies', window: 'week' }) : undefined} />
         </View>
       );
     }
@@ -411,7 +422,7 @@ export default function HomeScreen() {
         <View key={railId} style={styles.section}>
           <SectionTitle title="Trending" highlight="TV Shows" />
           <MediaRow items={trendingTV} onPress={navigateToMedia} exploreLabel="Explore more trending TV shows"
-            onExploreMore={() => exploreDiscover({ feed: 'trending', mediaType: 'tv', label: 'Trending TV Shows', window: 'week' })} />
+            onExploreMore={network.remoteReady ? () => exploreDiscover({ feed: 'trending', mediaType: 'tv', label: 'Trending TV Shows', window: 'week' }) : undefined} />
         </View>
       );
     }
@@ -420,7 +431,7 @@ export default function HomeScreen() {
         <View key={railId} style={styles.section}>
           <SectionTitle title="New" highlight="Releases" />
           <MediaRow items={newReleases} onPress={navigateToMedia} exploreLabel="Explore more new releases"
-            onExploreMore={() => exploreDiscover({ feed: 'new-releases', mediaType: 'all', label: 'New Releases', window: '30' })} />
+            onExploreMore={network.remoteReady ? () => exploreDiscover({ feed: 'new-releases', mediaType: 'all', label: 'New Releases', window: '30' }) : undefined} />
         </View>
       );
     }
@@ -429,7 +440,7 @@ export default function HomeScreen() {
         <View key={railId} style={styles.section}>
           <SectionTitle title="Coming" highlight="Soon" />
           <MediaRow items={upcoming} onPress={navigateToMedia} exploreLabel="Explore more upcoming titles"
-            onExploreMore={() => exploreDiscover({ feed: 'upcoming', mediaType: 'all', label: 'Coming Soon', window: '90' })} />
+            onExploreMore={network.remoteReady ? () => exploreDiscover({ feed: 'upcoming', mediaType: 'all', label: 'Coming Soon', window: '90' }) : undefined} />
         </View>
       );
     }
@@ -438,7 +449,7 @@ export default function HomeScreen() {
         <View key={railId} style={styles.section}>
           <SectionTitle title="K-Dramas" highlight="Spotlight" />
           <MediaRow items={kDramas} onPress={navigateToMedia} exploreLabel="Explore more K-Dramas"
-            onExploreMore={() => exploreDiscover({ feed: 'browse', mediaType: 'tv', region: 'asian', subfilter: 'kr', genreId: '18', sort: 'popularity.desc', label: 'K-Dramas' })} />
+            onExploreMore={network.remoteReady ? () => exploreDiscover({ feed: 'browse', mediaType: 'tv', region: 'asian', subfilter: 'kr', genreId: '18', sort: 'popularity.desc', label: 'K-Dramas' }) : undefined} />
         </View>
       );
     }
@@ -447,7 +458,7 @@ export default function HomeScreen() {
         <View key={railId} style={styles.section}>
           <SectionTitle title="Top Rated" highlight="Masterpieces" />
           <MediaRow items={topRated} onPress={navigateToMedia} exploreLabel="Explore more top rated titles"
-            onExploreMore={() => exploreDiscover({ feed: 'top-rated', mediaType: 'all', label: 'Top Rated' })} />
+            onExploreMore={network.remoteReady ? () => exploreDiscover({ feed: 'top-rated', mediaType: 'all', label: 'Top Rated' }) : undefined} />
         </View>
       );
     }
@@ -479,8 +490,10 @@ export default function HomeScreen() {
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
       >
-        {showRemoteCatalog &&
-          spotlightItems.length > 0 && (
+        {!showHero && !offlineHome && (
+          <MobilePageHeader title="Cinema" eyebrow="ORION" compact reserveFloatingTriggerInLandscape />
+        )}
+        {showHero && (
             <HeroBillboard
               items={spotlightItems}
               onPress={navigateToMedia}
@@ -516,6 +529,15 @@ export default function HomeScreen() {
             {!offlineHome && connectionPanel}
             {(offlineHome ? visibleRailOrder : visibleRailOrder.slice(connectionAnchorIndex)).map(renderHomeRail)}
           </>
+        )}
+
+        {waitingForCatalog ? (
+          <HomeCatalogPlaceholder
+            railIds={visibleRailOrder.filter((id) => id !== 'continue-watching')}
+            showContinueWatching={visibleRailOrder.includes('continue-watching')}
+          />
+        ) : showLocalLibrary && (
+          <HomeLocalLibrary showContinueWatching={visibleRailOrder.includes('continue-watching')} showActions={!offlineHome} />
         )}
 
         <View style={{ height: 60 }} />

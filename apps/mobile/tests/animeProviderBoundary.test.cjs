@@ -48,10 +48,10 @@ test('existing Mobile source order/default/Auto/download choices remain intact; 
   assert.ok(!mobile.getMobileDownloadSourceChoices('tv').some((source) => source.id === 'aniembed'));
   const screen = read('apps/mobile/src/features/playback/PlayerScreen.tsx');
   assert.match(screen, /sourceExtras=\{\(select\) => !downloadResolutionOnly && !handoffIsPending\(handoff\) && anime.detail/);
-  assert.match(screen, /pendingAnimeSelection.current = selection; select\('aniembed', true\)/);
-  assert.match(screen, /sourceId === 'aniembed' \? `-\$\{animeAttempt\}` : ''/);
+  assert.match(screen, /pendingAnimeSelection.current = selection; select\(selection.providerId \|\| 'aniembed', true\)/);
+  assert.match(screen, /isManualAnimeProvider\(sourceId\) \? `-\$\{animeAttempt\}` : ''/);
   assert.match(read('apps/mobile/src/features/playback/EmbedPlayerSurface.tsx'), /sourceExtras=\{sourceExtras\?\.\(selectSource\)\}/);
-  assert.match(screen, /onAutomaticFailover:[\s\S]{0,100}sourceId === 'aniembed'/);
+  assert.match(screen, /onAutomaticFailover:[\s\S]{0,100}isManualAnimeProvider\(sourceId\)/);
   assert.match(read('apps/mobile/src/features/playback/useAnimeSource.ts'), /isAnimeContent\(detail\)/);
 });
 test('wrapper extraction preserves legacy Videasy CSP and direct source contract', () => {

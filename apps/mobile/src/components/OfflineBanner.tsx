@@ -5,10 +5,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNetworkStatus } from "../context/NetworkContext";
 import { useOrionTheme } from "../context/ThemeContext";
 import { getMobileConnectionPresentation } from "./mobileConnectionPresentationPolicy";
+import { usePathname } from "expo-router";
 
 export type OfflineIndicatorState = "hidden" | "expanded" | "compact";
 
 export function OfflineBanner() {
+  const homeOwnsStatus = usePathname() === "/";
   const network = useNetworkStatus();
   const { theme } = useOrionTheme();
   const insets = useSafeAreaInsets();
@@ -16,16 +18,16 @@ export function OfflineBanner() {
   const [state, setState] = useState<OfflineIndicatorState>(presentation.banner ? "expanded" : "hidden");
 
   useEffect(() => {
-    if (!presentation.banner) {
+    if (!presentation.banner || homeOwnsStatus) {
       setState("hidden");
       return;
     }
     setState("expanded");
     const timer = setTimeout(() => setState("compact"), 4000);
     return () => clearTimeout(timer);
-  }, [network.productState, presentation.banner]);
+  }, [network.productState, presentation.banner, homeOwnsStatus]);
 
-  if (!presentation.banner || state === "hidden") return null;
+  if (!presentation.banner || homeOwnsStatus || state === "hidden") return null;
   const localMessage = "Local and downloaded content remain available.";
   return (
     <View pointerEvents="box-none" style={[styles.layer, { top: insets.top + 8 }]}>

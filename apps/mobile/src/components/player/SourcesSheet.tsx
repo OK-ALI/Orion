@@ -3,7 +3,7 @@ import { BackHandler, View, Text, StyleSheet, Pressable, ScrollView, useWindowDi
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { radii, spacing } from '@orion/shared/tokens';
-import { getSource } from '@orion/shared/sources';
+import { getSource, isManualAnimeProvider } from '@orion/shared/sources';
 import { getMobileSourceHealthV2 } from '../../services/sourceHealth';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { OrionDialog } from '../OrionDialog';
@@ -79,8 +79,8 @@ export function SourcesSheet(props: SourcesSheetProps) {
   const wide = width >= 700 || width > height;
   const [detailsOpen, setDetailsOpen] = useState(wide || section !== 'sources');
   const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
-  const [animeExpanded, setAnimeExpanded] = useState(currentSourceId === 'aniembed');
-  const [generalExpanded, setGeneralExpanded] = useState(currentSourceId !== 'aniembed');
+  const [animeExpanded, setAnimeExpanded] = useState(isManualAnimeProvider(currentSourceId));
+  const [generalExpanded, setGeneralExpanded] = useState(!isManualAnimeProvider(currentSourceId));
   useEffect(() => setDetailsOpen(wide || section !== 'sources'), [section, wide]);
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {

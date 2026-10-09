@@ -1,6 +1,6 @@
 import type { IStorageAdapter } from '@orion/shared/api';
 import type { MobilePlaybackEvidence } from '@orion/shared/types';
-import { getEffectivePlayerSources } from '@orion/shared/sources';
+import { getEffectivePlayerSources, isManualAnimeProvider } from '@orion/shared/sources';
 import { canPersistVerifiedPlayback } from '../playback/playbackEvidence';
 
 export type SourceVariant = 'sub' | 'dub' | 'raw';
@@ -20,7 +20,7 @@ export function validateSourcePreference(value: unknown, type: 'movie' | 'tv'): 
     || source.releaseStatus === 'disabled' || source.availability === 'temporarily-unavailable'
     || !(type === 'movie' ? source.media.movie : source.media.tv)) return null;
   if (source.animeProvider) {
-    if (!source.animeProvider.playbackQualified || !input.variant
+    if (!isManualAnimeProvider(source.id) || !input.variant
       || !source.animeProvider.variants.includes(input.variant)) return null;
     return { sourceId: source.id, variant: input.variant };
   }

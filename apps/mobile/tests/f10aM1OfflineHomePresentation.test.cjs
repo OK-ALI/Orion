@@ -64,6 +64,9 @@ function harness({ mode = 'home', state = 'offline', presentation, width = 480, 
     '../services/storageAdapter': { mmkvStorageAdapter: { get: () => null, set() {}, remove() {} } },
     '../../services/storageAdapter': { mmkvStorageAdapter: { get: () => null, set() {}, remove() {} } },
     '../../src/components/HeroBillboard': { HeroBillboard: 'HeroBillboard' },
+    '../../src/components/MobilePageHeader': { MobilePageHeader: 'MobilePageHeader' },
+    '../../src/features/home/HomeCatalogPlaceholder': { HomeCatalogPlaceholder: 'HomeCatalogPlaceholder' },
+    '../../src/features/home/HomeLocalLibrary': { HomeLocalLibrary: 'HomeLocalLibrary' },
     '../../src/components/HomeConnectionPanel': { HomeConnectionPanel: 'HomeConnectionPanel' },
     '../../src/components/MediaCard': { MediaCard: 'MediaCard' },
     '../../src/features/library/HomeContinueWatching': { HomeContinueWatching: 'HomeContinueWatching' },
@@ -124,7 +127,7 @@ function contentOrder(h) {
 }
 
 test('offline Home introduces local actions first, keeps compact Continue Watching, and hides every remote section', () => {
-  const h = harness(); assert.deepEqual(contentOrder(h), ['HomeConnectionPanel', 'HomeContinueWatching', 'View']);
+  const h = harness(); assert.deepEqual(contentOrder(h), ['HomeConnectionPanel', 'HomeContinueWatching', 'HomeLocalLibrary', 'View']);
   assert.equal(h.component('HomeContinueWatching').props.presentation, 'offline-compact');
   assert.equal(h.requests.length, 0); assert.equal(h.component('HeroBillboard'), undefined); assert.equal(h.component('MediaRow'), undefined);
   const intro = h.panelUI(); assert.ok(texts(intro).includes('AVAILABLE OFFLINE')); assert.ok(texts(intro).includes('Your local Orion is ready.'));
@@ -142,12 +145,12 @@ test('online Home keeps Hero, default Continue Watching, panel and remote rows i
   assert.deepEqual(contentOrder(h), ['HeroBillboard', 'HomeContinueWatching', 'HomeConnectionPanel', 'View', 'View', 'View', 'View', 'View', 'View', 'View']);
   assert.equal(h.panelUI(), null); assert.deepEqual(h.component('HeroBillboard').props.items.map((item) => item.id), [1, 2]);
   h.connect('offline'); assert.equal(h.component('HeroBillboard'), undefined); assert.equal(h.component('MediaRow'), undefined);
-  assert.deepEqual(contentOrder(h), ['HomeConnectionPanel', 'HomeContinueWatching', 'View']);
+  assert.deepEqual(contentOrder(h), ['HomeConnectionPanel', 'HomeContinueWatching', 'HomeLocalLibrary', 'View']);
 });
 
 for (const [state, title] of [['checking', 'Checking Cinema connection.'], ['degraded', 'Cinema is temporarily unavailable.'], ['reconnecting', 'Reconnecting to Orion Cinema.']]) {
-  test(state + ' retains existing order, default rail and connection card', () => {
-    const h = harness({ state }); assert.deepEqual(contentOrder(h), ['HomeContinueWatching', 'HomeConnectionPanel', 'View']);
+  test(state + ' reserves the control lane, default rail and compact connection card above the fallback body', () => {
+    const h = harness({ state }); assert.deepEqual(contentOrder(h), ['MobilePageHeader', 'HomeContinueWatching', 'HomeConnectionPanel', state === 'degraded' ? 'HomeLocalLibrary' : 'HomeCatalogPlaceholder', 'View']);
     assert.equal(h.component('HomeContinueWatching').props.presentation, undefined);
     const panel = h.panelUI(); assert.ok(texts(panel).includes(title)); assert.equal(style(panel.props.style).borderWidth, 1);
   });

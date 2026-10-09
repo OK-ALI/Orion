@@ -20,6 +20,7 @@ export {
   DEFAULT_CINEMA_SOURCE_ID,
   NEEDS_INTERCEPT,
   getRegisteredSource,
+  isManualAnimeProvider,
   getSource,
   getSourceUrl,
   getSourceResumeParams,

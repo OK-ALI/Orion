@@ -55,10 +55,11 @@ test('Anime uses one provider card, both source groups, real header identity and
   assert.match(sheet, /props.animeAvailable && <SourceGroup title="Anime Sources"/);
   assert.match(sheet, /title="General Sources" expanded=\{!props.animeAvailable \|\| generalExpanded\}/);
   assert.match(sheet, /props.currentSourceLabel \|\| DISPLAY_NAMES/);
-  assert.match(sheet, /currentSourceId === 'aniembed'/); assert.match(sheet, /currentSourceId !== 'aniembed'/);
-  assert.match(screen, /getSourceResumeParams\(sourceId, resumeTime, type\), lang: activeAnimeTest.variant/);
-  assert.match(screen, /nextAnimeVariant: sourceId === 'aniembed' \? activeAnimeTest\?\.variant/);
-  assert.match(screen, /if \(reason === 'automatic' && sourceId === 'aniembed'\) return false/);
+  assert.match(sheet, /useState\(isManualAnimeProvider\(currentSourceId\)\)/); assert.match(sheet, /useState\(!isManualAnimeProvider\(currentSourceId\)\)/);
+  assert.match(screen, /getMobileEmbedResumeParams\(sourceId, resumeTime, type, forceStartFromBeginning\)/);
+  assert.match(screen, /animeProvider!.variantParam\]: activeAnimeTest.variant/);
+  assert.match(screen, /nextAnimeVariant: isManualAnimeProvider\(sourceId\) \? activeAnimeTest\?\.variant/);
+  assert.match(screen, /if \(reason === 'automatic' && isManualAnimeProvider\(sourceId\)\) return false/);
   assert.match(screen, /getPlaybackProgress\([\s\S]*resolvedSeason,[\s\S]*resolvedEpisode/);
   assert.match(screen, /ResumePlaybackPrompt/); assert.match(screen, /resolveResumeChoiceTime\(choice, initialSavedTime\)/);
   assert.doesNotMatch(card, /ResumePlaybackPrompt|currentTime|Start Over Only|Seamless Resume/);

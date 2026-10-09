@@ -10,7 +10,7 @@ const {
 const {
   createEmbeddedTelemetryScript,
   parseEmbeddedTelemetryMessage,
-} = require("../src/features/playback/embeddedTelemetry.ts");
+} = require("./helpers/animeModules.cjs").loader()("apps/mobile/src/features/playback/embeddedTelemetry.ts");
 const {
   verifiedResumeSeconds,
 } = require("../src/features/playback/playbackResume.ts");

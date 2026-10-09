@@ -18,6 +18,7 @@ import { candidateSources } from "./adapters/candidates";
 import { experimentalSources, disabledSources } from "./adapters/experimental";
 import { allMangaSource } from "./adapters/allmanga";
 import { aniEmbedSource } from './adapters/aniembed';
+import { aniLinkSource } from './adapters/anilink';
 import { CINEMA_BLOCK_RULE_CATALOG_V1 } from "@orion/shared/cinema-block-rules";
 import {
   applyOrionProviderStatusV1,
@@ -88,6 +89,7 @@ export const ALL_CINEMA_SOURCES: readonly LegacyCompatibleSource[] = Object.free
   ...disabledSources,
   allMangaSource,
   aniEmbedSource,
+  aniLinkSource,
 ].map(toLegacyCompatibleSource));
 
 assertSourceRegistry(ALL_CINEMA_SOURCES as unknown as CinemaSourceDescriptor[]);
@@ -151,6 +153,14 @@ export function getCinemaSourceRuntimeHealth(
 // ── Source lookup ───────────────────────────────────────────────────────────
 export function getRegisteredSource(sourceId: string): LegacyCompatibleSource | null {
   return ALL_CINEMA_SOURCES.find((source) => source.id === sourceId) ?? null;
+}
+
+/** Manual selection/success affinity is independent of physical acceptance and Auto. */
+export function isManualAnimeProvider(sourceId: string | null | undefined): boolean {
+  const source = sourceId ? getRegisteredSource(sourceId) : null;
+  return Boolean(source?.animeOnly && source.animeProvider && source.media.tv && !source.async
+    && source.routingMode === 'manual-only' && !source.quarantined && source.releaseStatus !== 'disabled'
+    && source.availability !== 'temporarily-unavailable');
 }
 
 export function getSource(sourceId: string): LegacyCompatibleSource {

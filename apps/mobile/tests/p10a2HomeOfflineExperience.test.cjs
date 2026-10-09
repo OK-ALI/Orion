@@ -188,7 +188,7 @@ test("initial or late-mounted online Home loads once while later restoration is 
   );
 });
 
-test("remote-only Home rails stay hidden while the product state is not remote-ready", () => {
+test("Home may render retained non-offline rails without granting remote request readiness", () => {
   const home =
     read("app/(tabs)/index.tsx");
 
@@ -212,6 +212,8 @@ test("remote-only Home rails stay hidden while the product state is not remote-r
   assert.match(home, /railId === 'trending-movies' && trendingMovies\.length > 0/);
   assert.match(home, /railId === 'trending-tv' && trendingTV\.length > 0/);
   assert.match(home, /railId === 'k-dramas' && kDramas\.length > 0/);
+  assert.match(home, /showRemoteCatalog = !offlineHome && \(network\.remoteReady \|\| hasRemoteContent\)/);
+  assert.match(home, /if\s*\(!remoteReadyRef\.current\)\s*\{\s*return;/);
 });
 
 test("Home connection panel exposes truthful offline, degraded, reconnecting, and checking states", () => {

@@ -75,6 +75,9 @@ function harness({ state = 'online', epoch = 0 } = {}) {
     '../../src/context/PerformanceContext': { usePerformanceProfile: () => ({ resolvedProfile: 'balanced' }) },
     '../../src/services/listPerformance': { getRailRenderBudget: () => ({}) },
     '../../src/components/HeroBillboard': { HeroBillboard: 'HeroBillboard' },
+    '../../src/components/MobilePageHeader': { MobilePageHeader: 'MobilePageHeader' },
+    '../../src/features/home/HomeCatalogPlaceholder': { HomeCatalogPlaceholder: 'HomeCatalogPlaceholder' },
+    '../../src/features/home/HomeLocalLibrary': { HomeLocalLibrary: 'HomeLocalLibrary' },
     '../../src/components/HomeConnectionPanel': { HomeConnectionPanel: 'HomeConnectionPanel' },
     './HomeOfflineIntroduction': { HomeOfflineIntroduction: 'HomeOfflineIntroduction' },
     '../../src/components/MediaCard': { MediaCard: 'MediaCard' },
@@ -298,4 +301,47 @@ test('the real shared recovery hook starts one full fan-out per legitimate epoch
   h.finish(0, [2]); await h.settle(); h.render(); assert.equal(h.requests.length, 9);
   h.connect('degraded', 4); h.connect('reconnecting', 4); assert.equal(h.requests.length, 9);
   h.connect('online', 5); h.finish(1); await h.settle(); h.connect('online', 5); assert.equal(h.requests.length, 18);
+});
+
+test('healthy manual refresh keeps the same rails, Hero and local rail without a first-load body', async () => {
+  const h = harness(); h.finish(); await h.settle();
+  const previous = h.rows(), hero = h.hero();
+  h.retry();
+  assert.equal(h.panel().loading, true); assert.equal(h.panel().compact, true); assert.equal(h.panel().initialLoad, false);
+  for (const label of [...labels, ...timelyLabels]) assert.strictEqual(h.rows()[label], previous[label]);
+  assert.deepEqual(h.hero(), hero); assert.ok(h.component('HomeContinueWatching'));
+  assert.equal(h.component('HomeCatalogPlaceholder'), undefined); assert.equal(h.component('HomeLocalLibrary'), undefined);
+  assert.ok(nodes(h.panelUI()).some((node) => node.props.children === 'Refreshing Orion Cinema.'));
+});
+
+for (const state of ['checking', 'degraded', 'reconnecting']) {
+  test(state + ' retains previously loaded rails while requests stay blocked, then recovers in place', async () => {
+    const h = harness(); h.finish(); await h.settle(); const previous = h.rows(), hero = h.hero();
+    h.connect(state);
+    for (const label of [...labels, ...timelyLabels]) assert.strictEqual(h.rows()[label], previous[label]);
+    assert.deepEqual(h.hero(), hero); assert.equal(h.requests.length, 9);
+    assert.equal(h.component('HomeCatalogPlaceholder'), undefined); assert.ok(h.component('HomeLocalLibrary'));
+    for (const row of nodes(h.result || h.component('ScrollView')).filter((node) => nameOf(node) === 'MediaRow')) {
+      assert.equal(row.props.onExploreMore, undefined, 'Retained content cannot offer an unavailable remote feed');
+    }
+    h.retry(); assert.equal(h.requests.length, 9);
+    h.connect('online', 1); assert.equal(h.requests.length, 18);
+    for (const label of labels) assert.strictEqual(h.rows()[label], previous[label]);
+    h.finish(1, [], responses(1000)); await h.settle();
+    assert.ok(h.rows()[labels[0]].every((item) => item.id >= 1000));
+    assert.equal(h.panelUI(), null); assert.equal(h.component('HomeLocalLibrary'), undefined);
+  });
+}
+
+test('cold load and recovery reserve placeholders only until data or a terminal outcome exists', async () => {
+  const h = harness({ state: 'checking' });
+  assert.ok(h.component('MobilePageHeader')); assert.ok(h.component('HomeCatalogPlaceholder'));
+  assert.equal(h.requests.length, 0);
+  h.connect('online'); assert.equal(h.requests.length, 9); assert.ok(h.component('HomeCatalogPlaceholder'));
+  h.finish(0, [0, 1, 2, 3, 4, 5, 6, 7, 8]); await h.settle();
+  assert.equal(h.component('HomeCatalogPlaceholder'), undefined); assert.ok(h.component('HomeLocalLibrary'));
+  h.connect('degraded'); h.connect('online', 1); assert.ok(h.component('HomeCatalogPlaceholder'));
+  h.finish(1); await h.settle();
+  assert.equal(h.component('HomeCatalogPlaceholder'), undefined); assert.equal(h.component('MobilePageHeader'), undefined);
+  assert.ok(h.component('HeroBillboard')); assert.equal(h.panelUI(), null);
 });

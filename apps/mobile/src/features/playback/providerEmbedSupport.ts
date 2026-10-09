@@ -16,7 +16,13 @@ export function getMobileEmbedResumeParams(sourceId: string, time: number, type:
 }
 
 export function createProviderResumeScript(sourceId: string, time: number, attemptId: string) {
-  return sourceId === 'cinesrc' ? createCineSrcResumeScript(time, attemptId) : createVerifiedResumeScript(time, attemptId);
+  const script = sourceId === 'cinesrc' ? createCineSrcResumeScript(time, attemptId) : createVerifiedResumeScript(time, attemptId);
+  if (sourceId !== 'aniembed') return script;
+  const target = Math.max(0, Math.floor(Number(time) || 0));
+  return `(function() { try { var owner = window.__orionPlaybackTelemetry;
+    if (owner && owner.sourceId === 'aniembed' && owner.diagnostics
+      && typeof owner.diagnostics.noteHostSeek === 'function') owner.diagnostics.noteHostSeek(${target});
+  } catch (_) {} })();\n${script}`;
 }
 
 export function retainPlaybackTargetObservation(previous: PlaybackTargetObservation | null, attemptId: string | null | undefined,
@@ -83,6 +89,17 @@ export function getProviderTelemetryFrameOrigin(source: CinemaSourceDescriptor |
 
 /** Only public route identity enters the top-level player bridge; query/request data stays out. */
 export function getProviderTelemetryPageContext(sourceId: string, url: string) {
+  if (sourceId === 'anilink') {
+    try {
+      const page = new URL(url), route = /^\/watch\/([1-9]\d*)\/([1-9]\d*)$/.exec(page.pathname);
+      const variant = page.searchParams.get('variant');
+      if (page.origin !== 'https://anilink.cc' || page.username || page.password || !route
+        || !Number.isSafeInteger(Number(route[1])) || !Number.isSafeInteger(Number(route[2]))
+        || (variant !== 'sub' && variant !== 'dub')) return undefined;
+      return { origin: page.origin, pathname: page.pathname, mediaType: 'tv', id: route[1],
+        season: null, episode: Number(route[2]), variant, frameUrl: page.href };
+    } catch { return undefined; }
+  }
   if (sourceId !== 'vidsrc-ir') return undefined;
   try {
     const page = new URL(url);
@@ -103,13 +120,16 @@ export function getProviderShieldManifest(sourceId: string, source?: CinemaSourc
 }
 
 /** Anime testing may not silently navigate to another episode or requested variant. */
-export function isSelectedAnimeNavigation(requestedUrl: string, selectedUrl: string): boolean {
+export function isSelectedAnimeNavigation(requestedUrl: string, selectedUrl: string, source?: CinemaSourceDescriptor): boolean {
   try {
     const requested = new URL(requestedUrl);
     const selected = new URL(selectedUrl);
+    if (source?.requiresIframeWrapper && source.allowedNavigationOrigins.includes('https://orion.local')
+      && requested.href === 'https://orion.local/player/') return true;
+    const variantParam = source?.animeProvider?.variantParam || 'lang';
     return requested.protocol === 'https:' && !requested.username && !requested.password
       && requested.origin === selected.origin && requested.pathname === selected.pathname
-      && requested.searchParams.get('lang') === selected.searchParams.get('lang');
+      && requested.searchParams.get(variantParam) === selected.searchParams.get(variantParam);
   } catch { return false; }
 }
 

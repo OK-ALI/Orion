@@ -25,6 +25,7 @@ const YTDLP_ANDROID_DEPENDENCIES = Object.freeze([
 ]);
 const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionCinemaWebViewClient.kt',
+  'OrionWrapperSourceLoad.kt',
   'OrionCinemaWebChromeClient.kt',
   'OrionCinemaWebViewManager.kt',
   'OrionCinemaWebViewManagerDelegate.java',
@@ -74,6 +75,7 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionDownloadTransferRuntime.kt',
 ]);
 const CINEMA_NATIVE_TEST_FILES = Object.freeze([
+  'OrionWrapperSourceLoadTest.kt',
   'OrionFinalizedPlayerPolicyTest.kt',
   'OrionPlayerSubtitleParserTest.kt',
   'OrionMediaPlayerSeekPolicyTest.kt',

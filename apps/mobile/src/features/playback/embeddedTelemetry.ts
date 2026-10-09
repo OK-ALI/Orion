@@ -3,6 +3,8 @@ import type {
   MobilePlaybackState,
 } from '@orion/shared/types';
 import type { PlaybackTelemetryInput } from './usePlaybackTelemetryController';
+import { createAniLinkTelemetryAdapterScript } from './aniLinkTelemetry';
+import { createAniEmbedRuntimeDiagnosticScript } from './aniEmbedRuntimeDiagnostics';
 
 const EVENT_TYPE = 'ORION_PLAYBACK_TELEMETRY';
 
@@ -12,7 +14,7 @@ interface BridgeOptions {
   strategy: string;
   expectedOrigins: string[];
   frameOrigin?: string;
-  pageContext?: { origin: string; pathname: string; mediaType: string; id: string; season: number | null; episode: number | null };
+  pageContext?: { origin: string; pathname: string; mediaType: string; id: string; season: number | null; episode: number | null; variant?: string; frameUrl?: string };
 }
 
 interface ParseContext {
@@ -115,6 +117,7 @@ export function createEmbeddedTelemetryScript({
       var sequence = 0;
       var attached = new WeakSet();
       var allowedOrigins = new Set(config.expectedOrigins || []);
+      var aniLinkStopped = false;${sourceId === 'aniembed' ? '\n      ' + createAniEmbedRuntimeDiagnosticScript() : ''}
       var providerMessageOrigins = {
         vidsrc: new Set(['https://cloudorchestranova.com']),
         vsembed: new Set(['https://cloudorchestranova.com'])
@@ -163,7 +166,7 @@ export function createEmbeddedTelemetryScript({
         return 'playing';
       }
 
-      function reportVideo(video, eventName) {
+      function reportVideo(video, eventName) {${sourceId === 'aniembed' ? '\n        aniEmbedDiagnostics.observe(video, eventName);' : ''}
         send(stateFor(video, eventName), 'provider-video-event', {
           currentTime: video.currentTime,
           duration: video.duration,
@@ -224,7 +227,9 @@ export function createEmbeddedTelemetryScript({
         return page.origin;
       }
 
+      ${sourceId === 'anilink' ? createAniLinkTelemetryAdapterScript() : ''}
       function normalizeProviderMessage(event) {
+        if (config.sourceId === 'anilink') { observeAniLinkMessage(event); return; }
         var supportedSources = {
           videasy: true,
           vidlink: true,
@@ -327,8 +332,9 @@ export function createEmbeddedTelemetryScript({
 
       window.__orionPlaybackTelemetry = {
         sessionId: config.sessionId,
-        sourceId: config.sourceId,
+        sourceId: config.sourceId,${sourceId === 'anilink' ? '\n        diagnostics: aniLinkDiagnostics,' : sourceId === 'aniembed' ? '\n        diagnostics: aniEmbedDiagnostics,' : ''}
         stop: function() {
+          aniLinkStopped = true;
           clearInterval(timer);
           window.removeEventListener('message', normalizeProviderMessage, false);
         }

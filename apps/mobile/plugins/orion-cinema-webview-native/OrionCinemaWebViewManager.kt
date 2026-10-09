@@ -8,6 +8,7 @@ import androidx.annotation.NonNull
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.ViewManagerDelegate
 import com.facebook.react.uimanager.annotations.ReactProp
@@ -36,6 +37,19 @@ class OrionCinemaWebViewManager : RNCWebViewManager() {
   override fun getName(): String = "OrionCinemaWebView"
 
   override fun getDelegate(): ViewManagerDelegate<RNCWebViewWrapper> = fabricDelegate
+
+  override fun setNewSource(viewWrapper: RNCWebViewWrapper, value: ReadableMap?) {
+    clients[viewWrapper]?.stageWrapperSource(value)
+    clients[viewWrapper]?.recordSourceDiagnostic(value)
+    super.setNewSource(viewWrapper, value)
+  }
+
+  override fun onAfterUpdateTransaction(viewWrapper: RNCWebViewWrapper) {
+    clients[viewWrapper]?.armWrapperSource()
+    clients[viewWrapper]?.recordSourceTransactionDiagnostic(viewWrapper.webView, "before")
+    super.onAfterUpdateTransaction(viewWrapper)
+    clients[viewWrapper]?.recordSourceTransactionDiagnostic(viewWrapper.webView, "after")
+  }
 
   override fun addEventEmitters(@NonNull reactContext: ThemedReactContext, viewWrapper: RNCWebViewWrapper) {
     val client = OrionCinemaWebViewClient(reactContext, viewWrapper.id) {

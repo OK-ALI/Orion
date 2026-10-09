@@ -394,7 +394,7 @@ export function EmbedPlayerSurface({
   };
 
   const handleShouldStartLoad = (request: { url?: string; isTopFrame?: boolean }) => {
-    if (source?.animeProvider && request.isTopFrame !== false && !isSelectedAnimeNavigation(String(request.url || ''), embedUrl)) {
+    if (source?.animeProvider && request.isTopFrame !== false && !isSelectedAnimeNavigation(String(request.url || ''), embedUrl, source)) {
       animeReadiness.fail(); return false;
     }
     if (Platform.OS !== 'ios' || request.isTopFrame === false) return true;
@@ -446,6 +446,7 @@ export function EmbedPlayerSurface({
     setIsBuffering(false);
     controller.setLoading('failed');
     telemetry.emitTelemetry({ evidence: 'provider-message', state: 'error' });
+    if (sourceId === 'anilink' && activeHandoffId) onResumeAttempt(activeHandoffId, 'unavailable');
     const failure = classifyCinemaSourceFailure(message, {
       superseded: sourceTransitionPending.current || surfaceReleased,
     });
@@ -629,7 +630,7 @@ export function EmbedPlayerSurface({
       const snapshot = telemetry.getVerifiedSnapshot();
       if (snapshot) onPlaybackSnapshot?.({ ...snapshot, targetObservation: targetObservation.current || undefined });
       const shouldUseCineSrcCommandSeek = sourceId === 'cinesrc' && sourceContinuity.canReceivePosition;
-      const shouldUseTopLevelVerifiedSeek = sourceContinuity.canReceivePosition && (source?.resumeStrategy === 'verified-seek' || sourceId === 'vidlink' || forceStartFromBeginning);
+      const shouldUseTopLevelVerifiedSeek = sourceContinuity.canReceivePosition && (source?.resumeStrategy === 'verified-seek' || sourceId === 'vidlink' || (forceStartFromBeginning && sourceId !== 'anilink'));
       if ((shouldUseCineSrcCommandSeek || shouldUseTopLevelVerifiedSeek)
         && (initialResumeTime > 0 || forceStartFromBeginning)
         && !resumeRequested.current) {

@@ -17,7 +17,9 @@ test('successful manual sources restore despite automaticTarget=false and unrela
   }
   assert.equal(mobile.getPreferredMobileResumeSource('aniembed', 'tv'), 'aniembed');
   assert.equal(mobile.getPreferredMobileResumeSource('aniembed', 'movie'), 'vixsrc');
-  for (const id of ['invalid', 'videasy', 'vsembed', 'allmanga', 'anilink', 'dropfile']) {
+  assert.equal(mobile.getPreferredMobileResumeSource('anilink', 'tv'), 'anilink');
+  assert.equal(mobile.mobileSourceSupportsContinuity('anilink'), false);
+  for (const id of ['invalid', 'videasy', 'vsembed', 'allmanga', 'dropfile']) {
     assert.equal(mobile.getPreferredMobileResumeSource(id, 'tv'), 'vixsrc');
   }
   assert.deepEqual(mobile.MOBILE_PLAYER_SOURCES.map(s => s.id), ['vixsrc', 'vidsrc', 'vidlink', 'vidnest', 'vidsrc-ir', 'cinesrc', '111movies']);
