@@ -138,6 +138,7 @@ function ThemedApplication() {
                   }}
                 >
                   <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen name="player/[id]" options={{ animation: 'none', contentStyle: { backgroundColor: '#000' } }} />
                 </Stack>
                 <GlobalSearchShortcut />
                 <MobileUpdateAnnouncementBanner />

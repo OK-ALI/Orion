@@ -20,7 +20,7 @@ function nodes(tree, name, result = []) {
   for (const child of [tree.props?.children].flat(Infinity)) nodes(child, name, result);
   return result;
 }
-function playbackFixture(initialRoute, storage, animeOverrides = {}, fetchOverride) {
+function playbackFixture(initialRoute, storage, animeOverrides = {}, fetchOverride, orientationOverrides = {}) {
   const library = libraryFixture(storage), player = hookHarness();
   let route = initialRoute, surface = null, surfaceKey = null, mounted = 0, sequence = 0, sessionId = null, disposed = false;
   const navigation = [], failures = [], success = [], diagnostics = [], updates = [], injections = [], episodeRequests = [], traces = [], urlBuilds = [];
@@ -52,7 +52,7 @@ function playbackFixture(initialRoute, storage, animeOverrides = {}, fetchOverri
     './MobilePlayerController': { MobilePlayerControllerProvider: 'Controller', useMobilePlayerController: () => controller },
     './NextEpisodePrompt': { NextEpisodePrompt: 'NextEpisodePrompt' },
     '../../components/player/PlayerStateOverlay': { PlayerStateOverlay: 'PlayerStateOverlay' },
-    './usePlayerOrientation': { usePlayerOrientation: () => ({ isLandscape: true, toggleOrientation() {}, releaseOrientation: async () => {} }) } });
+    './usePlayerOrientation': { usePlayerOrientation: () => ({ isLandscape: true, toggleOrientation() {}, releaseOrientation: async () => {}, ...orientationOverrides }) } });
   player.start(loadPlayer('apps/mobile/src/features/playback/PlayerScreen.tsx').default, {});
   function reconcile() {
     const node = nodes(player.result, 'EmbedPlayerSurface')[0];

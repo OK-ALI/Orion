@@ -113,7 +113,7 @@ function OfflinePlaybackPreparationSurface({
 
 export default function PlayerScreen() {
   const router = useRouter();
-  const { isLandscape, toggleOrientation, releaseOrientation } = usePlayerOrientation();
+  const { isLandscape, toggleOrientation, releaseOrientation, entryReady = true, onPlayerLayout } = usePlayerOrientation();
   const exitPlayer = useCallback(async () => {
     clearAnimeFlowChoice(String(routeIdRef.current));
     await releaseOrientation();
@@ -683,9 +683,11 @@ export default function PlayerScreen() {
 
   return (
     <MobilePlayerControllerProvider key={offlineRequested ? 'offline' : playbackIdentity}>
-    <View style={{ flex: 1 }}>
+    <View onLayout={onPlayerLayout} style={{ flex: 1, backgroundColor: '#000' }}>
+      <View style={{ flex: 1, opacity: entryReady ? 1 : 0 }} pointerEvents={entryReady ? 'auto' : 'none'}
+        accessibilityElementsHidden={!entryReady} importantForAccessibility={entryReady ? 'auto' : 'no-hide-descendants'}>
       {surface}
-      {initialChoicePending && !episodeTransition && anime.phase !== 'checking' && (
+      {entryReady && initialChoicePending && !episodeTransition && anime.phase !== 'checking' && (
         <ResumePlaybackPrompt
           title={title || 'this title'}
           savedTime={initialSavedTime}
@@ -701,6 +703,8 @@ export default function PlayerScreen() {
           onCancel={() => setNextEpisodePrompt(null)}
         />
       )}
+      </View>
+      {!entryReady && <PlayerStateOverlay state="preparing" onBack={exitPlayer} />}
     </View>
     </MobilePlayerControllerProvider>
   );
