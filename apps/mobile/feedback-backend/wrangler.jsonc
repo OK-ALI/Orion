@@ -1,0 +1,59 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "orion-feedback",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-13",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "observability": {
+    "enabled": false
+  },
+  "secrets": {
+    "required": [
+      "BREVO_API_KEY",
+      "FEEDBACK_HMAC_SECRET"
+    ]
+  },
+  "vars": {
+    "DAILY_MAIL_LIMIT": "100",
+    "FEEDBACK_RECIPIENT": "official.orion.feedback@gmail.com",
+    "BREVO_SENDER_EMAIL": "official.orion.feedback@gmail.com",
+    "BREVO_SENDER_NAME": "Orion Feedback"
+  },
+  "ratelimits": [
+    {
+      "name": "IP_LIMIT",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 6,
+        "period": 60
+      }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RECEIPTS",
+        "class_name": "FeedbackReceipt"
+      },
+      {
+        "name": "BUDGET",
+        "class_name": "FeedbackBudget"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "FeedbackReceipt",
+        "FeedbackBudget"
+      ]
+    }
+  ],
+  "keep_vars": true,
+  "send_metrics": false,
+  "preview_urls": false
+}
