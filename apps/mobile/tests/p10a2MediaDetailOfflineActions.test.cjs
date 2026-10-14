@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const ts = require('typescript');
+const isAnimeContent = require('./helpers/animeModules.cjs').loader()('packages/shared/src/api/tmdb.ts').isAnimeContent;
 const root = path.resolve(__dirname, '..');
 const dir = path.join(root, 'src/features/media-detail');
 const read = (name) => fs.readFileSync(path.join(dir, name), 'utf8');
@@ -54,7 +55,7 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
     'expo-router': { useRouter: () => router, useLocalSearchParams: () => params, useFocusEffect: (fn) => react.useEffect(fn, [fn]) },
     'expo-linear-gradient': { LinearGradient: 'LinearGradient' }, 'expo-blur': { BlurView: 'BlurView' }, '@expo/vector-icons': { Ionicons: 'Ionicons' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 10, bottom: 10 }) },
-    '@orion/shared/api': { tmdbFetch: (url, requestOptions = {}) => new Promise((resolve, reject) => requests.push({ url, options: requestOptions, resolve, reject })), imgUrl: (value) => value },
+    '@orion/shared/api': { isAnimeContent, tmdbFetch: (url, requestOptions = {}) => new Promise((resolve, reject) => requests.push({ url, options: requestOptions, resolve, reject })), imgUrl: (value) => value },
     '../../context/NetworkContext': { useNetworkStatus: () => network }, './NetworkContext': { useNetworkStatus: () => network },
     '../../context/ThemeContext': { useOrionTheme: () => ({ theme }) },
     '../../context/LibraryContext': { useLibraryVisual: () => ({ toggleSave: (record) => saves.push(record), isSaved: () => false }), useLibraryPlaybackActions: () => ({ getPlaybackProgress: () => null }) },
@@ -593,4 +594,16 @@ test('TV title uses existing appended credits plus creators without changing epi
   h.press('Episodes section');
   assert.ok(h.nodes().some((node) => node.props.accessibilityLabel === 'Season 1'));
   h.unmount();
+});
+
+test('catalog-recognized Anime film Watch adds only advisory entry intent; offline remains unchanged',async()=>{
+ const h=harness({repository:downloaded()});
+ h.requests[0].resolve({...titleResponse(),original_language:'ja',genres:[{id:16}]});await h.settle();
+ h.press('Watch Remote title 1');const route=h.routes[0];assert.equal(route.params.animeHint,'true');
+ assert.equal(route.params.id,'1');assert.equal(route.params.type,'movie');assert.equal(route.params.season,undefined);assert.equal(route.params.episode,undefined);
+ h.connect('offline');h.press('Play Remote title 1 offline');assert.equal(h.routes[1].params.offlineAssetId,'asset-1');assert.equal(h.routes[1].params.animeHint,undefined);h.unmount();
+});
+test('ordinary film Watch retains its exact original route payload without an Anime hint',async()=>{
+ const h=harness();h.requests[0].resolve(titleResponse());await h.settle();h.press('Watch Remote title 1');
+ assert.deepEqual(h.routes[0],{pathname:'/player/[id]',params:{id:'1',type:'movie',title:'Remote title 1',year:'2024',seriesTitle:undefined,posterPath:undefined,backdropPath:undefined}});h.unmount();
 });

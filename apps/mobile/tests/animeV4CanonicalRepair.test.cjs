@@ -95,3 +95,69 @@ test('normal release resolves the repaired checkout API and preserves all other 
     assert.equal(calls.length,3);assert.equal(calls[0][0],context);assert.equal(calls[0][2],'android');
   }
 });
+
+function animeEntryPriorityFixture({knownAnime=true,preference=null,routedSource,type='movie',enabled=true}={}){
+ const {hookHarness}=require('./helpers/playerHookHarness.cjs'),h=hookHarness(),chosen=[],requests=[];
+ let releaseCatalog,releaseIdentity;
+ const catalog=new Promise(r=>releaseCatalog=r),identity=new Promise(r=>releaseIdentity=r);
+ const l=loader({react:h.react,'@orion/shared/api':{isAnimeContent:d=>d?.anime===true,tmdbFetch:async path=>{requests.push(path);return catalog;},lookupAnimeEntries(){}},
+  './animeIdentityDiagnostics':{createAnimeIdentityTrace:()=>()=>{}},'./animeIdentityRequest':{resolveAnimeTestIdentity:async()=>identity},
+  '../../services/storageAdapter':{mmkvStorageAdapter:{get:()=>null,set(){}}}});
+ const props={id:'372058',type,season:type==='tv'?1:null,episode:type==='tv'?1:null,knownAnime,enabled,preference,routedSource,onPreferred:v=>chosen.push(v)};
+ h.start(l('apps/mobile/src/features/playback/useAnimeSource.ts').useAnimeSource,props);
+ const verified=type==='movie'?{state:'verified',mediaType:'movie',tmdbId:props.id,anilistId:21519}:{state:'verified',tmdbId:props.id,anilistId:21519,season:1,episode:1};
+ return {h,props,chosen,requests,releaseCatalog,releaseIdentity,verified};
+}
+test('fresh Anime films stay gated through both catalog and identity lookup, then prefer AniEmbed',async()=>{
+ const f=animeEntryPriorityFixture();assert.equal(f.h.result.phase,'checking');assert.equal(f.chosen.length,0);
+ f.releaseCatalog({id:372058,anime:true});await f.h.settle();assert.equal(f.h.result.phase,'checking');assert.equal(f.chosen.length,0);
+ f.releaseIdentity(f.verified);await f.h.settle();assert.equal(f.h.result.phase,'anime');assert.equal(f.chosen.length,1);
+ assert.equal(f.chosen[0].providerId,'aniembed');assert.equal(f.chosen[0].variant,'sub');assert.equal(f.chosen[0].identity.mediaType,'movie');
+ assert.ok(!Object.hasOwn(f.chosen[0].identity,'season'));assert.ok(!Object.hasOwn(f.chosen[0].identity,'episode'));f.h.dispose();
+});
+test('fresh episodic Anime still prefers AniEmbed without any saved source',async()=>{
+ const f=animeEntryPriorityFixture({knownAnime:false,type:'tv'});assert.equal(f.h.result.phase,'checking');
+ f.releaseCatalog({id:372058,anime:true});await f.h.settle();f.releaseIdentity(f.verified);await f.h.settle();
+ assert.equal(f.h.result.phase,'anime');assert.equal(f.chosen[0].providerId,'aniembed');f.h.dispose();
+});
+test('catalog-recognized Anime without an entry hint stops General while identity proof is pending',async()=>{
+ const f=animeEntryPriorityFixture({knownAnime:false});assert.equal(f.h.result.phase,'general');
+ f.releaseCatalog({id:372058,anime:true});await f.h.settle();assert.equal(f.h.result.phase,'checking');assert.equal(f.chosen.length,0);
+ f.releaseIdentity(f.verified);await f.h.settle();assert.equal(f.h.result.phase,'anime');f.h.dispose();
+});
+test('ordinary films preserve immediate General entry and never resolve an Anime identity',async()=>{
+ const f=animeEntryPriorityFixture({knownAnime:false});assert.equal(f.h.result.phase,'general');
+ f.releaseCatalog({id:372058,anime:false});await f.h.settle();assert.equal(f.h.result.phase,'general');assert.equal(f.chosen.length,0);f.h.dispose();
+});
+test('entry hint cannot authorize Anime playback without canonical catalog verification',async()=>{
+ const f=animeEntryPriorityFixture();assert.equal(f.h.result.phase,'checking');
+ f.releaseCatalog({id:372058,anime:false});await f.h.settle();assert.equal(f.h.result.phase,'general');assert.equal(f.chosen.length,0);f.h.dispose();
+});
+test('saved and routed General choices remain primary even with a canonical Anime entry hint',async()=>{
+ for(const options of [{preference:{sourceId:'vixsrc'}},{routedSource:'vidlink'}]){
+  const f=animeEntryPriorityFixture(options);assert.equal(f.h.result.phase,'general');
+  f.releaseCatalog({id:372058,anime:true});await f.h.settle();assert.equal(f.h.result.phase,'general');assert.equal(f.chosen.length,0);f.h.dispose();
+ }
+});
+test('manual General escape cannot be overwritten by delayed Anime-film identity proof',async()=>{
+ const f=animeEntryPriorityFixture();f.releaseCatalog({id:372058,anime:true});await f.h.settle();
+ f.h.result.manualGeneral('vidlink');await f.h.settle();f.releaseIdentity(f.verified);await f.h.settle();
+ assert.equal(f.h.result.phase,'general');assert.equal(f.chosen.length,0);f.h.dispose();
+});
+test('disabled offline or download-resolution paths ignore Anime entry hints without catalog work',async()=>{
+ const f=animeEntryPriorityFixture({enabled:false});assert.equal(f.h.result.phase,'general');await f.h.settle();
+ assert.equal(f.requests.length,0);assert.equal(f.chosen.length,0);f.h.dispose();
+});
+test('entry hints reuse public Anime detection and leave ordinary route payloads unchanged',()=>{
+ const api=base('packages/shared/src/api/tmdb.ts');const helper=loader({'@orion/shared/api':{isAnimeContent:api.isAnimeContent}})('apps/mobile/src/features/playback/animeEntryIntent.ts');
+ for(const item of [{id:7,genre_ids:[16],original_language:'ja'},{id:8,genres:[{id:16}],origin_country:['JP']}])assert.deepEqual(helper.getAnimeEntryHint(item),{animeHint:'true'});
+ for(const item of [{id:7,genre_ids:[16],original_language:'en'},{id:8,genres:[{id:18}],origin_country:['JP']},{id:9}])assert.deepEqual(helper.getAnimeEntryHint(item),{});
+ const player=read('apps/mobile/src/features/playback/PlayerScreen.tsx');assert.match(player,/knownAnime: animeHint === 'true'/);
+});
+
+test('same-title transition into known Anime intent gates immediately and cancels stale entry work',async()=>{
+ const f=animeEntryPriorityFixture({knownAnime:false});assert.equal(f.h.result.phase,'general');
+ f.h.update({...f.props,knownAnime:true});assert.equal(f.h.result.phase,'checking');
+ f.releaseCatalog({id:372058,anime:true});await f.h.settle();f.releaseIdentity(f.verified);await f.h.settle();
+ assert.equal(f.chosen.length,1);assert.equal(f.h.result.phase,'anime');f.h.dispose();
+});

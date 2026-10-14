@@ -13,6 +13,7 @@ import { spacing, fontFamilies, radii } from '@orion/shared/tokens';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { tmdbFetch } from '@orion/shared/api';
+import { getAnimeEntryHint } from '../../src/features/playback/animeEntryIntent';
 import { TmdbMediaItem, TmdbPaginatedResponse } from '@orion/shared/types';
 import { HeroBillboard } from '../../src/components/HeroBillboard';
 import { HomeConnectionPanel } from '../../src/components/HomeConnectionPanel';
@@ -319,6 +320,7 @@ export default function HomeScreen() {
       pathname: '/player/[id]',
       params: {
         id: item.id,
+        ...getAnimeEntryHint(item),
         type,
         title,
         year,

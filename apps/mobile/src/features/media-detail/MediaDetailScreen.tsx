@@ -7,6 +7,7 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { imgUrl } from '@orion/shared/api';
+import { getAnimeEntryHint } from '../playback/animeEntryIntent';
 import { useMediaDetailRemoteState, mediaDetailConnectionCopy } from './useMediaDetailRemoteState';
 import { useMediaDetailLocalAvailability, type MediaDetailLocalCopy } from './useMediaDetailLocalAvailability';
 import { MediaDetailFallback, MediaDetailLocalCopies } from './MediaDetailFallback';
@@ -365,6 +366,7 @@ export default function MediaDetailScreen() {
                   pathname: '/player/[id]',
                   params: {
                     id, type, title, year,
+                    ...getAnimeEntryHint(data),
                     seriesTitle: type === 'tv' ? title : undefined,
                     posterPath: data.poster_path || undefined,
                     backdropPath: data.backdrop_path || undefined,

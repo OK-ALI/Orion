@@ -17,12 +17,12 @@ type State = { key: string; phase: 'checking' | 'general' | 'anime' | 'failed'; 
   selection: AnimeSourceSelection | null; error: string | null; providerId?: string };
 
 /** Identity/affinity integration only. Resume and progress belong to Orion's existing player. */
-export function useAnimeSource({ id, type, season, episode, enabled, routedSource, routedVariant, preference, onPreferred }: {
+export function useAnimeSource({ id, type, season, episode, enabled, knownAnime = false, routedSource, routedVariant, preference, onPreferred }: {
   id: string; type: 'movie' | 'tv'; season: number | null; episode: number | null; enabled: boolean;
   preference?: { sourceId: string; variant?: string } | null;
-  routedSource?: string; routedVariant?: string; onPreferred(selection: AnimeSourceSelection): void;
+  knownAnime?: boolean; routedSource?: string; routedVariant?: string; onPreferred(selection: AnimeSourceSelection): void;
 }) {
-  const key = `${type}:${id}:${season}:${episode}`;
+  const key = `${type}:${id}:${season}:${episode}${knownAnime && type === 'movie' ? ':anime-entry' : ''}`;
   const eligible = enabled && (type === 'movie' || ((season ?? 0) > 0 && (episode ?? 0) > 0));
   const [state, setState] = useState<State>({ key: '', phase: 'checking', detail: null, selection: null, error: null });
   const failures = useRef<Record<string, string>>({});
@@ -55,7 +55,7 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
   useEffect(() => {
     const scope = new AbortController(); request.current = scope;
     detailRef.current = null; selectionRef.current = null; manualChoice.current = false; failures.current = {};
-    setState({ key, phase: eligible && (type === 'tv' || isManualAnimeProvider(routedSource) || isManualAnimeProvider(preferenceRef.current?.sourceId)) ? 'checking' : 'general', detail: null, selection: null, error: null });
+    setState({ key, phase: eligible && (type === 'tv' || isManualAnimeProvider(routedSource) || isManualAnimeProvider(preferenceRef.current?.sourceId) || (knownAnime && preferredMovieAnimeSource(id, routedSource, routedVariant, preferenceRef.current) !== null)) ? 'checking' : 'general', detail: null, selection: null, error: null });
     if (!eligible) return () => scope.abort();
     // Bound the catalog request as well as AniList lookup. No stale episode may be activated.
     const timer = setTimeout(() => scope.abort(), 20_000);
@@ -82,6 +82,8 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
           else setState({ key, phase: 'general', detail, selection: null, error: null });
           return;
         }
+        // A catalog-verified Anime film must not open General while identity proof is pending.
+        if (type === 'movie') setState({ key, phase: 'checking', detail, selection: null, error: null });
         const selection = await resolve(affinity.variant, detail, scope.signal, affinity.providerId);
         if (scope.signal.aborted || disposed || manualChoice.current) return;
         if (!selection) { failure(); return; }
@@ -94,7 +96,7 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
     const abort = () => { if (!disposed && !manualChoice.current) failure(); };
     scope.signal.addEventListener('abort', abort, { once: true });
     return () => { disposed = true; scope.signal.removeEventListener('abort', abort); clearTimeout(timer); scope.abort(); };
-  }, [eligible, id, key, resolve, retryAttempt, routedSource, routedVariant, type]);
+  }, [eligible, id, key, resolve, retryAttempt, routedSource, routedVariant, knownAnime, type]);
 
   const prepare = useCallback(async (variant: AnimeVariant, providerId = 'aniembed') => {
     const scope = request.current;
@@ -126,7 +128,7 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
     const affinity = { providerId: sourceId, variant: selection.variant };
     (type === 'movie' ? setMovieAnimeFlowChoice : setAnimeFlowChoice)(id, affinity);
   }, [id, type]);
-  const current = state.key === key ? state : { key, phase: eligible && (type === 'tv' || isManualAnimeProvider(routedSource) || isManualAnimeProvider(preferenceRef.current?.sourceId)) ? 'checking' as const : 'general' as const,
+  const current = state.key === key ? state : { key, phase: eligible && (type === 'tv' || isManualAnimeProvider(routedSource) || isManualAnimeProvider(preferenceRef.current?.sourceId) || (knownAnime && preferredMovieAnimeSource(id, routedSource, routedVariant, preferenceRef.current) !== null)) ? 'checking' as const : 'general' as const,
     detail: null, selection: null, error: null };
   return { ...current, prepare, activate, manualGeneral, recordSuccess, preparationFailure: (providerId: string) => animeFailureCopy(failures.current[providerId], type), retry: () => setRetryAttempt((value) => value + 1) };
 }

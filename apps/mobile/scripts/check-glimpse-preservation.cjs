@@ -53,6 +53,10 @@ const integrations = [
   "apps/mobile/src/features/playback/useAnimeSource.ts",
   "apps/mobile/src/features/playback/AnimeSourceChoices.tsx",
   "apps/mobile/src/features/playback/PlayerScreen.tsx",
+  "apps/mobile/app/(tabs)/index.tsx",
+  "apps/mobile/src/features/media-detail/MediaDetailScreen.tsx",
+  "apps/mobile/tests/p10a2MediaDetailOfflineActions.test.cjs",
+  "apps/mobile/tests/f10aM1OfflineHomePresentation.test.cjs",
 ];
 function expectedIntegration(file, original) {
   if (file === integrations[0]) return original
@@ -106,6 +110,7 @@ function allowedAddition(file) {
     || file === "apps/mobile/src/features/playback/animeEpisodeProof.ts"
     || file === "apps/mobile/src/features/playback/animeCanonicalRepair.ts"
     || file === "apps/mobile/src/features/playback/animeMediaShape.ts"
+    || file === "apps/mobile/src/features/playback/animeEntryIntent.ts"
     || file === "apps/mobile/tests/animeV4CanonicalRepair.test.cjs"
     || file === "docs/mobile-v4-anime-repair-audit.md"
     || file.startsWith('apps/mobile/src/features/feedback/')

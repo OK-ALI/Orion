@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const ts = require('typescript');
+const isAnimeContent = require('./helpers/animeModules.cjs').loader()('packages/shared/src/api/tmdb.ts').isAnimeContent;
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const cache = new Map();
@@ -47,7 +48,7 @@ function harness({ mode = 'home', state = 'offline', presentation, width = 480, 
     'expo-linear-gradient': { LinearGradient: 'LinearGradient' }, '@expo/vector-icons': { Ionicons: 'Ionicons' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 24, bottom: 0 }) },
     '@orion/shared/tokens': { spacing: Array.from({ length: 20 }, (_, i) => i * 4), fontFamilies: {}, radii: {} },
-    '@orion/shared/api': { tmdbFetch: (url) => new Promise((resolve, reject) => requests.push({ url, resolve, reject })), imgUrl: (value) => value },
+    '@orion/shared/api': { isAnimeContent, tmdbFetch: (url) => new Promise((resolve, reject) => requests.push({ url, resolve, reject })), imgUrl: (value) => value },
     'expo-file-system': {
       Directory: class Directory { constructor() { this.uri = 'file:///artwork/'; this.exists = false; } create() { this.exists = true; } list() { return []; } },
       File: class File { constructor(...parts) { this.uri = String(parts.at(-1) || 'file:///artwork/file'); this.exists = false; this.size = 0; } delete() { this.exists = false; } },
@@ -269,4 +270,14 @@ test('final offline Home polish adds 12 dp after the introduction while preservi
     assert.ok(!texts(other.panelUI()).includes('Your local Orion is ready.'));
     assert.equal(other.component('HomeContinueWatching').props.presentation, undefined);
   }
+});
+
+test('Home Hero uses advisory Anime intent only for recognized catalog items and preserves ordinary movie routes',async()=>{
+ for(const anime of [false,true]){
+  const h=harness({state:'online'}),item={id:7,title:'Catalog film',media_type:'movie',release_date:'2026-01-01',poster_path:'/poster',backdrop_path:'/backdrop',genre_ids:[16],original_language:anime?'ja':'en'};
+  h.requests.forEach((r,i)=>r.resolve({results:i===0?[item]:[]}));await h.settle();
+  const hero=h.component('HeroBillboard');assert.ok(hero);hero.props.onPlay(hero.props.items[0]);
+  const expected={pathname:'/player/[id]',params:{id:7,type:'movie',title:'Catalog film',year:'2026',seriesTitle:undefined,posterPath:'/poster',backdropPath:'/backdrop'}};
+  if(anime)expected.params.animeHint='true';assert.deepEqual(h.routes,[expected]);
+ }
 });

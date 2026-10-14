@@ -1,7 +1,7 @@
 'use strict';
 // Exact reviewed Anime repair dependencies. Qualified transports/players outside
 // these identity, selection-copy and provider-episode arguments remain frozen.
-function animeRepairIntegration(file, source) {
+function animeRepairIntegrationBase(file, source) {
   if(file==='packages/shared/src/api/animeLookup.ts') return source
     .replace('  catalog?: AnimeCatalogEvidence; diagnostic?: AnimeIdentityDiagnosticSink;', '  catalog?: AnimeCatalogEvidence; diagnostic?: AnimeIdentityDiagnosticSink; forceRefresh?: boolean;')
     .replace('cached: Boolean(saved && saved.expires > Date.now())','cached: Boolean(!options.forceRefresh && saved && saved.expires > Date.now())')
@@ -65,5 +65,98 @@ function animeRepairIntegration(file, source) {
     .replace('    setSurfaceReleased(true);\n  });', '    setSurfaceReleased(true);\n  }, sourceId);');
   if(file==='apps/mobile/metro.config.js') return source.replace('module.exports = config;',"// Resolve Orion's public API from this checkout even when dependencies are reused.\nconst upstreamResolveRequest = config.resolver.resolveRequest;\nconfig.resolver.resolveRequest = (context, moduleName, platform) => {\n  if (moduleName === '@orion/shared/api') {\n    return { type: 'sourceFile', filePath: path.join(workspaceRoot, 'packages/shared/src/api/index.ts') };\n  }\n  return upstreamResolveRequest\n    ? upstreamResolveRequest(context, moduleName, platform)\n    : context.resolveRequest(context, moduleName, platform);\n};\n\nmodule.exports = config;");
   return source;
+}
+// Exact additive route intent and Anime-only pending-identity gate. No General or offline changes.
+const animeEntryTransforms = {
+  "apps/mobile/src/features/playback/useAnimeSource.ts": [
+    [
+      "enabled, routedSource, routedVariant, preference, onPreferred",
+      "enabled, knownAnime = false, routedSource, routedVariant, preference, onPreferred"
+    ],
+    [
+      "  routedSource?: string; routedVariant?: string; onPreferred",
+      "  knownAnime?: boolean; routedSource?: string; routedVariant?: string; onPreferred"
+    ],
+    [
+      "eligible && (type === 'tv' || isManualAnimeProvider(routedSource) || isManualAnimeProvider(preferenceRef.current?.sourceId))",
+      "eligible && (type === 'tv' || isManualAnimeProvider(routedSource) || isManualAnimeProvider(preferenceRef.current?.sourceId) || (knownAnime && preferredMovieAnimeSource(id, routedSource, routedVariant, preferenceRef.current) !== null))",
+      2
+    ],
+    [
+      "        const selection = await resolve(affinity.variant, detail, scope.signal, affinity.providerId);",
+      "        // A catalog-verified Anime film must not open General while identity proof is pending.\n        if (type === 'movie') setState({ key, phase: 'checking', detail, selection: null, error: null });\n        const selection = await resolve(affinity.variant, detail, scope.signal, affinity.providerId);"
+    ],
+    [
+      "resolve, retryAttempt, routedSource, routedVariant, type]);",
+      "resolve, retryAttempt, routedSource, routedVariant, knownAnime, type]);"
+    ],
+    [
+      "  const key = `${type}:${id}:${season}:${episode}`;",
+      "  const key = `${type}:${id}:${season}:${episode}${knownAnime && type === 'movie' ? ':anime-entry' : ''}`;"
+    ]
+  ],
+  "apps/mobile/src/features/playback/PlayerScreen.tsx": [
+    [
+      "  nextAnimeVariant?: string;",
+      "  nextAnimeVariant?: string;\n  animeHint?: string;"
+    ],
+    [
+      "posterPath, backdropPath, episodeTitle, offlineAssetId, isOffline, nextSourceId, nextAnimeVariant,",
+      "posterPath, backdropPath, episodeTitle, offlineAssetId, isOffline, nextSourceId, nextAnimeVariant, animeHint,"
+    ],
+    [
+      "enabled: !offlineRequested && !downloadResolutionOnly, preference: sourcePreference,",
+      "enabled: !offlineRequested && !downloadResolutionOnly, knownAnime: animeHint === 'true', preference: sourcePreference,"
+    ]
+  ],
+  "apps/mobile/app/(tabs)/index.tsx": [
+    [
+      "import { tmdbFetch } from '@orion/shared/api';",
+      "import { tmdbFetch } from '@orion/shared/api';\nimport { getAnimeEntryHint } from '../../src/features/playback/animeEntryIntent';"
+    ],
+    [
+      "        id: item.id,\n        type,",
+      "        id: item.id,\n        ...getAnimeEntryHint(item),\n        type,"
+    ]
+  ],
+  "apps/mobile/src/features/media-detail/MediaDetailScreen.tsx": [
+    [
+      "import { imgUrl } from '@orion/shared/api';",
+      "import { imgUrl } from '@orion/shared/api';\nimport { getAnimeEntryHint } from '../playback/animeEntryIntent';"
+    ],
+    [
+      "                    id, type, title, year,",
+      "                    id, type, title, year,\n                    ...getAnimeEntryHint(data),"
+    ]
+  ],
+  "apps/mobile/tests/p10a2MediaDetailOfflineActions.test.cjs": [
+    [
+      "const root = path.resolve(__dirname, '..');",
+      "const isAnimeContent = require('./helpers/animeModules.cjs').loader()('packages/shared/src/api/tmdb.ts').isAnimeContent;\nconst root = path.resolve(__dirname, '..');"
+    ],
+    [
+      "    '@orion/shared/api': { tmdbFetch:",
+      "    '@orion/shared/api': { isAnimeContent, tmdbFetch:"
+    ]
+  ],
+  "apps/mobile/tests/f10aM1OfflineHomePresentation.test.cjs": [
+    [
+      "const root = path.resolve(__dirname, '..');",
+      "const isAnimeContent = require('./helpers/animeModules.cjs').loader()('packages/shared/src/api/tmdb.ts').isAnimeContent;\nconst root = path.resolve(__dirname, '..');"
+    ],
+    [
+      "    '@orion/shared/api': { tmdbFetch:",
+      "    '@orion/shared/api': { isAnimeContent, tmdbFetch:"
+    ]
+  ]
+};
+const animeEntryAppendTests = {
+  "apps/mobile/tests/p10a2MediaDetailOfflineActions.test.cjs": "\ntest('catalog-recognized Anime film Watch adds only advisory entry intent; offline remains unchanged',async()=>{\n const h=harness({repository:downloaded()});\n h.requests[0].resolve({...titleResponse(),original_language:'ja',genres:[{id:16}]});await h.settle();\n h.press('Watch Remote title 1');const route=h.routes[0];assert.equal(route.params.animeHint,'true');\n assert.equal(route.params.id,'1');assert.equal(route.params.type,'movie');assert.equal(route.params.season,undefined);assert.equal(route.params.episode,undefined);\n h.connect('offline');h.press('Play Remote title 1 offline');assert.equal(h.routes[1].params.offlineAssetId,'asset-1');assert.equal(h.routes[1].params.animeHint,undefined);h.unmount();\n});\ntest('ordinary film Watch retains its exact original route payload without an Anime hint',async()=>{\n const h=harness();h.requests[0].resolve(titleResponse());await h.settle();h.press('Watch Remote title 1');\n assert.deepEqual(h.routes[0],{pathname:'/player/[id]',params:{id:'1',type:'movie',title:'Remote title 1',year:'2024',seriesTitle:undefined,posterPath:undefined,backdropPath:undefined}});h.unmount();\n});\n",
+  "apps/mobile/tests/f10aM1OfflineHomePresentation.test.cjs": "\ntest('Home Hero uses advisory Anime intent only for recognized catalog items and preserves ordinary movie routes',async()=>{\n for(const anime of [false,true]){\n  const h=harness({state:'online'}),item={id:7,title:'Catalog film',media_type:'movie',release_date:'2026-01-01',poster_path:'/poster',backdrop_path:'/backdrop',genre_ids:[16],original_language:anime?'ja':'en'};\n  h.requests.forEach((r,i)=>r.resolve({results:i===0?[item]:[]}));await h.settle();\n  const hero=h.component('HeroBillboard');assert.ok(hero);hero.props.onPlay(hero.props.items[0]);\n  const expected={pathname:'/player/[id]',params:{id:7,type:'movie',title:'Catalog film',year:'2026',seriesTitle:undefined,posterPath:'/poster',backdropPath:'/backdrop'}};\n  if(anime)expected.params.animeHint='true';assert.deepEqual(h.routes,[expected]);\n }\n});\n"
+};
+function animeRepairIntegration(file, source) {
+  let expected = animeRepairIntegrationBase(file, source);
+  for (const [before, after] of animeEntryTransforms[file] || []) expected = expected.replaceAll(before, after);
+  return expected + (animeEntryAppendTests[file] || '');
 }
 module.exports={animeRepairIntegration};

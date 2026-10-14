@@ -82,6 +82,7 @@ type PlayerRouteParams = {
   isOffline?: string;
   nextSourceId?: string;
   nextAnimeVariant?: string;
+  animeHint?: string;
 };
 
 function OfflinePlaybackPreparationSurface({
@@ -123,7 +124,7 @@ export default function PlayerScreen() {
   }, [releaseOrientation, router]);
   const {
     id, type, title, season, episode, year, seriesTitle,
-    posterPath, backdropPath, episodeTitle, offlineAssetId, isOffline, nextSourceId, nextAnimeVariant,
+    posterPath, backdropPath, episodeTitle, offlineAssetId, isOffline, nextSourceId, nextAnimeVariant, animeHint,
   } =
     useLocalSearchParams<PlayerRouteParams>();
   const routeIdRef = useRef(id); routeIdRef.current = id;
@@ -162,7 +163,7 @@ export default function PlayerScreen() {
   const [animeAttempt, setAnimeAttempt] = useState(0);
   const pendingAnimeSelection = useRef<AnimeSourceSelection | null>(null);
   const anime = useAnimeSource({ id, type, season: resolvedSeason, episode: resolvedEpisode,
-    enabled: !offlineRequested && !downloadResolutionOnly, preference: sourcePreference,
+    enabled: !offlineRequested && !downloadResolutionOnly, knownAnime: animeHint === 'true', preference: sourcePreference,
     routedSource: isManualAnimeProvider(nextSourceId) ? nextSourceId : routedNextSource || undefined, routedVariant: nextAnimeVariant,
     onPreferred: (selection) => setSourceId(selection.providerId || 'aniembed') });
   const activeAnimeTest = anime.selection;
