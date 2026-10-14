@@ -29,7 +29,7 @@ test('Phase 9 Updates uses one consumer-facing App Updates hierarchy', () => {
   assert.match(settings, />Update options</);
   assert.match(appState, /label: 'Up to date'/);
   assert.match(appUpdate, />App updates</);
-  assert.match(settings, /What's new/);
+  assert.match(settings, /View Release Notes/);
   assert.match(appUpdate, /getMobileApplicationUpdatePresentationV1\(state\)/);
   assert.doesNotMatch(settings, /Quick updates|Recovery|RuntimeUpdateExecutionSection|checkExpoRuntimeUpdateV1/);
   assert.doesNotMatch(settings, /Minimum Android|Installer|Signed APK updates remain|Google Play distribution/i);

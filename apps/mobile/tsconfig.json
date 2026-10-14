@@ -5,6 +5,7 @@
   },
   "exclude": [
     "dist",
+    "feedback-backend",
     "node_modules"
   ]
 }

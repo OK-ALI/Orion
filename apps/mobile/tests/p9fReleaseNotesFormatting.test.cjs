@@ -13,8 +13,9 @@ test('P9-F3 Mobile renders release notes structurally instead of leaking raw Mar
   const content = readMobile('src/features/settings/UpdatesSettingsContent.tsx');
   const notes = readMobile('src/features/settings/MobileReleaseNotes.tsx');
 
-  assert.match(content, /import \{ MobileReleaseNotes \} from '\.\/MobileReleaseNotes';/);
-  assert.match(content, /<MobileReleaseNotes notes=\{releaseNotes\} \/>/);
+  assert.match(content, /import \{ ReleaseNotesDialog \} from '\.\.\/releaseNotes\/ReleaseNotesDialog';/);
+  assert.match(content, /<ReleaseNotesDialog document=\{notesDocument\}/);
+  assert.doesNotMatch(content, /<MobileReleaseNotes/);
   assert.doesNotMatch(content, /numberOfLines=\{6\}/);
 
   assert.match(notes, /parseMobileReleaseNotesV1/);

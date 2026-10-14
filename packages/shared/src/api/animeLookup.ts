@@ -27,7 +27,7 @@ function normalizeEntry(value: any): AnimeLookupEntry | null {
 
 /** Bounded public metadata search; never substitutes stale data after failure. */
 export async function lookupAnimeEntries(titles: string[], signal?: AbortSignal, options: {
-  catalog?: AnimeCatalogEvidence; diagnostic?: AnimeIdentityDiagnosticSink;
+  catalog?: AnimeCatalogEvidence; diagnostic?: AnimeIdentityDiagnosticSink; forceRefresh?: boolean;
 } = {}): Promise<AnimeLookupEntry[]> {
   const searches = [...new Set(titles.filter((title) => typeof title === 'string' && title.trim().length > 0
     && title.length <= 300).map((title) => title.trim()))].slice(0, 3);
@@ -68,8 +68,8 @@ export async function lookupAnimeEntries(titles: string[], signal?: AbortSignal,
     for (const title of searches) {
       checkCancelled();
       const saved = cache.get(title);
-      emit(options.diagnostic, { stage: 'lookup', scope: 'search', query: describeAnimeLookupTitle(title), cached: Boolean(saved && saved.expires > Date.now()) });
-      if (saved && saved.expires > Date.now()) { result.push(...saved.entries); continue; }
+      emit(options.diagnostic, { stage: 'lookup', scope: 'search', query: describeAnimeLookupTitle(title), cached: Boolean(!options.forceRefresh && saved && saved.expires > Date.now()) });
+      if (!options.forceRefresh && saved && saved.expires > Date.now()) { result.push(...saved.entries); continue; }
       const entries: AnimeLookupEntry[] = [];
       for (let page = 1; page <= 3; page++) {
         const reply = await fetchPage(QUERY, { search: title, page }, 'search');

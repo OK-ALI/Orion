@@ -56,7 +56,7 @@ test('P9.4 Updates surface keeps release notes visible, rollout-aware and retrya
   const state = read('src', 'services', 'mobileApplicationUpdateState.ts');
 
   assert.match(settings, /formatMobileReleaseNotesV1\(published\?\.notes\)/);
-  assert.match(settings, /What's new/);
+  assert.match(settings, /View Release Notes/);
   assert.match(state, /result\.rollout\.deferred/);
   assert.match(execution, /state\.result\?\.rollout\.deferred/);
   assert.match(execution, /A newer Orion version is still rolling out/);

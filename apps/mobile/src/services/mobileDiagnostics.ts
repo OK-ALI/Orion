@@ -107,10 +107,20 @@ function sanitizeDiagnosticText(value: unknown): string {
     .slice(0, 240);
 }
 
+const evidenceListeners = new Set<() => void>();
+export function subscribeMobileDiagnosticEvidence(listener: () => void): () => void {
+  if (evidenceListeners.size >= 8) return () => {};
+  evidenceListeners.add(listener);
+  return () => { evidenceListeners.delete(listener); };
+}
+function publishDiagnosticEvidence() {
+  for (const listener of evidenceListeners) { try { listener(); } catch { /* Optional evidence never affects Orion operation. */ } }
+}
 export function updateMobileDiagnostics(
   update: Partial<Omit<DiagnosticsMutableState, 'lastError'>>,
 ) {
   Object.assign(state, update);
+  publishDiagnosticEvidence();
 }
 
 export function reportMobileDiagnosticError(error: {
@@ -123,6 +133,7 @@ export function reportMobileDiagnosticError(error: {
     code: sanitizeDiagnosticText(error.code),
     message: sanitizeDiagnosticText(error.message),
   };
+  publishDiagnosticEvidence();
 }
 
 export function clearMobileDiagnosticError(area?: string) {

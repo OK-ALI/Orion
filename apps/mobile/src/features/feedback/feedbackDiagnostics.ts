@@ -1,0 +1,28 @@
+// Lazy access keeps optional evidence isolated from media presentation.
+const storage = { get: (key: string): string | null => require('../../services/storageAdapter').mmkvStorageAdapter.get(key), set: (key: string, value: string) => require('../../services/storageAdapter').mmkvStorageAdapter.set(key, value) };
+import { FEEDBACK_AREAS, type FeedbackArea } from './feedbackModel';
+export interface SafeEvent {at:number;area:FeedbackArea;event:string;code?:string;provider?:string;state?:string;mediaId?:number;mediaType?:string;sourceType?:string;owned?:boolean;phase?:string;retryCount?:number;anilistId?:number;season?:number;episode?:number;variant?:string;stage?:string}
+export interface SafeIncident {id:string;at:number;area:FeedbackArea;code:string;context:SafeEvent}
+interface DiagnosticState {schema:1;events:SafeEvent[];incidents:SafeIncident[];session:{at:number;area:FeedbackArea;state:string};previousSession:{at:number;area:FeedbackArea;state:string}|null}
+const KEY='orion.mobile.feedback.diagnostics.v1';const LIMIT=120;const MAX_AGE=24*60*60*1000;
+let state:DiagnosticState={schema:1,events:[],incidents:[],session:{at:Date.now(),area:'Home',state:'active'},previousSession:null};let initialized=false;let dirty=false;
+export const safeCode=(v:unknown)=>typeof v==='string'&&/^[A-Z][A-Z0-9_]{0,63}$/.test(v)&&!/(TOKEN|SECRET|PASSWORD|COOKIE|AUTHORIZATION|API_KEY)/.test(v)?v:'UNAVAILABLE';
+const safeWords=(v:unknown)=>typeof v==='string'&&/^[a-zA-Z0-9_-]{1,40}$/.test(v)&&!/(token|secret|password|cookie|authorization)/i.test(v)?v:undefined;
+export function diagnosticArea(route:string):FeedbackArea {const value=route.toLowerCase();return value.includes('anime')?'Anime':value.includes('player')?'Player':value.includes('glimpse')?'Glimpse':value.includes('download')?'Downloads':value.includes('discover')?'Discovery':value.includes('search')?'Search':value.includes('library')?'Library':value.includes('settings')?'Settings':value.includes('connect')?'Orion Connect':value.includes('movie')?'Movies':value.includes('tv')?'TV':value==='/'?'Home':'Other';}
+export function initializeDiagnostics() {
+  if(initialized)return;initialized=true;
+  try {const raw=storage.get(KEY);if(raw&&raw.length<=64_000){const v=JSON.parse(raw);if(v.schema===1){state.events=(v.events||[]).filter((e:SafeEvent)=>FEEDBACK_AREAS.includes(e.area)&&Number.isFinite(e.at)&&e.at>Date.now()-MAX_AGE).slice(-LIMIT).map(cleanEvent);state.incidents=(v.incidents||[]).filter((i:SafeIncident)=>FEEDBACK_AREAS.includes(i.area)&&Number.isFinite(i.at)&&i.at>Date.now()-7*MAX_AGE).slice(-8).map((i:SafeIncident)=>({id:/^incident-[0-9-]{1,40}$/.test(i.id)?i.id:'incident-unknown',at:i.at,area:i.area,code:safeCode(i.code),context:cleanEvent(i.context)}));if(v.session?.state==='active'&&FEEDBACK_AREAS.includes(v.session.area))state.previousSession={at:v.session.at,area:v.session.area,state:'interrupted'};else if(v.previousSession&&FEEDBACK_AREAS.includes(v.previousSession.area))state.previousSession={at:v.previousSession.at,area:v.previousSession.area,state:'interrupted'};}}}catch{/* corrupt diagnostics never affect startup */}
+  dirty=true;flushDiagnostics();
+}
+function cleanEvent(e:SafeEvent):SafeEvent {const coordinates: Partial<SafeEvent> = {}; for (const key of ['anilistId', 'season', 'episode'] as const) if (Number.isSafeInteger(e[key]) && e[key]! > 0 && e[key]! <= 1_000_000_000) coordinates[key] = e[key]; return {at:Number.isFinite(e.at)?e.at:Date.now(),area:FEEDBACK_AREAS.includes(e.area)?e.area:'Other',event:safeWords(e.event)||'state',...(e.code?{code:safeCode(e.code)}:{}),...(safeWords(e.provider)?{provider:safeWords(e.provider)}:{}),...(safeWords(e.state)?{state:safeWords(e.state)}:{}),...(Number.isSafeInteger(e.mediaId)&&e.mediaId!>0?{mediaId:e.mediaId,...(e.mediaType==='movie'||e.mediaType==='tv'?{mediaType:e.mediaType}:{})}:{}),...(e.sourceType==='youtube'?{sourceType:'youtube'}:{}),...coordinates,...(e.variant==='sub'||e.variant==='dub'?{variant:e.variant}:{}),...(safeWords(e.stage)?{stage:safeWords(e.stage)}:{}),...(typeof e.owned==='boolean'?{owned:e.owned}:{}),...(safeWords(e.phase)?{phase:safeWords(e.phase)}:{}),...(Number.isSafeInteger(e.retryCount)&&e.retryCount!>=0&&e.retryCount!<1000?{retryCount:e.retryCount}:{})};}
+export function recordFeedbackEvent(event:SafeEvent, incident=false) {
+  initializeDiagnostics();const safe=cleanEvent(event);state.events=[...state.events.filter(e=>e.at>Date.now()-MAX_AGE),safe].slice(-LIMIT);state.session={at:safe.at,area:safe.area,state:'active'};
+  if(incident)state.incidents=[...state.incidents,{id:`incident-${safe.at}-${state.events.length}`,at:safe.at,area:safe.area,code:safeCode(safe.code),context:safe}].slice(-8);
+  dirty=true;
+}
+export function flushDiagnostics(background?:boolean){if(background!==undefined){state.session={...state.session,at:Date.now(),state:background?'background':'active'};dirty=true;}if(!dirty)return;try{storage.set(KEY,JSON.stringify(state));dirty=false;}catch{/* optional evidence must not affect Orion */}}
+export function feedbackDiagnosticState(){initializeDiagnostics();return state;}
+export function generateFeedbackReport(area:FeedbackArea,app:Record<string,string|number>,context:{online:boolean;profile:string;reducedMotion:boolean},incidentId?:string,previous=false) {
+  initializeDiagnostics();const incident=state.incidents.find(i=>i.id===incidentId&&i.area===area);
+  return {schema:1,capturedAt:Date.now(),app,context:{area,...context},events:state.events.filter(e=>e.area===area).slice(-40),...(incident?{incident:{...incident.context,id:incident.id,code:incident.code}}:{}),...(previous&&state.previousSession?{previousSession:state.previousSession}:{})};
+}

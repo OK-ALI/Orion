@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, Platform, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, Platform, ScrollView, Image, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, usePathname } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,6 +8,9 @@ import { useOrionTheme } from '../context/ThemeContext';
 import { useNetworkStatus } from '../context/NetworkContext';
 import { getMobileConnectionPresentation } from './mobileConnectionPresentationPolicy';
 import { useOrionAccount } from '../context/AccountContext';
+// GLIMPSE ADDITION BEGIN
+import { isGlimpsePreviewEnabled } from '../features/glimpse/glimpsePreview';
+// GLIMPSE ADDITION END
 
 interface SidebarDrawerProps {
   visible: boolean;
@@ -21,6 +24,9 @@ const NAV_SECTIONS = [
     label: 'BROWSE',
     items: [
       { id: 'home', name: 'Home', icon: 'home-outline', activeIcon: 'home', route: '/' },
+// GLIMPSE ADDITION BEGIN
+      ...(isGlimpsePreviewEnabled() ? [{ id: 'glimpse', name: 'Glimpse', icon: 'play-circle-outline', activeIcon: 'play-circle', route: '/glimpse' }] : []),
+// GLIMPSE ADDITION END
       { id: 'discover', name: 'Discover & Search', icon: 'compass-outline', activeIcon: 'compass', route: '/discover' },
     ],
   },
@@ -49,6 +55,8 @@ const NAV_SECTIONS = [
 ] as const;
 
 export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarDrawerProps) {
+  const { fontScale } = useWindowDimensions();
+  const footerStacked = fontScale > 1.3;
   const router = useRouter();
   const pathname = usePathname();
   const { theme } = useOrionTheme();
@@ -166,14 +174,19 @@ export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarD
             </View>
             <Ionicons name="chevron-forward" size={14} color={theme.textMuted} />
           </Pressable>
-          <View accessible accessibilityLabel={`Orion Mobile. ${connectionLabel}`} style={[styles.footerCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <View style={styles.statusRow}>
-              <View style={[styles.statusDot, { backgroundColor: theme[presentation.tone], shadowColor: theme[presentation.tone] }]} />
-              <Text style={[styles.statusText, { color: theme.text }]}>Orion Mobile</Text>
+          <View testID="sidebar-shared-footer" style={[styles.footerCard, footerStacked && styles.footerCardStacked, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View accessible accessibilityLabel={`Orion Mobile. ${connectionLabel}`} style={[styles.footerStatus, footerStacked && styles.footerStatusStacked]}>
+              <View style={styles.statusRow}>
+                <View style={[styles.statusDot, { backgroundColor: theme[presentation.tone], shadowColor: theme[presentation.tone] }]} />
+                <Text style={[styles.statusText, { color: theme.text }]}>Orion Mobile</Text>
+              </View>
+              <Text style={[styles.versionText, { color: theme.textMuted }]}>{connectionLabel}</Text>
             </View>
-            <Text style={[styles.versionText, { color: theme.textMuted }]}>
-              {connectionLabel}
-            </Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Feedback. Bugs, ideas and feedback" accessibilityHint="Opens the Orion Feedback Center" onPress={() => handleNavigate('/feedback')}
+              style={({ pressed }) => [styles.footerFeedback, footerStacked && styles.footerFeedbackStacked, { borderColor: theme.border }, pressed && { backgroundColor: theme.surfaceHover }]} >
+              <Ionicons accessible={false} name="chatbubble-ellipses-outline" size={20} color={theme.accent} />
+              <Text style={[styles.footerFeedbackLabel, { color: theme.text }]}>Feedback</Text>
+            </Pressable>
           </View>
         </View>
   );
@@ -398,8 +411,11 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   footerCard: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderWidth: 1,
@@ -407,6 +423,12 @@ const styles = StyleSheet.create({
     marginBottom: Platform.OS === 'ios' ? 30 : 20,
     marginTop: spacing[2],
   },
+  footerCardStacked: { flexDirection: 'column', alignItems: 'stretch' },
+  footerStatus: { flex: 1, minWidth: 0 },
+  footerStatusStacked: { flex: 0 },
+  footerFeedback: { flex: 1, minWidth: 0, minHeight: 44, borderLeftWidth: StyleSheet.hairlineWidth, paddingHorizontal: 8, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  footerFeedbackStacked: { flex: 0, borderLeftWidth: 0, borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 0, justifyContent: 'flex-start' },
+  footerFeedbackLabel: { flexShrink: 1, fontSize: 12, fontFamily: fontFamilies.heading, fontWeight: '700' },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -414,6 +436,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   statusDot: {
+    flexShrink: 0,
     width: 8,
     height: 8,
     borderRadius: 4,

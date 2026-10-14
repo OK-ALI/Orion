@@ -55,7 +55,7 @@ function harness({ mode = 'banner', state = 'online', latencyMs = 42, persistent
   const mocks = {
     react, 'react/jsx-runtime': { jsx: element, jsxs: element, Fragment: 'Fragment' },
     'react-native': { ...Object.fromEntries(['View', 'Text', 'ScrollView', 'Modal', 'Pressable', 'Image'].map((name) => [name, name])),
-      StyleSheet: { create: (styles) => styles, absoluteFill: {} }, Platform: { OS: 'android' } },
+      StyleSheet: { create: (styles) => styles, absoluteFill: {}, hairlineWidth: 1 }, Platform: { OS: 'android' }, useWindowDimensions: () => ({ fontScale: 1 }) },
     '@expo/vector-icons': { Ionicons: 'Ionicons' }, 'expo-linear-gradient': { LinearGradient: 'LinearGradient' }, 'expo-blur': { BlurView: 'BlurView' },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 24, bottom: 0 }) },
     'expo-router': { useRouter: () => ({ push: (route) => routes.push(route) }), usePathname: () => pathname, Tabs },
@@ -111,6 +111,7 @@ function harness({ mode = 'banner', state = 'online', latencyMs = 42, persistent
     get result() { return result; }, get frames() { return frames; }, get theme() { return theme; },
     get timers() { return timers.size; }, get closes() { return closes; },
     alert: () => nodes(result).find((node) => node.props.accessibilityRole === 'alert'),
+    footerShell: () => nodes(result).find((node) => node.props.testID === 'sidebar-shared-footer'),
     footer: () => nodes(result).find((node) => node.props.accessibilityLabel?.startsWith('Orion Mobile.')),
     downloads: () => nodes(result).find((node) => node.props.accessibilityRole === 'button' && node.props.accessibilityLabel.startsWith('Downloads')),
     connect(state, values = {}) { network = { ...network, productState: state, remoteReady: state === 'online', ...values }; render(); },
@@ -251,8 +252,8 @@ for (const themeId of ['midnight-premiere', 'amoled', 'mocha', 'slate', 'project
       assert.equal(style(badge.props.style).color, drawer.theme.text);
       assert.equal(style(badge.props.style).backgroundColor, drawer.theme.elevated);
       assert.equal(style(badge.props.style).borderColor, drawer.theme.border);
-      assert.equal(style(drawer.footer().props.style).backgroundColor, drawer.theme.surface);
-      assert.equal(style(drawer.footer().props.style).borderColor, drawer.theme.border);
+      assert.equal(style(drawer.footerShell().props.style).backgroundColor, drawer.theme.surface);
+      assert.equal(style(drawer.footerShell().props.style).borderColor, drawer.theme.border);
     }
   });
 }

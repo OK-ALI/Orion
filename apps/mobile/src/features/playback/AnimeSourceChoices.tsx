@@ -8,11 +8,13 @@ import { getMobileSourceHealthV2 } from '../../services/sourceHealth';
 import { getMobileSourceContinuityCapability } from './mobileSources';
 import { useMobilePlayerController } from './MobilePlayerController';
 import type { AnimeSourceSelection } from './useAnimeSource';
+import { mobileAnimeSupportsMedia } from './animeMediaShape';
 import type { AnimeVariant } from './animeSourceAffinity';
 
 /** Selection uses Orion's existing source switch and resume prompt. */
 interface AnimeSourceChoicesProps {
   currentSourceId: string; variant?: AnimeVariant;
+  mediaType?: 'movie' | 'tv'; preparationFailure?: (providerId: string) => string;
   prepare(variant: AnimeVariant, providerId?: string): Promise<AnimeSourceSelection | null>;
   onSelect(selection: AnimeSourceSelection): void;
 }
@@ -20,7 +22,7 @@ export function AnimeSourceChoices(props: AnimeSourceChoicesProps) {
   return <View style={{ gap: 8 }}>{PLAYER_SOURCES.filter((source) => isManualAnimeProvider(source.id)).map((source) =>
     <AnimeProviderChoice key={source.id} {...props} providerId={source.id} />)}</View>;
 }
-function AnimeProviderChoice({ currentSourceId, variant, prepare, onSelect, providerId }: AnimeSourceChoicesProps & { providerId: string }) {
+function AnimeProviderChoice({ currentSourceId, variant, prepare, onSelect, providerId, mediaType = 'tv', preparationFailure }: AnimeSourceChoicesProps & { providerId: string }) {
   const { theme } = useOrionTheme();
   const controller = useMobilePlayerController();
   const [busy, setBusy] = useState(false);
@@ -30,15 +32,16 @@ function AnimeProviderChoice({ currentSourceId, variant, prepare, onSelect, prov
   const source = getRegisteredSource(providerId);
   const selected = currentSourceId === source?.id;
   const capability = getMobileSourceContinuityCapability(providerId);
-  const health = getMobileSourceHealthV2(providerId, 'tv');
+  const health = getMobileSourceHealthV2(providerId, mediaType);
+  const supported = mobileAnimeSupportsMedia(providerId, mediaType);
   const choose = async (next: AnimeVariant) => {
-    if (busy || (selected && variant === next) || !source?.animeProvider?.variants.includes(next)) return;
+    if (!supported || busy || (selected && variant === next) || !source?.animeProvider?.variants.includes(next)) return;
     const attempt = ++operation.current;
     setBusy(true); setError(null);
     try {
       const selection = await prepare(next, providerId);
       if (attempt !== operation.current) return;
-      if (!selection) { setError('Orion could not verify this Anime season and episode. Choose another source.'); return; }
+      if (!selection) { setError(preparationFailure?.(providerId) || 'Orion could not match this Anime episode. Choose another source.'); return; }
       onSelect(selection); controller.closeOverlay();
     } finally { if (attempt === operation.current) setBusy(false); }
   };
@@ -52,7 +55,7 @@ function AnimeProviderChoice({ currentSourceId, variant, prepare, onSelect, prov
       <View style={styles.copy}>
         <Text style={[styles.name, { color: theme.text }]}>{source.label}</Text>
         <Text style={[styles.status, { color: health?.state === 'failed' ? theme.danger : theme.textSecondary }]}>
-          {health?.state === 'ready' ? 'Playing normally' : health?.state === 'failed' ? 'Having trouble' : 'Ready'}
+          {!supported ? 'Not currently available for Anime films' : health?.state === 'ready' ? 'Playing normally' : health?.state === 'failed' ? 'Having trouble' : 'Ready'}
         </Text>
       </View>
       <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={21} color={selected ? theme.accent : theme.textSecondary} />
@@ -60,9 +63,9 @@ function AnimeProviderChoice({ currentSourceId, variant, prepare, onSelect, prov
     <View style={styles.variants}>
       {source.animeProvider?.variants.filter((value): value is AnimeVariant => value === 'sub' || value === 'dub').map((value) => {
         const active = selected && variant === value;
-        return <Pressable key={value} accessibilityRole="button" disabled={busy}
+        return <Pressable key={value} accessibilityRole="button" disabled={busy || !supported}
           accessibilityLabel={source.label + ' · ' + (value === 'sub' ? 'Sub' : 'Dub') + '. ' + capability.label + '.'}
-          accessibilityHint={capability.description} accessibilityState={{ selected: active, disabled: busy }}
+          accessibilityHint={capability.description} accessibilityState={{ selected: active, disabled: busy || !supported }}
           onPress={() => { void choose(value); }}
           style={[styles.variant, { backgroundColor: active ? theme.accent : theme.elevated,
             borderColor: active ? theme.accent : theme.border }]}>

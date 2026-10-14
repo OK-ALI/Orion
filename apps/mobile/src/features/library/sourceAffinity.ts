@@ -18,7 +18,7 @@ export function validateSourcePreference(value: unknown, type: 'movie' | 'tv'): 
   const source = getEffectivePlayerSources().find((entry) => entry.id === input.sourceId);
   if (!source || excluded.has(source.id) || source.async || source.quarantined
     || source.releaseStatus === 'disabled' || source.availability === 'temporarily-unavailable'
-    || !(type === 'movie' ? source.media.movie : source.media.tv)) return null;
+    || !(type === 'movie' ? source.media.movie || isManualAnimeProvider(source.id) : source.media.tv)) return null;
   if (source.animeProvider) {
     if (!isManualAnimeProvider(source.id) || !input.variant
       || !source.animeProvider.variants.includes(input.variant)) return null;

@@ -1,6 +1,10 @@
 import type { PlaybackTelemetryInput } from './usePlaybackTelemetryController';
 
 export const ANIME_READINESS_DEADLINE_MS = 35_000;
+// AniLink publishes a 90-second recovery budget; allow ten seconds for page startup.
+export const ANILINK_READINESS_DEADLINE_MS = 100_000;
+export const animeReadinessDeadline = (providerId?: string) => providerId === 'anilink'
+  ? ANILINK_READINESS_DEADLINE_MS : ANIME_READINESS_DEADLINE_MS;
 export interface AnimeReadiness {
   sessionId: string;
   status: 'opening' | 'waiting' | 'ready' | 'failed';
@@ -25,7 +29,7 @@ export function observeAnimeReadiness(state: AnimeReadiness, sessionId: string,
   const advances = input.state === 'playing' && state.lastTime !== null && time > state.lastTime + 0.05;
   return { ...state, lastTime: time, lastObservedAt: observedAt, status: state.status === 'ready' || advances ? 'ready' : 'waiting' };
 }
-export function expireAnimeReadiness(state: AnimeReadiness, now: number): AnimeReadiness {
-  return state.status !== 'ready' && now - state.startedAt >= ANIME_READINESS_DEADLINE_MS
+export function expireAnimeReadiness(state: AnimeReadiness, now: number, providerId?: string): AnimeReadiness {
+  return state.status !== 'ready' && now - state.startedAt >= animeReadinessDeadline(providerId)
     ? { ...state, status: 'failed' } : state;
 }

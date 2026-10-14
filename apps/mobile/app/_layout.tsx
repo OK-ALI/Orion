@@ -1,4 +1,6 @@
 import { Stack } from 'expo-router';
+import { ReleaseWelcomeBoundary } from '../src/features/releaseWelcome/ReleaseWelcomeBoundary';
+import { FeedbackDiagnosticsBridge } from '../src/features/feedback/FeedbackDiagnosticsBridge';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet, Platform } from 'react-native';
 import { initTmdbClient, initAnilistClient } from '@orion/shared/api';
@@ -127,9 +129,11 @@ function ThemedApplication() {
                 <MobileWatchedSummaryCoordinator />
                 <MobileArtworkCacheCoordinator />
                 <MobileNotificationCoordinator />
-                <MobileNotificationResponseRouter />
                 <MobileDiagnosticsBridge />
+                <FeedbackDiagnosticsBridge />
                 <StatusBar style={theme.dark ? 'light' : 'dark'} />
+                <ReleaseWelcomeBoundary active={!showStartup}>
+                  <MobileNotificationResponseRouter />
                 <Stack
                   screenOptions={{
                     headerShown: false,
@@ -143,6 +147,7 @@ function ThemedApplication() {
                 <GlobalSearchShortcut />
                 <MobileUpdateAnnouncementBanner />
                 <OfflineBanner />
+                </ReleaseWelcomeBoundary>
               </View>
               </GestureHandlerRootView>
               </ViewingActivitySteadyStateSyncProvider>

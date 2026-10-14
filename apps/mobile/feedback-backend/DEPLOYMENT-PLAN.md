@@ -1,5 +1,13 @@
 # Existing Orion Feedback Worker — deployment plan, not a deployment
 
+## Official-inbox qualification — 14 October 2026
+
+The real Android → production Worker → Brevo → official.orion.feedback@gmail.com path passed. The explicitly selected official Gmail connection contains exactly four unique qualification emails: Problem, follow-up, feature and general. Structured subjects/bodies, Settings/Annoying fields, original Feedback-ID link and usefulness text match. The Problem has screenshot.jpg (17,991 bytes), orion-diagnostics.zip (467 bytes) and the supplied Reply-To. The recipient opened the ZIP and reported zero events; Gmail does not support ZIP extraction, so no unsupported attachment fetch was attempted. Reports filter recent events to the selected area: after normal Settings navigation, the actual device Included information dialog showed one real Settings event. No artificial event was added; the own unsent preview draft was discarded.
+
+The retry recovered the same Feedback ID without another provider call or duplicate inbox email. History retains four unique receipts across cold restart. Feature/general supplied no reply address or attachments; Brevo adds its verified sender as a default Reply-To and rewrites the free sender address to its brevosend.com domain. Those transport defaults are distinguished from user-supplied reply addresses. The sanitized evidence record contains no diagnostic JSON, raw payloads, credentials or attachment bytes.
+
+Feedback delivery is qualified for phase4ae. AniLink incoming continuity and the final Mobile release gates remain open; this is not a final v4 seal. Earlier pending-inbox statements below are historical and superseded by this qualification.
+
 ## Qualification cleanup and presentation checks — 14 October 2026
 
 The final normal-rate Worker deployment is **59b32e72-d13c-4060-8093-d309efdc2523**. The temporary ten-send code and Cloudflare variable were removed before 05:00 Pakistan time. The five/network/day, 100/global/day and six/minute controls are restored. All existing secret names, public sender/recipient values and SQLite namespaces were checked afterward; no secret value was retrieved or replaced. A cleanup-only authoritative variable upload was guarded against unrelated dashboard variables, and the source keep_vars:true policy was restored. Safe endpoint checks return 405/400 without sending mail. Twenty Worker tests and TypeScript pass.
@@ -8,7 +16,7 @@ Native Release Notes opened offline and Android Back closed it while Last checke
 
 The Welcome Feedback illustration, report types, IDs/History copy and safe-diagnostics introduction rendered with both network connections disabled, after the existing Orion section and before the Final Chapter. Its product copy promises a final major feature release with maintenance/feedback improvements still possible. The only final actions remained Explore Glimpse and Continue to Orion. Deliberate Continue dismissal persisted across a cold restart in the bounded internal qualification namespace; the real Welcome marker was not modified and the actual final version upgrade remains a later gate. Original font/network/accessibility settings were restored.
 
-**The four recipient-inbox confirmations are still pending. Feedback is not declared fully qualified, and AniLink incoming continuity remains an open release gate. No public release or final identity transition is claimed.**
+**Official-inbox verification passed. Feedback delivery is qualified; AniLink incoming continuity remains an open release gate. No public release or final identity transition is claimed.**
 
 
 ## Current qualification update — 14 October 2026

@@ -19,6 +19,7 @@ import { reportMobileDiagnosticError, updateMobileDiagnostics, traceMobilePlayba
 import { EmbedPlayerSurface } from './EmbedPlayerSurface';
 import { AnimeSourceChoices } from './AnimeSourceChoices';
 import { useAnimeSource, type AnimeSourceSelection } from './useAnimeSource';
+import { getMobileAnimePlaybackUrl, getMobileAnimeFilmResumeSource, clearMovieAnimeFlowChoice } from './animeMediaShape';
 import { clearAnimeFlowChoice } from './animeSourceAffinity';
 import { OrionFinalizedPlayerActivitySurface } from './OrionFinalizedPlayerActivitySurface';
 import { OrionOfflinePlayerSurface } from './OrionOfflinePlayerSurface';
@@ -115,7 +116,8 @@ export default function PlayerScreen() {
   const router = useRouter();
   const { isLandscape, toggleOrientation, releaseOrientation, entryReady = true, onPlayerLayout } = usePlayerOrientation();
   const exitPlayer = useCallback(async () => {
-    clearAnimeFlowChoice(String(routeIdRef.current));
+    if (routeTypeRef.current === 'movie') clearMovieAnimeFlowChoice(String(routeIdRef.current));
+    else clearAnimeFlowChoice(String(routeIdRef.current));
     await releaseOrientation();
     router.back();
   }, [releaseOrientation, router]);
@@ -125,6 +127,7 @@ export default function PlayerScreen() {
   } =
     useLocalSearchParams<PlayerRouteParams>();
   const routeIdRef = useRef(id); routeIdRef.current = id;
+  const routeTypeRef = useRef(type); routeTypeRef.current = type;
   const { getPlaybackProgress, getPlaybackSourcePreference } = useLibraryPlaybackActions();
   const offlineRequested = isOffline === 'true';
   const [offlineResolutionAttempt, setOfflineResolutionAttempt] = useState(0);
@@ -147,7 +150,7 @@ export default function PlayerScreen() {
     ? nextSourceId
     : null;
   const sourcePreference = getPlaybackSourcePreference(type, id);
-  const [sourceId, setSourceId] = useState(() => routedNextSource || getPreferredMobileResumeSource(
+  const [sourceId, setSourceId] = useState(() => routedNextSource || getMobileAnimeFilmResumeSource(sourcePreference?.sourceId || existingProgress?.sourceId, type) || getPreferredMobileResumeSource(
     sourcePreference?.sourceId || existingProgress?.sourceId || MOBILE_DEFAULT_CINEMA_SOURCE_ID,
     type,
   ));
@@ -299,8 +302,7 @@ export default function PlayerScreen() {
   const activeStreamUrl = useMemo(() => {
     if (offlineRequested) return '';
     if (anime.phase === 'failed') return '';
-    if (isManualAnimeProvider(sourceId)) return activeAnimeTest ? getSourceUrl(sourceId, type,
-      { tmdbId: id, anilistId: activeAnimeTest.identity.anilistId }, resolvedSeason || 1, resolvedEpisode || 1,
+    if (isManualAnimeProvider(sourceId)) return activeAnimeTest ? getMobileAnimePlaybackUrl(sourceId, activeAnimeTest.identity,
       { ...getMobileEmbedResumeParams(sourceId, resumeTime, type, forceStartFromBeginning),
         [getRegisteredSource(sourceId)!.animeProvider!.variantParam]: activeAnimeTest.variant }) : '';
     const resumeParams: Record<string, string | number> = {
@@ -673,7 +675,7 @@ export default function PlayerScreen() {
       animeVariant={isManualAnimeProvider(sourceId) ? activeAnimeTest?.variant : undefined}
       onExperimentalRetry={() => { if (anime.error) anime.retry(); else setAnimeAttempt((attempt) => attempt + 1); }}
       sourceExtras={(select) => !downloadResolutionOnly && !handoffIsPending(handoff) && anime.detail && <AnimeSourceChoices
-        currentSourceId={sourceId} variant={activeAnimeTest?.variant} prepare={anime.prepare}
+        currentSourceId={sourceId} variant={activeAnimeTest?.variant} prepare={anime.prepare} mediaType={type} preparationFailure={anime.preparationFailure}
         onSelect={(selection) => { pendingAnimeSelection.current = selection; select(selection.providerId || 'aniembed', true); }} />}
       playbackPurpose={downloadResolutionOnly ? 'download-resolution' : 'viewing'}
       onResumeAttempt={handleResumeAttempt}

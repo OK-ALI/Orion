@@ -1,6 +1,6 @@
 # Orion Feedback infrastructure
 
-This repository contains the deployed backend source/configuration for the existing **orion-feedback** Worker. Mobile uses **https://orion-feedback.okali-orion.workers.dev/v1/feedback**. See [DEPLOYMENT-PLAN.md](./DEPLOYMENT-PLAN.md) for current deployment and qualification evidence. Physical recipient-inbox verification is still pending; local tests or Brevo acceptance do not constitute full end-to-end qualification.
+This repository contains the deployed backend source/configuration for the existing **orion-feedback** Worker. Mobile uses **https://orion-feedback.okali-orion.workers.dev/v1/feedback**. See [DEPLOYMENT-PLAN.md](./DEPLOYMENT-PLAN.md) for current deployment and qualification evidence. Physical end-to-end delivery has passed: actual Android submissions reached the official inbox, with four distinct accepted IDs, correct report formats and attachments, and no duplicate email after receipt recovery. Gmail verified headers/body/attachment metadata; the recipient inspected the diagnostics ZIP. See test-results/feedback-inbox-verification.json for sanitized evidence. This qualifies Feedback delivery, not the final Mobile release.
 
 ## Verification and deployment
 

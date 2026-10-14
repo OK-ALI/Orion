@@ -1,3 +1,4 @@
+import { isGlimpsePreviewEnabled } from '../glimpse/glimpsePreview';
 export type MobileSettingsSectionStatus = 'active' | 'reserved';
 
 export type MobileSettingsSectionId =
@@ -11,7 +12,8 @@ export type MobileSettingsSectionId =
   | 'notifications'
   | 'updates'
   | 'connect'
-  | 'downloads';
+  | 'downloads'
+  | 'glimpse';
 
 export interface MobileSettingsSectionDefinition {
   id: MobileSettingsSectionId;
@@ -34,6 +36,7 @@ export const MOBILE_SETTINGS_SECTIONS: readonly MobileSettingsSectionDefinition[
   { id: 'updates', label: 'Updates', status: 'active' },
   { id: 'connect', label: 'Connect', status: 'reserved' },
   { id: 'downloads', label: 'Downloads', status: 'active' },
+  { id: 'glimpse', label: 'Glimpse', status: isGlimpsePreviewEnabled() ? 'active' : 'reserved' },
 ] as const;
 
 export const MOBILE_ACTIVE_SETTINGS_SECTIONS = MOBILE_SETTINGS_SECTIONS.filter(

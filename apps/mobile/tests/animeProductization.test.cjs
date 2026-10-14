@@ -51,7 +51,7 @@ test('Anime uses one provider card, both source groups, real header identity and
   const screen = read('apps/mobile/src/features/playback/PlayerScreen.tsx');
   for (const copy of ['Anime source testing', 'Experimental playback test', 'Test AniEmbed', 'physically qualified']) assert.ok(!card.includes(copy));
   assert.match(card, /getMobileSourceContinuityCapability/); assert.match(card, /capability.description/);
-  assert.match(card, /accessibilityState=\{\{ selected: active, disabled: busy \}\}/);
+  assert.match(card, /accessibilityState=\{\{ selected: active, disabled: busy \|\| !supported \}\}/);
   assert.match(sheet, /props.animeAvailable && <SourceGroup title="Anime Sources"/);
   assert.match(sheet, /title="General Sources" expanded=\{!props.animeAvailable \|\| generalExpanded\}/);
   assert.match(sheet, /props.currentSourceLabel \|\| DISPLAY_NAMES/);

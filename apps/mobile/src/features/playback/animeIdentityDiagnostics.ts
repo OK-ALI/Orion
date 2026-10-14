@@ -28,6 +28,18 @@ export function sanitizeAnimeIdentityDiagnostic(event: AnimeIdentityDiagnostic):
   return safe;
 }
 
+const animeEvidenceListeners = new Set<(evidence: Readonly<Record<string, string | number | boolean>>) => void>();
+export function subscribeAnimeIdentityEvidence(listener: (evidence: Readonly<Record<string, string | number | boolean>>) => void): () => void {
+  if (animeEvidenceListeners.size >= 8) return () => {};
+  animeEvidenceListeners.add(listener);
+  return () => { animeEvidenceListeners.delete(listener); };
+}
+function publishAnimeIdentityEvidence(safe: Record<string, string | number | boolean>) {
+  if (!['catalog', 'lookup', 'decision'].includes(String(safe.stage))) return;
+  const { query: _query, ...evidence } = safe;
+  for (const listener of animeEvidenceListeners) { try { listener(Object.freeze({ ...evidence })); } catch { /* Evidence cannot alter identity resolution. */ } }
+}
+
 /** At most 64 lines per user attempt, reserving a final decision slot. */
 export function createAnimeIdentityTrace(writer?: (payload: string) => void): AnimeIdentityDiagnosticSink {
   const attempt = ++nextAttempt;
@@ -36,6 +48,7 @@ export function createAnimeIdentityTrace(writer?: (payload: string) => void): An
     if (sequence >= 64 || (sequence >= 63 && event.stage !== 'decision')) return;
     const safe = sanitizeAnimeIdentityDiagnostic(event);
     if (!safe) return;
+    publishAnimeIdentityEvidence(safe);
     try {
       const write = writer || (Platform.OS === 'android' ? NativeModules.OrionAnimeIdentity?.logEvent : undefined);
       if (typeof write === 'function') write(JSON.stringify({ attempt, sequence: ++sequence, ...safe }));

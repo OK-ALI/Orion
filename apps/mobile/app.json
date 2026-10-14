@@ -61,6 +61,7 @@
       ]
     ],
     "extra": {
+      "feedbackEndpoint": "https://orion-feedback.okali-orion.workers.dev/v1/feedback",
       "router": {},
       "eas": {
         "projectId": "db8d113f-2d08-4a1c-b58a-19dceeeca94f"

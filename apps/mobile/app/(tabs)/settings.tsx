@@ -31,6 +31,7 @@ import { UpdatesSettingsContent } from "../../src/features/settings/UpdatesSetti
 import { NotificationSettingsContent } from "../../src/features/settings/NotificationSettingsContent";
 import { HomeLayoutSettingsContent } from "../../src/features/settings/HomeLayoutSettingsContent";
 import { DownloadSettingsContent } from "../../src/features/downloads/DownloadSettingsContent";
+import { isGlimpsePreviewEnabled } from "../../src/features/glimpse/glimpsePreview";
 import {
   PERFORMANCE_PROFILE_LABELS,
   PERFORMANCE_PROFILE_OPTIONS,
@@ -85,7 +86,7 @@ export default function MobileSettingsScreen() {
   const motion = resolveMotionPolicy(preferences.reducedMotion, systemReducedMotion);
   const { selection, resolvedProfile, setSelection } = usePerformanceProfile();
   const { isTablet } = useResponsiveLayout();
-  const { section: requestedSectionParam } = useLocalSearchParams<{ section?: string | string[] }>();
+  const { section: requestedSectionParam, glimpseEntry: glimpseEntryParam } = useLocalSearchParams<{ section?: string | string[]; glimpseEntry?: string }>();
   const account = MOBILE_SETTINGS_SECTION_BY_ID.account;
   const appearance = MOBILE_SETTINGS_SECTION_BY_ID.appearance;
   const performance = MOBILE_SETTINGS_SECTION_BY_ID.performance;
@@ -104,12 +105,17 @@ export default function MobileSettingsScreen() {
   const scrollRef = React.useRef<ScrollView>(null);
   const sectionOffsets = React.useRef<Partial<Record<MobileSettingsSectionId, number>>>({});
   const pendingDeepLinkSectionRef = React.useRef<MobileSettingsSectionId | null>(null);
+  const glimpseContentJumpPendingRef = React.useRef(false);
   const [currentSectionId, setCurrentSectionId] = React.useState<MobileSettingsSectionId>('account');
 
   const jumpToSection = React.useCallback((sectionId: MobileSettingsSectionId) => {
     const y = sectionOffsets.current[sectionId];
     if (typeof y !== 'number') return;
     setCurrentSectionId(sectionId);
+    if (sectionId === 'glimpse') {
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing[2]), animated: false });
+      return;
+    }
     scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing[2]), animated: !motion.reduceMotion });
   }, [motion.reduceMotion]);
 
@@ -125,12 +131,13 @@ export default function MobileSettingsScreen() {
     const section = orderedSections.find((candidate) => candidate.id === requested);
     if (!section) return;
     const y = sectionOffsets.current[section.id];
+    glimpseContentJumpPendingRef.current = section.id === 'glimpse' && typeof y !== 'number';
     if (typeof y === 'number') {
       requestAnimationFrame(() => jumpToSection(section.id));
     } else {
       pendingDeepLinkSectionRef.current = section.id;
     }
-  }, [jumpToSection, orderedSections, requestedSectionParam]);
+  }, [jumpToSection, orderedSections, requestedSectionParam, glimpseEntryParam]);
 
   const handleScroll = React.useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = event.nativeEvent.contentOffset.y + 28;
@@ -362,6 +369,16 @@ export default function MobileSettingsScreen() {
                     <DownloadSettingsContent />
                   </SettingsSection>
         );
+      case 'glimpse': {
+        if (!isGlimpsePreviewEnabled()) return null;
+        const { GlimpseSettingsContent } = require('../../src/features/glimpse/GlimpseSettingsContent') as typeof import('../../src/features/glimpse/GlimpseSettingsContent');
+        return (
+          <SettingsSection sectionId="glimpse" title="Glimpse" description="Choose how you explore clips."
+            theme={theme} onLayout={recordSectionLayout('glimpse')}>
+            <GlimpseSettingsContent />
+          </SettingsSection>
+        );
+      }
       default:
         return null;
     }
@@ -385,6 +402,11 @@ export default function MobileSettingsScreen() {
         ref={scrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={[styles.content, isTablet && styles.contentTablet]}
+        onContentSizeChange={() => {
+          if (!glimpseContentJumpPendingRef.current || typeof sectionOffsets.current.glimpse !== 'number') return;
+          glimpseContentJumpPendingRef.current = false;
+          requestAnimationFrame(() => jumpToSection('glimpse'));
+        }}
         onScroll={handleScroll}
         scrollEventThrottle={32}
       >

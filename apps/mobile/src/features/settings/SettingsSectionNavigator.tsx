@@ -30,6 +30,7 @@ const SECTION_ICONS: Partial<Record<MobileSettingsSectionId, React.ComponentProp
   connect: 'phone-portrait-outline',
   downloads: 'download-outline',
   updates: 'cloud-download-outline',
+  glimpse: 'play-circle-outline',
 };
 
 interface SettingsSectionNavigatorProps {

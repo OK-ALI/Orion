@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PlaybackTelemetryInput } from './usePlaybackTelemetryController';
-import { ANIME_READINESS_DEADLINE_MS, createAnimeReadiness, expireAnimeReadiness, observeAnimeReadiness } from './animeReadiness';
+import { animeReadinessDeadline, createAnimeReadiness, expireAnimeReadiness, observeAnimeReadiness } from './animeReadiness';
 
 /** Adds bounded Anime readiness without changing existing-provider load semantics. */
-export function useAnimeReadiness(enabled: boolean, sessionId: string, attempt: number, onFailure: () => void) {
+export function useAnimeReadiness(enabled: boolean, sessionId: string, attempt: number, onFailure: () => void, providerId?: string) {
   const state = useRef(createAnimeReadiness(sessionId, Date.now()));
   const failure = useRef(onFailure);
   failure.current = onFailure;
@@ -18,10 +18,10 @@ export function useAnimeReadiness(enabled: boolean, sessionId: string, attempt: 
     setStatus('opening');
     if (!enabled) return undefined;
     const timer = setTimeout(() => {
-      if (expireAnimeReadiness(state.current, Date.now()).status === 'failed') failed();
-    }, ANIME_READINESS_DEADLINE_MS);
+      if (expireAnimeReadiness(state.current, Date.now(), providerId).status === 'failed') failed();
+    }, animeReadinessDeadline(providerId));
     return () => clearTimeout(timer);
-  }, [enabled, sessionId, attempt, failed]);
+  }, [enabled, sessionId, attempt, failed, providerId]);
   const observe = useCallback((input: PlaybackTelemetryInput) => {
     if (!enabled) return true;
     const next = observeAnimeReadiness(state.current, sessionId, input, Date.now());

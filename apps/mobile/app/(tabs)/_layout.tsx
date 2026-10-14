@@ -1,4 +1,7 @@
 import { Tabs } from 'expo-router';
+// GLIMPSE ADDITION BEGIN
+import { isGlimpsePreviewEnabled } from '../../src/features/glimpse/glimpsePreview';
+// GLIMPSE ADDITION END
 import { StyleSheet, View } from 'react-native';
 import { FloatingSidebarTrigger } from '../../src/components/FloatingSidebarTrigger';
 import { SidebarDrawer } from '../../src/components/SidebarDrawer';
@@ -54,6 +57,9 @@ export default function TabLayout() {
             title: 'Library',
           }}
         />
+        {/* GLIMPSE ADDITION BEGIN */}
+        <Tabs.Screen name="glimpse" options={{ title: 'Glimpse', href: isGlimpsePreviewEnabled() ? '/glimpse' : null }} />
+        {/* GLIMPSE ADDITION END */}
         <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
       </Tabs>
       </View>

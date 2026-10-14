@@ -461,7 +461,7 @@ export function EmbedPlayerSurface({
     markFailed('This source did not start. Retry or choose another source.');
     webViewRef.current?.injectJavaScript(QUIET_CURRENT_SURFACE_SCRIPT);
     setSurfaceReleased(true);
-  });
+  }, sourceId);
 
   const applyShieldEnvelope = useCallback((envelope: any) => {
       const parsed = parseShieldEvidenceEnvelope(envelope);

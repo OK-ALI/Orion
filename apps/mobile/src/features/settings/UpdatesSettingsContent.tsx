@@ -5,7 +5,9 @@ import { fontSizes, radii, spacing } from '@orion/shared/tokens';
 import type { OrionReleaseChannelV1 } from '@orion/shared/types';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { MobileUpdateExecutionSection } from './MobileUpdateExecutionSection';
-import { MobileReleaseNotes } from './MobileReleaseNotes';
+import { ReleaseNotesDialog } from '../releaseNotes/ReleaseNotesDialog';
+import { releaseNotesFromUpdate } from '../releaseNotes/releaseNotesContent';
+import type { ReleaseDocument } from '../releaseNotes/releaseNotesModel';
 import {
   getMobileUpdateChannelV1,
   setMobileUpdateChannelV1,
@@ -33,6 +35,7 @@ export function UpdatesSettingsContent() {
   const { theme } = useOrionTheme();
   const [channel, setChannel] = React.useState<OrionReleaseChannelV1>(() => getMobileUpdateChannelV1());
   const [checking, setChecking] = React.useState(false);
+  const [notesDocument, setNotesDocument] = React.useState<ReleaseDocument | null>(null);
   const [appUpdateState, setAppUpdateState] = React.useState<MobileApplicationUpdateStateV1>(() =>
     getMobileApplicationUpdateStateV1(),
   );
@@ -63,6 +66,8 @@ export function UpdatesSettingsContent() {
   const mobileTruth = result?.releaseTruth.mobile || null;
   const published = result?.publishedRelease || mobileTruth?.release || null;
   const releaseNotes = formatMobileReleaseNotesV1(published?.notes);
+  const releaseDocument = React.useMemo(() => releaseNotesFromUpdate(currentVersion,
+    published && (result?.state === 'available' || published.version === currentVersion) ? { version: published.version, notes: releaseNotes } : null), [currentVersion, published?.version, releaseNotes, result?.state]);
   const appPresentation = getMobileApplicationUpdatePresentationV1(appUpdateState);
   const selectedChannelDescription = channel === 'stable'
     ? 'Recommended for everyday use.'
@@ -127,15 +132,15 @@ export function UpdatesSettingsContent() {
         <MobileUpdateExecutionSection state={appUpdateState} />
       </View>
 
-      {releaseNotes ? (
-        <View style={[styles.notes, { borderTopColor: theme.border }]}>
-          <View style={styles.notesHeading}>
-            <Ionicons name="sparkles-outline" size={18} color={theme.accent} />
-            <Text style={[styles.notesTitle, { color: theme.text }]}>What's new{published ? ` in v${published.version}` : ''}</Text>
-          </View>
-          <MobileReleaseNotes notes={releaseNotes} />
-        </View>
-      ) : null}
+      <Pressable accessibilityRole="button" accessibilityLabel="View Release Notes"
+        onPress={() => setNotesDocument(releaseDocument)}
+        style={({ pressed }) => [styles.notesRow, { borderColor: theme.border, backgroundColor: pressed ? theme.surfaceHover : theme.elevated }]}>
+        <Ionicons name="document-text-outline" size={22} color={theme.accent} />
+        <View style={{ flex: 1, minWidth: 0 }}><Text style={[styles.notesTitle, { color: theme.text }]}>View Release Notes</Text>
+          <Text style={[styles.summaryText, { color: theme.textSecondary }]}>See what's new in Orion {releaseDocument.version}</Text></View>
+        <Ionicons name="chevron-forward" size={18} color={theme.textMuted} />
+      </Pressable>
+      <ReleaseNotesDialog document={notesDocument} onClose={() => setNotesDocument(null)} />
 
       <Pressable
         accessibilityRole="button"
@@ -174,8 +179,7 @@ const styles = StyleSheet.create({
   channelButtonText: { fontSize: fontSizes.sm, fontWeight: '900' },
   channelDescription: { fontSize: fontSizes.xs, lineHeight: 18, paddingHorizontal: 2 },
   updateGroup: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth },
-  notes: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: spacing[3], gap: spacing[2] },
-  notesHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
+  notesRow: { minHeight: 64, padding: spacing[3], borderWidth: 1, borderRadius: radii.lg, flexDirection: 'row', gap: spacing[3], alignItems: 'center' },
   notesTitle: { fontSize: fontSizes.sm, fontWeight: '900' },
   checkButton: { minHeight: 48, borderRadius: radii.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: spacing[4] },
   checkButtonText: { color: '#fff', fontSize: fontSizes.sm, fontWeight: '900' },

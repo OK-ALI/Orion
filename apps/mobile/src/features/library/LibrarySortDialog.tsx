@@ -8,6 +8,7 @@ import {
 } from './librarySort';
 
 interface LibrarySortDialogProps {
+  eyebrow?: string;
   visible: boolean;
   selected: MobileLibrarySort;
   onSelect: (sort: MobileLibrarySort) => void;
@@ -15,6 +16,7 @@ interface LibrarySortDialogProps {
 }
 
 export function LibrarySortDialog({
+  eyebrow = 'MY LIST',
   visible,
   selected,
   onSelect,
@@ -44,7 +46,7 @@ export function LibrarySortDialog({
         >
           <View style={styles.heading}>
             <View>
-              <Text style={[styles.eyebrow, { color: theme.accent }]}>MY LIST</Text>
+              <Text style={[styles.eyebrow, { color: theme.accent }]}>{eyebrow}</Text>
               <Text accessibilityRole="header" style={[styles.title, { color: theme.text }]}>Sort titles</Text>
             </View>
             <Pressable

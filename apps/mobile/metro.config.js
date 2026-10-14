@@ -18,4 +18,15 @@ config.resolver.nodeModulesPaths = [
 ];
 
 // 3. Let Metro resolve dependencies hierarchically
+// Resolve Orion's public API from this checkout even when dependencies are reused.
+const upstreamResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === '@orion/shared/api') {
+    return { type: 'sourceFile', filePath: path.join(workspaceRoot, 'packages/shared/src/api/index.ts') };
+  }
+  return upstreamResolveRequest
+    ? upstreamResolveRequest(context, moduleName, platform)
+    : context.resolveRequest(context, moduleName, platform);
+};
+
 module.exports = config;

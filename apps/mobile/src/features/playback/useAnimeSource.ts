@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isAnimeContent, lookupAnimeEntries, tmdbFetch, type AnimeIdentityResult } from '@orion/shared/api';
 import { getRegisteredSource, isManualAnimeProvider } from '@orion/shared/sources';
+import { animeFailureCopy, type CanonicalAnimeIdentity } from './animeCanonicalRepair';
+import { mobileAnimeSupportsMedia, animeSelectionMatches, getMovieAnimeFlowChoice, setMovieAnimeFlowChoice, preferredMovieAnimeSource } from './animeMediaShape';
 import { createAnimeIdentityTrace } from './animeIdentityDiagnostics';
 import { resolveAnimeTestIdentity } from './animeIdentityRequest';
 import { getAnimeFlowChoice, preferredAnimeSource, setAnimeFlowChoice,
@@ -8,7 +10,7 @@ import { getAnimeFlowChoice, preferredAnimeSource, setAnimeFlowChoice,
 
 export interface AnimeSourceSelection {
   providerId?: string;
-  identity: Extract<AnimeIdentityResult, { state: 'verified' }>;
+  identity: CanonicalAnimeIdentity;
   variant: AnimeVariant;
 }
 type State = { key: string; phase: 'checking' | 'general' | 'anime' | 'failed'; detail: any;
@@ -21,8 +23,9 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
   routedSource?: string; routedVariant?: string; onPreferred(selection: AnimeSourceSelection): void;
 }) {
   const key = `${type}:${id}:${season}:${episode}`;
-  const eligible = enabled && type === 'tv' && (season ?? 0) > 0 && (episode ?? 0) > 0;
+  const eligible = enabled && (type === 'movie' || ((season ?? 0) > 0 && (episode ?? 0) > 0));
   const [state, setState] = useState<State>({ key: '', phase: 'checking', detail: null, selection: null, error: null });
+  const failures = useRef<Record<string, string>>({});
   const request = useRef<AbortController | null>(null);
   const detailRef = useRef<any>(null);
   const preferred = useRef(onPreferred); preferred.current = onPreferred;
@@ -32,13 +35,18 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
   const [retryAttempt, setRetryAttempt] = useState(0);
 
   const resolve = useCallback(async (variant: AnimeVariant, detail: any, signal: AbortSignal, providerId = 'aniembed') => {
-    if (!isManualAnimeProvider(providerId) || !getRegisteredSource(providerId)?.animeProvider?.variants.includes(variant)) return null;
+    if (!isManualAnimeProvider(providerId) || !getRegisteredSource(providerId)?.animeProvider?.variants.includes(variant)) { failures.current[providerId] = 'variant-unavailable'; return null; }
     const diagnostic = createAnimeIdentityTrace();
     try {
       const result = await resolveAnimeTestIdentity({ id, type, season, episode, detail, variant, signal },
         { fetchSeason: tmdbFetch, lookup: lookupAnimeEntries }, diagnostic);
-      return !signal.aborted && result.state === 'verified' ? { identity: result, variant, providerId } : null;
+      if (signal.aborted) { failures.current[providerId] = 'lookup-cancelled'; return null; }
+      if (result.state !== 'verified') { failures.current[providerId] = result.reason; return null; }
+      if (!mobileAnimeSupportsMedia(providerId, type) || !animeSelectionMatches(result, id, type, season, episode)) { failures.current[providerId] = 'unsupported-media'; return null; }
+      delete failures.current[providerId];
+      return { identity: result, variant, providerId };
     } catch {
+      failures.current[providerId] = 'selection-failed';
       diagnostic({ stage: 'decision', outcome: 'rejected', reason: 'selection-failed' });
       return null;
     }
@@ -46,18 +54,18 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
 
   useEffect(() => {
     const scope = new AbortController(); request.current = scope;
-    detailRef.current = null; selectionRef.current = null; manualChoice.current = false;
-    setState({ key, phase: eligible ? 'checking' : 'general', detail: null, selection: null, error: null });
+    detailRef.current = null; selectionRef.current = null; manualChoice.current = false; failures.current = {};
+    setState({ key, phase: eligible && (type === 'tv' || isManualAnimeProvider(routedSource) || isManualAnimeProvider(preferenceRef.current?.sourceId)) ? 'checking' : 'general', detail: null, selection: null, error: null });
     if (!eligible) return () => scope.abort();
     // Bound the catalog request as well as AniList lookup. No stale episode may be activated.
     const timer = setTimeout(() => scope.abort(), 20_000);
     const failure = () => {
-      const flow = getAnimeFlowChoice(id);
+      const flow = (type === 'movie' ? getMovieAnimeFlowChoice(id) : getAnimeFlowChoice(id));
       const manualGeneral = Boolean((routedSource && !isManualAnimeProvider(routedSource)) || (flow && 'generalSourceId' in flow));
       const providerId = routedSource || (flow && 'providerId' in flow ? flow.providerId : preferenceRef.current?.sourceId) || 'aniembed';
       const continuation = !manualGeneral && (isManualAnimeProvider(providerId) && (Boolean(routedSource || preferenceRef.current?.sourceId || flow)));
       setState({ key, phase: continuation ? 'failed' : 'general', detail: detailRef.current, selection: null,
-        providerId, error: continuation ? `Could not continue this episode with ${getRegisteredSource(providerId)?.label}.` : null });
+        providerId, error: continuation ? (failures.current[providerId] ? animeFailureCopy(failures.current[providerId], type) : `Could not continue this episode with ${getRegisteredSource(providerId)?.label}.`) : null });
     };
     let disposed = false;
     (async () => {
@@ -68,7 +76,7 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
           failure(); return;
         }
         detailRef.current = detail;
-        const affinity = preferredAnimeSource(id, routedSource, routedVariant, preferenceRef.current);
+        const affinity = (type === 'movie' ? preferredMovieAnimeSource : preferredAnimeSource)(id, routedSource, routedVariant, preferenceRef.current);
         if (!affinity) {
           if (isManualAnimeProvider(routedSource)) failure();
           else setState({ key, phase: 'general', detail, selection: null, error: null });
@@ -100,25 +108,25 @@ export function useAnimeSource({ id, type, season, episode, enabled, routedSourc
   const activate = useCallback((selection: AnimeSourceSelection) => {
     const providerId = selection.providerId || 'aniembed';
     if (!isManualAnimeProvider(providerId) || !getRegisteredSource(providerId)?.animeProvider?.variants.includes(selection.variant)) return false;
-    if (selection.identity.tmdbId !== id || selection.identity.season !== season || selection.identity.episode !== episode) return false;
+    if (!mobileAnimeSupportsMedia(providerId, type) || !animeSelectionMatches(selection.identity, id, type, season, episode)) return false;
     manualChoice.current = true;
     selectionRef.current = selection;
-    setAnimeFlowChoice(id, { providerId, variant: selection.variant });
+    (type === 'movie' ? setMovieAnimeFlowChoice : setAnimeFlowChoice)(id, { providerId, variant: selection.variant });
     setState((current) => ({ ...current, phase: 'anime', selection, error: null })); return true;
-  }, [episode, id, season]);
+  }, [episode, id, season, type]);
   const manualGeneral = useCallback((generalSourceId: string) => {
     manualChoice.current = true;
-    setAnimeFlowChoice(id, { generalSourceId });
+    (type === 'movie' ? setMovieAnimeFlowChoice : setAnimeFlowChoice)(id, { generalSourceId });
     selectionRef.current = null;
     setState((current) => ({ ...current, phase: 'general', selection: null, error: null }));
-  }, [id]);
+  }, [id, type]);
   const recordSuccess = useCallback((sourceId: string) => {
     const selection = selectionRef.current;
     if (!selection || sourceId !== (selection.providerId || 'aniembed') || !isManualAnimeProvider(sourceId)) return;
     const affinity = { providerId: sourceId, variant: selection.variant };
-    setAnimeFlowChoice(id, affinity);
-  }, [id]);
-  const current = state.key === key ? state : { key, phase: eligible ? 'checking' as const : 'general' as const,
+    (type === 'movie' ? setMovieAnimeFlowChoice : setAnimeFlowChoice)(id, affinity);
+  }, [id, type]);
+  const current = state.key === key ? state : { key, phase: eligible && (type === 'tv' || isManualAnimeProvider(routedSource) || isManualAnimeProvider(preferenceRef.current?.sourceId)) ? 'checking' as const : 'general' as const,
     detail: null, selection: null, error: null };
-  return { ...current, prepare, activate, manualGeneral, recordSuccess, retry: () => setRetryAttempt((value) => value + 1) };
+  return { ...current, prepare, activate, manualGeneral, recordSuccess, preparationFailure: (providerId: string) => animeFailureCopy(failures.current[providerId], type), retry: () => setRetryAttempt((value) => value + 1) };
 }
