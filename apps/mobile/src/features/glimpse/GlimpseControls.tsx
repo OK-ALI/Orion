@@ -29,7 +29,7 @@ export function GlimpseControls({ query, onQuery, sort, onSort, filters, onFilte
         accessibilityHint="Opens Glimpse sort options" disabled={unavailable} accessibilityState={{ disabled: unavailable }} onPress={onSort}
         style={[styles.sort, { backgroundColor: theme.background, borderColor: theme.border, opacity: unavailable ? 0.5 : 1 }]}>
         <Ionicons name="swap-vertical-outline" size={16} color={theme.accent} />
-        <Text style={[styles.sortLabel, { color: theme.text }]}>{MOBILE_LIBRARY_SORT_SHORT_LABELS[sort]}</Text>
+        <Text numberOfLines={1} style={[styles.sortLabel, { color: theme.text }]}>{MOBILE_LIBRARY_SORT_SHORT_LABELS[sort]}</Text>
         <Ionicons name="chevron-down" size={14} color={theme.textSecondary} />
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={filtersVisible ? 'Close Glimpse filters' : 'Filter Glimpse clips'}
@@ -80,8 +80,8 @@ export function GlimpseControls({ query, onQuery, sort, onSort, filters, onFilte
   </View>;
 }
 const styles = StyleSheet.create({
-  container: { gap: spacing[2], marginBottom: spacing[3] }, toolbar: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  sort: { flex: 1, minWidth: 0, minHeight: 44, borderWidth: 1, borderRadius: 21, paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  container: { gap: spacing[2], marginBottom: spacing[3] }, toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing[2] },
+  sort: { flex: 1, minWidth: 120, minHeight: 44, borderWidth: 1, borderRadius: 21, paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
   sortLabel: { minWidth: 0, flexShrink: 1, fontSize: 12, fontWeight: '800' },
   tool: { minHeight: 44, borderWidth: 1, borderRadius: 22, paddingHorizontal: spacing[3], flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[1] },
   icon: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }, filters: { gap: spacing[1] },
