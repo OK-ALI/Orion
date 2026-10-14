@@ -1,4 +1,5 @@
 import type { TmdbMediaItem } from '@orion/shared/types';
+import { awaitGlimpseRequest } from './glimpseRequestCancellation';
 import type { GlimpseCatalog, GlimpseReel, GlimpseVideoSource } from './glimpseModel';
 
 export interface GlimpseFeedSnapshot { reels: GlimpseReel[]; exhausted: boolean; failedTitles: number; addedCount: number }
@@ -40,7 +41,7 @@ export class GlimpseFeedEngine {
       const budget = Math.max(1, Math.min(8, Math.floor(titleBudget) || 1));
       // At most one catalog page, eight title requests and eight new reels per extension.
       if (!cursor && titles.length === 0 && hasMore) {
-        const page = await this.catalog.page(nextPage, signal);
+        const page = await awaitGlimpseRequest(() => this.catalog.page(nextPage, signal), signal);
         assertCurrent(); titles = page.items.slice(0, 40); nextPage++; hasMore = page.hasMore;
       }
       for (let inspected = 0; inspected < budget && additions.length < budget; inspected++) {
@@ -51,7 +52,7 @@ export class GlimpseFeedEngine {
         if (!cursor && seen.has(titleKey)) continue;
         const titleDelivered = cursor?.delivered || new Set<string>();
         let candidates: GlimpseReel[];
-        try { requestedTitles++; candidates = await this.source.candidates(item, signal); }
+        try { requestedTitles++; candidates = await awaitGlimpseRequest(() => this.source.candidates(item, signal), signal); }
         catch (error) { assertCurrent(); sourceError ||= error; failedTitles++; seen.add(titleKey); cursor = null; continue; }
         assertCurrent();
         const batchVideos = new Set<string>();
