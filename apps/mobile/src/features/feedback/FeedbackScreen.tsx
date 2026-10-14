@@ -17,6 +17,7 @@ import { FEEDBACK_AREAS, feedbackValidation, feedbackSubject, type FeedbackDraft
 import { feedbackEndpoint, feedbackTransport } from './feedbackTransport';
 import { FeedbackButton, FeedbackField, FeedbackText } from './FeedbackControls';
 import { FeedbackDiagnosticPreview, type FeedbackReport } from './FeedbackDiagnosticPreview';
+import { FeedbackReportContent } from './FeedbackReportContent';
 import { OrionContentDialog } from './OrionContentDialog';
 type Page='home'|'form'|'history'|'details'|'success';
 const kindLabel=(type:FeedbackKind)=>type==='problem'?'Report a Problem':type==='idea'?'Suggest a Feature':type==='followup'?'Add more information':'General Feedback';
@@ -95,7 +96,7 @@ export default function FeedbackScreen() {
     </>}
     {(page==='details'||page==='success')&&selected&&<>
       <Ionicons accessible={false} name="checkmark-circle-outline" color={theme.accent} size={40}/><FeedbackText heading>{page==='success'?'Thanks for helping improve Orion.':'Sent'}</FeedbackText><FeedbackText heading>Orion Feedback ID</FeedbackText><FeedbackText>{selected.id}</FeedbackText><FeedbackButton label="Copy ID" onPress={()=>{void feedbackNative?.copy(selected.id).catch(()=>setError('The Feedback ID couldn’t be copied.'));}}/>
-      <FeedbackText>{kindLabel(selected.type)} · {selected.area}{'\n'}{new Date(selected.sentAt).toLocaleString()}</FeedbackText><FeedbackText heading>{selected.subject}</FeedbackText><FeedbackText>{selected.message}</FeedbackText><FeedbackText>Diagnostics Included: {selected.diagnostics?'Yes':'No'}{'\n'}Screenshot Included: {selected.screenshot?'Yes':'No'}</FeedbackText>
+      <FeedbackText>{kindLabel(selected.type)} · {selected.area}{'\n'}{new Date(selected.sentAt).toLocaleString()}</FeedbackText><FeedbackReportContent subject={selected.subject} message={selected.message}/><FeedbackText>Diagnostics Included: {selected.diagnostics?'Yes':'No'}{'\n'}Screenshot Included: {selected.screenshot?'Yes':'No'}</FeedbackText>
       <FeedbackButton label="Add more information" onPress={()=>void start('followup',selected)}/><FeedbackButton label="Done" onPress={()=>setPage('home')}/>
       {page==='success'&&<><FeedbackButton label="Send another report" onPress={()=>setPage('home')}/><FeedbackButton label="View Feedback History" onPress={()=>setPage('history')}/></>}
     </>}

@@ -13,4 +13,11 @@ export function feedbackValidation(draft:FeedbackDraft):string|null {
   return null;
 }
 
+// A transport/history summary is not a second copy of the report body.
+export function feedbackContentTitle({subject, message}: Pick<FeedbackRecord, 'subject' | 'message'>): string | null {
+  const normalized = (text: string) => text.trim().replace(/\s+/g, ' ');
+  const summary = normalized(message).slice(0, 120).trim();
+  return !subject.trim() || normalized(subject) === summary ? null : subject;
+}
+
 export function feedbackSubject(draft: FeedbackDraft): string { return (draft.subject.trim() || draft.message.trim().replace(/\s+/g, ' ')).slice(0,120); }

@@ -94,3 +94,32 @@ test('v4 notes qualification uses the bundled native dialog only in internal bui
     else assert.equal(tree.props.href,'/');
   }
 });
+
+test('all Feedback receipts and history details render a generated summary only as the full message',()=>{
+  const read=loader({'react/jsx-runtime':jsx,'./FeedbackControls':{FeedbackText:'FeedbackText'}});
+  const model=read('src/features/feedback/feedbackModel.ts');
+  const content=read('src/features/feedback/FeedbackReportContent.tsx').FeedbackReportContent;
+  for(const type of ['problem','idea','general','followup']){
+    for(const message of ['A short report.', 'First line\n  More details.', 'A complete report with details. '.repeat(12), 'x'.repeat(119)+' '+ 'More details remain visible.']){
+      const draft={...model.blankFeedback(type,'fixture'),message};
+      const subject=model.feedbackSubject(draft),record={subject,message},before=JSON.stringify(record);
+      const tree=content(record),texts=nodes(tree).filter(n=>n.type==='FeedbackText');
+      assert.equal(texts.length,1,type);assert.equal(textOf(tree),message,type);
+      assert.equal(texts[0].props.heading,undefined);assert.equal(JSON.stringify(record),before);
+    }
+  }
+  const screen=source('src/features/feedback/FeedbackScreen.tsx');
+  assert.match(screen,/\(page==='details'\|\|page==='success'\)/);
+  assert.match(screen,/<FeedbackReportContent subject=\{selected.subject\} message=\{selected.message\}\/>/);
+});
+
+test('distinct user titles and legacy report subjects remain visible without changing saved content',()=>{
+  const read=loader({'react/jsx-runtime':jsx,'./FeedbackControls':{FeedbackText:'FeedbackText'}});
+  const content=read('src/features/feedback/FeedbackReportContent.tsx').FeedbackReportContent;
+  for(const report of [{subject:'A useful title',message:'The full report explains the title.'},{subject:'Additional information',message:'Further details about the original report.'},{subject:'Playback',message:'Playback failed after returning to Orion.'}]){
+    const tree=content(report),texts=nodes(tree).filter(n=>n.type==='FeedbackText');
+    assert.equal(texts.length,2);assert.equal(texts[0].props.heading,true);
+    assert.equal(textOf(texts[0]),report.subject);assert.equal(textOf(texts[1]),report.message);
+  }
+  assert.equal(textOf(content({subject:'First   line More details.',message:'First line\n More details.'})),'First line\n More details.');
+});

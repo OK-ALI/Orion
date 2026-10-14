@@ -83,3 +83,27 @@ it('diagnostics travel as one fixed JSON entry in an allowed ZIP, with screensho
  const report=validateSubmission({...sample(),diagnostics:{schema:1},screenshot:btoa(String.fromCharCode(255,216,255,217))});
  expect(formatMail(report,'ORN-FB-'+ 'A'.repeat(24),'orion@example.invalid','inbox@example.invalid').attachment?.map(a=>a.name)).toEqual(['orion-diagnostics.zip','screenshot.jpg']);
 });
+
+describe('Feedback report presentation',()=>{
+ for(const type of ['problem','idea','general','followup'] as const){
+  it(type+' renders exact and truncated summaries only as one full report body',()=>{
+   for(const message of ['A short report.', 'First line\n  More details.', 'A complete report with details. '.repeat(12), 'x'.repeat(119)+' '+ 'More details remain visible.']){
+    const subject=message.trim().replace(/\s+/g,' ').slice(0,120);
+    const report=validateSubmission({...sample(),type,message,subject,severity:type==='problem'?'Annoying':undefined,...(type==='followup'?{parentId:'ORN-FB-'+ 'A'.repeat(24),followupToken:'b'.repeat(64)}:{})});
+    const before=JSON.stringify(report),m=formatMail(report,'ORN-FB-'+ 'B'.repeat(24),'orion@example.invalid','inbox@example.invalid');
+    const body=m.textContent.split('Screenshot: Not included\n\n')[1];
+    expect(body).toBe(report.message+'\n');
+    expect(m.htmlContent).toContain(report.message);
+    expect(JSON.stringify(report)).toBe(before);
+    expect(m.subject).toContain(type==='followup'?'[ORION][FOLLOW-UP]':report.subject);
+   }
+  });
+  it(type+' retains distinct subjects and supporting information',()=>{
+   const report=validateSubmission({...sample(),type,subject:'A distinct title',message:'The complete report.',severity:type==='problem'?'Annoying':undefined,...(type==='idea'?{usefulness:'Helps explain why this matters.'}:{}),...(type==='followup'?{parentId:'ORN-FB-'+ 'A'.repeat(24),followupToken:'b'.repeat(64)}:{})});
+   const m=formatMail(report,'ORN-FB-'+ 'B'.repeat(24),'orion@example.invalid','inbox@example.invalid');
+   expect(m.textContent).toContain('\n\nA distinct title\n\nThe complete report.');
+   if(type==='idea')expect(m.textContent).toContain('Why this helps:\nHelps explain why this matters.');
+   if(type==='followup')expect(m.textContent).toContain('Original Feedback ID: '+report.parentId);
+  });
+ }
+});
