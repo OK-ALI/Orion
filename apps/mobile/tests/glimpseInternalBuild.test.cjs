@@ -67,7 +67,7 @@ test('normal production ignores preview environment variables; only the dedicate
   const previousInternal = process.env.ORION_GLIMPSE_INTERNAL_PREVIEW_BUILD;
   try {
     global.__DEV__ = false; process.env.EXPO_PUBLIC_GLIMPSE_PREVIEW = 'true'; process.env.ORION_GLIMPSE_INTERNAL_PREVIEW_BUILD = '1';
-    assert.equal(loader()(prefix + 'glimpsePreview.ts').isGlimpsePreviewEnabled(), false);
+    assert.equal(loader({ './glimpseBuild': { GLIMPSE_INTERNAL_PREVIEW: false, GLIMPSE_PRODUCTION_ENABLED: false } })(prefix + 'glimpsePreview.ts').isGlimpsePreviewEnabled(), false);
     assert.equal(loader({ './glimpseBuild': { GLIMPSE_INTERNAL_PREVIEW: true } })(prefix + 'glimpsePreview.ts').isGlimpsePreviewEnabled(), true);
   } finally {
     if (previousDev === undefined) delete global.__DEV__; else global.__DEV__ = previousDev;

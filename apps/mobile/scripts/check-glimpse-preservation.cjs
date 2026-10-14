@@ -4,6 +4,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { productPolishIntegration } = require('./product-polish-integrations.cjs');
 const { animeRepairIntegration } = require('./anime-repair-integrations.cjs');
+const { mobileReleaseIntegration, assertMobileGeneratedIntegration } = require('./mobile-release-integrations.cjs');
 const ROOT = path.resolve(__dirname, '../../..');
 const BASE = '32ea4f75d8ff64975f44507672ad07db477efaf9';
 const git = args => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
@@ -57,6 +58,10 @@ const integrations = [
   "apps/mobile/src/features/media-detail/MediaDetailScreen.tsx",
   "apps/mobile/tests/p10a2MediaDetailOfflineActions.test.cjs",
   "apps/mobile/tests/f10aM1OfflineHomePresentation.test.cjs",
+  'apps/mobile/package.json',
+  'apps/mobile/android/app/build.gradle',
+  'package-lock.json',
+  'apps/mobile/tests/p107DistributionVersioning.test.cjs',
 ];
 function expectedIntegration(file, original) {
   if (file === integrations[0]) return original
@@ -105,7 +110,12 @@ function expectedIntegration(file, original) {
   throw new Error('Unknown reviewed integration: ' + file);
 }
 function allowedAddition(file) {
-  return file === "apps/mobile/scripts/anime-repair-integrations.cjs"
+  return file === 'apps/mobile/scripts/mobile-release-integrations.cjs'
+    || file === 'apps/mobile/scripts/create-mobile-release-manifests.cjs'
+    || file === 'apps/mobile/tests/mobileV4Release.test.cjs'
+    || file === 'docs/mobile-v4-release-audit.md'
+    || file === 'docs/releases/mobile-v4.0.0.md'
+    || file === "apps/mobile/scripts/anime-repair-integrations.cjs"
     || file === "apps/mobile/src/features/playback/animePublicEvidence.ts"
     || file === "apps/mobile/src/features/playback/animeEpisodeProof.ts"
     || file === "apps/mobile/src/features/playback/animeCanonicalRepair.ts"
@@ -148,11 +158,15 @@ function checkPreservation() {
   }
   for (const file of additions) if (!allowedAddition(file)) throw new Error('Out-of-scope untracked file: ' + file);
   for (const file of [...navigation, ...integrations]) {
+    if (!baselineSet.has(file)) {
+      assertMobileGeneratedIntegration(file, normalize(fs.readFileSync(path.join(ROOT, file), 'utf8')));
+      continue;
+    }
     const original = normalize(execFileSync('git', ['show', BASE + ':' + file], { cwd: ROOT, encoding: 'utf8' }));
     const actual = normalize(fs.readFileSync(path.join(ROOT, file), 'utf8'));
-    if (actual !== animeRepairIntegration(file, productPolishIntegration(file, navigation.includes(file) ? expectedNavigation(file, original) : expectedIntegration(file, original)))) throw new Error('Navigation differs beyond the reviewed Glimpse addition: ' + file);
+    if (actual !== mobileReleaseIntegration(file, animeRepairIntegration(file, productPolishIntegration(file, navigation.includes(file) ? expectedNavigation(file, original) : expectedIntegration(file, original))))) throw new Error('Navigation differs beyond the reviewed Glimpse addition: ' + file);
   }
-  return { authority: BASE, frozenBaselineFiles: tracked.length - navigation.length - integrations.length, navigationAdditions: navigation.length, reviewedIntegrations: integrations.length,
+  return { authority: BASE, frozenBaselineFiles: tracked.filter(file => !navigation.includes(file) && !integrations.includes(file)).length, navigationAdditions: navigation.length, reviewedIntegrations: integrations.length,
     newFiles: [...new Set([...changed.filter(file => !baselineSet.has(file)), ...additions])].length };
 }
 module.exports = { checkPreservation, expectedNavigation, expectedIntegration, integrations };

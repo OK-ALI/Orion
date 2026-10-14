@@ -60,7 +60,7 @@ test('Mobile uses only the verified public production Feedback endpoint and cont
   const app=JSON.parse(source('app.json')).expo;
   assert.equal(app.extra.feedbackEndpoint,'https://orion-feedback.okali-orion.workers.dev/v1/feedback');
   assert.equal(app.android.package,'com.okali.orion');
-  assert.equal(app.version,'3.2.1');assert.equal(app.android.versionCode,59);
+  assert.equal(app.version,'4.0.0');assert.equal(app.android.versionCode,60);
   assert.doesNotMatch(JSON.stringify(app),/BREVO_API_KEY|FEEDBACK_HMAC_SECRET|followupToken/);
 });
 

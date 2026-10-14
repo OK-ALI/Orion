@@ -30,7 +30,7 @@ test('a replaced owner cannot publish late colors',async t=>{
 });
 test('hook releases on playback stop, Efficiency and unmount; ordinary production never invokes capture',async t=>{
  timers(t);for(const preview of [false,true]){const h=hookHarness(),b=bridge();let props={nativeId:'orion-glimpse:a',session:'a',enabled:true,profile:'balanced',reducedMotion:false,onPalette(){}};
- const hook=loader({react:h.react,'react-native':{Platform:{OS:'android'}},'expo-modules-core':{requireOptionalNativeModule:()=>b.native},'./glimpseBuild':{GLIMPSE_INTERNAL_PREVIEW:preview}})(prefix+'useGlimpseAmbientSampler.ts').useGlimpseAmbientSampler;
+ const hook=loader({react:h.react,'react-native':{Platform:{OS:'android'}},'expo-modules-core':{requireOptionalNativeModule:()=>b.native},'./glimpseBuild':{GLIMPSE_INTERNAL_PREVIEW:preview,GLIMPSE_PRODUCTION_ENABLED:false}})(prefix+'useGlimpseAmbientSampler.ts').useGlimpseAmbientSampler;
  h.start(()=>hook(props.nativeId,props.session,props.enabled,props.profile,props.reducedMotion,props.onPalette));assert.equal(b.calls.length,preview?1:0);props={...props,enabled:false};h.update();assert.deepEqual(b.stops,preview?['a']:[]);
  props={...props,enabled:true};h.update();props={...props,profile:'efficiency'};h.update();assert.equal(b.calls.length,preview?2:0);
  props={...props,profile:'balanced',session:'b',nativeId:'orion-glimpse:b'};h.update();h.dispose();assert.equal(b.stops.at(-1),preview?'b':undefined);for(const call of b.calls)call.resolve(palette(call.session));await flush();}

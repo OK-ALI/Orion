@@ -277,7 +277,7 @@ test('a rapid swipe during extension protects the latest active identity before 
 test('preview exposure requires explicit development opt-in and cannot expose production Glimpse', () => {
   const previousDev = global.__DEV__;
   const previousFlag = process.env.EXPO_PUBLIC_GLIMPSE_PREVIEW;
-  const gate = loader()(prefix + 'glimpsePreview.ts').isGlimpsePreviewEnabled;
+  const gate = loader({ './glimpseBuild': { GLIMPSE_INTERNAL_PREVIEW: false, GLIMPSE_PRODUCTION_ENABLED: false } })(prefix + 'glimpsePreview.ts').isGlimpsePreviewEnabled;
   try {
     process.env.EXPO_PUBLIC_GLIMPSE_PREVIEW = 'true'; global.__DEV__ = false;
     assert.equal(gate(), false);
