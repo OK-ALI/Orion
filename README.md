@@ -1,106 +1,131 @@
-# Orion X Music Planet
+<p align="center">
+  <img src="apps/mobile/assets/brand-mark.png" width="96" alt="Orion">
+</p>
 
-**A universe made to be felt.**
+# Orion: A Multiverse of Stories
 
-Orion X Music Planet is a Windows-first Electron application with two connected worlds: Cinema for discovering, streaming and downloading movies, series and anime; and Music Planet for finding, playing and organizing music.
+Discover, watch, and organize movies, series, and anime across Orion Mobile and Desktop. Orion Connect links the two on your local network, while Music Planet brings music discovery and listening to Desktop.
 
-## v2.0.1 release
+[Official releases](https://github.com/OK-ALI/Orion/releases) · [Mobile 4.0 release notes](docs/releases/mobile-v4.0.0.md) · [Music Planet architecture](docs/architecture/music.md)
 
-v2.0.1 is a stability and maintenance update for Orion Cinema. It migrates primary VidSrc and Videasy endpoints to updated provider mirrors (`vsembed.su` and `player.videasy.to`), expands ad-blocking across webview sessions with over 15 new tracking domain filters and DOM overlay cleaners, and repairs experimental sources (VsEmbed and 111Movies).
+## Platforms and releases
 
-Music Planet adds an audio-reactive Orb, YouTube Music catalog and discovery, YouTube Audio playback, Local Library, lyrics, playlists, favorites, queue and radio. Cinema retains protected-stream playback, local playback, subtitles, managed downloads, tray behavior, battery-aware behavior and Windows media controls.
+| Part of Orion | Current public status | Role |
+| --- | --- | --- |
+| **Orion Mobile** | [v4.0.0 for Android](https://github.com/OK-ALI/Orion/releases/tag/v4.0.0), released October 14, 2026 | Cinema, Glimpse, Library, downloads, and account features on Android |
+| **Orion Desktop** | [v3.2.0 for Windows](https://github.com/OK-ALI/Orion/releases/tag/v3.2.0) | Cinema and Music Planet; Desktop 4.0 has not been publicly released |
+| **Orion Connect** | Included integration | Pair Desktop and Mobile on the same Wi-Fi / LAN |
+| **Music Planet** | Desktop feature | Music discovery, playback, lyrics, playlists, and Local Library |
+| **Orion TV** | Planned | Future TV integration; no public TV application is offered here |
 
-Google sign-in is bundled for every user through a central Desktop OAuth client using PKCE. Users sign in with their own Google account; they never need to create or paste Cloud Console credentials. Google Drive backup covers Cinema and Music preferences, playlists, favorites, queue and history, but excludes credentials, caches, signed URLs and machine-specific paths.
+Mobile v4.1.0 is a development target, not a published release. Package versions in the monorepo can differ by platform and do not establish public release status.
 
-See [Music Planet architecture](docs/architecture/music.md) and the [living-world implementation record](docs/Music-Planet-Living-World-Audit-2026-07-10.md).
-The v2.0.1 release scope is recorded in the [v2.0.1 release notes](docs/releases/v2.0.1.md) (and [v2.0.0 notes](docs/releases/v2.0.0.md)).
+## Orion Mobile
 
-## v2.0.1 highlights
+- **Cinema:** Browse and search movies, TV, and anime; open title details and choose streaming sources. Playback continuity includes Resume, Start from Beginning, Replay Last 30, and Next Episode where supported.
+- **Library:** Keep My List, viewing history, watched state, playback progress, and Continue Watching, with filtering and sorting.
+- **Downloads:** Manage downloads and play supported downloaded media offline, including available subtitle tracks.
+- **Glimpse:** Discover titles through a vertical clip feed, search and filter clips, and keep private Likes on the device. Start muted, Auto-advance, Ambient glow, and Remember my place are configurable.
+- **Feedback Center:** Send a problem report, feature suggestion, or general feedback with optional diagnostics, screenshot, and reply address. Successful submissions receive an Orion Feedback ID and local history.
+- **Account and Orion Cloud:** Google sign-in and account-scoped synchronization for supported Library information, with explicit synchronization controls.
+- **Personalization:** Six themes—Midnight Premiere, AMOLED, Mocha, Slate, Projector Silver, and Custom—plus custom accent, Home Layout, Performance Profiles, and Reduced Motion.
+- **Release information:** A one-time upgrade Welcome and offline native Release Notes complement the existing update flow.
 
-- VidSrc primary endpoint migrated to official updated mirror `vsembed.su` for reliable, ad-free streaming.
-- Videasy primary endpoint updated to `player.videasy.to` and tracking host removed from allowed origin manifest.
-- Over 15 tracking, font-vector, and ad-redirect domains added to Electron `sessionManager.js` ad-blocking system.
-- Webview preload DOM cleaner enhanced to strip `z-index` click-hijack overlays, full-screen popunders, and ad-detector frames.
-- VsEmbed and 111Movies experimental sources repaired and VidSrc CC quarantined.
+Source capabilities vary. Embedded controls, incoming resume, subtitles, audio choices, and downloads depend on the selected provider. AniLink remains a manual Anime source with documented playback and resume limitations. Glimpse clips also depend on uploader availability, regional permissions, and embed support.
 
-## What's new in v1.0.10
+The published Android baseline requires **Android 7.0 / API 24 or newer**. Install official updates in place to retain app data; do not uninstall Orion first.
 
-- Invisible Quality, Balanced, and Efficiency adaptation prioritizes streaming under CPU, memory, battery, or buffering pressure.
-- Battery status appears in Orion's title bar and tray, with low/critical alerts and resumable critical-battery download pausing.
-- Windows media-session support adds Bluetooth headset, speaker, and media-key playback controls plus media-flyout metadata.
-- Windows owns Bluetooth/output volume so Volume Up, Volume Down, and Mute work without double volume changes.
-- Settings includes redacted local diagnostics for performance, playback pressure, battery state, and downloads.
-- The mini-player is now a true 16:9 floating surface with a pop-out-inspired auto-hiding toolbar and theme-aware resize affordance.
-- Home rails preserve poster hover lift and glow without clipping.
-- Appearance adds live hover intensity, hover-color and glow controls with a themed preview and Reduced Motion-safe feedback.
-- Player chrome, overlays, Downloads, local playback and shortcut surfaces share semantic colors across all six themes.
-- v1.0.9 playback continuity, ambient safeguards, downloader reliability, and local playback remain intact.
+## Desktop, Music Planet, and Connect
 
-See the complete [v1.0.10 release notes](docs/releases/v1.0.10.md).
+Desktop combines Cinema with Music Planet. Music Planet includes YouTube Music catalog discovery, YouTube Audio playback, lyrics, Local Library, playlists, favorites, queue, and radio. Its provider and playback boundaries are described in the [architecture record](docs/architecture/music.md).
 
-## Features
+Orion Connect pairs Desktop and Mobile over the local network. Its discovery, pairing, and remote-media capabilities are implemented in the platform applications and shared protocol contracts. Both applications must be reachable on the same Wi-Fi / LAN.
 
-- Movie, TV, and anime discovery powered by TMDB metadata.
-- Embedded, mini, pop-out, and restricted local playback with state handoffs, progress, resume, fullscreen, subtitles, and ambient glow.
-- Managed `yt-dlp` and ffmpeg downloads with HLS capture, browser-session proxy fallback, pause/resume/retry, tray progress, and organized Movie/Series folders.
-- Sidecar subtitle search and download through user-configured SubDL or Wyzie credentials.
-- Watchlist, history, watched state, backups, appearance preferences, and update checks.
-- OS-protected storage for user provider keys and optional TMDB overrides.
+Desktop development and public release qualification proceed separately from Mobile.
 
-DRM circumvention is not supported. Download only media you are authorized to access.
+## Repository layout
 
-## Requirements
-
-- Windows 10 or later for the fully supported desktop and managed-tool workflow.
-- Node.js 22 or later for local development.
-- npm 10 or later.
-
-macOS and Linux retain PATH-based compatibility, but managed-tool installer and Windows media-control parity are not part of v2.0.0.
-
-## Run locally
-
-```powershell
-git clone https://github.com/OK-ALI/orion.git
-cd orion
-npm.cmd ci
-npm.cmd start
+```text
+apps/
+  mobile/       React Native, Expo, TypeScript, Android plugins and local modules
+  desktop/      Electron and React application, Cinema and Music Planet
+packages/
+  shared/       Shared types, API clients, design tokens, source registry and protocols
+docs/           Architecture, release notes, handoffs and qualification records
+scripts/        Repository release maps, manifests and qualification utilities
 ```
 
-Use `npm.cmd` in PowerShell if script execution policy blocks `npm.ps1`.
+The root package coordinates npm workspaces. Mobile application identity lives in `apps/mobile/package.json` and `apps/mobile/app.json`; the root and Desktop version numbers are independent.
 
-Orion uses its bundled TMDB read token when available. SubDL and Wyzie keys belong to each user and are configured in Settings. Local `.env` files are private and excluded from Git.
+## Development
 
-## Verify the refactor
-
-```powershell
-npm.cmd run check
-npm.cmd run test:electron
-```
-
-The check suite enforces the compatible IPC surface and retained aliases, rejects unresolved JavaScript/JSX bindings and dependency cycles, scans for committed credentials and new theme-color leaks, fails source files above 800 lines, runs node/renderer tests, and creates a production renderer build.
-
-## Package Windows builds
+Use the committed `package-lock.json` and **Node.js 22.13+ in the 22.x line or 24.3+ in the 24.x line**, with a compatible npm version. The locked Mobile stack includes **Expo 57**, **React Native 0.86.3**, **React 19.2.3**, and **TypeScript**. Dependency manifests and the lockfile are the compatibility authority.
 
 ```powershell
-npm.cmd run dist:win
+git clone https://github.com/OK-ALI/Orion.git
+cd Orion
+npm ci
 ```
 
-Artifacts are written to `release/`. Packaging does not publish a GitHub release.
+To inspect the published Mobile baseline, check out tag `v4.0.0` before installing dependencies. In PowerShell, use `npm.cmd` if execution policy blocks `npm.ps1`.
 
-## Architecture
+### Mobile
 
-- `src/main`: Electron lifecycle, windows, native IPC, sessions, downloader, player, and subtitles.
-- `src/preload`: domain-based APIs composed into the compatible flat `window.electron` bridge.
-- `src/renderer`: app shell, features, components, services, shared utilities, and styles.
-- `src/shared`: cross-boundary contracts and runtime constants.
-- `tests`: unit, integration, Electron, fixtures, and future visual baselines.
+```powershell
+npm run start --workspace @orion/mobile
+npm run web --workspace @orion/mobile
+```
 
-See [architecture overview](docs/architecture/overview.md), [refactoring plan](docs/refactoring-plan.md), and [testing guide](docs/testing.md).
+Android integrations use Orion's native plugins and modules. Expo Go and the web preview do not qualify native playback, downloads, Google sign-in, Connect, or the updater.
 
-## Security
+For native Android work, install a compatible JDK and the Android SDK, then set `JAVA_HOME` and `ANDROID_HOME`. The generated Android project and locked native dependencies determine the required SDK, build tools, NDK, CMake, and Gradle wrapper versions.
 
-Do not commit `.env`, user data, logs, managed tools, `dist/`, `release/`, or `node_modules/`. Provider keys, cookies, captured headers, executable paths, and spawn arguments must remain main-process-only.
+```powershell
+cd apps/mobile
+npx expo prebuild --platform android --no-install
+cd ../..
+npm run build:android:standalone --workspace @orion/mobile
+```
 
-## License
+The standalone pipeline requires valid local Mobile runtime configuration, including `EXPO_PUBLIC_ORION_GOOGLE_WEB_CLIENT_ID` and `EXPO_PUBLIC_TMDB_READ_TOKEN`. Keep configuration values out of source control. Standalone debug builds use a debug signing certificate and the same package identifier as production: use a clean emulator or a dedicated test device, without replacing or removing an existing production installation.
 
-GPL-3.0.
+Official release builds use `npm run build:android:release --workspace @orion/mobile` and require the original Orion signing credentials. Never substitute a new production key. Generated native directories are build output; authoritative native integrations live in the checked-in plugins and modules.
+
+### Desktop
+
+After the complete workspace install:
+
+```powershell
+npm run start --workspace @orion/desktop
+```
+
+This builds the renderer and starts Electron. See the Desktop workspace scripts for platform packaging; packaging and publishing are separate operations.
+
+### Validation
+
+```powershell
+npm run typecheck --workspace @orion/shared
+npm run typecheck --workspace @orion/mobile
+npm test --workspace @orion/mobile
+npm run check:source-size --workspace @orion/mobile
+npm run check:expo --workspace @orion/mobile
+npm run build:web --workspace @orion/mobile
+```
+
+Some Mobile preservation checks expect the generated Android project and the reviewed release Gradle configuration. A plain Expo prebuild alone does not reproduce every release prerequisite. The v4.0.0 [release audit](docs/mobile-v4-release-audit.md) records five inherited Download source-assertion failures; results must be compared with that baseline rather than treated as a universally green suite.
+
+Desktop has its own `npm run check --workspace @orion/desktop` and `npm run test:electron --workspace @orion/desktop` gates. Android compilation, native tests, real playback, physical-device checks, and updater qualification remain separate from JavaScript or web checks.
+
+## Security and release integrity
+
+- Obtain APKs and Desktop installers from [official GitHub Releases](https://github.com/OK-ALI/Orion/releases).
+- Android updates preserve `com.okali.orion` and the original signing authority. The updater verifies release identity, integrity, and signer before installation.
+- Never commit private environment files, OAuth tokens, provider credentials, signing material, user data, logs, caches, managed tools, or generated build artifacts.
+- Desktop protects sensitive provider data and local paths behind its main-process boundary. Mobile uses its existing secure account and native authorization paths; exported or synchronized data must respect those boundaries.
+- Third-party media availability is outside Orion's control. DRM circumvention is not supported. Access and download only media you are authorized to use.
+
+## License and attribution
+
+The root, Desktop, and shared package manifests declare **GPL-3.0**. Third-party components and retained template notices keep their own license terms; for example, `apps/mobile/LICENSE` contains the Expo template's MIT notice. Preserve applicable license and attribution notices when redistributing components.
+
+Historical release documents remain available under [`docs/releases/`](docs/releases/).
