@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "historicalProduction": {
+    "id": "mobile-4.0.0-historical-production",
+    "purpose": "historical-production",
+    "mobileVersion": "4.0.0",
+    "androidVersionCode": 60,
+    "normalizedSha256": "0df69eef3e0aee7ff94596f7a37c25943fb978037b845ec855aa541c38d2b8ba",
+    "fixtureRecovered": false,
+    "verification": "apps/mobile/scripts/mobile-release-integrations.cjs"
+  },
+  "developmentProfiles": [
+    {
+      "id": "mobile-4.0.0-infrastructure-a-d",
+      "purpose": "development-validation",
+      "approval": "owner-approved",
+      "identity": {
+        "mobileVersion": "4.0.0",
+        "androidVersionCode": 60,
+        "androidPackage": "com.okali.orion",
+        "runtimeVersion": "orion-mobile-native-r2",
+        "expectedSignerSha256": "4422ec4bc16b1c83c914a0ad1b688be8f7c158ff7f99bcd223a909966ac7a1bd",
+        "artifactName": "orion-mobile-v4.0.0.apk",
+        "preservationCommit": "5d5e893f8be951020015aa658dfe1a67d8c0b16d"
+      },
+      "fixture": "config/fixtures/orion-mobile-4.0.0-infrastructure-development.gradle",
+      "fixtureSha256": "ee25b27790552a5b9d25e27b6dff1d7c874921ef1bf07ddbddaf9b73476d3815",
+      "inputs": "config/fixtures/orion-mobile-development-generation-inputs-v1.json",
+      "inputsSha256": "0c2929755a3825243e45ac7a4a5cf42f58b210b5d835f2dabd9201893fc96c81"
+    }
+  ]
+}

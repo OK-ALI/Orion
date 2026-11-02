@@ -1,0 +1,18 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const c=require('../mobile-development-validation-core.cjs');
+const {validateDevelopmentPreservation:validate,CONTRACT}=require('../check-mobile-development-preservation.cjs');
+const {fixture}=require('./development-validation-fixtures.cjs');
+test('exact approved contents pass as review without replacing historical checks',t=>{const f=fixture(t),r=validate(f.contractOptions());assert.equal(r.status,'PASS');assert.equal(r.productionQualified,false);assert.equal(r.historicalGlimpseCheckReplaced,false);});
+for(const file of ['apps/desktop/package.json','apps/mobile/src/features/downloads/runtime.ts','apps/mobile/src/screens/LibraryScreen.tsx','apps/mobile/src/context/AccountContext.tsx','apps/mobile/plugins/orion-cinema-webview-native/OrionDownloadYtDlpGateway.kt','apps/mobile/src/features/player/engine.ts','apps/mobile/scripts/build-android-release.cjs','apps/mobile/src/features/updates/trust.ts','apps/mobile/feedback-backend/worker.js','packages/shared/src/index.ts','package-lock.json','.github/workflows/release.yml','apps/mobile/app.json','config/orion-release-map-v1.json','apps/mobile/scripts/check-glimpse-preservation.cjs','apps/mobile/scripts/mobile-release-integrations.cjs'])test('rejects unauthorized modification: '+file,t=>{const f=fixture(t);f.state.changed.push(file);assert.throws(()=>validate(f.contractOptions()),/Unauthorized/);});
+test('rejects unrelated untracked source',t=>{const f=fixture(t);f.state.added.push('unreviewed.js');assert.throws(()=>validate(f.contractOptions()),/Unauthorized/);});
+test('approved README is not a blanket documentation exemption',t=>{const f=fixture(t);f.write('README.md','unreviewed edit');assert.throws(()=>validate(f.contractOptions()),/content differs/);});
+test('approved path must retain its reviewed contents even when git reports no difference',t=>{const f=fixture(t);f.state.changed=[];f.write('README.md','baseline');assert.throws(()=>validate(f.contractOptions()),/content differs/);});
+test('pending contract cannot be activated',t=>{const f=fixture(t);assert.throws(()=>validate({...f.contractOptions(),reviewOnly:false}),/not approved/);});
+test('requires explicit trusted contract checksum',t=>{const f=fixture(t);assert.throws(()=>validate({...f.contractOptions(),expectedContractSha256:undefined}),/SHA-256 required/);});
+test('rejects contract tampering',t=>{const f=fixture(t),o=f.contractOptions();f.contract.changes=[];f.json(CONTRACT,f.contract);assert.throws(()=>validate(o),/Authority/);});
+test('rejects baseline substitution even with a rehashed review contract',t=>{const f=fixture(t);f.contract.baselineCommit='0'.repeat(40);f.json(CONTRACT,f.contract);assert.throws(()=>validate(f.contractOptions()),/authority/);});
+test('rejects historical tag object mutation',t=>{const f=fixture(t);f.state.refs=['refs/tags/v4.0.0 '+'3'.repeat(40)];assert.throws(()=>validate(f.contractOptions()),/Historical/);});
+test('rejects a moved protected main branch',t=>{const f=fixture(t);f.state.main='3'.repeat(40);assert.throws(()=>validate(f.contractOptions()),/Protected branch/);});
+test('rejects execution on main',t=>{const f=fixture(t);f.state.branch='main';assert.throws(()=>validate(f.contractOptions()),/Wrong development/);});
+test('rejects duplicate change entries',t=>{const f=fixture(t);f.contract.changes.push(f.contract.changes[0]);f.json(CONTRACT,f.contract);assert.throws(()=>validate(f.contractOptions()),/duplicate/);});
+test('rejects directory-style wildcard exemption',t=>{const f=fixture(t);f.contract.changes[0].path='apps/mobile/*';f.json(CONTRACT,f.contract);assert.throws(()=>validate(f.contractOptions()));});

@@ -1,0 +1,31 @@
+'use strict';
+const os=require('node:os'),assert=require('node:assert/strict');
+const c=require('../mobile-development-validation-core.cjs');
+const {HISTORICAL_PROFILE,REGISTRY}=require('../check-mobile-development-gradle.cjs');
+const {CONTRACT}=require('../check-mobile-development-preservation.cjs');
+function fixture(t){
+ const root=c.fs.mkdtempSync(c.path.join(os.tmpdir(),'orion-review-fixture-'));
+ t.after(()=>{const checked=c.fs.realpathSync(root);assert.ok(checked.startsWith(c.fs.realpathSync(os.tmpdir())+c.path.sep+'orion-review-fixture-'));c.fs.rmSync(checked,{recursive:true,force:true});});
+ const write=(p,bytes)=>{const f=c.path.join(root,p);c.fs.mkdirSync(c.path.dirname(f),{recursive:true});c.fs.writeFileSync(f,bytes);};
+ const json=(p,v)=>write(p,JSON.stringify(v,null,2)+'\n');
+ write('apps/mobile/package.json',JSON.stringify({version:'4.0.0'}));
+ write('apps/mobile/app.json',JSON.stringify({expo:{version:'4.0.0',android:{versionCode:60,package:'com.okali.orion'},runtimeVersion:'orion-mobile-native-r2'}}));
+ const gradle=c.fs.readFileSync(c.path.resolve(__dirname,'../../config/fixtures/orion-mobile-4.0.0-infrastructure-development.gradle'),'utf8');
+ write('apps/mobile/android/app/build.gradle',gradle);write('config/fixtures/review.gradle',gradle);write('generator.js','reviewed generator\n');
+ const directories=['apps/mobile/plugins','apps/mobile/scripts','apps/mobile/assets'];for(const d of directories)c.fs.mkdirSync(c.path.join(root,d),{recursive:true});
+ const manifest={schemaVersion:1,sourceBaseline:c.BASE,generation:{command:'unit fixture'},node:{version:process.version,executableSha256:c.sha(c.fs.readFileSync(process.execPath))},files:['apps/mobile/package.json','apps/mobile/app.json','generator.js'].map(p=>({path:p,sha256:c.sha(c.fs.readFileSync(c.path.join(root,p)))})),absent:['.env'],directories};
+ const input='config/fixtures/inputs.json';json(input,manifest);
+ const registry={schemaVersion:1,historicalProduction:{...HISTORICAL_PROFILE},developmentProfiles:[{id:'mobile-4.0.0-infrastructure-a-d',purpose:'development-validation',approval:'owner-review-pending',identity:{mobileVersion:'4.0.0',androidVersionCode:60,androidPackage:'com.okali.orion',runtimeVersion:'orion-mobile-native-r2',expectedSignerSha256:c.SIGNER,artifactName:'orion-mobile-v4.0.0.apk',preservationCommit:c.BASE},fixture:'config/fixtures/review.gradle',fixtureSha256:c.sha(Buffer.from(gradle)),inputs:input,inputsSha256:c.sha(c.fs.readFileSync(c.path.join(root,input)))}]};
+ json(REGISTRY,registry);
+ write('README.md','approved documentation\n');
+ const before='1'.repeat(40),refs=['refs/tags/v4.0.0 '+'2'.repeat(40)];
+ const contract={schemaVersion:1,purpose:'development-preservation',approval:'owner-review-pending',baselineCommit:c.BASE,developmentBranch:'codex/orion-mobile-v4.1.0',authorityFile:CONTRACT,changes:[{path:'README.md',kind:'modify',beforeBlob:before,afterCanonicalSha256:c.sha(Buffer.from('approved documentation\n')),approval:'already-owner-approved'}],historicalRefs:refs,protectedRefs:[{ref:'refs/heads/main',object:c.BASE}]};
+ json(CONTRACT,contract);
+ const state={changed:['README.md'],added:[],refs,branch:'codex/orion-mobile-v4.1.0',main:c.BASE};
+ const oldGit=c.git,oldBaseline=c.baseline;
+ c.baseline=()=>assert.equal(c.git(root,['rev-parse','v4.0.0^{commit}']),c.BASE);
+ c.git=(r,args)=>{if(args[0]==='branch')return state.branch;if(args[0]==='rev-parse')return args.at(-1)==='refs/heads/main'?state.main:c.BASE;if(args[0]==='ls-tree'&&args.includes('--name-only'))return 'README.md\napps/desktop/package.json';if(args[0]==='ls-tree')return '100644 blob '+before+'\t'+args.at(-1);if(args[0]==='diff')return state.changed.join('\n');if(args[0]==='ls-files')return state.added.join('\n');if(args[0]==='for-each-ref')return state.refs.join('\n');throw Error('Unexpected git operation');};
+ t.after(()=>{c.git=oldGit;c.baseline=oldBaseline;});
+ return {root,write,json,registry,manifest,contract,state,registryOptions:()=>({workspaceRoot:root,expectedRegistrySha256:c.sha(c.fs.readFileSync(c.path.join(root,REGISTRY))),profileId:registry.developmentProfiles[0].id,purpose:'development-validation',reviewOnly:true}),contractOptions:()=>({workspaceRoot:root,expectedContractSha256:c.sha(c.fs.readFileSync(c.path.join(root,CONTRACT))),reviewOnly:true})};
+}
+module.exports={fixture};

@@ -1,0 +1,305 @@
+{
+  "schemaVersion": 1,
+  "purpose": "development-preservation",
+  "approval": "owner-approved",
+  "baselineCommit": "5d5e893f8be951020015aa658dfe1a67d8c0b16d",
+  "developmentBranch": "codex/orion-mobile-v4.1.0",
+  "authorityFile": "config/orion-mobile-v4.1-development-preservation-v1.json",
+  "changes": [
+    {
+      "path": "apps/mobile/plugins/orion-cinema-webview-native-tests/OrionDownloadYtDlpGatewayTest.kt",
+      "kind": "modify",
+      "beforeBlob": "8ab605aa661bfae6705f4433f099238c540c44bb",
+      "afterCanonicalSha256": "8b83e49d71284452844d4c8f5ab57eb8289d1638d882f7a1b8275c29b93566c1",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/plugins/withOrionCinemaWebView.js",
+      "kind": "modify",
+      "beforeBlob": "e7d3282bd280e05dac10f43bb6a9e0177fef4a7a",
+      "afterCanonicalSha256": "a2329e0e743d516c5f24a7530eca99539020d8bb06f722fb80a131ce2aff85af",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/nativeSourceManifestCoverage.test.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "44c43bcfa20a4656f3313b750e4008a7867ed992e014f34482136b2a1b8e23f5",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/p321DownloadUxControlHardening.test.cjs",
+      "kind": "modify",
+      "beforeBlob": "5bf7d2384074ed1805a18fc66d947de07859077d",
+      "afterCanonicalSha256": "f3cabe350f643364921e8b71e463ed3f1e35c7f870898226a208d9238f356a02",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/p321InterruptedTransferIntegrity.test.cjs",
+      "kind": "modify",
+      "beforeBlob": "9440acf4f99f809889e8678be35ead79b587139a",
+      "afterCanonicalSha256": "6cae76aaf597942f5ec84777c49db2c9fa05e0289a22aa42624757fdc9bda74b",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/p321RecoveryRetryHardening.test.cjs",
+      "kind": "modify",
+      "beforeBlob": "c97af8c8253a4fae57d7805508a03d16240068a4",
+      "afterCanonicalSha256": "9710884de8bfe05ee040665d45886a03e5a3ffb61d4f0b0e16d2bd9f901e4a5f",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/p321TrueResumeHardening.test.cjs",
+      "kind": "modify",
+      "beforeBlob": "35a39c641177b89e2de1f3932abbc21b4e9ac45b",
+      "afterCanonicalSha256": "b2e2559ffa55918487480e5d79af1daea325d8be63228851f0dc318389d64dea",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "config/fixtures/orion-mobile-4.0.0-infrastructure-development.gradle",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "ee25b27790552a5b9d25e27b6dff1d7c874921ef1bf07ddbddaf9b73476d3815",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "config/fixtures/orion-mobile-development-generation-inputs-v1.json",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "0c2929755a3825243e45ac7a4a5cf42f58b210b5d835f2dabd9201893fc96c81",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "config/orion-mobile-generated-gradle-profiles-v1.json",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "9bb5dbac2611094a582c17b75b26723204dc16db9fefeb105059100ea4f04457",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "config/orion-mobile-release-map-v1.json",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "3356dc50ea8d6f3b1c4617df31e2bef29439319666294c03505b58dae983076f",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "docs/mobile-v4.1-infrastructure-checkpoint.md",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "8d091bd7a48a3cfb7cbc18923bf5f48ef1e025d9538c5f809215027bc71023ae",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "package.json",
+      "kind": "modify",
+      "beforeBlob": "e8688877ad42d60e4e174c038cf820b01f792713",
+      "afterCanonicalSha256": "d6c0bff119f21c97b6f9c97391d335e3ea46b3ea053e0304ec5838840c1db118",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "README.md",
+      "kind": "modify",
+      "beforeBlob": "f36ed1b36dc8c452b514ff15e11d6a257e1976a1",
+      "afterCanonicalSha256": "dcf3caf88a02c3e98223839bcab7cd90feb6fcf4770f5cfb20722cf8045db532",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "scripts/check-mobile-development-gradle.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "435d195f4b9ec0abcd2dbf818275056db6573b705166c5421bef243dbe09ac41",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "scripts/check-mobile-development-preservation.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "2d40a7066e165366e24e00667128c5006f721c52f391c74c84e1758fcf07416a",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "scripts/check-mobile-release-map.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "4dfecfc9fc72323d03a1e9d100698a4c7c690d445e7046ab59eb51e9b6d44ec6",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "scripts/mobile-development-validation-core.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "4c309df3eafd186044a286616163421f16fe1d15bd19bb7a1380d0197ada8f27",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "scripts/review-mobile-development.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "4a195c1fa01d2cd1712c2117c755a0830deb2ae39e0a3e58ac169dbc781af6c2",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "scripts/tests/development-validation-fixtures.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "894e250d3d009086f7ef8458c8e5c85eb582965b6ace52b3d87d91874b7d9f3c",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "scripts/tests/mobile-development-gradle.test.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "c7f9fde47df732877083b527eb5d872aa42609abc5a1b27d78c686ea65b8a039",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "scripts/tests/mobile-development-preservation.test.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "aec12d70137be232c52f04ef07c2093a71339521dfa6252fc8c63f23b954992e",
+      "approval": "already-owner-approved"
+    }
+  ],
+  "historicalRefs": [
+    "refs/tags/checkpoint-orion-v3.1.0 434e10592c025b1bc73e381b550777ba626eb413",
+    "refs/tags/mobile-p8.4-c1-checkpoint 2ec5b98c7993b8aee7a21ad7c52b6208a8ae224d",
+    "refs/tags/orion-v3-phase5-continuity-accepted a703aeb92e2a18f63b32b3c41e01d0659c7cc52d",
+    "refs/tags/post-p7-phase8-ready-2026-08-16 ecdf170ccc47de97c8a99f3e7a68dc98d3377c8f",
+    "refs/tags/v1.0.0 82976dbaaedafdeb47c24b413056c6ef530aaaae",
+    "refs/tags/v1.0.1 302287175ccc6ffdc6344973efcda8c3f83b119d",
+    "refs/tags/v1.0.10 99e71a5b4e0e2dac650d7cb235a652633852d290",
+    "refs/tags/v1.0.2 0b7e1eb4d6418e283e7cae18f345be850431da8c",
+    "refs/tags/v1.0.3 f640860275483603262c62a19c535e8b79f05bc5",
+    "refs/tags/v1.0.4 6d116a029217de76814e1fdfaa1d27c86492b950",
+    "refs/tags/v1.0.5 b854494f046035e4cd6d88826b71c075c65edb90",
+    "refs/tags/v1.0.6 d686da823563dbd183d28f7172a5401cd247bcb9",
+    "refs/tags/v1.0.7 8a981dec779b1bfaeed13e8db3e8bdee663f4ed2",
+    "refs/tags/v1.0.9 c738cfd70ce177b25c0b3cc4a06b161add3a63b7",
+    "refs/tags/v1.1.0 e91dcb849fabb670b36e26a43d419d9fb426a1d7",
+    "refs/tags/v1.1.1 742fe1b5138ffd36ea2d224e35acdfd6fc14d8f7",
+    "refs/tags/v1.2.0 20b725b78451c087f071d7738cf759e1c0540015",
+    "refs/tags/v1.2.1 339c38bc907ec2a1fc8eaf3b8efbe8f93ed9e5b2",
+    "refs/tags/v2.0.0 b09425813c01585b24074ad5da7cbcd6fed91e38",
+    "refs/tags/v2.0.1 63158f3af2f7e5dc7d365e22a26d7e16367fa420",
+    "refs/tags/v2.1.0 8b34a52680e88b63d8b5b44dfeda1ec50f2e4eea",
+    "refs/tags/v2.1.1 3b94d6e391bd6141b6777c7708a4147b1deed459",
+    "refs/tags/v2.1.10 919f7b31f23bdc2a14201a8e044ca6f0bec413d3",
+    "refs/tags/v2.1.11 3a84de3e7383551e5f86d16be6c48c9cddb237ce",
+    "refs/tags/v2.1.12 684c2903cb1675f212a63b4ef0ed64a38a34e58c",
+    "refs/tags/v2.1.13 5d7aec10b9b73cdedb0cde6f00dd6a60c5227fdf",
+    "refs/tags/v2.1.14 a65ec8e077daacd57a3ce6879e3058dcd04e5f0c",
+    "refs/tags/v2.1.15 a65ec8e077daacd57a3ce6879e3058dcd04e5f0c",
+    "refs/tags/v2.1.16 a65ec8e077daacd57a3ce6879e3058dcd04e5f0c",
+    "refs/tags/v2.1.17 e2d849c4734b98af0aa79e1b5fb378256f9bc703",
+    "refs/tags/v2.1.18 e2d849c4734b98af0aa79e1b5fb378256f9bc703",
+    "refs/tags/v2.1.19 e2d849c4734b98af0aa79e1b5fb378256f9bc703",
+    "refs/tags/v2.1.2 d8e49c4c58b8437b5497f02338a43d3556c4d103",
+    "refs/tags/v2.1.20 e2d849c4734b98af0aa79e1b5fb378256f9bc703",
+    "refs/tags/v2.1.21 e2d849c4734b98af0aa79e1b5fb378256f9bc703",
+    "refs/tags/v2.1.22 e2d849c4734b98af0aa79e1b5fb378256f9bc703",
+    "refs/tags/v2.1.23 e2d849c4734b98af0aa79e1b5fb378256f9bc703",
+    "refs/tags/v2.1.24 e2d849c4734b98af0aa79e1b5fb378256f9bc703",
+    "refs/tags/v2.1.25 1bdcab46263226c0a0cfc58015f92620f7f56ee8",
+    "refs/tags/v2.1.26 5bc78dd238b35680e901a2b0728b4b4e1aa5444b",
+    "refs/tags/v2.1.27 606b394bcaf5c5a55609ecc14f11e1cf05cc2d07",
+    "refs/tags/v2.1.28 2a0108eeac6fda93ee1f2e4f8aa0baf36332aa4b",
+    "refs/tags/v2.1.29 e84b16a0aa0654558e50f75fb7bc057731fea2df",
+    "refs/tags/v2.1.30 c15dc3343a717e11dc73d0defc7e99a8e75d2952",
+    "refs/tags/v2.1.31 339c2ff501fe3c9606f846cb1b164951f30d941f",
+    "refs/tags/v2.1.8 6eb183eb3c2a3620c570d49f54a37c4962c9bbff",
+    "refs/tags/v2.1.9 46706111929f84632faec2c38510eee8686278ef",
+    "refs/tags/v2.2.0 005e118614fbbb7cc2936d4ed4555e7e0c156556",
+    "refs/tags/v2.2.1 56a223a530f02778f7656f13bcfbe5198083722d",
+    "refs/tags/v2.2.10 a9cbacc905e2ab535577a70ed318418882b9997a",
+    "refs/tags/v2.2.11 66f647af1a5f77d4792fe82ea2d4662fc3f05351",
+    "refs/tags/v2.2.12 eb5cafc3d44e97152125713e575d60338112f339",
+    "refs/tags/v2.2.13 6d169cdea8e678091592da1a902c12e536a15ff5",
+    "refs/tags/v2.2.14 39832ccb7f859089bd9e9c782c107e9bae74e296",
+    "refs/tags/v2.2.15 0c594f1717a59f35fd6bad02593cedad6717235f",
+    "refs/tags/v2.2.16 913891fd6366cd9c83bc79d016f3776f09ea800b",
+    "refs/tags/v2.2.17 6d9c5a846051e622399daf4bb93abc78d4f8f35a",
+    "refs/tags/v2.2.18 0cc7e1ef6b6759c42b17233fcb380ef5022d2cc7",
+    "refs/tags/v2.2.19 43c7b5f356d31aa1aaea205bbd1a10eabf7bd261",
+    "refs/tags/v2.2.2 6dbff22ff86515021d268a9ee4c842c73473ef18",
+    "refs/tags/v2.2.20 37c64bf24eaab915b77edc122423d0188dc9f94f",
+    "refs/tags/v2.2.21 84853ec30b01fcff35b962ce6510d9a715cfd1d2",
+    "refs/tags/v2.2.3 7056aa321aee306a5c3c225f4071054f4d24ba2a",
+    "refs/tags/v2.2.4 818687c377e19b2161a2cff062451c53086d0364",
+    "refs/tags/v2.2.5 a942f82d873bd515875f6b7ba59c769616dee7fe",
+    "refs/tags/v2.2.6 82abd63181092351d3d4a125a68272d89aa8b897",
+    "refs/tags/v2.2.7 2e068e7854e2e47666f597c6b4a4618b0af5f4d8",
+    "refs/tags/v2.2.8 c76e36843fcb8fd7ae73f92896f76da0cfc1a8f2",
+    "refs/tags/v2.2.9 c5a375b89f94e7d4ee6f872b1174e8dedcfb1d36",
+    "refs/tags/v3.0.0 a179ba8515c06d474e84be3942c9f2807d6c2f97",
+    "refs/tags/v3.1.0 b16c1b35dd627a567b2ae182bfc6dc3bdb7dbbe7",
+    "refs/tags/v3.2.0 1c218c576d7eb355d67f96f618b07db67d4c2ba8",
+    "refs/tags/v4.0.0 39cea2b56825efe15487ec10d7879c49fb51676e"
+  ],
+  "protectedRefs": [
+    {
+      "ref": "refs/heads/main",
+      "object": "5d5e893f8be951020015aa658dfe1a67d8c0b16d"
+    },
+    {
+      "ref": "refs/remotes/origin/HEAD",
+      "object": "5d5e893f8be951020015aa658dfe1a67d8c0b16d"
+    },
+    {
+      "ref": "refs/remotes/origin/checkpoint/orion-v3.1.0-release",
+      "object": "d98f0c3bd09d292ed0e706730083472154aeec18"
+    },
+    {
+      "ref": "refs/remotes/origin/codex/orion-v1.0.9",
+      "object": "19e777e6da130bc6e47b547a72a903b21e4d554e"
+    },
+    {
+      "ref": "refs/remotes/origin/codex/orion-v3",
+      "object": "ec65bec235087cba72ed6388b8fa4be1c09289ef"
+    },
+    {
+      "ref": "refs/remotes/origin/codex/orion-v3-p10-mobile-downloads-offline-library",
+      "object": "fa2dfee005c8e35bd98c3f8d9bccc514af6490d1"
+    },
+    {
+      "ref": "refs/remotes/origin/codex/orion-v3-p11-reliable-connect",
+      "object": "1c218c576d7eb355d67f96f618b07db67d4c2ba8"
+    },
+    {
+      "ref": "refs/remotes/origin/codex/orion-v3-p8.1-candidate-1",
+      "object": "27f71d111a6f64ed84943261b1626989c398b4c4"
+    },
+    {
+      "ref": "refs/remotes/origin/codex/orion-v3-p9-distribution-updates",
+      "object": "e24edf23a119d44a95e98579a9aea793a02f5d5b"
+    },
+    {
+      "ref": "refs/remotes/origin/codex/orion-v3.2.1-anilink-qualified",
+      "object": "c12b0c06404406a7e70290b736ed44100dbbc157"
+    },
+    {
+      "ref": "refs/remotes/origin/codex/orion-v3.2.1-anime-provider-extension",
+      "object": "b7a0fc9686cef3336129a98ac7a7d656664e3444"
+    },
+    {
+      "ref": "refs/remotes/origin/codex/orion-v3.2.1-mobile-final-repair",
+      "object": "a25e2e30a92b3d974254bb7e523f7f40a5b21907"
+    },
+    {
+      "ref": "refs/remotes/origin/codex/orion-v3.2.1-player-entry-polish",
+      "object": "32ea4f75d8ff64975f44507672ad07db477efaf9"
+    },
+    {
+      "ref": "refs/remotes/origin/codex/orion-v4-mobile-glimpse",
+      "object": "5d5e893f8be951020015aa658dfe1a67d8c0b16d"
+    },
+    {
+      "ref": "refs/remotes/origin/main",
+      "object": "5d5e893f8be951020015aa658dfe1a67d8c0b16d"
+    },
+    {
+      "ref": "refs/remotes/origin/waven/v1",
+      "object": "0cc112ffa9b39ae23c5fa365b109e34dd5bb83d2"
+    }
+  ]
+}
