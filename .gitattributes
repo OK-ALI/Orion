@@ -1,0 +1,11 @@
+config/fixtures/orion-mobile-4.0.0-infrastructure-development.gradle text eol=lf
+config/fixtures/orion-mobile-development-generation-inputs-v1.json text eol=lf
+config/orion-mobile-generated-gradle-profiles-v1.json text eol=lf
+config/orion-mobile-v4.1-development-preservation-v1.json text eol=lf
+scripts/check-mobile-development-gradle.cjs text eol=lf
+scripts/check-mobile-development-preservation.cjs text eol=lf
+scripts/mobile-development-validation-core.cjs text eol=lf
+scripts/review-mobile-development.cjs text eol=lf
+scripts/tests/development-validation-fixtures.cjs text eol=lf
+scripts/tests/mobile-development-gradle.test.cjs text eol=lf
+scripts/tests/mobile-development-preservation.test.cjs text eol=lf

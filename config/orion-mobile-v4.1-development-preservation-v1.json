@@ -159,6 +159,13 @@
       "beforeBlob": null,
       "afterCanonicalSha256": "aec12d70137be232c52f04ef07c2093a71339521dfa6252fc8c63f23b954992e",
       "approval": "already-owner-approved"
+    },
+    {
+      "path": ".gitattributes",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "be598949d5117d85a0938cc662e159b959b9c54e92dd67f89adf773fe093f8fe",
+      "approval": "already-owner-approved"
     }
   ],
   "historicalRefs": [
