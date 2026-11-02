@@ -6,6 +6,7 @@
   "author": "Orion",
   "license": "GPL-3.0",
   "scripts": {
+    "release:check-mobile-map": "node scripts/check-mobile-release-map.cjs",
     "release:check-map": "node scripts/check-release-map.cjs",
     "release:manifests": "node scripts/create-release-manifests.cjs",
     "release:provider-status": "node scripts/create-provider-status.cjs",

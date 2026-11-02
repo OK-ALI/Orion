@@ -6,13 +6,39 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.URL
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.Before
+import org.junit.After
+import org.junit.Assert.assertNotNull
+import org.junit.runner.RunWith
+import org.json.JSONObject
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], manifest = Config.NONE)
 class OrionDownloadYtDlpGatewayTest {
+  @Before fun prepareIsolatedJobStore() {
+    val context = RuntimeEnvironment.getApplication()
+    assertTrue(context.getSharedPreferences("orion_download_jobs_v1", 0).edit().clear().commit())
+    OrionDownloadJobStore.initialize(context)
+  }
+
+  @After fun clearIsolatedJobStore() {
+    assertTrue(RuntimeEnvironment.getApplication().getSharedPreferences("orion_download_jobs_v1", 0).edit().clear().commit())
+  }
+
+  @Test fun missingJobRemainsDenied() {
+    assertEquals("cancel", OrionDownloadJobStore.control("unknown-test-job"))
+  }
+
   @Test
   fun servesOpaqueLoopbackManifestForGetAndHead() {
     val jobId =
@@ -290,6 +316,18 @@ class OrionDownloadYtDlpGatewayTest {
           ),
       )
 
+    val media = JSONObject().put("schemaVersion", 1).put("id", 1)
+      .put("mediaType", "movie").put("libraryKind", "movie").put("title", "Gateway fixture")
+    val storage = JSONObject().put("mode", "orion-library").put("displayName", "Isolated JVM fixture")
+      .put("writable", true).put("persistedPermission", true)
+    val job = JSONObject().put("schemaVersion", 1).put("jobId", bound.jobId)
+      .put("candidateId", bound.candidateId).put("media", media)
+      .put("destination", "orion-library").put("storageTarget", storage)
+    assertNotNull(OrionDownloadJobStore.createJob(JSONObject().put("job", job), bound))
+    assertEquals("run", OrionDownloadJobStore.control(bound.jobId))
+
+    val firstProgress = CountDownLatch(1)
+    val secondProgress = CountDownLatch(1)
     val measured = Collections.synchronizedList(mutableListOf<Triple<Long, Int, Int>>())
     val session =
       requireNotNull(
@@ -297,6 +335,8 @@ class OrionDownloadYtDlpGatewayTest {
           bound.jobId,
           onMediaProgress = { bytes, completed, total ->
             measured.add(Triple(bytes, completed, total))
+            if (completed == 1) firstProgress.countDown()
+            if (completed == 2) secondProgress.countDown()
           },
         ),
       )
@@ -390,6 +430,7 @@ class OrionDownloadYtDlpGatewayTest {
 
       connection.disconnect()
 
+      assertTrue("First provider progress callback timed out", firstProgress.await(5, TimeUnit.SECONDS))
       assertEquals(listOf(Triple(payload.size.toLong(), 1, 2)), measured.toList())
       for (routeUrl in listOf(secondGatewayUrl, gatewayUrl)) {
         val next = URL(routeUrl).openConnection() as HttpURLConnection
@@ -400,6 +441,7 @@ class OrionDownloadYtDlpGatewayTest {
         assertEquals(payload.toList(), next.inputStream.use { it.readBytes() }.toList())
         next.disconnect()
       }
+      assertTrue("Second provider progress callback timed out", secondProgress.await(5, TimeUnit.SECONDS))
       assertEquals(
         listOf(Triple(payload.size.toLong(), 1, 2), Triple(payload.size.toLong() * 2, 2, 2)),
         measured.toList(),

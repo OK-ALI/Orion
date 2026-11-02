@@ -16,6 +16,7 @@ const transfer = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTr
 const list = read('src', 'features', 'downloads', 'DownloadActivityList.tsx');
 
 function between(source, start, end) {
+  source = source.replace(/\r\n/g, '\n');
   const from = source.indexOf(start);
   assert.ok(from >= 0, `missing start marker: ${start}`);
   const to = source.indexOf(end, from + start.length);

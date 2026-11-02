@@ -17,6 +17,7 @@ const telemetry = read('src', 'features', 'downloads', 'downloadTelemetry.ts');
 const modal = read('src', 'components', 'DownloadModal.tsx');
 
 function between(source, start, end) {
+  source = source.replace(/\r\n/g, '\n');
   const from = source.indexOf(start);
   assert.ok(from >= 0, `missing start marker: ${start}`);
   const to = source.indexOf(end, from + start.length);

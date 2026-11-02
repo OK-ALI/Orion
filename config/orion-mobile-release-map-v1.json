@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "platform": "android",
+  "mobileVersion": "4.0.0",
+  "androidVersionCode": 60,
+  "androidPackage": "com.okali.orion",
+  "mobileRuntimeVersion": "orion-mobile-native-r2",
+  "gitTag": "v4.0.0",
+  "artifactName": "orion-mobile-v4.0.0.apk",
+  "expectedSignerSha256": "4422ec4bc16b1c83c914a0ad1b688be8f7c158ff7f99bcd223a909966ac7a1bd",
+  "preservationBaseline": {
+    "tag": "v4.0.0",
+    "commit": "5d5e893f8be951020015aa658dfe1a67d8c0b16d"
+  }
+}

@@ -30,12 +30,14 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionCinemaWebViewManager.kt',
   'OrionCinemaWebViewManagerDelegate.java',
   'OrionCinemaWebViewPackage.kt',
+  'OrionAnimeIdentityModule.kt',
   'OrionPlayerSystemUiModule.kt',
   'OrionPlayerActivity.kt',
   'OrionMediaPlayerSeekPolicy.kt',
   'OrionPlayerSubtitleParser.kt',
   'OrionDownloadCaptureModule.kt',
   'OrionDownloadRequestContextBroker.kt',
+  'OrionActiveAuthorityLeasePolicy.kt',
   'OrionDownloadAuthorizedHttp.kt',
   'OrionDownloadEngineModule.kt',
   'OrionDownloadForegroundService.kt',
@@ -44,6 +46,7 @@ const CINEMA_NATIVE_FILES = Object.freeze([
   'OrionDownloadExecutionFence.kt',
   'OrionDownloadFinalizationManifest.kt',
   'OrionDownloadJobStore.kt',
+  'OrionFreshRebindNumberPolicy.kt',
   'OrionDownloadNotificationContract.kt',
   'OrionDownloadNotifications.kt',
   'OrionDownloadOwnershipPolicy.kt',
@@ -76,6 +79,8 @@ const CINEMA_NATIVE_FILES = Object.freeze([
 ]);
 const CINEMA_NATIVE_TEST_FILES = Object.freeze([
   'OrionWrapperSourceLoadTest.kt',
+  'OrionActiveAuthorityLeasePolicyTest.kt',
+  'OrionFreshRebindNumberPolicyTest.kt',
   'OrionFinalizedPlayerPolicyTest.kt',
   'OrionPlayerSubtitleParserTest.kt',
   'OrionMediaPlayerSeekPolicyTest.kt',
@@ -198,6 +203,13 @@ function withDownloadEngineGradle(config) {
       nextConfig.modResults.contents = nextConfig.modResults.contents.replace(
         /dependencies\s*\{/,
         (match) => `${match}\n    // ORION_P10_PORTABLE_CADENCE_TEST_DEPENDENCY\n    ${testMarker}`,
+      );
+    }
+    const robolectric = 'testImplementation "org.robolectric:robolectric:4.15.1"';
+    if (!nextConfig.modResults.contents.includes(robolectric)) {
+      nextConfig.modResults.contents = nextConfig.modResults.contents.replace(
+        /dependencies\s*\{/,
+        (match) => `${match}\n    // ORION_GATEWAY_JVM_ANDROID_TEST_RUNTIME\n    ${robolectric}`,
       );
     }
     return nextConfig;

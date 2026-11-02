@@ -13,6 +13,7 @@ const runtime = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadYtD
 const transfer = read('plugins', 'orion-cinema-webview-native', 'OrionDownloadTransferRuntime.kt');
 
 function between(source, start, end) {
+  source = source.replace(/\r\n/g, '\n');
   const from = source.indexOf(start);
   assert.ok(from >= 0, `missing start marker: ${start}`);
   const to = source.indexOf(end, from + start.length);
