@@ -93,6 +93,7 @@ function createHarness(productState = 'online', recoveryEpoch = 0) {
     '../../services/listPerformance': { getGridRenderBudget: () => ({}), getRailRenderBudget: () => ({}) },
     './discoverStyles': { createDiscoverStyles: () => ({}) },
     './CinemaPortals': { CinemaPortals: 'CinemaPortals' },
+    './DiscoverGuide': { DiscoverGuide: 'DiscoverGuide' },
     './DiscoverFilterModal': { DiscoverFilterModal: 'DiscoverFilterModal' },
     '../../components/MediaCard': { MediaCard: 'MediaCard' },
     '../../components/PersonCard': { PersonCard: 'PersonCard' },

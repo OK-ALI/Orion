@@ -166,6 +166,55 @@
       "beforeBlob": null,
       "afterCanonicalSha256": "be598949d5117d85a0938cc662e159b959b9c54e92dd67f89adf773fe093f8fe",
       "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/components/guide/OrionGuide.tsx",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "c97dee5dc7e00f25cb5c67d7b3f2114814dafaaacd0f74219fb977f902c429ac",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/components/guide/OrionGuideSheet.tsx",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "867ad5a6064ef96c49aee78095ffe533916637724b01610c7fc9c70762d28a85",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/discover/DiscoverGuide.tsx",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "5792bab397a84f5445538be57eb0580515dc2a4bb009ae18ae5022a6fc7c1278",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/discover/DiscoverScreen.tsx",
+      "kind": "modify",
+      "beforeBlob": "b127ce1d3e003edcb168a74a30ea0c1fccd1e226",
+      "afterCanonicalSha256": "dea2ca43e5d890294fa332a61825a754153e25fe2d0e0511bc6321c0121ff0c4",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/discoverGuide.test.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "68e79ce58ca4c6d5a651108012f7772d9412e586e3d8b5c0f576a84d8d693910",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/helpers/guideDomHarness.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "3439aa1fa2d0b6cb18474c71856ddb6fddfd3874900cee381e336577cdd33fe0",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/p10a2DiscoverOfflineExperience.test.cjs",
+      "kind": "modify",
+      "beforeBlob": "5bec99a71655fa0398871c21bcb0c5fd92fe2deb",
+      "afterCanonicalSha256": "f25579217a48c5763fcba0897abee34a8b0c61772a70b8bbd1ba9270f949bba6",
+      "approval": "already-owner-approved"
     }
   ],
   "historicalRefs": [

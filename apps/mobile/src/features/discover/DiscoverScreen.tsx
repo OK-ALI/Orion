@@ -8,6 +8,7 @@ import { TmdbMediaItem, TmdbPaginatedResponse } from '@orion/shared/types';
 import { MediaCard } from '../../components/MediaCard';
 import { PersonCard } from '../../components/PersonCard';
 import { MobilePageHeader } from '../../components/MobilePageHeader';
+import { DiscoverGuide } from './DiscoverGuide';
 import { useOrionTheme } from '../../context/ThemeContext';
 import { resolveMotionPolicy } from '../../services/motionPolicy';
 import { useSearchArrivalAnimation } from './useSearchArrivalAnimation';
@@ -376,6 +377,7 @@ export default function DiscoverScreen() {
         title="Discover"
         subtitle="Search, filter and explore every corner of Orion."
         reserveFloatingTriggerInLandscape
+        trailing={<DiscoverGuide />}
       />
       <Animated.View
         style={[
