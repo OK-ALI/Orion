@@ -1,9 +1,12 @@
 'use strict';
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 const { loader, read } = require('./helpers/animeModules.cjs');
 const { hookHarness } = require('./helpers/playerHookHarness.cjs');
+const { withHistoricalGlimpseReplay } = require('./helpers/runHistoricalGlimpsePreservation.cjs');
 const prefix = 'apps/mobile/src/features/glimpse/';
 const load = loader({
   '@orion/shared/api': { isAnimeContent: item => item.genre_ids?.includes(16) && item.original_language === 'ja' },
@@ -146,7 +149,36 @@ test('feed hook ignores late responses after blur and resumes the interrupted in
   harness.dispose();
 });
 test('all locked source remains preserved except the exact two gated navigation additions', () => {
-  const result = require('../scripts/check-glimpse-preservation.cjs').checkPreservation();
+  const result = withHistoricalGlimpseReplay(({ checkout, gradle, checkPreservation }) => {
+    const original = checkPreservation();
+    const unknown = path.join(checkout, 'glimpse-preservation-probe.txt');
+    fs.writeFileSync(unknown, 'Unexpected historical addition\n', { flag: 'wx' });
+    assert.throws(checkPreservation, /Out-of-scope untracked file: glimpse-preservation-probe\.txt/);
+    fs.unlinkSync(unknown);
+
+    const locked = path.join(checkout, 'apps/mobile/src/components/MediaCard.tsx');
+    const baselineSource = fs.readFileSync(locked);
+    assert.match(baselineSource.toString('utf8'), /\n/);
+    assert.doesNotMatch(baselineSource.toString('utf8'), /\r\n/);
+    fs.appendFileSync(locked, '\n// Unexpected historical source edit\n');
+    assert.throws(checkPreservation, /Locked file changed: apps\/mobile\/src\/components\/MediaCard\.tsx/);
+    fs.writeFileSync(locked, baselineSource);
+
+    const baselineGradle = fs.readFileSync(gradle);
+    fs.appendFileSync(gradle, '\n// Unexpected historical Gradle edit\n');
+    assert.throws(checkPreservation, /Historical Gradle fingerprint mismatch/);
+    fs.unlinkSync(gradle);
+    assert.throws(checkPreservation, /Cannot read historical Gradle input/);
+    fs.writeFileSync(gradle, baselineGradle.toString('utf8').replace(/\r?\n/g, '\r\n'));
+    assert.deepEqual(checkPreservation(), original);
+    return original;
+  });
+  const crlfResult = withHistoricalGlimpseReplay(({ checkout, checkPreservation }) => {
+    const source = fs.readFileSync(path.join(checkout, 'apps/mobile/src/components/MediaCard.tsx'), 'utf8');
+    assert.match(source, /\r\n/);
+    return checkPreservation();
+  }, { autocrlf: true });
+  assert.deepEqual(crlfResult, result);
   assert.equal(result.authority, '32ea4f75d8ff64975f44507672ad07db477efaf9');
   assert.equal(result.navigationAdditions, 2);
   assert.ok(result.frozenBaselineFiles > 100);

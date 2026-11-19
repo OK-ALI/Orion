@@ -250,6 +250,27 @@
       "beforeBlob": null,
       "afterCanonicalSha256": "5f87e9fccc382114aae266afeee4af45dfb4f5a68576eee94ca1b93a775ff630",
       "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/glimpseFoundation.test.cjs",
+      "kind": "modify",
+      "beforeBlob": "732b992b356e52e0216b34ae0bc1d7119449302c",
+      "afterCanonicalSha256": "dec4c694c4086f6159eae1dbbf72cb24f767a5dfc0baff8efe8473e6a87fd77e",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/helpers/runHistoricalGlimpsePreservation.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "b299edbf15ef1348dd4e6919c71f354aca3cf1d1bfce165e2fda5e64cdf5422f",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "config/fixtures/orion-mobile-4.0.0-historical-release.gradle",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "0df69eef3e0aee7ff94596f7a37c25943fb978037b845ec855aa541c38d2b8ba",
+      "approval": "already-owner-approved"
     }
   ],
   "historicalRefs": [
