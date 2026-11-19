@@ -1,8 +1,16 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { Appearance, AppState, type ColorSchemeName } from "react-native";
 import type { MobileThemePreferences, OrionThemeId } from "@orion/shared/types";
-import { mmkvStorageAdapter } from "../services/storageAdapter";
+import { getMobileStorageHealth, mmkvStorageAdapter } from "../services/storageAdapter";
 import { useSystemReducedMotion } from "../hooks/useSystemReducedMotion";
+import {
+  isCustomAccent,
+  loadThemePreferences,
+  normalizeAccent,
+  resolveThemeSelection,
+  THEME_PREFERENCES_KEY,
+  type ThemePreferencesV2,
+} from "../features/appearance/appearancePreferences";
 
 export interface MobileThemeTokens {
   id: OrionThemeId;
@@ -25,12 +33,7 @@ export interface MobileThemeTokens {
   danger: string;
 }
 
-const THEME_STORAGE_KEY = "mobileThemePreferencesV1";
 const DEFAULT_CUSTOM_ACCENT = "#E50914";
-
-function normalizeAccent(value: string): string {
-  return value.toUpperCase();
-}
 
 function accentChannels(value: string): [number, number, number] {
   const normalized = normalizeAccent(value);
@@ -111,81 +114,115 @@ interface ThemeContextValue {
   setReducedMotion: (value: boolean) => void;
   setFollowSystem: (value: boolean) => void;
   setCustomAccent: (value: string | null) => boolean;
+  preferenceSaveError: string | null;
+  dismissPreferenceSaveError: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function loadPreferences(systemDark: boolean): MobileThemePreferences {
-  try {
-    const parsed = JSON.parse(mmkvStorageAdapter.get(THEME_STORAGE_KEY) || "{}");
-    if (parsed?.schemaVersion === 1 && THEMES[parsed.theme as OrionThemeId]) return parsed;
-  } catch {}
+function resolvePalette(themeId: OrionThemeId, customAccent: string | null): MobileThemeTokens {
+  const base = THEMES[themeId];
+  if (themeId !== "custom" || !customAccent) return base;
+  const accent = normalizeAccent(customAccent);
   return {
-    schemaVersion: 1,
-    theme: systemDark ? "midnight-premiere" : "projector-silver",
-    followSystem: true,
-    reducedMotion: false,
-    customAccent: null,
+    ...base,
+    accent,
+    accentSoft: accentSoft(accent),
+    onAccent: onAccent(accent),
   };
+}
+
+function normalizeSystemScheme(scheme: ColorSchemeName | null | undefined): "light" | "dark" {
+  return scheme === "light" ? "light" : "dark";
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemReducedMotion = useSystemReducedMotion();
-  const [systemScheme, setSystemScheme] = useState<ColorSchemeName>(() => Appearance.getColorScheme() || "dark");
-  const [preferences, setPreferences] = useState(() => loadPreferences(systemScheme !== "light"));
-  const persist = useCallback((next: MobileThemePreferences) => {
-    setPreferences(next);
-    mmkvStorageAdapter.set(THEME_STORAGE_KEY, JSON.stringify(next));
-  }, []);
-  const setTheme = useCallback((theme: OrionThemeId) => {
-    persist({ ...preferences, theme, followSystem: false });
-  }, [persist, preferences]);
-  const setReducedMotion = useCallback((reducedMotion: boolean) => {
-    persist({ ...preferences, reducedMotion });
-  }, [persist, preferences]);
-  const setFollowSystem = useCallback((followSystem: boolean) => {
-    const theme = followSystem
-      ? (systemScheme === "light" ? "projector-silver" : "midnight-premiere")
-      : preferences.theme;
-    persist({ ...preferences, followSystem, theme });
-  }, [persist, preferences, systemScheme]);
-  const setCustomAccent = useCallback((value: string | null) => {
-    if (value !== null && !/^#[0-9a-f]{6}$/i.test(value)) return false;
-    const customAccent = value === null ? null : normalizeAccent(value);
-    persist({ ...preferences, theme: "custom", followSystem: false, customAccent });
+  const [systemScheme, setSystemScheme] = useState(() => normalizeSystemScheme(Appearance.getColorScheme()));
+  const [initial] = useState(() => loadThemePreferences(
+    mmkvStorageAdapter,
+    systemScheme,
+    getMobileStorageHealth().state === "unavailable",
+  ));
+  const [applied, setApplied] = useState(initial.preferences);
+  const committed = useRef(applied);
+  const [preferenceSaveError, setPreferenceSaveError] = useState<string | null>(null);
+  const dismissPreferenceSaveError = useCallback(() => setPreferenceSaveError(null), []);
+
+  const persist = useCallback((patch: Partial<Omit<ThemePreferencesV2, "schemaVersion">>) => {
+    const previous = committed.current;
+    if (Object.entries(patch).every(([key, value]) => previous[key as keyof ThemePreferencesV2] === value)) {
+      return true;
+    }
+    if (initial.saveStatus !== "ready") {
+      const message = initial.saveStatus === "unsupported"
+        ? "These settings were saved by a different version of Orion."
+        : "Local storage is unavailable. Reopen Orion and try again.";
+      setPreferenceSaveError(message);
+      return false;
+    }
+
+    const next = { ...previous, ...patch };
+    try {
+      mmkvStorageAdapter.set(THEME_PREFERENCES_KEY, JSON.stringify(next));
+    } catch {
+      setPreferenceSaveError("Try again to save your changes.");
+      return false;
+    }
+
+    // Later updates can run before React renders the saved snapshot.
+    committed.current = next;
+    setApplied(next);
+    setPreferenceSaveError(null);
     return true;
-  }, [persist, preferences]);
+  }, [initial]);
+
+  const setTheme = useCallback((manualTheme: OrionThemeId) => {
+    persist({ manualTheme, followSystem: false });
+  }, [persist]);
+  const setReducedMotion = useCallback((reducedMotion: boolean) => {
+    persist({ reducedMotion });
+  }, [persist]);
+  const setFollowSystem = useCallback((followSystem: boolean) => {
+    persist({ followSystem });
+  }, [persist]);
+  const setCustomAccent = useCallback((value: string | null) => {
+    if (value !== null && !isCustomAccent(value)) return false;
+    const customAccent = value === null ? null : normalizeAccent(value);
+    return persist({ manualTheme: "custom", followSystem: false, customAccent });
+  }, [persist]);
+
   React.useEffect(() => {
     const appearance = Appearance.addChangeListener(({ colorScheme }) => {
-      setSystemScheme(colorScheme || "dark");
+      setSystemScheme(normalizeSystemScheme(colorScheme));
     });
     const appState = AppState.addEventListener("change", (state) => {
-      if (state === "active") setSystemScheme(Appearance.getColorScheme() || "dark");
+      if (state === "active") setSystemScheme(normalizeSystemScheme(Appearance.getColorScheme()));
     });
+    setSystemScheme(normalizeSystemScheme(Appearance.getColorScheme()));
     return () => {
       appearance.remove();
       appState.remove();
     };
   }, []);
-  React.useEffect(() => {
-    if (!preferences.followSystem) return;
-    const next = systemScheme === "light" ? "projector-silver" : "midnight-premiere";
-    if (preferences.theme !== next) persist({ ...preferences, theme: next });
-  }, [preferences, persist, systemScheme]);
-  const theme = useMemo(() => {
-    const base = THEMES[preferences.theme] || THEMES["midnight-premiere"];
-    if (preferences.theme !== "custom" || !preferences.customAccent) return base;
-    const accent = normalizeAccent(preferences.customAccent);
-    return {
-      ...base,
-      accent,
-      accentSoft: accentSoft(accent),
-      onAccent: onAccent(accent),
-    };
-  }, [preferences]);
+
+  const { customAccent, followSystem, reducedMotion } = applied;
+  const themeId = resolveThemeSelection(applied, systemScheme);
+  const theme = useMemo(() => resolvePalette(themeId, customAccent), [themeId, customAccent]);
+  // Existing consumers use this view of the effective selection. V2 alone is saved.
+  const preferences = useMemo<MobileThemePreferences>(() => ({
+    schemaVersion: 1,
+    theme: themeId,
+    customAccent,
+    followSystem,
+    reducedMotion,
+  }), [themeId, customAccent, followSystem, reducedMotion]);
 
   return (
-    <ThemeContext.Provider value={{ theme, preferences, systemReducedMotion, setTheme, setReducedMotion, setFollowSystem, setCustomAccent }}>
+    <ThemeContext.Provider value={{
+      theme, preferences, systemReducedMotion, setTheme, setReducedMotion, setFollowSystem, setCustomAccent,
+      preferenceSaveError, dismissPreferenceSaveError,
+    }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -82,7 +82,10 @@ function SettingsSection({ sectionId, title, description, children, theme, onLay
 }
 
 export default function MobileSettingsScreen() {
-  const { theme, preferences, systemReducedMotion, setTheme, setReducedMotion, setFollowSystem, setCustomAccent } = useOrionTheme();
+  const {
+    theme, preferences, systemReducedMotion, setTheme, setReducedMotion, setFollowSystem, setCustomAccent,
+    preferenceSaveError, dismissPreferenceSaveError,
+  } = useOrionTheme();
   const motion = resolveMotionPolicy(preferences.reducedMotion, systemReducedMotion);
   const { selection, resolvedProfile, setSelection } = usePerformanceProfile();
   const { isTablet } = useResponsiveLayout();
@@ -398,6 +401,18 @@ export default function MobileSettingsScreen() {
         onSelect={jumpToSection}
       />
 
+      {preferenceSaveError && (
+        <View style={[styles.saveNotice, { backgroundColor: theme.elevated, borderColor: theme.border }]}>
+          <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.noticeText, { color: theme.text }]}>
+            Changes weren’t saved. {preferenceSaveError}
+          </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Dismiss save message"
+            onPress={dismissPreferenceSaveError} style={styles.dismissSaveNotice}>
+            <Ionicons name="close" size={18} color={theme.textSecondary} />
+          </Pressable>
+        </View>
+      )}
+
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
@@ -456,4 +471,6 @@ const styles = StyleSheet.create({
   performanceNote: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: spacing[4] },
   notice: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: spacing[4], flexDirection: "row", alignItems: "flex-start", gap: spacing[3] },
   noticeText: { flex: 1, fontSize: fontSizes.xs, lineHeight: 19 },
+  saveNotice: { marginHorizontal: spacing[5], paddingLeft: spacing[3], paddingVertical: spacing[2], borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", alignItems: "center" },
+  dismissSaveNotice: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
 });

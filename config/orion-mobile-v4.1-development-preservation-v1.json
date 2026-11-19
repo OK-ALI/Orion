@@ -215,6 +215,41 @@
       "beforeBlob": "5bec99a71655fa0398871c21bcb0c5fd92fe2deb",
       "afterCanonicalSha256": "f25579217a48c5763fcba0897abee34a8b0c61772a70b8bbd1ba9270f949bba6",
       "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/app/(tabs)/settings.tsx",
+      "kind": "modify",
+      "beforeBlob": "254307a9d05fbe302be8a0afd37d25fca0aa21c6",
+      "afterCanonicalSha256": "76c82b48ea26adf803f59db99f5026fe1e378327b803bd0b2bcd6b2fb33032ca",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/context/ThemeContext.tsx",
+      "kind": "modify",
+      "beforeBlob": "01e842bf70698551d74982b92dfd16317852cfc9",
+      "afterCanonicalSha256": "54901f6d4c6508e4b99cf6fd99b39a11f11d2c365be84e4c6e6362a2f7379b4d",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/motionPolicy.test.cjs",
+      "kind": "modify",
+      "beforeBlob": "00f2b86c0603a28e78d8169011e16b0aa525cd18",
+      "afterCanonicalSha256": "10e62c64c8f8b37a1690a31f763e7a32898c5dfb67052284f9ae1da55a12686f",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/appearance/appearancePreferences.ts",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "e95ee5bbeecde14386307f540acde435aa2142fdc033bf4ad47f1bca8da4d4bb",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/appearancePreferences.test.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "5f87e9fccc382114aae266afeee4af45dfb4f5a68576eee94ca1b93a775ff630",
+      "approval": "already-owner-approved"
     }
   ],
   "historicalRefs": [

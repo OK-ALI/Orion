@@ -16,7 +16,9 @@ test('unresolved platform query suppresses decorative movement without changing 
   assert.equal(resolveMotionPolicy(false, null).reduceMotion, true);
   assert.equal(resolveMotionPolicy(false, false).reduceMotion, false);
   const theme = read('apps/mobile/src/context/ThemeContext.tsx');
-  assert.match(theme, /reducedMotion: false/); assert.match(theme, /persist\(\{ \.\.\.preferences, reducedMotion \}\)/);
+  const appearance = read('apps/mobile/src/features/appearance/appearancePreferences.ts');
+  assert.match(appearance, /reducedMotion: readBoolean\(v1\?\.reducedMotion, false\)/);
+  assert.match(theme, /persist\(\{ reducedMotion \}\)/);
   assert.match(theme, /systemReducedMotion = useSystemReducedMotion\(\)/);
   assert.doesNotMatch(theme, /persist\([^\n]*systemReducedMotion/);
 });
