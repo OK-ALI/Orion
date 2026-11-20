@@ -1,7 +1,11 @@
 import React from "react";
 import { resolveMotionPolicy } from "../../src/services/motionPolicy";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useNavigation } from "expo-router";
 import {
+  AccessibilityInfo,
+  AppState,
+  findNodeHandle,
+  Platform,
   ScrollView,
   View,
   Text,
@@ -81,10 +85,79 @@ function SettingsSection({ sectionId, title, description, children, theme, onLay
   );
 }
 
+type StudioFocusRequest = { settingsExposed: boolean; windowFocused: boolean };
+
+function RestoreStudioEntryFocus({ entry, pending, studioOpen }: {
+  entry: React.RefObject<View | null>;
+  pending: React.RefObject<StudioFocusRequest | null>;
+  studioOpen: boolean;
+}) {
+  const navigation = useNavigation();
+  const restore = React.useCallback(() => {
+    const request = pending.current;
+    if (!request) return;
+    const android = Platform.OS === "android";
+    if (!navigation.isFocused() || (android && AppState.currentState !== "active")) {
+      pending.current = null;
+      return;
+    }
+    if (!request.settingsExposed || (android && !request.windowFocused)) return;
+
+    const node = entry.current;
+    if (!node) return;
+    if (Platform.OS === "web") {
+      pending.current = null;
+      (node as unknown as { focus?: () => void }).focus?.();
+      return;
+    }
+    const handle = findNodeHandle(node);
+    if (handle === null) return;
+    pending.current = null;
+    AccessibilityInfo.setAccessibilityFocus(handle);
+  }, [entry, navigation, pending]);
+
+  React.useLayoutEffect(() => {
+    const cancel = () => { pending.current = null; };
+    const removeNavigationBlur = navigation.addListener("blur", cancel);
+    const subscriptions = Platform.OS === "android" ? [
+      AppState.addEventListener("focus", () => {
+        if (!pending.current) return;
+        pending.current.windowFocused = true;
+        restore();
+      }),
+      AppState.addEventListener("blur", () => {
+        // A blur can arrive from opening Studio. Invalidate a regained window if it loses focus again.
+        if (pending.current?.windowFocused) cancel();
+      }),
+      AppState.addEventListener("change", state => {
+        if (state !== "active") cancel();
+      }),
+    ] : [];
+    return () => {
+      removeNavigationBlur();
+      subscriptions.forEach(subscription => subscription.remove());
+      cancel();
+    };
+  }, [navigation, pending, restore]);
+
+  React.useLayoutEffect(() => {
+    if (studioOpen || !pending.current) return;
+    pending.current.settingsExposed = true;
+    if (Platform.OS === "android") {
+      restore();
+      return;
+    }
+    const frame = requestAnimationFrame(restore);
+    return () => cancelAnimationFrame(frame);
+  }, [pending, restore, studioOpen]);
+
+  return null;
+}
+
 export default function MobileSettingsScreen() {
   const {
     theme, preferences, systemReducedMotion, setTheme, setReducedMotion, setFollowSystem, setCustomAccent,
-    preferenceSaveError, dismissPreferenceSaveError,
+    preferenceSaveError, dismissPreferenceSaveError, appearanceChoices,
   } = useOrionTheme();
   const motion = resolveMotionPolicy(preferences.reducedMotion, systemReducedMotion);
   const { selection, resolvedProfile, setSelection } = usePerformanceProfile();
@@ -110,6 +183,12 @@ export default function MobileSettingsScreen() {
   const pendingDeepLinkSectionRef = React.useRef<MobileSettingsSectionId | null>(null);
   const glimpseContentJumpPendingRef = React.useRef(false);
   const [currentSectionId, setCurrentSectionId] = React.useState<MobileSettingsSectionId>('account');
+  const [studioOpen, setStudioOpen] = React.useState(false);
+  const studioEntry = React.useRef<View>(null);
+  const returnStudioFocus = React.useRef<StudioFocusRequest | null>(null);
+  const StudioDialog = studioOpen
+    ? (require("../../src/features/appearance/AppearanceStudioDialog") as typeof import("../../src/features/appearance/AppearanceStudioDialog")).default
+    : null;
 
   const jumpToSection = React.useCallback((sectionId: MobileSettingsSectionId) => {
     const y = sectionOffsets.current[sectionId];
@@ -175,6 +254,23 @@ export default function MobileSettingsScreen() {
                     theme={theme}
                     onLayout={recordSectionLayout('appearance')}
                   >
+                    <Pressable
+                      ref={studioEntry}
+                      accessibilityRole="button"
+                      accessibilityLabel="Appearance Studio"
+                      accessibilityHint="Preview and customize Orion’s appearance."
+                      onPress={() => {
+                        returnStudioFocus.current = null;
+                        setStudioOpen(true);
+                      }}
+                      style={[styles.studioEntry, { backgroundColor: theme.elevated, borderColor: theme.border }]}
+                    >
+                      <View style={[styles.settingCopy, styles.studioEntryCopy]}>
+                        <Text style={[styles.settingTitle, { color: theme.text }]}>Appearance Studio</Text>
+                        <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>Preview and customize Orion’s appearance.</Text>
+                      </View>
+                      <Ionicons accessible={false} name="chevron-forward" size={20} color={theme.textSecondary} />
+                    </Pressable>
                     <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Theme</Text>
                     <View style={styles.themeGrid}>
                       {(Object.keys(ORION_MOBILE_THEMES) as OrionThemeId[]).map((id) => {
@@ -216,6 +312,7 @@ export default function MobileSettingsScreen() {
                           <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>Enter the color code you want Orion to use.</Text>
                         </View>
                         <TextInput
+                          key={preferences.customAccent ?? "default-custom-accent"}
                           accessibilityLabel="Custom accent hexadecimal color"
                           accessibilityHint="Enter a six-digit hexadecimal color such as number sign E50914"
                           autoCapitalize="characters"
@@ -233,7 +330,9 @@ export default function MobileSettingsScreen() {
                     <View style={styles.settingRow}>
                       <View style={styles.settingCopy}>
                         <Text style={[styles.settingTitle, { color: theme.text }]}>Follow system appearance</Text>
-                        <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>Use Projector Silver in light mode and Midnight Premiere in dark mode.</Text>
+                        <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
+                          Use {THEME_LABELS[appearanceChoices?.lightTheme ?? "projector-silver"]} in light mode and {THEME_LABELS[appearanceChoices?.darkTheme ?? "midnight-premiere"]} in dark mode.
+                        </Text>
                       </View>
                       <Switch
                         accessibilityRole="switch"
@@ -388,7 +487,10 @@ export default function MobileSettingsScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
+    <>
+    <View style={{ flex: 1, backgroundColor: theme.background }}
+      importantForAccessibility={studioOpen ? "no-hide-descendants" : "auto"}
+      accessibilityElementsHidden={studioOpen}>
       <MobilePageHeader
         eyebrow="ORION MOBILE"
         title="Settings"
@@ -437,6 +539,12 @@ export default function MobileSettingsScreen() {
         </View>
       </ScrollView>
     </View>
+    <RestoreStudioEntryFocus entry={studioEntry} pending={returnStudioFocus} studioOpen={studioOpen} />
+    {StudioDialog && <StudioDialog onClose={() => {
+      returnStudioFocus.current = { settingsExposed: false, windowFocused: false };
+      setStudioOpen(false);
+    }} />}
+    </>
   );
 }
 
@@ -447,6 +555,8 @@ const styles = StyleSheet.create({
   sectionHeader: { alignItems: "flex-start", marginBottom: spacing[6] },
   sectionTitle: { fontSize: fontSizes.xl, lineHeight: 30, fontWeight: "900", letterSpacing: -0.35 },
   sectionDescription: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: spacing[2], maxWidth: 620 },
+  studioEntry: { borderWidth: 1, borderRadius: radii.lg, padding: spacing[3], marginBottom: spacing[4],
+    minHeight: 48, alignItems: "center", gap: spacing[3], flexDirection: "row" },
   groupTitle: { fontSize: fontSizes.md, fontWeight: "900", marginBottom: spacing[4] },
   subgroupTitle: { fontSize: fontSizes.md, fontWeight: "900", marginTop: spacing[5], marginBottom: spacing[2] },
   themeGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing[3] },
@@ -458,6 +568,7 @@ const styles = StyleSheet.create({
   settingRow: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: spacing[4] },
   settingTopDivider: { borderTopWidth: 1, paddingTop: spacing[4], marginTop: spacing[4] },
   settingCopy: { flex: 1 },
+  studioEntryCopy: { minWidth: 0 },
   settingTitle: { fontSize: fontSizes.md, fontWeight: "800" },
   settingDescription: { fontSize: fontSizes.xs, lineHeight: 18, marginTop: 4 },
   customAccentRow: { marginTop: spacing[4], paddingTop: spacing[4], borderTopWidth: 1, flexDirection: "row", alignItems: "center", gap: spacing[4] },

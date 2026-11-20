@@ -4,11 +4,15 @@ import type { MobileThemePreferences, OrionThemeId } from "@orion/shared/types";
 import { getMobileStorageHealth, mmkvStorageAdapter } from "../services/storageAdapter";
 import { useSystemReducedMotion } from "../hooks/useSystemReducedMotion";
 import {
+  getAppearanceChoices,
   isCustomAccent,
   loadThemePreferences,
   normalizeAccent,
+  prepareAppearancePatch,
   resolveThemeSelection,
   THEME_PREFERENCES_KEY,
+  type AppearanceChoices,
+  type AppearanceScheme,
   type ThemePreferencesV2,
 } from "../features/appearance/appearancePreferences";
 
@@ -110,6 +114,10 @@ interface ThemeContextValue {
   systemReducedMotion: boolean | null;
   theme: MobileThemeTokens;
   preferences: MobileThemePreferences;
+  appearanceChoices: AppearanceChoices;
+  appearanceSaveBlock: string | null;
+  systemScheme: AppearanceScheme;
+  applyAppearanceChoices: (opening: AppearanceChoices, edited: AppearanceChoices) => AppearanceApplyResult;
   setTheme: (theme: OrionThemeId) => void;
   setReducedMotion: (value: boolean) => void;
   setFollowSystem: (value: boolean) => void;
@@ -118,9 +126,11 @@ interface ThemeContextValue {
   dismissPreferenceSaveError: () => void;
 }
 
+type AppearanceApplyResult = { ok: true } | { ok: false; message: string };
+
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function resolvePalette(themeId: OrionThemeId, customAccent: string | null): MobileThemeTokens {
+export function resolvePalette(themeId: OrionThemeId, customAccent: string | null): MobileThemeTokens {
   const base = THEMES[themeId];
   if (themeId !== "custom" || !customAccent) return base;
   const accent = normalizeAccent(customAccent);
@@ -149,16 +159,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [preferenceSaveError, setPreferenceSaveError] = useState<string | null>(null);
   const dismissPreferenceSaveError = useCallback(() => setPreferenceSaveError(null), []);
 
-  const persist = useCallback((patch: Partial<Omit<ThemePreferencesV2, "schemaVersion">>) => {
+  const appearanceChoices = useMemo(() => getAppearanceChoices(applied), [applied]);
+  const appearanceSaveBlock = initial.saveStatus === "unsupported"
+    ? "These settings were saved by a different version of Orion."
+    : initial.saveStatus === "unavailable"
+      ? "Local storage is unavailable. Reopen Orion and try again."
+      : null;
+
+  const persist = useCallback((
+    patch: Partial<Omit<ThemePreferencesV2, "schemaVersion">>,
+    reportError: (message: string) => void = setPreferenceSaveError,
+  ) => {
     const previous = committed.current;
     if (Object.entries(patch).every(([key, value]) => previous[key as keyof ThemePreferencesV2] === value)) {
       return true;
     }
-    if (initial.saveStatus !== "ready") {
-      const message = initial.saveStatus === "unsupported"
-        ? "These settings were saved by a different version of Orion."
-        : "Local storage is unavailable. Reopen Orion and try again.";
-      setPreferenceSaveError(message);
+    if (appearanceSaveBlock) {
+      reportError(appearanceSaveBlock);
       return false;
     }
 
@@ -166,7 +183,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     try {
       mmkvStorageAdapter.set(THEME_PREFERENCES_KEY, JSON.stringify(next));
     } catch {
-      setPreferenceSaveError("Try again to save your changes.");
+      reportError("Try again to save your changes.");
       return false;
     }
 
@@ -175,7 +192,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setApplied(next);
     setPreferenceSaveError(null);
     return true;
-  }, [initial]);
+  }, [appearanceSaveBlock]);
+
+  const applyAppearanceChoices = useCallback((opening: AppearanceChoices, edited: AppearanceChoices): AppearanceApplyResult => {
+    const plan = prepareAppearancePatch(opening, edited, getAppearanceChoices(committed.current));
+    if (!plan.ok) return plan;
+    let message = "Try again to save your changes.";
+    if (persist(plan.patch, error => { message = error; })) return { ok: true };
+    return { ok: false, message };
+  }, [persist]);
 
   const setTheme = useCallback((manualTheme: OrionThemeId) => {
     persist({ manualTheme, followSystem: false });
@@ -222,6 +247,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     <ThemeContext.Provider value={{
       theme, preferences, systemReducedMotion, setTheme, setReducedMotion, setFollowSystem, setCustomAccent,
       preferenceSaveError, dismissPreferenceSaveError,
+      appearanceChoices, appearanceSaveBlock, systemScheme, applyAppearanceChoices,
     }}>
       {children}
     </ThemeContext.Provider>

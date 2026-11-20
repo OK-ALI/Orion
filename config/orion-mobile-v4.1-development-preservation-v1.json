@@ -220,14 +220,14 @@
       "path": "apps/mobile/app/(tabs)/settings.tsx",
       "kind": "modify",
       "beforeBlob": "254307a9d05fbe302be8a0afd37d25fca0aa21c6",
-      "afterCanonicalSha256": "76c82b48ea26adf803f59db99f5026fe1e378327b803bd0b2bcd6b2fb33032ca",
+      "afterCanonicalSha256": "20d5cf4c006f7664430e52549504dc07291ac30834d205f50fef43805c931098",
       "approval": "already-owner-approved"
     },
     {
       "path": "apps/mobile/src/context/ThemeContext.tsx",
       "kind": "modify",
       "beforeBlob": "01e842bf70698551d74982b92dfd16317852cfc9",
-      "afterCanonicalSha256": "54901f6d4c6508e4b99cf6fd99b39a11f11d2c365be84e4c6e6362a2f7379b4d",
+      "afterCanonicalSha256": "4dc11cfcbebece58e7f142db062502414a9ba56cf438af10978cf952a605cd5b",
       "approval": "already-owner-approved"
     },
     {
@@ -241,7 +241,7 @@
       "path": "apps/mobile/src/features/appearance/appearancePreferences.ts",
       "kind": "add",
       "beforeBlob": null,
-      "afterCanonicalSha256": "e95ee5bbeecde14386307f540acde435aa2142fdc033bf4ad47f1bca8da4d4bb",
+      "afterCanonicalSha256": "8e611c45293f5be1af8d57d5068c82fef04d7724a2d4b6d36c393b4cc4815f37",
       "approval": "already-owner-approved"
     },
     {
@@ -270,6 +270,83 @@
       "kind": "add",
       "beforeBlob": null,
       "afterCanonicalSha256": "0df69eef3e0aee7ff94596f7a37c25943fb978037b845ec855aa541c38d2b8ba",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/appearance/AppearanceStudioControls.tsx",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "5fbd0402f5f00683337813532a63b6ea6f528031a4bf632d92e7cea7469eaace",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/appearance/AppearanceStudioDialog.tsx",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "8ba39073ab747c468966995f0d0dba3c7e8fc1b055b6c86bd2cf90aeab9a453d",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/appearance/AppearanceStudioPreview.tsx",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "670e62bad0314623a940551f5c633da3d3ccb1f1016d5019b70d30b199d68295",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/appearance/appearanceStudioContrast.ts",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "4e173b4dbb6ac0d7f059fcf26160eb1e26b8b94e80030a365123d786745f9cd3",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/appearance/appearanceStudioDraft.ts",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "a7456355d6165f99e8a00c651daa09808c9be9e766e238b6b473dee84c775ebc",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/appearanceStudioDraft.test.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "7560cd400445b48be982b60e00ffb5141bc2d1fc07b0921bf70b58cf955b037a",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/appearanceStudioUi.test.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "09fdb219e976d1da27cd587d9b53a463d914066053bb5fc51d52f97de85f9bdb",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/helpers/appearanceStudioHarness.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "19e722b53c720d63cc41629b275f3b01b7849d47e508177b45c73999eb4ded9e",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/appearance/AppearanceStudioAccentSheet.tsx",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "ee10992dcc0b56a245c0ad72ece3dcb92a926b554a0e1ee4fc262d28a38e6b99",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/appearance/appearanceStudioAccentColor.ts",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "d462820581a2be007763d069290fda75c283ebc3e852dc4896586fd81e081108",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/appearance/appearanceStudioIme.ts",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "cf3b6d527734f0351de1c7428b5b45d7dd62dc19ce009f1d0298a61aca31555e",
       "approval": "already-owner-approved"
     }
   ],

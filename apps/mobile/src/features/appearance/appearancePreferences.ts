@@ -123,3 +123,48 @@ export function resolveThemeSelection(
   if (!preferences.followSystem) return preferences.manualTheme;
   return scheme === "light" ? preferences.lightTheme : preferences.darkTheme;
 }
+
+
+export type AppearanceChoices = Pick<ThemePreferencesV2,
+  "manualTheme" | "lightTheme" | "darkTheme" | "followSystem" | "customAccent">;
+export type AppearanceScheme = "light" | "dark";
+
+const APPEARANCE_KEYS = ["manualTheme", "lightTheme", "darkTheme", "followSystem", "customAccent"] as const;
+
+export function getAppearanceChoices(
+  { manualTheme, lightTheme, darkTheme, followSystem, customAccent }: ThemePreferencesV2,
+): AppearanceChoices {
+  return { manualTheme, lightTheme, darkTheme, followSystem, customAccent };
+}
+
+export function matchesThemeScheme(theme: OrionThemeId, scheme: AppearanceScheme): boolean {
+  return scheme === "light" ? theme === DEFAULT_LIGHT_THEME : isDarkTheme(theme);
+}
+
+export function chooseSystemTheme(
+  choices: AppearanceChoices, scheme: AppearanceScheme, theme: OrionThemeId,
+): AppearanceChoices {
+  if (scheme === "light" && theme === DEFAULT_LIGHT_THEME) return { ...choices, lightTheme: theme };
+  if (scheme === "dark" && isDarkTheme(theme)) return { ...choices, darkTheme: theme };
+  return choices;
+}
+
+export function resetSystemTheme(choices: AppearanceChoices, scheme: AppearanceScheme): AppearanceChoices {
+  return chooseSystemTheme(choices, scheme, scheme === "light" ? DEFAULT_LIGHT_THEME : DEFAULT_DARK_THEME);
+}
+
+export function prepareAppearancePatch(
+  opening: AppearanceChoices, edited: AppearanceChoices, current: AppearanceChoices,
+): { ok: true; patch: Partial<AppearanceChoices> } | { ok: false; message: string } {
+  if (!isTheme(edited.manualTheme) || edited.lightTheme !== DEFAULT_LIGHT_THEME ||
+      !isDarkTheme(edited.darkTheme) || typeof edited.followSystem !== "boolean" ||
+      (edited.customAccent !== null && !isCustomAccent(edited.customAccent))) {
+    return { ok: false, message: "Choose supported themes and enter a valid six-digit HEX accent." };
+  }
+  const normalized = { ...edited, customAccent: readAccent(edited.customAccent, null) };
+  const changed = APPEARANCE_KEYS.filter(key => normalized[key] !== opening[key] && normalized[key] !== current[key]);
+  if (changed.some(key => opening[key] !== current[key])) {
+    return { ok: false, message: "Appearance changed while you were editing. Keep your draft, or discard it and reopen Studio to review the latest choices." };
+  }
+  return { ok: true, patch: Object.fromEntries(changed.map(key => [key, normalized[key]])) };
+}
