@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useOrionTheme } from '../context/ThemeContext';
+import { ORION_MOBILE_THEMES, useOrionTheme } from '../context/ThemeContext';
+import { studioReadableForeground } from '../features/appearance/appearanceStudioContrast';
 
 export type OrionDialogActionRole = 'primary' | 'secondary' | 'cancel' | 'destructive';
 
@@ -10,6 +11,7 @@ export interface OrionDialogAction {
   label: string;
   role?: OrionDialogActionRole;
   accessibilityLabel?: string;
+  disabled?: boolean;
   onPress: () => void;
 }
 
@@ -23,7 +25,12 @@ interface OrionDialogProps {
 }
 
 export function OrionDialog({ visible, title, message, icon = 'alert-circle-outline', actions, onDismiss }: OrionDialogProps) {
-  const { theme } = useOrionTheme();
+  const { theme, effectiveAppearanceThemeId, advancedAppearanceChoices } = useOrionTheme();
+  // Player descendants can carry the app's selection alongside their historical presentation tokens.
+  const adaptive = (effectiveAppearanceThemeId === 'custom-light'
+    || (effectiveAppearanceThemeId === 'custom' && advancedAppearanceChoices?.custom.dark.rendering === 'adaptive'))
+    && theme !== ORION_MOBILE_THEMES[theme.id];
+  const [focusedAction, setFocusedAction] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const titleRef = useRef<Text>(null);
@@ -53,20 +60,31 @@ export function OrionDialog({ visible, title, message, icon = 'alert-circle-outl
           <View style={[styles.actions, stacked && styles.actionsStacked]}>
             {actions.map((action) => {
               const role = action.role || 'secondary';
-              const filled = role === 'primary' || role === 'destructive';
-              const backgroundColor = role === 'destructive' ? theme.danger : role === 'primary' ? theme.accent : theme.surface;
-              const color = filled ? theme.onAccent : theme.text;
+              const key = `${role}-${action.label}`;
+              const filled = !action.disabled && (role === 'primary' || role === 'destructive');
+              const backgroundColor = !filled ? theme.surface : role === 'destructive' ? theme.danger : theme.accent;
+              const color = action.disabled ? theme.textSecondary : adaptive && role === 'destructive'
+                ? studioReadableForeground(backgroundColor, theme.onAccent)
+                : filled ? theme.onAccent : theme.text;
+              const focused = adaptive && !action.disabled && focusedAction === key;
               return (
                 <Pressable
-                  key={`${role}-${action.label}`}
+                  key={key}
                   accessibilityRole="button"
                   accessibilityLabel={action.accessibilityLabel || action.label}
+                  accessibilityState={action.disabled ? { disabled: true } : undefined}
+                  disabled={action.disabled}
+                  onFocus={adaptive ? () => setFocusedAction(key) : undefined}
+                  onBlur={adaptive ? () => setFocusedAction(current => current === key ? null : current) : undefined}
                   onPress={action.onPress}
                   style={({ pressed }) => [
                     styles.action,
                     stacked && styles.actionStacked,
                     { backgroundColor, borderColor: filled ? backgroundColor : theme.border },
+                    action.disabled && styles.disabled,
                     pressed && styles.pressed,
+                    adaptive && pressed && styles.adaptivePressed,
+                    focused && { borderWidth: 2, borderColor: studioReadableForeground(backgroundColor, color, 3) },
                   ]}
                 >
                   <Text style={[styles.actionText, { color }]}>{action.label}</Text>
@@ -93,5 +111,7 @@ const styles = StyleSheet.create({
   action: { minWidth: 112, minHeight: 48, borderRadius: 24, borderWidth: 1, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
   actionStacked: { width: '100%' },
   actionText: { fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  disabled: { borderStyle: 'dashed' },
   pressed: { opacity: 0.74, transform: [{ scale: 0.985 }] },
+  adaptivePressed: { opacity: 1 },
 });

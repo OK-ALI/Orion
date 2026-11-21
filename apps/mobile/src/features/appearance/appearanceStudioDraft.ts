@@ -1,36 +1,40 @@
-import type { OrionThemeId } from "@orion/shared/types";
 import {
-  chooseSystemTheme, isCustomAccent, matchesThemeScheme, normalizeAccent, resetSystemTheme,
-  type AppearanceChoices, type AppearanceScheme,
+  editAdvancedPaletteRole, isCustomAccent, normalizeAccent, prepareAdvancedAppearanceWrite,
+  resetAdvancedPaletteProfile,
+  type AdvancedAppearanceChoices, type AppearanceScheme, type MobileAppearanceThemeId, type ThemePreferencesV3,
 } from "./appearancePreferences";
+import type { CustomPaletteProfile, CustomPaletteRole, PaletteIssue } from "./customAppearancePalette";
 
-export const THEME_NAMES: Record<OrionThemeId, string> = {
+export type StudioThemeGroup = AppearanceScheme | "fixed";
+export type StudioColorTarget = { profile: CustomPaletteProfile; role: CustomPaletteRole };
+export const ACCENT_ERROR = "Enter six HEX digits, such as #E50914.";
+
+export const THEME_NAMES: Record<MobileAppearanceThemeId, string> = {
   "midnight-premiere": "Midnight Premiere",
   amoled: "AMOLED",
   mocha: "Mocha",
   slate: "Slate",
   "projector-silver": "Projector Silver",
-  custom: "Custom",
+  custom: "Custom Dark",
+  "custom-light": "Custom Light",
 };
 
-export const THEME_DETAILS: Record<OrionThemeId, string> = {
+export const THEME_DETAILS: Record<MobileAppearanceThemeId, string> = {
   "midnight-premiere": "Orion’s cinematic dark signature.",
   amoled: "Pure black tuned for OLED displays.",
   mocha: "Warm cinema tones with softer contrast.",
   slate: "Cool blue-gray tones for a calmer screen.",
   "projector-silver": "A bright projector-inspired light theme.",
-  custom: "Your accent on Orion’s dark canvas.",
+  custom: "Your colors on Orion’s dark canvas.",
+  "custom-light": "Your colors on Orion’s light canvas.",
 };
 
-export interface StudioDraft {
-  choices: AppearanceChoices;
-  accentInput: string;
-}
-export const ACCENT_ERROR = "Enter six HEX digits, such as #E50914.";
-
-export function newStudioDraft(choices: AppearanceChoices, defaultAccent: string): StudioDraft {
-  return { choices: { ...choices }, accentInput: choices.customAccent ?? defaultAccent };
-}
+const lightThemes = ["projector-silver", "custom-light"] as const;
+const darkThemes = ["midnight-premiere", "amoled", "mocha", "slate", "custom"] as const;
+export const STUDIO_THEME_CHOICES = { light: lightThemes, dark: darkThemes,
+  fixed: ["midnight-premiere", "amoled", "mocha", "slate", "projector-silver", "custom", "custom-light"] as const };
+export const PROFILE_NAMES = { light: THEME_NAMES["custom-light"], dark: THEME_NAMES.custom };
+export const ROLE_NAMES = { accent: "Accent", background: "Background", surface: "Surface", text: "Text", border: "Border" };
 
 export function parseStudioAccent(input: string): string | null {
   const value = input.trim();
@@ -38,53 +42,50 @@ export function parseStudioAccent(input: string): string | null {
   return isCustomAccent(hex) ? normalizeAccent(hex) : null;
 }
 
-export function withStudioAccent(draft: StudioDraft, input: string, defaultAccent: string): StudioDraft {
-  const hex = parseStudioAccent(input);
-  return {
-    accentInput: input,
-    choices: hex === null || hex === (draft.choices.customAccent ?? defaultAccent) ? draft.choices : {
-      ...draft.choices,
-      customAccent: hex === defaultAccent ? null : hex,
-    },
-  };
+export function selectStudioTheme(draft: AdvancedAppearanceChoices, group: StudioThemeGroup,
+  theme: MobileAppearanceThemeId): AdvancedAppearanceChoices {
+  if (group === "fixed") return { ...draft, manualTheme: theme };
+  if (group === "light" && lightThemes.some(id => id === theme)) {
+    return { ...draft, lightTheme: theme as AdvancedAppearanceChoices["lightTheme"] };
+  }
+  if (group === "dark" && darkThemes.some(id => id === theme)) {
+    return { ...draft, darkTheme: theme as AdvancedAppearanceChoices["darkTheme"] };
+  }
+  return draft;
 }
 
-export function withAccentChoice(draft: StudioDraft, accent: string | null, defaultAccent: string): StudioDraft {
-  return { choices: { ...draft.choices, customAccent: accent }, accentInput: accent ?? defaultAccent };
+export function resetStudioSelection(draft: AdvancedAppearanceChoices, opening: AdvancedAppearanceChoices,
+  group: StudioThemeGroup): AdvancedAppearanceChoices {
+  return selectStudioTheme(draft, group, group === "fixed" ? opening.manualTheme
+    : group === "light" ? lightThemes[0] : darkThemes[0]);
 }
 
-export function getStudioTheme(choices: AppearanceChoices, scheme: AppearanceScheme): OrionThemeId {
-  if (!choices.followSystem) return choices.manualTheme;
-  return scheme === "light" ? choices.lightTheme : choices.darkTheme;
+export function getStudioPreviewTheme(draft: AdvancedAppearanceChoices, scheme: AppearanceScheme) {
+  if (!draft.followSystem && STUDIO_THEME_CHOICES[scheme].some(id => id === draft.manualTheme)) {
+    return draft.manualTheme;
+  }
+  return scheme === "light" ? draft.lightTheme : draft.darkTheme;
 }
 
-export function selectStudioTheme(draft: StudioDraft, scheme: AppearanceScheme, theme: OrionThemeId): StudioDraft {
-  const choices = draft.choices.followSystem
-    ? chooseSystemTheme(draft.choices, scheme, theme)
-    : { ...draft.choices, manualTheme: theme };
-  return { ...draft, choices };
+export function readStudioColor(choices: AdvancedAppearanceChoices, { profile, role }: StudioColorTarget) {
+  return (profile === "light" ? choices.custom.light : choices.custom.dark.colors)[role];
 }
 
-export function resetStudioSelection(draft: StudioDraft, opening: AppearanceChoices, scheme: AppearanceScheme): StudioDraft {
-  const choices = draft.choices.followSystem
-    ? resetSystemTheme(draft.choices, scheme)
-    : { ...draft.choices, manualTheme: opening.manualTheme };
-  return { ...draft, choices };
+export function withStudioColor(draft: AdvancedAppearanceChoices, target: StudioColorTarget, color: string | null) {
+  return editAdvancedPaletteRole(draft, target.profile, target.role, color);
 }
 
-export function getStudioPreviewTheme(draft: StudioDraft, scheme: AppearanceScheme): OrionThemeId {
-  const choice = getStudioTheme(draft.choices, scheme);
-  if (matchesThemeScheme(choice, scheme)) return choice;
-  return scheme === "light" ? draft.choices.lightTheme : draft.choices.darkTheme;
+export function restoreStudioPalette(draft: AdvancedAppearanceChoices, profile: CustomPaletteProfile) {
+  return resetAdvancedPaletteProfile(draft, profile);
 }
 
-export function isStudioDirty(draft: StudioDraft, opening: AppearanceChoices): boolean {
-  return parseStudioAccent(draft.accentInput) === null ||
-    draft.choices.manualTheme !== opening.manualTheme ||
-    draft.choices.lightTheme !== opening.lightTheme ||
-    draft.choices.darkTheme !== opening.darkTheme ||
-    draft.choices.followSystem !== opening.followSystem ||
-    draft.choices.customAccent !== opening.customAccent;
+export function getStudioDraftPlan(opening: AdvancedAppearanceChoices, draft: AdvancedAppearanceChoices,
+  validate: (choices: AdvancedAppearanceChoices, profile: CustomPaletteProfile) => PaletteIssue[] = () => []) {
+  const baseline: ThemePreferencesV3 = { schemaVersion: 3, reducedMotion: false, ...opening };
+  const plan = prepareAdvancedAppearanceWrite(opening, draft, baseline, validate);
+  return plan.ok
+    ? { dirty: plan.preferences !== baseline, choices: plan.preferences, error: null }
+    : { dirty: true, choices: draft, error: plan.message };
 }
 
 export function getStudioLayout(width: number, height: number, fontScale: number, keyboard: boolean) {

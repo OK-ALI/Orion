@@ -28,12 +28,16 @@ test("large mobile routes are thin shims and have no source-size exceptions", ()
     "app/(tabs)/connect.tsx",
     "app/(tabs)/discover.tsx",
     "app/media/[id].tsx",
-    "app/player/[id].tsx",
   ]) {
     const source = read(route);
     assert.match(source, /^export \{ default \} from /);
     assert.ok(source.split(/\r?\n/).length <= 3);
   }
+  const player = read("app/player/[id].tsx").replace(/\s+/g, " ").trim();
+  assert.equal(player,
+    "import PlayerScreen from '../../src/features/playback/PlayerScreen'; " +
+    "import { PlayerPresentationTheme } from '../../src/context/ThemeContext'; " +
+    "export default function PlayerRoute() { return ( <PlayerPresentationTheme> <PlayerScreen /> </PlayerPresentationTheme> ); }");
 
   const sizeGate = read("scripts/check-source-size.cjs");
   assert.doesNotMatch(sizeGate, /OVERSIZED_ALLOWLIST/);

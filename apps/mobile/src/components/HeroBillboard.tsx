@@ -29,7 +29,12 @@ function HeroSlide({ item, onPlay, onInfo, onPress, width }: {
   width: number;
 }) {
   const { isSaved, toggleSave } = useLibraryVisual();
-  const { theme } = useOrionTheme();
+  const { theme, effectiveAppearanceThemeId, advancedAppearanceChoices } = useOrionTheme();
+  const adaptive = effectiveAppearanceThemeId === 'custom-light'
+    || (effectiveAppearanceThemeId === 'custom' && advancedAppearanceChoices?.custom.dark.rendering === 'adaptive');
+  const mediaForeground = adaptive ? '#FFFFFF' : theme.onAccent;
+  const mediaGlass = adaptive ? 'rgba(0,0,0,0.80)' : theme.mediaScrim;
+  const pressedStyle = adaptive ? [styles.pressed, styles.adaptivePressed] : styles.pressed;
   const isMovie = item.media_type === 'movie' || !item.name;
   const title = isMovie ? item.title : item.name;
   const backdrop = imgUrl(item.backdrop_path, 'original');
@@ -68,11 +73,12 @@ function HeroSlide({ item, onPlay, onInfo, onPress, width }: {
           />
 
           <View style={styles.content}>
-            <Text style={[styles.tag, { color: theme.accent }]}>
+            {adaptive && <View pointerEvents="none" style={styles.adaptiveScrim} />}
+            <Text style={[styles.tag, { color: adaptive ? mediaForeground : theme.accent }]}>
               SPOTLIGHT · {isMovie ? 'MOVIE' : 'SERIES'}
             </Text>
             
-            <Text style={[styles.title, { color: theme.onAccent }]} numberOfLines={1}>
+            <Text style={[styles.title, { color: mediaForeground }]} numberOfLines={1}>
               {title}
             </Text>
             
@@ -80,20 +86,20 @@ function HeroSlide({ item, onPlay, onInfo, onPress, width }: {
               {!!item.vote_average && (
                 <View style={styles.ratingBadge}>
                   <Ionicons name="star" size={12} color={semantic.warning} />
-                  <Text style={[styles.metaText, { color: theme.onAccent }]}>{item.vote_average.toFixed(1)}</Text>
+                  <Text style={[styles.metaText, { color: mediaForeground }]}>{item.vote_average.toFixed(1)}</Text>
                 </View>
               )}
-              <Text style={[styles.metaText, { color: theme.onAccent }]}>
+              <Text style={[styles.metaText, { color: mediaForeground }]}>
                 {item.release_date ? item.release_date.slice(0, 4) : item.first_air_date?.slice(0, 4)}
               </Text>
             </View>
 
-            <Text style={[styles.overview, { color: theme.onAccent }]} numberOfLines={2}>
+            <Text style={[styles.overview, { color: mediaForeground }]} numberOfLines={2}>
               {item.overview}
             </Text>
 
             <View style={styles.buttonRow}>
-              <Pressable onPress={onPlay} style={({ pressed }) => [styles.playWrapper, pressed && styles.pressed]}>
+              <Pressable onPress={onPlay} style={({ pressed }) => [styles.playWrapper, pressed && pressedStyle]}>
                 <View style={[styles.playButtonGlow, { backgroundColor: theme.accent }]} />
                 <View style={[styles.playButton, { backgroundColor: theme.accent }]}>
                   <Ionicons name="play" size={15} color={theme.onAccent} />
@@ -101,17 +107,17 @@ function HeroSlide({ item, onPlay, onInfo, onPress, width }: {
                 </View>
               </Pressable>
               
-              <Pressable style={({ pressed }) => [styles.infoButton, pressed && styles.pressed]} onPress={(e) => { e.stopPropagation(); toggleSave(item); }}>
-                <BlurView intensity={80} tint="dark" style={[styles.blurButton, { backgroundColor: theme.mediaScrim }]}>
-                  <Ionicons name={saved ? "checkmark" : "add"} size={18} color={theme.onAccent} />
-                  <Text style={[styles.infoText, { color: theme.onAccent }]}>{saved ? "In My List" : "My List"}</Text>
+              <Pressable style={({ pressed }) => [styles.infoButton, pressed && pressedStyle]} onPress={(e) => { e.stopPropagation(); toggleSave(item); }}>
+                <BlurView intensity={80} tint="dark" style={[styles.blurButton, { backgroundColor: mediaGlass }]}>
+                  <Ionicons name={saved ? "checkmark" : "add"} size={18} color={mediaForeground} />
+                  <Text style={[styles.infoText, { color: mediaForeground }]}>{saved ? "In My List" : "My List"}</Text>
                 </BlurView>
               </Pressable>
               
-              <Pressable style={({ pressed }) => [styles.infoButton, pressed && styles.pressed]} onPress={(e) => { e.stopPropagation(); onInfo?.(); }}>
-                <BlurView intensity={80} tint="dark" style={[styles.blurButton, { backgroundColor: theme.mediaScrim }]}>
-                  <Ionicons name="information-circle-outline" size={18} color={theme.onAccent} />
-                  <Text style={[styles.infoText, { color: theme.onAccent }]}>More Info</Text>
+              <Pressable style={({ pressed }) => [styles.infoButton, pressed && pressedStyle]} onPress={(e) => { e.stopPropagation(); onInfo?.(); }}>
+                <BlurView intensity={80} tint="dark" style={[styles.blurButton, { backgroundColor: mediaGlass }]}>
+                  <Ionicons name="information-circle-outline" size={18} color={mediaForeground} />
+                  <Text style={[styles.infoText, { color: mediaForeground }]}>More Info</Text>
                 </BlurView>
               </Pressable>
             </View>
@@ -289,6 +295,15 @@ const styles = StyleSheet.create({
     right: 18,
     zIndex: 10,
   },
+  adaptiveScrim: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    right: -8,
+    bottom: -8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+  },
   tag: {
     fontSize: 10,
     fontWeight: '800',
@@ -382,6 +397,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     transform: [{ scale: 0.98 }],
   },
+  adaptivePressed: { opacity: 1 },
   bottomBlurEdge: {
     position: 'absolute',
     bottom: 0,

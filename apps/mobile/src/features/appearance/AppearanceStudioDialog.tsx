@@ -1,40 +1,47 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal, ScrollView, StatusBar, StyleSheet, Switch, Text, useWindowDimensions, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fontSizes, spacing } from "@orion/shared/tokens";
-import type { OrionThemeId } from "@orion/shared/types";
-import { ORION_MOBILE_THEMES, resolvePalette, useOrionTheme } from "../../context/ThemeContext";
+import { resolveAppliedAppearancePalette, resolveCustomProfile, useOrionTheme } from "../../context/ThemeContext";
 import { usePerformanceProfile } from "../../context/PerformanceContext";
 import { resolveMotionPolicy } from "../../services/motionPolicy";
 import { AppearanceStudioAccentSheet, type AccentSheetHandle } from "./AppearanceStudioAccentSheet";
 import { focusStudioNode, StudioAction, StudioCard, StudioHeading, studioTextStyles } from "./AppearanceStudioControls";
 import { AppearanceStudioPreview } from "./AppearanceStudioPreview";
-import { matchesThemeScheme, type AppearanceScheme } from "./appearancePreferences";
+import { AppearanceStudioPaletteFields } from "./AppearanceStudioPaletteFields";
+import type { AdvancedAppearanceChoices, AppearanceScheme } from "./appearancePreferences";
 import { studioAccentForeground, studioReadableForeground } from "./appearanceStudioContrast";
-import { describeAccent } from "./appearanceStudioAccentColor";
+import type { CustomPaletteProfile, CustomPaletteRole } from "./customAppearancePalette";
 import {
-  getStudioLayout, getStudioPreviewTheme, getStudioTheme, isStudioDirty, newStudioDraft,
-  resetStudioSelection, selectStudioTheme, studioBackAction, THEME_NAMES, THEME_DETAILS, withAccentChoice,
+  getStudioDraftPlan, getStudioLayout, getStudioPreviewTheme, readStudioColor, resetStudioSelection,
+  restoreStudioPalette, selectStudioTheme, studioBackAction, STUDIO_THEME_CHOICES, THEME_NAMES, THEME_DETAILS,
+  withStudioColor, type StudioColorTarget, type StudioThemeGroup,
 } from "./appearanceStudioDraft";
 
-const DEFAULT_ACCENT = ORION_MOBILE_THEMES.custom.accent;
-const themeIds = Object.keys(THEME_NAMES) as OrionThemeId[];
+const themeGroupNames = { light: "Light theme", dark: "Dark theme", fixed: "Fixed theme" };
+const themeChoiceKeys = { light: "lightTheme", dark: "darkTheme", fixed: "manualTheme" } as const;
+const systemGroups = ["light", "dark"] as const;
+const fixedGroups = ["fixed"] as const;
+const validateProfile = (choices: AdvancedAppearanceChoices, profile: CustomPaletteProfile) =>
+  resolveCustomProfile(choices, profile).issues;
 
 export default function AppearanceStudioDialog({ onClose }: { onClose: () => void }) {
   const {
-    theme, preferences, systemReducedMotion, appearanceChoices, appearanceSaveBlock, systemScheme, applyAppearanceChoices,
+    theme, preferences, systemReducedMotion, advancedAppearanceChoices, appearanceSaveBlock, systemScheme,
+    applyAdvancedAppearanceChoices,
   } = useOrionTheme();
   const { resolvedProfile } = usePerformanceProfile();
   const motion = resolveMotionPolicy(preferences.reducedMotion, systemReducedMotion);
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const [measured, setMeasured] = useState<{ width: number; height: number } | null>(null);
-  const [opening] = useState(appearanceChoices);
-  const [draft, setDraft] = useState(() => newStudioDraft(opening, DEFAULT_ACCENT));
-  const [expanded, setExpanded] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [opening] = useState(advancedAppearanceChoices);
+  const [draft, setDraft] = useState(opening);
+  const [expanded, setExpanded] = useState<StudioThemeGroup | null>(null);
+  const [profile, setProfile] = useState<CustomPaletteProfile>(systemScheme);
+  const [pickerTarget, setPickerTarget] = useState<StudioColorTarget | null>(null);
   const [previewScheme, setPreviewScheme] = useState<AppearanceScheme>(systemScheme);
   const [confirming, setConfirming] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -44,7 +51,8 @@ export default function AppearanceStudioDialog({ onClose }: { onClose: () => voi
   const confirmationHeading = useRef<Text>(null);
   const closeButton = useRef<View>(null);
   const cancelButton = useRef<View>(null);
-  const changeColor = useRef<View>(null);
+  const roleNodes = useRef<Partial<Record<CustomPaletteRole, View | null>>>({});
+  const returnRole = useRef<CustomPaletteRole | null>(null);
   const picker = useRef<AccentSheetHandle>(null);
   const scroll = useRef<ScrollView>(null);
   const editorOffset = useRef(0);
@@ -53,11 +61,12 @@ export default function AppearanceStudioDialog({ onClose }: { onClose: () => voi
   const width = Math.max(0, Math.min(window.width, measured?.width ?? window.width) - insets.left - insets.right);
   const height = Math.max(0, Math.min(window.height, measured?.height ?? window.height) - insets.top - insets.bottom);
   const { sideBySide, stackedActions } = getStudioLayout(width, height, window.fontScale, false);
-  const selectedTheme = getStudioTheme(draft.choices, "dark");
-  const previewTheme = resolvePalette(getStudioPreviewTheme(draft, previewScheme), draft.choices.customAccent);
-  const dirty = isStudioDirty(draft, opening);
-  const followSystem = draft.choices.followSystem;
-  const accent = draft.choices.customAccent ?? DEFAULT_ACCENT;
+  const pickerOpen = pickerTarget !== null;
+  const { dirty, choices, error: draftError } = useMemo(() => getStudioDraftPlan(opening, draft, validateProfile), [opening, draft]);
+  const previewId = getStudioPreviewTheme(choices, previewScheme);
+  const previewTheme = useMemo(() => resolveAppliedAppearancePalette(previewId, choices), [previewId, choices]);
+  const palette = useMemo(() => resolveCustomProfile(choices, profile), [choices, profile]);
+  const followSystem = choices.followSystem;
 
   useEffect(() => {
     if (pickerOpen) return;
@@ -68,7 +77,9 @@ export default function AppearanceStudioDialog({ onClose }: { onClose: () => voi
         const target = returnFocus.current;
         returnFocus.current = null;
         if (target !== "color") scroll.current?.scrollTo({ y: editorOffset.current, animated: false });
-        focusStudioNode(target === "color" ? changeColor.current : target === "close" ? closeButton.current
+        const role = returnRole.current;
+        returnRole.current = null;
+        focusStudioNode(target === "color" && role ? roleNodes.current[role] ?? null : target === "close" ? closeButton.current
           : target === "cancel" ? cancelButton.current : heading.current);
       }
     });
@@ -103,9 +114,9 @@ export default function AppearanceStudioDialog({ onClose }: { onClose: () => voi
   }
 
   function apply() {
-    if (applying.current || appearanceSaveBlock || !dirty) return;
+    if (applying.current || appearanceSaveBlock || draftError || !dirty) return;
     applying.current = true;
-    const result = applyAppearanceChoices(opening, draft.choices);
+    const result = applyAdvancedAppearanceChoices(opening, draft);
     if (result.ok) onClose();
     else {
       applying.current = false;
@@ -115,7 +126,39 @@ export default function AppearanceStudioDialog({ onClose }: { onClose: () => voi
 
   function closePicker() {
     returnFocus.current = "color";
-    setPickerOpen(false);
+    returnRole.current = pickerTarget?.role ?? null;
+    setPickerTarget(null);
+  }
+
+  function renderThemeGroup(group: StudioThemeGroup) {
+    const selected = choices[themeChoiceKeys[group]];
+    const open = expanded === group;
+    return (
+      <React.Fragment key={group}>
+        <StudioCard compact label={themeGroupNames[group]} value={THEME_NAMES[selected]}
+          swatch={resolveAppliedAppearancePalette(selected, advancedAppearanceChoices).accent} theme={theme}
+          expanded={open} onPress={() => setExpanded(open ? null : group)} />
+        {open && (
+          <>
+            <View style={[styles.cards, sideBySide && styles.row]}>
+              {STUDIO_THEME_CHOICES[group].map(id => {
+                const cardPalette = resolveAppliedAppearancePalette(id, advancedAppearanceChoices);
+                return <View key={id} style={sideBySide && styles.themeColumn}>
+                  <StudioCard label={THEME_NAMES[id] + " theme"} detail={THEME_DETAILS[id]} theme={theme}
+                    palette={cardPalette} swatch={cardPalette.accent} checked={id === selected}
+                    onPress={() => edit(current => selectStudioTheme(current, group, id))} />
+                </View>;
+              })}
+            </View>
+            <StudioAction label={group === "fixed" ? "Restore opening theme" : `Reset ${themeGroupNames[group]}`}
+              theme={theme} onPress={() => {
+                edit(current => resetStudioSelection(current, opening, group));
+                setStatus("Theme selection restored in preview.");
+              }} />
+          </>
+        )}
+      </React.Fragment>
+    );
   }
   return (
     <Modal visible animationType={motion.reduceMotion || resolvedProfile === "efficiency" ? "none" : "fade"}
@@ -157,44 +200,22 @@ export default function AppearanceStudioDialog({ onClose }: { onClose: () => voi
                       <Switch accessibilityRole="switch" accessibilityLabel="Follow system appearance"
                         accessibilityState={{ checked: followSystem }} value={followSystem}
                         onValueChange={value => {
-                          setExpanded(false);
-                          edit(current => ({ ...current, choices: { ...current.choices, followSystem: value } }));
+                          setExpanded(null);
+                          edit(current => ({ ...current, followSystem: value }));
                         }}
                         trackColor={{ false: theme.border, true: theme.accentSoft }}
                         thumbColor={followSystem ? studioAccentForeground(theme, theme.background, 3)
                           : studioReadableForeground(theme.background, theme.textMuted, 3)}
                         style={styles.switch} />
                     </View>
-                    {followSystem && <StudioCard compact label="Light theme" value={THEME_NAMES[draft.choices.lightTheme]}
-                      swatch={ORION_MOBILE_THEMES[draft.choices.lightTheme].accent} theme={theme} />}
-                    <StudioCard compact label={followSystem ? "Dark theme" : "Fixed theme"}
-                      value={THEME_NAMES[selectedTheme]} swatch={resolvePalette(selectedTheme, appearanceChoices.customAccent).accent}
-                      expanded={expanded} onPress={() => setExpanded(value => !value)} theme={theme} />
-                    {expanded && (
-                      <>
-                        <View style={[styles.cards, sideBySide && styles.row]}>
-                          {themeIds.filter(id => !followSystem || matchesThemeScheme(id, "dark")).map(id => {
-                            const palette = resolvePalette(id, appearanceChoices.customAccent);
-                            return <View key={id} style={sideBySide && styles.themeColumn}>
-                              <StudioCard label={THEME_NAMES[id] + " theme"} detail={THEME_DETAILS[id]} theme={theme}
-                                palette={palette} swatch={palette.accent} checked={id === selectedTheme}
-                                onPress={() => edit(current => selectStudioTheme(current, "dark", id))} />
-                            </View>;
-                          })}
-                        </View>
-                        <StudioAction label={followSystem ? "Reset Dark theme" : "Restore opening theme"} theme={theme} onPress={() => {
-                          edit(current => resetStudioSelection(current, opening, "dark"));
-                          setStatus(followSystem ? "Dark theme reset in preview." : "Original fixed theme restored in preview.");
-                        }} />
-                      </>
-                    )}
-                    {selectedTheme === "custom" && (
-                      <View style={[styles.group, styles.section]}>
-                        <StudioHeading title="Custom accent" theme={theme} />
-                        <StudioCard compact label="Change Color" value={describeAccent(accent)} swatch={accent}
-                          cardRef={changeColor} theme={theme} onPress={() => setPickerOpen(true)} />
-                      </View>
-                    )}
+                    {(followSystem ? systemGroups : fixedGroups).map(renderThemeGroup)}
+                    <AppearanceStudioPaletteFields profile={profile} resolution={palette} theme={theme} stacked={stackedActions}
+                      canReset={Object.values(palette.roles).some(role => role.requestedColor !== null)
+                        || (profile === "dark" && choices.custom.dark.rendering !== "legacy")}
+                      onProfile={setProfile} onEdit={role => setPickerTarget({ profile, role })}
+                      onResetRole={role => edit(current => withStudioColor(current, { profile, role }, null))}
+                      onResetPalette={() => edit(current => restoreStudioPalette(current, profile))}
+                      roleRef={(role, node) => { roleNodes.current[role] = node; }} />
                   </View>
                   <View style={[styles.group, sideBySide && styles.pane]}>
                     <StudioHeading title="Preview" theme={theme} />
@@ -206,29 +227,38 @@ export default function AppearanceStudioDialog({ onClose }: { onClose: () => voi
                         </View>
                       ))}
                     </View>
-                    {!followSystem && previewTheme.id !== draft.choices.manualTheme &&
+                    {!followSystem && previewId !== choices.manualTheme &&
                       <Text style={[studioTextStyles.description, { color: theme.textSecondary }]}>
-                        Fixed theme uses {THEME_NAMES[draft.choices.manualTheme]}.
+                        Fixed theme uses {THEME_NAMES[choices.manualTheme]}.
                       </Text>}
-                    <AppearanceStudioPreview theme={previewTheme} editorTheme={theme} />
+                    <AppearanceStudioPreview theme={previewTheme} themeId={previewId} editorTheme={theme} />
                   </View>
                 </View>
-                {(appearanceSaveBlock || saveError) &&
+                {(appearanceSaveBlock || saveError || draftError) &&
                   <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={{ color: theme.text }}>
-                    {appearanceSaveBlock ?? ("Changes weren’t saved. " + saveError)}
+                    {appearanceSaveBlock ?? (saveError ? "Changes weren’t saved. " + saveError : draftError)}
                   </Text>}
                 {status && <Text accessibilityLiveRegion="polite" style={{ color: theme.text }}>{status}</Text>}
+                {dirty && <Text accessibilityLiveRegion="polite" style={[studioTextStyles.description, { color: theme.textSecondary }]}>
+                  Unsaved changes
+                </Text>}
                 <View testID="studio-actions" style={stackedActions ? styles.group : styles.row}>
                   <StudioAction label="Cancel" actionRef={cancelButton} theme={theme} fluid={!stackedActions} onPress={() => requestClose("cancel")} />
                   <StudioAction label="Apply" theme={theme} fluid={!stackedActions} primary
-                    disabled={!dirty || !!appearanceSaveBlock} onPress={apply} />
+                    disabled={!dirty || !!appearanceSaveBlock || !!draftError} onPress={apply} />
                 </View>
               </>
             )}
           </ScrollView>
-          {pickerOpen && <AppearanceStudioAccentSheet ref={picker} theme={theme} original={draft.choices.customAccent}
-            defaultAccent={DEFAULT_ACCENT} stacked={stackedActions} onCancel={closePicker}
-            onUse={value => { edit(current => withAccentChoice(current, value, DEFAULT_ACCENT)); closePicker(); }} />}
+          {pickerTarget && <AppearanceStudioAccentSheet ref={picker} theme={theme} target={pickerTarget}
+            original={readStudioColor(draft, pickerTarget)}
+            saved={readStudioColor(opening, pickerTarget)}
+            palette={palette} stacked={stackedActions} onCancel={closePicker}
+            resolveCandidate={value => {
+              const next = getStudioDraftPlan(opening, withStudioColor(draft, pickerTarget, value)).choices;
+              return resolveCustomProfile(next, pickerTarget.profile);
+            }}
+            onUse={value => { edit(current => withStudioColor(current, pickerTarget, value)); closePicker(); }} />}
         </View>
       </View>
     </Modal>
@@ -239,7 +269,6 @@ const styles = StyleSheet.create({
   window: { flex: 1, minHeight: 0 },
   content: { width: "100%", maxWidth: 900, alignSelf: "center", padding: spacing[5], gap: spacing[5] },
   group: { gap: spacing[3], minWidth: 0 },
-  section: { marginTop: spacing[2] },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing[3] },
   paneRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing[5] },
   pane: { flex: 1, minWidth: 0 },

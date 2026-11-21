@@ -27,7 +27,7 @@ const flatStyle=styles=>Object.assign({},...[styles].flat(Infinity).filter(Boole
 test('sidebar shares one compact footer, preserves status and opens Feedback; larger text grows safely',()=>{
   for(const fontScale of [1,1.3,1.8]){
     let closed=0;const routes=[];
-    const read=loader({'react':{},'react/jsx-runtime':jsx,
+    const read=loader({'react':{useState:value=>[value,()=>{}]},'react/jsx-runtime':jsx,
       'react-native':{View:'View',Text:'Text',Pressable:'Pressable',ScrollView:'ScrollView',Modal:'Modal',Image:'Image',Platform:{OS:'android'},StyleSheet:{create:v=>v,hairlineWidth:1,absoluteFill:{}},useWindowDimensions:()=>({fontScale})},
       '@expo/vector-icons':{Ionicons:'Icon'},'expo-router':{useRouter:()=>({push:r=>routes.push(r)}),usePathname:()=>'/'},'expo-linear-gradient':{LinearGradient:'Gradient'},
       '@orion/shared/tokens':{fontFamilies:{display:'Display',heading:'Heading'},fontSizes:{sm:14},radii:{xl:16},spacing:{2:8,3:12,4:16},text:{muted:'gray'},accent:{primary:'red'}},

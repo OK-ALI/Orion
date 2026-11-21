@@ -4,17 +4,15 @@ import type { MobileThemePreferences, OrionThemeId } from "@orion/shared/types";
 import { getMobileStorageHealth, mmkvStorageAdapter } from "../services/storageAdapter";
 import { useSystemReducedMotion } from "../hooks/useSystemReducedMotion";
 import {
-  getAppearanceChoices,
-  isCustomAccent,
-  loadThemePreferences,
-  normalizeAccent,
-  prepareAppearancePatch,
-  resolveThemeSelection,
-  THEME_PREFERENCES_KEY,
-  type AppearanceChoices,
-  type AppearanceScheme,
-  type ThemePreferencesV2,
+  ADVANCED_THEME_PREFERENCES_KEY, getAdvancedAppearanceChoices, getLegacyAppearanceChoices,
+  isCustomAccent, isMobileAppearanceTheme, legacyThemeId, loadAdvancedThemePreferences, normalizeAccent,
+  prepareAdvancedAppearanceWrite, prepareAppearancePatch, resolveAdvancedThemeSelection,
+  type AdvancedAppearanceChoices, type AppearanceChoices, type AppearanceScheme,
+  type MobileAppearanceThemeId, type PreferenceRecovery, type ThemePreferencesV3,
 } from "../features/appearance/appearancePreferences";
+import {
+  describeCustomPalette, resolveAdaptiveCustomPalette, type CustomPaletteProfile,
+} from "../features/appearance/customAppearancePalette";
 
 export interface MobileThemeTokens {
   id: OrionThemeId;
@@ -113,12 +111,16 @@ const THEMES: Record<OrionThemeId, MobileThemeTokens> = {
 interface ThemeContextValue {
   systemReducedMotion: boolean | null;
   theme: MobileThemeTokens;
+  effectiveAppearanceThemeId: MobileAppearanceThemeId;
+  advancedAppearanceChoices: AdvancedAppearanceChoices;
+  appearanceRecoveries: readonly PreferenceRecovery[];
+  applyAdvancedAppearanceChoices: (opening: AdvancedAppearanceChoices, edited: AdvancedAppearanceChoices) => AppearanceApplyResult;
   preferences: MobileThemePreferences;
   appearanceChoices: AppearanceChoices;
   appearanceSaveBlock: string | null;
   systemScheme: AppearanceScheme;
   applyAppearanceChoices: (opening: AppearanceChoices, edited: AppearanceChoices) => AppearanceApplyResult;
-  setTheme: (theme: OrionThemeId) => void;
+  setTheme: (theme: MobileAppearanceThemeId) => void;
   setReducedMotion: (value: boolean) => void;
   setFollowSystem: (value: boolean) => void;
   setCustomAccent: (value: string | null) => boolean;
@@ -142,6 +144,43 @@ export function resolvePalette(themeId: OrionThemeId, customAccent: string | nul
   };
 }
 
+export function resolveCustomProfile(choices: AdvancedAppearanceChoices, profile: CustomPaletteProfile) {
+  if (profile === "light") return resolveAdaptiveCustomPalette(THEMES["projector-silver"], "light", choices.custom.light);
+  const { colors, rendering } = choices.custom.dark;
+  return rendering === "legacy"
+    ? describeCustomPalette(THEMES.custom, colors, resolvePalette("custom", colors.accent))
+    : resolveAdaptiveCustomPalette(THEMES.custom, "dark", colors);
+}
+
+export function resolveAppliedAppearancePalette(
+  id: MobileAppearanceThemeId, choices: AdvancedAppearanceChoices,
+): MobileThemeTokens {
+  if (id === "custom-light") return resolveCustomProfile(choices, "light").palette;
+  if (id === "custom") return choices.custom.dark.rendering === "legacy"
+    ? resolvePalette("custom", choices.custom.dark.colors.accent)
+    : resolveCustomProfile(choices, "dark").palette;
+  return THEMES[id];
+}
+
+/** Full-screen playback keeps its qualified presentation palette. */
+export function resolvePlaybackPresentationPalette(
+  id: MobileAppearanceThemeId, choices: AdvancedAppearanceChoices,
+): MobileThemeTokens {
+  if (id === "custom-light") return THEMES["projector-silver"];
+  if (id === "custom" && choices.custom.dark.rendering === "adaptive") return THEMES.custom;
+  return resolveAppliedAppearancePalette(id, choices);
+}
+
+function legacyAccentChange(preferences: ThemePreferencesV3, accent: string | null): ThemePreferencesV3 {
+  const dark = preferences.custom.dark;
+  if (dark.colors.accent === accent) return preferences;
+  return { ...preferences, custom: { ...preferences.custom, dark: { ...dark, colors: { ...dark.colors, accent } } } };
+}
+
+const canSaveLegacyAccent = (next: ThemePreferencesV3) => next.custom.dark.rendering === "legacy"
+  || resolveCustomProfile(getAdvancedAppearanceChoices(next), "dark").issues.length === 0;
+const legacyPaletteError = "Fix the Custom Dark palette before saving a new accent.";
+
 function normalizeSystemScheme(scheme: ColorSchemeName | null | undefined): "light" | "dark" {
   return scheme === "light" ? "light" : "dark";
 }
@@ -149,7 +188,7 @@ function normalizeSystemScheme(scheme: ColorSchemeName | null | undefined): "lig
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemReducedMotion = useSystemReducedMotion();
   const [systemScheme, setSystemScheme] = useState(() => normalizeSystemScheme(Appearance.getColorScheme()));
-  const [initial] = useState(() => loadThemePreferences(
+  const [initial] = useState(() => loadAdvancedThemePreferences(
     mmkvStorageAdapter,
     systemScheme,
     getMobileStorageHealth().state === "unavailable",
@@ -159,29 +198,32 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [preferenceSaveError, setPreferenceSaveError] = useState<string | null>(null);
   const dismissPreferenceSaveError = useCallback(() => setPreferenceSaveError(null), []);
 
-  const appearanceChoices = useMemo(() => getAppearanceChoices(applied), [applied]);
+  const appearanceChoices = useMemo(() => getLegacyAppearanceChoices(applied), [applied]);
+  const advancedAppearanceChoices = useMemo(() => getAdvancedAppearanceChoices(applied), [applied]);
   const appearanceSaveBlock = initial.saveStatus === "unsupported"
     ? "These settings were saved by a different version of Orion."
     : initial.saveStatus === "unavailable"
       ? "Local storage is unavailable. Reopen Orion and try again."
-      : null;
+      : initial.saveStatus === "corrupted"
+        ? "Saved appearance settings could not be read. Orion kept the original data."
+        : null;
 
   const persist = useCallback((
-    patch: Partial<Omit<ThemePreferencesV2, "schemaVersion">>,
+    updates: Partial<ThemePreferencesV3>,
     reportError: (message: string) => void = setPreferenceSaveError,
   ) => {
     const previous = committed.current;
-    if (Object.entries(patch).every(([key, value]) => previous[key as keyof ThemePreferencesV2] === value)) {
-      return true;
-    }
+    if (updates === previous) return true;
+    const next = { ...previous, ...updates };
+    const serialized = JSON.stringify(next);
+    if (serialized === JSON.stringify(previous)) return true;
     if (appearanceSaveBlock) {
       reportError(appearanceSaveBlock);
       return false;
     }
 
-    const next = { ...previous, ...patch };
     try {
-      mmkvStorageAdapter.set(THEME_PREFERENCES_KEY, JSON.stringify(next));
+      mmkvStorageAdapter.set(ADVANCED_THEME_PREFERENCES_KEY, serialized);
     } catch {
       reportError("Try again to save your changes.");
       return false;
@@ -194,27 +236,53 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return true;
   }, [appearanceSaveBlock]);
 
-  const applyAppearanceChoices = useCallback((opening: AppearanceChoices, edited: AppearanceChoices): AppearanceApplyResult => {
-    const plan = prepareAppearancePatch(opening, edited, getAppearanceChoices(committed.current));
-    if (!plan.ok) return plan;
+  const commitChoices = useCallback((next: ThemePreferencesV3): AppearanceApplyResult => {
     let message = "Try again to save your changes.";
-    if (persist(plan.patch, error => { message = error; })) return { ok: true };
+    if (persist(next, error => { message = error; })) return { ok: true };
     return { ok: false, message };
   }, [persist]);
 
-  const setTheme = useCallback((manualTheme: OrionThemeId) => {
-    persist({ manualTheme, followSystem: false });
+  const applyAppearanceChoices = useCallback((opening: AppearanceChoices, edited: AppearanceChoices): AppearanceApplyResult => {
+    const current = committed.current;
+    const plan = prepareAppearancePatch(opening, edited, getLegacyAppearanceChoices(current));
+    if (!plan.ok) return plan;
+    const { customAccent, ...selection } = plan.patch;
+    const next = { ...current, ...selection };
+    const updated = customAccent === undefined ? next : legacyAccentChange(next, customAccent);
+    if (updated !== next && !canSaveLegacyAccent(updated)) return { ok: false, message: legacyPaletteError };
+    return commitChoices(updated);
+  }, [commitChoices]);
+
+  const applyAdvancedAppearanceChoices = useCallback((
+    opening: AdvancedAppearanceChoices, edited: AdvancedAppearanceChoices,
+  ): AppearanceApplyResult => {
+    const plan = prepareAdvancedAppearanceWrite(opening, edited, committed.current,
+      (candidate, profile) => resolveCustomProfile(getAdvancedAppearanceChoices(candidate), profile).issues);
+    return plan.ok ? commitChoices(plan.preferences) : plan;
+  }, [commitChoices]);
+
+  const setTheme = useCallback((manualTheme: MobileAppearanceThemeId) => {
+    if (isMobileAppearanceTheme(manualTheme)) persist({ manualTheme, followSystem: false });
   }, [persist]);
+
   const setReducedMotion = useCallback((reducedMotion: boolean) => {
     persist({ reducedMotion });
   }, [persist]);
+
   const setFollowSystem = useCallback((followSystem: boolean) => {
     persist({ followSystem });
   }, [persist]);
+
   const setCustomAccent = useCallback((value: string | null) => {
     if (value !== null && !isCustomAccent(value)) return false;
+    const current = committed.current;
     const customAccent = value === null ? null : normalizeAccent(value);
-    return persist({ manualTheme: "custom", followSystem: false, customAccent });
+    const updated = legacyAccentChange(current, customAccent);
+    if (updated !== current && !canSaveLegacyAccent(updated)) {
+      setPreferenceSaveError(legacyPaletteError);
+      return false;
+    }
+    return persist({ ...updated, manualTheme: "custom", followSystem: false });
   }, [persist]);
 
   React.useEffect(() => {
@@ -231,23 +299,27 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const { customAccent, followSystem, reducedMotion } = applied;
-  const themeId = resolveThemeSelection(applied, systemScheme);
-  const theme = useMemo(() => resolvePalette(themeId, customAccent), [themeId, customAccent]);
-  // Existing consumers use this view of the effective selection. V2 alone is saved.
+  const { followSystem, reducedMotion } = applied;
+  const customAccent = applied.custom.dark.colors.accent;
+  const effectiveAppearanceThemeId = resolveAdvancedThemeSelection(applied, systemScheme);
+  const theme = useMemo(() => resolveAppliedAppearancePalette(effectiveAppearanceThemeId, advancedAppearanceChoices),
+    [effectiveAppearanceThemeId, advancedAppearanceChoices]);
+  // Existing consumers use the legacy view. Only the complete V3 record is written.
   const preferences = useMemo<MobileThemePreferences>(() => ({
     schemaVersion: 1,
-    theme: themeId,
+    theme: legacyThemeId(effectiveAppearanceThemeId),
     customAccent,
     followSystem,
     reducedMotion,
-  }), [themeId, customAccent, followSystem, reducedMotion]);
+  }), [effectiveAppearanceThemeId, customAccent, followSystem, reducedMotion]);
 
   return (
     <ThemeContext.Provider value={{
       theme, preferences, systemReducedMotion, setTheme, setReducedMotion, setFollowSystem, setCustomAccent,
       preferenceSaveError, dismissPreferenceSaveError,
       appearanceChoices, appearanceSaveBlock, systemScheme, applyAppearanceChoices,
+      effectiveAppearanceThemeId, advancedAppearanceChoices, applyAdvancedAppearanceChoices,
+      appearanceRecoveries: initial.recoveries,
     }}>
       {children}
     </ThemeContext.Provider>
@@ -258,6 +330,20 @@ export function useOrionTheme() {
   const value = useContext(ThemeContext);
   if (!value) throw new Error("useOrionTheme must be used within ThemeProvider");
   return value;
+}
+
+export function PlayerPresentationTheme({ children }: { children: React.ReactNode }) {
+  const appearance = useOrionTheme();
+  const value = useMemo(() => {
+    const { effectiveAppearanceThemeId, advancedAppearanceChoices, theme } = appearance;
+    if (effectiveAppearanceThemeId !== "custom-light" &&
+        !(effectiveAppearanceThemeId === "custom" && advancedAppearanceChoices.custom.dark.rendering === "adaptive")) {
+      return appearance;
+    }
+    const presentationTheme = resolvePlaybackPresentationPalette(effectiveAppearanceThemeId, advancedAppearanceChoices);
+    return theme === presentationTheme ? appearance : { ...appearance, theme: presentationTheme };
+  }, [appearance]);
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export const ORION_MOBILE_THEMES = THEMES;

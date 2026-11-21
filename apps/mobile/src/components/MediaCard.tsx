@@ -29,7 +29,12 @@ interface MediaCardProps {
 
 export function MediaCard({ item, onPress, width = 140, height = 210, style, watched, disabled = false, contextLabel }: MediaCardProps) {
   const { isSaved, toggleSave, isItemFullyWatched } = useLibraryVisual();
-  const { theme } = useOrionTheme();
+  const { theme, effectiveAppearanceThemeId, advancedAppearanceChoices } = useOrionTheme();
+  const adaptive = effectiveAppearanceThemeId === 'custom-light'
+    || (effectiveAppearanceThemeId === 'custom' && advancedAppearanceChoices?.custom.dark.rendering === 'adaptive');
+  const BadgeSurface = adaptive ? View : BlurView;
+  const tint = theme.dark ? 'dark' : 'light';
+  const badgeForeground = adaptive ? '#FFFFFF' : theme.text;
   const isMovie = item.media_type === 'movie' || !item.name;
   const offlineAvailability = useMobileDownloadAvailability(item.id, isMovie ? 'movie' : 'tv');
   const title = isMovie ? item.title : item.name;
@@ -108,17 +113,18 @@ export function MediaCard({ item, onPress, width = 140, height = 210, style, wat
                 style={[
                   styles.downloadedBadgeWrapper,
                   !isMovie && styles.downloadedBadgeCountWrapper,
-                  { borderColor: theme.border },
+                  { borderColor: adaptive ? '#A6A6AD' : theme.border },
                 ]}
               >
-                <BlurView intensity={42} tint={theme.dark ? 'dark' : 'light'} style={styles.downloadedBadge}>
-                  <Ionicons name="download-outline" size={12} color={theme.text} />
+                <BadgeSurface {...(adaptive ? {} : { intensity: 42, tint })}
+                  style={adaptive ? [styles.downloadedBadge, styles.mediaBadge] : styles.downloadedBadge}>
+                  <Ionicons name="download-outline" size={12} color={badgeForeground} />
                   {!isMovie && (
-                    <Text style={[styles.downloadedBadgeText, { color: theme.text }]}>
+                    <Text style={[styles.downloadedBadgeText, { color: badgeForeground }]}>
                       {offlineAvailability.episodeCount}
                     </Text>
                   )}
-                </BlurView>
+                </BadgeSurface>
               </View>
             )}
 
@@ -158,10 +164,11 @@ export function MediaCard({ item, onPress, width = 140, height = 210, style, wat
             {/* Rating Badge */}
             {!!item.vote_average && item.vote_average > 0 && (
               <View pointerEvents="none" style={styles.ratingBadgeWrapper}>
-                <BlurView intensity={60} tint={theme.dark ? 'dark' : 'light'} style={styles.ratingBadge}>
+                <BadgeSurface {...(adaptive ? {} : { intensity: 60, tint })}
+                  style={adaptive ? [styles.ratingBadge, styles.mediaBadge] : styles.ratingBadge}>
                   <Ionicons name="star" size={10} color={semantic.warning} />
-                  <Text style={[styles.ratingText, { color: theme.text }]}>{item.vote_average.toFixed(1)}</Text>
-                </BlurView>
+                  <Text style={[styles.ratingText, { color: badgeForeground }]}>{item.vote_average.toFixed(1)}</Text>
+                </BadgeSurface>
               </View>
             )}
           </View>
@@ -184,6 +191,7 @@ const styles = StyleSheet.create({
   pressedCard: {
     transform: [{ scale: 0.97 }],
   },
+  mediaBadge: { backgroundColor: '#16161C' },
   imageContainer: {
     flex: 1,
     borderRadius: radii.md,

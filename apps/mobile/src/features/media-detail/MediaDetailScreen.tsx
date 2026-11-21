@@ -35,7 +35,7 @@ import { CreditPersonCard, KeyCrewList, TitleCreditsPreview } from './CreditsPre
 export default function MediaDetailScreen() {
   const { id, type } = useLocalSearchParams<{ id: string; type: 'movie' | 'tv' }>();
   const router = useRouter();
-  const { theme } = useOrionTheme();
+  const { theme, effectiveAppearanceThemeId, advancedAppearanceChoices } = useOrionTheme();
   const insets = useSafeAreaInsets();
   const { resolvedProfile } = usePerformanceProfile();
   const { toggleSave, isSaved } = useLibraryVisual();
@@ -199,6 +199,10 @@ export default function MediaDetailScreen() {
   const heroSecondary = theme.dark ? 'rgba(255,255,255,0.82)' : theme.textSecondary;
   const heroSurface = theme.dark ? 'rgba(255,255,255,0.10)' : theme.surface;
   const heroBorder = theme.dark ? 'rgba(255,255,255,0.18)' : theme.border;
+  const adaptive = effectiveAppearanceThemeId === 'custom-light'
+    || (effectiveAppearanceThemeId === 'custom' && advancedAppearanceChoices?.custom.dark.rendering === 'adaptive');
+  const artworkText = adaptive ? '#FFFFFF' : heroText;
+  const artworkSecondary = adaptive ? '#D1D5DB' : heroSecondary;
   const backdropFadeColors = theme.dark
     ? ['rgba(5,5,10,0.10)', 'rgba(5,5,10,0.52)', 'rgba(5,5,10,0.84)', theme.background] as const
     : [`${theme.background}00`, `${theme.background}52`, `${theme.background}E8`, theme.background] as const;
@@ -301,10 +305,12 @@ export default function MediaDetailScreen() {
               )}
             </View>
             <View style={styles.headerMeta}>
+              {adaptive && <View pointerEvents="none" style={{ ...StyleSheet.absoluteFill, top: -4, bottom: -4, left: -8, right: -8,
+                borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.72)' }} />}
               <Text accessibilityRole="header" style={[
                 styles.titleText,
                 {
-                  color: heroText,
+                  color: artworkText,
                   textShadowColor: theme.dark ? 'rgba(0,0,0,0.95)' : 'transparent',
                   textShadowOffset: theme.dark ? { width: 0, height: 2 } : { width: 0, height: 0 },
                   textShadowRadius: theme.dark ? 10 : 0,
@@ -314,14 +320,15 @@ export default function MediaDetailScreen() {
                 {!!data.vote_average && (
                   <View style={styles.ratingBadge}>
                     <Ionicons name="star" size={12} color="#fbbf24" />
-                    <Text style={[styles.metaText, { color: heroText }]}>{data.vote_average.toFixed(1)}</Text>
+                    <Text style={[styles.metaText, { color: artworkText }]}>{data.vote_average.toFixed(1)}</Text>
                   </View>
                 )}
-                <Text style={[styles.metaText, { color: heroSecondary }]}>{year}</Text>
-                <Text style={[styles.metaText, { color: heroSecondary }]}>•</Text>
-                <Text style={[styles.metaText, { color: heroSecondary }]}>{runtime}</Text>
-                <View style={[styles.hdBadge, { backgroundColor: heroSurface, borderColor: heroBorder }]}>
-                  <Text style={[styles.hdText, { color: heroText }]}>HD</Text>
+                <Text style={[styles.metaText, { color: artworkSecondary }]}>{year}</Text>
+                <Text style={[styles.metaText, { color: artworkSecondary }]}>•</Text>
+                <Text style={[styles.metaText, { color: artworkSecondary }]}>{runtime}</Text>
+                <View style={[styles.hdBadge, { backgroundColor: heroSurface, borderColor: heroBorder },
+                  adaptive && { backgroundColor: '#23232A', borderColor: '#A6A6AD' }]}>
+                  <Text style={[styles.hdText, { color: artworkText }]}>HD</Text>
                 </View>
               </View>
               {genres && (
@@ -329,7 +336,7 @@ export default function MediaDetailScreen() {
                   <Text style={[
                     styles.genreInlineText,
                     {
-                      color: theme.accent,
+                      color: adaptive ? artworkSecondary : theme.accent,
                       textShadowColor: theme.dark ? 'rgba(0,0,0,0.9)' : 'transparent',
                       textShadowOffset: theme.dark ? { width: 0, height: 1 } : { width: 0, height: 0 },
                       textShadowRadius: theme.dark ? 4 : 0,
@@ -337,7 +344,8 @@ export default function MediaDetailScreen() {
                   ]} numberOfLines={2}>{genres}</Text>
                 </View>
               )}
-              {isMovie && <MovieWatchedBadge watched={watchedActions.movieWatched} theme={theme} />}
+              {isMovie && <MovieWatchedBadge watched={watchedActions.movieWatched}
+                foregroundColor={adaptive ? artworkSecondary : theme.accent} />}
             </View>
           </View>
           {(!network.remoteReady || loadError || actionMessage) && <Text accessibilityLiveRegion="polite" style={[styles.overviewText, { color: theme.textSecondary }]}>

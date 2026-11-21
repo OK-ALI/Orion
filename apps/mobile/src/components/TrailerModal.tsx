@@ -6,6 +6,7 @@ import {
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { semantic } from '@orion/shared/tokens';
 import type { TrailerCandidateV1, TrailerPlaybackState } from '@orion/shared/types';
 import { useOrionTheme } from '../context/ThemeContext';
 import { resolveMotionPolicy } from '../services/motionPolicy';
@@ -42,7 +43,11 @@ function errorCopy(state: TrailerPlaybackState, provider?: string, externalKind?
 }
 
 export function TrailerModal({ visible, onClose, title, titleKey = title, candidates: incomingCandidates, searchMetadata }: TrailerModalProps) {
-  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion, effectiveAppearanceThemeId, advancedAppearanceChoices } = useOrionTheme();
+  const adaptive = effectiveAppearanceThemeId === 'custom-light'
+    || (effectiveAppearanceThemeId === 'custom' && advancedAppearanceChoices?.custom.dark.rendering === 'adaptive');
+  const mediaText = adaptive ? '#FFFFFF' : theme.text;
+  const mediaSupportingText = adaptive ? '#D1D5DB' : theme.textSecondary;
   const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -176,11 +181,11 @@ export function TrailerModal({ visible, onClose, title, titleKey = title, candid
                 />
               )
             )}
-            {isPreparing && <View style={styles.playerOverlay}><ActivityIndicator size="large" color={theme.accent} /><Text style={[styles.statusText, { color: theme.textSecondary }]}>{session.state === 'rotating' ? 'Trying another trailer…' : 'Preparing trailer…'}</Text></View>}
-            {showError && <View style={[styles.playerOverlay, { backgroundColor: theme.mediaScrim }]}>
-              <Ionicons name="alert-circle-outline" size={34} color={theme.warning} />
-              <Text style={[styles.errorTitle, { color: theme.text }]}>{errorTitle}</Text>
-              <Text style={[styles.errorText, { color: theme.textSecondary }]}>{errorText}</Text>
+            {isPreparing && <View style={styles.playerOverlay}><ActivityIndicator size="large" color={adaptive ? mediaText : theme.accent} /><Text style={[styles.statusText, { color: mediaSupportingText }]}>{session.state === 'rotating' ? 'Trying another trailer…' : 'Preparing trailer…'}</Text></View>}
+            {showError && <View style={[styles.playerOverlay, { backgroundColor: adaptive ? '#000' : theme.mediaScrim }]}>
+              <Ionicons name="alert-circle-outline" size={34} color={adaptive ? semantic.warning : theme.warning} />
+              <Text style={[styles.errorTitle, { color: mediaText }]}>{errorTitle}</Text>
+              <Text style={[styles.errorText, { color: mediaSupportingText }]}>{errorText}</Text>
             </View>}
           </View>
 

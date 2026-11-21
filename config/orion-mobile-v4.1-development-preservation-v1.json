@@ -220,14 +220,14 @@
       "path": "apps/mobile/app/(tabs)/settings.tsx",
       "kind": "modify",
       "beforeBlob": "254307a9d05fbe302be8a0afd37d25fca0aa21c6",
-      "afterCanonicalSha256": "20d5cf4c006f7664430e52549504dc07291ac30834d205f50fef43805c931098",
+      "afterCanonicalSha256": "acdba8931ec50170b7d3ab86942df9034e9a74acb7dac753323f2df604301c5b",
       "approval": "already-owner-approved"
     },
     {
       "path": "apps/mobile/src/context/ThemeContext.tsx",
       "kind": "modify",
       "beforeBlob": "01e842bf70698551d74982b92dfd16317852cfc9",
-      "afterCanonicalSha256": "4dc11cfcbebece58e7f142db062502414a9ba56cf438af10978cf952a605cd5b",
+      "afterCanonicalSha256": "255177a1602405314b46db57723823d01274c8fe400befd22c330d9a2fe49d4d",
       "approval": "already-owner-approved"
     },
     {
@@ -241,14 +241,14 @@
       "path": "apps/mobile/src/features/appearance/appearancePreferences.ts",
       "kind": "add",
       "beforeBlob": null,
-      "afterCanonicalSha256": "8e611c45293f5be1af8d57d5068c82fef04d7724a2d4b6d36c393b4cc4815f37",
+      "afterCanonicalSha256": "e15c713f41a1f93ad6c63f0353be9986e042fe904109ef5c32e16c5f609ae437",
       "approval": "already-owner-approved"
     },
     {
       "path": "apps/mobile/tests/appearancePreferences.test.cjs",
       "kind": "add",
       "beforeBlob": null,
-      "afterCanonicalSha256": "5f87e9fccc382114aae266afeee4af45dfb4f5a68576eee94ca1b93a775ff630",
+      "afterCanonicalSha256": "e8de53209e335fef0b4827664c13876034c6f0b881cd07b31299aaf6c6852b99",
       "approval": "already-owner-approved"
     },
     {
@@ -276,63 +276,63 @@
       "path": "apps/mobile/src/features/appearance/AppearanceStudioControls.tsx",
       "kind": "add",
       "beforeBlob": null,
-      "afterCanonicalSha256": "5fbd0402f5f00683337813532a63b6ea6f528031a4bf632d92e7cea7469eaace",
+      "afterCanonicalSha256": "b9e72109f3a6c2b02d1eb1911f01552c594d3a4e7908b6ebf20a187d171265b4",
       "approval": "already-owner-approved"
     },
     {
       "path": "apps/mobile/src/features/appearance/AppearanceStudioDialog.tsx",
       "kind": "add",
       "beforeBlob": null,
-      "afterCanonicalSha256": "8ba39073ab747c468966995f0d0dba3c7e8fc1b055b6c86bd2cf90aeab9a453d",
+      "afterCanonicalSha256": "5d74392d334f87c3fb45654aede804da3aec47737604ffa6fe29b0c313219496",
       "approval": "already-owner-approved"
     },
     {
       "path": "apps/mobile/src/features/appearance/AppearanceStudioPreview.tsx",
       "kind": "add",
       "beforeBlob": null,
-      "afterCanonicalSha256": "670e62bad0314623a940551f5c633da3d3ccb1f1016d5019b70d30b199d68295",
+      "afterCanonicalSha256": "2adb06be1a7b647f8d0f3a123cc3ee1997029f2a8165107a18332cd6aa7c367a",
       "approval": "already-owner-approved"
     },
     {
       "path": "apps/mobile/src/features/appearance/appearanceStudioContrast.ts",
       "kind": "add",
       "beforeBlob": null,
-      "afterCanonicalSha256": "4e173b4dbb6ac0d7f059fcf26160eb1e26b8b94e80030a365123d786745f9cd3",
+      "afterCanonicalSha256": "1993be0053c699170ac21e68db28d8d76c66120766d619e4eec9d4e2d21f8587",
       "approval": "already-owner-approved"
     },
     {
       "path": "apps/mobile/src/features/appearance/appearanceStudioDraft.ts",
       "kind": "add",
       "beforeBlob": null,
-      "afterCanonicalSha256": "a7456355d6165f99e8a00c651daa09808c9be9e766e238b6b473dee84c775ebc",
+      "afterCanonicalSha256": "566c4aa5d384c287e6264523f73d23394e66942294504f27d9038cdcf7bc5e23",
       "approval": "already-owner-approved"
     },
     {
       "path": "apps/mobile/tests/appearanceStudioDraft.test.cjs",
       "kind": "add",
       "beforeBlob": null,
-      "afterCanonicalSha256": "7560cd400445b48be982b60e00ffb5141bc2d1fc07b0921bf70b58cf955b037a",
+      "afterCanonicalSha256": "df035e0b1b2993f9435800ea1b1cdb83d0320ebb2747da05164a343c9ded3fac",
       "approval": "already-owner-approved"
     },
     {
       "path": "apps/mobile/tests/appearanceStudioUi.test.cjs",
       "kind": "add",
       "beforeBlob": null,
-      "afterCanonicalSha256": "09fdb219e976d1da27cd587d9b53a463d914066053bb5fc51d52f97de85f9bdb",
+      "afterCanonicalSha256": "7d1f9dace04bbf9ba8929e49a2f485ce0a0e257dbc134df3f9af316688725884",
       "approval": "already-owner-approved"
     },
     {
       "path": "apps/mobile/tests/helpers/appearanceStudioHarness.cjs",
       "kind": "add",
       "beforeBlob": null,
-      "afterCanonicalSha256": "19e722b53c720d63cc41629b275f3b01b7849d47e508177b45c73999eb4ded9e",
+      "afterCanonicalSha256": "44b2a152ca204146516802941092516242161d2da6bd128f794c077da0ce1748",
       "approval": "already-owner-approved"
     },
     {
       "path": "apps/mobile/src/features/appearance/AppearanceStudioAccentSheet.tsx",
       "kind": "add",
       "beforeBlob": null,
-      "afterCanonicalSha256": "ee10992dcc0b56a245c0ad72ece3dcb92a926b554a0e1ee4fc262d28a38e6b99",
+      "afterCanonicalSha256": "fca0d1fd06e6ba77518f72298a21be53e6ddb8961fadcf6babb58cc01f6f5f7c",
       "approval": "already-owner-approved"
     },
     {
@@ -347,6 +347,153 @@
       "kind": "add",
       "beforeBlob": null,
       "afterCanonicalSha256": "cf3b6d527734f0351de1c7428b5b45d7dd62dc19ce009f1d0298a61aca31555e",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/appearance/customAppearancePalette.ts",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "36d132bcf3fa017a3940abb9827c91b1282446f79777a2d7dd734681ba0f878e",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/services/storageAdapter.ts",
+      "kind": "modify",
+      "beforeBlob": "e81a453d029c61e511f512307468cd95949cf4d9",
+      "afterCanonicalSha256": "beb1f5d64f3013f4d9fe511399ecf77c9e68072fa75c859186641aff66c738dc",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/customAppearancePalette.test.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "d5ab11b1bb1fd54979e525033af12a4b83f07b39f1e8f56f0b0e49827c2333b6",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/appearance/AppearanceStudioPaletteFields.tsx",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "366a3ef64b133121b36fa5d23c1294938982e47b53f78d30ff66869fa4cc28c1",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/components/HeroBillboard.tsx",
+      "kind": "modify",
+      "beforeBlob": "5eac46dff0027bbdb97dd3e0e7bf5125998df26b",
+      "afterCanonicalSha256": "b2b6bd25dc09f9fa87a0201e7ae1f2c2f0a6743ee26ceacaf34d123d0cd425a5",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/components/GlobalSearchShortcut.tsx",
+      "kind": "modify",
+      "beforeBlob": "ac174aad3432e8b1d05680506a807ac27641e275",
+      "afterCanonicalSha256": "4f0a58a7973ed549ce2e3505b88152471bd9745d4e171cc20906eda76d2c093f",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/components/OrionDialog.tsx",
+      "kind": "modify",
+      "beforeBlob": "9a1add645366fbb2d817a9d43f5dcb0dc4fe14b0",
+      "afterCanonicalSha256": "0b67353e1e3b5bfee1f325090df32d4ed044cab57810b5202bbebdb35bccbd88",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/components/TrailerModal.tsx",
+      "kind": "modify",
+      "beforeBlob": "89c4b911483b03b00f8640cfe23b8d86d25979c0",
+      "afterCanonicalSha256": "9a6c35fb4823e7864e92f901f9916b806c7a9a601c648198b63c43b02255cd3f",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/app/player/[id].tsx",
+      "kind": "modify",
+      "beforeBlob": "5121e64ca02304895bf30bac1bfa34a11cdf35f8",
+      "afterCanonicalSha256": "f6dd68e32d428ef89b26eb01b198bcbb955f7c5394d2e2b97fd26fa1f10ac033",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/adaptiveApplicationPresentation.test.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "4f14f7702adb9bc1a63ecf3e242649fcf50c4af3fa6ee4e166fc20278ceb5d87",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/phase0Safety.test.cjs",
+      "kind": "modify",
+      "beforeBlob": "70e1ad1e8c9bcaacbfba75e3d03809b458c3ff1e",
+      "afterCanonicalSha256": "a222534e9b1521a4a781cc87425d73a3a44f620c67585dba000bcb1d2d32280e",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/components/MediaCard.tsx",
+      "kind": "modify",
+      "beforeBlob": "8886f4460fcb37bab36e1357d16f2c7d55581c4a",
+      "afterCanonicalSha256": "e1c4547fab6a7d11e91ba3b7a6ab114af772548d7dcaabe1b2603c07a11e3c20",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/media-detail/MediaDetailScreen.tsx",
+      "kind": "modify",
+      "beforeBlob": "f18047ead7b93b68d2b323abf0ec40c137609af2",
+      "afterCanonicalSha256": "f3076ae60b4d95e7f9048e75a33f723fbbebcd5ac555732553c72792760e5e57",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/downloads/DownloadActivityList.tsx",
+      "kind": "modify",
+      "beforeBlob": "d813aa9ef0578ffd6ac7c2d1dd0673cf35f4e245",
+      "afterCanonicalSha256": "be4e892a08530e6a746ea4bbca914ba6862cb933039cbc1adb165357c59e3bd8",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/p10a2MediaDetailOfflineActions.test.cjs",
+      "kind": "modify",
+      "beforeBlob": "0a3ebd02cb50c95e6d8e0605f31ce31799a11504",
+      "afterCanonicalSha256": "2eb1eef992c629ba04673a59c8935ae6e9bfe5c02a888cfb6cb45226870f1409",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/library/ContinueWatchingCard.tsx",
+      "kind": "modify",
+      "beforeBlob": "b182efb979b4a8cf3b1db2877613fc3dd8f12599",
+      "afterCanonicalSha256": "19f76df80c0a786ef4c9b1d243415126e08434b0144324ff1474d3b499af77a9",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/components/SidebarDrawer.tsx",
+      "kind": "modify",
+      "beforeBlob": "56a7d1d7017656b556df1f63b2aa99c589f8b27e",
+      "afterCanonicalSha256": "06856c776d86bf8a91d58513f3554eff8acac6b3b89e9de291fe9208f253ab8a",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/settings/AccountSettingsContent.tsx",
+      "kind": "modify",
+      "beforeBlob": "6f9bf10363739748b027eb0baf06352764e0b9a2",
+      "afterCanonicalSha256": "d5a36a9a5a06a9cdeded014bd7967c3bf33816b3772d25a1e3c2a3a71219b756",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/pressedAppearanceContrast.test.cjs",
+      "kind": "add",
+      "beforeBlob": null,
+      "afterCanonicalSha256": "2b638a3edc3c2957ec1a5eff5423ac6405adbc18a4234f15f5d64b8a96ad5a41",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/tests/productPolish.test.cjs",
+      "kind": "modify",
+      "beforeBlob": "37c8aa2406ae7ad02c56ec9c0f0824a2cf5f12da",
+      "afterCanonicalSha256": "4d4d697c04ad1df5f551206878db4b0ade1a713e5d151d667fc582e314e3c8b4",
+      "approval": "already-owner-approved"
+    },
+    {
+      "path": "apps/mobile/src/features/media-detail/WatchedControls.tsx",
+      "kind": "modify",
+      "beforeBlob": "af5b9032f25ba3744cb5361e3e9605a56a000281",
+      "afterCanonicalSha256": "cd707b788b340ca3ce54fb4ef658fee738c9b3aceeeb948eacf49242e06664df",
       "approval": "already-owner-approved"
     }
   ],

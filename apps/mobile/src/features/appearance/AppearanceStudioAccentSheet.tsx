@@ -1,29 +1,36 @@
-import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import {
-  Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View,
+  Animated, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View,
   type GestureResponderEvent, type KeyboardEvent,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { fontSizes, radii, spacing } from "@orion/shared/tokens";
-import { resolvePalette, type MobileThemeTokens } from "../../context/ThemeContext";
+import { ORION_MOBILE_THEMES, type MobileThemeTokens } from "../../context/ThemeContext";
 import {
   accentFromArea, accentHsvToHex, ACCENT_HUES, clampPercent, describeAccent,
-  hexToAccentHsv, hueIndex, storedPickerAccent, type AccentHsv,
+  hexToAccentHsv, hueIndex, type AccentHsv,
 } from "./appearanceStudioAccentColor";
-import { getStudioAccentNotice, studioAccentForeground, studioReadableForeground } from "./appearanceStudioContrast";
-import { focusStudioNode, StudioAccentField, StudioAction, StudioHeading, StudioSwatch, studioTextStyles } from "./AppearanceStudioControls";
-import { ACCENT_ERROR, parseStudioAccent } from "./appearanceStudioDraft";
+import { studioAccentForeground, studioReadableForeground } from "./appearanceStudioContrast";
+import { focusStudioNode, StudioAccentField, StudioAction, StudioCard, StudioHeading, StudioSwatch } from "./AppearanceStudioControls";
+import { roleColorText, StudioPaletteFeedback } from "./AppearanceStudioPaletteFields";
+import { ACCENT_ERROR, parseStudioAccent, PROFILE_NAMES, ROLE_NAMES, THEME_NAMES, type StudioColorTarget } from "./appearanceStudioDraft";
 import { studioKeyboardInset, studioRevealOffset, type StudioKeyboardFrame, type StudioMeasuredFrame } from "./appearanceStudioIme";
+import { compositePaletteColor, type CustomPaletteResolution } from "./customAppearancePalette";
 
 const MARKER_SIZE = 20;
+const presetIds = ["midnight-premiere", "amoled", "mocha", "slate", "projector-silver"] as const;
+const presets = presetIds.map(id => ({ label: THEME_NAMES[id], hex: ORION_MOBILE_THEMES[id].accent.toUpperCase() }));
 
 export interface AccentSheetHandle { back: () => void }
 
 interface AccentSheetProps {
   theme: MobileThemeTokens;
+  target: StudioColorTarget;
   original: string | null;
-  defaultAccent: string;
+  saved: string | null;
+  palette: CustomPaletteResolution;
+  resolveCandidate: (value: string | null) => CustomPaletteResolution;
   stacked: boolean;
   onCancel: () => void;
   onUse: (value: string | null) => void;
@@ -69,9 +76,14 @@ function ColorStep({ label, value, onChange, theme }: {
 }
 
 export const AppearanceStudioAccentSheet = forwardRef<AccentSheetHandle, AccentSheetProps>(
-  function AppearanceStudioAccentSheet({ theme, original, defaultAccent, stacked, onCancel, onUse }, ref) {
-    const opening = original ?? defaultAccent;
+  function AppearanceStudioAccentSheet({ theme, target, original, saved, palette, resolveCandidate, stacked, onCancel, onUse }, ref) {
+    const { role, profile } = target;
+    const inherited = palette.roles[role].inheritedColor;
+    const defaultHex = compositePaletteColor(inherited, palette.palette.surface);
+    const opening = original ?? defaultHex;
+    const title = `${PROFILE_NAMES[profile]} · ${ROLE_NAMES[role]}`;
     const [hsv, setHsv] = useState(() => hexToAccentHsv(opening));
+    const [edited, setEdited] = useState(false);
     const [hexInput, setHexInput] = useState<string | null>(null);
     const [showHex, setShowHex] = useState(false);
     const [validate, setValidate] = useState(false);
@@ -79,7 +91,9 @@ export const AppearanceStudioAccentSheet = forwardRef<AccentSheetHandle, AccentS
     const [focusedHue, setFocusedHue] = useState<number | null>(null);
     const [confirming, setConfirming] = useState(false);
     const [area, setArea] = useState({ width: 0, height: 0 });
-    const [selectingShade, setSelectingShade] = useState(false);
+    const [pickerLayout, setPickerLayout] = useState({ contentHeight: 0, viewportHeight: 0 });
+    const [shadeDragLayout, setShadeDragLayout] = useState<typeof pickerLayout | null>(null);
+    const [scrollPosition] = useState(() => new Animated.Value(0));
     const [keyboard, setKeyboard] = useState<StudioKeyboardFrame | null>(() => Keyboard.metrics() ?? null);
     const [viewport, setViewport] = useState<StudioMeasuredFrame | null>(null);
     const root = useRef<View>(null);
@@ -99,11 +113,17 @@ export const AppearanceStudioAccentSheet = forwardRef<AccentSheetHandle, AccentS
     const raw = hexInput ?? hex;
     const inset = viewport ? studioKeyboardInset(viewport, keyboard) : 0;
     const error = validate && !parseStudioAccent(raw) ? ACCENT_ERROR : null;
-    const dirty = hex !== opening || !parseStudioAccent(raw) || (useDefault && original !== null);
-    const proposedTheme = resolvePalette("custom", hex);
-    const notice = getStudioAccentNotice(proposedTheme);
+    const candidate = useDefault ? null : edited ? hex : original;
+    const dirty = candidate !== original || !parseStudioAccent(raw);
+    const resolution = useMemo(() => resolveCandidate(candidate), [resolveCandidate, candidate]);
+    const proposedTheme = resolution.palette;
     const hue = hueIndex(hsv.hue);
     const accent = studioAccentForeground(theme, theme.elevated, 3);
+    const { contentHeight, viewportHeight } = pickerLayout;
+    const scrollRange = contentHeight - viewportHeight;
+    const thumbHeight = viewportHeight > 0 && scrollRange > 0
+      ? Math.min(viewportHeight, Math.max(20, viewportHeight * viewportHeight / contentHeight))
+      : 0;
 
     const measure = useCallback(() => {
       readFrame(root.current, next => setViewport(previous =>
@@ -170,6 +190,7 @@ export const AppearanceStudioAccentSheet = forwardRef<AccentSheetHandle, AccentS
     useImperativeHandle(ref, () => ({ back }));
 
     function select(next: AccentHsv) {
+      setEdited(true);
       setUseDefault(false);
       setHexInput(null);
       setValidate(false);
@@ -183,15 +204,17 @@ export const AppearanceStudioAccentSheet = forwardRef<AccentSheetHandle, AccentS
     }
 
     function startShade(event: GestureResponderEvent) {
-      setSelectingShade(true);
+      // Hold the viewport and scroll extent while live details below Shade change height.
+      setShadeDragLayout(pickerLayout);
       selectShade(event);
     }
 
     function endShade() {
-      setSelectingShade(false);
+      setShadeDragLayout(null);
     }
 
     function editHex(value: string) {
+      setEdited(true);
       setUseDefault(false);
       setHexInput(value);
       const parsed = parseStudioAccent(value);
@@ -202,7 +225,7 @@ export const AppearanceStudioAccentSheet = forwardRef<AccentSheetHandle, AccentS
       const parsed = parseStudioAccent(raw);
       if (parsed) {
         Keyboard.dismiss();
-        onUse(useDefault ? null : storedPickerAccent(parsed, original, defaultAccent));
+        onUse(useDefault ? null : edited ? parsed : original);
       } else {
         revealError.current = true;
         setShowHex(true);
@@ -218,12 +241,24 @@ export const AppearanceStudioAccentSheet = forwardRef<AccentSheetHandle, AccentS
           backgroundColor: theme.elevated, borderColor: theme.border,
           maxHeight: keyboard || (viewport?.height ?? height) < 520 ? "100%" : "90%",
         }]}>
-          <View ref={scrollViewport} testID="studio-picker-visible" collapsable={false} style={styles.scrollViewport} onLayout={reveal}>
+          <View ref={scrollViewport} testID="studio-picker-visible" collapsable={false}
+            style={[styles.scrollViewport, shadeDragLayout?.viewportHeight ? { height: shadeDragLayout.viewportHeight } : undefined]}
+            onLayout={({ nativeEvent: { layout: { height } } }) => {
+              setPickerLayout(current => current.viewportHeight === height ? current : { ...current, viewportHeight: height });
+              reveal();
+            }}>
             <ScrollView ref={scroll} testID="studio-picker-scroll" keyboardShouldPersistTaps="handled"
-              scrollEnabled={!selectingShade} style={styles.scroll} contentContainerStyle={styles.content}
-              onScroll={event => { offset.current = event.nativeEvent.contentOffset.y; }} scrollEventThrottle={16}>
+              scrollEnabled={shadeDragLayout === null} style={styles.scroll}
+              contentContainerStyle={[styles.content, shadeDragLayout && { minHeight: shadeDragLayout.contentHeight }]}
+              showsVerticalScrollIndicator={false}
+              onContentSizeChange={(_width, height) =>
+                setPickerLayout(current => current.contentHeight === height ? current : { ...current, contentHeight: height })}
+              onScroll={event => {
+                offset.current = event.nativeEvent.contentOffset.y;
+                scrollPosition.setValue(offset.current);
+              }} scrollEventThrottle={16}>
               <View style={styles.header}>
-                <StudioHeading dialogTitle title={confirming ? "Discard color changes?" : "Custom accent"}
+                <StudioHeading dialogTitle title={confirming ? "Discard color changes?" : title}
                   headingRef={heading} theme={theme} background={theme.elevated} />
                 {!confirming && <StudioAction label="Close color picker" icon="close" actionRef={returnButton}
                   theme={theme} background={theme.elevated} onPress={close} />}
@@ -241,26 +276,17 @@ export const AppearanceStudioAccentSheet = forwardRef<AccentSheetHandle, AccentS
                 </>
               ) : (
                 <>
-                  <View style={[styles.row, styles.samples]}>
-                    <View style={styles.colorSample}>
-                      <StudioSwatch color={opening} backing={theme.elevated} />
-                      <Text style={[styles.label, { color: theme.text }]}>Current</Text>
-                      <Text style={{ color: theme.textSecondary }}>{describeAccent(opening)}</Text>
+                  {role === "accent" && (
+                    <View style={styles.group}>
+                      <StudioHeading title="Orion Accents" theme={theme} background={theme.elevated} />
+                      <View style={stacked ? styles.group : styles.row}>
+                        {presets.map(preset => <View key={preset.hex} style={!stacked && styles.preset}>
+                          <StudioCard compact label={preset.label + ", " + preset.hex} swatch={preset.hex} theme={theme}
+                            checked={hex === preset.hex} onPress={() => select(hexToAccentHsv(preset.hex))} />
+                        </View>)}
+                      </View>
                     </View>
-                    <View style={styles.colorSample}>
-                      <StudioSwatch color={hex} backing={theme.elevated} />
-                      <Text style={[styles.label, { color: theme.text }]}>New color</Text>
-                      <Text accessibilityLiveRegion="polite" style={{ color: theme.textSecondary }}>
-                        {describeAccent(hex)}, {hex}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={[styles.sample, { backgroundColor: proposedTheme.surface, borderColor: proposedTheme.border }]}>
-                    <Text style={{ color: proposedTheme.text }}>Custom Dark preview</Text>
-                    <View testID="studio-picker-sample" style={[styles.sampleAction, { backgroundColor: hex }]}>
-                      <Text style={[styles.label, { color: studioReadableForeground(hex, proposedTheme.onAccent) }]}>Play</Text>
-                    </View>
-                  </View>
+                  )}
                   <StudioHeading title="Hue" theme={theme} background={theme.elevated} />
                   <View style={styles.row}>
                     {ACCENT_HUES.map((name, index) => {
@@ -306,9 +332,34 @@ export const AppearanceStudioAccentSheet = forwardRef<AccentSheetHandle, AccentS
                     onChange={saturation => select({ ...hsv, saturation })} />
                   <ColorStep label="Brightness" value={hsv.brightness} theme={theme}
                     onChange={brightness => select({ ...hsv, brightness })} />
-                  {notice && <Text style={[studioTextStyles.description, { color: theme.textSecondary }]}>{notice}</Text>}
+                  <View style={[styles.row, styles.samples]}>
+                    <View style={styles.colorSample}>
+                      <StudioSwatch color={saved ?? inherited} backing={theme.elevated} />
+                      <Text style={[styles.label, { color: theme.text }]}>Saved color</Text>
+                      <Text style={{ color: theme.textSecondary }}>{roleColorText(saved, inherited)}</Text>
+                    </View>
+                    <View style={styles.colorSample}>
+                      <View testID="studio-picker-sample" style={[styles.requestedSwatch, { backgroundColor: candidate ?? inherited,
+                        borderColor: accent }]} />
+                      <Text style={[styles.label, { color: theme.text }]}>Proposed color</Text>
+                      <Text testID="studio-proposed-color" accessibilityLiveRegion="polite" style={{ color: theme.textSecondary }}>
+                        {candidate === null ? roleColorText(null, inherited) : `${describeAccent(hex)}, ${hex}`}
+                      </Text>
+                    </View>
+                  </View>
+                  <StudioPaletteFeedback role={role} resolution={resolution} theme={theme} />
+                  {resolution.issues.filter(issue => issue.role !== role).map(issue =>
+                    <StudioPaletteFeedback key={issue.role} role={issue.role} resolution={resolution} theme={theme} />)}
+                  <View style={[styles.sample, { backgroundColor: proposedTheme.background, borderColor: proposedTheme.border }]}>
+                    <View style={[styles.sample, { backgroundColor: proposedTheme.surface, borderColor: proposedTheme.border }]}>
+                      <Text style={[styles.sampleTitle, { color: proposedTheme.text }]}>{PROFILE_NAMES[profile]} preview</Text>
+                      <View style={[styles.sampleAction, { backgroundColor: proposedTheme.accent }]}>
+                        <Text style={[styles.label, { color: studioReadableForeground(proposedTheme.accent, proposedTheme.onAccent) }]}>Play</Text>
+                      </View>
+                    </View>
+                  </View>
                   <StudioAction label="Use Orion default" theme={theme} onPress={() => {
-                    select(hexToAccentHsv(defaultAccent));
+                    select(hexToAccentHsv(defaultHex));
                     setUseDefault(true);
                   }} />
                   <StudioAction label={showHex ? "Hide HEX" : "Enter HEX"} theme={theme} onPress={() => {
@@ -317,7 +368,8 @@ export const AppearanceStudioAccentSheet = forwardRef<AccentSheetHandle, AccentS
                   }} />
                   {showHex && (
                     <View ref={field} collapsable={false} onLayout={reveal} testID="studio-hex-group">
-                      <StudioAccentField theme={theme} value={raw} error={error} onChange={editHex}
+                      <StudioAccentField theme={theme} label={`${PROFILE_NAMES[profile]} ${ROLE_NAMES[role].toLowerCase()} HEX`}
+                        value={raw} error={error} onChange={editHex}
                         onFocus={() => { inputFocused.current = true; reveal(); }}
                         onBlur={() => { inputFocused.current = false; setValidate(true); }}
                         onSubmit={() => { revealError.current = true; setValidate(true); requestAnimationFrame(reveal); }} />
@@ -333,6 +385,14 @@ export const AppearanceStudioAccentSheet = forwardRef<AccentSheetHandle, AccentS
                 </>
               )}
             </ScrollView>
+            {thumbHeight > 0 && (
+              <Animated.View testID="studio-picker-scrollbar" accessible={false} importantForAccessibility="no"
+                pointerEvents="none" style={[styles.scrollbar, { backgroundColor: accent, height: thumbHeight,
+                  transform: [{ translateY: scrollPosition.interpolate({
+                    inputRange: [0, scrollRange], outputRange: [0, viewportHeight - thumbHeight], extrapolate: "clamp",
+                  }) }],
+                }]} />
+            )}
           </View>
         </View>
       </View>
@@ -348,16 +408,20 @@ const styles = StyleSheet.create({
   },
   scrollViewport: { minHeight: 0, flexShrink: 1 },
   scroll: { minHeight: 0, flexShrink: 1, flexGrow: 0 },
+  scrollbar: { position: "absolute", top: 0, right: 3, width: 3, borderRadius: 2 },
   content: { padding: spacing[4], gap: spacing[3] },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing[3] },
   group: { gap: spacing[3] },
   row: { flexDirection: "row", flexWrap: "wrap", gap: spacing[2] },
   samples: { gap: spacing[3] },
   colorSample: { flexGrow: 1, flexBasis: 115, minWidth: 0, gap: spacing[1] },
+  preset: { flexGrow: 1, flexBasis: 210, minWidth: 0 },
+  requestedSwatch: { width: 20, height: 20, borderWidth: 1, borderRadius: 10 },
   label: { fontSize: fontSizes.sm, fontWeight: "800" },
   percentage: { fontSize: fontSizes.base },
-  sample: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing[2],
+  sample: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing[2], minWidth: 0, maxWidth: "100%",
     padding: spacing[2], borderRadius: radii.md, borderWidth: 1 },
+  sampleTitle: { minWidth: 0, flexShrink: 1 },
   sampleAction: { padding: spacing[2], borderRadius: radii.md },
   hue: { width: 48, height: 48, borderRadius: 24, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   colorArea: { minHeight: 148, borderWidth: 1, borderRadius: radii.lg, overflow: "hidden" },

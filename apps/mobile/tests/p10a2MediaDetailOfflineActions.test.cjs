@@ -27,7 +27,7 @@ const titleResponse = (id = 1, type = 'movie') => ({ id, title: 'Remote title ' 
 // Deterministic hook/effect runner, real screen/hydration/repository selectors, mocked
 // platform services. Deferred promises let tests resolve pre-loss requests last.
 function harness({ state = 'online', epoch = 0, repository = emptyRepository(), reconciliation = 'ready', mode = 'screen', type = 'movie',
-  themeId = 'midnight-premiere', width = 400, height = 800, fontScale = 1 } = {}) {
+  themeId = 'midnight-premiere', appearance, movieWatched = false, width = 400, height = 800, fontScale = 1 } = {}) {
   const slots = [], requests = [], routes = [], saves = [], sourceRequests = [];
   const repositoryListeners = new Set(), reconciliationListeners = new Set(), modules = new Map();
   let network = { productState: state, remoteReady: state === 'online', recoveryEpoch: epoch };
@@ -46,7 +46,7 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
   };
   const element = (type, props) => ({ type, props: props || {} });
   const router = { push: (route) => routes.push(route), back() {} };
-  const watchedActions = { movieWatched: false, isEpisodeWatched: () => false, toggleMovieWatched: () => watched++, toggleEpisodeWatched: () => watched++ };
+  const watchedActions = { movieWatched, isEpisodeWatched: () => false, toggleMovieWatched: () => watched++, toggleEpisodeWatched: () => watched++ };
   const mocks = {
     react, 'react/jsx-runtime': { jsx: element, jsxs: element, Fragment: 'Fragment' },
     'react-native': { ...Object.fromEntries(['View', 'Text', 'Image', 'ScrollView', 'ActivityIndicator', 'Pressable', 'FlatList', 'Modal'].map((s) => [s, s])),
@@ -57,7 +57,7 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 10, bottom: 10 }) },
     '@orion/shared/api': { isAnimeContent, tmdbFetch: (url, requestOptions = {}) => new Promise((resolve, reject) => requests.push({ url, options: requestOptions, resolve, reject })), imgUrl: (value) => value },
     '../../context/NetworkContext': { useNetworkStatus: () => network }, './NetworkContext': { useNetworkStatus: () => network },
-    '../../context/ThemeContext': { useOrionTheme: () => ({ theme }) },
+    '../../context/ThemeContext': { useOrionTheme: () => appearance ?? { theme } },
     '../../context/LibraryContext': { useLibraryVisual: () => ({ toggleSave: (record) => saves.push(record), isSaved: () => false }), useLibraryPlaybackActions: () => ({ getPlaybackProgress: () => null }) },
     '../../context/PerformanceContext': { usePerformanceProfile: () => ({ resolvedProfile: 'balanced' }) },
     '../../services/responsive': { useResponsiveLayout: () => ({ width, isTablet: Math.min(width, height) >= 600 }) },
@@ -76,6 +76,8 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
     '../downloads/downloadCandidateCapture': { cancelMobileDownloadSourceResolutionV1() {}, requestMobileDownloadSourceResolutionV1: (...args) => sourceRequests.push(args) },
     '../../components/DownloadModal': { DownloadModal: 'DownloadModal' }, '../../components/TrailerModal': { TrailerModal: 'TrailerModal' },
     '../../components/MediaCard': { MediaCard: 'MediaCard' },
+    '../../components/OrionDialog': { OrionDialog: 'OrionDialog' },
+    '../../components/WatchedUndoBanner': { WatchedUndoBanner: 'WatchedUndoBanner' },
   };
   function load(file) {
     if (modules.has(file)) return modules.get(file).exports;
@@ -93,7 +95,7 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
     return module.exports;
   }
   mocks['@orion/shared/tokens'] = load(path.resolve(root, '../../packages/shared/src/tokens/index.ts'));
-  const theme = load(path.join(root, 'src/context/ThemeContext.tsx')).ORION_MOBILE_THEMES[themeId];
+  const theme = appearance?.theme ?? load(path.join(root, 'src/context/ThemeContext.tsx')).ORION_MOBILE_THEMES[themeId];
   const remoteHook = load(path.join(dir, 'useMediaDetailRemoteState.ts')).useMediaDetailRemoteState;
   const Screen = load(path.join(dir, 'MediaDetailScreen.tsx')).default;
   const Collection = load(path.join(dir, 'MovieCollectionTab.tsx')).MovieCollectionTab;
@@ -118,6 +120,12 @@ function harness({ state = 'online', epoch = 0, repository = emptyRepository(), 
       const list = nodes(result).find((node) => node.type?.name === 'MediaDetailLocalCopies');
       const props = list?.props || result.props;
       return nodes(load(path.join(dir, 'MediaDetailFallback.tsx')).MediaDetailLocalCopies(props));
+    },
+    watchedBadgeNodes() {
+      const badge = nodes(result).find(node => node.type === 'MovieWatchedBadge');
+      if (!badge) return [];
+      const { MovieWatchedBadge } = load(path.join(dir, 'WatchedControls.tsx'));
+      return nodes(MovieWatchedBadge(badge.props));
     },
     fallbackNodes() {
       const fallback = nodes(result).find((node) => node.type?.name === 'MediaDetailFallback');
@@ -396,6 +404,114 @@ test('cold offline TV fallback exposes choices and refuses an unspecified episod
 
 
 const style = (value) => Object.assign({}, ...(Array.isArray(value) ? value.flat(Infinity).filter(Boolean) : [typeof value === 'function' ? value({ pressed: false }) : value]).flat(Infinity));
+
+test('Movie and TV hero metadata stays readable over bright and dark artwork in both adaptive profiles', async () => {
+  const load = require('./helpers/animeModules.cjs').loader({
+    react: { createContext: () => ({}) }, 'react-native': {},
+    '../services/storageAdapter': {}, '../hooks/useSystemReducedMotion': {},
+  });
+  const { inheritedCustomPalette, compositePaletteColor, paletteContrast } =
+    load('apps/mobile/src/features/appearance/customAppearancePalette.ts');
+  const { resolveAppliedAppearancePalette, resolveCustomProfile } = load('apps/mobile/src/context/ThemeContext.tsx');
+  const blank = inheritedCustomPalette();
+  const advancedAppearanceChoices = { custom: {
+    light: { ...blank, background: '#777777', surface: '#888888', text: '#000000', accent: '#FF0090' },
+    dark: { colors: { ...blank, background: '#747474', surface: '#747474', accent: '#08001B' }, rendering: 'adaptive' },
+  } };
+  for (const [profile, effectiveAppearanceThemeId] of [['light', 'custom-light'], ['dark', 'custom']]) {
+    assert.deepEqual(resolveCustomProfile(advancedAppearanceChoices, profile).issues, []);
+    const theme = resolveAppliedAppearancePalette(effectiveAppearanceThemeId, advancedAppearanceChoices);
+    for (const type of ['movie', 'tv']) {
+      const h = harness({ type, movieWatched: true, appearance: { effectiveAppearanceThemeId, advancedAppearanceChoices, theme } });
+      try {
+        h.requests[0].resolve({ ...titleResponse(1, type), vote_average: 8.1, runtime: 109,
+          backdrop_path: '/synthetic-extremes.jpg', genres: [{ id: 28, name: 'Action' }] });
+        await h.settle();
+        const nodes = h.nodes();
+        const header = nodes.find(n => n.props.accessibilityRole === 'header' &&
+          n.props.children === (type === 'movie' ? 'Remote title 1' : 'Remote series 1'));
+        const backing = nodes.find(n => n.props.pointerEvents === 'none' &&
+          style(n.props.style).backgroundColor === 'rgba(0,0,0,0.72)');
+        assert.ok(header);
+        assert.ok(backing);
+        assert.ok(nodes.some(n => n.type === 'Image' && n.props.source?.uri === '/synthetic-extremes.jpg'));
+        const gradient = nodes.find(n => n.type === 'LinearGradient' && n.props.locations?.length === 4);
+        assert.equal(gradient.props.colors.at(-1), theme.background);
+        const getText = copy => nodes.find(n => n.type === 'Text' && n.props.children === copy);
+        const rating = nodes.find(n => n.props.children?.some?.(child => child?.props?.children === '8.1'));
+        const hd = nodes.find(n => n.props.children === getText('HD'));
+        const badge = h.watchedBadgeNodes();
+        if (type === 'movie') {
+          const label = badge.find(node => node.type === 'Text' && node.props.children === 'Watched');
+          const icon = badge.find(node => node.type === 'Ionicons' && node.props.name === 'checkmark-circle');
+          assert.ok(label && icon);
+          const backgrounds = ['#000000', '#FFFFFF', theme.background].map(artwork =>
+            compositePaletteColor(style(backing.props.style).backgroundColor, artwork));
+          for (const background of [...backgrounds, '#44403B']) {
+            assert.ok(paletteContrast(style(label.props.style).color, background) >= 4.5);
+            assert.ok(paletteContrast(icon.props.color, background) >= 3);
+          }
+        } else {
+          assert.deepEqual(badge, []);
+        }
+        for (const artwork of ['#000000', '#FFFFFF', theme.background]) {
+          const behind = compositePaletteColor(style(backing.props.style).backgroundColor, artwork);
+          for (const text of [header, getText('2024'), getText(type === 'movie' ? '109m' : '3 Seasons'), getText('Action')]) {
+            assert.ok(paletteContrast(style(text.props.style).color, behind) >= 4.5);
+          }
+          const ratingFill = compositePaletteColor(style(rating.props.style).backgroundColor, behind);
+          assert.ok(paletteContrast(style(getText('8.1').props.style).color, ratingFill) >= 4.5);
+          assert.ok(paletteContrast(rating.props.children[0].props.color, ratingFill) >= 3);
+          assert.ok(paletteContrast(style(getText('HD').props.style).color, style(hd.props.style).backgroundColor) >= 4.5);
+          assert.ok(paletteContrast(style(hd.props.style).borderColor, style(hd.props.style).backgroundColor) >= 3);
+        }
+      } finally {
+        h.unmount();
+      }
+    }
+  }
+});
+
+test('Detail hero retains the historical metadata and badge palette for presets and legacy Custom accent', async () => {
+  const load = require('./helpers/animeModules.cjs').loader({
+    react: { createContext: () => ({}) }, 'react-native': {},
+    '../services/storageAdapter': {}, '../hooks/useSystemReducedMotion': {},
+  });
+  const { ORION_MOBILE_THEMES, resolvePalette } = load('apps/mobile/src/context/ThemeContext.tsx');
+  for (const theme of [...Object.values(ORION_MOBILE_THEMES), resolvePalette('custom', '#285E95')]) {
+    const h = harness({ movieWatched: true, appearance: { theme, effectiveAppearanceThemeId: theme.id,
+      advancedAppearanceChoices: { custom: { dark: { rendering: 'legacy' } } } } });
+    try {
+      h.requests[0].resolve({ ...titleResponse(), runtime: 109, vote_average: 8.1, genres: [{ id: 28, name: 'Action' }] });
+      await h.settle();
+      const nodes = h.nodes();
+      const text = copy => nodes.find(n => n.type === 'Text' && n.props.children === copy);
+      assert.equal(style(text('Remote title 1').props.style).color, theme.dark ? '#ffffff' : theme.text);
+      assert.equal(style(text('109m').props.style).color, theme.dark ? 'rgba(255,255,255,0.82)' : theme.textSecondary);
+      assert.equal(style(text('Action').props.style).color, theme.accent);
+      const badge = h.watchedBadgeNodes();
+      assert.equal(style(badge.find(node => node.type === 'Text' && node.props.children === 'Watched').props.style).color, theme.accent);
+      assert.equal(badge.find(node => node.type === 'Ionicons' && node.props.name === 'checkmark-circle').props.color, theme.accent);
+      const hd = nodes.find(n => n.props.children === text('HD'));
+      assert.equal(style(hd.props.style).backgroundColor, theme.dark ? 'rgba(255,255,255,0.10)' : theme.surface);
+      assert.equal(nodes.some(n => style(n.props.style).backgroundColor === 'rgba(0,0,0,0.72)'), false);
+    } finally {
+      h.unmount();
+    }
+  }
+});
+
+test('Unwatched movies omit the real Watched badge', async () => {
+  const h = harness();
+  try {
+    h.requests[0].resolve(titleResponse());
+    await h.settle();
+    assert.ok(h.component('MovieWatchedBadge'));
+    assert.deepEqual(h.watchedBadgeNodes(), []);
+  } finally {
+    h.unmount();
+  }
+});
 
 // Compare complete rendered geometry/content outside the intentionally variable
 // local capability, including Download, Watch Now, secondary actions and tabs.

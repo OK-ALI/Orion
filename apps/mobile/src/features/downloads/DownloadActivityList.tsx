@@ -339,7 +339,9 @@ function seasonDisplayTitle(season: number | null): string {
 }
 
 export function DownloadActivityList({ jobs, assets, offlineEntries, active = true, onManageAssets, onPlayInOrion, onPlayLocally, onRefreshAndResume }: DownloadActivityListProps) {
-  const { theme } = useOrionTheme();
+  const { theme, effectiveAppearanceThemeId, advancedAppearanceChoices } = useOrionTheme();
+  const adaptive = effectiveAppearanceThemeId === 'custom-light'
+    || (effectiveAppearanceThemeId === 'custom' && advancedAppearanceChoices?.custom.dark.rendering === 'adaptive');
   const [busyJob, setBusyJob] = useState<string | null>(null);
   const [actionError, setActionError] = useState<{ jobId: string; message: string } | null>(null);
   const [tab, setTab] = useState<DownloadTab>('all');
@@ -724,22 +726,24 @@ export function DownloadActivityList({ jobs, assets, offlineEntries, active = tr
     </View>
   );
 
-  function ActionButton({ label, icon, accessibilityLabel, disabled, primary = false, onPress }: { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; accessibilityLabel?: string; disabled?: boolean; primary?: boolean; onPress: () => void }) {
+  function ActionButton({ label, icon, accessibilityLabel, disabled, primary: primaryAction = false, onPress }: { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; accessibilityLabel?: string; disabled?: boolean; primary?: boolean; onPress: () => void }) {
+    const [focused, setFocused] = useState(false);
+    const adaptivePrimary = adaptive && primaryAction;
+    const primary = primaryAction && !(adaptivePrimary && disabled);
     return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel || `${label} download`}
-        disabled={disabled}
-        onPress={onPress}
-        style={({ pressed }) => [
-          styles.action,
-          {
-            borderColor: primary ? theme.accent : theme.border,
-            backgroundColor: primary ? (pressed ? theme.accentSoft : theme.accent) : (pressed ? theme.surfaceHover : theme.elevated),
-            opacity: disabled ? 0.55 : 1,
-          },
-        ]}
-      >
+      <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel || `${label} download`} disabled={disabled}
+        accessibilityState={adaptivePrimary ? { disabled: !!disabled } : undefined} onPress={onPress}
+        onFocus={adaptivePrimary ? () => setFocused(true) : undefined} onBlur={adaptivePrimary ? () => setFocused(false) : undefined}
+        style={({ pressed }) => [styles.action, adaptivePrimary ? {
+          backgroundColor: disabled ? theme.elevated : theme.accent,
+          borderColor: disabled ? theme.border : focused ? theme.onAccent : theme.accent,
+          borderWidth: focused && !disabled ? 2 : 1, borderStyle: disabled ? 'dashed' : 'solid',
+          transform: pressed && !disabled ? [{ scale: 0.98 }] : undefined,
+        } : {
+          borderColor: primary ? theme.accent : theme.border,
+          backgroundColor: primary ? (pressed ? theme.accentSoft : theme.accent) : (pressed ? theme.surfaceHover : theme.elevated),
+          opacity: disabled ? 0.55 : 1,
+        }]}>
         <Ionicons name={icon} size={15} color={primary ? theme.onAccent : theme.textSecondary} />
         <Text style={[styles.actionText, { color: primary ? theme.onAccent : theme.textSecondary }]}>{label}</Text>
       </Pressable>

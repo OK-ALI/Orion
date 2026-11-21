@@ -13,55 +13,61 @@ const original = {
 };
 const defaultAccent = '#E50914';
 
-test('Studio restores six historical manual choices and the saved inactive accent', () => {
-  for (const manualTheme of Object.keys(draft.THEME_NAMES)) {
-    const saved = { ...original, manualTheme };
-    const value = draft.newStudioDraft(saved, defaultAccent);
-    assert.deepEqual(value.choices, saved);
-    assert.notEqual(value.choices, saved);
-    assert.equal(value.accentInput, original.customAccent);
-    assert.equal(draft.isStudioDirty(value, saved), false);
+const { inheritedCustomPalette } = load(location + 'customAppearancePalette.ts');
+const blank = inheritedCustomPalette();
+const advanced = {
+  manualTheme: original.manualTheme, lightTheme: original.lightTheme, darkTheme: original.darkTheme,
+  followSystem: original.followSystem,
+  custom: { light: blank, dark: { colors: { ...blank, accent: original.customAccent }, rendering: 'legacy' } },
+};
+
+test('Studio opens all six historical identities plus Custom Light without a changed draft', () => {
+  assert.equal(draft.STUDIO_THEME_CHOICES.fixed.length, 7);
+  for (const manualTheme of draft.STUDIO_THEME_CHOICES.fixed) {
+    const opening = { ...advanced, manualTheme };
+    const plan = draft.getStudioDraftPlan(opening, opening);
+    assert.equal(plan.choices.manualTheme, manualTheme);
+    assert.equal(plan.choices.custom.dark.colors.accent, original.customAccent);
+    assert.equal(plan.dirty, false);
   }
 });
 
-test('Fixed and Follow System editing preserve the alternate choices, including on reset', () => {
-  const fixed = draft.newStudioDraft(original, defaultAccent);
-  const changed = draft.selectStudioTheme(fixed, 'dark', 'slate');
-  assert.deepEqual(changed.choices, { ...original, manualTheme: 'slate' });
-  assert.deepEqual(draft.resetStudioSelection(changed, original, 'dark').choices, original);
-  const follow = { ...changed, choices: { ...changed.choices, followSystem: true } };
-  assert.equal(draft.selectStudioTheme(follow, 'light', 'slate').choices, follow.choices);
-  const edited = draft.selectStudioTheme(follow, 'dark', 'custom');
-  assert.equal(edited.choices.lightTheme, original.lightTheme);
-  assert.equal(edited.choices.manualTheme, 'slate');
-  assert.equal(draft.getStudioTheme(edited.choices, 'dark'), 'custom');
-  assert.equal(draft.getStudioTheme(edited.choices, 'light'), 'projector-silver');
-  const reset = draft.resetStudioSelection(edited, original, 'dark');
-  assert.deepEqual(reset.choices, { ...edited.choices, darkTheme: 'midnight-premiere' });
+test('Fixed and both Follow System choices preserve alternate assignments on selection and reset', () => {
+  const fixed = draft.selectStudioTheme(advanced, 'fixed', 'slate');
+  assert.deepEqual(fixed, { ...advanced, manualTheme: 'slate' });
+  assert.deepEqual(draft.resetStudioSelection(fixed, advanced, 'fixed'), advanced);
+  const follow = { ...fixed, followSystem: true };
+  assert.equal(draft.selectStudioTheme(follow, 'light', 'slate'), follow);
+  assert.equal(draft.selectStudioTheme(follow, 'dark', 'custom-light'), follow);
+  const dark = draft.selectStudioTheme(follow, 'dark', 'custom');
+  const edited = draft.selectStudioTheme(dark, 'light', 'custom-light');
+  assert.equal(edited.manualTheme, 'slate');
+  assert.equal(draft.getStudioPreviewTheme(edited, 'dark'), 'custom');
+  assert.equal(draft.getStudioPreviewTheme(edited, 'light'), 'custom-light');
+  assert.deepEqual(draft.resetStudioSelection(edited, advanced, 'dark'), { ...edited, darkTheme: 'midnight-premiere' });
+  assert.deepEqual(draft.resetStudioSelection(edited, advanced, 'light'), { ...edited, lightTheme: 'projector-silver' });
 });
 
-test('Light and Dark previews leave Fixed choice and both saved assignments intact', () => {
-  const value = draft.newStudioDraft(original, defaultAccent);
-  assert.equal(draft.getStudioPreviewTheme(value, 'dark'), 'mocha');
-  assert.equal(draft.getStudioPreviewTheme(value, 'light'), 'projector-silver');
-  assert.equal(draft.getStudioTheme(value.choices, 'light'), 'mocha');
-  assert.equal(draft.isStudioDirty(value, original), false);
+test('Independent preview does not edit Fixed choice or saved system selections', () => {
+  assert.equal(draft.getStudioPreviewTheme(advanced, 'dark'), 'mocha');
+  assert.equal(draft.getStudioPreviewTheme(advanced, 'light'), 'projector-silver');
+  assert.equal(draft.getStudioDraftPlan(advanced, advanced).dirty, false);
+  assert.equal(draft.getStudioPreviewTheme({ ...advanced, manualTheme: 'custom-light' }, 'dark'), 'amoled');
 });
 
-test('HEX edits preserve last valid preview, normalize input and support default reset', () => {
-  const value = draft.newStudioDraft(original, defaultAccent);
+test('Studio HEX input validates six digits and distinguishes explicit default from a reset', () => {
+  const target = { profile: 'dark', role: 'accent' };
   for (const invalid of ['#abc', 'g00000', '', '##aabbcc', 'aabbccff']) {
     assert.equal(draft.parseStudioAccent(invalid), null);
-    const error = draft.withStudioAccent(value, invalid, defaultAccent);
-    assert.equal(error.accentInput, invalid);
-    assert.equal(error.choices.customAccent, original.customAccent);
-    assert.equal(draft.isStudioDirty(error, original), true);
+    const error = draft.getStudioDraftPlan(advanced, draft.withStudioColor(advanced, target, invalid));
+    assert.ok(error.error);
+    assert.equal(draft.readStudioColor(advanced, target), '#3867D6');
   }
-  const changed = draft.withStudioAccent(value, ' aabbcc ', defaultAccent);
-  assert.equal(changed.choices.customAccent, '#AABBCC');
-  assert.equal(draft.withStudioAccent(changed, defaultAccent, defaultAccent).choices.customAccent, null);
-  const explicit = draft.newStudioDraft({ ...original, customAccent: defaultAccent }, defaultAccent);
-  assert.equal(draft.withStudioAccent(explicit, 'e50914', defaultAccent).choices, explicit.choices);
+  const explicit = draft.withStudioColor(advanced, target, draft.parseStudioAccent(' e50914 '));
+  assert.equal(draft.readStudioColor(explicit, target), defaultAccent);
+  assert.equal(draft.getStudioDraftPlan(advanced, explicit).choices.custom.dark.rendering, 'adaptive');
+  assert.equal(draft.readStudioColor(draft.withStudioColor(explicit, target, null), target), null);
+  assert.equal(draft.getStudioDraftPlan(advanced, draft.restoreStudioPalette(explicit, 'dark')).choices.custom.dark.rendering, 'legacy');
 });
 
 test('Batch Apply validates inputs and merges nonconflicting changes without overwriting current values', () => {

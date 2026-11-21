@@ -63,7 +63,10 @@ function initialFor(name: string): string {
 }
 
 export function AccountSettingsContent() {
-  const { theme } = useOrionTheme();
+  const { theme, effectiveAppearanceThemeId, advancedAppearanceChoices } = useOrionTheme();
+  const [disconnectFocused, setDisconnectFocused] = useState(false);
+  const adaptive = effectiveAppearanceThemeId === 'custom-light' ||
+    (effectiveAppearanceThemeId === 'custom' && advancedAppearanceChoices?.custom.dark.rendering === 'adaptive');
   const {
     state,
     googleConfigured,
@@ -141,6 +144,8 @@ export function AccountSettingsContent() {
 
   const driveReady = drivePhase === 'ready' || drivePhase === 'revoking';
   const driveBusy = drivePhase === 'checking' || drivePhase === 'authorizing' || drivePhase === 'revoking';
+  const disconnectDisabled = busy || driveBusy;
+  const showDisconnectFocus = adaptive && !disconnectDisabled && disconnectFocused;
   const driveStatus = driveReady
     ? 'Connected'
     : drivePhase === 'checking'
@@ -279,11 +284,23 @@ export function AccountSettingsContent() {
                 accessibilityRole="button"
                 accessibilityLabel="Disconnect Orion Cloud"
                 accessibilityHint="Stops Orion Cloud sync while keeping local Orion data on this device"
-                accessibilityState={{ disabled: busy || driveBusy }}
-                disabled={busy || driveBusy}
+                accessibilityState={{ disabled: disconnectDisabled }}
+                disabled={disconnectDisabled}
                 onPress={() => setShowDriveRemovalDialog(true)}
-                style={({ pressed }) => [styles.managementRow, pressed && styles.pressed]}
+                onFocus={adaptive && !disconnectDisabled ? () => setDisconnectFocused(true) : undefined}
+                onBlur={adaptive ? () => setDisconnectFocused(false) : undefined}
+                style={({ pressed }) => [
+                  styles.managementRow,
+                  pressed && !adaptive && styles.pressed,
+                  adaptive && !disconnectDisabled && (pressed || showDisconnectFocus) && {
+                    backgroundColor: theme.surfaceHover,
+                  },
+                  adaptive && !disconnectDisabled && pressed && styles.managementPress,
+                ]}
               >
+                {showDisconnectFocus && (
+                  <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.managementFocus, { borderColor: theme.danger }]} />
+                )}
                 <Ionicons name="cloud-offline-outline" size={20} color={theme.danger} />
                 <View style={styles.managementCopy}>
                   <Text style={[styles.managementTitle, { color: theme.danger }]}>
@@ -445,6 +462,8 @@ const styles = StyleSheet.create({
   inlineButtonText: { fontSize: fontSizes.xs, fontWeight: '800' },
   accountActions: { borderTopWidth: 1 },
   managementRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingVertical: spacing[3] },
+  managementPress: { transform: [{ scale: 0.985 }] },
+  managementFocus: { borderWidth: 2, borderRadius: radii.md },
   managementDivider: { borderTopWidth: 1 },
   managementCopy: { flex: 1, minWidth: 0 },
   managementTitle: { fontSize: fontSizes.sm, fontWeight: '800' },

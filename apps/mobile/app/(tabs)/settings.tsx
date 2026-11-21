@@ -157,8 +157,11 @@ function RestoreStudioEntryFocus({ entry, pending, studioOpen }: {
 export default function MobileSettingsScreen() {
   const {
     theme, preferences, systemReducedMotion, setTheme, setReducedMotion, setFollowSystem, setCustomAccent,
-    preferenceSaveError, dismissPreferenceSaveError, appearanceChoices,
+    preferenceSaveError, dismissPreferenceSaveError, appearanceChoices, advancedAppearanceChoices, effectiveAppearanceThemeId,
   } = useOrionTheme();
+  const lightTheme = advancedAppearanceChoices?.lightTheme ?? appearanceChoices?.lightTheme ?? "projector-silver";
+  const darkTheme = advancedAppearanceChoices?.darkTheme ?? appearanceChoices?.darkTheme ?? "midnight-premiere";
+  const activeTheme = effectiveAppearanceThemeId ?? preferences.theme;
   const motion = resolveMotionPolicy(preferences.reducedMotion, systemReducedMotion);
   const { selection, resolvedProfile, setSelection } = usePerformanceProfile();
   const { isTablet } = useResponsiveLayout();
@@ -272,10 +275,12 @@ export default function MobileSettingsScreen() {
                       <Ionicons accessible={false} name="chevron-forward" size={20} color={theme.textSecondary} />
                     </Pressable>
                     <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.text }]}>Theme</Text>
+                    {activeTheme === "custom-light" &&
+                      <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>Using Custom Light</Text>}
                     <View style={styles.themeGrid}>
                       {(Object.keys(ORION_MOBILE_THEMES) as OrionThemeId[]).map((id) => {
                         const preview = ORION_MOBILE_THEMES[id];
-                        const selected = preferences.theme === id;
+                        const selected = activeTheme === id;
                         const previewAccent = id === "custom" && preferences.customAccent
                           ? preferences.customAccent
                           : preview.accent;
@@ -331,7 +336,8 @@ export default function MobileSettingsScreen() {
                       <View style={styles.settingCopy}>
                         <Text style={[styles.settingTitle, { color: theme.text }]}>Follow system appearance</Text>
                         <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
-                          Use {THEME_LABELS[appearanceChoices?.lightTheme ?? "projector-silver"]} in light mode and {THEME_LABELS[appearanceChoices?.darkTheme ?? "midnight-premiere"]} in dark mode.
+                          Use {lightTheme === "custom-light" ? "Custom Light" : THEME_LABELS[lightTheme]} in light mode
+                          and {darkTheme === "custom" ? "Custom Dark" : THEME_LABELS[darkTheme]} in dark mode.
                         </Text>
                       </View>
                       <Switch

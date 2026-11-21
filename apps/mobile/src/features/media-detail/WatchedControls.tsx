@@ -5,12 +5,12 @@ import { WatchedUndoBanner } from '../../components/WatchedUndoBanner';
 import { styles } from './mediaDetailStyles';
 import type { SeasonWatchedDialog, WatchedUndoNotice } from './useMediaDetailWatched';
 
-export function MovieWatchedBadge({ watched, theme }: { watched: boolean; theme: any }) {
+export function MovieWatchedBadge({ watched, foregroundColor }: { watched: boolean; foregroundColor: string }) {
   if (!watched) return null;
   return (
     <View style={styles.movieWatchedStatus}>
-      <Ionicons name="checkmark-circle" size={13} color={theme.accent} />
-      <Text style={[styles.movieWatchedStatusText, { color: theme.accent }]}>Watched</Text>
+      <Ionicons name="checkmark-circle" size={13} color={foregroundColor} />
+      <Text style={[styles.movieWatchedStatusText, { color: foregroundColor }]}>Watched</Text>
     </View>
   );
 }

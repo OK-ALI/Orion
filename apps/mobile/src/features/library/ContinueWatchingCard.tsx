@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { imgUrl } from '@orion/shared/api';
 import type { ContinueWatchingEntry } from '@orion/shared/types';
 import { useOrionTheme } from '../../context/ThemeContext';
+import { compositePaletteColor, paletteContrast } from '../appearance/customAppearancePalette';
 import { progressDescription } from './playbackFormatting';
 import { useResponsiveLayout } from '../../services/responsive';
 import { useContinueWatchingArtwork } from './useContinueWatchingArtwork';
@@ -18,6 +20,13 @@ interface ContinueWatchingCardProps {
 
 export type ContinueWatchingPresentation = 'home-rail' | 'library-full' | 'offline-compact';
 
+const PRESS_OPACITY = 0.72;
+
+function fadedOverCard(color: string, card: string) {
+  const rgb = [1, 3, 5].map(index => Number.parseInt(color.slice(index, index + 2), 16));
+  return compositePaletteColor('rgba(' + rgb.join(',') + ',' + PRESS_OPACITY + ')', card);
+}
+
 export function ContinueWatchingCard({
   entry,
   onResume,
@@ -27,7 +36,14 @@ export function ContinueWatchingCard({
   presentation: presentationMode = 'home-rail',
 }: ContinueWatchingCardProps) {
   const { width, shortestEdge } = useResponsiveLayout();
-  const { theme } = useOrionTheme();
+  const { theme, effectiveAppearanceThemeId, advancedAppearanceChoices } = useOrionTheme();
+  const [resumeFocused, setResumeFocused] = useState(false);
+  const adaptive = effectiveAppearanceThemeId === 'custom-light' ||
+    (effectiveAppearanceThemeId === 'custom' && advancedAppearanceChoices?.custom.dark.rendering === 'adaptive');
+  const resumePress = adaptive && paletteContrast(
+    fadedOverCard(theme.onAccent, theme.elevated),
+    fadedOverCard(theme.accent, theme.elevated),
+  ) < 4.5 ? styles.pressScale : styles.pressed;
   const { progress } = entry;
   const { mediaIdentity, presentation } = progress;
   const compact = shortestEdge < 360;
@@ -76,10 +92,15 @@ export function ContinueWatchingCard({
             accessibilityRole="button"
             accessibilityLabel={`Resume ${mediaIdentity.title}`}
             onPress={onResume}
-            style={({ pressed }) => [styles.resume, { backgroundColor: theme.accent }, pressed && styles.pressed]}
+            onFocus={adaptive ? () => setResumeFocused(true) : undefined}
+            onBlur={adaptive ? () => setResumeFocused(false) : undefined}
+            style={({ pressed }) => [styles.resume, { backgroundColor: theme.accent }, pressed && resumePress]}
           >
             <Ionicons name="play" size={17} color={theme.onAccent} />
             <Text style={[styles.resumeText, { color: theme.onAccent }]}>Resume</Text>
+            {adaptive && resumeFocused && (
+              <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.resumeOutline, { borderColor: theme.onAccent }]} />
+            )}
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -103,6 +124,8 @@ export function ContinueWatchingCard({
   );
 }
 
+const resumeRadius = 22;
+
 const styles = StyleSheet.create({
   card: { borderRadius: 18, borderWidth: 1, overflow: 'hidden', flexShrink: 0 },
   artworkFrame: { width: '100%', aspectRatio: 16 / 9, overflow: 'hidden' },
@@ -123,8 +146,10 @@ const styles = StyleSheet.create({
   progressText: { fontSize: 12, marginTop: 2 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' },
   actionsCompact: { alignItems: 'stretch' },
-  resume: { minHeight: 44, paddingHorizontal: 16, borderRadius: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, flexGrow: 1 },
+  resume: { minHeight: 44, paddingHorizontal: 16, borderRadius: resumeRadius, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, flexGrow: 1 },
+  resumeOutline: { borderWidth: 2, borderRadius: resumeRadius },
   resumeText: { fontSize: 14, fontWeight: '800' },
   iconButton: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
+  pressScale: { transform: [{ scale: 0.985 }] },
+  pressed: { opacity: PRESS_OPACITY, transform: [{ scale: 0.985 }] },
 });

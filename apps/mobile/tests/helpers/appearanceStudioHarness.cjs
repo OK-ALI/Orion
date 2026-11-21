@@ -57,10 +57,12 @@ function createStudioHarness(options = {}) {
   const scrolls = [];
   const areaControl = { props: null };
   const pickerScroll = { props: null };
+  const pickerViewport = { props: null };
   const adjustments = new Map();
   const measuredView = React.forwardRef((props, ref) => {
     const node = React.useRef(null);
     if (props.testID === 'studio-color-area') areaControl.props = props;
+    if (props.testID === 'studio-picker-visible') pickerViewport.props = props;
     if (props.accessibilityRole === "adjustable") adjustments.set(props.accessibilityLabel, props.onAccessibilityAction);
     React.useImperativeHandle(ref, () => {
       const element = node.current;
@@ -212,9 +214,18 @@ function createStudioHarness(options = {}) {
       };
       testing.act(() => handlers[phase](event));
     },
+    measurePickerLayout(width, contentHeight, viewportHeight) {
+      testing.act(() => {
+        pickerViewport.props.onLayout({ nativeEvent: { layout: { width, height: viewportHeight } } });
+        pickerScroll.props.onContentSizeChange?.(width, contentHeight);
+      });
+    },
+    scrollPicker(offset) {
+      testing.act(() => pickerScroll.props.onScroll({ nativeEvent: { contentOffset: { y: offset } } }));
+    },
     canScrollPicker: () => pickerScroll.props.scrollEnabled !== false,
     canTransferShadeResponder: () => areaControl.props.onResponderTerminationRequest(),
-    hex: value => testing.fireEvent.change(rendered.getByRole('textbox', { name: 'Custom Dark accent HEX' }), { target: { value } }),
+    hex: value => testing.fireEvent.change(testing.within(rendered.getByTestId('studio-picker-scroll')).getByRole('textbox'), { target: { value } }),
     resize(values) { Object.assign(env, values); rendered.rerender(app()); },
     scheme(scheme, foreground = false) {
       testing.act(() => {
@@ -346,10 +357,70 @@ async function verifyGeometry(executablePath, evidenceDirectory) {
               bounds.bottom > innerHeight - parseFloat(padding.paddingBottom) + 1 ||
               bounds.left < parseFloat(padding.paddingLeft) - 1 ||
               bounds.right > innerWidth - parseFloat(padding.paddingRight) + 1 ||
-              scroll.scrollWidth > scroll.clientWidth + 1) issues.push('scroll area exceeds insets');
+              scroll.scrollWidth > scroll.clientWidth + 1) issues.push('scroll area exceeds insets ' +
+                JSON.stringify({ bounds: bounds.toJSON(), viewport: [innerWidth, innerHeight],
+                  padding: [padding.paddingTop, padding.paddingRight, padding.paddingBottom, padding.paddingLeft],
+                  widths: [scroll.scrollWidth, scroll.clientWidth] }));
           return issues;
         });
         assert.deepEqual(issues, [], 'collision check');
+      }
+      async function assertShadeStability(modal, atEnd = false) {
+        const pickerScroll = page.getByTestId('studio-picker-scroll');
+        const area = page.getByTestId('studio-color-area');
+        const warning = pickerScroll.getByText('Adjusted for contrast.', { exact: true });
+        await area.evaluate((element, end) => {
+          const scroll = element.closest('[data-testid="studio-picker-scroll"]');
+          if (end) scroll.scrollTop = scroll.scrollHeight;
+          else element.scrollIntoView({ block: 'center', inline: 'nearest' });
+        }, atEnd);
+        const original = await area.boundingBox();
+        const scrollTop = await pickerScroll.evaluate(scroll => scroll.scrollTop);
+        const content = await pickerScroll.evaluate(node => ({
+          width: node.clientWidth, height: node.scrollHeight, viewportHeight: node.clientHeight,
+        }));
+        f.measureArea(original.width, original.height);
+        f.measurePickerLayout(content.width, content.height, content.viewportHeight);
+        assert.equal(await warning.count(), atEnd ? 1 : 0);
+        for (const [index, step] of (atEnd ? [
+          [.15, .05, true], [.29, .61, false], [.09, .05, true], [.85, .82, false],
+        ] : [
+          [.29, .61, false], [.15, .05, true], [.85, .82, false], [.09, .05, true], [.48, .21, true], [.29, .61, false],
+        ]).entries()) {
+          const [x, y, adjusted] = step;
+          const next = await area.boundingBox();
+          // The finger uses the opening screen coordinates. RN receives them relative to the current view.
+          f.areaGesture(index === 0 ? 'start' : 'move',
+            original.x + original.width * x - next.x, original.y + original.height * y - next.y);
+          await loadLayout(modal);
+          await pickerScroll.evaluate((node, offset) => { node.scrollTop = offset; }, scrollTop);
+          const actual = await area.boundingBox();
+          const thumb = await page.getByTestId('studio-picker-scrollbar').boundingBox();
+          const viewport = await pickerScroll.boundingBox();
+          assert.ok(thumb.x >= actual.x + actual.width && thumb.x + thumb.width <= viewport.x + viewport.width,
+            'accent scroll thumb must be outside the shade and inside the picker');
+          const actualOffset = await pickerScroll.evaluate(node => node.scrollTop);
+          const difference = actual.y - original.y;
+          console.log('SHADE_GEOMETRY ' + JSON.stringify({
+            viewport: size.name, atEnd, step: index, adjusted, shade: actual, deltaY: difference, scrollTop: actualOffset,
+          }));
+          assert.ok(Math.abs(difference) <= 1, 'shade moved by ' + difference + ' CSS px at contrast boundary');
+          for (const property of ['x', 'width', 'height']) {
+            assert.ok(Math.abs(actual[property] - original[property]) <= 1, 'shade changed ' + property);
+          }
+          assert.ok(Math.abs(actualOffset - scrollTop) <= 1, 'scroll offset changed during shade drag');
+          assert.equal(await warning.count(), adjusted ? 1 : 0);
+          if (adjusted) {
+            assert.equal(await pickerScroll.getByText(/^Requested #[A-F0-9]{6}$/).count(), 1);
+            assert.equal(await pickerScroll.getByText(/^Displayed #[A-F0-9]{6}$/).count(), 1);
+          }
+          assert.equal(f.get('slider', { name: 'Saturation' }).getAttribute('aria-valuenow'), String(Math.round(x * 100)));
+          assert.equal(f.get('slider', { name: 'Brightness' }).getAttribute('aria-valuenow'), String(Math.round((1 - y) * 100)));
+          assert.equal(f.canScrollPicker(), false);
+          assert.equal(f.attempts.length, 0);
+        }
+        f.areaGesture('end');
+        assert.equal(f.canScrollPicker(), true);
       }
       const snapshot = async name => {
         if (evidenceDirectory) await page.screenshot({ path: path.join(evidenceDirectory, name + '.png') });
@@ -371,7 +442,7 @@ async function verifyGeometry(executablePath, evidenceDirectory) {
         await assertNoCollisions();
         await assertVisible('button:has-text("Apply")');
         await assertTypography(page.getByRole('heading', { name: 'Appearance Studio' }), 20, 900);
-        for (const name of ['Theme', 'Custom accent', 'Preview']) {
+        for (const name of ['Theme', 'Custom Palette', 'Preview']) {
           await assertTypography(page.getByRole('heading', { name, exact: true }), 16, 900);
         }
         const follow = page.getByTestId('studio-scroll').getByText('Follow system appearance', { exact: true });
@@ -381,7 +452,7 @@ async function verifyGeometry(executablePath, evidenceDirectory) {
         'Follow System label and switch collide');
         const fixedTheme = page.getByRole('button', { name: /Fixed theme,/ });
         await assertTypography(fixedTheme.getByText('Fixed theme', { exact: true }), 13, 800);
-        await assertTypography(fixedTheme.getByText('Custom', { exact: true }), 11, null, 18);
+        await assertTypography(fixedTheme.getByText('Custom Dark', { exact: true }), 11, null, 18);
         if (size.name === 'portrait') {
           await page.getByTestId('studio-scroll').evaluate(element => { element.scrollTop = 0; });
           await snapshot('appearance-studio-browser');
@@ -393,14 +464,35 @@ async function verifyGeometry(executablePath, evidenceDirectory) {
         const card = page.getByRole('radio', { name: 'Midnight Premiere theme' });
         await assertTypography(card.getByText('Midnight Premiere theme', { exact: true }), 13, 800);
         await assertTypography(card.locator('[dir="auto"]').nth(1), 11, null, 15);
-        f.press(/Change Color,/);
+        f.choose('Custom Light');
+        await loadLayout(modal);
+        await assertNoCollisions();
+        for (const role of ['accent', 'background', 'surface', 'text', 'border']) {
+          await assertVisible('[data-testid="studio-role-' + role + '"] button');
+        }
+        await assertVisible('button:has-text("Restore default palette")');
+        if (size.name === 'portrait') {
+          await page.getByRole('heading', { name: 'Custom Palette' })
+            .evaluate(node => node.scrollIntoView({ block: 'start', inline: 'nearest' }));
+          await snapshot('appearance-palette-browser');
+        }
+        f.press(/Edit Border,/);
+        await layoutFrame();
+        await loadLayout(modal);
+        await assertNoCollisions();
+        assert.equal(await page.getByRole('heading', { name: 'Orion Accents' }).count(), 0);
+        await assertVisible('button:has-text("Use Color")');
+        f.press('Cancel color');
+        f.choose('Custom Dark');
+        f.press(/Edit Accent,/);
         await layoutFrame();
         await loadLayout(modal);
         await assertNoCollisions();
         await assertVisible('[data-testid="studio-color-area"]');
+        await assertVisible('[aria-label="Midnight Premiere, #E50914"]');
         const picker = page.getByTestId('studio-picker-scroll');
-        await assertTypography(picker.getByRole('heading', { name: 'Custom accent' }), 20, 900);
-        for (const name of ['Hue', 'Shade']) {
+        await assertTypography(picker.getByRole('heading', { name: 'Custom Dark · Accent' }), 20, 900);
+        for (const name of ['Orion Accents', 'Hue', 'Shade']) {
           await assertTypography(picker.getByRole('heading', { name }), 16, 900);
         }
         for (const label of ['Saturation', 'Brightness']) {
@@ -468,6 +560,27 @@ async function verifyGeometry(executablePath, evidenceDirectory) {
         await assertVisible('button:has-text("Keep editing color")');
         await assertVisible('button:has-text("Discard color changes")');
         f.press('Discard color changes');
+        f.choose('Custom Light');
+        f.press(/Edit Accent,/);
+        f.choose('Blue hue');
+        if (size.ime) {
+          f.press('Enter HEX');
+          const top = size.nativeResized ? size.height : size.keyboardTop;
+          f.toggleKeyboard(true, { screenX: 0, screenY: top, width: size.width, height: 255 });
+          await layoutFrame();
+        }
+        await loadLayout(modal);
+        await assertShadeStability(modal);
+        await assertNoCollisions();
+        if (size.name === 'portrait') {
+          const shade = await page.getByTestId('studio-color-area').boundingBox();
+          f.areaTap(shade.width * .15, shade.height * .05, shade.width, shade.height);
+          await loadLayout(modal);
+          await assertShadeStability(modal, true);
+        }
+        f.toggleKeyboard(false);
+        f.press('Cancel color');
+        f.choose('Custom Dark');
         f.choose('Mocha theme');
         f.press('Cancel');
         await loadLayout(modal);

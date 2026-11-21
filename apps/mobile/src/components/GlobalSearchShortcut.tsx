@@ -18,7 +18,9 @@ export function GlobalSearchShortcut() {
   const pathname = usePathname();
   const network = useNetworkStatus();
   const insets = useSafeAreaInsets();
-  const { theme, preferences, systemReducedMotion } = useOrionTheme();
+  const { theme, preferences, systemReducedMotion, effectiveAppearanceThemeId, advancedAppearanceChoices } = useOrionTheme();
+  const adaptive = effectiveAppearanceThemeId === 'custom-light'
+    || (effectiveAppearanceThemeId === 'custom' && advancedAppearanceChoices?.custom.dark.rendering === 'adaptive');
   const motion = resolveMotionPolicy(preferences?.reducedMotion === true, systemReducedMotion);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const scale = useRef(new Animated.Value(1)).current;
@@ -82,28 +84,35 @@ export function GlobalSearchShortcut() {
               shadowColor: theme.dark ? '#000000' : theme.accent,
             },
             pressed && styles.pressed,
+            adaptive && { backgroundColor: theme.surface, opacity: 1 },
           ]}
         >
-          <BlurView
-            intensity={78}
-            tint={theme.dark ? 'dark' : 'light'}
-            pointerEvents="none"
-            style={styles.glassInner}
-          >
-            <View
-              style={[
-                styles.glassWash,
-                { backgroundColor: theme.dark ? 'rgba(5, 7, 12, 0.34)' : 'rgba(255, 255, 255, 0.30)' },
-              ]}
-            />
-            <View
-              style={[
-                styles.accentHalo,
-                { backgroundColor: theme.accentSoft, opacity: theme.dark ? 0.34 : 0.22 },
-              ]}
-            />
-            <Ionicons name="search" size={20} color={theme.accent} />
-          </BlurView>
+          {adaptive ? (
+            <View pointerEvents="none" style={styles.glassInner}>
+              <Ionicons name="search" size={20} color={theme.accent} />
+            </View>
+          ) : (
+            <BlurView
+              intensity={78}
+              tint={theme.dark ? 'dark' : 'light'}
+              pointerEvents="none"
+              style={styles.glassInner}
+            >
+              <View
+                style={[
+                  styles.glassWash,
+                  { backgroundColor: theme.dark ? 'rgba(5, 7, 12, 0.34)' : 'rgba(255, 255, 255, 0.30)' },
+                ]}
+              />
+              <View
+                style={[
+                  styles.accentHalo,
+                  { backgroundColor: theme.accentSoft, opacity: theme.dark ? 0.34 : 0.22 },
+                ]}
+              />
+              <Ionicons name="search" size={20} color={theme.accent} />
+            </BlurView>
+          )}
         </Pressable>
       </Animated.View>
     </View>

@@ -111,8 +111,9 @@ export function StudioSwatch({ color, backing }: { color: string; backing: strin
   }]} />;
 }
 
-export function StudioAccentField({ theme, value, error, onChange, onFocus, onBlur, onSubmit }: {
+export function StudioAccentField({ theme, label, value, error, onChange, onFocus, onBlur, onSubmit }: {
   theme: MobileThemeTokens;
+  label: string;
   value: string;
   error: string | null;
   onChange: (value: string) => void;
@@ -124,7 +125,7 @@ export function StudioAccentField({ theme, value, error, onChange, onFocus, onBl
   return (
     <View style={styles.group}>
       <Text style={[styles.label, { color: theme.text }]}>HEX color</Text>
-      <TextInput testID="studio-accent-input" accessibilityLabel="Custom Dark accent HEX"
+      <TextInput testID="studio-accent-input" accessibilityLabel={label}
         accessibilityHint={error ?? "Enter six HEX digits."} value={value}
         autoCapitalize="characters" autoCorrect={false} spellCheck={false} returnKeyType="done"
         onChangeText={onChange} onFocus={() => { setFocused(true); onFocus(); }}

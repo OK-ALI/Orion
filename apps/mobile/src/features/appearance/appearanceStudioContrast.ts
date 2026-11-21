@@ -4,7 +4,7 @@ function rgb(hex: string): number[] {
   return [1, 3, 5].map(start => Number.parseInt(hex.slice(start, start + 2), 16));
 }
 
-function luminance(hex: string): number {
+export function studioLuminance(hex: string): number {
   const [r, g, b] = rgb(hex).map(value => {
     const srgb = value / 255;
     return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
@@ -13,8 +13,8 @@ function luminance(hex: string): number {
 }
 
 export function studioContrast(first: string, second: string): number {
-  const a = luminance(first);
-  const b = luminance(second);
+  const a = studioLuminance(first);
+  const b = studioLuminance(second);
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 

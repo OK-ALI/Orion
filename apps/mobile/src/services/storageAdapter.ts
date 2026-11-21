@@ -36,7 +36,11 @@ if (Platform.OS !== 'web') {
     // private application directory and do not require Android storage access.
     const mmkv = createMMKV({ id: 'orion.mobile' });
     adapter = {
-      get: (key: string) => mmkv.getString(key) || null,
+      get(key: string) {
+        const value = mmkv.getString(key);
+        // V3 must recognize a stored empty record as corrupt and protect its bytes.
+        return key === 'mobileThemePreferencesV3' ? value ?? null : value || null;
+      },
       set: (key: string, value: string) => mmkv.set(key, value),
       remove: (key: string) => mmkv.remove(key),
     };

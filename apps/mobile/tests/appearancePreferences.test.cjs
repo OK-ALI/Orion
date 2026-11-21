@@ -7,7 +7,9 @@ const { hookHarness } = require("./helpers/playerHookHarness.cjs");
 
 const LEGACY_KEY = "mobileThemePreferencesV1";
 const V2_KEY = "mobileThemePreferencesV2";
-const { loadThemePreferences, resolveThemeSelection } = loader()(
+const V3_KEY = "mobileThemePreferencesV3";
+const { loadThemePreferences, resolveThemeSelection, loadAdvancedThemePreferences,
+  editAdvancedPaletteRole, resetAdvancedPaletteProfile } = loader()(
   "apps/mobile/src/features/appearance/appearancePreferences.ts",
 );
 
@@ -260,9 +262,10 @@ test("system changes, missed events and foreground refresh resolve without stora
   await app.changeScheme("light");
   await app.appState("active");
   assert.equal(app.current.theme.id, "mocha");
-  assert.deepEqual(storage.attempts, [V2_KEY]);
+  assert.deepEqual(storage.attempts, [V3_KEY]);
   assert.equal(storage.writes[0][1].darkTheme, "amoled");
-  assert.equal(storage.writes[0][1].customAccent, "#445566");
+  assert.equal(storage.writes[0][1].custom.dark.colors.accent, "#445566");
+  assert.equal(storage.get(V2_KEY), rawV2);
 });
 
 test("a saved manual selection survives Follow System, OS changes and restart", async (t) => {
@@ -281,7 +284,7 @@ test("a saved manual selection survives Follow System, OS changes and restart", 
   assert.equal(restarted.current.preferences.reducedMotion, true);
   assert.equal(restarted.current.preferences.customAccent, "#00FF00");
   assert.equal(storage.get(LEGACY_KEY), rawV1);
-  assert.deepEqual(storage.attempts, [V2_KEY, V2_KEY]);
+  assert.deepEqual(storage.attempts, [V3_KEY, V3_KEY]);
 
   const custom = restarted.current.setCustomAccent("#00ff00");
   assert.equal(custom, true);
@@ -290,7 +293,7 @@ test("a saved manual selection survives Follow System, OS changes and restart", 
   assert.equal(restarted.current.theme.accentSoft, "rgba(0,255,0,0.16)");
   assert.equal(restarted.current.theme.onAccent, "#000000");
   assert.equal(restarted.current.setCustomAccent("#bad"), false);
-  assert.deepEqual(storage.attempts, [V2_KEY, V2_KEY, V2_KEY]);
+  assert.deepEqual(storage.attempts, [V3_KEY, V3_KEY, V3_KEY]);
 });
 
 test("unresolved and changing system motion stay separate from the user's motion preference", async (t) => {
@@ -309,7 +312,7 @@ test("unresolved and changing system motion stay separate from the user's motion
   app.changeSystemMotion(false);
   assert.equal(app.current.preferences.reducedMotion, true);
   assert.equal(app.current.systemReducedMotion, false);
-  assert.deepEqual(storage.attempts, [V2_KEY]);
+  assert.deepEqual(storage.attempts, [V3_KEY]);
   assert.equal(storage.get(LEGACY_KEY), rawV1);
 });
 
@@ -356,6 +359,356 @@ test("failed writes leave saved and active appearance untouched and later retrie
   assert.equal(app.current.setCustomAccent("#FFFFFF"), true);
   await app.settle();
   assert.equal(app.current.theme.id, "custom");
-  assert.equal(JSON.parse(storage.get(V2_KEY)).customAccent, "#FFFFFF");
+  assert.equal(JSON.parse(storage.get(V3_KEY)).custom.dark.colors.accent, "#FFFFFF");
+  assert.equal(storage.get(V2_KEY), null);
   assert.equal(storage.get(LEGACY_KEY), rawV1);
+});
+
+function v2Record(extra = {}) {
+  return JSON.stringify({ schemaVersion: 2, manualTheme: 'custom', lightTheme: 'projector-silver',
+    darkTheme: 'custom', followSystem: false, reducedMotion: true, customAccent: '#254DA8', ...extra });
+}
+
+const blankColors = { accent: null, background: null, surface: null, text: null, border: null };
+const setupV3 = (storage = createStorage()) => loadAdvancedThemePreferences(storage, 'dark', false).preferences;
+
+test('Fresh, V1 and V2 become independent in-memory V3 without writing', () => {
+  for (const records of [{}, { [LEGACY_KEY]: legacy('custom', { customAccent: '#Abc987' }) },
+    { [V2_KEY]: v2Record({ manualTheme: 'slate', followSystem: true }) }]) {
+    const storage = createStorage(records);
+    const loaded = setupV3(storage);
+    const old = loadThemePreferences(storage, 'dark', false).preferences;
+    assert.deepEqual(loaded, {
+      schemaVersion: 3, manualTheme: old.manualTheme, lightTheme: old.lightTheme, darkTheme: old.darkTheme,
+      followSystem: old.followSystem, reducedMotion: old.reducedMotion,
+      custom: { light: blankColors, dark: { colors: { ...blankColors, accent: old.customAccent }, rendering: 'legacy' } },
+    });
+    assert.deepEqual([...storage.records], Object.entries(records));
+    assert.deepEqual(storage.attempts, []);
+  }
+});
+
+test('Partial V3 recovers only the missing and invalid roles and differentiates default HEX from null', () => {
+  const old = v2Record({ customAccent: '#1abccd' });
+  const storage = createStorage({ [V2_KEY]: old });
+  const data = setupV3(storage);
+  for (const [condition, value, expected] of [
+    ['missing', undefined, '#1ABCCD'], ['invalid', '#Bad', '#1ABCCD'],
+    [null, null, null], [null, '#e50914', '#E50914'],
+  ]) {
+    data.custom.light.accent = '#a11111';
+    data.custom.dark.colors.accent = value;
+    if (value === undefined) delete data.custom.dark.colors.accent;
+    storage.records.set(V3_KEY, JSON.stringify(data));
+    const { preferences, recoveries, saveStatus } = loadAdvancedThemePreferences(storage, 'dark', false);
+    assert.equal(preferences.custom.light.accent, '#A11111');
+    assert.equal(preferences.custom.dark.colors.accent, expected);
+    assert.equal(preferences.custom.dark.rendering, 'legacy');
+    assert.deepEqual(recoveries, condition ? [{ path: 'custom.dark.colors.accent', reason: condition }] : []);
+    assert.equal(saveStatus, 'ready');
+  }
+  assert.equal(storage.get(V2_KEY), old);
+  assert.deepEqual(storage.attempts, []);
+});
+
+test('Invalid Dark mode recovers saved advanced roles without writing or letting an unreadable profile render', async t => {
+  const storage = createStorage({ [V2_KEY]: v2Record() });
+  const preferences = setupV3(storage);
+  preferences.custom.dark.colors = { ...blankColors, background: '#161B24', text: '#000000' };
+  delete preferences.custom.dark.rendering;
+  const raw = JSON.stringify(preferences);
+  storage.records.set(V3_KEY, raw);
+  const app = mountTheme(t, storage, 'dark');
+  assert.equal(app.current.theme.id, 'custom');
+  assert.notEqual(app.current.theme.text, '#000000');
+  assert.notEqual(app.current.theme.background, '#161B24');
+  assert.deepEqual(app.current.appearanceRecoveries, [{ path: 'custom.dark.rendering', reason: 'missing' }]);
+  const opening = app.current.advancedAppearanceChoices;
+  assert.equal(opening.custom.dark.rendering, 'adaptive');
+  assert.equal(opening.custom.dark.colors.text, '#000000');
+  assert.equal(opening.custom.dark.colors.background, '#161B24');
+  assert.equal(storage.get(V3_KEY), raw);
+  assert.deepEqual(storage.attempts, []);
+
+  const edited = editAdvancedPaletteRole(opening, 'dark', 'text', '#F4F5F9');
+  assert.deepEqual(app.current.applyAdvancedAppearanceChoices(opening, edited), { ok: true });
+  await app.settle();
+  assert.equal(app.current.theme.text, '#F4F5F9');
+  assert.equal(app.current.theme.background, '#161B24');
+  assert.deepEqual(storage.attempts, [V3_KEY]);
+});
+
+test('A complete supported V3 skips older keys and wins after a downgrade wrote to V2', () => {
+  const storage = createStorage({ [V2_KEY]: v2Record({ customAccent: '#444444' }) });
+  const preferences = setupV3(storage);
+  preferences.custom.dark.colors.accent = '#ABCDE0';
+  preferences.custom.light.accent = '#EB7305';
+  storage.records.set(V3_KEY, JSON.stringify(preferences));
+  storage.failedReadKeys.add(V2_KEY);
+  storage.failedReadKeys.add(LEGACY_KEY);
+  const result = loadAdvancedThemePreferences(storage, 'dark', false);
+  assert.equal(result.saveStatus, 'ready');
+  assert.deepEqual(result.preferences, preferences);
+  assert.deepEqual(storage.attempts, []);
+});
+
+test('Malformed, empty and future V3 payloads render a fallback and protect the saved bytes', async (t) => {
+  for (const [raw, message] of [['{truncated', /could not be read/], ['', /could not be read/],
+    ['{"schemaVersion":4,"newSetting":"keep me"}', /different version/]]) {
+    const old = v2Record();
+    const storage = createStorage({ [V3_KEY]: raw, [V2_KEY]: old });
+    const app = mountTheme(t, storage, 'dark');
+    assert.equal(app.current.theme.accent, '#254DA8');
+    assert.match(app.current.appearanceSaveBlock, message);
+    assert.equal(app.current.setCustomAccent('#999999'), false);
+    await app.settle();
+    assert.match(app.current.preferenceSaveError, message);
+    assert.equal(storage.get(V3_KEY), raw);
+    assert.equal(storage.get(V2_KEY), old);
+    assert.deepEqual(storage.attempts, []);
+  }
+});
+
+function mockAndroidStorage(records, failSet = () => {}) {
+  const load = loader({
+    'react-native': { Platform: { OS: 'android' } },
+    'react-native-mmkv': { createMMKV: () => ({
+      getString: key => records.get(key),
+      set(key, value) { failSet(key); records.set(key, value); },
+      remove: key => records.delete(key),
+    }) },
+    '@orion/shared/api': {},
+    '../glimpse/glimpseBuild': { GLIMPSE_INTERNAL_PREVIEW: true },
+  });
+  return { load, storage: load('apps/mobile/src/services/storageAdapter.ts').mmkvStorageAdapter };
+}
+
+test('Android adapter keeps empty V3 records distinct from missing keys and preserves older storage semantics', () => {
+  const records = new Map([[V3_KEY, '']]);
+  const { storage } = mockAndroidStorage(records);
+  assert.equal(storage.get(V3_KEY), '');
+  assert.equal(loadAdvancedThemePreferences(storage, 'light', false).saveStatus, 'corrupted');
+  records.delete(V3_KEY);
+  assert.equal(storage.get(V3_KEY), null);
+  assert.equal(loadAdvancedThemePreferences(storage, 'light', false).saveStatus, 'ready');
+  for (const key of [LEGACY_KEY, V2_KEY, 'orion.mobile.downloads.repository.v1',
+    'p8.myListSyncCheckpoint.v1:test', 'p8.syncPolicy.v1:test', 'unrelated']) {
+    assert.equal(storage.get(key), null, key);
+    storage.set(key, '');
+    assert.equal(records.get(key), '', key);
+    assert.equal(storage.get(key), null, key);
+    storage.set(key, '{"test":1}');
+    assert.equal(storage.get(key), '{"test":1}', key);
+    storage.remove(key);
+    assert.equal(records.has(key), false, key);
+  }
+});
+
+test('an empty internal Welcome qualification key is treated as absent on Android', () => {
+  const records = new Map();
+  const { load } = mockAndroidStorage(records);
+  const { TEST_KEY } = load('apps/mobile/src/features/releaseWelcome/welcomeState.ts');
+  const { qualificationEnabled } = load('apps/mobile/src/features/releaseWelcome/welcomeQualification.ts');
+  assert.equal(qualificationEnabled(), false);
+  records.set(TEST_KEY, '');
+  assert.equal(qualificationEnabled(), false);
+  records.set(TEST_KEY, '{}');
+  assert.equal(qualificationEnabled(), true);
+});
+
+test('Android My List rollback restores populated data and treats a historical empty key as absent', () => {
+  for (const previous of ['', '{"movie-1":{"id":1}}']) {
+    const records = new Map([['saved', previous], ['savedOrder', '["movie-1"]']]);
+    let failOnce = true;
+    const { load, storage } = mockAndroidStorage(records, key => {
+      if (key === 'savedOrder' && failOnce) {
+        failOnce = false;
+        throw new Error('second write failed');
+      }
+    });
+    const { replacePersistedMyListV1 } = load('apps/mobile/src/features/library/myListPersistence.ts');
+    assert.throws(() => replacePersistedMyListV1(storage, {}, []), /second write failed/);
+    assert.equal(records.has('saved'), previous !== '');
+    assert.equal(storage.get('saved'), previous || null);
+    assert.equal(storage.get('savedOrder'), '["movie-1"]');
+  }
+});
+
+test('V3 read failures display V2 preferences but attempt zero writes', async (t) => {
+  const storage = createStorage({ [V2_KEY]: v2Record() });
+  storage.failedReadKeys.add(V3_KEY);
+  const app = mountTheme(t, storage, 'dark');
+  assert.equal(app.current.theme.accent, '#254DA8');
+  assert.match(app.current.appearanceSaveBlock, /unavailable/);
+  app.current.setReducedMotion(false);
+  await app.settle();
+  assert.equal(app.current.preferences.reducedMotion, true);
+  assert.deepEqual(storage.attempts, []);
+});
+
+const lightColors = { accent: '#545C92', background: '#FAF7EE', surface: '#ECF2FF', text: '#172238', border: '#30334A' };
+const darkColors = { accent: '#ECB97B', background: '#0E141E', surface: '#242834', text: '#F4F5F9', border: '#7F91AF' };
+
+function editAll(draft, profile, colors) {
+  return Object.entries(colors).reduce((choices, [role, color]) => editAdvancedPaletteRole(choices, profile, role, color), draft);
+}
+
+test('Advanced Apply stores ten independent values once and switches profiles without persisting system events', async (t) => {
+  const old = v2Record();
+  const storage = createStorage({ [V2_KEY]: old });
+  const app = mountTheme(t, storage, 'dark');
+  const opening = app.current.advancedAppearanceChoices;
+  let edited = editAll(opening, 'light', lightColors);
+  assert.equal(edited.custom.dark.rendering, 'legacy');
+  edited = editAll(edited, 'dark', darkColors);
+  edited = { ...edited, lightTheme: 'custom-light', darkTheme: 'custom', followSystem: true };
+
+  assert.deepEqual(storage.attempts, []);
+  assert.deepEqual(app.current.applyAdvancedAppearanceChoices(opening, edited), { ok: true });
+  await app.settle();
+  assert.deepEqual(storage.attempts, [V3_KEY]);
+  const record = JSON.parse(storage.get(V3_KEY));
+  assert.deepEqual(record.custom, { light: lightColors, dark: { colors: darkColors, rendering: 'adaptive' } });
+  assert.equal(record.manualTheme, 'custom');
+  assert.equal(record.reducedMotion, true);
+  assert.equal(storage.get(V2_KEY), old);
+  assert.equal(app.current.theme.background, darkColors.background);
+  assert.equal(app.current.theme.dark, true);
+
+  const restarted = mountTheme(t, storage, 'light');
+  assert.equal(restarted.current.effectiveAppearanceThemeId, 'custom-light');
+  assert.equal(restarted.current.theme.id, 'projector-silver');
+  assert.equal(restarted.current.theme.dark, false);
+  assert.equal(restarted.current.theme.background, lightColors.background);
+  await restarted.changeScheme('dark');
+  assert.equal(restarted.current.effectiveAppearanceThemeId, 'custom');
+  assert.equal(restarted.current.theme.background, darkColors.background);
+  await restarted.changeScheme('light', false);
+  await restarted.appState('active');
+  assert.equal(restarted.current.effectiveAppearanceThemeId, 'custom-light');
+  assert.deepEqual(storage.attempts, [V3_KEY]);
+  restarted.current.setTheme('custom-light');
+  await restarted.changeScheme('dark');
+  assert.equal(restarted.current.effectiveAppearanceThemeId, 'custom-light');
+  assert.equal(restarted.current.preferences.followSystem, false);
+  assert.deepEqual(JSON.parse(storage.get(V3_KEY)).custom, record.custom);
+});
+
+test('Direct Settings HEX targets V3 Dark only, keeps rendering mode and retains save feedback', async (t) => {
+  const old = v2Record();
+  const storage = createStorage({ [V2_KEY]: old });
+  const app = mountTheme(t, storage, 'dark');
+  const initial = app.current.advancedAppearanceChoices;
+  assert.deepEqual(app.current.applyAdvancedAppearanceChoices(initial, {
+    ...editAll(editAll(initial, 'light', lightColors), 'dark', darkColors), lightTheme: 'custom-light', followSystem: true,
+  }), { ok: true });
+  await app.settle();
+  assert.equal(app.current.setCustomAccent('#dadada'), true);
+  await app.settle();
+  const record = JSON.parse(storage.get(V3_KEY));
+  assert.deepEqual(record.custom.light, lightColors);
+  assert.deepEqual(record.custom.dark, { colors: { ...darkColors, accent: '#DADADA' }, rendering: 'adaptive' });
+  assert.equal(record.lightTheme, 'custom-light');
+  assert.equal(record.manualTheme, 'custom');
+  assert.equal(record.followSystem, false);
+  assert.equal(storage.get(V2_KEY), old);
+  assert.equal(app.current.setCustomAccent('#bad'), false);
+  storage.failWrite = true;
+  assert.equal(app.current.setCustomAccent('#AAAAAA'), false);
+  await app.settle();
+  assert.match(app.current.preferenceSaveError, /Try again/);
+  assert.deepEqual(JSON.parse(storage.get(V3_KEY)), record);
+});
+
+test('Per-role reset preserves peers and mode; full Dark reset restores historical Custom tokens', async (t) => {
+  const storage = createStorage({ [V2_KEY]: v2Record() });
+  const app = mountTheme(t, storage, 'dark');
+  const initial = app.current.advancedAppearanceChoices;
+  const resetLegacyAccent = editAdvancedPaletteRole(initial, 'dark', 'accent', null);
+  assert.equal(resetLegacyAccent.custom.dark.rendering, 'legacy');
+  const edited = editAll(editAll(initial, 'light', lightColors), 'dark', darkColors);
+  assert.deepEqual(app.current.applyAdvancedAppearanceChoices(initial, edited), { ok: true });
+  await app.settle();
+  const opening = app.current.advancedAppearanceChoices;
+  const perRole = editAdvancedPaletteRole(opening, 'dark', 'border', null);
+  assert.deepEqual(app.current.applyAdvancedAppearanceChoices(opening, perRole), { ok: true });
+  await app.settle();
+  assert.deepEqual(app.current.advancedAppearanceChoices.custom.dark,
+    { colors: { ...darkColors, border: null }, rendering: 'adaptive' });
+  const from = app.current.advancedAppearanceChoices;
+  assert.deepEqual(app.current.applyAdvancedAppearanceChoices(from, resetAdvancedPaletteProfile(from, 'dark')), { ok: true });
+  await app.settle();
+  const record = JSON.parse(storage.get(V3_KEY));
+  assert.deepEqual(record.custom, { light: lightColors, dark: { colors: blankColors, rendering: 'legacy' } });
+  assert.equal(Object.hasOwn(record, 'resetProfiles'), false);
+  assert.equal(app.current.theme.accent, '#E50914');
+  assert.equal(app.current.theme.border, 'rgba(255,255,255,0.10)');
+  const lightStart = app.current.advancedAppearanceChoices;
+  assert.deepEqual(app.current.applyAdvancedAppearanceChoices(lightStart, resetAdvancedPaletteProfile(lightStart, 'light')), { ok: true });
+  await app.settle();
+  assert.deepEqual(app.current.advancedAppearanceChoices.custom,
+    { light: blankColors, dark: { colors: blankColors, rendering: 'legacy' } });
+});
+
+test('Concurrent disjoint changes merge and overlapping or unsafe merged palettes never persist', async (t) => {
+  const storage = createStorage({ [V2_KEY]: v2Record() });
+  const app = mountTheme(t, storage, 'dark');
+  const opening = app.current.advancedAppearanceChoices;
+  const change = app.current.applyAdvancedAppearanceChoices;
+  assert.equal(change(opening, editAdvancedPaletteRole(opening, 'dark', 'accent', '#BBCDEF')).ok, true);
+  assert.equal(change(opening, editAdvancedPaletteRole(opening, 'dark', 'border', '#6C778A')).ok, true);
+  assert.equal(change(opening, editAdvancedPaletteRole(opening, 'light', 'accent', '#304951')).ok, true);
+  assert.match(change(opening, editAdvancedPaletteRole(opening, 'dark', 'accent', '#123456')).message, /changed while/);
+  await app.settle();
+  const next = app.current.advancedAppearanceChoices;
+  assert.equal(change(next, editAdvancedPaletteRole(next, 'light', 'text', '#555555')).ok, true);
+  const result = change(next, editAdvancedPaletteRole(next, 'light', 'surface', '#999999'));
+  assert.match(result.message, /Custom Light text.*contrast/);
+  const stored = JSON.parse(storage.get(V3_KEY));
+  assert.equal(stored.custom.light.surface, null);
+  assert.equal(stored.custom.light.text, '#555555');
+  assert.equal(stored.custom.light.accent, '#304951');
+  assert.equal(stored.custom.dark.colors.accent, '#BBCDEF');
+  assert.equal(stored.custom.dark.colors.border, '#6C778A');
+  assert.equal(stored.custom.dark.rendering, 'adaptive');
+  assert.deepEqual(storage.attempts, [V3_KEY, V3_KEY, V3_KEY, V3_KEY]);
+});
+
+test('An explicit whole-profile reset rejects a concurrently edited role that was inherited when opened', async (t) => {
+  const storage = createStorage({ [V2_KEY]: v2Record() });
+  const app = mountTheme(t, storage, 'dark');
+  const opening = app.current.advancedAppearanceChoices;
+  const reset = resetAdvancedPaletteProfile(opening, 'dark');
+  const apply = app.current.applyAdvancedAppearanceChoices;
+  assert.equal(apply(opening, editAdvancedPaletteRole(opening, 'dark', 'border', '#626DA0')).ok, true);
+  assert.match(apply(opening, reset).message, /changed while/);
+  await app.settle();
+  assert.equal(app.current.advancedAppearanceChoices.custom.dark.colors.border, '#626DA0');
+  assert.deepEqual(storage.attempts, [V3_KEY]);
+});
+
+test('Invalid draft and failed commits leave active profiles intact while real no-ops write nothing', async (t) => {
+  const storage = createStorage({ [V2_KEY]: v2Record() });
+  const app = mountTheme(t, storage, 'dark');
+  const opening = app.current.advancedAppearanceChoices;
+  const apply = app.current.applyAdvancedAppearanceChoices;
+  const changed = editAdvancedPaletteRole(opening, 'dark', 'accent', '#ABCDEF');
+  const reverted = editAdvancedPaletteRole(changed, 'dark', 'accent', opening.custom.dark.colors.accent);
+  assert.equal(apply(opening, reverted).ok, true);
+  assert.match(apply(opening, editAdvancedPaletteRole(opening, 'light', 'accent', 'bad')).message, /HEX/);
+  assert.match(apply(opening, editAdvancedPaletteRole(opening, 'dark', 'background', '#FFFFFF')).message, /range/);
+  assert.deepEqual(storage.attempts, []);
+  storage.failWrite = true;
+  assert.match(apply(opening, changed).message, /Try again/);
+  await app.settle();
+  assert.equal(app.current.advancedAppearanceChoices, opening);
+  assert.equal(app.current.theme.accent, '#254DA8');
+  assert.equal(storage.get(V3_KEY), null);
+  storage.failWrite = false;
+  assert.equal(apply(opening, changed).ok, true);
+  assert.equal(apply(opening, changed).ok, true);
+  await app.settle();
+  assert.deepEqual(storage.attempts, [V3_KEY, V3_KEY]);
+  assert.equal(storage.writes.length, 1);
+  assert.equal(changed.custom.dark.colors.accent, '#ABCDEF');
 });

@@ -3,11 +3,14 @@ import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { fontSizes, radii, spacing } from "@orion/shared/tokens";
 import type { MobileThemeTokens } from "../../context/ThemeContext";
+import type { MobileAppearanceThemeId } from "./appearancePreferences";
 import { studioAccentForeground, studioReadableForeground } from "./appearanceStudioContrast";
 import { THEME_NAMES } from "./appearanceStudioDraft";
 
-export function AppearanceStudioPreview({ theme, editorTheme }: { theme: MobileThemeTokens; editorTheme: MobileThemeTokens }) {
-  const title = THEME_NAMES[theme.id];
+export function AppearanceStudioPreview({ theme, themeId, editorTheme }: {
+  theme: MobileThemeTokens; themeId: MobileAppearanceThemeId; editorTheme: MobileThemeTokens;
+}) {
+  const title = THEME_NAMES[themeId];
   return (
     <View style={styles.section}>
       <Text

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, Platform, ScrollView, Image, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, usePathname } from 'expo-router';
@@ -59,7 +59,10 @@ export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarD
   const footerStacked = fontScale > 1.3;
   const router = useRouter();
   const pathname = usePathname();
-  const { theme } = useOrionTheme();
+  const { theme, effectiveAppearanceThemeId, advancedAppearanceChoices } = useOrionTheme();
+  const [focusedRoute, setFocusedRoute] = useState<string | null>(null);
+  const adaptive = effectiveAppearanceThemeId === 'custom-light' ||
+    (effectiveAppearanceThemeId === 'custom' && advancedAppearanceChoices?.custom.dark.rendering === 'adaptive');
   const { state: accountState } = useOrionAccount();
 
   const accountProfile = accountState.profile;
@@ -113,6 +116,7 @@ export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarD
                 <Text accessibilityRole="header" style={[styles.sectionTitle, { color: theme.textMuted }]}>{section.label}</Text>
                 {section.items.map((item) => {
                   const isActive = pathname === item.route || (item.route !== '/' && pathname.startsWith(item.route));
+                  const isFocused = adaptive && focusedRoute === item.route;
                   const localAvailable = item.id === 'downloads' && presentation.localDownloads;
                   return (
                     <Pressable
@@ -120,11 +124,18 @@ export function SidebarDrawer({ visible, onClose, persistent = false }: SidebarD
                       accessibilityLabel={localAvailable ? 'Downloads. Local media remains available.' : item.name}
                       accessibilityState={{ selected: isActive }}
                       key={item.id}
+                      onFocus={adaptive ? () => setFocusedRoute(item.route) : undefined}
+                      onBlur={adaptive ? () => setFocusedRoute(route => route === item.route ? null : route) : undefined}
                       style={({ pressed }) => [
                         styles.menuRow,
                         isActive && styles.menuRowActive,
                         isActive && { backgroundColor: theme.accentSoft, borderColor: theme.accent, shadowColor: theme.accent },
-                        pressed && styles.menuRowHover,
+                        pressed && !adaptive && styles.menuRowHover,
+                        adaptive && (pressed || isFocused) && {
+                          backgroundColor: theme.surfaceHover,
+                          borderColor: isActive ? theme.accent : theme.border,
+                        },
+                        isFocused && { borderColor: theme.text, borderStyle: 'dashed' },
                       ]}
                       onPress={() => handleNavigate(item.route)}
                     >
