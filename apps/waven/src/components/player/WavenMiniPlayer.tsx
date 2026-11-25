@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
+import { useWavenConnectivity } from '../../infrastructure/connectivity/connectivityHooks';
 import {
   Animated,
   Easing,
   Image,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
+import { WavenText as Text } from '../typography/WavenText';
 import { WavenArtworkFallback } from '../artwork/WavenArtworkFallback';
 import { WavenPressable } from '../interaction/WavenPressable';
+import { useWavenArtworkLease } from '../../hooks/useWavenArtworkLease';
 import type { PlaybackSnapshot } from '../../features/playback/contracts';
+import { resumeWavenNativeTrack } from '../../features/playback/trackPlaybackRuntime';
 import {
   nativePlayback,
   subscribeNativePlayback,
@@ -23,6 +26,18 @@ import {
   wavenSpacing,
   wavenTypography,
 } from '../../theme/tokens';
+
+
+const useMiniPlayerAppearance:
+  typeof import('../../theme/previewChromeMaterials').useMiniPlayerPreviewAppearance =
+  typeof __DEV__ !== 'undefined' &&
+  __DEV__ &&
+  process.env.EXPO_PUBLIC_WAVEN_HOME_ANIME_PREVIEW === '1'
+    ? (
+        require('../../theme/previewChromeMaterials') as
+          typeof import('../../theme/previewChromeMaterials')
+      ).useMiniPlayerPreviewAppearance
+    : (base) => ({ styles: base, highlight: null });
 
 const PROGRESS_HEIGHTS = [
   3, 5, 8, 6, 10, 5, 7, 4, 9, 6, 11, 7, 4, 8, 5, 10, 6, 8, 4,
@@ -57,10 +72,12 @@ function progressRatio(snapshot: PlaybackSnapshot) {
 }
 
 function PlayIcon() {
+  const { styles } = useMiniPlayerAppearance(noirStyles);
   return <View accessible={false} style={styles.playIcon} />;
 }
 
 function PauseIcon() {
+  const { styles } = useMiniPlayerAppearance(noirStyles);
   return (
     <View accessible={false} style={styles.pauseIcon}>
       <View style={styles.pauseBar} />
@@ -70,11 +87,11 @@ function PauseIcon() {
 }
 
 export function WavenMiniPlayer() {
+  const { styles, highlight } = useMiniPlayerAppearance(noirStyles);
+  const connection = useWavenConnectivity();
   const reducedMotion = useWavenReducedMotion();
   const [snapshot, setSnapshot] =
     useState<PlaybackSnapshot | null>(null);
-  const [artworkFailed, setArtworkFailed] =
-    useState(false);
   const [commandPending, setCommandPending] =
     useState(false);
   const [waveWidth, setWaveWidth] =
@@ -140,7 +157,6 @@ export function WavenMiniPlayer() {
     if (!snapshot?.playing) {
       return;
     }
-
     let mounted = true;
 
     const interval = setInterval(() => {
@@ -160,12 +176,13 @@ export function WavenMiniPlayer() {
       mounted = false;
       clearInterval(interval);
     };
-  }, [
-    snapshot?.currentQueueId,
-    snapshot?.playing,
-  ]);
+  }, [snapshot?.currentQueueId, snapshot?.playing]);
 
   const item = snapshot?.currentItem ?? null;
+  const artworkLease = useWavenArtworkLease({
+    leaseKey: `mini-player:${item?.queueId || 'empty'}`,
+    sourceKey: item?.artworkUrl || null,
+  });
 
   const title =
     item?.title?.trim() || 'Unknown track';
@@ -178,13 +195,6 @@ export function WavenMiniPlayer() {
   const pauseIntent =
     snapshot?.playing === true ||
     (snapshot?.buffering === true && snapshot?.playWhenReady === true);
-
-  useEffect(() => {
-    setArtworkFailed(false);
-  }, [
-    item?.artworkUrl,
-    item?.queueId,
-  ]);
 
   useEffect(() => {
     const nextQueueId = item?.queueId ?? null;
@@ -258,7 +268,7 @@ export function WavenMiniPlayer() {
       duration: 1000,
       easing: Easing.linear,
       toValue: nextRatio,
-      useNativeDriver: false,
+      useNativeDriver: true,
     }).start();
 
     return () => {
@@ -438,6 +448,11 @@ export function WavenMiniPlayer() {
     inputRange: [0, 1],
     outputRange: [0, waveWidth],
   });
+  // Reveal a fixed-width mask using native transforms. Counter-translate its
+  // contents so artwork-like bars stay anchored while the right edge advances.
+  // Animating width sent layout props through Fabric on every progress frame.
+  const playedClipTranslateX = Animated.subtract(animatedProgressWidth, waveWidth);
+  const playedBarsTranslateX = Animated.subtract(waveWidth, animatedProgressWidth);
 
   const activeWaveOpacity = activePulse.interpolate({
     inputRange: [0, 1],
@@ -463,7 +478,9 @@ export function WavenMiniPlayer() {
   const bufferingActive =
     snapshot.buffering && snapshot.playWhenReady;
 
-  const secondaryText = snapshot.error
+  const secondaryText = !connection.internetReady && (snapshot.error || bufferingActive)
+    ? `Waiting for connection · ${artist}`
+    : snapshot.error
     ? `${artist} · Playback needs attention`
     : snapshot.buffering && snapshot.playWhenReady
       ? `Buffering · ${artist}`
@@ -484,7 +501,7 @@ export function WavenMiniPlayer() {
     try {
       const nextSnapshot = pauseIntent
         ? await nativePlayback.pause()
-        : await nativePlayback.play();
+        : await resumeWavenNativeTrack();
 
       setSnapshot(nextSnapshot);
     } catch {
@@ -501,6 +518,10 @@ export function WavenMiniPlayer() {
     }
   };
 
+  const PreviewHighlight = highlight === null
+    ? null
+    : (require('expo-linear-gradient') as typeof import('expo-linear-gradient')).LinearGradient;
+
   return (
     <View
       accessibilityLabel="Now playing"
@@ -511,7 +532,15 @@ export function WavenMiniPlayer() {
           accessible={false}
           pointerEvents="none"
           style={styles.topHighlight}
-        />
+        >
+          {PreviewHighlight && highlight ? (
+            <PreviewHighlight
+              colors={highlight}
+              locations={[0, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          ) : null}
+        </View>
 
         <View style={styles.row}>
           <Animated.View
@@ -523,20 +552,32 @@ export function WavenMiniPlayer() {
             ]}
           >
             <View style={styles.artworkFrame}>
-              {item.artworkUrl && !artworkFailed ? (
-                <Image
-                  accessibilityLabel={`${title} artwork`}
-                  onError={() => setArtworkFailed(true)}
-                  source={{ uri: item.artworkUrl }}
-                  style={styles.artworkImage}
-                />
-              ) : (
+              {artworkLease.showFallback ? (
                 <WavenArtworkFallback
                   accessibilityLabel={`${title} artwork`}
                   seed={item.queueId}
                   size={48}
                 />
-              )}
+              ) : null}
+              {artworkLease.backupSourceKey ? (
+                <Image
+                  accessible={false}
+                  resizeMethod="resize"
+                  source={{ uri: artworkLease.backupSourceKey }}
+                  style={styles.artworkImage}
+                />
+              ) : null}
+              {item.artworkUrl ? (
+                <Image
+                  accessibilityLabel={`${title} artwork`}
+                  key={artworkLease.imageKey}
+                  onError={artworkLease.onError}
+                  onLoad={artworkLease.onLoad}
+                  resizeMethod="resize"
+                  source={{ uri: item.artworkUrl }}
+                  style={styles.artworkImage}
+                />
+              ) : null}
             </View>
 
             <View style={styles.copy}>
@@ -720,7 +761,10 @@ export function WavenMiniPlayer() {
               pointerEvents="none"
               style={[
                 styles.playedClip,
-                { width: animatedProgressWidth },
+                {
+                  width: waveWidth,
+                  transform: [{ translateX: playedClipTranslateX }],
+                },
               ]}
             >
               <Animated.View
@@ -729,6 +773,7 @@ export function WavenMiniPlayer() {
                   {
                     opacity: activeWaveOpacity,
                     width: waveWidth,
+                    transform: [{ translateX: playedBarsTranslateX }],
                   },
                 ]}
               >
@@ -991,3 +1036,5 @@ const styles = StyleSheet.create({
     width: 16,
   },
 });
+
+const noirStyles = styles;

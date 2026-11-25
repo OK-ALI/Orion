@@ -24,13 +24,17 @@ import {
   commitWavenEntityRevealEnter,
   commitWavenEntityRevealExit,
   completeWavenEntityReveal,
+  forceCompleteWavenEntityRevealEnter,
+  forceCompleteWavenEntityRevealExit,
   getWavenEntityRevealTransition,
   markWavenEntityRevealHandoffReady,
   markWavenEntityRevealOriginHandoffReady,
+  markWavenEntityRevealVisualReady,
   refreshWavenEntityRevealExitOrigin,
   subscribeWavenEntityReveal,
   type WavenEntityRevealRect,
 } from '../../features/navigation/wavenEntityReveal';
+import { useWavenArtworkLease } from '../../hooks/useWavenArtworkLease';
 import { useWavenLayout } from '../../hooks/useWavenLayout';
 import { useWavenReducedMotion } from '../../hooks/useWavenReducedMotion';
 import { wavenColors } from '../../theme/tokens';
@@ -43,6 +47,8 @@ const EXIT_TRAVEL_MS = 500;
 const ENTER_HANDOFF_MS = 140;
 const EXIT_LANDING_HANDOFF_MS = 96;
 const ENTER_DESTINATION_TIMEOUT_MS = 1200;
+const ENTER_FAILSAFE_MS = 2600;
+const EXIT_FAILSAFE_MS = 1800;
 
 function commitEnterTransition(transitionToken: number) {
   commitWavenEntityRevealEnter(transitionToken);
@@ -56,6 +62,14 @@ function completeTransition(transitionToken: number) {
   completeWavenEntityReveal(transitionToken);
 }
 
+function forceEnterTransition(transitionToken: number) {
+  forceCompleteWavenEntityRevealEnter(transitionToken);
+}
+
+function forceExitTransition(transitionToken: number) {
+  forceCompleteWavenEntityRevealExit(transitionToken);
+}
+
 function revealEnterDestination(transitionToken: number) {
   markWavenEntityRevealHandoffReady(transitionToken);
 }
@@ -66,6 +80,10 @@ function revealExitOrigin(transitionToken: number) {
 
 function refreshExitOrigin(transitionToken: number) {
   void refreshWavenEntityRevealExitOrigin(transitionToken);
+}
+
+function revealOverlayVisual(transitionToken: number) {
+  markWavenEntityRevealVisualReady(transitionToken);
 }
 
 function coverScale(
@@ -116,6 +134,10 @@ export function WavenEntityRevealOverlay() {
   const insets = useSafeAreaInsets();
   const reducedMotion = useWavenReducedMotion();
   const [transition, setTransition] = useState(getWavenEntityRevealTransition());
+  const artworkLease = useWavenArtworkLease({
+    leaseKey: transition?.entityKey || 'entity-reveal:none',
+    sourceKey: transition?.artworkUrl || null,
+  });
 
   const sceneTarget = useMemo<WavenEntityRevealRect>(() => {
     const width = Math.max(
@@ -198,15 +220,24 @@ export function WavenEntityRevealOverlay() {
     toHeight.value = target.height;
     toRadius.value = target.borderRadius;
 
+    // Reduced Motion owns navigation completion rather than artwork decode.
+    // If a transition copy never decodes, accessibility mode must still never
+    // strand the route behind visual readiness.
     if (reducedMotion) {
       if (transition.phase === 'enter') {
         commitWavenEntityRevealEnter(transition.token);
+        completeWavenEntityReveal(transition.token);
       } else {
         commitWavenEntityRevealExit(transition.token);
         completeWavenEntityReveal(transition.token);
       }
       return;
     }
+
+    // Keep the real source/destination artwork authoritative until the
+    // transition copy has actually decoded. This removes the one-frame
+    // full-screen blink seen in signed Android builds.
+    if (!transition.visualReady) return;
 
     if (transition.phase === 'enter') {
       travelProgress.value = withTiming(
@@ -265,8 +296,27 @@ export function WavenEntityRevealOverlay() {
     toY,
     transition?.phase,
     transition?.token,
+    transition?.visualReady,
     travelProgress,
   ]);
+
+  useEffect(() => {
+    if (!transition || reducedMotion) return;
+
+    const token = transition.token;
+    const timeout = setTimeout(
+      () => {
+        if (transition.phase === 'enter') {
+          forceEnterTransition(token);
+          return;
+        }
+        forceExitTransition(token);
+      },
+      transition.phase === 'enter' ? ENTER_FAILSAFE_MS : EXIT_FAILSAFE_MS,
+    );
+
+    return () => clearTimeout(timeout);
+  }, [reducedMotion, transition?.phase, transition?.token]);
 
   useEffect(() => {
     if (
@@ -381,8 +431,14 @@ export function WavenEntityRevealOverlay() {
       );
     };
 
-    if (transition.destinationReady) {
+    if (transition.destinationReady && transition.destinationVisualReady) {
       requestAnimationFrame(() => requestAnimationFrame(beginHandoff));
+      return () => cancelAnimation(handoffProgress);
+    }
+
+    // A geometry timeout may recover a late layout measurement, but never
+    // reveal an undecoded destination image.
+    if (!transition.destinationVisualReady) {
       return () => cancelAnimation(handoffProgress);
     }
 
@@ -395,6 +451,7 @@ export function WavenEntityRevealOverlay() {
     handoffProgress,
     reducedMotion,
     transition?.destinationReady,
+    transition?.destinationVisualReady,
     transition?.navigationCommitted,
     transition?.phase,
     transition?.token,
@@ -433,10 +490,12 @@ export function WavenEntityRevealOverlay() {
       Extrapolation.CLAMP,
     );
 
+    const visual = transition?.visualReady ? 1 : 0;
+    const ownership = phase.value === 1 ? ownershipProgress.value : 1;
     return {
       borderRadius: Math.min(width, height) * radiusRatio,
       height,
-      opacity: 1 - handoffProgress.value,
+      opacity: visual * ownership * (1 - handoffProgress.value),
       transform: [
         {
           translateX: interpolate(
@@ -521,9 +580,10 @@ export function WavenEntityRevealOverlay() {
             Extrapolation.CLAMP,
           );
 
+    const visual = transition?.visualReady ? 1 : 0;
     const ownership = phase.value === 1 ? ownershipProgress.value : 1;
     return {
-      opacity: opacity * ownership * (1 - handoffProgress.value),
+      opacity: opacity * visual * ownership * (1 - handoffProgress.value),
     };
   });
 
@@ -534,7 +594,9 @@ export function WavenEntityRevealOverlay() {
         ? interpolate(progress, [0.48, 0.74, 1], [0, 0.45, 1], Extrapolation.CLAMP)
         : interpolate(progress, [0, 0.28, 0.58], [1, 0.6, 0], Extrapolation.CLAMP);
 
-    return { opacity: opacity * (1 - handoffProgress.value) };
+    const visual = transition?.visualReady ? 1 : 0;
+    const ownership = phase.value === 1 ? ownershipProgress.value : 1;
+    return { opacity: opacity * visual * ownership * (1 - handoffProgress.value) };
   });
 
   const kindStyle = useAnimatedStyle(() => {
@@ -548,8 +610,10 @@ export function WavenEntityRevealOverlay() {
         ? interpolate(progress, [0.6, 0.88], [12, 0], Extrapolation.CLAMP)
         : interpolate(progress, [0, 0.38], [0, -8], Extrapolation.CLAMP);
 
+    const visual = transition?.visualReady ? 1 : 0;
+    const ownership = phase.value === 1 ? ownershipProgress.value : 1;
     return {
-      opacity: opacity * (1 - handoffProgress.value),
+      opacity: opacity * visual * ownership * (1 - handoffProgress.value),
       transform: [{ translateY }],
     };
   });
@@ -565,8 +629,10 @@ export function WavenEntityRevealOverlay() {
         ? interpolate(progress, [0.68, 0.96], [24, 0], Extrapolation.CLAMP)
         : interpolate(progress, [0, 0.44], [0, -12], Extrapolation.CLAMP);
 
+    const visual = transition?.visualReady ? 1 : 0;
+    const ownership = phase.value === 1 ? ownershipProgress.value : 1;
     return {
-      opacity: opacity * (1 - handoffProgress.value),
+      opacity: opacity * visual * ownership * (1 - handoffProgress.value),
       transform: [{ translateY }],
     };
   });
@@ -609,6 +675,7 @@ export function WavenEntityRevealOverlay() {
         <Animated.Image
           blurRadius={transition.kind === 'artist' ? 36 : 30}
           fadeDuration={0}
+          resizeMethod="resize"
           resizeMode="cover"
           source={{ uri: transition.artworkUrl }}
           style={[styles.sceneBlur, targetBlurStyle]}
@@ -618,6 +685,13 @@ export function WavenEntityRevealOverlay() {
       <Animated.View style={[styles.frame, frameStyle]}>
         <Animated.Image
           fadeDuration={0}
+          key={artworkLease.imageKey}
+          onError={artworkLease.onError}
+          onLoad={() => {
+            artworkLease.onLoad();
+            revealOverlayVisual(transition.token);
+          }}
+          resizeMethod="resize"
           resizeMode="stretch"
           source={{ uri: transition.artworkUrl }}
           style={[styles.artworkCanvas, artworkStyle]}

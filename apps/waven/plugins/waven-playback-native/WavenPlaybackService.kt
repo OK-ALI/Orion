@@ -1,6 +1,7 @@
 package com.okali.waven.playback
 
 import android.net.Uri
+import android.util.Log
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -29,6 +30,22 @@ class WavenPlaybackService : MediaSessionService() {
   private var mediaSession: MediaSession? = null
   private lateinit var recoveryStore: WavenPlaybackRecoveryStore
   private val mainHandler = Handler(Looper.getMainLooper())
+
+  private fun traceMedia3(stage: String) {
+    if (packageName == "com.okali.waven.phase8validation") {
+      Log.i("WAVEN_P08_DIAG", "event=media3 detail=$stage ms=0 count=0")
+    }
+  }
+
+  private val media3TraceListener = object : Player.Listener {
+    override fun onPlaybackStateChanged(playbackState: Int) {
+      if (playbackState == Player.STATE_READY) traceMedia3("ready")
+      if (playbackState == Player.STATE_BUFFERING) traceMedia3("buffering")
+    }
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+      if (isPlaying) traceMedia3("playing")
+    }
+  }
 
   private val persistenceListener = object : Player.Listener {
     override fun onEvents(player: Player, events: Player.Events) {
@@ -59,7 +76,7 @@ class WavenPlaybackService : MediaSessionService() {
     )
 
     val resolvingFactory = ResolvingDataSource.Factory(
-      upstream,
+      WavenRemoteRangeDataSource.Factory(upstream),
       object : ResolvingDataSource.Resolver {
         override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
           if (dataSpec.uri.scheme != WavenPlaybackContract.SOURCE_SCHEME) {
@@ -121,6 +138,7 @@ class WavenPlaybackService : MediaSessionService() {
     }
 
     activePlayer.addListener(persistenceListener)
+    activePlayer.addListener(media3TraceListener)
     mainHandler.postDelayed(positionCheckpoint, POSITION_CHECKPOINT_MS)
 
     mediaSession = MediaSession.Builder(this, activePlayer)
@@ -144,6 +162,7 @@ class WavenPlaybackService : MediaSessionService() {
     player?.let { active ->
       persistNow(active)
       active.removeListener(persistenceListener)
+      active.removeListener(media3TraceListener)
     }
     mediaSession?.release()
     mediaSession = null

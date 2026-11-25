@@ -72,8 +72,8 @@ export function WavenEntityRevealAnchor({
     role === 'origin' &&
     transition?.entityKey === entityKey &&
     (
-      transition.phase === 'enter' ||
-      (transition.phase === 'exit' && !transition.originHandoffReady)
+      (transition.phase === 'enter' && transition.visualReady) ||
+      (transition.phase === 'exit' && transition.visualReady && !transition.originHandoffReady)
     );
 
   return (

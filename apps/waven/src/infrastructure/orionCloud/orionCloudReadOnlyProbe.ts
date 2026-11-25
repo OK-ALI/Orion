@@ -1,4 +1,5 @@
 import { NativeModules, Platform } from 'react-native';
+import { wavenConnectivity } from '../connectivity/connectivityService';
 import {
   PORTABLE_PROFILE_PRIMARY_KEY,
   normalizePortableProfileV3,
@@ -67,10 +68,10 @@ export async function readExistingOrionPrimaryProfile(
     throw new Error('Google account email is required for the Orion Cloud visibility check.');
   }
 
-  const result = await requireNative().readPortableProfile(
+  const result = await wavenConnectivity.runRemote('orion-cloud', () => requireNative().readPortableProfile(
     normalizedEmail,
     PORTABLE_PROFILE_PRIMARY_KEY,
-  );
+  ));
 
   if (result.state === 'missing') {
     return {

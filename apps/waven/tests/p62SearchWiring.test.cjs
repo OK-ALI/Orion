@@ -52,7 +52,8 @@ test('P6.2 keeps Search scope, artwork, provider identity, and classification bo
     metadataAdapter,
     /browsePageType === 'MUSIC_PAGE_TYPE_PLAYLIST'/,
   );
-  assert.match(metadataAdapter, /String\(browseId\)\.startsWith\('VL'\)/);
+  assert.match(metadataAdapter, /String\(explicitBrowseId\)\.startsWith\('VL'\)/);
+  assert.match(metadataAdapter, /String\(fallbackBrowseId\)\.startsWith\('VL'\)/);
   assert.match(
     metadataAdapter,
     /browsePageType === 'MUSIC_PAGE_TYPE_ALBUM'/,
@@ -60,15 +61,19 @@ test('P6.2 keeps Search scope, artwork, provider identity, and classification bo
   assert.match(metadataAdapter, /id\.startsWith\('MPRE'\)/);
   assert.match(
     metadataAdapter,
-    /if \(!isAlbumBrowse\(type, browseId\)\) return null;/,
+    /explicitBrowseId && isAlbumBrowse\(type, explicitBrowseId\)/,
   );
   assert.match(
     metadataAdapter,
-    /if \(browseId && isAlbumBrowse\(browsePageType, browseId\)\)/,
+    /if \(!isAlbumBrowse\(type, fallbackBrowseId\)\) return null;/,
+  );
+  assert.match(
+    metadataAdapter,
+    /fallbackBrowseId && isAlbumBrowse\(browsePageType, fallbackBrowseId\)/,
   );
   assert.doesNotMatch(
     metadataAdapter,
-    /if \(browseId\) \{\s*return \{\s*id: `ytmusic-album:/,
+    /if \((?:explicit|fallback)BrowseId\) \{\s*return \{\s*id: `ytmusic-album:/,
   );
   assert.doesNotMatch(
     search,

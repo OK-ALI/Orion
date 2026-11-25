@@ -2,6 +2,8 @@ import type {
   MusicProviderHealth,
   MusicProviderHealthStatus,
 } from '../../domain/music';
+import { ConnectivityUnavailableError, wavenConnectivity } from '../../infrastructure/connectivity/connectivityService';
+import { traceP8, traceProviderName, traceFailureKind } from '../../infrastructure/connectivity/phase8ValidationTrace';
 
 export interface WavenProviderRuntimeIdentity {
   readonly id: string;
@@ -23,6 +25,9 @@ export interface WavenProviderQueryResult<T> {
 export interface WavenProviderQueryOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
+  capability?: string;
+  /** A superseded discovery generation must not publish provider health either. */
+  isCurrent?: () => boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -182,23 +187,31 @@ export async function queryMusicProviders<
 
   const settled = await Promise.allSettled(
     providers.map(async (provider) => {
+      const capability = options.capability ?? provider.id;
       const startedAt = Date.now();
       try {
-        const value = await withProviderTimeout(
+        const value = await wavenConnectivity.runRemote(capability, connectionSignal => withProviderTimeout(
           provider.name,
           timeoutMs,
-          options.signal,
+          connectionSignal,
           (signal) => operation(provider, signal),
-        );
+        ), options.signal);
+        if (options.signal?.aborted || options.isCurrent?.() === false) throw new WavenProviderCancelledError();
         healthBook.recordSuccess(provider.id, Date.now() - startedAt);
+        traceP8('source', `${traceProviderName(provider.id)}:ok`, Date.now() - startedAt);
+        wavenConnectivity.reportProvider(capability, true);
         return {
           providerId: provider.id,
           providerName: provider.name,
           value,
         } satisfies WavenProviderOperationResult<TValue>;
       } catch (error) {
-        if (!(error instanceof WavenProviderCancelledError)) {
+        if (options.signal?.aborted || options.isCurrent?.() === false) throw new WavenProviderCancelledError();
+        if (!(error instanceof WavenProviderCancelledError) && !(error instanceof ConnectivityUnavailableError)) {
           healthBook.recordFailure(provider.id, error, Date.now() - startedAt);
+          const kind = classifyProviderFailure(error);
+          traceP8('source', `${traceProviderName(provider.id)}:${kind === 'slow' ? 'timeout' : kind === 'authentication_required' ? 'auth' : kind === 'rate_limited' ? 'rate' : traceFailureKind(error)}`, Date.now() - startedAt);
+          wavenConnectivity.reportProvider(capability, false);
         }
         throw error;
       }

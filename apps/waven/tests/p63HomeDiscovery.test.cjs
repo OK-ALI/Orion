@@ -11,7 +11,7 @@ const readRepo = (relativePath) =>
   fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 
 const home = readApp('app/index.tsx');
-const exploreIcon = readApp('src/components/icons/WavenExploreIcon.tsx');
+const sectionTitle = readApp('src/components/typography/WavenSectionTitle.tsx');
 const atmosphericCanvas = readApp('src/components/surfaces/WavenAtmosphericCanvas.tsx');
 const runtime = readApp('src/features/discovery/wavenDiscoveryRuntime.ts');
 const provider = readApp(
@@ -25,60 +25,47 @@ const design = readRepo(
   'docs/design/WAVEN-UIUX-REFERENCE-DESIGN-CONTRACT.md',
 );
 
-test('P6.3 wires Home to the existing dashboard runtime with bounded cancellation and retry', () => {
+test('P6.5 V3.4 Home uses dedicated chart and new-release discovery with bounded cancellation and retry', () => {
   assert.match(home, /wavenDiscoveryRuntime/);
-  assert.match(home, /\.getDashboard\(\{ signal: controller\.signal, refresh: shouldRefresh \}\)/);
+  assert.match(home, /getSearchGlobalCharts\(\{/);
+  assert.match(home, /getSearchNewReleases\(\{/);
   assert.match(home, /new AbortController\(\)/);
   assert.match(home, /return \(\) => controller\.abort\(\)/);
   assert.match(home, /discoveryRequestSequence/);
   assert.match(home, /setDiscoveryRetryNonce\(\(value\) => value \+ 1\)/);
-  assert.match(runtime, /async getDashboard\(/);
+  assert.match(runtime, /async getSearchGlobalCharts\(/);
+  assert.match(runtime, /async getSearchNewReleases\(/);
 });
 
-test('P6.3 keeps the accepted Home hierarchy and adds truthful discovery states', () => {
+test('P6.5 V3.4 gives Home one deliberate hierarchy after the hero and truthful recent state', () => {
   assert.match(home, /<WavenAppShell brandTagline>/);
   assert.match(home, /home-reference-02-feature/);
   assert.match(home, /leading="Recently" accent="Played"/);
-  assert.match(home, /EXPLORE_CARDS/);
-  assert.match(home, /Open Your Library/);
+  assert.match(home, /label: 'Trending Now'/);
+  assert.match(home, /label: 'New Releases'/);
+  assert.doesNotMatch(home, /Featured Artists|Featured Albums|Featured Playlists/);
+  assert.doesNotMatch(home, /Open Your Library|leading="Your" accent="Music"/);
+  assert.doesNotMatch(home, /EXPLORE_CARDS|WavenExploreIcon|Choose a direction/);
   assert.match(home, /discoveryStatus === 'loading'/);
   assert.match(home, /discoveryStatus === 'ready'/);
   assert.match(home, /discoveryStatus === 'empty'/);
   assert.match(home, /discoveryStatus === 'error'/);
-  assert.match(home, /Some discovery shelves are temporarily unavailable\./);
-  assert.match(home, /accessibilityLabel="Retry Home discovery"/);
-  assert.match(home, /minHeight: 48/);
 });
 
-test('P6.3 Explore destinations use WAVEN semantic identity icons instead of fallback media artwork', () => {
-  assert.match(home, /WavenExploreIcon/);
-  assert.match(home, /icon: 'songs'/);
-  assert.match(home, /icon: 'artists'/);
-  assert.match(home, /icon: 'albums'/);
-  assert.match(home, /kind=\{card\.icon\}/);
-  assert.doesNotMatch(home, /home-explore-songs|home-explore-artists|home-explore-albums/);
-  assert.match(exploreIcon, /WavenExploreIconKind = 'songs' \| 'artists' \| 'albums'/);
-  assert.match(exploreIcon, /songStem/);
-  assert.match(exploreIcon, /songFlag/);
-  assert.match(exploreIcon, /songHead/);
-  assert.doesNotMatch(exploreIcon, /songBeam|songStemAccent|songHeadAccent/);
-  assert.match(exploreIcon, /artistHead/);
-  assert.match(exploreIcon, /artistBust/);
-  assert.match(exploreIcon, /artistSignalBar/);
-  assert.doesNotMatch(
-    exploreIcon,
-    /songGlyph|identityDot|artistBustMask|micCapsule|micCradle|micStand|micBase/,
-  );
-  assert.match(exploreIcon, /albumDisc/);
+test('Home keeps the first-run Search affordance and transforms its hero from real P7 history without duplicate navigation', () => {
+  assert.match(home, /router\.navigate\('\/search'\)/);
+  assert.match(home, /latestPlay \? `Replay \$\{latestPlay\.title\}` : 'Explore music'/);
+  assert.match(home, /const latestPlay = library\.state\.history\[0\]\?\.track/);
+  assert.match(home, /discoveryGroups\.map/);
+  assert.doesNotMatch(home, /WavenExploreIcon|EXPLORE_CARDS|Open Your Library|Your Music/);
+  assert.match(sectionTitle, /wavenColors\.interactionBlue/);
 });
 
-test('P6.3 Home media identity is artwork-first instead of card-shell-first', () => {
+test('P6.5 V3.4 Home media identity stays artwork-first with the accepted Sora split-heading grammar', () => {
   assert.match(home, /WavenSectionTitle/);
   assert.match(home, /leading="Recently" accent="Played"/);
-  assert.match(home, /leading="Explore" single/);
-  assert.match(home, /leading="Your" accent="Music"/);
-  assert.match(home, /sectionTitleAccent/);
-  assert.match(home, /sectionTitleSignalBar/);
+  assert.match(sectionTitle, /accent/);
+  assert.match(sectionTitle, /wavenColors\.interactionBlue/);
   assert.match(home, /leading=\{group\.label\.split\(' '\)\[0\]\}/);
   assert.match(home, /accent=\{group\.label\.split\(' '\)\.slice\(1\)\.join\(' '\)\}/);
   assert.match(home, /const discoveryArtworkSize = layout\.isCompact/);
@@ -89,29 +76,24 @@ test('P6.3 Home media identity is artwork-first instead of card-shell-first', ()
   assert.match(home, /paddingRight: Math\.round\(discoveryCardWidth \* 0\.5\)/);
   assert.match(home, /discoveryCard: \{[\s\S]*backgroundColor: 'transparent'/);
   assert.doesNotMatch(home, /styles\.mediaGlassTint|styles\.mediaGlassInnerEdge/);
-  assert.match(home, /const isArtist = group\.type === 'artists'/);
-  assert.match(home, /const sourceBorderRadius = isArtist\s*\? discoveryMediaArtworkSize \/ 2\s*: wavenRadii\.md/s);
-  assert.match(home, /circular=\{isArtist\}/);
-  assert.match(home, /borderRadius=\{sourceBorderRadius\}/);
-  assert.match(home, /styles\.discoveryArtistMeta/);
-  assert.match(home, /styles\.discoveryArtistText/);
-  assert.match(home, /discoveryArtistText: \{[\s\S]*textAlign: 'center'/);
-  assert.match(home, /minHeight: 30/);
-  assert.doesNotMatch(home, /discoveryGroupTitle/);
 });
 
-test('P6.3 uses a real chart signal for Popular Now and truthful editorial labels elsewhere', () => {
+test('P6.5 V3.4.1 keeps Trending chart-backed while New Releases becomes globally aggregated canonical release discovery', () => {
   assert.match(home, /GLOBAL_CHART_SECTION_ID = 'waven-global-top-50'/);
-  assert.match(home, /chartTracks\.length > 0 \? 'Popular Now' : 'Discover Now'/);
-  assert.match(home, /\{ type: 'artists', label: 'Featured Artists' \}/);
-  assert.match(home, /\{ type: 'albums', label: 'Featured Albums' \}/);
-  assert.match(home, /\{ type: 'playlists', label: 'Featured Playlists' \}/);
+  assert.match(home, /section\.id === GLOBAL_CHART_SECTION_ID/);
+  assert.match(home, /label: 'Trending Now'/);
+  assert.doesNotMatch(home, /label: 'Discover Now'|label: 'Popular Now'/);
+  assert.match(home, /NEW_RELEASE_ALBUM_TARGET = 10/);
+  assert.match(home, /HOME_DISCOVERY_LIMIT = 16/);
+  assert.match(home, /releaseFingerprint/);
+  assert.match(runtime, /getSearchGlobalChartsSessionSnapshot/);
+  assert.match(runtime, /getSearchNewReleasesSessionSnapshot/);
   assert.match(chartProvider, /SPOTIFY_CHARTS_URL/);
   assert.match(chartProvider, /id: 'waven-global-top-50'/);
   assert.match(chartProvider, /type: 'tracks'/);
-  assert.match(runtime, /createSpotifyChartsDashboardProvider/);
-  assert.match(runtime, /createSpotifyChartsDashboardProvider\(\),\s*createYouTubeMusicDashboardProvider\(\)/);
-  assert.match(home, /WavenHomeDiscoveryArtwork/);
+  assert.match(provider, /FEmusic_new_releases/);
+  assert.match(provider, /WAVEN_GLOBAL_DISCOVERY_MARKETS/);
+  assert.match(provider, /mergeGlobalNewReleaseSections/);
   assert.doesNotMatch(home, /providerName|providerAttribution|YouTube Music|Spotify|YOUTUBE MUSIC/);
 });
 
@@ -119,7 +101,7 @@ test('P6.3 rejects generic UC channel identities unless the provider explicitly 
   assert.match(provider, /type === 'MUSIC_PAGE_TYPE_ARTIST'/);
   assert.match(
     provider,
-    /browseId && browsePageType === 'MUSIC_PAGE_TYPE_ARTIST'/,
+    /explicitBrowseId &&[\s\S]*browsePageType === 'MUSIC_PAGE_TYPE_ARTIST'/,
   );
   assert.doesNotMatch(
     provider,
@@ -131,7 +113,7 @@ test('P6.3 rejects generic UC channel identities unless the provider explicitly 
   );
 });
 
-test('P6.3 replaces the broad Top songs fallback with strict category-directed Home fillers', () => {
+test('P6.3 keeps strict category-directed dashboard fillers as a provider safeguard even though V3.4 no longer renders those generic Home shelves', () => {
   assert.doesNotMatch(provider, /\{ query: 'Top songs' \}/);
   assert.match(provider, /HOME_DISCOVERY_FILLERS/);
   assert.match(provider, /queries: \['popular songs'\]/);
@@ -144,7 +126,6 @@ test('P6.3 replaces the broad Top songs fallback with strict category-directed H
     provider,
     /splitResults\(collectMusicItems\(directedPayload\)\)\[target\.type\]/,
   );
-  assert.match(provider, /variable provider response must not make a core/);
 });
 
 test('P6.3 rejects explicit non-music episode and podcast rows before videoId can promote them to Songs', () => {
@@ -159,34 +140,34 @@ test('P6.3 rejects explicit non-music episode and podcast rows before videoId ca
   );
 });
 
-test('P6.3 treats real dashboard playlist shelves as usable discovery instead of falsely falling back', () => {
-  assert.match(
-    provider,
-    /\{ type: 'playlists' as const, items: groups\.playlists \}/,
-  );
-  assert.match(provider, /\.\.\.collectCatalogSections\(payload\)/);
-  assert.match(provider, /sections\.some\(\(section\) => section\.type === target\.type\)/);
-  assert.match(home, /type: 'playlists'/);
-  assert.match(home, /label: 'Featured Playlists'/);
+test('P6.5 V3.4.1 builds one release lane from canonical albums/singles plus track-only releases and removes cross-shelf duplicates', () => {
+  assert.match(home, /const releaseAlbums = collectDiscoveryItems\(newReleaseSections, 'albums'\)/);
+  assert.match(home, /const releaseTracks = collectDiscoveryItems\(newReleaseSections, 'tracks'\)/);
+  assert.match(home, /NEW_RELEASE_ALBUM_TARGET/);
+  assert.match(home, /trendingKeys\.has\(key\) \|\| releaseKeys\.has\(key\)/);
+  assert.match(home, /appendRelease\('albums', album\)/);
+  assert.match(home, /appendRelease\('tracks', track\)/);
+  assert.match(home, /label: 'New Releases'/);
+  assert.doesNotMatch(home, /collectDiscoveryItems\(newReleaseSections, 'playlists'\)/);
+  assert.doesNotMatch(home, /Featured Artists|Featured Albums|Featured Playlists/);
 });
 
-test('P6.3 keeps core Home discovery lanes structurally stable across dashboard variation', () => {
-  assert.match(provider, /missingTargets = HOME_DISCOVERY_FILLERS\.filter/);
-  assert.match(provider, /Promise\.all\(/);
-  assert.match(provider, /ytmusic-home-directed-\$\{target\.type\}/);
-  assert.match(provider, /Songs\/Artists\/Albums\/Playlists lane appear or disappear/);
-  assert.doesNotMatch(provider, /region-aware starter shelves/);
-});
-
-test('P6.3 preserves one Home discovery snapshot for the app session until explicit retry', () => {
-  assert.match(runtime, /dashboardSessionCache/);
-  assert.match(runtime, /if \(!refresh && this\.dashboardSessionCache\)/);
-  assert.match(runtime, /this\.dashboardSessionCache = result/);
+test('P6.5 V3.4.2 keeps one authoritative session snapshot and treats age as an explicit refresh hint', () => {
+  assert.match(runtime, /DISCOVERY_REFRESH_HINT_MS = 15 \* 60 \* 1_000/);
+  assert.match(runtime, /function refreshIsRecommended/);
+  assert.match(runtime, /return this\.searchNewReleasesSessionCache;/);
+  assert.match(runtime, /return this\.searchGlobalChartsSessionCache;/);
+  assert.match(runtime, /searchNewReleasesGeneration/);
+  assert.match(runtime, /searchGlobalChartsGeneration/);
+  assert.match(runtime, /requestGeneration !== this\.searchNewReleasesGeneration/);
+  assert.match(runtime, /requestGeneration !== this\.searchGlobalChartsGeneration/);
+  assert.match(runtime, /getDiscoveryFreshnessHints/);
+  assert.match(home, /initialTrendingSnapshot/);
+  assert.match(home, /initialNewReleasesSnapshot/);
   assert.match(runtime, /refresh\?: boolean/);
-  assert.match(home, /refresh: shouldRefresh/);
 });
 
-test('P6.3 physical polish keeps explicit refresh one-shot and gives artwork the full media-tile width', () => {
+test('P6.5 V3.4 keeps explicit refresh one-shot and preserves accepted Home media geometry', () => {
   assert.match(home, /const discoveryCardWidth = discoveryArtworkSize \+ 32/);
   assert.match(home, /const discoveryMediaArtworkSize = discoveryCardWidth/);
   assert.match(home, /const discoveryCardMinHeight = discoveryMediaArtworkSize \+ 56/);
@@ -196,15 +177,8 @@ test('P6.3 physical polish keeps explicit refresh one-shot and gives artwork the
   assert.match(home, /refresh: shouldRefresh/);
   assert.match(home, /accessibilityLabel="Refresh Home discovery"/);
   assert.match(home, /styles\.discoveryCardContent/);
-  assert.match(home, /\{ width: discoveryCardWidth \}/);
   assert.match(home, /size=\{discoveryMediaArtworkSize\}/);
-  assert.match(home, /discoveryCardContent: \{[\s\S]*alignSelf: 'center'[\s\S]*gap: 8/);
-  assert.match(home, /discoveryCard: \{[\s\S]*alignItems: 'center'[\s\S]*paddingHorizontal: 0/);
-  assert.doesNotMatch(home, /discoveryMeta: \{[\s\S]{0,180}paddingHorizontal:/);
-  assert.match(exploreIcon, /songStem/);
-  assert.match(exploreIcon, /songFlag/);
-  assert.match(exploreIcon, /artistSignalBar/);
-  assert.doesNotMatch(exploreIcon, /identityDot|artistBustMask|songGlyph/);
+  assert.doesNotMatch(home, /WavenExploreIcon|EXPLORE_CARDS/);
 });
 
 test('P6.3 selective WAVEN Glass stays on utility surfaces while real media artwork remains shell-free', () => {
@@ -217,7 +191,6 @@ test('P6.3 selective WAVEN Glass stays on utility surfaces while real media artw
   assert.match(master, /P6\.3 selective WAVEN Glass refinement/);
 });
 
-
 test('P6.3 final Home micro-polish inherits the reference atmosphere without changing WAVEN identity', () => {
   assert.match(atmosphericCanvas, /PRIMARY_TOP_GLOW/);
   assert.match(atmosphericCanvas, /PRIMARY_MID_GLOW/);
@@ -226,47 +199,41 @@ test('P6.3 final Home micro-polish inherits the reference atmosphere without cha
   assert.match(atmosphericCanvas, /rgba\(102,178,221,0\.085\)/);
   assert.match(atmosphericCanvas, /const isEntry = variant === 'entry'/);
   assert.match(atmosphericCanvas, /colors=\{isEntry \? ENTRY_BASE : PRIMARY_BASE\}/);
-  assert.match(home, /const discoveryCardWidth = discoveryArtworkSize \+ 32/);
-  assert.match(home, /const discoveryMediaArtworkSize = discoveryCardWidth/);
-  assert.match(home, /const discoveryCardMinHeight = discoveryMediaArtworkSize \+ 56/);
   assert.match(home, /discoveryCardContent: \{[\s\S]*gap: 8/);
   assert.match(home, /discoveryMeta: \{[\s\S]*gap: 2/);
-  assert.match(exploreIcon, /songStem/);
-  assert.match(exploreIcon, /songFlag/);
-  assert.match(exploreIcon, /songHead/);
-  assert.doesNotMatch(exploreIcon, /songBeam|songStemAccent|songHeadAccent/);
-  assert.match(exploreIcon, /artistSignalBar/);
+  assert.doesNotMatch(home, /WavenExploreIcon|EXPLORE_CARDS/);
+  assert.match(sectionTitle, /accessibilityRole="header"/);
+  assert.match(sectionTitle, /wavenColors\.interactionBlue/);
   assert.doesNotMatch(atmosphericCanvas, /#FF|orange|coral|pink/i);
 });
 
-test('P6.3 keeps Home discovery free of playback persistence and Cloud ownership while later Phase 6 may add detail routing', () => {
-  assert.match(home, /group\.items\.map/);
+test('P6.5 V3.4 keeps Home discovery free of playback persistence and Cloud ownership', () => {
+  assert.match(home, /data=\{group\.items\}/);
+  assert.match(home, /renderItem=\{\(\{ item: \{ item, type \} \}\) =>/);
   assert.doesNotMatch(
     home,
     /WavenPlaybackNative|MediaSession|resolveCandidate|resolveTrack|playbackUrl|streamUrl|NativeModules/,
   );
   assert.doesNotMatch(home, /AsyncStorage|SecureStore|MMKV|sqlite|Orion Cloud|writePortableProfile/);
-  assert.match(
-    design,
-    /Artist\/album detail navigation, pagination, caching, suggestions, and playback handoff remain separate later Phase 6 slices/,
-  );
+  assert.match(master, /No playback or persistence expansion/i);
 });
 
-test('P6.3 docs record the bounded Home discovery slice without advancing completion or later phases', () => {
-  assert.match(master, /P6\.3 Provider-backed Home \/ Discovery presentation/);
-  assert.match(master, /wavenDiscoveryRuntime\.getDashboard\(\)/);
-  assert.match(master, /Songs.*, \*\*Artists\*\*, \*\*Albums\*\*, and \*\*Playlists\*\*/s);
+test('P6.5 V3.4 records the bounded Home IA change without advancing completion or later phases', () => {
+  assert.match(master, /P6\.5 V3\.4\.0 discovery hierarchy/);
+  assert.match(master, /Hero → Recently Played → Trending Now → New Releases/);
   assert.match(master, /Authoritative WAVEN v1 completion remains \*\*45%\*\*/);
-  assert.match(master, /Phase 7 and every later phase remain \*\*NOT AUTHORIZED\*\*/);
-  assert.match(design, /P6\.3 Home \/ Discovery implementation contract/);
-  assert.match(design, /Do not render upstream dashboard titles, attribution, provider names, or provider diagnostics/);
-  assert.match(design, /Expo Go is a valid first physical evidence tier/);
-  assert.match(design, /Icons represent destinations and actions; artwork represents music entities/);
-  assert.match(master, /WAVEN-owned stable core Home composition/);
-  assert.match(design, /Popular Now/);
-  assert.match(design, /Featured Artists/);
-  assert.match(design, /Featured Albums/);
-  assert.match(design, /Featured Playlists/);
-  assert.match(design, /internal discovery foundation/i);
-  assert.match(master, /editorial Home labels/i);
+  assert.match(master, /Phase 7\+ remain \*\*NOT AUTHORIZED\*\*/);
+  assert.match(design, /P6\.5 V3\.4\.0 discovery hierarchy contract/);
+  assert.match(design, /Trending Now.*chart-backed/s);
+  assert.match(design, /New Releases.*provider-backed/s);
+  assert.match(design, /Featured Artists.*removed from Home/s);
+  assert.match(design, /Your Music.*removed from Home/s);
+});
+
+test('P6.5 V3.4 preserves the locked Artist Album reveal owner for any navigable New Releases album cards', () => {
+  assert.match(home, /detailRouteForHomeItem/);
+  assert.match(home, /primeWavenAlbumDetail/);
+  assert.match(home, /beginWavenEntityReveal/);
+  assert.match(home, /wavenEntityRevealKey/);
+  assert.match(home, /role="origin"/);
 });

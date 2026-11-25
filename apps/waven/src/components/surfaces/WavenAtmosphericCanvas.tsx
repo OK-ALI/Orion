@@ -1,10 +1,11 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 export type WavenAtmosphericVariant = 'default' | 'entry' | 'quiet';
 
 interface WavenAtmosphericCanvasProps {
   variant?: WavenAtmosphericVariant;
+  cacheStatic?: boolean;
 }
 
 const VARIANT_OPACITY: Record<WavenAtmosphericVariant, number> = {
@@ -56,10 +57,11 @@ const PRIMARY_LOWER_GLOW = [
 
 export function WavenAtmosphericCanvas({
   variant = 'default',
+  cacheStatic = false,
 }: WavenAtmosphericCanvasProps) {
   const isEntry = variant === 'entry';
 
-  return (
+  const canvas = (
     <View
       accessible={false}
       pointerEvents="none"
@@ -116,6 +118,22 @@ export function WavenAtmosphericCanvas({
         start={{ x: 0.5, y: 0 }}
         style={StyleSheet.absoluteFill}
       />
+    </View>
+  );
+
+  if (!cacheStatic || Platform.OS !== 'android' || variant !== 'default') return canvas;
+
+  // Cache the unchanged paint subtree outside its existing opacity boundary.
+  // The wrapper owns no motion, color, opacity, layout or playback state.
+  return (
+    <View
+      accessible={false}
+      collapsable={false}
+      pointerEvents="none"
+      renderToHardwareTextureAndroid
+      style={StyleSheet.absoluteFill}
+    >
+      {canvas}
     </View>
   );
 }

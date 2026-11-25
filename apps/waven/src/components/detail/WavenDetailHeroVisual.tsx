@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet } from 'react-native';
-import { wavenColors } from '../../theme/tokens';
+import { wavenColors, wavenFonts } from '../../theme/tokens';
 
 export const WAVEN_DETAIL_HERO_BLUR_OVERFLOW = 40;
 export const WAVEN_DETAIL_HERO_BLUR_OPACITY = 0.5;
@@ -9,19 +9,21 @@ export const WAVEN_DETAIL_HERO_SHARP_OPACITY = 1;
 export const WAVEN_DETAIL_HERO_COPY_MAX_WIDTH = 620;
 export const WAVEN_DETAIL_HERO_SUBTITLE_SLOT_HEIGHT = 30;
 
-export function wavenDetailHeroCopyBottom(kind: 'Artist' | 'Album'): number {
+export function wavenDetailHeroCopyBottom(kind: 'Artist' | 'Album' | 'Single' | 'EP'): number {
   return kind === 'Artist' ? 38 : 34;
 }
 
 export const wavenDetailHeroCopyStyles = StyleSheet.create({
   kindLabel: {
     color: wavenColors.interactionBlue,
+    fontFamily: wavenFonts.bold,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: 2.2,
   },
   heroTitle: {
     color: wavenColors.textPrimary,
+    fontFamily: wavenFonts.extraBold,
     fontSize: 38,
     fontWeight: '800',
     lineHeight: 43,
@@ -41,6 +43,7 @@ export const wavenDetailHeroCopyStyles = StyleSheet.create({
   heroSubtitle: {
     color: 'rgba(231,236,241,0.82)',
     fontSize: 16,
+    fontFamily: wavenFonts.semiBold,
     fontWeight: '600',
     lineHeight: 22,
     textAlign: 'left',

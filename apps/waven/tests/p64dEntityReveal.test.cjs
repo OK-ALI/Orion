@@ -91,12 +91,24 @@ test('P6.4D motion repair keeps one authoritative artwork owner through the forw
   assert.match(revealRuntime, /handoffReady: boolean/);
   assert.match(revealOverlay, /function revealEnterDestination\(transitionToken: number\)/);
   assert.match(revealOverlay, /markWavenEntityRevealHandoffReady\(transitionToken\)/);
+  assert.match(revealRuntime, /visualReady: false/);
+  assert.match(revealRuntime, /destinationVisualReady: false/);
+  assert.match(revealRuntime, /markWavenEntityRevealVisualReady/);
+  assert.match(revealRuntime, /markWavenEntityRevealDestinationVisualReady/);
+  assert.match(revealAnchor, /transition\.phase === 'enter' && transition\.visualReady/);
+  assert.match(revealOverlay, /if \(!transition\.visualReady\) return/);
+  assert.match(revealOverlay, /artworkLease\.onLoad\(\);[\s\S]*revealOverlayVisual\(transition\.token\)/);
+  assert.match(revealOverlay, /transition\.destinationReady && transition\.destinationVisualReady/);
   assert.match(revealOverlay, /handoffProgress\.value = withTiming/);
   assert.match(revealOverlay, /scheduleOnRN\(completeTransition, transition\.token\)/);
   assert.match(detail, /enteringThisEntity/);
   assert.match(detail, /enterHandoffReady/);
   assert.match(detail, /hideSharpArtwork/);
   assert.match(detail, /enteringThisEntity && !enterHandoffReady/);
+  assert.match(detail, /markWavenEntityRevealDestinationVisualReady/);
+  assert.match(detail, /onLoad=\{onSharpLoad\}/);
+  assert.match(detail, /const hideSharpArtwork = enteringThisEntity && !enterHandoffReady/);
+  assert.doesNotMatch(detail, /exitingThisEntity \|\| \(enteringThisEntity && !enterHandoffReady\)/);
   assert.match(revealAnchor, /overlayOwnsOrigin/);
   assert.match(revealAnchor, /opacity:\s*0/);
   assert.doesNotMatch(detail, /requestAnimationFrame\(onBack\)/);
@@ -200,7 +212,7 @@ test('P6.4D Transition Scene releases only after stable destination geometry and
   assert.match(heroVisual, /WAVEN_DETAIL_HERO_SHARP_OPACITY = 1/);
   assert.match(heroVisual, /WAVEN_DETAIL_HERO_SUBTITLE_SLOT_HEIGHT = 30/);
   assert.match(home, /borderRadius=\{sourceBorderRadius\}/);
-  assert.match(search, /borderRadius=\{10\}/);
+  assert.match(search, /borderRadius=\{circular \? 29 : 10\}/);
 });
 
 test('P6.4D Transition Scene primes provider detail during motion and suppresses a flash-loading handoff', () => {
@@ -208,6 +220,9 @@ test('P6.4D Transition Scene primes provider detail during motion and suppresses
   assert.match(detailPrefetch, /primeWavenAlbumDetail/);
   assert.match(detailPrefetch, /readWavenArtistDetailPrefetch/);
   assert.match(detailPrefetch, /readWavenAlbumDetailPrefetch/);
+  assert.match(detailPrefetch, /readWavenArtistDetailSnapshot/);
+  assert.match(detailPrefetch, /readWavenAlbumDetailSnapshot/);
+  assert.match(detailPrefetch, /10 \* 60_000/);
   assert.match(home, /primeWavenArtistDetail/);
   assert.match(home, /primeWavenAlbumDetail/);
   assert.match(search, /primeWavenArtistDetail/);

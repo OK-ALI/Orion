@@ -28,6 +28,7 @@
       "expo-asset",
       "expo-font",
       "./plugins/withWavenPlayback.js",
+      "./plugins/withWavenStreamingSource.js",
       "./plugins/withOrionGoogleIdentity.js",
       "./plugins/withOrionGoogleDriveAuthorization.js",
       [

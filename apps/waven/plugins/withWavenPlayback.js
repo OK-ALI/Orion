@@ -28,6 +28,7 @@ const NATIVE_FILES = Object.freeze([
   "WavenPlaybackPackage.kt",
   "WavenPlaybackRecoveryStore.kt",
   "WavenPlaybackService.kt",
+  "WavenRemoteRangeDataSource.java",
 ]);
 
 function withPlaybackMainApplication(config) {

@@ -66,7 +66,8 @@ test('P6.1 records a provider-runtime foundation without advancing WAVEN complet
   assert.match(master, /P6\.1 Provider runtime foundation/);
   assert.match(master, /YouTube Music metadata\/dashboard adapter/);
   assert.match(master, /request broker with bounded timeout, cancellation, sanitized failure text, and provider-health classification/);
-  assert.match(master, /Current authoritative WAVEN v1 completion: 45%/);
+  assert.match(master, /P6\.1[\s\S]*?Current authoritative WAVEN v1 completion remains \*\*45%\*\*/);
+  assert.match(master, /Current authoritative WAVEN v1 completion: 68%/);
   assert.match(master, /Phase 7 and every later phase remain \*\*NOT AUTHORIZED\*\*/);
   assert.match(master, /`P6\.2` owns the first product Search wiring/);
 });

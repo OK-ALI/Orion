@@ -67,7 +67,7 @@ test('P5.4B animates only overflowing song titles and makes Reduced Motion stati
 });
 
 test('P5.4B remains presentation-only and preserves compact-player scope', () => {
-  assert.match(miniPlayer, /nativePlayback\.play\(\)/);
+  assert.match(miniPlayer, /resumeWavenNativeTrack\(\)/);
   assert.match(miniPlayer, /nativePlayback\.pause\(\)/);
   assert.match(miniPlayer, /maxFontSizeMultiplier=\{COMPACT_TEXT_MAX_SCALE\}/);
 

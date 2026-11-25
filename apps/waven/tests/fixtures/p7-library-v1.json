@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "scope": "google:p7-validation-a",
+  "likedTracks": [{ "id": "fixture-one", "title": "Migration Fixture One", "artistName": "WAVEN Validation Fixture", "source": { "provider": "p7-validation", "id": "one" } }],
+  "likedAlbums": [],
+  "likedArtists": [],
+  "playlists": [{ "id": "fixture-playlist", "name": "Migration Fixture Playlist", "createdAt": 1, "tracks": [
+    { "id": "fixture-two", "title": "Migration Fixture Two", "artistName": "WAVEN Validation Fixture", "source": { "provider": "p7-validation", "id": "two" } },
+    { "id": "fixture-one", "title": "Migration Fixture One", "artistName": "WAVEN Validation Fixture", "source": { "provider": "p7-validation", "id": "one" } }
+  ] }],
+  "history": []
+}

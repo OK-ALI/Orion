@@ -1467,3 +1467,186 @@ P6.4D is **physically accepted and locked** at the V8.1 evidence boundary.
 - **Frozen behaviors:** explicit crop interpolation, stable destination geometry, seed-artwork handoff, later quality-art crossfade, reserved metadata geometry, restrained controls/body choreography, quiet delayed loading presentation, Android Back, Reduced Motion, and no competing detail Stack animation.
 - This acceptance introduces no dependency change, no Library/history persistence, no offline owner, no Orion Cloud music sync, and no Phase 7+ authority. WAVEN remains **45%** pending the eventual Phase 6 Completion ACK.
 
+### P6.5 Search discovery + suggestions visual contract — 2026-09-19
+
+P6.5 translates the accepted **Reference 04 — Premium Glass Search + Layered Atmosphere** direction into the real provider-backed Search surface while preserving WAVEN identity.
+
+- **Discovery before query is the default Search state.** Search opens with one prominent WAVEN search field followed by real provider-backed catalog sections rather than fallback artwork plus explanatory empty-state copy.
+- **Focused search replaces discovery rather than stacking on top of it.** Once the query contains real text, the zero-query catalog retreats and the existing Songs / Artists / Albums / Playlists scope controls, suggestions, loading/results/empty/error states become the immediate hierarchy.
+- **Catalog sections are artwork-led and denser than Home.** Zero-query Search may show up to 12 deduplicated entities per Songs / Artists / Albums / Playlists group in this bounded candidate. This is discovery depth, not final pagination or a permanent item ceiling.
+- **Artist identity is circular.** Artist discovery artwork is circular with centered names and no redundant `Artist` subtitle. Album, Song, and Playlist discovery artwork remains square or softly rounded. Search Artist/Album detail origins reuse the accepted P6.4D entity-reveal owner and may therefore enter Detail with the same circle/square source semantics without reopening transition architecture.
+- **Suggestions are lightweight and immediate.** Provider-backed suggestions appear only for queries of at least two characters, use a short independent debounce/cancellation path, and disappear when stale. Selecting a suggestion replaces the query and lets the normal focused Search request own results.
+- **Reference-image borrowing is structural only.** The finalized Search references support top-field prominence, creator circles, compact content density, lightweight discovery chips, and artwork-led browsing. WAVEN does not copy their yellow accent, pink/magenta skin, exact navigation, exact cards, fake artwork, or catalog labels.
+- **No fabricated categories.** P6.5 now has a real provider-supplied mood and genre taxonomy. Chip labels come from the live discovery response, and WAVEN preserves the provider's opaque browse params rather than reconstructing category requests from visible text. Static reference labels such as `Hip Hop`, `Soft`, `Pop`, or `Soothing` are never copied merely because they appear in a reference image.
+- **Discovery chips open real browse destinations.** Mood/genre chips browse the provider category endpoint; **New Releases** opens the provider's release surface; **Global Charts** opens WAVEN's already-proven region-neutral global chart source. A chip is therefore a discovery handle, not a disguised search query.
+- **Home remained frozen through V3.2.1.** V3.3 later authorizes one bounded Home cleanup only: the redundant Explore shortcut row is removed. Home shelf ownership, first-run hero behavior, and later Trending/New Releases restructuring remain unchanged.
+- **Library remains Phase 7-owned.** No favorites, saved albums/artists, playlists, history, downloads, or collection persistence is pulled into Search discovery.
+- **Atmosphere stays WAVEN.** Near-black canvas, navy/cyan environmental light, cool-silver typography, restrained blue interaction accents, crisp media artwork, and selective glass remain the governing visual language.
+
+P6.5 remains a physical-review target. Green code alone does not accept this Search composition, and authoritative WAVEN completion remains **45%**.
+
+### P6.5 physical visual repair V3 — Orion-shaped discovery, WAVEN artwork identity
+
+Physical review of V2.2 accepts the functional Search split but rejects the thin horizontal genre/mood chips and the slab-heavy focused result treatment.
+
+- Borrow from the supplied Orion Mobile Search reference only the **two-column destination-card rhythm** and obvious category scanability. Do not copy Orion's movie genres, icons, multicolor palette, hamburger/search navigation, or exact geometry.
+- WAVEN's category cards are **artwork-led**. Genre artwork should come from the real content returned by that provider category when available; the provider navigation-button accent and deterministic WAVEN artwork are the fallback. Random web images are not an automatic product source.
+- Provider taxonomy remains authoritative. WAVEN may prioritize familiar returned categories for scanability, but a category is never rendered unless the live provider response supplied it and its opaque browse handle.
+- `New Releases` and `Global Charts` use the same destination-card family while retaining their existing truthful data owners.
+- Search suggestions and focused results use **open rows with quiet separators**, not nested rounded slabs. Album/Artist artwork and the locked entity reveal remain intact.
+- This repair changes presentation and session reuse only. Home, hero, Library, playback, Orion Cloud, dependencies, and Phase 7+ boundaries stay frozen.
+
+P6.5 is still not physically accepted until this V3 composition is reviewed on device.
+
+### P6.5 curated discovery artwork V3.2 — stable WAVEN destination identity
+
+V3.2 locks the discovery-card architecture from V3 but replaces opportunistic provider-preview artwork with a curated WAVEN-owned asset family.
+
+- The Search discovery surface owns **16 lossless PNG presentation masters**: eight core genre artworks, six Moods & Moments artworks, plus New Releases and Global Charts. Runtime presentation may clip them but must not stretch them or replace them with fabricated/alternate artwork. Density-appropriate lossless downsampling of the same accepted composition is allowed when required to prevent Android decode pressure.
+- The primary genre grid is intentionally minimal and globally stable: `Pop`, `Hip-Hop`, `R&B & Soul`, `Rock`, `Electronic`, `Indie / Alternative`, `Jazz`, `Classical`. Regional/provider-specific scenes may remain available through deeper discovery, but they do not take over a core slot merely because their title contains `Pop` or `Hip-Hop`.
+- Core destination visibility uses **exact provider-category matches** against a bounded alias list. Artwork and WAVEN display labels are curated; the underlying browse category and opaque provider params remain real.
+- Moods & Moments is similarly bounded to `Chill`, `Focus`, `Workout`, `Feel Good`, `Party`, and `Sleep`, only when the provider supplies the matching live category.
+- `New Releases` and `Global Charts` use their custom WAVEN artworks while preserving their existing truthful data owners.
+- Every curated card uses a **3:2 clipped destination viewport** with rounded overflow clipping and proportional `cover` rendering. 3:2 genre originals fit natively; square discovery/mood originals receive a controlled center crop. No image may visually overflow its card or be non-uniformly stretched.
+- V3.2 removes category preview artwork fetching from the zero-query visual path. Actual category content is fetched when the user opens the destination.
+- When a discovery destination is open, the generic zero-query `Explore your next sound` heading retreats so the selected destination title becomes the clear hierarchy owner.
+- For this build, green JS/UI tests are necessary but insufficient. Physical acceptance requires a **signed APK** produced through the Android native packaging path, signature verification, asset-bundle verification, and on-device review. Expo Go is not acceptance evidence for V3.2.
+
+Home, the first-run hero, Library, playback, Cloud, dependency ownership, and Phase 7+ remain frozen by this contract.
+
+
+### P6.5 consolidated signed-build physical polish V3.3 — continuity, session warmth, and hierarchy
+
+V3.3 consolidates the physical findings discovered after the first permanent-signed Android candidate so the next device pass validates one coherent build rather than a chain of partial repairs.
+
+- **Transition visual ownership is decode-gated.** P6.4D geometry, crop interpolation, route timing, Artist radius choreography, and reversible origin/destination model remain authoritative. The transition copy may not take ownership until its artwork has decoded; the forward handoff additionally waits for the destination hero visual to be ready. Reverse ownership crossfades from the real detail hero before route pop instead of hiding the detail artwork immediately. This repairs the observed full-screen blink without redesigning the accepted reveal.
+- **Session-warm discovery is the default revisit path.** Home dashboard, Search dashboard, provider taxonomy, opened genre/mood destinations, New Releases, Global Charts, and resolved Artist/Album details expose synchronous in-memory snapshots. Returning to an already-opened surface restores the last successful session result immediately instead of presenting a fresh loading state. Explicit Retry/Refresh still bypasses the snapshot and performs a real provider request. This is Phase 6 session caching only, not Phase 7 persistence or personalization.
+- **Home Explore shortcut row is removed.** The custom Songs/Artists/Albums shortcut cards no longer interrupt Home. The existing hero Search affordance remains, and real provider-backed discovery shelves flow directly through the page. This does not authorize the later Home Trending/New Releases IA redesign.
+- **Split-accent headings are shared WAVEN grammar.** The white + WAVEN-blue section-heading treatment is centralized and reused beyond Home. Search now carries the same identity in “Explore your next sound”, “Browse by Genre”, “Moods & Moments”, focused discovery titles, and “Browse music”, while preserving restrained blue usage.
+- **Spacing is normalized.** Search discovery uses one consistent vertical rhythm between heading, featured destinations, genre/mood grids, focused discovery, and catalog rails rather than stacked local margins.
+- **Curated artwork is unchanged.** All 16 accepted PNG masters and the V3.2.1 exact-size 3:2 clipping repair remain byte-for-byte unchanged.
+- **Acceptance remains signed Android only for this cycle.** The next acceptance build must use the permanent WAVEN certificate, verify the 16 packaged discovery resources, and pass physical review. Expo Go is not acceptance evidence for V3.3.
+- Library, playback, Cloud, dependencies, and Phase 7+ ownership remain unchanged. P6.5 remains IN PROGRESS and authoritative WAVEN completion remains 45% until physical acceptance and later Phase 6 exit work.
+
+## P6.5 V3.3.2 typography identity polish — 2026-09-19
+
+- WAVEN's functional UI voice is **Manrope** with explicit Regular, Medium, SemiBold, Bold, and ExtraBold faces. Product text must use the real bundled weight face rather than relying on synthetic Android bolding.
+- WAVEN-blue display words use **Bebas Neue** as a deliberate visual accent. This applies to prominent blue words in brand/display and section-heading grammar, not to blue icons, chevrons, controls, or every small status label.
+- The WAVEN wordmark may use Bebas Neue as a complete display lockup while retaining the existing blue `V` identity and tracking.
+- Major product headings use intentional Title Case. Examples include `Browse Music`, `Explore Your Next SOUND`, and `Browse By GENRE`.
+- Font assets are bundled locally through pinned Expo Google Fonts packages. WAVEN must not depend on runtime font downloads.
+- This typography pass does not change discovery/provider ownership, P6.4D transition geometry, Library ownership, playback ownership, Orion Cloud, or any Phase 7+ boundary.
+
+
+## P6.5 V3.3.3 Sora typography refinement — 2026-09-19
+
+- **Bebas Neue is now reserved for the WAVEN wordmark lockup only.** It no longer switches into blue words inside ordinary product phrases.
+- **Sora is WAVEN's major heading/display family.** Section and display headings use bundled Sora Bold/ExtraBold as one continuous typographic voice across both white and WAVEN-blue words.
+- **Color may change inside a heading; typeface, baseline, size, and casing do not.** Blue accent words remain in the same Sora family and preserve intentional Title Case instead of being automatically uppercased.
+- **Manrope remains the functional UI family** for body copy, metadata, navigation, buttons, search input, status/eyebrow labels, detail-kind labels, and brand taglines.
+- The preferred grammar is therefore: **Bebas = wordmark, Sora = product-heading personality, Manrope = functional language, WAVEN blue = semantic emphasis.**
+- Existing P6.4D reveal motion, Home/Search discovery behavior, artwork, provider runtime, playback, Library ownership, Orion Cloud, and Phase 7+ boundaries are unchanged.
+- V3.3.3 requires the permanent WAVEN signing identity, bundled-font verification, in-place physical update, and visual review before acceptance. WAVEN remains **45%** and P6.5 remains **IN PROGRESS**.
+
+### P6.5 V3.4.0 discovery hierarchy contract — 2026-09-19
+
+This contract supersedes the V3.3 zero-query density and Home shelf composition while preserving the physically accepted V3.3.3 typography and all locked visual foundations.
+
+- **Home has one editorial job.** After the existing Hero and truthful Recently Played state, only **Trending Now** and **New Releases** remain. Featured Artists, Featured Albums, Featured Playlists, and **Your Music / Open Your Library** are removed from Home.
+- **Trending Now is chart-backed or absent.** It may render only from WAVEN's established region-neutral global chart owner. No generic provider-discovery row may inherit that label.
+- **New Releases is provider-backed or absent.** It uses the existing `FEmusic_new_releases` browse owner. A generic Featured Albums row must never be renamed to simulate freshness.
+- **Search landing is intentionally sparse.** Zero-query Search contains the `Find Your Sound` heading, the search field, **Browse by Genre**, and **Moods & Moments**, then ends.
+- **Genre remains visually primary.** Core genre destinations retain the accepted two-column 3:2 artwork-led cards and exact provider-category matching.
+- **Moods & Moments is a compact horizontal rail.** Keep the six accepted WAVEN mood artworks and real provider handles, but reduce vertical occupation so the rail reads as secondary exploration rather than another full page of cards.
+- **No duplicate discovery shelves on zero-query Search.** `New Releases`, `Global Charts`, the generic `Browse Music` heading, and zero-query Songs / Artists / Albums / Playlists rails are removed from the landing state.
+- **Focused discovery still expands.** Opening a Genre or Mood may expose the provider's relevant Songs, Artists, Albums, and Playlists rails. Typed Search continues to own explicit scoped results and suggestions.
+- **Typography is frozen.** Bebas remains wordmark-only, Sora remains the continuous display/section heading voice, Manrope remains functional UI, and WAVEN blue remains color-only emphasis.
+- **Artwork and motion are frozen.** V3.2.1 card sizing and the P6.4D entity-reveal owner remain unchanged.
+- **No dependency, playback, Library, Cloud, or Phase 7 expansion is authorized.**
+
+Physical acceptance requires the permanent WAVEN signing identity and on-device validation of the reduced Home/Search density, focused Genre/Mood continuity, typed Search, and portrait/rotation safety.
+
+
+## P6.5 V3.4.1 discovery-accuracy visual/data contract — 2026-09-20
+
+The accepted V3.4.0 composition remains visually frozen:
+
+- Home remains **Hero → Recently Played → Trending Now → New Releases**.
+- Zero-query Search remains **Find Your Sound → Browse by Genre → Artists to Explore → Moods & Moments**.
+- The new Artist lane is one compact horizontal rail with circular provider-backed Artist identity. It must reuse the existing Artist reveal/detail owner and must not become another two-column destination wall.
+- Trending Now is visually and semantically track-oriented. Its meaning is current popularity from the dedicated chart signal.
+- New Releases is visually release-oriented. Canonical Singles/EPs/Albums should remain release entities when the provider identifies them as such, even if the same card also has an immediate play endpoint. Track-only current releases may fill the rail, but playlists do not qualify as releases.
+- Cross-shelf duplicate presentation should be minimized by normalized title + artist identity. A release may be both new and trending in reality, but Home should prefer distinct cards when enough truthful alternatives exist.
+- Global release discovery must not change because a VPN, device locale, SIM, or current network country changed. WAVEN owns a deterministic fixed multi-market discovery strategy and merges the resulting provider data.
+- Artists to Explore must be dynamic. Candidate Artists come from current release/chart signals and strict provider Artist entities, with provider-backed artist discovery only as bounded supplementation. Static celebrity lists are prohibited.
+- The V3.3.3 Sora/Manrope/Bebas typography, V3.2.1 artwork geometry, P6.4D reveal choreography, black-surface blue-accent rule, portrait behavior, and persistent bottom navigation remain unchanged.
+- Fast-changing discovery snapshots have a bounded 15-minute in-memory freshness lifetime. This is runtime freshness only, not Phase 7 history or persistence.
+
+## P6.5 V3.4.2 determinism + rail-depth contract — 2026-09-20
+
+- **Current composition stays frozen.** Home remains Hero → Recently Played → Trending Now → New Releases. Search remains Find Your Sound → Browse by Genre → Artists to Explore → Moods & Moments.
+- **Visible rails must not reshuffle themselves.** Once a valid session snapshot is rendered, asynchronous provider completion, remounts, or freshness age alone must not replace it. Explicit Refresh and a new app session are the replacement boundaries.
+- **Rail depth increases without increasing visual density.** The card geometry and continuation peek remain unchanged, while the underlying live rail aims for roughly 12–20 distinct high-confidence entities where truthful data supports them.
+- **Accuracy outranks count.** Empty space or a shorter rail is preferable to duplicate, malformed, stale, weakly classified, or video-wrapper content.
+- **New Releases is canonical-first.** Canonical Single/EP/Album/Track identities outrank MV, Official Music Video, lyric-video, and visualizer representations. Equivalent canonical/video identities deduplicate to the canonical entity.
+- **Artists to Explore remains circular and compact.** Its candidate order should reflect current chart/release relevance rather than network completion timing or one weak regional association.
+- **Explore More is a later Phase-6 destination contract only.** A future terminal rail action may open a dedicated live page for the same semantic feed, using the same snapshot/ranking/classification identity plus continuation/pagination and explicit refresh. No Explore More page is implemented by V3.4.2.
+- **Typography, artwork scale, reveal motion, bottom navigation, portrait behavior, playback, Library, Cloud, and Phase 7+ remain frozen.**
+
+
+## V3.4.3 catalog identity + navigation reliability contract — 2026-09-20
+
+- The accepted V3.4.2 visual composition is frozen. This repair changes data identity and interaction reliability, not card geometry, typography, artwork scale, atmospheric treatment or discovery hierarchy.
+- **Artist portrait/name presentation follows canonical entity identity.** Display-name normalization may aid relevance but never becomes the entity key. When provider-linked evidence is ambiguous, omission/fallback is preferable to confidently opening the wrong same-name Artist.
+- **Search restoration is invisible product continuity.** Returning from a Search-origin Artist/Album detail restores the user's query, active scope/filter, focused Genre/Mood destination, result/suggestion snapshot and practical vertical position rather than dropping to Home or rebuilding Search from zero. Search Back unwinds its own in-memory checkpoints before leaving the route.
+- **Reverse reveal has a bounded escape path.** The accepted P6.4D forward/reverse choreography remains the healthy path. Anchor measurement is bounded and an exit watchdog may bypass the decorative contraction only when required to guarantee route restoration. A failed motion path must never leave detail body ownership hidden or navigation stuck.
+- **Bottom-nav swipe is local to the navigation surface.** Home/Search/Library retain their existing tap targets. Horizontal drag across the bottom-nav track may move the active pill and commit an adjacent/target tab by bounded position/velocity thresholds. Terminated/cancelled gestures snap back. Vertical content scrolling and Android edge navigation must not become page-wide tab gestures.
+- **Canonical Search/New Releases presentation beats quota.** Strong fan/AI/unofficial noise is not promoted into the primary Search track surface. Canonical non-video release forms beat equivalent MV/Official Video wrappers, and New Releases may remain shorter when only weak video filler is available.
+- Trending/session determinism, Artists-to-Explore circular treatment, typography, provider-neutral product language, portrait behavior, one Media3 playback owner, Library/Cloud boundaries and all Phase 7+ ownership remain unchanged.
+- No Explore More page is implemented by V3.4.3. The future Explore More full-page experience remains a later design discussion after physical approval of this reliability boundary.
+
+## V3.4.4 reliability + catalog-integrity contract — 2026-09-20
+
+- **The accepted visual composition remains frozen.** V3.4.4 repairs liveness, entity/presentation evidence, artwork continuity, Search history semantics and bottom-nav gesture direction. It does not reopen Home/Search hierarchy, Sora/Manrope/Bebas typography, discovery-card geometry, atmospheric treatment, or the healthy P6.4D reveal choreography.
+- **Forward and reverse reveal both have a bounded escape.** Healthy motion keeps the existing geometry/crop/ownership language. A stuck destination decode/layout/handoff or reverse landing may degrade to normal route completion, but WAVEN must never remain on an empty black/atmospheric transition scene. Reduced Motion is never gated by transition-artwork decode.
+- **Artist cards must preserve real artwork whenever trustworthy same-ID evidence has it.** Canonical provider identity stays authoritative, while presentation evidence can supply the profile image. Selecting the correct Artist is not allowed to regress the card into generic WAVEN fallback artwork when real artwork is already known. The source image seeds the reveal; higher-quality detail art may replace it later without a full-hero fallback flash.
+- **Artist Search may be enriched by canonical Track/Album evidence.** When provider-linked music results prove an exact Artist identity relevant to the query, Artist scope may surface that same ID even if the provider's independent Artist row was omitted. Name normalization affects ranking only and never merges distinct provider Artist IDs.
+- **Canonical music presentation is distinct from canonical browse identity.** Video/performance/fan/unofficial semantics are classified across Track and Album/Single renderers. New Releases and primary Search surfaces prefer canonical music presentation and may remain shorter rather than fill with obvious secondary video wrappers.
+- **Focused Genre/Mood artwork uses provider artwork before WAVEN fallback.** Empty thumbnail branches must not prevent later valid renderer artwork from being inspected. A bounded nested fallback is presentation recovery only; it does not fabricate music or alter provider destination semantics.
+- **Search Back restores meaningful states.** Query/focus/detail-origin checkpoints remain meaningful navigation history, while adjacent scope-only changes may coalesce so Back does not replay every filter tap.
+- **Bottom navigation behaves like a horizontal pager.** The visible order is Home → Search → Library. **Swipe LEFT goes to the next tab; Swipe RIGHT goes to the previous tab.** No wrap occurs at either end. The selection pill progresses toward the destination, cancelled gestures return to the current tab, taps remain authoritative, vertical page scrolling remains independent, and primary-tab route content does not add a ghosting crossfade on top of the pill gesture.
+- **Physical acceptance is mandatory.** Re-test the original Artist-homonym probe, Artists-to-Explore portraits, ROSÉ/ROSE-style Artist relevance, current-release canonical quality, Rock/Pop focused artwork parity, forward and reverse reveal stress, Reduced Motion where practical, Search Back coalescing, pager-direction bottom-nav swipes, no-wrap/cancel, vertical-scroll separation and ordinary taps.
+- **Explore More remains deferred.** No Explore More page is implemented by V3.4.4. Full-page discovery design resumes only after this reliability/catalog-integrity boundary is physically accepted.
+
+WAVEN remains **45%**, P6.5 remains **IN PROGRESS**, and Phase 7+ remain **NOT AUTHORIZED**.
+
+## P6.5 V3.4.5 canonical-presentation + atomic-navigation contract
+
+- **Tap and Back are product intents, not animation stages.** One Artist/Album tap owns exactly one navigation transaction before any asynchronous measurement/prefetch/artwork work; duplicate taps coalesce. Back during an unfinished enter cancels reveal ownership and performs Back. Watchdogs must fulfill the original OPEN/BACK intent exactly once.
+- **Presentation state is provider-identity keyed and non-downgrading.** Canonical Track/Artist/Album/Playlist identity and the best trustworthy presentation evidence travel together for the app session. Real source artwork seeds the reveal and detail hero; later artwork may improve resolution but may not regress to generic fallback.
+- **Canonical media policy is shared below surfaces.** Home, typed Search, focused discovery, Artist detail, Album detail, and New Releases consume the same wrapper classification, canonical-equivalence dedupe, and artwork normalization contract. Songs contains canonical music entities, not explicit Video entities.
+- **Homonyms remain safe.** Display name alone never collapses Artist identities. Where Search contains same-name provider identities, the UI may surface truthful provider/profile identity evidence to distinguish them rather than guessing equivalence.
+- **Primary-route visual ownership is singular.** Each committed primary page is visually opaque while reproducing the accepted WAVEN atmospheric surface, preventing outgoing/incoming content sandwiches; the bottom-nav pill may animate independently.
+- **Accepted navigation semantics remain frozen.** LEFT = next, RIGHT = previous, no wrap, cancelled drags snap back, vertical scrolling and Android edge Back remain separate, and Search restoration remains intact.
+- **Evidence gate remains physical.** Automated source/type/test/build/signature checks are necessary but not sufficient. The permanently signed release APK must be installed/updated on the real device and physically reviewed before V3.4.5 can be accepted. Explore More remains deferred. WAVEN remains **45%**, P6.5 remains **IN PROGRESS**, and Phase 7+ remain **NOT AUTHORIZED**.
+
+
+
+## P6.5 V3.4.6 artwork-lifecycle + visual-ownership contract
+
+- **Real artwork stays real.** Once a provider-backed entity artwork has rendered successfully in-session, a later renderer/decode failure must not visually reclassify that entity as generic WAVEN fallback. One bounded retry is permitted; infinite retry loops are not.
+- **One visual identity crosses navigation.** The artwork under the finger is the authoritative seed for source → reveal → destination hero → reverse reveal → restored source. A richer trustworthy image may upgrade later, but another `Image` instance failing may not downgrade the entity.
+- **Fallback is pre-success presentation, not destructive state.** Generic WAVEN artwork may sit behind an image that has never rendered, but after session success it is removed from that visual lease so a transient failure cannot expose a false fallback downgrade.
+- **Blur is decorative.** Full-bleed/reveal blur copies are never allowed to mark the authoritative foreground source failed. Sharp foreground readiness owns visual handoff.
+- **Bundled discovery art must survive navigation.** Genre/Mood assets retain their accepted compositions and WAVEN identity while using density-appropriate lossless PNG dimensions and Android resize decoding to reduce memory pressure.
+- **Canonical media remains surface-independent.** Provider renderer evidence and bounded title semantics feed one shared classifier for Search Songs, Artist/Album detail, and Home New Releases. `live version`, video/performance renderer types, view-count video rows, and `PLAY ▶` program wrappers cannot masquerade as canonical Songs/New Releases when secondary evidence is present.
+- **No scope drift.** Typography, Home hierarchy, zero-query Search hierarchy, Trending semantics, fixed-market New Releases semantics, Search restoration, V3.4.5 atomic navigation, and bottom-nav behavior remain frozen. Physical signed-APK review is required before acceptance.
+
+## P6.5 V3.4.8 New Release signal-to-canonical contract
+
+- **A freshness signal is not a presentation entity.** An anonymous YouTube Music New Releases OMV may prove that music is newly active, but the OMV itself never becomes visible Home presentation.
+- **Home New Releases displays canonical music only.** WAVEN resolves strong freshness signals through the provider catalog and may present only strongly equivalent canonical Track/Song or Album/Single identities. Video wrappers, view-count rows, performance forms, and weak/unofficial matches remain excluded.
+- **Artist identity participates in resolution.** Canonical provider Artist linkage is preferred when both sides expose it; strict normalized Artist-name equivalence is the bounded fallback. Title similarity alone cannot promote an unrelated song with the same name.
+- **Resolution is bounded.** Cross-market signals are ranked and deduplicated before a small concurrency-limited resolver workload. Cancellation remains authoritative and failure never authorizes filler.
+- **Direct canonical recovery is future-safe.** If the provider restores canonical release shelves, direct canonical rows remain valid and continue through the same final merge.
+- **Accepted hierarchy remains frozen.** Home remains Hero → Recently Played → Trending Now → New Releases. V3.4.8 changes data ownership below the surface, not the accepted visual hierarchy or typography.

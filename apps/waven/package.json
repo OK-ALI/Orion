@@ -16,6 +16,9 @@
     "check": "npm run typecheck && npm test && npm run check:expo && npm run build:web"
   },
   "dependencies": {
+    "@expo-google-fonts/bebas-neue": "0.4.1",
+    "@expo-google-fonts/manrope": "0.4.2",
+    "@expo-google-fonts/sora": "0.4.2",
     "@expo/metro-runtime": "57.0.15",
     "@orion/shared": "*",
     "@react-native-community/netinfo": "12.0.1",

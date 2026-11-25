@@ -1,4 +1,5 @@
 import { NativeModules, Platform } from 'react-native';
+import { wavenConnectivity } from '../connectivity/connectivityService';
 import {
   PORTABLE_PROFILE_PRIMARY_KEY,
   normalizePortableProfileV3,
@@ -324,7 +325,7 @@ function assertSha256SelfTest(): void {
 }
 
 async function readRawExistingProfile(accountEmail: string): Promise<NativeFoundResult> {
-  const result = await requireNative().readPortableProfile(accountEmail, PORTABLE_PROFILE_PRIMARY_KEY);
+  const result = await wavenConnectivity.runRemote('orion-cloud', () => requireNative().readPortableProfile(accountEmail, PORTABLE_PROFILE_PRIMARY_KEY));
 
   if (result.state !== 'found') {
     fail(
@@ -487,6 +488,9 @@ export async function executePreparedControlledNoOpWrite(
 
   // Any concurrent Orion client write invalidates the preparation before mutation.
   const justBeforeWrite = await readRawExistingProfile(email);
+  if (pendingSnapshot !== pending) {
+    fail('ORION_CLOUD_CONTROLLED_WRITE_NOT_PREPARED', 'The account or preparation changed. No write was attempted.');
+  }
   const justBeforeDigest = sha256Utf8(justBeforeWrite.profileJson);
   if (
     justBeforeWrite.revisionTag !== pending.revisionTag
@@ -500,6 +504,7 @@ export async function executePreparedControlledNoOpWrite(
     );
   }
 
+  wavenConnectivity.assertRemote('orion-cloud');
   const writeResult = await requireNative().writePortableProfile(
     email,
     PORTABLE_PROFILE_PRIMARY_KEY,

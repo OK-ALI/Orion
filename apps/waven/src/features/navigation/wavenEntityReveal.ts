@@ -1,6 +1,9 @@
 import { Image } from 'react-native';
+import { wavenArtworkLeaseKey } from '../artwork/wavenArtworkLifecycle';
 
-export type WavenEntityRevealKind = 'artist' | 'album';
+export type WavenEntityRevealKind = 'artist' | 'album' | 'single' | 'ep';
+export type WavenEntityRevealKeyKind = 'artist' | 'album';
+export type WavenReleaseRevealKind = Exclude<WavenEntityRevealKind, 'artist'>;
 export type WavenEntityRevealRole = 'origin' | 'destination';
 
 export interface WavenEntityRevealRect {
@@ -26,8 +29,10 @@ export interface WavenEntityRevealTransition {
   title: string;
   phase: 'enter' | 'exit';
   handoffReady: boolean;
+  visualReady: boolean;
   navigationCommitted: boolean;
   destinationReady: boolean;
+  destinationVisualReady: boolean;
   exitOriginReady: boolean;
   originHandoffReady: boolean;
   from: WavenEntityRevealRect;
@@ -53,6 +58,7 @@ interface RevealHistory {
 
 interface PendingCommit {
   token: number;
+  entityKey: string;
   committed: boolean;
   commit: () => void;
 }
@@ -66,6 +72,8 @@ let activeTransition: WavenEntityRevealTransition | null = null;
 let pendingEnterCommit: PendingCommit | null = null;
 let pendingExitCommit: PendingCommit | null = null;
 let transitionToken = 0;
+const ANCHOR_CAPTURE_TIMEOUT_MS = 180;
+const DIRECT_LANDING_LOCK_MS = 2200;
 
 function emit() {
   for (const listener of listeners) listener();
@@ -81,8 +89,15 @@ async function captureRegistered(
 ): Promise<WavenEntityRevealRect | null> {
   const anchor = registry.get(key);
   if (!anchor) return null;
+
   try {
-    return (await anchor.capture()) || anchor.fallback;
+    const measured = await Promise.race<WavenEntityRevealRect | null>([
+      anchor.capture(),
+      new Promise<WavenEntityRevealRect | null>((resolve) => {
+        setTimeout(() => resolve(null), ANCHOR_CAPTURE_TIMEOUT_MS);
+      }),
+    ]);
+    return measured || anchor.fallback;
   } catch {
     return anchor.fallback;
   }
@@ -163,12 +178,19 @@ function resolveArtworkSize(
   });
 }
 
+export function wavenReleaseRevealKind(primaryType: unknown): WavenReleaseRevealKind {
+  const normalized = String(primaryType || '').trim().toLowerCase();
+  if (normalized === 'single') return 'single';
+  if (normalized === 'ep' || normalized === 'e.p.') return 'ep';
+  return 'album';
+}
+
 export function wavenEntityRevealKey(
-  kind: WavenEntityRevealKind,
+  kind: WavenEntityRevealKeyKind,
   provider: string,
   id: string,
 ): string {
-  return `${kind}:${provider}:${id}`;
+  return wavenArtworkLeaseKey(kind, provider, id);
 }
 
 export function subscribeWavenEntityReveal(listener: Listener): () => void {
@@ -223,6 +245,63 @@ export function updateWavenEntityRevealAnchorFallback(
   current.fallback = rect;
 }
 
+function releaseDirectEnterLock(token: number) {
+  setTimeout(() => {
+    if (
+      pendingEnterCommit?.token === token &&
+      pendingEnterCommit.committed &&
+      activeTransition?.token !== token
+    ) {
+      pendingEnterCommit = null;
+    }
+  }, DIRECT_LANDING_LOCK_MS);
+}
+
+function fulfillEnterIntentWithoutReveal(token: number): boolean {
+  const pending = pendingEnterCommit;
+  if (!pending || pending.token !== token) return false;
+  if (pending.committed) return true;
+  pending.committed = true;
+  pending.commit();
+  releaseDirectEnterLock(token);
+  return true;
+}
+
+export function acknowledgeWavenEntityRevealLanding(entityKey: string) {
+  if (
+    pendingEnterCommit?.entityKey === entityKey &&
+    pendingEnterCommit.committed &&
+    (!activeTransition || activeTransition.entityKey !== entityKey)
+  ) {
+    pendingEnterCommit = null;
+  }
+}
+
+export function cancelWavenEntityRevealEnterForBack(entityKey: string): boolean {
+  const transition = activeTransition;
+  if (
+    transition?.phase === 'enter' &&
+    transition.entityKey === entityKey
+  ) {
+    activeTransition = null;
+    if (pendingEnterCommit?.token === transition.token) pendingEnterCommit = null;
+    histories.delete(entityKey);
+    emit();
+    return true;
+  }
+
+  if (
+    pendingEnterCommit?.entityKey === entityKey &&
+    pendingEnterCommit.committed
+  ) {
+    pendingEnterCommit = null;
+    histories.delete(entityKey);
+    emit();
+    return true;
+  }
+  return false;
+}
+
 export async function beginWavenEntityReveal(
   input: {
     entityKey: string;
@@ -231,14 +310,37 @@ export async function beginWavenEntityReveal(
     title: string;
   },
   commit?: () => void,
+  options: { animate?: boolean } = {},
 ): Promise<boolean> {
+  // User intent is claimed synchronously, before measurement, prefetch, image
+  // sizing, or reveal preparation can yield. A rapid second tap therefore
+  // coalesces into this transaction instead of opening a duplicate route.
+  if (activeTransition || pendingEnterCommit) return true;
+  if (!commit) return false;
+
+  const token = ++transitionToken;
+  pendingEnterCommit = {
+    token,
+    entityKey: input.entityKey,
+    committed: false,
+    commit,
+  };
+
   const artworkUrl = input.artworkUrl?.trim() || '';
-  if (!artworkUrl || activeTransition) return false;
+  if (options.animate === false || !artworkUrl) {
+    fulfillEnterIntentWithoutReveal(token);
+    return true;
+  }
 
   const origin = await captureRegistered(origins, input.entityKey);
-  if (!origin || origin.width <= 1 || origin.height <= 1) return false;
+  if (pendingEnterCommit?.token !== token) return true;
+  if (!origin || origin.width <= 1 || origin.height <= 1) {
+    fulfillEnterIntentWithoutReveal(token);
+    return true;
+  }
 
   const artworkSize = await resolveArtworkSize(artworkUrl, origin);
+  if (pendingEnterCommit?.token !== token) return true;
 
   histories.set(input.entityKey, {
     kind: input.kind,
@@ -249,7 +351,6 @@ export async function beginWavenEntityReveal(
     origin,
   });
 
-  const token = ++transitionToken;
   activeTransition = {
     token,
     entityKey: input.entityKey,
@@ -260,20 +361,15 @@ export async function beginWavenEntityReveal(
     title: input.title,
     phase: 'enter',
     handoffReady: false,
-    navigationCommitted: !commit,
+    visualReady: false,
+    navigationCommitted: false,
     destinationReady: false,
+    destinationVisualReady: false,
     exitOriginReady: false,
     originHandoffReady: false,
     from: origin,
     to: null,
   };
-  pendingEnterCommit = commit
-    ? {
-        token,
-        committed: false,
-        commit,
-      }
-    : null;
   emit();
   return true;
 }
@@ -333,8 +429,10 @@ export async function beginWavenEntityRevealExit(
     title: history.title,
     phase: 'exit',
     handoffReady: false,
+    visualReady: false,
     navigationCommitted: !commit,
     destinationReady: true,
+    destinationVisualReady: true,
     exitOriginReady: false,
     originHandoffReady: false,
     from: destination,
@@ -343,6 +441,7 @@ export async function beginWavenEntityRevealExit(
   pendingExitCommit = commit
     ? {
         token,
+        entityKey,
         committed: false,
         commit,
       }
@@ -383,6 +482,31 @@ export async function refreshWavenEntityRevealExitOrigin(
   };
   emit();
   return true;
+}
+
+export function markWavenEntityRevealVisualReady(token: number) {
+  if (
+    activeTransition?.token !== token ||
+    activeTransition.visualReady
+  ) {
+    return;
+  }
+
+  activeTransition = { ...activeTransition, visualReady: true };
+  emit();
+}
+
+export function markWavenEntityRevealDestinationVisualReady(token: number) {
+  if (
+    activeTransition?.token !== token ||
+    activeTransition.phase !== 'enter' ||
+    activeTransition.destinationVisualReady
+  ) {
+    return;
+  }
+
+  activeTransition = { ...activeTransition, destinationVisualReady: true };
+  emit();
 }
 
 export function markWavenEntityRevealOriginHandoffReady(token: number) {
@@ -434,6 +558,63 @@ export function commitWavenEntityRevealExit(token: number) {
   pendingExitCommit.commit();
 }
 
+export function forceCompleteWavenEntityRevealEnter(token: number) {
+  if (
+    activeTransition?.token !== token ||
+    activeTransition.phase !== 'enter'
+  ) {
+    return;
+  }
+
+  const pending =
+    pendingEnterCommit?.token === token && !pendingEnterCommit.committed
+      ? pendingEnterCommit
+      : null;
+
+  if (pending) pending.committed = true;
+  activeTransition = null;
+  emit();
+
+  // Enter fallback releases visual ownership first, then fulfills the original
+  // OPEN intent exactly once. Keep the committed intent locked until the
+  // destination acknowledges landing (or the bounded direct lock expires), so
+  // a rapid second tap cannot stack the same route during recovery.
+  pending?.commit();
+  if (pending) releaseDirectEnterLock(token);
+}
+
+export function forceCompleteWavenEntityRevealExit(token: number) {
+  if (
+    activeTransition?.token !== token ||
+    activeTransition.phase !== 'exit'
+  ) {
+    return;
+  }
+
+  const finished = activeTransition;
+  const pending =
+    pendingExitCommit?.token === token && !pendingExitCommit.committed
+      ? pendingExitCommit
+      : null;
+
+  if (pending) pending.committed = true;
+  activeTransition = null;
+  pendingExitCommit = null;
+  histories.delete(finished.entityKey);
+  emit();
+
+  pending?.commit();
+}
+
+export function forceCompleteWavenEntityRevealTransaction(token: number) {
+  if (activeTransition?.token !== token) return;
+  if (activeTransition.phase === 'enter') {
+    forceCompleteWavenEntityRevealEnter(token);
+    return;
+  }
+  forceCompleteWavenEntityRevealExit(token);
+}
+
 export function completeWavenEntityReveal(token: number) {
   if (activeTransition?.token !== token) return;
   const finished = activeTransition;
@@ -449,9 +630,9 @@ export function clearWavenEntityReveal(entityKey?: string) {
     histories.delete(entityKey);
     origins.delete(entityKey);
     destinations.delete(entityKey);
+    if (pendingEnterCommit?.entityKey === entityKey) pendingEnterCommit = null;
+    if (pendingExitCommit?.entityKey === entityKey) pendingExitCommit = null;
     if (activeTransition?.entityKey === entityKey) {
-      if (pendingEnterCommit?.token === activeTransition.token) pendingEnterCommit = null;
-      if (pendingExitCommit?.token === activeTransition.token) pendingExitCommit = null;
       activeTransition = null;
     }
   } else {

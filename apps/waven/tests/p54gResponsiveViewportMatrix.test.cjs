@@ -118,21 +118,23 @@ test('P5.4G covers compact, standard, roomy and tablet-like viewport classes', (
   );
 });
 
-test('P5.4G keeps Home artwork rows inside compact and phone content budgets', () => {
+test('P5.4G keeps Home artwork rows inside compact and phone content budgets after later Explore-row retirement', () => {
   assert.match(home, /const heroArtworkSize = layout\.isCompact[\s\S]*?\? 150[\s\S]*?: layout\.isTabletLike[\s\S]*?\? 202[\s\S]*?: 172/);
-  assert.match(home, /const exploreArtworkSize = layout\.isCompact \? 84 : 96/);
-  assert.match(home, /exploreRow:\s*\{[\s\S]*?flexDirection:\s*'row'[\s\S]*?gap:\s*10/);
-  assert.match(home, /exploreCardPressable:\s*\{[\s\S]*?flex:\s*1/);
+  assert.match(home, /const discoveryArtworkSize = layout\.isCompact[\s\S]*?\? 104[\s\S]*?: layout\.isTabletLike[\s\S]*?\? 136[\s\S]*?: 116/);
+  assert.match(home, /const discoveryCardWidth = discoveryArtworkSize \+ 32/);
+  assert.match(home, /ItemSeparatorComponent=\{HomeDiscoverySeparator\}/);
+  assert.match(home, /discoveryRailSeparator:\s*\{\s*width:\s*10/);
+  assert.doesNotMatch(home, /exploreArtworkSize|exploreRow:|exploreCardPressable:/);
   assert.match(home, /layout\.isTabletLike \? styles\.heroTablet : styles\.heroPhone/);
 
   for (const width of [320, 390, 480]) {
     const viewport = resolve(width);
-    const artwork = viewport.isCompact ? 84 : 96;
-    const slotWidth = (viewport.contentWidth - 20) / 3;
+    const artwork = viewport.isCompact ? 104 : 116;
+    const cardWidth = artwork + 32;
 
     assert.ok(
-      slotWidth >= artwork,
-      width + 'dp Explore slot (' + slotWidth + ') must fit ' + artwork + 'dp artwork',
+      cardWidth <= viewport.contentWidth,
+      width + 'dp discovery card (' + cardWidth + ') must fit the ' + viewport.contentWidth + 'dp content frame',
     );
   }
 

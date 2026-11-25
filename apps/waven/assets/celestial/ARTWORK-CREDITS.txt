@@ -1,0 +1,24 @@
+WAVEN V8.6.2B-R2.4A
+CELESTIAL ASSET PROTOTYPES
+
+SUN:
+Procedural solar disc and atmospheric bloom.
+Not a scientific solar photograph.
+
+MOON:
+Lunar texture adapted from NASA's Scientific Visualization Studio.
+Visualizer: Ernie Wright.
+
+Source page:
+https://svs.gsfc.nasa.gov/5415/
+
+Texture:
+https://svs.gsfc.nasa.gov/vis/a000000/a005000/a005048/phase_full.1571_print.jpg
+
+Modifications:
+Crop, resampling, cool tint, transparent disc mask,
+procedural atmospheric bloom.
+
+Development evaluation only.
+Distribution usage review remains pending.
+No NASA endorsement implied.

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useWavenConnectivity } from '../../../src/infrastructure/connectivity/connectivityHooks';
+import { WavenMusicLibraryActions } from '../../../src/components/library/WavenLibraryControls';
 import { Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -12,9 +14,23 @@ import type {
   MusicArtistDetail,
 } from '../../../src/domain/music';
 import { wavenDiscoveryRuntime } from '../../../src/features/discovery/wavenDiscoveryRuntime';
-import { primeWavenAlbumDetail, readWavenArtistDetailPrefetch } from '../../../src/features/discovery/wavenDetailPrefetch';
+import {
+  readWavenPresentation,
+  seedWavenPresentation,
+  wavenEntityArtworkUrl,
+} from '../../../src/features/discovery/wavenCanonicalPresentation';
+import {
+  primeWavenAlbumDetail,
+  primeWavenArtistDetail,
+  readWavenArtistDetailPrefetch,
+  readWavenArtistDetailSnapshot,
+} from '../../../src/features/discovery/wavenDetailPrefetch';
 import { albumDetailRoute } from '../../../src/features/discovery/detailNavigation';
-import { beginWavenEntityReveal, wavenEntityRevealKey } from '../../../src/features/navigation/wavenEntityReveal';
+import {
+  beginWavenEntityReveal,
+  wavenEntityRevealKey,
+  wavenReleaseRevealKind,
+} from '../../../src/features/navigation/wavenEntityReveal';
 import { useWavenReducedMotion } from '../../../src/hooks/useWavenReducedMotion';
 import { wavenColors, wavenSpacing } from '../../../src/theme/tokens';
 
@@ -25,6 +41,7 @@ function firstParam(value: string | string[] | undefined): string {
 }
 
 export default function WavenArtistDetailRoute() {
+  const connection = useWavenConnectivity();
   const router = useRouter();
   const reducedMotion = useWavenReducedMotion();
   const params = useLocalSearchParams<{
@@ -32,6 +49,7 @@ export default function WavenArtistDetailRoute() {
     id?: string | string[];
     name?: string | string[];
     artworkUrl?: string | string[];
+    returnTo?: string | string[];
   }>();
   const provider = firstParam(params.provider);
   const id = firstParam(params.id);
@@ -39,6 +57,7 @@ export default function WavenArtistDetailRoute() {
   const entityKey = wavenEntityRevealKey('artist', provider, id);
   const seedName = firstParam(params.name) || 'Artist';
   const seedArtworkUrl = firstParam(params.artworkUrl) || null;
+  const returnTo = firstParam(params.returnTo);
   const seedArtist = useMemo<MusicArtist>(
     () => ({
       id: `detail-artist:${provider}:${id}`,
@@ -50,8 +69,20 @@ export default function WavenArtistDetailRoute() {
     [id, provider, seedArtworkUrl, seedName],
   );
 
-  const [status, setStatus] = useState<DetailStatus>('loading');
-  const [detail, setDetail] = useState<MusicArtistDetail | null>(null);
+  const presentedSeedArtist = useMemo(
+    () => readWavenPresentation(seedWavenPresentation(seedArtist, 'artist'), 'artist'),
+    [seedArtist],
+  );
+  const initialSnapshot = useMemo(
+    () => readWavenArtistDetailSnapshot(presentedSeedArtist),
+    [presentedSeedArtist],
+  );
+  const [status, setStatus] = useState<DetailStatus>(() =>
+    initialSnapshot?.detail ? 'ready' : 'loading',
+  );
+  const [detail, setDetail] = useState<MusicArtistDetail | null>(
+    () => initialSnapshot?.detail ?? null,
+  );
   const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
@@ -61,14 +92,27 @@ export default function WavenArtistDetailRoute() {
       return () => controller.abort();
     }
 
+    if (!connection.remoteReady && detail?.artist.source.provider === provider && detail.artist.source.id === id) {
+      setStatus('ready');
+      return () => controller.abort();
+    }
+
+    const snapshot = retryNonce === 0
+      ? readWavenArtistDetailSnapshot(seedArtist)
+      : null;
+    if (snapshot) {
+      setDetail(snapshot.detail);
+      setStatus(snapshot.detail ? 'ready' : 'error');
+      return () => controller.abort();
+    }
+
     setStatus('loading');
     setDetail(null);
 
     const request =
       retryNonce === 0
-        ? readWavenArtistDetailPrefetch(seedArtist) ??
-          wavenDiscoveryRuntime.getArtist(seedArtist, { signal: controller.signal })
-        : wavenDiscoveryRuntime.getArtist(seedArtist, { signal: controller.signal });
+        ? readWavenArtistDetailPrefetch(presentedSeedArtist) ?? primeWavenArtistDetail(presentedSeedArtist)
+        : wavenDiscoveryRuntime.getArtist(presentedSeedArtist, { signal: controller.signal });
 
     request.then((response) => {
         if (controller.signal.aborted || response.cancelled) return;
@@ -82,7 +126,7 @@ export default function WavenArtistDetailRoute() {
       });
 
     return () => controller.abort();
-  }, [hasRouteIdentity, id, provider, retryNonce, seedArtist]);
+  }, [hasRouteIdentity, id, provider, retryNonce, presentedSeedArtist, connection.remoteReady, connection.recoveryEpoch]);
 
   useEffect(() => {
     if (hasRouteIdentity) return;
@@ -90,6 +134,10 @@ export default function WavenArtistDetailRoute() {
   }, [hasRouteIdentity, router]);
 
   const handleBack = () => {
+    if (returnTo === 'search') {
+      router.navigate('/search');
+      return;
+    }
     if (router.canGoBack()) {
       router.back();
       return;
@@ -101,9 +149,8 @@ export default function WavenArtistDetailRoute() {
     return <View style={{ backgroundColor: wavenColors.canvas, flex: 1 }} />;
   }
 
-  const artist = detail?.artist ?? seedArtist;
-  const artworkUrl =
-    artist.artworkUrl || artist.profileImageUrl || seedArtworkUrl;
+  const artist = readWavenPresentation(detail?.artist ?? presentedSeedArtist, 'artist');
+  const artworkUrl = wavenEntityArtworkUrl(artist);
   const artistMeta = detail
     ? [
         detail.tracks.length
@@ -120,7 +167,7 @@ export default function WavenArtistDetailRoute() {
   return (
     <WavenMusicDetailFoundation
       artworkUrl={artworkUrl}
-      seedArtworkUrl={seedArtworkUrl}
+      seedArtworkUrl={wavenEntityArtworkUrl(presentedSeedArtist)}
       entityKey={entityKey}
       fallbackSeed={`artist-detail-${provider}-${id}`}
       kindLabel="Artist"
@@ -130,6 +177,7 @@ export default function WavenArtistDetailRoute() {
       subtitle={artistMeta}
       title={artist.name}
     >
+      {detail ? <WavenMusicLibraryActions kind="artist" entity={artist} /> : null}
       {detail?.tracks.length ? (
         <WavenDetailSection revealIndex={0} title="Songs">
           {detail.tracks.slice(0, 8).map((track, index) => (
@@ -157,18 +205,21 @@ export default function WavenArtistDetailRoute() {
               );
               const open = async () => {
                 void primeWavenAlbumDetail(album);
-                if (!reducedMotion) {
-                  const started = await beginWavenEntityReveal(
-                    {
-                      artworkUrl: album.artworkUrl,
-                      entityKey: albumKey,
-                      kind: 'album',
-                      title: album.title,
-                    },
-                    () => router.push(route),
-                  );
-                  if (started) return;
-                }
+                const presented = readWavenPresentation(
+                  seedWavenPresentation(album, 'album'),
+                  'album',
+                );
+                const started = await beginWavenEntityReveal(
+                  {
+                    artworkUrl: wavenEntityArtworkUrl(presented),
+                    entityKey: albumKey,
+                    kind: wavenReleaseRevealKind(presented.primaryType),
+                    title: presented.title,
+                  },
+                  () => router.push(route),
+                  { animate: !reducedMotion },
+                );
+                if (started) return;
                 router.push(route);
               };
               void open();

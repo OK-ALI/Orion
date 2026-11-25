@@ -120,12 +120,11 @@ test('P5.2 Revision 4C makes the living waveform cinematic, fuller-width, irregu
   assert.match(entry, /WavenAtmosphericCanvas variant="entry"/);
 });
 
-test('P5.2 Revision 4D keeps one continuous atmospheric canvas behind primary content while later detail routes may inherit it', () => {
-  assert.match(layout, /showAtmosphericCanvas \? <WavenAtmosphericCanvas \/> : null/);
-  assert.match(layout, /backgroundColor:\s*showAtmosphericCanvas[\s\S]*\? 'transparent'[\s\S]*:\s*wavenColors\.canvas/);
+test('P5.2 Revision 4D preserves the accepted atmosphere while V3.4.5 gives each primary route singular visual ownership', () => {
+  assert.match(layout, /showAtmosphericCanvas \? <WavenAtmosphericCanvas cacheStatic \/> : null/);
   assert.match(layout, /showPrimaryNavigation \? <WavenBottomNav \/> : null/);
-  assert.doesNotMatch(appShell, /<WavenAtmosphericCanvas \/>/);
-  assert.match(appShell, /backgroundColor:\s*'transparent'/);
+  assert.match(appShell, /<WavenAtmosphericCanvas \/>/);
+  assert.match(appShell, /backgroundColor:\s*wavenColors\.canvas/);
 });
 
 test('P5.2 Revision 4E keeps the full WAVEN brand lockup on Home and removes it from Search and Library', () => {
@@ -133,47 +132,54 @@ test('P5.2 Revision 4E keeps the full WAVEN brand lockup on Home and removes it 
   assert.match(appShell, /showBrand = brandTagline/);
   assert.match(appShell, /\{showBrand \? \(/);
   assert.match(home, /<WavenAppShell brandTagline>/);
-  assert.match(search, /<WavenAppShell>/);
+  assert.match(search, /<WavenAppShell\b/);
+  assert.doesNotMatch(search, /<WavenAppShell\s+brandTagline/);
   assert.match(library, /<WavenAppShell>/);
   assert.doesNotMatch(search, /brandTagline|showBrand/);
   assert.doesNotMatch(library, /brandTagline|showBrand/);
 });
 
-test('P5.2 Revision 4F translates Reference 02 into an artwork-led Home without fake music data', () => {
+test('P5.2 Revision 4F preserves the Reference 02 artwork-led Home foundation while later phases may retire shortcut cards', () => {
   assert.match(home, /home-reference-02-feature/);
-  assert.match(home, /Find your/);
+  assert.match(home, /Find Your/);
   assert.match(home, /heroTitleAccent/);
   assert.match(home, /Recently Played/);
-  assert.match(home, /EXPLORE_CARDS/);
-  assert.match(home, /WavenExploreIcon/);
-  assert.match(home, /icon: 'songs'/);
-  assert.match(home, /icon: 'artists'/);
-  assert.match(home, /icon: 'albums'/);
+  assert.doesNotMatch(home, /Open Your Library|Your Music/);
+  assert.doesNotMatch(home, /EXPLORE_CARDS|WavenExploreIcon|icon: 'songs'|icon: 'artists'|icon: 'albums'/);
   assert.doesNotMatch(home, /home-explore-songs|home-explore-artists|home-explore-albums/);
-  assert.match(home, /Open Your Library/);
   assert.doesNotMatch(home, /Daily Mix|Top Trending|Midnight Bloom|fake artwork/i);
 });
 
 test('P5.2 Revision 4G establishes restrained WAVEN Glass while later polish may refine local hero layers', () => {
   assert.match(home, /glassTopHighlight/);
   assert.match(home, /recentState: \{[\s\S]*backgroundColor: 'rgba\(/);
-  assert.match(home, /exploreCard: \{[\s\S]*backgroundColor: 'rgba\(/);
   assert.match(home, /discoveryState: \{[\s\S]*backgroundColor: 'rgba\(/);
+  assert.doesNotMatch(home, /exploreCard:/);
   assert.match(home, /borderWidth: StyleSheet\.hairlineWidth/);
   assert.match(home, /heroArtworkSize = layout\.isCompact[\s\S]*\? 150[\s\S]*\? 202[\s\S]*: 172/);
   assert.match(home, /Recently Played/);
-  assert.match(home, /EXPLORE_CARDS/);
-  assert.match(home, /Open Your Library/);
+  assert.doesNotMatch(home, /Open Your Library|Your Music/);
+  assert.doesNotMatch(home, /EXPLORE_CARDS|WavenExploreIcon|exploreCard:/);
   assert.doesNotMatch(home, /BlurView|expo-blur|backdropFilter/);
 });
 
 test('P5.2 Revision 4H removes the visible hero tint band and lets atmosphere provide the blue', () => {
   assert.match(home, /glassTopHighlight/);
   assert.doesNotMatch(home, /glassBottomTint/);
-  assert.match(home, /backgroundColor: 'rgba\(5, 10, 15, 0\.5\)'/);
+  // V8.6.2B-R2.4D: owner-approved borderless Home Hero.
+  // The atmosphere remains the visual owner of the background.
+  const heroStyle = home.match(/^  hero: \{[\s\S]*?^  \},/m);
+  assert.ok(heroStyle, 'Home Hero style must exist');
+  assert.match(heroStyle[0], /backgroundColor: 'transparent'/);
+  assert.match(heroStyle[0], /borderColor: 'transparent'/);
+  assert.match(heroStyle[0], /padding: wavenSpacing\.md/);
+  assert.doesNotMatch(
+    home,
+    /glassTopHighlight\} \/>\s*<View\s+style=\{\[\s*styles\.heroVisual,/
+  );
   assert.match(home, /Recently Played/);
-  assert.match(home, /EXPLORE_CARDS/);
-  assert.match(home, /Open Your Library/);
+  assert.doesNotMatch(home, /Open Your Library|Your Music/);
+  assert.doesNotMatch(home, /EXPLORE_CARDS|WavenExploreIcon|exploreCard:/);
   assert.doesNotMatch(home, /backgroundColor: 'rgba\(37, 149, 216, 0\.045\)'/);
 });
 

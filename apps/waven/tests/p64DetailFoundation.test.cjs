@@ -40,8 +40,18 @@ test('P6.4A adapts provider-backed artist and album browse detail without weaken
   assert.match(provider, /collectContinuationTokens\(payload, 1\)/);
   assert.match(provider, /biography: ''/);
   assert.match(provider, /browsePageType === 'MUSIC_PAGE_TYPE_ARTIST'/);
-  assert.match(provider, /if \(!isAlbumBrowse\(type, browseId\)\) return null;/);
-  assert.doesNotMatch(provider, /browseId\.startsWith\('UC'\).*MusicArtist/s);
+  assert.match(
+    provider,
+    /explicitBrowseId && isAlbumBrowse\(type, explicitBrowseId\)/,
+  );
+  assert.match(
+    provider,
+    /if \(!isAlbumBrowse\(type, fallbackBrowseId\)\) return null;/,
+  );
+  assert.doesNotMatch(
+    provider,
+    /String\([^)]*\)\.startsWith\('UC'\)[\s\S]{0,400}satisfies MusicArtist/,
+  );
 });
 
 test('P6.4A runtime resolves detail through the owning metadata provider with broker timeout cancellation and health', () => {
@@ -51,7 +61,8 @@ test('P6.4A runtime resolves detail through the owning metadata provider with br
   assert.match(runtime, /metadataProviderFor\(album\.source\.provider\)/);
   assert.match(runtime, /queryMusicProviders\(/);
   assert.match(runtime, /timeoutMs: options\.timeoutMs \?\? 12_000/);
-  assert.match(runtime, /detail: response\.results\[0\]\?\.value \?\? null/);
+  assert.match(runtime, /canonicalizeWavenArtistDetail\(response\.results\[0\]\.value\)/);
+  assert.match(runtime, /canonicalizeWavenAlbumDetail\(response\.results\[0\]\.value\)/);
 });
 
 test('P6.4A routes only Artist and Album entities from Search and Home into provider-neutral detail paths', () => {
@@ -68,9 +79,9 @@ test('P6.4A routes only Artist and Album entities from Search and Home into prov
 
 test('P6.4A detail routes keep cancellation retry and truthful provider-backed content without playback or persistence creep', () => {
   assert.match(artistRoute, /new AbortController\(\)/);
-  assert.match(artistRoute, /\.getArtist\(seedArtist, \{ signal: controller\.signal \}\)/);
+  assert.match(artistRoute, /\.getArtist\(presentedSeedArtist, \{ signal: controller\.signal \}\)/);
   assert.match(albumRoute, /new AbortController\(\)/);
-  assert.match(albumRoute, /\.getAlbum\(seedAlbum, \{ signal: controller\.signal \}\)/);
+  assert.match(albumRoute, /\.getAlbum\(presentedSeedAlbum, \{ signal: controller\.signal \}\)/);
   assert.match(artistRoute, /Albums & Releases/);
   assert.match(albumRoute, /title="Tracks"/);
   assert.doesNotMatch(
@@ -82,9 +93,10 @@ test('P6.4A detail routes keep cancellation retry and truthful provider-backed c
 test('P6.4A detail family inherits WAVEN atmosphere and hides primary navigation on detail routes', () => {
   assert.match(layout, /pathname\.startsWith\('\/artist\/'\)/);
   assert.match(layout, /pathname\.startsWith\('\/album\/'\)/);
-  assert.match(layout, /showAtmosphericCanvas \? <WavenAtmosphericCanvas \/> : null/);
+  assert.match(layout, /showAtmosphericCanvas \? <WavenAtmosphericCanvas cacheStatic \/> : null/);
   assert.match(layout, /showPrimaryNavigation \? <WavenBottomNav \/> : null/);
-  assert.match(detailFoundation, /kindLabel: 'Artist' \| 'Album'/);
+  assert.match(detailFoundation, /type DetailKind = 'Artist' \| 'Album' \| 'Single' \| 'EP';/);
+  assert.match(detailFoundation, /kindLabel: DetailKind;/);
   assert.match(detailFoundation, /accessibilityLabel="Go back"/);
   assert.match(detailFoundation, /minimumTouchTarget/);
 });

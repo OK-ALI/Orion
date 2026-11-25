@@ -17,7 +17,7 @@ There must be no separate **WAVEN Cloud**. WAVEN will participate in **Orion Clo
 The supplied icon has been copied unchanged into `apps/waven/assets/icon.png`. It is the current reference/application icon, not a redesigned derivative.
 Offline behavior is a first-class product mode and is intentionally separate from downloadable media. Direct-distribution builds are expected to gain a WAVEN in-app updater based on a future read-only audit of Orion Mobile's current updater, with GitHub Preview/Prerelease artifacts and same-signature physical update acceptance.
 
-Current accepted completion status is **Phases 0–5 complete at their recorded evidence tiers, 45% overall**. Phase 5 was authorized under `AUTH-P05-2026-09-14` and is accepted under `ACK-P05-2026-09-16`; its final published closure checkpoint is `68d55a57456ace75cd87ab6fdf702aec246409b5`. Phase 6 is now **AUTHORIZED** under `AUTH-P06-2026-09-16` for Search, Discovery, and Detail implementation. P6.1–P6.4D are implemented at their recorded evidence boundaries, and P6.4D is physically accepted/locked under the 2026-09-18 seal below; Phase 6 itself still has no Completion ACK and therefore earns **0%** so far. Authoritative WAVEN v1 completion remains **45%**. Phase 7 and every later phase remain unauthorized. Expo Go, WAVEN development-device evidence, and a permanently signed distributed candidate remain distinct evidence tiers; success in one must never be promoted into another.
+Current accepted completion status is **Phases 0–7 complete; Phase 8 ACCEPTED WITH DOCUMENTED RESIDUALS; 68% overall**. [Phase 6 Completion ACK](../audits/WAVEN-PHASE-6-COMPLETION-ACK-2026-10-01.md) and [Phase 7 Completion ACK](../audits/WAVEN-PHASE-7-COMPLETION-ACK-2026-10-02.md) remain independent and unchanged; together accepted Phases 0–7 contribute 60%. Phase 8 earns its fixed **8%** under [ACK-P08-2026-10-19](../audits/WAVEN-PHASE-8-COMPLETION-ACK-2026-10-19.md), normalized `ACCEPTED`, and the explicit owner amendment `AMEND-P08-2026-10-19` / `EXC-P08-2026-10-19` in section 15.5. Unresolved performance remains **KNOWN ACCEPTED RISKS**; missing physical fixtures remain **UNTESTED / OWNER EXCEPTION**, not PASS. Signed-distribution requirements remain outstanding. Phase 9 and every later phase remain unauthorized. Earlier dated slice records retain their historical boundaries. V8.5 development stops after closeout. COMMIT NO; PUSH NO; MERGE NO; TAG NO; RELEASE NO.
 
 ## 2. Instruction and evidence boundary
 
@@ -536,7 +536,7 @@ Expo Go may validate visual state transitions only when dependencies permit. It 
 
 ## 14. Phased implementation roadmap
 
-Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 is authorized and currently in progress under `AUTH-P05-2026-09-14`; Phase 6 and every later phase remain unauthorized and require their own explicit implementation authorization. This section was reconciled on 2026-09-15 to include the published P5.1 UI-shell checkpoint and the physically accepted P5.2 Rev4H visual/material checkpoint without changing completion accounting.
+Phases 0–7 are accepted. Phase 6's search-to-play exit was implemented and physically validated under the owner's conditional closure authorization. Phase 7 was authorized under `AUTH-P07-2026-10-01` and is now accepted under `ACK-P07-2026-10-02`; Phase 8 is ACCEPTED WITH DOCUMENTED RESIDUALS under `ACK-P08-2026-10-19` and the explicit exception in section 15.5, after authorization `AUTH-P08-2026-10-02`. Phase 9 and every later phase require separate authorization. Historical records remain intact. Current accounting is governed by section 15.
 
 ### Phase 0 — Evidence and version baseline (evidence complete; audit ACK accepted)
 
@@ -839,7 +839,11 @@ Phases 0–4 are accepted at the evidence boundaries recorded below. Phase 5 is 
 - **Residual/deferred scope:** provider-backed Search/Discovery/Details remain Phase 6; Library persistence/favorites/playlists/history remain Phase 7; offline/connectivity behavior remains Phase 8; WAVEN music domains in Orion Cloud remain Phase 9; immersive Full Player/lyrics/artwork atmosphere remain Phase 10; downloads/reliability remain Phase 11.
 - **Acceptance conclusion:** the owner accepts the complete Phase 5 development-device UI/accessibility/motion boundary. Phase 5 earns its full 7% weight, raising authoritative WAVEN v1 completion from 38% to **45%**. This ACK does **not** authorize Phase 6.
 
-### Phase 6 — Search, discovery, and detail experiences (authorized; implementation started at P6.1)
+### Phase 6 — Search, discovery, and detail experiences (complete; Completion ACK accepted)
+
+#### Phase 6 Completion ACK — `ACK-P06-2026-10-01`
+
+Phase 6 — Search, discovery, and details; fixed weight **7%**; decision **ACCEPTED**, 2026-10-01; reviewer/owner **WAVEN project owner**. [The durable ACK](../audits/WAVEN-PHASE-6-COMPLETION-ACK-2026-10-01.md) records the original signed metadata/reveal evidence and additional development-device product playback evidence. The owner's instruction to hold closure until search-to-play was implemented and physically validated is satisfied: actual Search → Play song completed `lacy`, and `vampire` completed with Mini Player pause/fresh-source resume. Phase 6 earns 7%, raising completion from 45% to **52%**. SOUR/EP limitations remain accepted. COMMIT NO; PUSH NO.
 
 #### Phase 6 Authorization — `AUTH-P06-2026-09-16`
 
@@ -930,7 +934,25 @@ P6.4A begins the authorized Detail portion of Phase 6 from the published and loc
 7. **Dependencies:** Phases 3–5.
 8. **Out of scope:** invented personalization or catalog rights.
 
-### Phase 7 — Local Library, favorites, playlists, and listening history (not authorized)
+### Phase 7 — Local Library, favorites, playlists, and listening history (accepted / complete)
+
+#### Phase 7 Authorization — `AUTH-P07-2026-10-01`
+
+- **Decision:** `AUTHORIZED`; decision date 2026-10-01; authorized by WAVEN project owner.
+- **Starting ref:** branch `waven/v1`, sealed base `d5299eb672df6d3396247cf15935b6de2ba7e7f1`, uncommitted Phase 6 candidate identified by the `ACK-P06-2026-10-01` draft.
+- **Starting completion / weight:** 45% pending Phase 6 exit reconciliation; proposed accepted total 52%; fixed Phase 7 weight 8%; earned 0% until accepted Completion ACK. Implementation authorization is explicit; section 15.4's dependency rule still governs eventual Phase 7 acceptance.
+- **Scope:** the Phase 7 requirements below: one versioned local Library repository, favorites, ordered local playlists, bounded meaningful-playback history, history-backed Home Recently Played, local preferences, safe migration/corruption recovery and account isolation. Reuse shared music identities and the single native Media3 owner, including its existing stable queue-recovery record.
+- **Storage boundary:** app-private MMKV already installed; no new dependency; anonymous `local` and canonical Google account-ID namespaces; no automatic movement of anonymous data into an account. No Cloud music sync, downloads, second player or Phase 8+ ownership.
+- **Acceptance tier:** development-build physical persistence/restart/account-isolation/migration validation plus TypeScript, focused and full-suite gates. Permanent distribution signing is not required. The accepted Phase 6 release remains its own artifact.
+- **Accounting / Git:** AUTHORIZED / IN PROGRESS, 0% earned. COMMIT NO; PUSH NO. Phase 8 and every later phase remain NOT AUTHORIZED.
+
+#### Phase 7 implementation and validation checkpoint — 2026-10-01
+
+Phase 6 dependency reconciliation is complete under `ACK-P06-2026-10-01`; current completion is **52%**. The starting 45% figure in the authorization above is historical. One app-private MMKV repository now owns schema-v2 favorites, ordered playlists, bounded meaningful-playback history and preferences, using shared canonical music entities and account-ID namespaces. Controlled native MMKV v1 migration/account-isolation evidence, real product favorite/playlist/history/restart evidence, and the physically inspected reference-adapted Library are recorded in [the durable implementation audit](../audits/WAVEN-PHASE-7-IMPLEMENTATION-VALIDATION-2026-10-01.md) and [UI reference classification](../audits/WAVEN-PHASE-7-UI-REFERENCES-2026-10-01.md). TypeScript PASS; focused 52/52 PASS; full suite 382/382 PASS. This is the requested meaningful implementation checkpoint, not a Phase 7 Completion ACK or owner acceptance attestation. Phase 7 remains **AUTHORIZED / IN PROGRESS**, earns **0%**, and Phase 8+ remains unauthorized.
+
+#### Phase 7 Completion ACK — `ACK-P07-2026-10-02`
+
+On 2026-10-02, the WAVEN project owner explicitly accepted the completed Phase 7 implementation and validation. The separate [durable Phase 7 Completion ACK](../audits/WAVEN-PHASE-7-COMPLETION-ACK-2026-10-02.md) records the development-build physical gate, source/artifact identities, automated results, and residual evidence. Phase 7 is **ACCEPTED / COMPLETE** and earns its fixed **8%**, advancing WAVEN v1 completion from **52% to 60%**. The owner accepts as documented limitations that a live switch between two real Google accounts was not exercised (distinct identities were validated against native MMKV), and that ten already-dirty baseline files have preserved hashes but no recoverable exact pre-change byte copies. No preimage/rollback evidence is fabricated. Phase 6's accepted evidence is unchanged; Phase 8 and later remain unauthorized. COMMIT NO; PUSH NO.
 
 1. **Goal:** Establish versioned local-first ownership before Cloud sync.
 2. **Scope:** local schemas/migrations, playlist ordering, favorites, history retention, preferences, queue recovery, corruption handling.
@@ -941,7 +963,16 @@ P6.4A begins the authorized Detail portion of Phase 6 from the published and loc
 7. **Dependencies:** Phases 3–6.
 8. **Out of scope:** Cloud enablement and media upload.
 
-### Phase 8 — Offline awareness and connectivity resilience (not authorized)
+### Phase 8 — Offline awareness and connectivity resilience (accepted with documented residuals)
+
+#### Phase 8 Authorization — `AUTH-P08-2026-10-02`
+
+- **Decision:** `AUTHORIZED / IN PROGRESS`; authorized by the WAVEN project owner on 2026-10-02 after explicit acceptance of the Phase 7 ACK and launcher/data distinction.
+- **Starting ref/accounting:** branch `waven/v1`, HEAD `d5299eb672df6d3396247cf15935b6de2ba7e7f1` plus accepted uncommitted local work; exact before hashes and all 107 dirty-source byte preimages are preserved under `release/waven-phase8-20261002/`. Accepted completion **60%**; fixed Phase 8 weight **8%**, earned **0%** pending its separate owner-accepted Completion ACK.
+- **Scope/sequence:** read-only Orion Mobile offline trace and reuse classification; one lifecycle-aware WAVEN connectivity owner; provider/playback/Library/Search/Discovery/Cloud adapters; bounded cached metadata, pending intent and ordered recovery; proper accessible WAVEN product UI; automated/runtime and development-device matrix required below. See [the architecture audit](../audits/WAVEN-PHASE-8-ORION-OFFLINE-ARCHITECTURE-AUDIT-2026-10-02.md).
+- **Frozen boundary:** accepted Phases 1–7, native Media3 queue/audio ownership, account-scoped Library, package identities and separate canonical/development data worlds. Retained development MMKV must not be cleared. Any temporary enablement for physical testing is restored afterward; no cross-package migration is authorized here.
+- **Exclusions/tier:** no Cloud music enrollment/sync (Phase 9), immersive player/lyrics (Phase 10), downloads (Phase 11), or updater/distribution ownership (Phase 12). Phase 8's development-device acceptance is distinct from its required later signed-distribution regression in sections 14/16; no debug build is relabeled as release evidence.
+- **Git/later scope:** COMMIT NO; PUSH NO. Phase 9 and every later phase remain NOT AUTHORIZED. The 2026-10-02 Phase 7/launcher decisions and their evidence remain intact.
 
 1. **Goal:** Make WAVEN intentionally usable through loss, degradation, and recovery of connectivity.
 2. **Scope/files:** Orion Mobile offline audit; `src/infrastructure/connectivity`; feature adapters for providers, playback, Library, Search/Discovery, Orion Cloud, pending mutations, lifecycle, and status UI.
@@ -957,6 +988,26 @@ P6.4A begins the authorized Detail portion of Phase 6 from the published and loc
 12. **Exit criteria:** one state owner; Library works offline; offline-capable tracks play; network-only features explain limits; queue/navigation survive where possible; Cloud pauses safely; pending changes recover; reconnection is automatic and ordered; duplicates/flapping do not corrupt state; development-device evidence exists.
 13. **Dependencies:** Phases 4 and 7, with Phase 6 integration; must precede WAVEN namespace enablement in Orion Cloud.
 14. **Out of scope:** downloadable-media implementation, pretending remote streams are offline, DRM/catalog infrastructure, or release acceptance from Expo Go.
+
+#### Phase 8 V8.5 implementation checkpoint — 2026-10-18
+
+Phase 8 V8.5 checkpoint, 2026-10-18: bounded playback failure isolation, capability-aware recovery, accepted-release notification/generation protection, and native-driven active-row feedback are implemented. TypeScript PASS; focused 140/140 PASS; complete WAVEN suite 470/470 PASS, including 34 deterministic smoke/repair tests and mounted Home recovery. The isolated Android candidate and exact source/artifact evidence are documented in [the V8.5 report](../audits/WAVEN-V8.5-IMPLEMENTATION-VALIDATION-2026-10-18.md). The owner separately approved r2/r3 installation. Final r3 was installed and hash-verified; substantial physical playback, rapid switching, offline persistence, detail/Search recovery and final ONLINE passed. Protected packages and original network settings were verified unchanged/restored. Explicit manual cases and final owner acceptance remain pending as documented in the report. This is **not** a Completion ACK: Phase 8 remains **AUTHORIZED / IN PROGRESS**, earns **0%**, overall remains **60%**, and Phase 9 onward remains unauthorized. COMMIT NO; PUSH NO.
+
+#### Phase 8 V8.5 R4 owner-review correction checkpoint — 2026-10-18
+
+The owner explicitly did **not** accept R3. R3 source preimages, APK, sealed package, report and pending ACK remain preserved. R4 adds a four-bar native-driver Living Wave driven by identity-filtered Media3 presentation, static pause/Reduced Motion, distinct preparation/buffering/failure states, and per-track React subscriptions. The exact 7738 ms R3 queue wait was reviewed; it followed an already-active discovery operation, so no speculative scheduler change or speedup claim is made. TypeScript PASS; focused 149/149 PASS; full suite 480/480 PASS. The separately hashed R4 APK passes build, signature, native-component and alignment checks but is **NOT INSTALLED**; installation requires new owner approval. Physical motion, audible output and the remaining manual fixtures are pending as classified in [the R4 correction report](../audits/WAVEN-V8.5-R4-OWNER-REVIEW-CORRECTIONS-2026-10-18.md). This is **not** acceptance or a Completion ACK. Phase 8 remains **AUTHORIZED / IN PROGRESS**, earns **0%**, and overall remains **60%**. Phase 9+ remains unauthorized. COMMIT NO; PUSH NO; MERGE NO; TAG NO.
+
+#### Phase 8 R4 physical review / R5 Living Wave cycle checkpoint — 2026-10-18
+
+The owner authorized installation of exact R4. Physical evidence confirms four moving bars, native playback/pause/resume, owner-confirmed audible output, a genuine forbidden-source rejection followed by unrelated playback, and successful same-route retry. The owner also found a cycle-restart glitch; R4 is **not accepted**. [The physical report](../audits/WAVEN-V8.5-R4-PHYSICAL-VALIDATION-2026-10-18.md) records actual results. The bounded fractional-phase/periodic-motion correction [R5](../audits/WAVEN-V8.5-R5-LIVING-WAVE-CYCLE-2026-10-18.md) passes TypeScript, focused 152/152 and full 483/483 tests. The owner separately approved exact R5 SHA-256 `86C9B7B3FEE8DEC0F9B05BF70179F18D475A544826D8396E16C5729B2F9B8330`; it was installed only in Personal user 0's existing isolated validation package and hash-verified. The owner confirmed “Cycles look smooth now” after pause/resume. Physical Reduced Motion/static pause, resumed/background-return cycles, Artist/Album/Search/genre navigation, visible Home releases, Library cold-restart persistence and protected package/settings readback are recorded. Strict initially-empty same-screen Home recovery, supported multi-item skip and usable cellular fixtures remain manual; captured jank, memory growth and queue/discovery waits remain explicit limitations. Motion feedback is **not Phase 8 owner acceptance**. Prior evidence and accepted ACKs remain preserved. No Phase 8 Completion ACK is issued: Phase 8 stays **AUTHORIZED / IN PROGRESS**, earns **0%**, overall stays **60%**, and Phase 9+ remains unauthorized. COMMIT NO; PUSH NO; MERGE NO; TAG NO.
+
+#### Phase 8 R6 discovery recovery repair checkpoint — 2026-10-18
+
+The owner authorized bounded investigation/repair of discovery failure recovery and intrusive warnings. [The R6 review report](../audits/WAVEN-V8.5-R6-DISCOVERY-RECOVERY-2026-10-18.md) distinguishes the unavailable exact owner Jazz HTTP trigger from captured R5 discovery timeouts and reproduced stale-state defects. R6 adds current-category accepted-result subscriptions, genuine validation for pending cached reads, shared cancellable reads, generation-aware health, job-specific incomplete-recovery completion and restrained localized/compact warnings. The global FIFO and playback owner remain unchanged. TypeScript PASS; focused 172/172 PASS; full 503/503 PASS, including 20 new recovery tests and existing R5 Living Wave regressions. The owner separately approved exact r2 SHA-256 `13E192C878213EA822BB69E0CD695598CB1F591152F9D5F213217361604C095C`; it was installed only in Personal user 0's existing validation package and hash-verified. Physical Focus recovered on the same screen without CHECK/navigation before unrelated recovery finished; normal Jazz/Rock, playback during optional degradation, motion/static Reduced Motion/pause, background return and cold-restart Library persistence were observed. Raw motion helper failures and transition reconciliation, significant measured jank/memory, cached Home versus strict initially-empty recovery, and remaining unavailable physical fixtures remain explicit. Protected packages/network/settings were verified unchanged/restored; separate final evidence seal preserves prior archives. Accepted Phases 0–7 and R3/R4/R5 evidence remain preserved. No Completion ACK or owner acceptance: Phase 8 remains **AUTHORIZED / IN PROGRESS**, earns **0%**, overall **60%**. Phase 9+ remains unauthorized. COMMIT NO; PUSH NO; MERGE NO; TAG NO; RELEASE NO.
+
+#### Phase 8 Completion ACK — `ACK-P08-2026-10-19`
+
+On 2026-10-19 the owner explicitly accepted the current development milestone with residual risks and stopped extended optimization. [The separate Completion ACK](../audits/WAVEN-PHASE-8-COMPLETION-ACK-2026-10-19.md) records **ACCEPTED WITH DOCUMENTED RESIDUALS** (normalized `ACCEPTED`) under the previously recorded [EXC-P08-2026-10-19](../audits/WAVEN-PHASE-8-OWNER-EXCEPTION-2026-10-19.md) and section 15.5 amendment. Exact approved R8 F SHA-256 `6D777C09C5F2F7531FA761D78C9A9C7DF40F54EA8E8BB021C604164A76E4C47C` is restored after the already authorized adjacent R7/F comparison and verified in Personal user 0's existing validation package. Final Library1favorite/1playlist/12history and named playlist, native playback context, protected packages/Work, network/animation settings and accepted Phase 6/7 ACK integrity are preserved. Built F TypeScript PASS,237focused/538full PASS; final closeout TypeScript PASS,247focused/539full PASS with only governance/test assertions added. Performance findings remain **KNOWN ACCEPTED RISKS**, unavailable/incomplete physical fixtures **UNTESTED / OWNER EXCEPTION**; no false PASS or signed-distribution acceptance. Phase 8 earns its unchanged 8%, advancing overall **60%→68%**. Earlier dated 60%/in-progress checkpoints remain historical. No further optimization/candidate/installation or Phase 9/V8.6 work; V8.5 development stops. COMMIT NO; PUSH NO; MERGE NO; TAG NO; RELEASE NO.
 
 ### Phase 9 — WAVEN domains in Orion Cloud (not authorized)
 
@@ -1020,9 +1071,9 @@ P6.4A begins the authorized Detail portion of Phase 6 from the published and loc
 
 ### 15.1 Completion rule
 
-WAVEN v1 progress is milestone-based, not an estimate of effort spent. Each Phase 0–12 has a fixed weight totaling **100%**. A phase contributes its full weight only when every exit criterion passes, its required physical-validation tier passes, its evidence is recorded, and its **Completion ACK** is `ACCEPTED`. Partial implementation, code completion, Expo Go success, or a development build does not earn partial overall percentage.
+WAVEN v1 progress is milestone-based, not an estimate of effort spent. Each Phase 0–12 has a fixed weight totaling **100%**. A phase contributes its full weight only when every exit criterion passes, its required physical-validation tier passes, its evidence is recorded, and its **Completion ACK** is `ACCEPTED`, subject solely to the explicit Phase 8 owner amendment in section 15.5. Partial implementation, code completion, Expo Go success, or a development build does not earn partial overall percentage.
 
-The only physical-validation exception is a phase with no runtime/device surface, currently Phase 0. Such a phase may complete through an evidence-review ACK that explicitly records `Physical validation: NOT APPLICABLE`. Phase 13 is post-v1 Desktop migration work and has a 0% WAVEN v1 weight; it still requires its own Desktop completion ACK.
+Apart from the narrow owner-authorized Phase 8 development-milestone exception in section 15.5, the only physical-validation exception is a phase with no runtime/device surface, currently Phase 0. Such a phase may complete through an evidence-review ACK that explicitly records `Physical validation: NOT APPLICABLE`. Phase 8 physical validation is partial with documented owner exceptions, never NOT APPLICABLE. Phase 13 is post-v1 Desktop migration work and has a 0% WAVEN v1 weight; it still requires its own Desktop completion ACK.
 
 **Overall WAVEN v1 completion formula:**
 
@@ -1040,16 +1091,16 @@ If later regression evidence invalidates an accepted phase, its ACK becomes `REO
 | 3 | Shared music domain/provider contracts | 8% | Contract parity at accepted scope; native playback integration deferred to Phase 4 | Complete; shared music contracts/provider registry accepted | `ACK-P03-2026-09-14` — ACCEPTED | 8% |
 | 4 | Android playback core | 12% | Development-build physical playback/lifecycle/MediaSession soak; later release reacceptance | Complete; development-device playback matrix accepted | `ACK-P04-2026-09-14` — ACCEPTED | 12% |
 | 5 | Design system and navigation | 7% | Expo Go-compatible physical UI/accessibility matrix or development-build equivalent | Complete; final closure checkpoint `68d55a57456ace75cd87ab6fdf702aec246409b5` published/remote-verified; native Google identity and Phase 5 UI/accessibility/motion matrix physically accepted on the WAVEN development/native path; distributed signed acceptance remains Phase 12 | `ACK-P05-2026-09-16` — ACCEPTED | 7% |
-| 6 | Search, discovery, and details | 7% | Physical online/degraded/offline provider flow in the correct runtime | AUTHORIZED / IN PROGRESS; P6.1–P6.4D implemented, P6.4D physically accepted/locked; remaining Phase 6 scope includes pagination/discovery depth, caching/attribution/health completion, and the bounded search-to-play handoff | PENDING | 0% |
-| 7 | Local Library, favorites, playlists, history | 8% | Development-build physical persistence, restart, account isolation, and migration | Not started / not authorized | PENDING | 0% |
-| 8 | Offline awareness and connectivity resilience | 8% | Development-build physical connectivity matrix in section 13.8 | Not started / not authorized | PENDING | 0% |
+| 6 | Search, discovery, and details | 7% | Physical provider flow and working search-to-play exit; explicit evidence disposition | COMPLETE; product handoff implemented and physically validated | `ACK-P06-2026-10-01` — ACCEPTED | 7% |
+| 7 | Local Library, favorites, playlists, history | 8% | Development-build physical persistence, restart, account isolation, and migration | COMPLETE; owner-accepted physical and automated evidence | `ACK-P07-2026-10-02` — ACCEPTED | 8% |
+| 8 | Offline awareness and connectivity resilience | 8% | Development-build physical connectivity matrix in section 13.8; explicit development-milestone owner exception in section 15.5 | ACCEPTED WITH DOCUMENTED RESIDUALS | `ACK-P08-2026-10-19` — ACCEPTED under `EXC-P08-2026-10-19` | 8% |
 | 9 | WAVEN domains in Orion Cloud | 9% | Development-build physical two-device/account/offline conflict matrix; later release reacceptance | Not started / not authorized | PENDING | 0% |
 | 10 | Full player, lyrics, and atmosphere | 7% | Development-build physical player/lyrics/accessibility/lifecycle matrix | Not started / not authorized | PENDING | 0% |
 | 11 | Downloads, reliability, and performance | 6% | Development-build physical storage/restart/soak matrix; distributed acceptance if downloads ship | Not started / not authorized | PENDING | 0% |
 | 12 | Release engineering, updater, distributed acceptance | 10% | Permanently signed GitHub Preview/Prerelease; clean install and in-place update on physical matrix | Not started / not authorized | PENDING | 0% |
 | 13 | Future Desktop Music Planet → WAVEN migration | 0% (post-v1) | Dedicated Desktop runtime/update/UX acceptance | Not started / not authorized | PENDING | 0% |
 
-**Current authoritative WAVEN v1 completion: 45%.** Phases 0–5 contribute `4% + 6% + 8% + 8% + 12% + 7% = 45%` through accepted Completion ACKs. Phase 6 is authorized under `AUTH-P06-2026-09-16` but still earns 0% until its implementation, required validation, evidence reconciliation, and Completion ACK are accepted. Phase 7 and every later phase remain unauthorized and earn 0%.
+**Current authoritative WAVEN v1 completion: 68%.** Accepted Phases 0–7 contribute 60%; Phase 8 contributes its fixed 8% under `ACK-P08-2026-10-19` and the narrow prior owner exception `EXC-P08-2026-10-19` / section 15.5: `4% + 6% + 8% + 8% + 12% + 7% + 7% + 8% + 8% = 68%`. Phase 8 is **ACCEPTED WITH DOCUMENTED RESIDUALS**, not all-physical-gates PASS or signed-distribution acceptance. Phase 6/7 ACKs and the two accepted Phase 7 evidence limitations remain unchanged. Phase 9 and every later phase remain unauthorized and earn 0%. V8.5 development stops; remaining release gates stay required at their authorized stage.
 
 ### 15.3 Completion ACK record required for every phase
 
@@ -1067,7 +1118,7 @@ Each phase must end with a durable ACK block in this ledger or an adjacent evide
 - Orion Cloud/offline continuity evidence when applicable;
 - reviewer/owner, ACK ID, decision date, and `ACCEPTED`, `REJECTED`, or `REOPENED` decision.
 
-`ACCEPTED` means all phase exit criteria and the required physical gate passed. `REJECTED` leaves the phase incomplete. `REOPENED` withdraws previously earned percentage until regression evidence passes again. A technical test summary without the decision record is not a Completion ACK.
+`ACCEPTED` ordinarily means all phase exit criteria and the required physical gate passed. Section 15.5 explicitly permits the Phase 8 development ACK to normalize to `ACCEPTED` with decision `ACCEPTED WITH DOCUMENTED RESIDUALS`; observed failures and untested fixtures remain distinct from owner acceptance. `REJECTED` leaves the phase incomplete. `REOPENED` withdraws previously earned percentage until regression evidence passes again. A technical test summary without the decision record is not a Completion ACK.
 
 ### 15.4 Dependency and release accounting
 
@@ -1076,6 +1127,83 @@ Each phase must end with a durable ACK block in this ledger or an adjacent evide
 - Phase 12 cannot be accepted until all release-scope Phase 1–11 ACKs are accepted or explicitly excluded from the candidate with documented scope.
 - WAVEN v1 reaches **100%** only when Phase 0–12 contribute their full accepted weights and the exact signed distributed candidate passes the final physical gate.
 - Stable promotion, if authorized, does not retroactively replace Preview/Prerelease acceptance evidence; both records remain traceable.
+### 15.5 Phase 8 owner-authorized development closeout exception — `AMEND-P08-2026-10-19`
+
+On 2026-10-19 the WAVEN project owner explicitly stopped extended R7/R8 optimization and accepted the current Phase 8 development milestone with documented residuals. The owner authorized recording the necessary formal exception/amendment before the Completion ACK. [EXC-P08-2026-10-19](../audits/WAVEN-PHASE-8-OWNER-EXCEPTION-2026-10-19.md) records that decision, the precise governance discrepancy, evidence classification and unchanged release obligations.
+
+This is a narrow exception to sections 15.1/15.3 and Phase 8's complete development-device matrix requirement in section 13.8: after final approved F integrity/functional checks and automated evidence are recorded, its ACK may be `ACCEPTED WITH DOCUMENTED RESIDUALS` (normalized `ACCEPTED`), earning the unchanged fixed 8%. Unresolved performance is **KNOWN ACCEPTED RISKS**, never PASS. Unavailable or incomplete physical fixtures are **UNTESTED / OWNER EXCEPTION**, never PASS; historical and deterministic evidence retain their actual tiers. Phase 8 physical validation is partial with owner exceptions, not N/A. The separate ACK/ledger update is required before completion advances from 60% to 68%.
+
+Only the already authorized adjacent R7/F comparison may finish, ending on approved F SHA-256 `6D777C09C5F2F7531FA761D78C9A9C7DF40F54EA8E8BB021C604164A76E4C47C`. No new optimization experiment/candidate, R8 G, R9, Phase 9/V8.6 work or other installation. Preserve Library/playback context, protected packages/Work, network/animation settings, all prior evidence and accepted Phase 0–7 contracts. COMMIT NO; PUSH NO; MERGE NO; TAG NO; RELEASE NO. V8.5 development stops after closeout.
+
+The architecture, official phase names, all fixed weights, later-phase authorization requirements and signed-distribution gates in sections 16–18 remain unchanged. This is not a generic exception policy, release acceptance or waiver of the later applicable connectivity, clean-install/update, migration/account/Cloud, device/accessibility/soak/performance requirements. The owner's next-milestone interests require separate authorization and any necessary master-plan reconciliation; none starts here.
+
+### 15.6 V8.6 owner-authorized enhancement milestone
+
+- Amendment: `AMEND-V86-2026-11-25`
+- Authorization: `AUTH-V86-2026-11-25`
+- Decision: `AUTHORIZED`
+- Milestone: V8.6 Settings, Appearance and Adaptive Experience.
+- Starting baseline: accepted V8.5 R8 F.
+- Additional roadmap weight: 0%.
+- Current authoritative WAVEN v1 completion: 68%.
+
+The owner authorizes V8.6 as a bounded post-Phase 8 enhancement milestone. This prospective authorization supersedes only the previous prohibition on starting V8.6. Historical Phase 8 decisions, evidence classifications, residual risks, fixed phase weights and release obligations remain unchanged.
+
+The November 25 Alienware automated baseline reproduced TypeScript PASS, 247/247 focused tests and 539/539 full regression tests. The original PowerShell summary incorrectly classified the two test gates because it expected TAP output while Node emitted spec-reporter output. Raw logs establish zero failures, cancellations, skipped or todo tests. Fresh physical Android acceptance has not been performed.
+
+#### V8.6 product requirements
+
+- Preserve WAVEN NOIR: black, charcoal, silver and blue.
+- Introduce WAVEN HIKARI: pearl white, azure and cyan.
+- Introduce WAVEN HIKARI NIGHT: midnight navy, electric blue and cyan.
+- No pink.
+- Deliver complete original anime-inspired visual experiences through composition, environment, lighting, depth, typography, iconography, materials, transitions and interaction choreography.
+- A palette or font substitution alone is insufficient.
+- Preserve music-first usability, original WAVEN identity and accepted NOIR behavior.
+- Use targeted external references, including Dribbble, under the existing reference acceptance protocol. Do not copy complete external screens or assets.
+- Centralize dynamic semantic theme tokens and persistent appearance preferences.
+- Follow System maps light to HIKARI and dark to HIKARI NIGHT. Manual selection persists when Follow System is disabled. NOIR remains independently selectable.
+- Centralized Settings contains Appearance, Playback, Library, Connectivity, Notifications, Performance and About.
+- Settings entry is a top-right control on Home, Search and Library, not a fourth primary navigation tab.
+- Provide Jump to Section and an interactive Appearance Studio.
+- Motion Intensity supports Subtle, Expressive and Reduced, while respecting system accessibility.
+- Performance profiles support Auto, Battery Saver, Balanced and Enhanced.
+- Auto may respond to rendering performance, memory pressure, thermal conditions and Android Power Saver, but not battery percentage, charging state or low-battery thresholds.
+- Do not expose unsupported or unauthorized functionality as working settings.
+
+#### Permanent interaction requirements
+
+Preserve interaction motion above spatial motion above atmospheric motion. Protect input responsiveness, frame pacing, playback continuity, accessibility and data integrity.
+
+Every major transition requires deliberate ownership, interruption and cancellation handling, responsive geometry, appropriate native/UI-thread execution, lifecycle cleanup and physical review.
+
+The roadmap must retain interactive finger-tracked Mini Player to Full Player expansion and collapse, shared artwork continuity, coordinated player and lyrics transformations, seeking, queue interactions, track-change transitions and predictable Android Back.
+
+Full-player implementation remains Phase 10-owned. V8.6 prepares compatible architecture without implementing unauthorized later-phase functionality.
+
+#### Implementation sequence
+
+- V8.6.0: Architecture and authorization.
+- V8.6.1: Theme and preference foundation.
+- V8.6.2: Three official theme identities.
+- V8.6.3: Centralized Settings.
+- V8.6.4: Appearance Studio.
+- V8.6.5: Motion and transition integration.
+- V8.6.6: Adaptive performance profiles.
+- V8.6.7: Cross-screen consistency and refinement.
+- V8.6.8: Automated, accessibility and performance validation.
+- V8.6.9: Physical Android review and milestone closeout.
+
+Each slice requires a bounded implementation contract and appropriate validation before acceptance.
+
+#### Protected boundaries
+
+Preserve the single native Media3 playback owner, accepted navigation and artwork ownership, scroll restoration, Library/account data, provider contracts, offline behavior, existing dependencies and Orion Desktop/Mobile isolation.
+
+Phase 9 and all later numbered phases remain unauthorized. No generic extension of Phase 8 owner exceptions is granted. V8.6 requires independent acceptance evidence.
+
+COMMIT NO; PUSH NO; MERGE NO; TAG NO; RELEASE NO.
+
 ## 16. Android development and validation model
 
 The automated baseline plus three device/distribution tiers are distinct bodies of evidence. A feature can progress through several, but none may be relabeled as a stronger tier.
@@ -1311,3 +1439,208 @@ Accepted evidence and invariants:
 
 P6.4D is therefore sealed. This sub-slice does **not** create the Phase 6 Completion ACK and does not advance authoritative WAVEN v1 completion beyond **45%**. Remaining Phase 6 work proceeds under the existing `AUTH-P06-2026-09-16` boundary.
 
+#### P6.5 Search Discovery + Suggestions — candidate 2026-09-19
+
+P6.5 begins the remaining Phase 6 discovery-depth work from the clean P6.4D V8.1 seal checkpoint. This slice changes Search only; P6.3 Home, the Home hero, Library, P6.4D Detail/Transition Scene, playback ownership, Orion Cloud, dependencies, and every Phase 7+ boundary remain frozen.
+
+Authorized candidate behavior:
+- **Zero-query Search becomes a real discovery surface.** Before the user types, Search presents provider-backed Songs, Artists, Albums, and Playlists using the existing dashboard/runtime data rather than a decorative empty placeholder.
+- **Real provider discovery sits above catalog browsing.** P6.5 reads the provider's live `FEmusic_moods_and_genres` surface, preserves each category's opaque browse params, and renders those provider-supplied mood and genre destinations as lightweight WAVEN chips. Selecting a chip browses `FEmusic_moods_and_genres_category` directly rather than converting the label into a synthetic text search.
+- **New Releases and Charts are genuine discovery destinations.** New Releases uses the provider browse surface `FEmusic_new_releases`. Global Charts uses the existing region-neutral global chart source already proven in P6.3 instead of silently turning Search into a country/VPN-sensitive chart surface.
+- **Search is the catalog-exploration owner.** Each zero-query group may expose up to 12 deduplicated provider entities in this bounded candidate, making Search materially deeper than the temporary eight-item Home presentation without redefining Home or claiming final pagination.
+- **Artist identity stays circular.** Zero-query Artist artwork uses circular portrait treatment with centered names; Albums, Songs, and Playlists remain square or softly rounded artwork-first media. Artist/Album entities reuse the already-locked P6.4D reveal owner without changing Transition Scene internals.
+- **Suggestions are provider-backed.** Queries of at least two characters use the already-implemented metadata-provider suggestion capability with a short independent debounce, AbortController cancellation, stale-request sequencing, provider-neutral copy, and no recent-search persistence.
+- **Discovery retreats when intent becomes explicit.** Typing transitions Search from zero-query discovery into the existing scoped focused-search mode. Songs / Artists / Albums / Playlists scope controls remain focused-search controls rather than permanent zero-query navigation chrome.
+- **Reference translation:** use the finalized Search references only for hierarchy/density ideas: top search field, discovery before query, circular creator identity, artwork-led catalog browsing, compact suggestion/result density. Do not copy yellow/pink skins, exact cards/navigation, or reference music data.
+- **Truthfulness:** genre/mood labels shown by P6.5 come only from the provider-supplied discovery taxonomy and retain the provider's opaque category handles internally. WAVEN does not manufacture genre names, rankings, or personalized claims. Upstream provider names, diagnostics, raw transport URLs, and secrets remain hidden.
+- **No later ownership:** no search-history persistence, favorites, saved Library state, Recently Played, Home Trending/New Releases redesign, stream resolution, search-to-play handoff, offline ownership, Cloud writes, or Phase 7+ behavior is introduced here.
+- **Validation:** this initial Search discovery/suggestions candidate is pure JS/UI/provider-read presentation and is Expo Go suitable for physical review. It remains unaccepted until physical evidence is reviewed; no commit/push is authorized before acceptance.
+
+This candidate does not award Phase 6 completion credit. Authoritative WAVEN v1 completion remains **45%** and Phase 7+ remain **NOT AUTHORIZED**.
+
+#### P6.5 physical visual repair V3 — artwork-led discovery destinations
+
+Physical Expo Go review of the automated-green V2.2 candidate accepted the Search architecture but rejected the discovery-chip presentation and the overly card-like focused Search rows. The supplied Orion Mobile Search/Discovery screenshot is accepted only as a hierarchy/shape reference for large two-column category destinations; WAVEN keeps its own atmosphere, typography, provider truthfulness, and music identity.
+
+V3 visual repair rules:
+- Replace the long mood/genre pill strip with **two-column artwork-led discovery destination cards**. `New Releases` and `Global Charts` remain genuine discovery destinations above the taxonomy.
+- Prefer provider-returned **Genres** and **Moods & Moments** groups. WAVEN may reorder the live categories toward broadly useful music intents such as Pop, Hip-Hop, R&B, Rock, Chill, Focus, and Workout only when those labels actually exist in the provider response; no category label is invented.
+- Genre cards attempt to derive artwork from the **real provider content behind that category**. Preview browse requests are bounded to two concurrent requests and the resulting category browse response is cached for the app session so tapping the card reuses the same response instead of refetching immediately.
+- The provider's own navigation-button stripe color is retained as a truthful category accent. If no usable category artwork is available, the card uses that provider accent plus deterministic WAVEN fallback artwork rather than unrelated web imagery.
+- Moods & Moments use the same destination-card family. They may remain on deterministic WAVEN artwork until real category artwork has been fetched; this is an honest visual fallback, not fabricated music metadata.
+- Focused Search suggestions become compact open rows with separators rather than dark slabs. Search-result rows also lose the enclosing card shell so real artwork and metadata carry the hierarchy.
+- The historical P5.5B `YOUR SEARCH · SCOPE` and quoted-query markers remain byte-shape compatible. P6.4D Artist/Album reveal behavior remains frozen.
+- Home, the Home hero, Library, playback, Cloud, dependencies, and Phase 7+ remain unchanged. This visual repair does not alter the planned later Home Trending/New Releases restructuring.
+
+V3 remains **P6.5 IN PROGRESS** pending a fresh Expo Go physical review. WAVEN remains **45%**. No commit or push is authorized by this repair.
+
+#### P6.5 curated discovery artwork V3.2 — stable taxonomy + signed APK acceptance
+
+V3.2 supersedes V3's provider-preview artwork experiment without changing the underlying provider browse ownership. The functional V2.2/V3.1 Search architecture remains intact; this repair owns only the curated discovery presentation, stable top-level taxonomy mapping, and the physical acceptance tier for this build.
+
+- **16 WAVEN-owned discovery artworks are bundled as lossless PNG presentation masters.** Eight core genres (`Pop`, `Hip-Hop`, `R&B & Soul`, `Rock`, `Electronic`, `Indie / Alternative`, `Jazz`, `Classical`), six Moods & Moments (`Chill`, `Focus`, `Workout`, `Feel Good`, `Party`, `Sleep`), plus `New Releases` and `Global Charts` use the accepted local artwork pack. The accepted improved Electronic artwork replaces the rejected first Electronic draft. V3.4.6 may downsample these same accepted compositions to density-appropriate PNG dimensions to control Android decode pressure; visual content, crop intent, and WAVEN identity remain unchanged.
+- **Stable, minimal core taxonomy.** The visible core genre/mood grid is WAVEN-curated, but a card is rendered only when the live provider exposes an exact matching category/alias and therefore a real opaque browse handle. Substring matching is forbidden so regional categories such as `Indian Pop`, `J-Pop`, `K-Pop`, or `Desi Hip-Hop` cannot impersonate the core `Pop` or `Hip-Hop` slots.
+- **Real provider browse remains authoritative.** Curated artwork and canonical WAVEN labels change presentation only. Tapping a core genre/mood still passes the matched provider category object and opaque params into the existing category-browse runtime. No synthetic text-search fallback is introduced.
+- **Card geometry is bounded.** Curated cards use a clipped 3:2 destination viewport with `resizeMode="cover"` and authoritative rounded overflow clipping. The 1536×1024 genre masters therefore fit at their native 3:2 ratio; square mood/discovery masters use a controlled center crop without stretching or overflow.
+- **Provider-preview requests are removed from the zero-query grid.** V3.2 no longer issues category preview-browse calls just to decorate cards. The accepted local artwork pack owns those visuals, reducing needless discovery traffic while leaving category-content fetching to the actual tap.
+- **Focused category hierarchy is quieter.** The generic `Explore your next sound` heading is hidden once a destination is open, leaving the selected discovery title as the clear owner; the explicit `Back` action returns to the discovery grid.
+- **Home remained frozen through V3.2.1.** V3.3 later authorizes removal of the redundant Explore shortcut row only. The later Home Trending/New Releases restructuring, first-run hero behavior, Library, playback, Cloud, dependencies, and Phase 7+ ownership remain unchanged.
+- **Validation tier is escalated for this build.** Expo Go is not accepted as P6.5 V3.2 physical evidence. Acceptance requires a real **signed APK physical acceptance** pass on Android, plus proof that the curated PNG assets are included by the native release packaging path. Expo may be reused for later fast UI iteration only when separately authorized.
+
+V3.2 remains **P6.5 IN PROGRESS** until the signed APK is built, signature-verified, installed on a physical Android device, and the Search discovery/artwork/category flows are physically accepted. WAVEN remains **45%**. No commit or push is authorized before that acceptance.
+
+
+#### P6.5 consolidated signed-build physical polish V3.3 — candidate 2026-09-19
+
+V3.3 is a bounded consolidation candidate following permanent-signed V3.2 physical review and the automated-green V3.2.1 image-fit repair. It is intended to produce one next signed APK for device acceptance rather than validating each repair independently.
+
+1. Preserve all 16 accepted discovery PNG masters and the V3.2.1 exact numeric 3:2 image-fit boundary. No artwork bytes, dependencies, provider taxonomy ownership, playback, Library, or Cloud behavior change.
+2. Repair the observed P6.4D blink as a visual-ownership issue only. Transition overlay artwork must decode before source ownership changes; forward handoff waits for both stable destination geometry and a decoded destination hero; reverse overlay ownership crossfades while the real detail artwork remains visible until route pop. Existing P6.4D geometry, crop interpolation, mask/radius choreography, and route semantics remain locked.
+3. Make successful Phase 6 metadata/discovery results session-warm. Home dashboard, Search dashboard/categories, opened category destinations, New Releases, Global Charts, and resolved Artist/Album details may be synchronously restored from in-memory session snapshots. Explicit user Retry/Refresh forces a new request. No disk persistence, history ownership, or invented personalization is introduced.
+4. Remove the redundant Home Explore shortcut/icon row. The Home hero still links to Search, real provider-backed shelves remain in their existing order, and the later Home Trending/New Releases redesign remains deferred.
+5. Promote the accepted split white/WAVEN-blue section-title treatment into a shared primary-page component and use it selectively in Search. Normalize Search discovery spacing so featured destinations, core genre/mood grids, focused browse, and catalog rails align to one consistent rhythm.
+6. Automated gate remains TypeScript + exactly 170/170 tests. Physical acceptance requires a fresh non-debug APK signed by the permanent WAVEN certificate, 16/16 bundled discovery resource verification, and device screenshots/behavior review.
+7. P6.5 remains **IN PROGRESS**. Authoritative WAVEN completion remains **45%**. Phase 7 and every later phase remain **NOT AUTHORIZED**. Commit and push remain prohibited until physical acceptance explicitly authorizes sealing.
+
+### P6.5 V3.3.2 Typography Identity Polish — 2026-09-19
+
+User-authorized physical polish adds a product-wide typography identity without advancing Phase 6 completion. Manrope becomes the functional UI family with real bundled 400/500/600/700/800 faces. Bebas Neue becomes the restrained WAVEN-blue display accent for prominent blue heading/brand words, while icons and ordinary small blue controls remain outside that rule. Major heading copy is normalized to intentional Title Case. Font packages are pinned and bundled locally; no runtime font network dependency is allowed. P6.4D motion, provider behavior, Library, playback, Orion Cloud, and Phase 7+ ownership remain unchanged. WAVEN remains **45%** until Phase 6 Completion ACK.
+
+
+### P6.5 V3.3.3 Sora Typography Refinement — 2026-09-19
+
+Physical review of V3.3.2 rejected the mixed Manrope/Bebas split-heading treatment as visually inconsistent. V3.3.3 keeps the accepted Manrope functional UI foundation, reserves Bebas Neue for the WAVEN wordmark only, and introduces locally bundled **Sora 700/800** for complete major display/section headings. WAVEN-blue words remain semantic color emphasis inside the same Sora family, at the same baseline/size/weight, with supplied Title Case preserved and no automatic uppercase conversion. Small labels, metadata, controls, navigation, taglines, and detail-kind labels remain Manrope. No discovery, artwork, provider, motion, playback, Library, Cloud, navigation-behavior, Phase 7+, or completion-percentage ownership changes are authorized. A permanent-signed in-place Android candidate plus physical visual review is required; WAVEN remains **45%**, P6.5 remains **IN PROGRESS**, Commit **NO**, Push **NO**.
+
+## P6.5 V3.4.0 discovery hierarchy — 2026-09-19
+
+V3.4.0 is a bounded information-architecture refinement after physical acceptance of the V3.3.3 typography system. Typography, artwork geometry, P6.4D entity-reveal motion, provider-neutral contracts, native Media3 ownership, Library behavior, Orion Cloud boundaries, portrait behavior, dependencies, and Phase 7+ ownership remain frozen.
+
+- **Home becomes intentionally short:** **Hero → Recently Played → Trending Now → New Releases**. The former Featured Artists, Featured Albums, Featured Playlists, and Your Music / Open Your Library sections are removed from Home rather than duplicated beside dedicated Search and Library destinations.
+- **Trending Now remains a chart claim.** Home reads only the already-proven region-neutral global chart discovery owner for this lane and renders it only when the exact chart section exists. Generic discovery relevance is never relabeled as trending.
+- **New Releases is provider-backed.** Home uses the existing provider `FEmusic_new_releases` discovery owner and exposes one truthful release lane. The lane prefers Album results, then Tracks, then Playlists, and does not fabricate release metadata or substitute generic dashboard shelves.
+- **Warm-session continuity remains Phase-6 ephemeral state.** Home reuses the existing Global Charts and New Releases session snapshots and explicit Refresh bypasses those snapshots only for that request.
+- **Zero-query Search becomes taxonomy-first rather than catalog-heavy.** Its stable order is `Find Your Sound` → search field → `Browse by Genre` → compact horizontal `Moods & Moments`, then the landing page ends.
+- **Genre remains primary discovery taxonomy.** The accepted two-column curated genre artwork grid stays intact and each visible card still requires an exact provider category match with the real opaque browse handle.
+- **Moods & Moments becomes compact.** The accepted six mood artworks move from a large two-column wall into one horizontally scrolling compact destination rail, preserving the same provider-backed category destinations.
+- **New Releases and Global Charts leave zero-query Search.** Their real runtime owners are retained because Home now owns those intents. Search does not duplicate those feature cards.
+- **The generic zero-query `Browse Music` Songs / Artists / Albums / Playlists rails are removed.** Those content types remain available when the user opens a Genre/Mood destination and in typed Search, where intent is explicit.
+- **Typed Search and suggestions are unchanged.** Songs / Artists / Albums / Playlists scope controls, provider-backed suggestions, loading/error/empty behavior, and Artist/Album P6.4D reveal routing remain intact.
+- **No playback or persistence expansion.** Search-to-play remains later Phase 6 work; Recently Played still does not invent history; Library remains Phase 7-owned.
+
+Validation requires TypeScript, the complete automated suite, a permanent-signed release APK, in-place physical update, portrait/rotation non-mutation, and physical review of Home, zero-query Search, focused Genre/Mood discovery, and typed Search regression.
+
+Authoritative WAVEN v1 completion remains **45%**. P6.5 remains **IN PROGRESS**. Phase 7+ remain **NOT AUTHORIZED**. Commit: **NO**. Push: **NO**.
+
+
+## P6.5 V3.4.1 discovery accuracy + Artist discovery — candidate 2026-09-20
+
+V3.4.1 does not reopen the physically accepted V3.4.0 Home/Search hierarchy or the V3.3.3 typography system. It repairs the meaning and freshness of the provider-backed content feeding those surfaces.
+
+- **Trending Now remains popularity-first.** WAVEN continues to accept the dedicated global Spotify chart section `waven-global-top-50` as the Home Trending source. Chart order is not reinterpreted as release order.
+- **New Releases becomes release-first rather than video-first.** Explicit provider browse identity is authoritative over incidental play overlays. A card explicitly identified as an Album release remains an Album even when the provider also supplies a playable `videoId`; the same precedence applies to explicit Artist and Playlist identities. Explicit Episode/Podcast/non-music semantics remain rejected before Track promotion.
+- **Canonical release scope is Singles/EPs/Albums plus track-only releases.** YouTube Music commonly represents Singles and EPs through its Album browse identity, so those canonical release entities are preferred. Track-only current releases remain eligible as bounded fill. Playlists are not New Releases.
+- **Global discovery is deterministic and WAVEN-owned.** `FEmusic_new_releases` is queried through a fixed multi-market set rather than device locale, SIM region, VPN state, IP geography, or whichever country happens to route the request. The responses are normalized, deduplicated by release identity, and ranked primarily by provider release-surface position with cross-market presence as a secondary confidence signal.
+- **Cross-shelf presentation is deduplicated.** Home normalizes title + artist identity so an exact release already visible in Trending is skipped from New Releases where another valid release is available.
+- **Artists to Explore becomes a real Search discovery axis.** The compact circular Artist rail is inserted between Genre and Moods & Moments. Candidate names are derived dynamically from current New Releases and current Trending signals, resolved back through strict provider Artist entities, deduplicated by provider identity and normalized artist name, and supplemented only by bounded provider-backed artist discovery when necessary. No celebrity seed list is allowed.
+- **Freshness is bounded without Phase 7 persistence.** Trending, New Releases, and Artists to Explore keep warm in-memory snapshots for 15 minutes. Stale snapshots are no longer treated as authoritative; explicit Refresh still bypasses the cache and cancellation remains owned by the existing provider-request flow.
+- **Real-world sanity probes are acceptance evidence, not product logic.** Current releases across multiple regions and genres may be used during physical validation. No named artist, title, release, country preference, listening history, or user preference is hardcoded into WAVEN discovery.
+- **No playback or persistence expansion.** V3.4.1 does not change Media3 ownership, Library persistence, Orion Cloud, downloads, provider secrets, raw playback URLs, or Phase 7 boundaries.
+- **Completion remains unchanged.** Authoritative WAVEN v1 completion remains **45%** and Phase 7+ remain **NOT AUTHORIZED** until the Phase 6 Completion ACK.
+
+## P6.5 V3.4.2 discovery determinism + canonical release quality — candidate 2026-09-20
+
+V3.4.2 freezes the accepted V3.4.0/V3.4.1 visual hierarchy and hardens the data beneath it.
+
+- **One-session discovery is authoritative once published.** Home follows `fetch → aggregate → classify → deduplicate → score → freeze snapshot → render`. Late provider work, duplicate mounts, or slower concurrent requests must not silently replace the visible Trending Now or New Releases snapshot. Only an explicit Refresh or a new app session may replace an already-published Home snapshot.
+- **Freshness becomes an explicit refresh hint rather than an automatic visible replacement.** WAVEN may record when fast-changing discovery has aged past the 15-minute freshness hint, but stale age alone must not reshuffle a currently visible session snapshot.
+- **Request generations prevent stale overwrite.** New Releases, Global Charts, and Artists to Explore track authoritative generations so an older request cannot publish after a newer explicit refresh. Concurrent ordinary requests converge on the first authoritative session snapshot instead of racing to replace it.
+- **Trending Now remains chart-order authoritative.** The dedicated `waven-global-top-50` source remains the only Home Trending owner. The rail retains a larger truthful chart population when available and never mixes generic search results into chart rank.
+- **New Releases prefers canonical music over video presentation.** Global release identity strips common `Official Music Video`, `MV`, lyric-video, visualizer, and audio wrapper text for deduplication. Canonical Album/Single/EP identities and ordinary Track releases rank ahead of video-shaped Track representations. If canonical and video representations resolve to the same normalized title + artist identity, the canonical representation wins.
+- **Video-shaped results are bounded fallback, not equal-confidence releases.** Obvious MV/Official Video representations are pushed behind canonical release candidates and should appear only when a stronger canonical population is unavailable.
+- **Deterministic release ordering is independent of network completion timing.** Ordering uses provider release-surface rank, canonical/video confidence, cross-market presence, entity type, normalized identity, and fixed market order as deterministic tie-breakers.
+- **Artists to Explore uses stronger relevance scoring.** Current chart evidence and current release evidence are combined into a deterministic candidate score before strict Artist lookup. No hardcoded artist list is allowed.
+- **Rail population is accuracy-first.** Home live rails target roughly **12–20 distinct high-confidence entities** where authoritative data supports them. WAVEN must show fewer rather than weaken classification, accept malformed duplicates, or fill with noisy video results.
+- **Future Explore More contract is preserved, not implemented here.** Eligible live rails may later terminate with an **Explore More** / **See All** destination opening a dedicated live page that reuses the same classifier, ranking, dedupe, and snapshot identity as the preview rail. The full page will own provider-backed continuation/pagination and explicit Refresh. V3.4.2 does not add these pages yet.
+- **No visual redesign or later-phase expansion.** Typography, card geometry, Artist rail geometry, Genre/Mood layout, P6.4D reveal ownership, Media3 playback, Library, Orion Cloud, and Phase 7+ remain frozen.
+
+Acceptance requires TypeScript, the full automated suite including determinism/canonical-release regressions, permanent signing, in-place physical update, and on-device proof that Home rails remain unchanged without user refresh while New Releases is materially more canonical and better populated.
+
+Authoritative WAVEN v1 completion remains **45%**. P6.5 remains **IN PROGRESS**. Phase 7+ remain **NOT AUTHORIZED**. Commit: **NO**. Push: **NO**.
+
+
+## P6.5 V3.4.3 catalog identity + navigation reliability — 2026-09-20
+
+V3.4.3 is the bounded physical-review repair after V3.4.2 proved stable Trending/session snapshots but exposed identity and navigation failures. It does not redesign Home/Search and does not advance Phase 6 accounting.
+
+- **Canonical Artist identity outranks display text.** A normalized display name is a query signal, not canonical Artist identity. WAVEN preserves strict provider Artist browse/source identity from linked catalog metadata whenever available. Chart-derived artist names are resolved only when provider-linked track/album evidence identifies one decisive Artist source; ambiguous homonyms are skipped rather than first-picked. This is generic behavior with no hardcoded BTS, LISA/LiSA, ROSÉ/ROSE/The Rose, or celebrity exceptions.
+- **Typed Search uses catalog evidence for relevance.** Diacritic/case normalization may improve matching, but it cannot collapse distinct Artist identities. Linked Artist evidence from returned tracks/albums boosts the owning Artist entity. Strong fan-made/AI-fan-song/unofficial/reaction/nightcore/8D noise is excluded from the bounded track surface, and equivalent canonical/video track forms deduplicate with the non-video canonical representation preferred.
+- **New Releases becomes stricter rather than fuller.** The V3.4.2 fixed-market atomic merge, generation guard, session snapshot and deterministic ordering remain locked. Video-only MV/Official Video/lyric-video/visualizer track presentations and strong low-confidence noise are excluded from the Home New Releases track fill. Accuracy before quota remains authoritative: a shorter truthful rail is preferred to weak video filler.
+- **Reverse reveal can no longer strand navigation.** Healthy P6.4D geometry, ownership and choreography remain unchanged. Anchor capture is bounded, UI Back and Android/system gesture Back still share one exit controller, and exit transitions have a bounded watchdog. If reverse measurement/visual handoff/landing cannot complete, WAVEN clears reveal ownership and commits the pending route exactly once so the user escapes instead of remaining on a blank/stuck detail scene.
+- **Search navigation state is session-only.** WAVEN keeps typed query, Songs/Artists/Albums/Playlists scope, focused Genre/Mood destination, focused results/errors, suggestions, provider results and practical scroll position in an in-memory Search navigation snapshot. Opening Artist/Album detail from Search carries an explicit Search return target. Back restores the originating Search snapshot, and Android Back first unwinds Search checkpoints/focused state before default route history can leave Search. No disk persistence, recent-search history or Phase 7 ownership is introduced.
+- **Restoration avoids unnecessary query churn.** A valid restored Search snapshot is rendered immediately instead of being cleared and refetched on the first restored effect cycle; subsequent user query changes use the existing cancellable provider request path normally.
+- **Bottom navigation supports both tap and contained horizontal drag.** Existing tab taps and router history remain intact. A horizontal gesture claimed only on the bottom-navigation surface moves the selection pill across Home/Search/Library, commits through bounded distance/velocity thresholds, and snaps/cancels to the current tab when the gesture is terminated. Vertical page scrolling and the rest of the application are not converted into a global swipe pager. Reduced Motion keeps the same navigation semantics without decorative settling motion.
+- **Validation probes are generic.** Regression coverage targets homonym collisions, canonical-ID evidence, canonical-vs-video/noisy track selection, reverse-reveal timeout recovery, Search state/back restoration and contained bottom-nav swipe semantics. Named artists observed during physical review are probes only, never product rules.
+- **Frozen V3.4.2 wins stay frozen.** Trending remains chart-ranked, session discovery stays deterministic, rail geometry/population targets stay unchanged, Artists to Explore remains circular, Sora/Manrope/Bebas typography remains locked, and no dependency, playback, Library, Cloud, offline or Phase 7+ ownership expands.
+- **Explore More remains deferred.** The previously documented future live full-page contract is preserved, but no Explore More page is implemented by V3.4.3. Its UX/design discussion begins only after this identity/navigation slice is physically approved.
+
+P6.5 remains **IN PROGRESS**. WAVEN remains **45%**. Phase 7 and every later phase remain **NOT AUTHORIZED**. No commit or push is authorized before signed physical acceptance.
+
+## P6.5 V3.4.4 reliability + catalog integrity — candidate 2026-09-20
+
+V3.4.4 is the no-compromise physical-lab repair after V3.4.3 proved Search restoration and contained bottom-nav drag, but exposed a forward reveal deadlock, Artist-artwork loss, cross-scope Artist relevance gaps, video-shaped release leakage, focused-discovery artwork inconsistency, and reversed swipe semantics. The accepted information architecture and visual language remain frozen.
+
+- **Entity reveal becomes one whole-transaction liveness contract.** Forward and reverse are both bounded. The existing P6.4D cinematic motion remains the healthy path, but source capture, transition-copy decode, destination readiness/geometry, navigation commit, landing handoff, reverse restoration, and completion may never keep route ownership indefinitely. A forward watchdog may abandon the cinematic handoff and commit the destination normally; a reverse watchdog may restore the source normally. Completion remains token-bound and exact-once so stale timers cannot finish a newer transaction. Reduced Motion completes navigation without waiting behind artwork decode.
+- **Canonical Artist identity and artwork are merged, not traded against one another.** Provider Artist browse/source ID remains identity authority. Same-ID Artist evidence may contribute the best trustworthy profile/artwork URL, including linked catalog evidence, ordinary Artist Search evidence, and a bounded lightweight Artist-presentation browse. Canonical identity selection must never discard valid artwork merely because the identity hint itself had no thumbnail. Artists to Explore may enrich only the final bounded set that still lacks artwork; no name-only artwork merge is allowed.
+- **Artist Search may use cross-scope canonical evidence.** Provider-linked Artist identities carried by canonical Track/Album results may enrich the Artist result set when they exactly support the normalized query. This closes the physical case where Songs strongly identified one Artist while the Artist scope omitted that same canonical entity. Distinct provider IDs remain distinct even when names normalize similarly; diacritic/case normalization affects relevance, not identity. No named celebrity exception is added.
+- **Search separates Artist intent from title coincidence.** When the result set contains strong exact canonical Artist evidence, linked tracks/albums from that Artist receive a relevance boost while legitimate exact-title matches remain eligible. Plain text equality never becomes entity identity.
+- **Media presentation is classified semantically across entity types.** MV/official-video, multilingual official-video labels, dance/performance/live video, lyric video, visualizer, fancam, fan/AI-fan, unofficial/reupload, and similar secondary presentations no longer depend on `Track` shape alone. Search dedupe and New Releases evaluate presentation quality independently of whether the provider renderer normalized as Track or Album/Single.
+- **New Releases requires both canonical identity and canonical presentation.** Global fixed-market aggregation, deterministic ordering, request generations, and V3.4.2 session stability remain locked. A video-shaped Album/Single renderer cannot bypass quality filtering simply because it owns a canonical browse ID. Canonical non-secondary music wins equivalent-identity dedupe. A shorter rail remains correct when remaining candidates are weak; release dates are never invented.
+- **Focused discovery artwork extraction is hardened without redesign.** Thumbnail lookup skips empty early branches, checks known renderer paths, may use a bounded nested thumbnail fallback, and prefers the largest usable provider thumbnail. This specifically targets the physical Rock-vs-Pop artwork disparity while preserving all accepted Genre/Mood geometry and local destination artwork.
+- **Search Back history becomes semantic rather than mechanical.** Existing query/scope/focus/results/suggestions/scroll restoration stays in memory. Consecutive scope-only taps in the same query/focused context are coalesced so Android Back does not replay every Songs/Artists/Albums/Playlists tap; meaningful query/focus/detail-origin checkpoints remain restorable. This is still session navigation, not Phase 7 persistence.
+- **Bottom-nav drag adopts pager semantics.** Tab order remains **Home → Search → Library**. **Swipe LEFT means next** (`Home → Search`, `Search → Library`) and **Swipe RIGHT means previous** (`Library → Search`, `Search → Home`). Finger delta and destination direction are therefore intentionally inverse, like pulling a horizontal page. End tabs do not wrap, short/cancelled drags snap back, vertical motion is not claimed, normal taps remain unchanged, and the selection pill moves toward the destination. Primary-tab route commits do not add a second route fade, avoiding the physical outgoing/incoming-page ghost seen in V3.4.3.
+- **Regression coverage expands around the physical failures.** Tests cover forward/reverse reveal fail-safes and stale-token protection, Reduced Motion liveness, same-ID Artist artwork merge, cross-scope canonical Artist promotion, Artist-intent ranking, semantic video/noise classification, Album/Single New Releases filtering, thumbnail fallback, Search scope-checkpoint coalescing, pager-direction/no-wrap behavior, tap preservation, and primary-route no-ghost ownership.
+- **Frozen wins stay frozen.** Trending remains chart-ranked, V3.4.2 discovery snapshots remain session-stable, current Home/Search hierarchy and rail population targets remain accuracy-first, Artists to Explore remains circular, typography/artwork geometry remain accepted, and the single Media3 playback owner plus Library/Cloud/offline phase boundaries do not change.
+- **Explore More remains deferred.** The future live full-page contract remains in the Master Plan, but its UI/UX design and implementation resume only after V3.4.4 earns signed physical acceptance.
+
+V3.4.4 does not authorize Phase 7 persistence, Cloud music mutation, another playback owner, dependency/toolchain upgrades, hardcoded artist/release exceptions, device/VPN/IP/SIM geography, commit, or push. P6.5 remains **IN PROGRESS**. WAVEN remains **45%**. Phase 7+ remain **NOT AUTHORIZED**.
+
+## P6.5 V3.4.5 canonical presentation + atomic navigation — candidate 2026-09-22
+
+V3.4.5 is the bounded repair for the signed V3.4.4 physical findings. The user-facing contract is atomic: **one deliberate tap → one complete Artist/Album detail transaction; one deliberate Back → the originating state**. Source measurement, prefetch, artwork decoding, reveal preparation, route commit, landing acknowledgement, and watchdog recovery are internal machinery and may never consume or replace that intent. Rapid duplicate taps coalesce into the active transaction, and a failed reverse reveal must skip animation and still complete the requested Back.
+
+Canonical identity and presentation are now session-authoritative together. The presentation store is keyed by entity kind plus canonical provider identity, merges only same-ID evidence, preserves the best trustworthy artwork already seen, and allows later quality upgrades without real-art → fallback downgrade. The actual source card presentation seeds route/reveal continuity. Same-display-name Artists are never merged by name alone; distinct provider identities remain distinct and Search may disambiguate colliding names with truthful provider-identity evidence.
+
+Home, Search, Artist detail, Album detail, New Releases, focused discovery, and provider output consume one shared canonical-presentation layer for media-wrapper classification, canonical/secondary equivalence dedupe, entity artwork normalization, and provider-ID presentation state. Songs excludes explicit secondary Video/performance forms; detail Songs do not repeat canonical music beside equivalent MV/lyric/video forms; New Releases prefers canonical music representation and excludes weak wrappers when no trustworthy canonical representation exists. Accuracy remains more important than quota.
+
+Primary-tab page content owns an opaque copy of the accepted atmospheric surface so outgoing Home/Search/Library content cannot ghost through an incoming primary page during route commit; bottom-nav pill motion remains independently animated. Pager semantics remain **Swipe LEFT = next**, **Swipe RIGHT = previous**, with no wrap, short-drag cancellation, vertical-scroll separation, normal taps, and Android system-edge Back preserved. Search session restoration and the proven ROSÉ cross-scope behavior remain protected.
+
+This candidate requires the full Windows source gate, `tsc --noEmit`, the complete **244/244** WAVEN test suite, a fresh Android **RELEASE** build, zipalign/signature verification with the permanent WAVEN signer, in-place installation on the physical Android device, cold launch, and owner physical review. Automated success is not acceptance. **Explore More remains deferred.** Authoritative WAVEN completion remains **45%**, P6.5 remains **IN PROGRESS**, Phase 7+ remain **NOT AUTHORIZED**, Commit **NO**, Push **NO**.
+
+
+
+## P6.5 V3.4.6 artwork lifecycle + visual ownership hardening — candidate 2026-09-22
+
+V3.4.6 is the bounded physical-lab repair after the permanently signed V3.4.5 candidate passed all automated gates but was rejected on-device because artwork that had already rendered successfully could later degrade to generic fallback after Artist/Album navigation. The repair preserves V3.4.5 atomic OPEN/BACK ownership and targets image lifecycle, decode pressure, and canonical presentation follow-up only.
+
+- **Renderer failure is not canonical absence.** A transient React Native `Image.onError` is renderer evidence only. It may trigger one bounded remount/retry, but it may not erase provider/session artwork that WAVEN has already displayed successfully.
+- **Session visual artwork leases span surfaces.** Track/Artist/Album/Playlist identity uses the same provider-keyed visual lease across source card, reveal overlay, detail hero, reverse reveal, restored origin, and compact playback presentation. Successful artwork remains authoritative for the session unless richer trustworthy artwork upgrades it.
+- **Decorative hero layers cannot poison the hero.** Blur/background decode failure is non-authoritative. Only the foreground artwork participates in visual-ready ownership; the base image stays eligible while an optional higher-quality source may crossfade in.
+- **Discovery artwork is memory-disciplined without redesign.** The 16 accepted WAVEN discovery compositions remain PNG and retain the accepted artwork/crop identity, but oversized 1536/1254-pixel presentation files are downsampled to density-appropriate 1024×683 landscape or 768×768 square masters. This reduces their aggregate decoded RGBA footprint from about 96 MiB to about 39 MiB before provider artwork/reveal layers are counted.
+- **Canonical media classification gains provider-renderer evidence.** YouTube Music `musicVideoType`/video-style metadata is recorded below UI surfaces, while bounded title semantics additionally cover live-version/session/recording and `PLAY ▶` wrapper forms. Songs and New Releases consume the shared evidence rather than relying only on display-title regexes.
+- **Physical acceptance remains mandatory.** The next permanently signed candidate must prove that real Artist/Album art survives OPEN/reveal/Back, unrelated Genre/Mood/Artist artwork does not collectively degrade after navigation, Album reveal preserves the source cover, Songs exclude secondary performance/video forms, and New Releases excludes or canonicalizes video/program wrappers.
+
+V3.4.6 does not authorize Explore More, Phase 7 persistence, Cloud music sync/mutation, another playback owner, accepted UI/typography hierarchy redesign, hardcoded artist/release exceptions, geography coupling, commit, or push. P6.5 remains **IN PROGRESS** and WAVEN remains **45%** until signed physical acceptance.
+
+## P6.5 V3.4.8 New Release signal -> canonical resolution — candidate 2026-09-23
+
+V3.4.8 is the bounded repair after the permanently signed V3.4.7 candidate still omitted Home New Releases and a zero-mutation eight-market live diagnostic proved the anonymous `FEmusic_new_releases` surface currently resolves to a `Music videos` shelf dominated by `MUSIC_VIDEO_TYPE_OMV` rows with no canonical Album shelf. V3.4.7 was therefore correctly rejecting the provider presentation but had no canonical replacement path.
+
+- **Freshness and presentation are separate owners.** The anonymous New Releases OMV feed is retained only as a fast-changing freshness signal. Raw OMV/video/view-count rows are never Home cards.
+- **Signals are ranked globally before resolver work.** WAVEN deduplicates normalized title + Artist signals across the locked fixed markets (`US`, `GB`, `KR`, `JP`, `IN`, `BR`, `MX`, `DE`), preserving deterministic rank and cross-market evidence before any catalog search.
+- **Canonical catalog resolution is bounded and dynamic.** Only the strongest bounded signals are searched back through YouTube Music metadata, with limited concurrency, cancellation propagation, and no artist/song-specific exceptions.
+- **Strong equivalence is mandatory.** A candidate must match the signal title strongly and match Artist identity through canonical provider Artist linkage when available, otherwise through strict normalized Artist text equivalence. Secondary/video/performance and low-confidence candidates remain rejected by the shared canonical layer.
+- **Future provider recovery remains compatible.** If YouTube Music later restores direct canonical Album/Track rows to the New Releases browse surface, those canonical rows continue to flow through the existing direct fixed-market merge and can coexist with resolved signals without requiring another architecture change.
+- **Accuracy before quota remains locked.** A signal with no trustworthy canonical Song/Track or Album/Single match is excluded rather than displayed as its OMV source.
+- **No scope drift.** V3.4.6 artwork lifecycle/visual ownership, V3.4.5 atomic navigation, V3.4.7 origin-state/Home-snapshot behavior, typography, Home hierarchy, playback ownership, Cloud boundaries, and fixed-market semantics remain frozen.
+
+Physical acceptance requires Home New Releases to appear with canonical music entities, no raw OMV/video wrappers, same-session stability, and no regression to the already-proven artwork/navigation behavior. No named release from the external benchmark is mandatory; overlap is evidence of dynamic freshness, not a hardcoded requirement. P6.5 remains **IN PROGRESS**, WAVEN remains **45%**, and Phase 7+, commit, and push remain unauthorized until signed physical acceptance.

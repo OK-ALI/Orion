@@ -1,19 +1,27 @@
+import { WavenHomeMaterialContent } from '../src/theme/homeMaterialPreview';
 import { useRouter } from 'expo-router';
+import { useWavenConnectivity } from '../src/infrastructure/connectivity/connectivityHooks';
+import { offlineMetadata } from '../src/infrastructure/connectivity/offlineMetadata';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocalLibrary } from '../src/features/library/libraryRuntime';
+import { WavenLibraryHeroArtwork, WavenLibraryRow } from '../src/components/library/WavenLibraryControls';
+import { trackPlayback } from '../src/features/playback/trackPlaybackRuntime';
 import {
   Image,
-  ScrollView,
+  FlatList,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
+import { WavenText as Text } from '../src/components/typography/WavenText';
 import { WavenArtworkFallback } from '../src/components/artwork/WavenArtworkFallback';
-import { WavenExploreIcon } from '../src/components/icons/WavenExploreIcon';
+import { wavenArtworkLeaseKey } from '../src/features/artwork/wavenArtworkLifecycle';
 import { WavenPressable } from '../src/components/interaction/WavenPressable';
 import { WavenEntityRevealAnchor } from '../src/components/navigation/WavenEntityRevealAnchor';
 import { WavenAppShell } from '../src/components/shell/WavenAppShell';
+import { wavenMediaRailWindow } from '../src/components/shell/wavenMediaRailWindow';
 import { WavenSurface } from '../src/components/surfaces/WavenSurface';
+import { WavenSectionTitle } from '../src/components/typography/WavenSectionTitle';
 import type {
   MusicAlbum,
   MusicArtist,
@@ -26,66 +34,73 @@ import {
   artistDetailRoute,
 } from '../src/features/discovery/detailNavigation';
 import { wavenDiscoveryRuntime } from '../src/features/discovery/wavenDiscoveryRuntime';
+import {
+  normalizeWavenCanonicalMediaText,
+  readWavenPresentation,
+  seedWavenPresentation,
+  wavenEntityArtworkUrl,
+} from '../src/features/discovery/wavenCanonicalPresentation';
 import { primeWavenAlbumDetail, primeWavenArtistDetail } from '../src/features/discovery/wavenDetailPrefetch';
-import { beginWavenEntityReveal, wavenEntityRevealKey } from '../src/features/navigation/wavenEntityReveal';
+import {
+  beginWavenEntityReveal,
+  wavenEntityRevealKey,
+  wavenReleaseRevealKind,
+} from '../src/features/navigation/wavenEntityReveal';
+import { useWavenArtworkLease } from '../src/hooks/useWavenArtworkLease';
 import { useWavenLayout } from '../src/hooks/useWavenLayout';
 import { useWavenReducedMotion } from '../src/hooks/useWavenReducedMotion';
 import {
   wavenColors,
+  wavenFonts,
   wavenRadii,
   wavenSpacing,
   wavenTypography,
 } from '../src/theme/tokens';
 
-const EXPLORE_CARDS = [
-  {
-    accessibilityLabel: 'Explore songs',
-    icon: 'songs' as const,
-    label: 'Songs',
-  },
-  {
-    accessibilityLabel: 'Explore artists',
-    icon: 'artists' as const,
-    label: 'Artists',
-  },
-  {
-    accessibilityLabel: 'Explore albums',
-    icon: 'albums' as const,
-    label: 'Albums',
-  },
-] as const;
-
 type HomeDiscoveryStatus = 'loading' | 'ready' | 'empty' | 'error';
 type HomeDiscoverySectionType = 'tracks' | 'artists' | 'albums' | 'playlists';
 
-interface HomeDiscoveryGroup {
+interface HomeDiscoveryEntry {
   type: HomeDiscoverySectionType;
-  label:
-    | 'Popular Now'
-    | 'Discover Now'
-    | 'Featured Artists'
-    | 'Featured Albums'
-    | 'Featured Playlists';
-  items: MusicEntity[];
+  item: MusicEntity;
 }
 
-const HOME_DISCOVERY_GROUPS: readonly {
-  type: Exclude<HomeDiscoverySectionType, 'tracks'>;
-  label: HomeDiscoveryGroup['label'];
-}[] = [
-  { type: 'artists', label: 'Featured Artists' },
-  { type: 'albums', label: 'Featured Albums' },
-  { type: 'playlists', label: 'Featured Playlists' },
-];
+interface HomeDiscoveryGroup {
+  label: 'Trending Now' | 'New Releases';
+  items: HomeDiscoveryEntry[];
+}
 
 const GLOBAL_CHART_SECTION_ID = 'waven-global-top-50';
+const NEW_RELEASE_ALBUM_TARGET = 10;
+const HOME_DISCOVERY_LIMIT = 16;
+
+function HomeDiscoverySeparator() {
+  return <View style={styles.discoveryRailSeparator} />;
+}
 
 function entityTitle(item: MusicEntity): string {
   return 'name' in item ? item.name : item.title;
 }
 
-function entityArtworkUrl(item: MusicEntity): string | null {
-  return item.artworkUrl || ('profileImageUrl' in item ? item.profileImageUrl : null) || null;
+function presentationKindForHomeType(type: HomeDiscoverySectionType) {
+  return type === 'tracks' ? 'track' : type === 'artists' ? 'artist' : type === 'albums' ? 'album' : 'playlist';
+}
+
+function entityArtworkUrl(item: MusicEntity, type: HomeDiscoverySectionType): string | null {
+  return wavenEntityArtworkUrl(readWavenPresentation(item, presentationKindForHomeType(type)));
+}
+
+function normalizeReleaseFingerprintText(value: unknown): string {
+  return normalizeWavenCanonicalMediaText(value);
+}
+
+function releaseFingerprint(item: MusicEntity): string {
+  if ('name' in item) {
+    return `artist\0${normalizeReleaseFingerprintText(item.name)}`;
+  }
+  const artist =
+    'artistName' in item ? normalizeReleaseFingerprintText(item.artistName) : '';
+  return `${normalizeReleaseFingerprintText(item.title)}\0${artist}`;
 }
 
 function entitySubtitle(
@@ -115,6 +130,7 @@ function collectDiscoveryItems(
   sections: readonly MusicDashboardSection[],
   type: HomeDiscoverySectionType,
   sectionFilter?: (section: MusicDashboardSection) => boolean,
+  limit = HOME_DISCOVERY_LIMIT,
 ): MusicEntity[] {
   const seen = new Set<string>();
   const items: MusicEntity[] = [];
@@ -126,141 +142,172 @@ function collectDiscoveryItems(
       if (seen.has(key)) continue;
       seen.add(key);
       items.push(item);
-      if (items.length >= 8) return items;
+      if (items.length >= limit) return items;
     }
   }
 
   return items;
 }
 
-function buildDiscoveryGroups(
-  sections: readonly MusicDashboardSection[],
+export function buildDiscoveryGroups(
+  trendingSections: readonly MusicDashboardSection[],
+  newReleaseSections: readonly MusicDashboardSection[],
 ): HomeDiscoveryGroup[] {
+  const groups: HomeDiscoveryGroup[] = [];
   const chartTracks = collectDiscoveryItems(
-    sections,
+    trendingSections,
     'tracks',
     (section) => section.id === GLOBAL_CHART_SECTION_ID,
   );
-  const trackItems =
-    chartTracks.length > 0
-      ? chartTracks
-      : collectDiscoveryItems(sections, 'tracks');
+  const trendingKeys = new Set(chartTracks.map(releaseFingerprint));
 
-  const groups: HomeDiscoveryGroup[] = [
-    {
-      type: 'tracks',
-      label: chartTracks.length > 0 ? 'Popular Now' : 'Discover Now',
-      items: trackItems,
-    },
-    ...HOME_DISCOVERY_GROUPS.map((group) => ({
-      ...group,
-      items: collectDiscoveryItems(sections, group.type),
-    })),
-  ];
+  if (chartTracks.length > 0) {
+    groups.push({
+      label: 'Trending Now',
+      items: chartTracks.map((item) => ({ type: 'tracks', item })),
+    });
+  }
 
-  return groups.filter((group) => group.items.length > 0);
+  const releaseEntries: HomeDiscoveryEntry[] = [];
+  const releaseKeys = new Set<string>();
+  const releaseAlbums = collectDiscoveryItems(newReleaseSections, 'albums');
+  const releaseTracks = collectDiscoveryItems(newReleaseSections, 'tracks');
+
+  const appendRelease = (
+    type: HomeDiscoverySectionType,
+    item: MusicEntity,
+  ) => {
+    const key = releaseFingerprint(item);
+    if (!key.replace('\0', '').trim()) return;
+    if (trendingKeys.has(key) || releaseKeys.has(key)) return;
+    releaseKeys.add(key);
+    releaseEntries.push({ type, item });
+  };
+
+  for (const album of releaseAlbums.slice(0, NEW_RELEASE_ALBUM_TARGET)) {
+    appendRelease('albums', album);
+  }
+  for (const track of releaseTracks) {
+    if (releaseEntries.length >= HOME_DISCOVERY_LIMIT) break;
+    appendRelease('tracks', track);
+  }
+  for (const album of releaseAlbums.slice(NEW_RELEASE_ALBUM_TARGET)) {
+    if (releaseEntries.length >= HOME_DISCOVERY_LIMIT) break;
+    appendRelease('albums', album);
+  }
+
+  // Prefer distinct cards, but never erase the entire truthful release shelf
+  // merely because the same current music is also charting.
+  if (!releaseEntries.length) {
+    for (const [type, items] of [['albums', releaseAlbums], ['tracks', releaseTracks]] as const) {
+      for (const item of items) {
+        const key = releaseFingerprint(item);
+        if (!key.replace('\0','').trim() || releaseKeys.has(key)) continue;
+        releaseKeys.add(key); releaseEntries.push({type,item});
+      }
+    }
+  }
+
+  if (releaseEntries.length > 0) {
+    groups.push({
+      label: 'New Releases',
+      items: releaseEntries.slice(0, HOME_DISCOVERY_LIMIT),
+    });
+  }
+
+  return groups;
 }
 
 function WavenHomeDiscoveryArtwork({
   circular = false,
   item,
   size,
+  type,
 }: {
   circular?: boolean;
   item: MusicEntity;
   size: number;
+  type: HomeDiscoverySectionType;
 }) {
-  const artworkUrl =
-    item.artworkUrl || ('profileImageUrl' in item ? item.profileImageUrl : null);
-  const [failed, setFailed] = useState(false);
+  const artworkUrl = entityArtworkUrl(item, type);
   const borderRadius = circular ? size / 2 : wavenRadii.md;
-
-  useEffect(() => {
-    setFailed(false);
-  }, [artworkUrl]);
-
-  if (!artworkUrl || failed) {
-    return (
-      <View
-        style={[
-          styles.discoveryArtworkClip,
-          {
-            borderRadius,
-            height: size,
-            width: size,
-          },
-        ]}
-      >
-        <WavenArtworkFallback
-          accessibilityLabel={`${entityTitle(item)} artwork`}
-          seed={`home-discovery-${item.source.provider}-${item.source.id}`}
-          size={size}
-        />
-      </View>
-    );
-  }
+  const artworkLease = useWavenArtworkLease({
+    leaseKey: wavenArtworkLeaseKey(
+      presentationKindForHomeType(type),
+      item.source.provider,
+      item.source.id,
+    ),
+    sourceKey: artworkUrl,
+  });
 
   return (
-    <Image
-      accessibilityLabel={`${entityTitle(item)} artwork`}
-      onError={() => setFailed(true)}
-      resizeMode="cover"
-      source={{ uri: artworkUrl }}
+    <View
       style={[
-        styles.discoveryArtwork,
+        styles.discoveryArtworkClip,
         {
           borderRadius,
           height: size,
           width: size,
         },
       ]}
-    />
-  );
-}
-
-
-function WavenSectionTitle({
-  leading,
-  accent,
-  single = false,
-  accessibilityLabel,
-}: {
-  leading: string;
-  accent?: string;
-  single?: boolean;
-  accessibilityLabel?: string;
-}) {
-  if (single) {
-    return (
-      <View
-        accessibilityLabel={accessibilityLabel || leading}
-        accessibilityRole="header"
-        style={styles.sectionTitleRow}
-      >
-        <Text style={styles.sectionTitle}>{leading}</Text>
-        <View accessible={false} style={styles.sectionTitleSignal}>
-          <View style={[styles.sectionTitleSignalBar, styles.sectionTitleSignalBarShort]} />
-          <View style={[styles.sectionTitleSignalBar, styles.sectionTitleSignalBarTall]} />
-          <View style={[styles.sectionTitleSignalBar, styles.sectionTitleSignalBarMid]} />
-        </View>
-      </View>
-    );
-  }
-
-  return (
-    <Text accessibilityLabel={accessibilityLabel} accessibilityRole="header" style={styles.sectionTitle}>
-      {leading}
-      {accent ? (
-        <>
-          {' '}
-          <Text style={styles.sectionTitleAccent}>{accent}</Text>
-        </>
+    >
+      {artworkLease.showFallback ? (
+        <WavenArtworkFallback
+          accessibilityLabel={`${entityTitle(item)} artwork`}
+          seed={`home-discovery-${item.source.provider}-${item.source.id}`}
+          size={size}
+        />
       ) : null}
-    </Text>
+      {artworkLease.backupSourceKey ? (
+        <Image
+          accessible={false}
+          resizeMethod="resize"
+          resizeMode="cover"
+          source={{ uri: artworkLease.backupSourceKey }}
+          style={[
+            styles.discoveryArtwork,
+            {
+              borderRadius,
+              height: size,
+              left: 0,
+              position: 'absolute',
+              top: 0,
+              width: size,
+            },
+          ]}
+        />
+      ) : null}
+      {artworkUrl ? (
+        <Image
+          accessibilityLabel={`${entityTitle(item)} artwork`}
+          key={artworkLease.imageKey}
+          onError={artworkLease.onError}
+          onLoad={artworkLease.onLoad}
+          resizeMethod="resize"
+          resizeMode="cover"
+          source={{ uri: artworkUrl }}
+          style={[
+            styles.discoveryArtwork,
+            {
+              borderRadius,
+              height: size,
+              left: 0,
+              position: 'absolute',
+              top: 0,
+              width: size,
+            },
+          ]}
+        />
+      ) : null}
+    </View>
   );
 }
+
 
 export default function WavenHomeScreen() {
+  const connection = useWavenConnectivity();
+  const library = useLocalLibrary();
+  const latestPlay = library.state.history[0]?.track;
   const router = useRouter();
   const layout = useWavenLayout();
   const reducedMotion = useWavenReducedMotion();
@@ -273,7 +320,6 @@ export default function WavenHomeScreen() {
       ? 202
       : 172;
 
-  const exploreArtworkSize = layout.isCompact ? 84 : 96;
   const discoveryArtworkSize = layout.isCompact
     ? 104
     : layout.isTabletLike
@@ -283,80 +329,196 @@ export default function WavenHomeScreen() {
   const discoveryCardWidth = discoveryArtworkSize + 32;
   const discoveryMediaArtworkSize = discoveryCardWidth;
   const discoveryCardMinHeight = discoveryMediaArtworkSize + 56;
-  const [discoveryStatus, setDiscoveryStatus] =
-    useState<HomeDiscoveryStatus>('loading');
-  const [dashboardSections, setDashboardSections] = useState<
+  const initialTrendingSnapshot = useRef(
+    wavenDiscoveryRuntime.getSearchGlobalChartsSessionSnapshot(),
+  ).current;
+  const initialNewReleasesSnapshot = useRef(
+    wavenDiscoveryRuntime.getSearchNewReleasesSessionSnapshot(),
+  ).current;
+  const initialDiscoveryGroups = buildDiscoveryGroups(
+    initialTrendingSnapshot?.result.sections ?? [],
+    initialNewReleasesSnapshot?.result.sections ?? [],
+  );
+  const initialDiscoveryErrors = [
+    ...(initialTrendingSnapshot?.errors ?? []),
+    ...(initialNewReleasesSnapshot?.errors ?? []),
+  ];
+  const [discoveryStatus, setDiscoveryStatus] = useState<HomeDiscoveryStatus>(() =>
+    initialDiscoveryGroups.length > 0
+      ? 'ready'
+      : initialTrendingSnapshot && initialNewReleasesSnapshot
+        ? initialDiscoveryErrors.length > 0
+          ? 'error'
+          : 'empty'
+        : 'loading',
+  );
+  const [trendingSections, setTrendingSections] = useState<
     readonly MusicDashboardSection[]
-  >([]);
-  const [hasDiscoveryDegradation, setHasDiscoveryDegradation] = useState(false);
+  >(() => initialTrendingSnapshot?.result.sections ?? []);
+  const [newReleaseSections, setNewReleaseSections] = useState<
+    readonly MusicDashboardSection[]
+  >(() => initialNewReleasesSnapshot?.result.sections ?? []);
+  const [shelfFailures, setShelfFailures] = useState<readonly string[]>(() => [
+    ...(initialTrendingSnapshot?.errors.length ? ['home-charts'] : []),
+    ...(initialNewReleasesSnapshot?.errors.length ? ['home-releases'] : []),
+  ]);
+  const hasDiscoveryDegradation = shelfFailures.length > 0;
   const [discoveryRetryNonce, setDiscoveryRetryNonce] = useState(0);
+  const [releaseNotice, setReleaseNotice] = useState<string | null>(null);
   const discoveryRequestSequence = useRef(0);
   const lastExplicitRefreshNonce = useRef(0);
+
+  useEffect(() => wavenDiscoveryRuntime.subscribeDiscovery(key => {
+    // Fill a missing shelf after background recovery; established visible rails
+    // retain their accepted session ordering until an explicit refresh.
+    const releases = wavenDiscoveryRuntime.getSearchNewReleasesSessionSnapshot();
+    const charts = wavenDiscoveryRuntime.getSearchGlobalChartsSessionSnapshot();
+    if (key === 'home-releases' && releases && !releases.errors.length) {
+      setShelfFailures(current => current.filter(value => value !== key));
+      setReleaseNotice(releases.result.sections.length ? null : 'No verified new releases are available right now.');
+      setNewReleaseSections(current => current.length ? current : releases.result.sections);
+      setDiscoveryStatus(current => releases.result.sections.length ? 'ready' : current === 'error' ? 'empty' : current);
+    }
+    if (key === 'home-charts' && charts?.result.sections.length) {
+      setShelfFailures(current => current.filter(value => value !== key));
+      setTrendingSections(current => current.length ? current : charts.result.sections);
+      setDiscoveryStatus('ready');
+    }
+  }), []);
 
   useEffect(() => {
     const controller = new AbortController();
     const sequence = ++discoveryRequestSequence.current;
     const shouldRefresh =
-      discoveryRetryNonce > lastExplicitRefreshNonce.current;
+      discoveryRetryNonce > lastExplicitRefreshNonce.current ||
+      (connection.remoteReady && Object.values(wavenDiscoveryRuntime.getDiscoveryFreshnessHints()).some(Boolean));
 
     if (shouldRefresh) {
       lastExplicitRefreshNonce.current = discoveryRetryNonce;
     }
 
-    setDiscoveryStatus('loading');
-    setHasDiscoveryDegradation(false);
+    const cachedTrending =
+      wavenDiscoveryRuntime.getSearchGlobalChartsSessionSnapshot();
+    const cachedNewReleases =
+      wavenDiscoveryRuntime.getSearchNewReleasesSessionSnapshot();
 
-    wavenDiscoveryRuntime
-      .getDashboard({ signal: controller.signal, refresh: shouldRefresh })
-      .then((response) => {
-        if (
-          controller.signal.aborted ||
-          response.cancelled ||
-          sequence !== discoveryRequestSequence.current
-        ) {
-          return;
-        }
+    const cachedGroups = buildDiscoveryGroups(
+      cachedTrending?.result.sections ?? [],
+      cachedNewReleases?.result.sections ?? [],
+    );
+    const cachedErrors = [
+      ...(cachedTrending?.errors ?? []),
+      ...(cachedNewReleases?.errors ?? []),
+    ];
 
-        const nextGroups = buildDiscoveryGroups(response.result.sections);
-        setDashboardSections(response.result.sections);
-        setHasDiscoveryDegradation(response.errors.length > 0);
-        setDiscoveryStatus(
-          nextGroups.length > 0
-            ? 'ready'
-            : response.errors.length > 0
-              ? 'error'
-              : 'empty',
-        );
-      })
-      .catch(() => {
-        if (
-          controller.signal.aborted ||
-          sequence !== discoveryRequestSequence.current
-        ) {
-          return;
-        }
+    if (!connection.remoteReady) {
+      offlineMetadata.enqueue('home-charts');
+      offlineMetadata.enqueue('home-releases');
+      if (cachedGroups.length > 0) {
+        setTrendingSections(cachedTrending?.result.sections ?? []);
+        setNewReleaseSections(cachedNewReleases?.result.sections ?? []);
+        setDiscoveryStatus('ready');
+      } else setDiscoveryStatus('error');
+      return () => controller.abort();
+    }
 
-        setDashboardSections([]);
-        setHasDiscoveryDegradation(false);
-        setDiscoveryStatus('error');
-      });
+    if (!shouldRefresh && cachedGroups.length > 0) {
+      setTrendingSections(cachedTrending?.result.sections ?? []);
+      setNewReleaseSections(cachedNewReleases?.result.sections ?? []);
+      setShelfFailures([
+        ...(cachedTrending?.errors.length ? ['home-charts'] : []),
+        ...(cachedNewReleases?.errors.length ? ['home-releases'] : []),
+      ]);
+      setDiscoveryStatus('ready');
+
+      if (cachedTrending && cachedNewReleases) {
+        return () => controller.abort();
+      }
+    } else {
+      setDiscoveryStatus('loading');
+      setShelfFailures([]);
+    }
+
+    Promise.allSettled([
+      wavenDiscoveryRuntime.getSearchGlobalCharts({
+        signal: controller.signal,
+        refresh: shouldRefresh,
+      }),
+      wavenDiscoveryRuntime.getSearchNewReleases({
+        signal: controller.signal,
+        refresh: shouldRefresh,
+      }),
+    ]).then(([trendingResult, newReleasesResult]) => {
+      if (
+        controller.signal.aborted ||
+        sequence !== discoveryRequestSequence.current
+      ) {
+        return;
+      }
+
+      const trendingResponse =
+        trendingResult.status === 'fulfilled' && !trendingResult.value.cancelled
+          ? trendingResult.value
+          : null;
+      const newReleasesResponse =
+        newReleasesResult.status === 'fulfilled' && !newReleasesResult.value.cancelled
+          ? newReleasesResult.value
+          : null;
+
+      const nextTrendingSections = trendingResponse?.result.sections.length ? trendingResponse.result.sections
+        : wavenDiscoveryRuntime.getSearchGlobalChartsSessionSnapshot()?.result.sections ?? [];
+      const nextNewReleaseSections = newReleasesResponse?.result.sections.length ? newReleasesResponse.result.sections
+        : wavenDiscoveryRuntime.getSearchNewReleasesSessionSnapshot()?.result.sections ?? [];
+      const nextErrors = [
+        ...(trendingResponse?.errors ??
+          (trendingResult.status === 'rejected'
+            ? ['Trending is unavailable right now.']
+            : [])),
+        ...(newReleasesResponse?.errors ??
+          (newReleasesResult.status === 'rejected'
+            ? ['New releases are unavailable right now.']
+            : [])),
+      ];
+      const nextGroups = buildDiscoveryGroups(
+        nextTrendingSections,
+        nextNewReleaseSections,
+      );
+      setReleaseNotice(newReleasesResponse?.errors.length
+        ? 'New Releases could not refresh. Previously saved music stays available.'
+        : nextNewReleaseSections.length ? null : 'No verified new releases are available right now.');
+
+      setTrendingSections(nextTrendingSections);
+      setNewReleaseSections(nextNewReleaseSections);
+      setShelfFailures([
+        ...(trendingResponse?.errors.length || trendingResult.status === 'rejected' ? ['home-charts'] : []),
+        ...(newReleasesResponse?.errors.length || newReleasesResult.status === 'rejected' ? ['home-releases'] : []),
+      ]);
+      setDiscoveryStatus(
+        nextGroups.length > 0
+          ? 'ready'
+          : nextErrors.length > 0
+            ? 'error'
+            : 'empty',
+      );
+    });
 
     return () => controller.abort();
-  }, [discoveryRetryNonce]);
+  }, [discoveryRetryNonce, connection.remoteReady, connection.recoveryEpoch]);
 
   const discoveryGroups = useMemo(
-    () => buildDiscoveryGroups(dashboardSections),
-    [dashboardSections],
+    () => buildDiscoveryGroups(trendingSections, newReleaseSections),
+    [newReleaseSections, trendingSections],
   );
 
   return (
     <WavenAppShell brandTagline>
+      <WavenHomeMaterialContent base={styles} render={(styles) => (
       <View style={styles.page}>
         <View style={styles.homeBody}>
           <WavenPressable
-            accessibilityLabel="Explore music"
+            accessibilityLabel={latestPlay ? `Replay ${latestPlay.title}` : 'Explore music'}
             accessibilityRole="button"
-            onPress={() => router.navigate('/search')}
+            onPress={() => latestPlay ? void trackPlayback.play(latestPlay) : router.navigate('/search')}
           >
             <WavenSurface
               style={[
@@ -364,7 +526,6 @@ export default function WavenHomeScreen() {
                 layout.isTabletLike ? styles.heroTablet : styles.heroPhone,
               ]}
             >
-              <View accessible={false} style={styles.glassTopHighlight} />
 
               <View
                 style={[
@@ -398,29 +559,29 @@ export default function WavenHomeScreen() {
                   ]}
                 />
                 <View style={styles.heroArtwork}>
-                  <WavenArtworkFallback
+                  {latestPlay ? <WavenLibraryHeroArtwork track={latestPlay} size={heroArtworkSize} /> : <WavenArtworkFallback
                     accessibilityLabel="WAVEN sound artwork"
                     seed="home-reference-02-feature"
                     size={heroArtworkSize}
-                  />
+                  />}
                 </View>
                 <View style={styles.heroBadge}>
                   <View accessible={false} style={styles.heroBadgeDot} />
-                  <Text style={styles.heroBadgeText}>START HERE</Text>
+                  <Text style={styles.heroBadgeText}>{latestPlay ? 'LAST PLAYED' : 'START HERE'}</Text>
                 </View>
               </View>
 
               <View style={styles.heroCopy}>
-                <Text style={styles.eyebrow}>YOUR NEXT PLAY</Text>
+                <Text style={styles.eyebrow}>{latestPlay ? 'YOUR LATEST PLAY' : 'YOUR NEXT PLAY'}</Text>
                 <Text accessibilityRole="header" style={styles.heroTitle}>
-                  Find your <Text style={styles.heroTitleAccent}>sound.</Text>
+                  {latestPlay ? latestPlay.title : <>Find Your <Text style={styles.heroTitleAccent}>Sound.</Text></>}
                 </Text>
                 <Text style={styles.heroBody}>
-                  Songs, artists, albums and playlists are one tap away.
+                  {latestPlay ? latestPlay.artistName : 'Songs, artists, albums and playlists are one tap away.'}
                 </Text>
 
                 <View style={styles.heroAction}>
-                  <Text style={styles.heroActionText}>Explore Music</Text>
+                  <Text style={styles.heroActionText}>{latestPlay ? 'Replay Song' : 'Explore Music'}</Text>
                   <Text accessible={false} style={styles.heroActionArrow}>›</Text>
                 </View>
               </View>
@@ -438,7 +599,9 @@ export default function WavenHomeScreen() {
               <Text style={styles.sectionHint}>Your listening trail</Text>
             </View>
 
-            <WavenSurface style={styles.recentState}>
+            {library.state.history.length ? <View>
+              {library.state.history.slice(0, 5).map(entry => <WavenLibraryRow key={entry.key} kind="track" entity={entry.track} />)}
+            </View> : <WavenSurface style={styles.recentState}>
               <View accessible={false} pointerEvents="none" style={styles.shortcutGlassTint} />
               <View accessible={false} pointerEvents="none" style={styles.shortcutGlassInnerEdge} />
               <View accessible={false} style={styles.glassTopHighlight} />
@@ -453,44 +616,10 @@ export default function WavenHomeScreen() {
                   Start a track and Home will turn into your listening history.
                 </Text>
               </View>
-            </WavenSurface>
+            </WavenSurface>}
           </View>
 
           <View style={styles.section}>
-            <View
-              style={[
-                styles.sectionHeader,
-                stackSectionHeaders ? styles.sectionHeaderStacked : null,
-              ]}
-            >
-              <WavenSectionTitle leading="Explore" single />
-              <Text style={styles.sectionHint}>Choose a direction</Text>
-            </View>
-
-            <View style={styles.exploreRow}>
-              {EXPLORE_CARDS.map((card) => (
-                <WavenPressable
-                  accessibilityLabel={card.accessibilityLabel}
-                  accessibilityRole="button"
-                  containerStyle={styles.exploreCardPressable}
-                  key={card.label}
-                  onPress={() => router.navigate('/search')}
-                >
-                  <View style={styles.exploreCard}>
-                    <View accessible={false} pointerEvents="none" style={styles.shortcutGlassTint} />
-                    <View accessible={false} pointerEvents="none" style={styles.shortcutGlassInnerEdge} />
-                    <View accessible={false} style={styles.cardTopHighlight} />
-                    <WavenExploreIcon
-                      kind={card.icon}
-                      size={exploreArtworkSize}
-                    />
-                    <Text style={styles.exploreLabel}>{card.label}</Text>
-                  </View>
-                </WavenPressable>
-              ))}
-            </View>
-
-
             {discoveryStatus === 'loading' ? (
               <WavenSurface style={styles.discoveryState}>
                 <View accessible={false} pointerEvents="none" style={styles.shortcutGlassTint} />
@@ -567,7 +696,7 @@ export default function WavenHomeScreen() {
                       accessibilityLiveRegion="polite"
                       style={styles.discoveryNotice}
                     >
-                      Some discovery shelves are temporarily unavailable.
+                      {shelfFailures.length > 1 ? 'Discovery is refreshing.' : shelfFailures[0] === 'home-releases' ? 'New Releases will retry automatically.' : 'Trending will retry automatically.'}
                     </Text>
                     <WavenPressable
                       accessibilityLabel="Refresh Home discovery"
@@ -582,12 +711,16 @@ export default function WavenHomeScreen() {
                 ) : null}
 
                 {discoveryGroups.map((group) => (
-                  <View key={group.type} style={styles.discoveryGroup}>
+                  <View key={group.label} style={styles.discoveryGroup}>
                     <WavenSectionTitle
                       leading={group.label.split(' ')[0]}
                       accent={group.label.split(' ').slice(1).join(' ')}
                     />
-                    <ScrollView
+                    <FlatList
+                      {...wavenMediaRailWindow(discoveryCardWidth, Math.min(layout.width - 2 * layout.gutter, layout.contentMaxWidth), 10)}
+                      data={group.items}
+                      keyExtractor={({ item }) => `${item.source.provider}:${item.source.id}`}
+                      ItemSeparatorComponent={HomeDiscoverySeparator}
                       contentContainerStyle={[
                         styles.discoveryRow,
                         { paddingRight: Math.round(discoveryCardWidth * 0.5) },
@@ -598,10 +731,9 @@ export default function WavenHomeScreen() {
                       showsHorizontalScrollIndicator={false}
                       snapToAlignment="start"
                       snapToInterval={discoveryCardWidth + 10}
-                    >
-                      {group.items.map((item) => {
-                        const detailRoute = detailRouteForHomeItem(item, group.type);
-                        const isArtist = group.type === 'artists';
+                      renderItem={({ item: { item, type } }) => {
+                        const detailRoute = detailRouteForHomeItem(item, type);
+                        const isArtist = type === 'artists';
                         const sourceBorderRadius = isArtist
                           ? discoveryMediaArtworkSize / 2
                           : wavenRadii.md;
@@ -639,6 +771,7 @@ export default function WavenHomeScreen() {
                                     circular={isArtist}
                                     item={item}
                                     size={discoveryMediaArtworkSize}
+                                    type={type}
                                   />
                                 </WavenEntityRevealAnchor>
                               ) : (
@@ -646,6 +779,7 @@ export default function WavenHomeScreen() {
                                   circular={isArtist}
                                   item={item}
                                   size={discoveryMediaArtworkSize}
+                                  type={type}
                                 />
                               )}
                               <View
@@ -670,7 +804,7 @@ export default function WavenHomeScreen() {
                                     isArtist ? styles.discoveryArtistText : null,
                                   ]}
                                 >
-                                  {entitySubtitle(item, group.type)}
+                                  {entitySubtitle(item, type)}
                                 </Text>
                               </View>
                             </View>
@@ -680,7 +814,7 @@ export default function WavenHomeScreen() {
                         if (!detailRoute) {
                           return (
                             <View
-                              accessibilityLabel={`${entityTitle(item)}, ${entitySubtitle(item, group.type)}`}
+                              accessibilityLabel={`${entityTitle(item)}, ${entitySubtitle(item, type)}`}
                               accessible
                               key={`${item.source.provider}:${item.source.id}`}
                             >
@@ -691,32 +825,34 @@ export default function WavenHomeScreen() {
 
                         return (
                           <WavenPressable
-                            accessibilityLabel={`Open ${entityTitle(item)} ${group.type === 'artists' ? 'artist' : 'album'} details`}
+                            accessibilityLabel={`Open ${entityTitle(item)} ${type === 'artists' ? 'artist' : 'album'} details`}
                             accessibilityRole="button"
                             key={`${item.source.provider}:${item.source.id}`}
                             onPress={() => {
                               const open = async () => {
-                                if (group.type === 'artists') {
+                                if (type === 'artists') {
                                   void primeWavenArtistDetail(item as MusicArtist);
-                                } else if (group.type === 'albums') {
+                                } else if (type === 'albums') {
                                   void primeWavenAlbumDetail(item as MusicAlbum);
                                 }
-                                if (!reducedMotion) {
-                                  const started = await beginWavenEntityReveal(
-                                    {
-                                      artworkUrl: entityArtworkUrl(item),
-                                      entityKey: wavenEntityRevealKey(
-                                        group.type === 'artists' ? 'artist' : 'album',
-                                        item.source.provider,
-                                        item.source.id,
-                                      ),
-                                      kind: group.type === 'artists' ? 'artist' : 'album',
-                                      title: entityTitle(item),
-                                    },
-                                    () => router.push(detailRoute),
-                                  );
-                                  if (started) return;
-                                }
+                                const presented = seedWavenPresentation(item, presentationKindForHomeType(type));
+                                const started = await beginWavenEntityReveal(
+                                  {
+                                    artworkUrl: entityArtworkUrl(presented, type),
+                                    entityKey: wavenEntityRevealKey(
+                                      type === 'artists' ? 'artist' : 'album',
+                                      presented.source.provider,
+                                      presented.source.id,
+                                    ),
+                                    kind: type === 'artists'
+                                      ? 'artist'
+                                      : wavenReleaseRevealKind((presented as MusicAlbum).primaryType),
+                                    title: entityTitle(presented),
+                                  },
+                                  () => router.push(detailRoute),
+                                  { animate: !reducedMotion },
+                                );
+                                if (started) return;
                                 router.push(detailRoute);
                               };
                               void open();
@@ -725,45 +861,26 @@ export default function WavenHomeScreen() {
                             {card}
                           </WavenPressable>
                         );
-                      })}
-                    </ScrollView>
+                      }}
+                    />
                   </View>
                 ))}
+                {releaseNotice && !discoveryGroups.some(group => group.label === 'New Releases') ? (
+                  <WavenSurface style={styles.discoveryState}>
+                    <WavenSectionTitle leading="New" accent="Releases" />
+                    <Text accessibilityLiveRegion="polite" style={styles.discoveryStateBody}>{releaseNotice}</Text>
+                    <WavenPressable accessibilityRole="button" accessibilityLabel="Retry New Releases" onPress={() => setDiscoveryRetryNonce(value => value + 1)}>
+                      <View style={styles.discoveryAction}><Text style={styles.discoveryActionText}>Try Again</Text></View>
+                    </WavenPressable>
+                  </WavenSurface>
+                ) : null}
               </View>
             ) : null}
           </View>
 
-          <View style={styles.section}>
-            <WavenSectionTitle leading="Your" accent="Music" />
-
-            <WavenPressable
-              accessibilityLabel="Open Library"
-              accessibilityRole="button"
-              onPress={() => router.navigate('/library')}
-            >
-              <View style={styles.libraryShortcut}>
-                <View accessible={false} pointerEvents="none" style={styles.shortcutGlassTint} />
-                <View accessible={false} pointerEvents="none" style={styles.shortcutGlassInnerEdge} />
-                <View accessible={false} style={styles.glassTopHighlight} />
-                <View accessible={false} style={styles.libraryIcon}>
-                  <View style={[styles.libraryBar, { height: 13 }]} />
-                  <View style={[styles.libraryBar, { height: 20 }]} />
-                  <View style={[styles.libraryBar, { height: 16 }]} />
-                </View>
-
-                <View style={styles.libraryShortcutCopy}>
-                  <Text style={styles.libraryShortcutTitle}>Open Your Library</Text>
-                  <Text style={styles.libraryShortcutBody}>
-                    Albums, artists, playlists and liked music.
-                  </Text>
-                </View>
-
-                <Text accessible={false} style={styles.shortcutArrow}>›</Text>
-              </View>
-            </WavenPressable>
-          </View>
         </View>
       </View>
+      )} />
     </WavenAppShell>
   );
 }
@@ -778,8 +895,8 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   hero: {
-    backgroundColor: 'rgba(5, 10, 15, 0.5)',
-    borderColor: 'rgba(214, 224, 232, 0.12)',
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     padding: wavenSpacing.md,
@@ -865,12 +982,14 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: wavenColors.interactionBlue,
+    fontFamily: wavenFonts.extraBold,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.45,
   },
   heroTitle: {
     color: wavenColors.textSecondary,
+    fontFamily: wavenFonts.headingExtraBold,
     fontSize: 28,
     fontWeight: '800',
     lineHeight: 34,
@@ -879,6 +998,9 @@ const styles = StyleSheet.create({
   },
   heroTitleAccent: {
     color: wavenColors.interactionBlue,
+    fontFamily: wavenFonts.headingExtraBold,
+    fontSize: 28,
+    fontWeight: '800',
   },
   heroBody: {
     color: wavenColors.textMuted,
@@ -925,40 +1047,6 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: 2,
   },
-  sectionTitle: {
-    color: wavenColors.textPrimary,
-    fontSize: wavenTypography.section.fontSize,
-    fontWeight: wavenTypography.section.fontWeight,
-    lineHeight: wavenTypography.section.lineHeight,
-  },
-  sectionTitleAccent: {
-    color: wavenColors.interactionBlue,
-  },
-  sectionTitleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 7,
-  },
-  sectionTitleSignal: {
-    alignItems: 'flex-end',
-    flexDirection: 'row',
-    gap: 2,
-    height: 13,
-  },
-  sectionTitleSignalBar: {
-    backgroundColor: wavenColors.interactionBlue,
-    borderRadius: 999,
-    width: 2.5,
-  },
-  sectionTitleSignalBarShort: {
-    height: 6,
-  },
-  sectionTitleSignalBarTall: {
-    height: 12,
-  },
-  sectionTitleSignalBarMid: {
-    height: 9,
-  },
   sectionHint: {
     color: wavenColors.textMuted,
     fontSize: 10,
@@ -989,31 +1077,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     marginTop: 3,
-  },
-  exploreRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  exploreCardPressable: {
-    flex: 1,
-  },
-  exploreCard: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(11, 18, 25, 0.52)',
-    borderColor: 'rgba(214, 224, 232, 0.145)',
-    borderRadius: wavenRadii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 8,
-    overflow: 'hidden',
-    paddingHorizontal: 6,
-    paddingVertical: 9,
-    position: 'relative',
-  },
-  exploreLabel: {
-    color: wavenColors.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'center',
   },
   discoveryState: {
     backgroundColor: 'rgba(10, 17, 24, 0.46)',
@@ -1096,9 +1159,8 @@ const styles = StyleSheet.create({
   discoveryGroup: {
     gap: 11,
   },
-  discoveryRow: {
-    gap: 10,
-  },
+  discoveryRow: {},
+  discoveryRailSeparator: { width: 10 },
   discoveryCard: {
     alignItems: 'center',
     backgroundColor: 'transparent',

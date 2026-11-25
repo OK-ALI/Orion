@@ -1,5 +1,6 @@
-import { StyleSheet, Text, type TextStyle } from 'react-native';
-import { wavenColors } from '../../theme/tokens';
+import { StyleSheet, type TextStyle } from 'react-native';
+import { WavenText as Text } from '../typography/WavenText';
+import { wavenColors, wavenFonts } from '../../theme/tokens';
 
 interface SplitAccentHeadingProps {
   lead: string;
@@ -19,10 +20,14 @@ export function SplitAccentHeading({ lead, accent, style }: SplitAccentHeadingPr
 const styles = StyleSheet.create({
   heading: {
     color: wavenColors.coolWhite,
+    fontFamily: wavenFonts.headingBold,
     fontSize: 22,
     fontWeight: '700',
   },
   accent: {
     color: wavenColors.activeBlue,
+    fontFamily: wavenFonts.headingBold,
+    fontSize: 22,
+    fontWeight: '700',
   },
 });

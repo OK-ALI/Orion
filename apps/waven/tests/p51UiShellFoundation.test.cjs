@@ -34,9 +34,9 @@ test('P5.1 establishes semantic WAVEN theme, layout, typography, glass, and moti
 
 
 test('P5.1 centralizes the WAVEN wordmark and reusable blue-accent page titles', () => {
-  assert.match(wordmark, /<Text>WA<\/Text>/);
+  assert.match(wordmark, />WA<\/Text>/);
   assert.match(wordmark, /<Text style=\{styles\.accent\}>V<\/Text>/);
-  assert.match(wordmark, /<Text>EN<\/Text>/);
+  assert.match(wordmark, />EN<\/Text>/);
   assert.match(wordmark, /wavenColors\.interactionBlue/);
   assert.match(accentTitle, /WavenAccentTitle/);
   assert.match(accentTitle, /wavenColors\.interactionBlue/);
@@ -102,7 +102,7 @@ test('P5.1 Home foundation stays product-safe and music-first as later P5 revisi
   assert.match(shell, /paddingBottom:\s*42/);
   assert.match(home, /Recently Played/);
   assert.match(home, /Your first plays will collect here/);
-  assert.match(home, /Open Your Library/);
+  assert.doesNotMatch(home, /Open Your Library|Your Music/);
   assert.match(cloudDebug, /if \(!__DEV__\) return null/);
 });
 

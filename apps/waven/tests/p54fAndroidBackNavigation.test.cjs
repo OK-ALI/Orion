@@ -17,8 +17,10 @@ test('P5.4F preserves Android Back history for user-driven primary navigation', 
   const homeLibraryNavigate =
     home.match(/router\.navigate\('\/library'\)/g) ?? [];
 
-  assert.equal(homeSearchNavigate.length, 2);
-  assert.equal(homeLibraryNavigate.length, 1);
+  assert.equal(homeSearchNavigate.length, 1);
+  // V3.4.0 intentionally retires the duplicate Home -> Library shortcut.
+  // Android Back history for Library remains owned by the persistent bottom nav.
+  assert.equal(homeLibraryNavigate.length, 0);
   assert.doesNotMatch(home, /router\.replace\('\/(search|library)'\)/);
 
   assert.match(
@@ -27,6 +29,10 @@ test('P5.4F preserves Android Back history for user-driven primary navigation', 
   );
   assert.doesNotMatch(library, /router\.replace\('\/search'\)/);
 
+  assert.match(
+    bottomNav,
+    /\{ label: 'Library', href: '\/library', icon: 'library' \}/,
+  );
   assert.match(
     bottomNav,
     /if \(!active\) router\.navigate\(item\.href\);/,

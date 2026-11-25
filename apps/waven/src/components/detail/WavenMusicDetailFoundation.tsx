@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useWavenConnectivity } from '../../infrastructure/connectivity/connectivityHooks';
 import {
   Animated,
   BackHandler,
@@ -7,11 +8,14 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
+import { WavenText as Text } from '../typography/WavenText';
 import { WavenArtworkFallback } from '../artwork/WavenArtworkFallback';
+import { wavenArtworkLeaseKey } from '../../features/artwork/wavenArtworkLifecycle';
 import { WavenPressable } from '../interaction/WavenPressable';
+import { WavenMusicLibraryActions, WavenTrackPlayTarget } from '../library/WavenLibraryControls';
+import { useWavenTrackPresentation } from '../../features/playback/trackPlaybackRuntime';
 import { WavenEntityRevealAnchor } from '../navigation/WavenEntityRevealAnchor';
 import {
   WAVEN_DETAIL_HERO_BLUR_OPACITY,
@@ -23,12 +27,16 @@ import {
   wavenDetailHeroCopyStyles,
 } from './WavenDetailHeroVisual';
 import { WavenAppShell } from '../shell/WavenAppShell';
+import { useWavenArtworkLease } from '../../hooks/useWavenArtworkLease';
 import { useWavenLayout } from '../../hooks/useWavenLayout';
 import { useWavenReducedMotion } from '../../hooks/useWavenReducedMotion';
 import type { MusicAlbum, MusicTrack } from '../../domain/music';
 import {
+  acknowledgeWavenEntityRevealLanding,
   beginWavenEntityRevealExit,
+  cancelWavenEntityRevealEnterForBack,
   getWavenEntityRevealTransition,
+  markWavenEntityRevealDestinationVisualReady,
   subscribeWavenEntityReveal,
 } from '../../features/navigation/wavenEntityReveal';
 import {
@@ -41,14 +49,14 @@ import {
 } from '../../theme/tokens';
 
 type DetailStatus = 'loading' | 'ready' | 'error';
-type DetailKind = 'Artist' | 'Album';
+type DetailKind = 'Artist' | 'Album' | 'Single' | 'EP';
 
 interface WavenMusicDetailFoundationProps {
   artworkUrl?: string | null;
   seedArtworkUrl?: string | null;
   entityKey: string;
   fallbackSeed: string;
-  kindLabel: 'Artist' | 'Album';
+  kindLabel: DetailKind;
   onBack: () => void;
   onRetry: () => void;
   status: DetailStatus;
@@ -125,23 +133,27 @@ function WavenFullBleedArtwork({
   allowQualityUpgrade,
   artworkUrl,
   seedArtworkUrl,
+  entityKey,
   fallbackSeed,
   kindLabel,
   title,
   heroHeight,
   heroWidth,
   hideSharpArtwork = false,
+  onVisualReady,
   scrollY,
 }: {
   allowQualityUpgrade: boolean;
   artworkUrl?: string | null;
   seedArtworkUrl?: string | null;
+  entityKey: string;
   fallbackSeed: string;
   kindLabel: DetailKind;
   title: string;
   heroHeight: number;
   heroWidth: number;
   hideSharpArtwork?: boolean;
+  onVisualReady?: () => void;
   scrollY: Animated.Value;
 }) {
   const normalizedArtworkUrl = artworkUrl?.trim() || null;
@@ -151,9 +163,18 @@ function WavenFullBleedArtwork({
     normalizedArtworkUrl && normalizedArtworkUrl !== baseArtworkUrl
       ? normalizedArtworkUrl
       : null;
-  const [baseFailed, setBaseFailed] = useState(false);
+  const baseLease = useWavenArtworkLease({
+    leaseKey: entityKey,
+    sourceKey: baseArtworkUrl,
+  });
+  const qualityLease = useWavenArtworkLease({
+    leaseKey: entityKey,
+    sourceKey: qualityArtworkUrl,
+  });
   const [qualityReady, setQualityReady] = useState(false);
-  const [qualityFailed, setQualityFailed] = useState(false);
+  const [qualityVisualReady, setQualityVisualReady] = useState(false);
+  const [qualityCommitted, setQualityCommitted] = useState(false);
+  const [qualityPrefetchFailed, setQualityPrefetchFailed] = useState(false);
   const qualityOpacity = useRef(new Animated.Value(0)).current;
   const parallax = scrollY.interpolate({
     inputRange: [0, heroHeight],
@@ -167,15 +188,17 @@ function WavenFullBleedArtwork({
   });
 
   useEffect(() => {
-    setBaseFailed(false);
-  }, [baseArtworkUrl]);
+    if (!baseArtworkUrl || baseLease.retryExhausted) onVisualReady?.();
+  }, [baseArtworkUrl, baseLease.retryExhausted, onVisualReady]);
 
   useEffect(() => {
     let cancelled = false;
     qualityOpacity.stopAnimation();
     qualityOpacity.setValue(0);
     setQualityReady(false);
-    setQualityFailed(false);
+    setQualityVisualReady(false);
+    setQualityCommitted(false);
+    setQualityPrefetchFailed(false);
 
     if (!qualityArtworkUrl) return;
 
@@ -184,7 +207,7 @@ function WavenFullBleedArtwork({
         if (!cancelled && loaded) setQualityReady(true);
       })
       .catch(() => {
-        if (!cancelled) setQualityFailed(true);
+        if (!cancelled) setQualityPrefetchFailed(true);
       });
 
     return () => {
@@ -199,7 +222,9 @@ function WavenFullBleedArtwork({
       !allowQualityUpgrade ||
       !qualityArtworkUrl ||
       !qualityReady ||
-      qualityFailed
+      !qualityVisualReady ||
+      qualityPrefetchFailed ||
+      qualityLease.retryExhausted
     ) {
       qualityOpacity.setValue(0);
       return;
@@ -211,89 +236,124 @@ function WavenFullBleedArtwork({
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     });
-    crossfade.start();
+    crossfade.start(({ finished }) => {
+      if (finished) setQualityCommitted(true);
+    });
     return () => crossfade.stop();
   }, [
     allowQualityUpgrade,
     qualityArtworkUrl,
-    qualityFailed,
+    qualityLease.retryExhausted,
     qualityOpacity,
+    qualityPrefetchFailed,
     qualityReady,
+    qualityVisualReady,
   ]);
 
-  if ((!baseArtworkUrl || baseFailed) && !(qualityArtworkUrl && qualityReady)) {
-    const fallbackSize = Math.min(heroWidth, heroHeight);
-    return (
-      <View style={[styles.fallbackHero, hideSharpArtwork ? styles.hiddenSharpArtwork : null]}>
-        <WavenArtworkFallback
-          accessibilityLabel={`${title} artwork`}
-          seed={fallbackSeed}
-          size={fallbackSize}
-        />
-      </View>
-    );
-  }
-
-  const renderArtworkPair = (
+  const renderArtworkLayers = (
     uri: string,
-    onError: () => void,
+    imageKey: string,
+    onSharpError: () => void,
     wrapperOpacity?: Animated.Value,
+    onSharpLoad?: () => void,
+    renderBlur = true,
+    renderSharp = true,
   ) => {
-    const pair = (
+    const layers = (
       <>
-        <Animated.Image
-          blurRadius={kindLabel === 'Artist' ? 36 : 30}
-          fadeDuration={0}
-          onError={onError}
-          resizeMode="cover"
-          source={{ uri }}
-          style={[
-            styles.heroBlur,
-            {
-              opacity: WAVEN_DETAIL_HERO_BLUR_OPACITY,
-              transform: [
-                { translateY: parallax },
-                { scale: WAVEN_DETAIL_HERO_BLUR_SCALE },
-              ],
-            },
-          ]}
-        />
-        <Animated.Image
-          accessibilityLabel={`${title} artwork`}
-          fadeDuration={0}
-          onError={onError}
-          resizeMode="cover"
-          source={{ uri }}
-          style={[
-            styles.heroSharp,
-            {
-              opacity: hideSharpArtwork ? 0 : WAVEN_DETAIL_HERO_SHARP_OPACITY,
-              transform: [{ translateY: parallax }, { scale }],
-            },
-          ]}
-        />
+        {renderBlur ? (
+          <Animated.Image
+            blurRadius={kindLabel === 'Artist' ? 36 : 30}
+            fadeDuration={0}
+            resizeMethod="resize"
+            resizeMode="cover"
+            source={{ uri }}
+            style={[
+              styles.heroBlur,
+              {
+                opacity: WAVEN_DETAIL_HERO_BLUR_OPACITY,
+                transform: [
+                  { translateY: parallax },
+                  { scale: WAVEN_DETAIL_HERO_BLUR_SCALE },
+                ],
+              },
+            ]}
+          />
+        ) : null}
+        {renderSharp ? (
+          <Animated.Image
+            accessibilityLabel={`${title} artwork`}
+            fadeDuration={0}
+            key={imageKey}
+            onError={onSharpError}
+            onLoad={onSharpLoad}
+            resizeMethod="resize"
+            resizeMode="cover"
+            source={{ uri }}
+            style={[
+              styles.heroSharp,
+              {
+                opacity: hideSharpArtwork ? 0 : WAVEN_DETAIL_HERO_SHARP_OPACITY,
+                transform: [{ translateY: parallax }, { scale }],
+              },
+            ]}
+          />
+        ) : null}
       </>
     );
 
     return wrapperOpacity ? (
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: wrapperOpacity }]}>
-        {pair}
+        {layers}
       </Animated.View>
     ) : (
-      pair
+      layers
     );
   };
 
+  const fallbackSize = Math.min(heroWidth, heroHeight);
+
   return (
     <View accessible={false} pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {baseArtworkUrl && !baseFailed
-        ? renderArtworkPair(baseArtworkUrl, () => setBaseFailed(true))
+      {baseLease.showFallback ? (
+        <View style={[styles.fallbackHero, hideSharpArtwork ? styles.hiddenSharpArtwork : null]}>
+          <WavenArtworkFallback
+            accessibilityLabel={`${title} artwork`}
+            seed={fallbackSeed}
+            size={fallbackSize}
+          />
+        </View>
+      ) : null}
+      {baseArtworkUrl
+        ? renderArtworkLayers(
+            baseArtworkUrl,
+            baseLease.imageKey,
+            baseLease.onError,
+            undefined,
+            () => {
+              baseLease.onLoad();
+              onVisualReady?.();
+            },
+            true,
+            !qualityCommitted,
+          )
         : null}
-      {qualityArtworkUrl && qualityReady && !qualityFailed
-        ? renderArtworkPair(
+      {qualityArtworkUrl && qualityReady && !qualityPrefetchFailed && !qualityLease.retryExhausted
+        ? renderArtworkLayers(
             qualityArtworkUrl,
-            () => setQualityFailed(true),
+            qualityLease.imageKey,
+            () => {
+              qualityLease.onError();
+              setQualityVisualReady(false);
+              setQualityCommitted(false);
+            },
             qualityOpacity,
+            () => {
+              qualityLease.onLoad();
+              setQualityVisualReady(true);
+            },
+            false,
+            true,
           )
         : null}
       <WavenDetailHeroGradients />
@@ -375,6 +435,7 @@ export function WavenMusicDetailFoundation({
   title,
   children,
 }: WavenMusicDetailFoundationProps) {
+  const connection = useWavenConnectivity();
   const layout = useWavenLayout();
   const reducedMotion = useWavenReducedMotion();
   const isArtist = kindLabel === 'Artist';
@@ -599,17 +660,34 @@ export function WavenMusicDetailFoundation({
     reducedMotion,
   ]);
 
+  useEffect(() => {
+    acknowledgeWavenEntityRevealLanding(entityKey);
+  }, [entityKey]);
+
   const requestEntityBack = useCallback(async () => {
-    if (exitInFlight.current || getWavenEntityRevealTransition()) return;
+    if (exitInFlight.current) return;
+
+    const activeReveal = getWavenEntityRevealTransition();
+    if (activeReveal?.entityKey === entityKey && activeReveal.phase === 'enter') {
+      cancelWavenEntityRevealEnterForBack(entityKey);
+      onBackRef.current();
+      return;
+    }
+    if (activeReveal) return;
 
     exitInFlight.current = true;
-    if (!reducedMotion) {
-      const started = await beginWavenEntityRevealExit(
-        entityKey,
-        () => onBackRef.current(),
-        artworkUrl,
-      );
-      if (started) return;
+    try {
+      if (!reducedMotion) {
+        const started = await beginWavenEntityRevealExit(
+          entityKey,
+          () => onBackRef.current(),
+          artworkUrl,
+        );
+        if (started) return;
+      }
+    } catch {
+      // Transition measurement/decoding is presentation-only. Navigation must
+      // remain recoverable even when the reveal path cannot start.
     }
 
     exitInFlight.current = false;
@@ -664,8 +742,7 @@ export function WavenMusicDetailFoundation({
     inputRange: [0, 1],
     outputRange: [4, 0],
   });
-  const hideSharpArtwork =
-    exitingThisEntity || (enteringThisEntity && !enterHandoffReady);
+  const hideSharpArtwork = enteringThisEntity && !enterHandoffReady;
   const allowQualityUpgrade =
     !enteringThisEntity && !exitingThisEntity && !revealTransition;
   const detailMotionContext = useMemo<WavenDetailMotionContextValue>(
@@ -710,11 +787,17 @@ export function WavenMusicDetailFoundation({
               allowQualityUpgrade={allowQualityUpgrade}
               artworkUrl={artworkUrl}
               seedArtworkUrl={seedArtworkUrl}
+              entityKey={entityKey}
               fallbackSeed={fallbackSeed}
               heroHeight={heroHeight}
               heroWidth={heroWidth}
               hideSharpArtwork={hideSharpArtwork}
               kindLabel={kindLabel}
+              onVisualReady={() => {
+                if (enteringThisEntity && revealTransition) {
+                  markWavenEntityRevealDestinationVisualReady(revealTransition.token);
+                }
+              }}
               scrollY={scrollY}
               title={title}
             />
@@ -808,9 +891,9 @@ export function WavenMusicDetailFoundation({
 
           {status === 'error' ? (
             <View accessibilityLiveRegion="polite" style={styles.stateCard}>
-              <Text style={styles.stateTitle}>Details are taking a break</Text>
+              <Text style={styles.stateTitle}>{connection.remoteReady ? 'Details are taking a break' : 'Connect to explore this music'}</Text>
               <Text style={styles.stateText}>
-                WAVEN could not load this music detail right now.
+                {connection.remoteReady ? 'WAVEN could not load this music detail right now.' : 'This detail is not saved on your device yet. Your Library stays available.'}
               </Text>
               <WavenPressable
                 accessibilityLabel={`Retry ${kindLabel.toLowerCase()} details`}
@@ -857,31 +940,43 @@ export function WavenDetailSection({
 }
 
 function WavenTrackArtwork({ track }: { track: MusicTrack }) {
-  const [failed, setFailed] = useState(false);
   const artworkUrl = track.artworkUrl || null;
-
-  useEffect(() => {
-    setFailed(false);
-  }, [artworkUrl]);
-
-  if (!artworkUrl || failed) {
-    return (
-      <WavenArtworkFallback
-        accessibilityLabel={`${track.title} artwork`}
-        seed={`detail-track-${track.source.provider}-${track.source.id}`}
-        size={50}
-      />
-    );
-  }
+  const artworkLease = useWavenArtworkLease({
+    leaseKey: wavenArtworkLeaseKey('track', track.source.provider, track.source.id),
+    sourceKey: artworkUrl,
+  });
 
   return (
-    <Image
-      accessibilityLabel={`${track.title} artwork`}
-      onError={() => setFailed(true)}
-      resizeMode="cover"
-      source={{ uri: artworkUrl }}
-      style={styles.trackArtwork}
-    />
+    <View style={[styles.trackArtwork, { overflow: 'hidden' }]}>
+      {artworkLease.showFallback ? (
+        <WavenArtworkFallback
+          accessibilityLabel={`${track.title} artwork`}
+          seed={`detail-track-${track.source.provider}-${track.source.id}`}
+          size={50}
+        />
+      ) : null}
+      {artworkLease.backupSourceKey ? (
+        <Image
+          accessible={false}
+          resizeMethod="resize"
+          resizeMode="cover"
+          source={{ uri: artworkLease.backupSourceKey }}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+      {artworkUrl ? (
+        <Image
+          accessibilityLabel={`${track.title} artwork`}
+          key={artworkLease.imageKey}
+          onError={artworkLease.onError}
+          onLoad={artworkLease.onLoad}
+          resizeMethod="resize"
+          resizeMode="cover"
+          source={{ uri: artworkUrl }}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+    </View>
   );
 }
 
@@ -898,6 +993,7 @@ export function WavenDetailTrackRow({
   showArtwork?: boolean;
   track: MusicTrack;
 }) {
+  const playbackState = useWavenTrackPresentation(track);
   const actualArtist = cleanMetadata(track.artistName);
   const contextArtist = cleanMetadata(fallbackArtistName);
   const artistForAccessibility = actualArtist || contextArtist;
@@ -929,46 +1025,63 @@ export function WavenDetailTrackRow({
         entranceStyle,
       ]}
     >
-      {typeof index === 'number' ? <Text style={styles.rowIndex}>{index}</Text> : null}
-      {showArtwork ? <WavenTrackArtwork track={track} /> : null}
-      <View style={styles.rowCopy}>
-        <Text numberOfLines={2} style={styles.rowTitle}>
-          {track.title}
-        </Text>
-        {secondary ? (
-          <Text numberOfLines={1} style={styles.rowSubtitle}>
-            {secondary}
+      <WavenTrackPlayTarget track={track} containerStyle={styles.rowPlayTarget} style={styles.rowPlayContent}>
+        {typeof index === 'number' ? <Text style={styles.rowIndex}>{index}</Text> : null}
+        {showArtwork ? <WavenTrackArtwork track={track} /> : null}
+        <View style={styles.rowCopy}>
+          <Text numberOfLines={2} style={[styles.rowTitle, playbackState === 'playing' ? { color: wavenColors.interactionBlue } : null]}>
+            {track.title}
           </Text>
-        ) : null}
-      </View>
+          {secondary ? (
+            <Text numberOfLines={1} style={styles.rowSubtitle}>
+              {secondary}
+            </Text>
+          ) : null}
+        </View>
+      </WavenTrackPlayTarget>
+      <WavenMusicLibraryActions kind="track" entity={track} />
     </Animated.View>
   );
 }
 
 function ReleaseArtwork({ album, size }: { album: MusicAlbum; size: number }) {
-  const [failed, setFailed] = useState(false);
   const artworkUrl = album.artworkUrl || null;
-
-  useEffect(() => setFailed(false), [artworkUrl]);
-
-  if (!artworkUrl || failed) {
-    return (
-      <WavenArtworkFallback
-        accessibilityLabel={`${album.title} artwork`}
-        seed={`detail-release-${album.source.provider}-${album.source.id}`}
-        size={size}
-      />
-    );
-  }
+  const artworkLease = useWavenArtworkLease({
+    leaseKey: wavenArtworkLeaseKey('album', album.source.provider, album.source.id),
+    sourceKey: artworkUrl,
+  });
 
   return (
-    <Image
-      accessibilityLabel={`${album.title} artwork`}
-      onError={() => setFailed(true)}
-      resizeMode="cover"
-      source={{ uri: artworkUrl }}
-      style={{ borderRadius: 20, height: size, width: size }}
-    />
+    <View style={{ borderRadius: 20, height: size, overflow: 'hidden', width: size }}>
+      {artworkLease.showFallback ? (
+        <WavenArtworkFallback
+          accessibilityLabel={`${album.title} artwork`}
+          seed={`detail-release-${album.source.provider}-${album.source.id}`}
+          size={size}
+        />
+      ) : null}
+      {artworkLease.backupSourceKey ? (
+        <Image
+          accessible={false}
+          resizeMethod="resize"
+          resizeMode="cover"
+          source={{ uri: artworkLease.backupSourceKey }}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+      {artworkUrl ? (
+        <Image
+          accessibilityLabel={`${album.title} artwork`}
+          key={artworkLease.imageKey}
+          onError={artworkLease.onError}
+          onLoad={artworkLease.onLoad}
+          resizeMethod="resize"
+          resizeMode="cover"
+          source={{ uri: artworkUrl }}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+    </View>
   );
 }
 
@@ -1260,6 +1373,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingVertical: 11,
   },
+  rowPlayTarget: { flex: 1, minWidth: 0 },
+  rowPlayContent: { flexDirection: 'row', alignItems: 'center', flex: 1, minHeight: 48 },
   musicRowWithArtwork: {
     gap: 12,
     minHeight: 76,

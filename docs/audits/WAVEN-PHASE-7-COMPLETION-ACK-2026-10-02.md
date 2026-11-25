@@ -1,0 +1,35 @@
+# WAVEN Phase 7 Completion ACK — 2026-10-02
+
+**ACK ID:** `ACK-P07-2026-10-02`  
+**Decision:** `ACCEPTED / COMPLETE` by the WAVEN project owner, explicitly authorized on 2026-10-02.  
+**Phase:** 7 — Local Library, favorites, playlists, and listening history.  
+**Fixed WAVEN v1 weight:** 8%; earned 8%. Accepted Phases 0–6 contributed 52%, so current WAVEN v1 completion is **60%**. Phase 8 and later remain not authorized.  
+**Git:** `COMMIT = NO`; `PUSH = NO`. This ACK identifies an uncommitted local workspace, not a new commit or distributed release.
+
+## Source and acceptance identity
+
+The authoritative [WAVEN v1 master plan](../plans/WAVEN-V1-MASTER-PLAN.md) and Phase 7 authorization `AUTH-P07-2026-10-01` govern this decision. The branch is `waven/v1`; sealed base HEAD is `d5299eb672df6d3396247cf15935b6de2ba7e7f1`. The accepted implementation is the dirty local source snapshot in [the Phase 7 evidence package](../../release/waven-phase7-20261001/REPORT.md), identified by `source-manifest.json` SHA-256 `9E7DB3BF9751FB649139B0EE48737E784EDC0B1F5C37E2A5F69958025E0F7D4D` and `source-delta.json` SHA-256 `7022853C3EB3FE5F22B4587A9D3C885C72EAA07E61BA72C35E19379D440B040E`. The root `package-lock.json` SHA-256 is `881E28596741274596E234216A2DF9F40B65C44337D07A8EC00E611448D6EFD9`; no lock change is accepted. This ACK and its ledger/test assertion updates are later governance records; they do not pretend to be members of the earlier sealed implementation snapshot.
+
+The verified ZIP is `release/waven-phase7-20261001/WAVEN-PHASE7-IMPLEMENTATION-VALIDATION-20261002-ZIP-OUT.zip`, SHA-256 `16C0FCB817BE7F59C1D252B9A2F126C3272E95AB8A542C036899914786028F25`, 95,972,248 bytes. Its 89 listed members were read back and verified. `HANDOFF-HASHES.json`, the before-state manifest, source manifest/delta, test logs, device captures, and the [implementation validation audit](WAVEN-PHASE-7-IMPLEMENTATION-VALIDATION-2026-10-01.md) retain the detailed evidence. The [UI reference classification](WAVEN-PHASE-7-UI-REFERENCES-2026-10-01.md) records inspection of all 19 supplied references: five Phase 7 direct, twelve shared visual/interaction, and two future-phase. Phase 7 structure was translated into the existing WAVEN identity; future-phase surfaces were deferred.
+
+## Accepted scope and validation
+
+One app-private native MMKV Library repository persists versioned schema-v2 favorites, ordered playlists, meaningful-playback history, preferences, and a history receipt. It uses canonical music identities and `local` or canonical Google account-ID scopes. It preserves original data during v1 migration and corruption recovery, bounds storage/history, and does not auto-merge anonymous data. Home Recently Played is backed by actual Library history. The product Library, playlist detail/actions, Search save actions, and Home use the accepted WAVEN visual and navigation system. Playback remains with the single native Media3 owner. No Phase 8 offline/download state machine or Phase 9 Cloud music sync is accepted here.
+
+**Classification/tier:** Native storage and lifecycle required a physical Android **development build**; Expo Go alone was insufficient. A permanently signed distributed Phase 7 candidate is not required for this phase. The physical matrix was Samsung `SM-S928B`, ADB serial `R5CWC2RYXZF`, Android 16/API 36, 2026-10-01–02. The inspected development artifact is `release/waven-phase7-20261001/WAVEN-P6-HANDOFF-P7-DEVELOPMENT.apk`, SHA-256 `611256CB1274C89B2180A77C41E773C885C77427A12F86DB325D2477B51D8006`, package `com.okali.waven.development`, versionName `0.1.0`, versionCode `1`, arm64/debuggable, debug signer certificate SHA-256 `FAC61745DC0903786FB9EDE62A962B399F7348F0BB6F899B8332667591033B9C`. Zipalign/signature and installed-APK hash matched. This development APK loads JavaScript from local Metro, so the APK and sealed source manifest jointly identify the physical build. The canonical production package remains `com.okali.waven`; no Phase 7 signed production release is claimed.
+
+**Automated gate:** TypeScript **PASS**; focused Library/presentation/handoff/native-transport tests **52/52 PASS**; complete WAVEN suite **382/382 PASS**, with **0 failures** in each test run. Exact logs are `release/waven-phase7-20261001/typecheck-final.log`, `focused-final.log`, and `full-suite-final.log`. Ledger-only assertion changes made with this ACK are separately rechecked after the decision; they do not rewrite the sealed 382/382 implementation result.
+
+**Physical gate:** Real Search-to-play produced meaningful Media3 playback and truthful Library/Home history. A favorite, playlist creation and ordered tracks, reorder/removal, history, Home Recently Played, and the revised Library/playlist UI were validated on the Samsung development build. Favorites, playlist order, and history survived cold process restarts and an in-place development APK update. A controlled fixture in a separate native MMKV instance exercised v1-to-v2 migration, original preservation, corruption/account namespace behavior, and distinct synthetic Google account identities A/B without changing product Library or the real Google session. Screenshots and redacted native logs are listed by scenario in the implementation audit and sealed evidence package. The development package and canonical signed production package were not uninstalled. A separate clean-install scratch package reached Entry; a fresh empty Library screen was not separately captured, and storage-absence behavior was tested automatically. The permanent signed distribution/update matrix belongs to Phase 12. Orion Cloud music synchronization and Phase 8 offline behavior were outside Phase 7; existing identity/session and Cloud boundaries were preserved.
+
+## Disposition and residual evidence
+
+The owner accepted the following documented limitations; neither blocks this Phase 7 ACK:
+
+1. A live switch between two real Google accounts was not exercised. Account isolation was validated with distinct account identities against the real native MMKV persistence layer, together with runtime identity tests. This is not represented as a two-account Google chooser test.
+2. Ten already-dirty baseline files have preserved before-state SHA-256 hashes but no recoverable exact pre-change byte copies. `source-delta.json` names them. No rollback/preimage evidence is fabricated; current source copies, final hashes, and recoverable preimages remain in the verified package.
+
+No unresolved Phase 7 defect or additional waiver is claimed by this acceptance. The local-history privacy/export/deletion policy, live multi-account UX, distributed signing, release migration, offline continuity, and Cloud sync remain subjects for their authorized later gates. The prior [Phase 6 Completion ACK](WAVEN-PHASE-6-COMPLETION-ACK-2026-10-01.md) and its evidence remain independent and unchanged.
+
+**Owner/reviewer:** WAVEN project owner, explicit acceptance instruction received 2026-10-02.  
+**Final decision:** `ACCEPTED / COMPLETE` — `ACK-P07-2026-10-02`. Phase 7 earns its fixed 8%; WAVEN v1 ledger advances from 52% to **60%**. `COMMIT = NO`; `PUSH = NO`.

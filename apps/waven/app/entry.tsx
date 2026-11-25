@@ -6,9 +6,9 @@ import {
   Easing,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
+import { WavenText as Text } from '../src/components/typography/WavenText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WavenWordmark } from '../src/components/brand/WavenWordmark';
 import { WavenEntrySignal } from '../src/components/entry/WavenEntrySignal';
@@ -25,6 +25,7 @@ import {
 } from '../src/infrastructure/orionCloud/nativeGoogleIdentity';
 import {
   wavenColors,
+  wavenFonts,
   wavenMotion,
   wavenRadii,
   wavenSpacing,
@@ -297,6 +298,7 @@ const styles = StyleSheet.create({
   },
   tagline: {
     color: wavenColors.textSecondary,
+    fontFamily: wavenFonts.semiBold,
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.4,
@@ -304,7 +306,10 @@ const styles = StyleSheet.create({
   },
   taglineAccent: {
     color: wavenColors.interactionBlue,
-    fontWeight: '800',
+    fontFamily: wavenFonts.semiBold,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   experience: {
     alignItems: 'center',
@@ -318,6 +323,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: wavenSpacing.sm,
   },
   title: {
+    fontFamily: wavenTypography.title.fontFamily,
     fontSize: wavenTypography.title.fontSize,
     fontWeight: wavenTypography.title.fontWeight,
     lineHeight: wavenTypography.title.lineHeight,
@@ -328,6 +334,9 @@ const styles = StyleSheet.create({
   },
   titleBlue: {
     color: wavenColors.interactionBlue,
+    fontFamily: wavenTypography.title.fontFamily,
+    fontSize: wavenTypography.title.fontSize,
+    fontWeight: wavenTypography.title.fontWeight,
   },
   actions: {
     alignItems: 'stretch',

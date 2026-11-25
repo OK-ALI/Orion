@@ -32,6 +32,18 @@ export const wavenColors = {
   scrim: 'rgba(0, 0, 0, 0.72)',
 } as const;
 
+
+export const wavenFonts = {
+  regular: 'Manrope_400Regular',
+  medium: 'Manrope_500Medium',
+  semiBold: 'Manrope_600SemiBold',
+  bold: 'Manrope_700Bold',
+  extraBold: 'Manrope_800ExtraBold',
+  wordmarkDisplay: 'BebasNeue_400Regular',
+  headingBold: 'Sora_700Bold',
+  headingExtraBold: 'Sora_800ExtraBold',
+} as const;
+
 export const wavenSpacing = {
   xxs: 2,
   xs: 4,
@@ -54,36 +66,43 @@ export const wavenRadii = {
 
 export const wavenTypography = {
   wordmark: {
-    fontSize: 27,
-    fontWeight: '800' as const,
+    fontFamily: wavenFonts.wordmarkDisplay,
+    fontSize: 30,
+    fontWeight: '400' as const,
     letterSpacing: 6.2,
   },
   display: {
+    fontFamily: wavenFonts.headingExtraBold,
     fontSize: 30,
     lineHeight: 36,
     fontWeight: '800' as const,
   },
   title: {
+    fontFamily: wavenFonts.headingExtraBold,
     fontSize: 22,
     lineHeight: 28,
     fontWeight: '800' as const,
   },
   section: {
+    fontFamily: wavenFonts.headingBold,
     fontSize: 18,
     lineHeight: 24,
     fontWeight: '700' as const,
   },
   body: {
+    fontFamily: wavenFonts.regular,
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '400' as const,
   },
   label: {
+    fontFamily: wavenFonts.bold,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '700' as const,
   },
   caption: {
+    fontFamily: wavenFonts.semiBold,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '600' as const,
@@ -115,3 +134,19 @@ export const wavenMotion = {
   deliberateMs: 360,
   pressedScale: 0.97,
 } as const;
+
+/** Semantic motion contract: a future theme can supply a different rhythm. */
+export interface LivingWaveMotionTokens {
+  cycleMs: number;
+  barWidth: number;
+  barHeight: number;
+  barGap: number;
+  scales: readonly [number, number, number, number];
+}
+export const wavenLivingWaveMotion: LivingWaveMotionTokens = {
+  cycleMs: 1_320,
+  barWidth: 3,
+  barHeight: 18,
+  barGap: wavenSpacing.xxs,
+  scales: [0.35, 0.8, 0.5, 1],
+};

@@ -1,0 +1,35 @@
+# WAVEN Phase 8 owner exception and governance amendment — 2026-10-19
+
+**Record:** `EXC-P08-2026-10-19`; incorporated master-plan amendment `AMEND-P08-2026-10-19`.  
+**Owner:** WAVEN project owner, explicit final-closeout instruction received 2026-10-19.  
+**Decision:** Accept the current Phase 8 development milestone **WITH DOCUMENTED RESIDUALS**, subject to final F integrity/functional readback and recorded automated validation. This exception is recorded before the separate Completion ACK; it does not itself issue that ACK or advance the ledger.
+
+## Why a formal amendment is required
+
+The authoritative master plan §15.1 ordinarily requires every exit criterion and physical gate to pass; its only previously stated physical exception was Phase 0. Section 15.3 ordinarily defines ACCEPTED as all criteria/gates passed. Phase 8 §14 and §13.8 require a full development-device connectivity matrix. The current evidence has genuine physical successes, unresolved performance findings and missing current-candidate fixtures. Therefore simply changing the ledger to accepted would conflict with existing governance.
+
+The owner's new direct instruction explicitly accepts those residuals, requests 68% when formally valid, and authorizes recording a necessary formal exception/amendment before the ACK. `AMEND-P08-2026-10-19` is a narrow owner-authorized exception to §§15.1/15.3 **for this Phase 8 development milestone only**. It permits a normalized ACCEPTED ACK with decision **ACCEPTED WITH DOCUMENTED RESIDUALS**, earning Phase 8's unchanged fixed 8% after the final candidate/readback/gates are recorded. It does not make failed or untested scenarios PASS, declare physical validation N/A, or create a general waiver for another phase.
+
+## Exact accepted boundary
+
+- Prefer approved R8 F, SHA-256 **`6D777C09C5F2F7531FA761D78C9A9C7DF40F54EA8E8BB021C604164A76E4C47C`**, existing Personal user 0 package `com.okali.waven.phase8validation`, Samsung SM-S928B/R5CWC2RYXZF. Final installed hash, UID, Library, protected state and settings must verify. No other new candidate or installation is authorized; only completion of the already approved adjacent R7/F comparison and restoration to this exact F.
+- Retain all implementation and raw R3–R8 evidence, including failed proposals, unfavorable windows, unavailable captures, historical owner decisions and incomplete tests. Retain accepted Phases 0–7, canonical/development data separation, native Media3 ownership, account-scoped MMKV, source/dependency/native boundaries and Work profile. No data clear or cross-package migration.
+- Stop the extended optimization cycle after the comparison. No R8 G, R9, other performance candidate, scheduler rewrite or further optimization experiment. No Phase 9/V8.6 implementation, commit, push, merge, tag or release. The owner's next-milestone interests do not authorize or silently rename a later master-plan phase.
+
+## Accepted risks and evidence exceptions
+
+**Performance — KNOWN ACCEPTED RISKS, not PASS.** Variable stopped/playing jank, residual missed deadlines, the earlier unfavorable Search/playing-navigation comparisons, frame-budget/provider/instrumentation attribution limits, source-resolution/queue/resume latency, graphics/PSS growth and lack of long-soak/low-memory proof remain documented. Complete the already authorized adjacent comparison and preserve every result, including any unfavorable outcome. The owner accepts these development-milestone risks without a new numeric performance claim or fabricated memory-leak conclusion.
+
+**Physical fixtures/coverage — UNTESTED / OWNER EXCEPTION, not PASS.** The final reconciliation matrix must name every missing or partial current-candidate requirement, preserving any historical physical result separately. This includes genuine current-F HTTP403 isolation/failed-row retry, mounted failed-category automatic recovery, broad-outage CHECK, strictly initially-empty live Home releases, usable cellular fallback, loss/reconnect/flapping and offline process/collection/cached-artwork coverage not rerun on F, conditional multi-item next-item/local-media/Cloud fixtures, Home album-detail/rail-origin fixture, TalkBack/large-text and unmeasured telemetry. Historical R3/R4/R5/R6/R7 physical evidence and deterministic tests remain their actual evidence tiers; they are not promoted to fresh F physical PASS. Conditional capabilities remain conditional; do not add downloads or Cloud music sync to manufacture fixtures.
+
+**Release obligations remain outstanding.** This exception accepts a single Samsung validation-signed, release-derived development checkpoint, not canonical production/distribution acceptance. Master-plan §§13.8, 16.4, 17 and 18 remain mandatory at their authorized release stage: permanent signer/canonical package, eligible versioned GitHub Preview/Prerelease, intended clean-install and same-signature update paths, oldest supported migration source, Google/Orion/account/namespace continuity, complete applicable connectivity matrix, multi-device/API/OEM/low-memory coverage, playback controls/audio focus/lifecycle/soak, accessibility/performance/battery/memory and explicit release sign-off. Nothing here authorizes publishing or waives those gates.
+
+The final matrix retains **observed status** (PASS/PARTIAL/FAIL/UNAVAILABLE FIXTURE/MANUAL REQUIRED) independently from **owner acceptance disposition**. Unresolved performance receives KNOWN ACCEPTED RISK; unavailable or incomplete current physical fixtures receive UNTESTED / OWNER EXCEPTION. Release validation stays outstanding. Owner acceptance is a governance decision, not test execution.
+
+## Authority, accounting and validity
+
+The master plan remains the only authoritative plan; its Phase 8 name, architecture, fixed 8% and other phase weights are unchanged. This explicit amendment is incorporated in §15.5 and referenced by §§15.1/15.3 before the ACK. Accepted Phase 6/7 ACK bytes remain protected. Existing Phase 7 live-account-switch/missing-historical-preimage limitations remain accepted and transparent.
+
+The original owner instruction is in this chat; `release/waven-phase8-closeout-20261019/owner-decision.txt` is a condensed, line-wrapped local transcription of that instruction, not claimed original attachment bytes. Pre-change master/test/accepted-ACK bytes and hashes are preserved before governance edits. `amendment-before-ack.json` records the exception/master hashes and the still-pending 60% ledger before ACK creation.
+
+Once final F integrity/functional checks and exact automated results are recorded, the separate `ACK-P08-2026-10-19` may normalize to **ACCEPTED**, with explicit decision **ACCEPTED WITH DOCUMENTED RESIDUALS**, earning **8%** and advancing **60%→68%**. Phase 9 and all later phases remain unauthorized. If those final concrete integrity/functional conditions fail, do not issue a false ACK; identify that blocker. Accepted residual performance/missing fixtures alone are no longer blockers under this narrow recorded owner decision.

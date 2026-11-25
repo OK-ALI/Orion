@@ -128,7 +128,9 @@ test('P5.3B mounts one persistent Mini Player above primary navigation', () => {
 test('P5.3B observes and controls only the existing P4 Media3 owner', () => {
   assert.match(miniPlayer, /subscribeNativePlayback/);
   assert.match(miniPlayer, /nativePlayback\.getSnapshot/);
-  assert.match(miniPlayer, /nativePlayback\.play\(\)/);
+  assert.match(miniPlayer, /resumeWavenNativeTrack\(\)/);
+  const handoff = read('src/features/playback/trackPlaybackRuntime.ts');
+  assert.match(handoff, /return nativePlayback\.play\(\)/);
   assert.match(miniPlayer, /nativePlayback\.pause\(\)/);
 
   assert.doesNotMatch(
@@ -217,7 +219,7 @@ test('P5.3C keeps active and buffering motion reduced-motion safe and non audio-
   assert.match(miniPlayer, /useWavenReducedMotion/);
   assert.match(miniPlayer, /reducedMotion \|\|/);
   assert.match(miniPlayer, /bufferingActive && !reducedMotion/);
-  assert.match(miniPlayer, /useNativeDriver:\s*false/);
+  assert.doesNotMatch(miniPlayer, /useNativeDriver:\s*false/);
   assert.match(miniPlayer, /useNativeDriver:\s*true/);
 
   assert.doesNotMatch(

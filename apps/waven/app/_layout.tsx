@@ -1,8 +1,19 @@
 import 'react-native-reanimated';
 
 import { Stack, usePathname, useRouter } from 'expo-router';
+import { useFonts } from 'expo-font';
+import {
+  Manrope_400Regular,
+  Manrope_500Medium,
+  Manrope_600SemiBold,
+  Manrope_700Bold,
+  Manrope_800ExtraBold,
+} from '@expo-google-fonts/manrope';
+import { BebasNeue_400Regular } from '@expo-google-fonts/bebas-neue';
+import { Sora_700Bold, Sora_800ExtraBold } from '@expo-google-fonts/sora';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
+import { startWavenConnectivity } from '../src/infrastructure/connectivity/connectivityRuntime';
 import { ActivityIndicator, Animated, Easing, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { WavenWordmark } from '../src/components/brand/WavenWordmark';
@@ -15,9 +26,27 @@ import {
   subscribeWavenEntrySession,
 } from '../src/features/account/wavenEntrySession';
 import { useWavenReducedMotion } from '../src/hooks/useWavenReducedMotion';
+import { WavenAppearanceProvider } from '../src/theme/appearanceProvider';
+import { bindLibrarySession, startLibraryPlaybackObservation } from '../src/features/library/libraryRuntime';
+import { wavenConnectivity } from '../src/infrastructure/connectivity/connectivityService';
+import { clearControlledNoOpWriteState } from '../src/infrastructure/orionCloud/orionCloudControlledNoOpWriteGate';
+import { trackPlayback } from '../src/features/playback/trackPlaybackRuntime';
 import { wavenColors, wavenMotion, wavenSpacing } from '../src/theme/tokens';
 
+
+const useChromeBacking:
+  typeof import('../src/theme/previewChromeMaterials').usePreviewChromeBacking =
+  typeof __DEV__ !== 'undefined' &&
+  __DEV__ &&
+  process.env.EXPO_PUBLIC_WAVEN_HOME_ANIME_PREVIEW === '1'
+    ? (
+        require('../src/theme/previewChromeMaterials') as
+          typeof import('../src/theme/previewChromeMaterials')
+      ).usePreviewChromeBacking
+    : () => null;
+
 const PRIMARY_PATHS = new Set(['/', '/search', '/library']);
+const PRIMARY_ROUTE_NAMES = new Set(['index', 'search', 'library']);
 const ENTITY_DETAIL_ROUTE_NAMES = new Set([
   'artist/[provider]/[id]',
   'album/[provider]/[id]',
@@ -49,7 +78,29 @@ function WavenStartupHandoff() {
 }
 
 function WavenRootNavigation() {
+  if (
+    typeof __DEV__ !== 'undefined' &&
+    __DEV__ &&
+    process.env.EXPO_PUBLIC_WAVEN_HOME_ANIME_PREVIEW === '1'
+  ) {
+    const { WavenPreviewCelestialProvider } =
+      require('../src/theme/previewCelestialController') as
+        typeof import('../src/theme/previewCelestialController');
+
+    return (
+      <WavenPreviewCelestialProvider>
+        <WavenRootNavigationContent />
+      </WavenPreviewCelestialProvider>
+    );
+  }
+
+  return <WavenRootNavigationContent />;
+}
+
+function WavenRootNavigationContent() {
   const pathname = usePathname();
+  const chromeBacking = useChromeBacking();
+  const homeBacking = pathname === '/' ? chromeBacking : null;
   const router = useRouter();
   const reducedMotion = useWavenReducedMotion();
   const [startupState, setStartupState] = useState<StartupState>('checking');
@@ -65,6 +116,13 @@ function WavenRootNavigation() {
   useEffect(() => {
     let mounted = true;
     let sessionChangeSeen = false;
+    let libraryObservation: ReturnType<typeof startLibraryPlaybackObservation> | null = null;
+    const bindLibrary = (session: Parameters<typeof bindLibrarySession>[0]) => {
+      libraryObservation?.accountChanged();
+      trackPlayback.cancel();
+      bindLibrarySession(session);
+      libraryObservation ??= startLibraryPlaybackObservation();
+    };
 
     const unsubscribe = subscribeWavenEntrySession((session) => {
       if (!mounted) return;
@@ -73,6 +131,9 @@ function WavenRootNavigation() {
       // Entry replaces its route with Home so stale startup state cannot
       // bounce a completed user back to Entry.
       sessionChangeSeen = true;
+      wavenConnectivity.cancelAccountWork();
+      clearControlledNoOpWriteState();
+      bindLibrary(session);
       setEntryRequired(!session);
       setEntryHandoffPending(Boolean(session));
       setStartupState('ready');
@@ -81,6 +142,7 @@ function WavenRootNavigation() {
     readWavenEntrySession()
       .then((session) => {
         if (!mounted || sessionChangeSeen) return;
+        bindLibrary(session);
         setEntryRequired(!session);
         setStartupState('ready');
       })
@@ -90,12 +152,14 @@ function WavenRootNavigation() {
         // Local session persistence must never make WAVEN unusable.
         // Fail open into the local-first product shell.
         setEntryRequired(false);
+        bindLibrary(null);
         setStartupState('ready');
       });
 
     return () => {
       mounted = false;
       unsubscribe();
+      libraryObservation?.stop();
     };
   }, []);
 
@@ -148,15 +212,18 @@ function WavenRootNavigation() {
   }
 
   return (
-    <View style={styles.root}>
+    <View style={[
+      styles.root,
+      homeBacking ? { backgroundColor: homeBacking.base } : null,
+    ]}>
       <StatusBar style="light" />
-      {showAtmosphericCanvas ? <WavenAtmosphericCanvas /> : null}
+      {homeBacking ? null : showAtmosphericCanvas ? <WavenAtmosphericCanvas cacheStatic /> : null}
       <View style={styles.stackFrame}>
         <Stack
           screenOptions={({ route }) => ({
             headerShown: false,
             animation:
-              reducedMotion || ENTITY_DETAIL_ROUTE_NAMES.has(route.name)
+              reducedMotion || ENTITY_DETAIL_ROUTE_NAMES.has(route.name) || PRIMARY_ROUTE_NAMES.has(route.name)
                 ? 'none'
                 : 'fade',
             contentStyle: {
@@ -190,9 +257,34 @@ function WavenRootNavigation() {
 }
 
 export default function RootLayout() {
+  useEffect(() => startWavenConnectivity(), []);
+  const [fontsLoaded, fontError] = useFonts({
+    Manrope_400Regular,
+    Manrope_500Medium,
+    Manrope_600SemiBold,
+    Manrope_700Bold,
+    Manrope_800ExtraBold,
+    BebasNeue_400Regular,
+    Sora_700Bold,
+    Sora_800ExtraBold,
+  });
+
+  if (!fontsLoaded && !fontError) {
+    return (
+      <SafeAreaProvider style={styles.provider}>
+        <View accessibilityLabel="Preparing WAVEN typography" style={styles.fontGate}>
+          <StatusBar style="light" />
+          <ActivityIndicator color={wavenColors.interactionBlue} size="small" />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider style={styles.provider}>
-      <WavenRootNavigation />
+      <WavenAppearanceProvider>
+        <WavenRootNavigation />
+      </WavenAppearanceProvider>
     </SafeAreaProvider>
   );
 }
@@ -205,6 +297,12 @@ const styles = StyleSheet.create({
   root: {
     backgroundColor: wavenColors.canvas,
     flex: 1,
+  },
+  fontGate: {
+    alignItems: 'center',
+    backgroundColor: wavenColors.canvas,
+    flex: 1,
+    justifyContent: 'center',
   },
   stackFrame: {
     flex: 1,

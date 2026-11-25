@@ -1,4 +1,5 @@
-import { StyleSheet, Text, type StyleProp, type TextStyle } from 'react-native';
+import { StyleSheet, type StyleProp, type TextStyle } from 'react-native';
+import { WavenText as Text } from './WavenText';
 import { wavenColors, wavenTypography } from '../../theme/tokens';
 
 interface WavenAccentTitleProps {
@@ -32,11 +33,15 @@ export function WavenAccentTitle({
 const styles = StyleSheet.create({
   title: {
     color: wavenColors.textPrimary,
+    fontFamily: wavenTypography.display.fontFamily,
     fontSize: wavenTypography.display.fontSize,
     fontWeight: wavenTypography.display.fontWeight,
     lineHeight: wavenTypography.display.lineHeight,
   },
   accent: {
     color: wavenColors.interactionBlue,
+    fontFamily: wavenTypography.display.fontFamily,
+    fontSize: wavenTypography.display.fontSize,
+    fontWeight: wavenTypography.display.fontWeight,
   },
 });

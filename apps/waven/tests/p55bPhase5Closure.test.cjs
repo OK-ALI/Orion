@@ -37,7 +37,8 @@ test('P5.5B records the authoritative Phase 5 Completion ACK', () => {
   assert.match(master, /P5\.5B `68d55a57456ace75cd87ab6fdf702aec246409b5`/);
   assert.match(master, /Phase 5 Completion ACK — `ACK-P05-2026-09-16`/);
   assert.match(master, /\*\*Decision:\*\* `ACCEPTED`/);
-  assert.match(master, /Current authoritative WAVEN v1 completion: 45%/);
+  assert.match(master, /Phase 5 earns its full 7% weight, raising authoritative WAVEN v1 completion from 38% to \*\*45%\*\*/);
+  assert.match(master, /Current authoritative WAVEN v1 completion: 68%/);
   assert.match(master, /This ACK does \*\*not\*\* authorize Phase 6/);
   assert.doesNotMatch(master, /P5\.5B closure audit\/reconciliation remains before Completion ACK/);
 });
